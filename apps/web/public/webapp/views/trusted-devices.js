@@ -5,6 +5,8 @@
 import { $, registerView, show } from "../lib/router.js";
 import { humanError } from "../lib/humanError.js";
 import { getSession, unlockSession } from "../lib/state.js";
+import { isAdminDevice } from "../lib/memberRoles.js";
+import { ADD_DEVICE_ADMIN_ONLY } from "../lib/crossDevicePairing.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
 import { formatWhen } from "../lib/dateFormat.js";
@@ -216,9 +218,25 @@ function renderDangerZone() {
   `;
 }
 
+function renderAddDeviceGate() {
+  const btn = $("trusted-devices-add");
+  if (!btn) return;
+  const admin = isAdminDevice(getSession());
+  btn.disabled = !admin;
+  let note = $("trusted-devices-add-note");
+  if (!admin && !note) {
+    note = document.createElement("p");
+    note.id = "trusted-devices-add-note";
+    note.className = "note small";
+    note.textContent = ADD_DEVICE_ADMIN_ONLY;
+    btn.insertAdjacentElement("afterend", note);
+  } else if (admin && note) note.remove();
+}
+
 async function renderTrustedDevices() {
   const root = $("trusted-devices-list");
   if (!root) return;
+  renderAddDeviceGate();
   root.innerHTML = `<div class="card placeholder">Loading devices…</div>`;
   try {
     await fetchDevices();
@@ -662,6 +680,7 @@ export function initTrustedDevicesView() {
   // and seals the account keys to a freshly-scanned-in collaborator
   // device (which joins QUARANTINED for 14 days).
   $("trusted-devices-add")?.addEventListener("click", async () => {
+    if (!isAdminDevice(getSession())) return toast(ADD_DEVICE_ADMIN_ONLY, "err");
     try {
       const { enterAddDevice } = await import("./add-device.js");
       await enterAddDevice();

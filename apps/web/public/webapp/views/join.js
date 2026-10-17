@@ -27,9 +27,10 @@ import { $, registerView, show } from "../lib/router.js";
 import {
   bytesToHex,
   hexToBytes,
-  deriveIrkFromSeed,
-  signWithIrk,
+  deriveAdminRootFromSeed,
+  signWithAdminRoot,
   persistSeedForProfile,
+  persistAccountDeviceSeed,
   persistAdminRootSeed,
   setActiveKeystoreProfile,
   verifyWithEd25519Pub,
@@ -68,13 +69,14 @@ function setStatus(kind, text) {
   el.textContent = text;
 }
 
-/** Mint a fresh, INDEPENDENT device key for this profile (its own
- *  Ed25519 seed — not derived from the account UMK we'll receive). Its
+/** Mint a fresh, INDEPENDENT device key for this profile (its own raw
+ *  Ed25519 seed — not derived from the account UMK we'll receive; kept
+ *  afterwards as the account device key, see persistAccountDeviceSeed). Its
  *  pub is what the admin binds in the DeviceAdmit. The push registration
  *  is signed by this same fresh key. */
 async function mintDeviceKey() {
   const seed = crypto.getRandomValues(new Uint8Array(32));
-  const irk = await deriveIrkFromSeed(seed);
+  const irk = await deriveAdminRootFromSeed(seed);
   return { seed, pubHex: bytesToHex(irk.publicKey), deviceId: generateDeviceId() };
 }
 
@@ -111,7 +113,7 @@ function makeRegisterPush(deviceSeed) {
         request.issuedAt,
       ].join("|"),
     );
-    const sig = await signWithIrk(deviceSeed, canonical);
+    const sig = await signWithAdminRoot(deviceSeed, canonical);
     return { request, signatureHex: bytesToHex(sig) };
   };
 }
@@ -182,6 +184,10 @@ async function startJoin() {
       persistSeedForProfile,
       localPassphrase,
       persistAdminRootSeed,
+      persistAccountDeviceSeed,
+      deviceSeed: device.seed,
+      signWithDevice: (bytes) => signWithAdminRoot(device.seed, bytes),
+      deviceDisplayName: "This browser",
       unlockSession,
       verifyEd25519: verifyWithEd25519Pub,
       registerPush: makeRegisterPush(device.seed),

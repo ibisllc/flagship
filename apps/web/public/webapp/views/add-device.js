@@ -20,7 +20,8 @@
 import { $, registerView, show } from "../lib/router.js";
 import { humanError } from "../lib/humanError.js";
 import { getSession } from "../lib/state.js";
-import { signWithIrk, bytesToHex } from "../keystore.js";
+import { signWithIrk, signWithAdminRoot, deriveIrkFromSeed, bytesToHex } from "../keystore.js";
+import { isAdminDevice } from "../lib/memberRoles.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import {
@@ -29,6 +30,7 @@ import {
   ADMIN_RISK_WARNING,
   NO_SCREENSHOT_WARNING,
   PAIRING_TTL_MS,
+  ADD_DEVICE_ADMIN_ONLY,
 } from "../lib/crossDevicePairing.js";
 import { makeAdminRelay } from "../lib/pairingRelay.js";
 
@@ -85,6 +87,10 @@ async function startPairing() {
   if (!session.umk || !session.username) {
     return toast("Unlock the webapp first", "err");
   }
+  if (!isAdminDevice(session)) {
+    setStatus("error", ADD_DEVICE_ADMIN_ONLY);
+    return toast(ADD_DEVICE_ADMIN_ONLY, "err");
+  }
   if (activePairing) {
     try { activePairing.abort(); } catch { /* ignore */ }
     activePairing = null;
@@ -133,6 +139,8 @@ async function startPairing() {
       username: session.username,
       seed: session.umk,
       signWithIrk,
+      signWithAdminRoot,
+      irkPubHex: bytesToHex((await deriveIrkFromSeed(session.umk)).publicKey),
       bytesToHex,
       promoteAdmin,
       adminRootSeed: session.adminRootSeed ?? null,

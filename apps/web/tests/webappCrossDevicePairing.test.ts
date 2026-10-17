@@ -19,13 +19,18 @@
 // in-memory IndexedDB shim (mirrors webappKeystoreMultiProfile.test.ts).
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   deriveIRK,
   signDeviceAdmit,
   verifyDeviceAdmit,
+  signDeviceCapabilityGrant,
+  verifyDeviceCapabilityGrant,
+  verifyDeviceSelfProfile,
   type DeviceAdmit,
+  type DeviceCapabilityGrant,
 } from "@flagship/protocol";
 
 /* ---------- in-memory IndexedDB + localStorage shims ---------- */
@@ -142,6 +147,15 @@ function jsonResponse(status: number, body: unknown = {}) {
 }
 
 const PASS = "correct-horse-battery-staple";
+const ADMIN_SEED = new Uint8Array(32).fill(0x5a);
+const GRANT_ID = "0a0b0c0d-0e0f-4a1b-8c2d-3e4f50617283";
+
+function protocolGrant(g: any): DeviceCapabilityGrant {
+  return {
+    grantId: g.grantId, username: g.username, deviceId: g.deviceId,
+    devicePubKey: fromHex(g.devicePubHex), scopes: g.scopes, issuedAt: g.issuedAt, expiresAt: g.expiresAt,
+  };
+}
 
 /* ─────────────────────────────────────────────────────────────────────
  * /join link — build + parse (the webapp-router hook).
@@ -306,7 +320,11 @@ describe("crossDevicePairing — runAdminAddDevice (vouch + seal)", () => {
     const out = await runAdminAddDevice({
       username: "harry",
       seed,
+      adminRootSeed: ADMIN_SEED,
       signWithIrk: (s: Uint8Array, b: Uint8Array) => k.signWithIrk(s, b),
+      signWithAdminRoot: k.signWithAdminRoot,
+      irkPubHex: k.bytesToHex(deriveIRK({ seed }).publicKey),
+      grantId: GRANT_ID,
       bytesToHex: k.bytesToHex,
       relay,
       onJoinLink: (l: string) => { joinLink = l; },
@@ -324,6 +342,18 @@ describe("crossDevicePairing — runAdminAddDevice (vouch + seal)", () => {
     expect(bundle.admit).toEqual(out.admit);
     expect(bundle.admitSig).toBe(out.admitSigHex);
 
+    // The grant: a member device (no admin scope), signed by the account key
+    // so `.com`'s verifyDeviceCapabilityGrant accepts it.
+    expect(bundle.irkPubHex).toBe(toHex(deriveIRK({ seed }).publicKey));
+    expect(bundle.grant).toMatchObject({
+      grantId: GRANT_ID, username: "harry", deviceId: DEVICE_ID, devicePubHex: "ab".repeat(32),
+      scopes: ["browse", "install-service", "vibe-code", "view-directory"],
+      issuedAt: 7000, expiresAt: 7000 + 90 * 86_400_000, signerRoot: "membership",
+    });
+    expect(verifyDeviceCapabilityGrant(
+      protocolGrant(bundle.grant), fromHex(bundle.grantSignature), deriveIRK({ seed }).publicKey,
+    )).toBe(true);
+
     // The admit signature verifies under the account IRK (protocol).
     const accountIrk = deriveIRK({ seed });
     expect(verifyDeviceAdmit(out.admit as DeviceAdmit, fromHex(out.admitSigHex), accountIrk.publicKey)).toBe(true);
@@ -339,6 +369,7 @@ describe("crossDevicePairing — runAdminAddDevice (vouch + seal)", () => {
     const out = await runAdminAddDevice({
       username: "harry",
       seed: new Uint8Array(32).fill(1),
+      adminRootSeed: ADMIN_SEED,
       signWithIrk: (s: Uint8Array, b: Uint8Array) => k.signWithIrk(s, b),
       bytesToHex: k.bytesToHex,
       relay,
@@ -346,6 +377,45 @@ describe("crossDevicePairing — runAdminAddDevice (vouch + seal)", () => {
     expect(out.outcome).toBe("cancelled");
     expect(relay.receivePeerPub).not.toHaveBeenCalled();
     expect(relay.seal).not.toHaveBeenCalled();
+  });
+
+  it("a device without the admin root cannot add a device (nothing opened, nothing sealed)", async () => {
+    const k = await loadKeystore();
+    const { runAdminAddDevice, ADD_DEVICE_ADMIN_ONLY } = await loadPairing();
+    const { relay } = fakeRelay();
+    await expect(runAdminAddDevice({
+      username: "harry",
+      seed: new Uint8Array(32).fill(1),
+      signWithIrk: (s: Uint8Array, b: Uint8Array) => k.signWithIrk(s, b),
+      bytesToHex: k.bytesToHex,
+      relay,
+    })).rejects.toThrow(ADD_DEVICE_ADMIN_ONLY);
+    expect(ADD_DEVICE_ADMIN_ONLY).toBe("Only an admin device of this account can add devices.");
+    expect(relay.open).not.toHaveBeenCalled();
+    expect(relay.seal).not.toHaveBeenCalled();
+  });
+
+  it("promoting seals an admin-root-signed grant with every scope and the admin root", async () => {
+    const k = await loadKeystore();
+    const { runAdminAddDevice, DEVICE_SCOPE_ORDER } = await loadPairing();
+    const { relay, calls } = fakeRelay();
+    const seed = new Uint8Array(32).fill(0x42);
+    const out = await runAdminAddDevice({
+      username: "harry", seed, adminRootSeed: ADMIN_SEED, promoteAdmin: true,
+      signWithIrk: (s: Uint8Array, b: Uint8Array) => k.signWithIrk(s, b),
+      signWithAdminRoot: k.signWithAdminRoot,
+      irkPubHex: k.bytesToHex(deriveIRK({ seed }).publicKey),
+      grantId: GRANT_ID, bytesToHex: k.bytesToHex, relay, now: () => 7000,
+    });
+    const bundle = JSON.parse(new TextDecoder().decode(calls.sealed));
+    expect(out.promotedAdmin).toBe(true);
+    expect(bundle.grant.signerRoot).toBe("admin-root");
+    expect(bundle.grant.scopes).toEqual(DEVICE_SCOPE_ORDER);
+    expect(bundle.wrappedAdminRoot).toBe(toHex(ADMIN_SEED));
+    const adminPub = (await k.deriveAdminRootFromSeed(ADMIN_SEED)).publicKey;
+    expect(verifyDeviceCapabilityGrant(
+      protocolGrant(bundle.grant), fromHex(bundle.grantSignature), adminPub,
+    )).toBe(true);
   });
 
   it("rejects when the admin seed is unavailable / malformed", async () => {
@@ -363,15 +433,34 @@ describe("crossDevicePairing — parseSealedBundle + quarantineTimeline", () => 
   it("parses a well-formed bundle to { seed, admit, admitSigHex }", async () => {
     const { parseSealedBundle } = await loadPairing();
     const seedHex = "55".repeat(32);
+    const grant = {
+      grantId: GRANT_ID, username: "harry", deviceId: DEVICE_ID, devicePubHex: "ab".repeat(32),
+      scopes: ["browse"], issuedAt: 1, expiresAt: 2, signerRoot: "membership",
+    };
     const bundle = JSON.stringify({
       umkSeedHex: seedHex,
       admit: { username: "harry", newDevicePubHex: "ab".repeat(32), issuedAt: 1 },
       admitSig: "cc".repeat(64),
+      irkPubHex: "DD".repeat(32),
+      grant,
+      grantSignature: "EE".repeat(64),
     });
     const out = parseSealedBundle(bundle);
     expect(toHex(out.seed)).toBe(seedHex);
     expect(out.admit.username).toBe("harry");
     expect(out.admitSigHex).toBe("cc".repeat(64));
+    expect(out.grant).toEqual(grant);
+    expect(out.grantSignatureHex).toBe("ee".repeat(64));
+  });
+
+  it("a bundle from an app that predates device grants says to update it", async () => {
+    const { parseSealedBundle, BUNDLE_OUT_OF_DATE } = await loadPairing();
+    const old = JSON.stringify({
+      umkSeedHex: "55".repeat(32),
+      admit: { username: "harry", newDevicePubHex: "ab".repeat(32), issuedAt: 1 },
+      admitSig: "cc".repeat(64),
+    });
+    expect(() => parseSealedBundle(old)).toThrow(BUNDLE_OUT_OF_DATE);
   });
 
   it("rejects a malformed bundle", async () => {
@@ -412,239 +501,269 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
     delete (globalThis as any).localStorage;
   });
 
-  it("verifies the admit, persists the UMK under a NEW profile, leaves the EXISTING one untouched", async () => {
-    const k = await loadKeystore();
-    const { runIncomingJoin, buildDeviceAdmit } = await loadPairing();
+  const HARRY_SEED = new Uint8Array(32).fill(0x21);
+  const DEVICE_SEED = new Uint8Array(32).fill(0x99);
 
-    // Pre-existing profile A in this same browser.
-    k.setActiveKeystoreProfile("alice");
-    const seedA = await k.bootstrapNewIdentity(PASS, "alice");
-
-    // The collaborator account "harry" — its UMK is what the admin seals.
-    const harrySeed = new Uint8Array(32).fill(0x21);
-    const harryIrk = deriveIRK({ seed: harrySeed });
-
-    // The incoming device's fresh device key (independent Ed25519). Its pub
-    // is what the admin bound in the admit.
-    const deviceSeed = new Uint8Array(32).fill(0x99);
-    const deviceIrk = await k.deriveIrkFromSeed(deviceSeed);
-    const deviceIrkPubHex = k.bytesToHex(deviceIrk.publicKey);
-
-    // The admin's vouch (signed by harry's account IRK).
-    const admit = buildDeviceAdmit({ username: "harry", deviceId: DEVICE_ID, newDevicePubHex: deviceIrkPubHex, issuedAt: 100 });
-    const admitSig = signDeviceAdmit(admit as DeviceAdmit, harryIrk);
+  /** What an admin device seals, built with the PROTOCOL's signers (wire
+   *  interop), and the deps the join view hands runIncomingJoin. */
+  async function fixture(k: any, opts: {
+    promote?: boolean; passphrase?: string | undefined; badGrantSigner?: boolean;
+    grantDevicePubHex?: string; admitPubHex?: string; admitSigner?: any;
+  } = {}) {
+    const harryIrk = deriveIRK({ seed: HARRY_SEED });
+    const devicePubHex = k.bytesToHex((await k.deriveAdminRootFromSeed(DEVICE_SEED)).publicKey);
+    const admit = {
+      username: "harry", deviceId: DEVICE_ID, newDevicePubHex: opts.admitPubHex ?? devicePubHex, issuedAt: 100,
+    };
+    const promote = opts.promote === true;
+    const grant = {
+      grantId: GRANT_ID, username: "harry", deviceId: DEVICE_ID,
+      devicePubHex: opts.grantDevicePubHex ?? devicePubHex,
+      scopes: promote
+        ? ["browse", "install-service", "vibe-code", "add-device", "manage-services", "revoke-others", "demo-provision", "admin", "view-directory"]
+        : ["browse", "install-service", "vibe-code", "view-directory"],
+      issuedAt: 100, expiresAt: 100 + 90 * 86_400_000,
+      signerRoot: promote ? "admin-root" : "membership",
+    };
+    const adminKp = await k.deriveAdminRootFromSeed(ADMIN_SEED);
+    const grantSigner = opts.badGrantSigner
+      ? deriveIRK({ seed: new Uint8Array(32).fill(0x03) })
+      : promote
+        ? { privateKey: ADMIN_SEED, publicKey: adminKp.publicKey }
+        : harryIrk;
     const bundle = JSON.stringify({
-      umkSeedHex: k.bytesToHex(harrySeed),
+      umkSeedHex: k.bytesToHex(HARRY_SEED),
       admit,
-      admitSig: toHex(admitSig),
+      admitSig: toHex(signDeviceAdmit(admit as DeviceAdmit, opts.admitSigner ?? harryIrk)),
+      irkPubHex: k.bytesToHex(harryIrk.publicKey),
+      grant,
+      grantSignature: toHex(signDeviceCapabilityGrant(protocolGrant(grant), grantSigner)),
+      ...(promote ? { wrappedAdminRoot: k.bytesToHex(ADMIN_SEED) } : {}),
     });
-
-    const registerPush = vi.fn(async ({ username }: any) => ({
-      request: {
-        username,
-        deviceId: DEVICE_ID,
-        platform: "webpush",
-        providerToken: "{}",
-        pushX25519Pub: "00".repeat(32),
-        issuedAt: 100,
-      },
-      signatureHex: "dd".repeat(64),
-    }));
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse(200, { ok: true, tokenId: "tok-1", quarantineUntil: 100 + 14 * 86_400_000 }),
     );
     const addedProfiles: any[] = [];
-
-    const out = await runIncomingJoin({
+    const registerPush = vi.fn(async ({ username }: any) => ({
+      request: {
+        username, deviceId: DEVICE_ID, platform: "webpush", providerToken: "{}",
+        pushX25519Pub: "00".repeat(32), issuedAt: 100,
+      },
+      signatureHex: "dd".repeat(64),
+    }));
+    const deps = {
       bundlePlaintext: bundle,
-      deviceIrkPubHex,
+      deviceIrkPubHex: devicePubHex,
       deviceId: DEVICE_ID,
-      // Resolve the account IRK pub straight from harry's seed (mirrors the
-      // pubkey-cert response) instead of hitting the network.
+      deviceSeed: DEVICE_SEED,
+      signWithDevice: (b: Uint8Array) => k.signWithAdminRoot(DEVICE_SEED, b),
+      deviceDisplayName: "This browser",
       fetchAccountIrkPubHex: async () => k.bytesToHex(harryIrk.publicKey),
       verifyEd25519: k.verifyWithEd25519Pub,
       setActiveKeystoreProfile: k.setActiveKeystoreProfile,
       persistSeedForProfile: k.persistSeedForProfile,
+      persistAccountDeviceSeed: k.persistAccountDeviceSeed,
+      persistAdminRootSeed: k.persistAdminRootSeed,
       unlockSession: () => {},
       registerPush,
       addProfile: (p: any) => addedProfiles.push(p),
       setUsername: () => {},
       bytesToHex: k.bytesToHex,
       hexToBytes: k.hexToBytes,
-      localPassphrase: PASS,
+      ...(("passphrase" in opts) && opts.passphrase === undefined ? {} : { localPassphrase: opts.passphrase ?? PASS }),
       fetch: fetchMock as any,
       now: () => 100,
-    });
+    };
+    return { deps, fetchMock, addedProfiles, registerPush, grant, devicePubHex, bundle };
+  }
 
-    // Joined harry; profile added (set active).
+  it("verifies the admit and grant, POSTs grant + profile, persists the UMK under a NEW profile and leaves the EXISTING one untouched", async () => {
+    const k = await loadKeystore();
+    const { runIncomingJoin } = await loadPairing();
+    k.setActiveKeystoreProfile("alice");
+    const seedA = await k.bootstrapNewIdentity(PASS, "alice");
+    const f = await fixture(k);
+
+    const out = await runIncomingJoin(f.deps);
+
     expect(out.username).toBe("harry");
-    expect(addedProfiles).toHaveLength(1);
-    expect(addedProfiles[0].cloudName).toBe("harry");
+    expect(out.promotedAdmin).toBe(false);
+    expect(f.addedProfiles).toHaveLength(1);
+    expect(f.addedProfiles[0].cloudName).toBe("harry");
 
-    // The UMK landed under harry's OWN record; alice's is untouched.
     const store = DATABASES.get("flagship-webapp")!.get("keystore")!;
     expect(store.has("wrappedUmk.harry")).toBe(true);
     expect(store.has("wrappedUmk.alice")).toBe(true);
-    expect(Array.from(await k.unlockUmk(PASS, "harry"))).toEqual(Array.from(harrySeed));
+    expect(Array.from(await k.unlockUmk(PASS, "harry"))).toEqual(Array.from(HARRY_SEED));
     expect(Array.from(await k.unlockUmk(PASS, "alice"))).toEqual(Array.from(seedA));
 
-    // Push registered + admit POSTed; the body carries the admit + sig.
-    expect(registerPush).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0]!;
+    // The body is exactly what `.com`'s handleVouchedDeviceAdmit requires.
+    expect(f.registerPush).toHaveBeenCalledTimes(1);
+    expect(f.fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = f.fetchMock.mock.calls[0]!;
     expect(url).toBe("https://flagshipserver.com/api/users/harry/devices/admit");
     const body = JSON.parse(init.body);
-    expect(body.admit).toEqual(admit);
-    expect(body.admitSig).toBe(toHex(admitSig));
-    expect(body.request.username).toBe("harry");
+    expect(body.admit).toMatchObject({ username: "harry", deviceId: DEVICE_ID, newDevicePubHex: f.devicePubHex });
+    expect(body.grant).toEqual(f.grant);
+    expect(verifyDeviceCapabilityGrant(
+      protocolGrant(body.grant), fromHex(body.grantSignature), deriveIRK({ seed: HARRY_SEED }).publicKey,
+    )).toBe(true);
+    expect(body.profile).toMatchObject({
+      accountId: "harry", deviceId: DEVICE_ID, revision: 1, keyVersion: 1, signerPubHex: f.devicePubHex,
+    });
+    expect(verifyDeviceSelfProfile(body.profile, fromHex(f.devicePubHex))).toBe(true);
+    expect(body.request.deviceId).toBe(DEVICE_ID);
     expect(body.signature).toBe("dd".repeat(64));
 
-    // 14-day quarantine surfaced.
+    // The device key picked before the account key was known is kept, wrapped
+    // under it, and is what the browser signs as from now on.
+    expect(Array.from(await k.deriveAccountDeviceSeedFromSeed(HARRY_SEED, "harry", DEVICE_ID)))
+      .toEqual(Array.from(DEVICE_SEED));
+    const sig = await k.signWithAccountDeviceKey(HARRY_SEED, "harry", DEVICE_ID, new Uint8Array([1, 2, 3]));
+    expect(await k.verifyWithEd25519Pub(fromHex(f.devicePubHex), sig, new Uint8Array([1, 2, 3]))).toBe(true);
+
     expect(out.quarantine.quarantined).toBe(true);
     expect(out.quarantine.remainingMs).toBe(14 * 86_400_000);
   });
 
-  it("REFUSES a bundle whose admit does NOT verify under the account key (nothing persisted)", async () => {
+  it("REFUSES a bundle whose admit does NOT verify under the account key (nothing sent or persisted)", async () => {
     const k = await loadKeystore();
-    const { runIncomingJoin, buildDeviceAdmit } = await loadPairing();
-
+    const { runIncomingJoin } = await loadPairing();
     k.setActiveKeystoreProfile("alice");
     const seedA = await k.bootstrapNewIdentity(PASS, "alice");
+    const f = await fixture(k, { admitSigner: deriveIRK({ seed: new Uint8Array(32).fill(0x01) }) });
 
-    const harrySeed = new Uint8Array(32).fill(0x21);
-    const wrongIrk = deriveIRK({ seed: new Uint8Array(32).fill(0x01) });
-    const deviceSeed = new Uint8Array(32).fill(0x99);
-    const deviceIrkPubHex = k.bytesToHex((await k.deriveIrkFromSeed(deviceSeed)).publicKey);
+    await expect(runIncomingJoin(f.deps)).rejects.toThrow(/did not verify/);
 
-    const admit = buildDeviceAdmit({ username: "harry", deviceId: DEVICE_ID, newDevicePubHex: deviceIrkPubHex, issuedAt: 1 });
-    // Sign with the WRONG key → must fail verification under the resolved
-    // account key.
-    const admitSig = signDeviceAdmit(admit as DeviceAdmit, wrongIrk);
-    const bundle = JSON.stringify({
-      umkSeedHex: k.bytesToHex(harrySeed),
-      admit,
-      admitSig: toHex(admitSig),
-    });
-
-    const fetchMock = vi.fn();
-    await expect(runIncomingJoin({
-      bundlePlaintext: bundle,
-      deviceIrkPubHex,
-      deviceId: DEVICE_ID,
-      // The resolved account key is harry's REAL IRK (not the wrong signer).
-      fetchAccountIrkPubHex: async () => k.bytesToHex(deriveIRK({ seed: harrySeed }).publicKey),
-      verifyEd25519: k.verifyWithEd25519Pub,
-      setActiveKeystoreProfile: k.setActiveKeystoreProfile,
-      persistSeedForProfile: k.persistSeedForProfile,
-      unlockSession: () => {},
-      registerPush: vi.fn(),
-      addProfile: vi.fn(),
-      bytesToHex: k.bytesToHex,
-      hexToBytes: k.hexToBytes,
-      localPassphrase: PASS,
-      fetch: fetchMock as any,
-    })).rejects.toThrow(/did not verify/);
-
-    // Nothing was persisted for harry; alice intact.
     const store = DATABASES.get("flagship-webapp")!.get("keystore")!;
     expect(store.has("wrappedUmk.harry")).toBe(false);
-    expect(store.has("wrappedUmk.alice")).toBe(true);
     expect(Array.from(await k.unlockUmk(PASS, "alice"))).toEqual(Array.from(seedA));
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(f.fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("REFUSES a grant signed by the wrong key (nothing sent or persisted)", async () => {
+    const k = await loadKeystore();
+    const { runIncomingJoin } = await loadPairing();
+    const f = await fixture(k, { badGrantSigner: true });
+    await expect(runIncomingJoin(f.deps)).rejects.toThrow(/grant did not verify/);
+    expect(f.fetchMock).not.toHaveBeenCalled();
+    expect(DATABASES.get("flagship-webapp")?.get("keystore")?.has("wrappedUmk.harry") ?? false).toBe(false);
+  });
+
+  it("REFUSES a grant that names another device key", async () => {
+    const k = await loadKeystore();
+    const { runIncomingJoin } = await loadPairing();
+    const f = await fixture(k, { grantDevicePubHex: "ab".repeat(32) });
+    await expect(runIncomingJoin(f.deps)).rejects.toThrow(/grant is for a different device/);
+    expect(f.fetchMock).not.toHaveBeenCalled();
   });
 
   it("REFUSES a bundle aimed at a DIFFERENT device (admit pub != this device key)", async () => {
     const k = await loadKeystore();
-    const { runIncomingJoin, buildDeviceAdmit } = await loadPairing();
-
-    const harrySeed = new Uint8Array(32).fill(0x21);
-    const harryIrk = deriveIRK({ seed: harrySeed });
-    // The admit binds SOME OTHER device pubkey.
-    const admit = buildDeviceAdmit({ username: "harry", deviceId: DEVICE_ID, newDevicePubHex: "ab".repeat(32), issuedAt: 1 });
-    const admitSig = signDeviceAdmit(admit as DeviceAdmit, harryIrk);
-    const bundle = JSON.stringify({
-      umkSeedHex: k.bytesToHex(harrySeed),
-      admit,
-      admitSig: toHex(admitSig),
-    });
-
-    // THIS device's key is different from the bound one.
-    const myPub = k.bytesToHex((await k.deriveIrkFromSeed(new Uint8Array(32).fill(0x99))).publicKey);
-    await expect(runIncomingJoin({
-      bundlePlaintext: bundle,
-      deviceIrkPubHex: myPub,
-      deviceId: DEVICE_ID,
-      fetchAccountIrkPubHex: async () => k.bytesToHex(harryIrk.publicKey),
-      verifyEd25519: k.verifyWithEd25519Pub,
-      setActiveKeystoreProfile: k.setActiveKeystoreProfile,
-      persistSeedForProfile: k.persistSeedForProfile,
-      unlockSession: () => {},
-      registerPush: vi.fn(),
-      addProfile: vi.fn(),
-      bytesToHex: k.bytesToHex,
-      hexToBytes: k.hexToBytes,
-      localPassphrase: PASS,
-      fetch: vi.fn() as any,
-    })).rejects.toThrow(/different device/);
+    const { runIncomingJoin } = await loadPairing();
+    const f = await fixture(k, { admitPubHex: "ab".repeat(32) });
+    await expect(runIncomingJoin(f.deps)).rejects.toThrow(/different device/);
+    expect(f.fetchMock).not.toHaveBeenCalled();
   });
 
-  /** A promoted join of "harry" on a browser with no account yet. */
-  async function promotedJoin(k: any, runIncomingJoin: any, buildDeviceAdmit: any, localPassphrase: string | undefined) {
-    const harrySeed = new Uint8Array(32).fill(0x21);
-    const harryIrk = deriveIRK({ seed: harrySeed });
-    const adminSeed = new Uint8Array(32).fill(0x5a);
-    const deviceIrkPubHex = k.bytesToHex((await k.deriveIrkFromSeed(new Uint8Array(32).fill(0x99))).publicKey);
-    const admit = buildDeviceAdmit({ username: "harry", deviceId: DEVICE_ID, newDevicePubHex: deviceIrkPubHex, issuedAt: 1 });
-    const bundle = JSON.stringify({
-      umkSeedHex: k.bytesToHex(harrySeed),
-      admit,
-      admitSig: toHex(signDeviceAdmit(admit as DeviceAdmit, harryIrk)),
-      wrappedAdminRoot: k.bytesToHex(adminSeed),
-    });
-    const run = runIncomingJoin({
-      bundlePlaintext: bundle,
-      deviceIrkPubHex,
-      deviceId: DEVICE_ID,
-      fetchAccountIrkPubHex: async () => k.bytesToHex(harryIrk.publicKey),
-      verifyEd25519: k.verifyWithEd25519Pub,
-      setActiveKeystoreProfile: k.setActiveKeystoreProfile,
-      persistSeedForProfile: k.persistSeedForProfile,
-      persistAdminRootSeed: k.persistAdminRootSeed,
-      unlockSession: () => {},
-      registerPush: async () => ({ request: { username: "harry" }, signatureHex: "dd".repeat(64) }),
-      addProfile: () => {},
-      bytesToHex: k.bytesToHex,
-      hexToBytes: k.hexToBytes,
-      ...(localPassphrase === undefined ? {} : { localPassphrase }),
-      fetch: vi.fn().mockResolvedValue(jsonResponse(200, { ok: true, quarantineUntil: 2 })) as any,
-      now: () => 1,
-    });
-    return { run, harrySeed, adminSeed };
-  }
-
-  it("a joined browser unlocks after a reload with the passphrase its owner chose, still an admin device", async () => {
+  it("a refusal from .com stores nothing in this browser", async () => {
     const k = await loadKeystore();
-    const { runIncomingJoin, buildDeviceAdmit } = await loadPairing();
+    const { runIncomingJoin } = await loadPairing();
+    const f = await fixture(k);
+    f.fetchMock.mockResolvedValue(jsonResponse(400, { error: "missing device bootstrap" }));
+    await expect(runIncomingJoin(f.deps)).rejects.toThrow(/400/);
+    expect(DATABASES.get("flagship-webapp")?.get("keystore")?.has("wrappedUmk.harry") ?? false).toBe(false);
+    expect(f.addedProfiles).toHaveLength(0);
+  });
+
+  it("a promoted join checks the grant under the sealed admin root and stays admin after a reload with the chosen passphrase", async () => {
+    const k = await loadKeystore();
+    const { runIncomingJoin } = await loadPairing();
     const chosen = "the-owner-chose-this";
-    const { run, harrySeed, adminSeed } = await promotedJoin(k, runIncomingJoin, buildDeviceAdmit, chosen);
-    await run;
-    // A reload: the lock screen unwraps the active profile's record with
-    // what the owner types.
+    const f = await fixture(k, { promote: true, passphrase: chosen });
+    const out = await runIncomingJoin(f.deps);
+    expect(out.promotedAdmin).toBe(true);
+    expect(JSON.parse(f.fetchMock.mock.calls[0]![1].body).grant.signerRoot).toBe("admin-root");
     expect(k.activeProfileId()).toBe("harry");
     const seed = await k.unlockUmk(chosen);
-    expect(Array.from(seed)).toEqual(Array.from(harrySeed));
-    expect(Array.from((await k.loadAdminRootSeed(seed))!)).toEqual(Array.from(adminSeed));
+    expect(Array.from(seed)).toEqual(Array.from(HARRY_SEED));
+    expect(Array.from((await k.loadAdminRootSeed(seed))!)).toEqual(Array.from(ADMIN_SEED));
+  });
+
+  it("a promoted bundle whose grant was NOT signed by the sealed admin root is refused", async () => {
+    const k = await loadKeystore();
+    const { runIncomingJoin } = await loadPairing();
+    const f = await fixture(k, { promote: true, badGrantSigner: true });
+    await expect(runIncomingJoin(f.deps)).rejects.toThrow(/grant did not verify/);
+    expect(f.fetchMock).not.toHaveBeenCalled();
   });
 
   it("a join with no chosen passphrase is refused before anything is stored", async () => {
     const k = await loadKeystore();
-    const { runIncomingJoin, buildDeviceAdmit } = await loadPairing();
+    const { runIncomingJoin } = await loadPairing();
     for (const pass of [undefined, "short"]) {
-      const { run } = await promotedJoin(k, runIncomingJoin, buildDeviceAdmit, pass);
-      await expect(run).rejects.toThrow(/passphrase/);
+      const f = await fixture(k, { promote: true, passphrase: pass });
+      await expect(runIncomingJoin(f.deps)).rejects.toThrow(/passphrase/);
+      expect(f.fetchMock).not.toHaveBeenCalled();
     }
     const store = DATABASES.get("flagship-webapp")?.get("keystore");
     expect(store?.has("wrappedUmk.harry") ?? false).toBe(false);
+  });
+});
+
+describe("crossDevicePairing — packages/protocol/test-vectors/device-pairing", () => {
+  const V = JSON.parse(readFileSync(
+    resolve(__dirname, "../../../packages/protocol/test-vectors/device-pairing/vectors.json"), "utf8",
+  ));
+
+  it("builds the vectors' grants and canonical bytes, and their signatures verify", async () => {
+    const k = await loadKeystore();
+    const P = await loadPairing();
+    expect(P.DEVICE_SCOPE_ORDER).toEqual(V.scopeOrder);
+    expect(P.MEMBER_DEVICE_SCOPES).toEqual(V.memberScopes);
+    expect(P.DEVICE_GRANT_TTL_MS).toBe(V.grantTtlMs);
+    expect(P.ADD_DEVICE_ADMIN_ONLY).toBe(V.adminOnlyLine);
+    const admit = V.admit.fields;
+    for (const [name, promoted, pub] of [
+      ["memberGrant", false, V.keys.irkPubHex], ["adminGrant", true, V.keys.adminRootPubHex],
+    ] as const) {
+      const g = P.buildDeviceGrant({ admit, promoted, grantId: V[name].grant.grantId });
+      expect(g).toEqual(V[name].grant);
+      expect(new TextDecoder().decode(P.deviceGrantCanonicalBytes(g))).toBe(V[name].canonical);
+      expect(await k.verifyWithEd25519Pub(
+        fromHex(pub), fromHex(V[name].signatureHex), P.deviceGrantCanonicalBytes(g),
+      )).toBe(true);
+    }
+  });
+
+  it("the admit's canonical bytes are the vectors'", async () => {
+    const P = await loadPairing();
+    expect(new TextDecoder().decode(P.deviceAdmitCanonicalBytes(V.admit.fields))).toBe(V.admit.canonical);
+  });
+
+  it("the sealed bundle and the POST carry exactly the vectors' keys", async () => {
+    const k = await loadKeystore();
+    const { runAdminAddDevice, postDeviceAdmit } = await loadPairing();
+    let sealed: Uint8Array | undefined;
+    const relay = {
+      open: async () => ({ sid: "S", pkB64u: "P" }), awaitConfirm: async () => true,
+      receivePeerPub: async () => ({ devicePubHex: V.keys.devicePubHex, deviceId: V.admit.fields.deviceId }),
+      seal: async (b: Uint8Array) => { sealed = b; }, close: () => {},
+    };
+    const seed = new Uint8Array(32).fill(7);
+    await runAdminAddDevice({
+      username: "harry", seed, adminRootSeed: ADMIN_SEED, promoteAdmin: true, relay,
+      signWithIrk: k.signWithIrk, signWithAdminRoot: k.signWithAdminRoot, bytesToHex: k.bytesToHex,
+      irkPubHex: k.bytesToHex(deriveIRK({ seed }).publicKey),
+    });
+    expect(Object.keys(JSON.parse(new TextDecoder().decode(sealed!))).sort())
+      .toEqual(V.bundleKeys.map((x: string) => x.replace("?", "")).sort());
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
+    await postDeviceAdmit({
+      username: "harry", admit: {}, admitSigHex: "a", grant: {}, grantSignatureHex: "b", profile: {},
+      request: {}, signatureHex: "c", fetch: fetchMock,
+    });
+    expect(Object.keys(JSON.parse(fetchMock.mock.calls[0]![1].body)).sort()).toEqual([...V.postKeys].sort());
   });
 });
 
