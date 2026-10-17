@@ -49,8 +49,8 @@ and the phone apps follow the device's setting. Both must be first-class.
 | `--ink` | `#14140F` | Primary copy. Near-black, warm. |
 | `--ink-muted` | `#555149` | Secondary copy, captions, mono labels. |
 | `--teal` | `#14B8A6` | The Flagship teal. Fills: primary buttons, selection, progress, the eyebrow rule. Text on it is dark ink (`#0A0A09`), never white or cream (contrast). |
-| `--accent` (webapp and site) | `#0F766E` | The teal deepened to pass AA (4.5:1) as small text: links, active tab label, pressed and hover text. Dark theme: `#2DD4BF`. |
-| `--accent-graphic` (webapp and site) | `#0E9488` | The lighter teal for graphics (at least 3.2:1 on every light surface): icons beside labels, focus rings, spinners, rings, sparklines, state borders, large headings. Never small text. Dark theme: `#2DD4BF`. Owner, 2026-10-17: keep the light teal wherever it stays readable. `apps/web/tests/themeContrast.test.ts` pins every pairing. |
+| `--accent` (webapp and site) | `#0F766E` | The deep teal, for INLINE TEXT LINKS only (4.5:1 on every light surface). Every other bit of teal text (labels, active tab, counters, hover states, pills) is ink, semibold, with a teal marker or underline. Dark theme: `#2DD4BF`. |
+| `--accent-graphic` (webapp and site) | `#14B8A6` | The brand teal as a graphic (owner, 2026-10-17: the look is light teal): icons beside labels, markers, rings, spinners, focus rings, state borders, large display headings. 2.3:1 on paper, so it is never the only cue of an unlabelled control (every icon-only control carries an aria-label) and never small text. Dark theme: `#2DD4BF`. `apps/web/tests/themeContrast.test.ts` pins every pairing and scans for teal text outside links. |
 | `--ok` / `--warn` / `--err` (webapp and site) | `#166534` / `#944D05` / `#B91C1C` | Status text and icons; 4.5:1 on every light surface and on their own 6-8 % wash. Dark theme: `#4ADE80` / `#FBBF24` / `#F87171`. |
 
 ### 2.2 Dark theme

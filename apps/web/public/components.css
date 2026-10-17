@@ -68,7 +68,7 @@ code:not(pre code) {
   padding: 1px 4px;
   background: var(--teal-soft);
   border-radius: var(--radius-xs);
-  color: var(--accent);
+  color: var(--ink);
 }
 pre {
   background: var(--canvas-2);
@@ -210,7 +210,7 @@ main {
 .btn--secondary:hover:not(:disabled),
 .btn--outline:hover:not(:disabled) {
   border-color: var(--teal);
-  color: var(--accent);
+  color: var(--ink);
 }
 
 .btn--ghost {
@@ -219,7 +219,7 @@ main {
   border-color: transparent;
   padding-inline: 0;
 }
-.btn--ghost:hover:not(:disabled) { color: var(--accent); }
+.btn--ghost:hover:not(:disabled) { color: var(--ink); }
 
 .btn--danger {
   background: var(--err);
@@ -246,11 +246,11 @@ main {
 }
 .arrow-link .arrow { color: var(--accent-graphic); display: inline-block; transition: transform 200ms var(--ease-out); }
 .arrow-link:hover { color: var(--accent); border-bottom-color: var(--teal-bright); }
-.arrow-link:hover .arrow { transform: translateX(4px); color: var(--accent); }
+.arrow-link:hover .arrow { transform: translateX(4px); color: var(--accent-graphic); }
 .arrow-link.muted { border-bottom-color: var(--rule-strong); color: var(--ink-muted); }
 .arrow-link.muted .arrow { color: var(--ink-muted); }
 .arrow-link.muted:hover { color: var(--ink); border-bottom-color: var(--ink); }
-.arrow-link.muted:hover .arrow { color: var(--accent); }
+.arrow-link.muted:hover .arrow { color: var(--accent-graphic); }
 
 /* ── Fields ───────────────────────────────────────────────────── */
 .field { display: block; }
@@ -365,7 +365,7 @@ textarea { min-height: 112px; padding: 12px 14px; resize: vertical; line-height:
   color: var(--ink);
   border-bottom: none;
 }
-.wordmark:hover { color: var(--accent); border-bottom: none; }
+.wordmark:hover { color: var(--ink); text-decoration: underline var(--teal) 2px; text-underline-offset: 5px; border-bottom: none; }
 .wordmark .glyph {
   display: inline-block;
   width: 4px; height: 13px;
@@ -383,7 +383,7 @@ textarea { min-height: 112px; padding: 12px 14px; resize: vertical; line-height:
 }
 .nav-links a { color: var(--ink-muted); border-bottom: none; }
 .nav-links a:hover, .nav-links a[aria-current="page"] {
-  color: var(--accent); border-bottom: none;
+  color: var(--ink); text-decoration: underline var(--teal) 2px; text-underline-offset: 5px; border-bottom: none;
 }
 .nav-cta { margin-left: auto; display: inline-flex; gap: 8px; align-items: center; }
 @media (max-width: 880px) { .nav-links { display: none; } }
@@ -422,7 +422,7 @@ textarea { min-height: 112px; padding: 12px 14px; resize: vertical; line-height:
   font-size: 13px;
   border-bottom: none;
 }
-.colophon a:hover { color: var(--accent); border-bottom: none; }
+.colophon a:hover { color: var(--ink); text-decoration: underline var(--teal) 2px; text-underline-offset: 5px; border-bottom: none; }
 .colophon-brand p {
   color: var(--ink-muted);
   font-size: 13px;
@@ -485,7 +485,7 @@ textarea { min-height: 112px; padding: 12px 14px; resize: vertical; line-height:
   font-size: 13px;
   border-bottom: none;
 }
-.footer-col a:hover { color: var(--accent); border-bottom: none; }
+.footer-col a:hover { color: var(--ink); text-decoration: underline var(--teal) 2px; text-underline-offset: 5px; border-bottom: none; }
 .footer-col p { color: var(--ink-muted); font-size: 13px; max-width: 32ch; margin: var(--space-3) 0 0; }
 .footer-bottom {
   max-width: var(--content-width);
@@ -503,7 +503,7 @@ textarea { min-height: 112px; padding: 12px 14px; resize: vertical; line-height:
   text-transform: uppercase;
 }
 .footer-bottom a { color: var(--ink-muted); margin: 0 8px; border-bottom: none; }
-.footer-bottom a:hover { color: var(--accent); border-bottom: none; }
+.footer-bottom a:hover { color: var(--ink); text-decoration: underline var(--teal) 2px; text-underline-offset: 5px; border-bottom: none; }
 
 /* ── 404 / blank state ───────────────────────────────────────── */
 .empty {
@@ -545,7 +545,7 @@ textarea { min-height: 112px; padding: 12px 14px; resize: vertical; line-height:
   color: var(--ink);
   border-bottom: none;
 }
-.topbar .brand:hover { color: var(--accent); border-bottom: none; }
+.topbar .brand:hover { color: var(--ink); text-decoration: underline var(--teal) 2px; text-underline-offset: 5px; border-bottom: none; }
 .topbar .brand .logo {
   display: inline-block;
   width: 4px; height: 13px;
@@ -565,7 +565,7 @@ textarea { min-height: 112px; padding: 12px 14px; resize: vertical; line-height:
   text-transform: uppercase;
   border-bottom: none;
 }
-.topbar nav a:hover, .topbar nav a[aria-current="page"] { color: var(--accent); border-bottom: none; }
+.topbar nav a:hover, .topbar nav a[aria-current="page"] { color: var(--ink); text-decoration: underline var(--teal) 2px; text-underline-offset: 5px; border-bottom: none; }
 /* The theme toggle is the last child; keep it spaced from the nav links
    and pinned to the far right on every page that uses the topbar. */
 .topbar nav + .theme-btn { margin-left: var(--space-4); }
@@ -624,7 +624,7 @@ textarea { min-height: 112px; padding: 12px 14px; resize: vertical; line-height:
   text-decoration: none;
   transition: border-color var(--motion-state), color var(--motion-state);
 }
-.cta-secondary:hover { border-color: var(--teal); color: var(--accent); }
+.cta-secondary:hover { border-color: var(--teal); color: var(--ink); }
 .cta-row {
   display: flex;
   flex-wrap: wrap;
@@ -660,7 +660,7 @@ button.secondary {
   color: var(--ink);
   border-color: var(--rule-strong);
 }
-button.secondary:hover { background: transparent; border-color: var(--teal); color: var(--accent); }
+button.secondary:hover { background: transparent; border-color: var(--teal); color: var(--ink); }
 
 /* .feature / .feature-grid */
 .feature-grid {
@@ -715,7 +715,7 @@ footer.site {
   margin-top: var(--space-16);
 }
 footer.site a { color: var(--ink-muted); margin: 0 var(--space-3); border-bottom: none; }
-footer.site a:hover { color: var(--accent); border-bottom: none; }
+footer.site a:hover { color: var(--ink); text-decoration: underline var(--teal) 2px; text-underline-offset: 5px; border-bottom: none; }
 
 /* .scope-grid / .payout-table — shared table styles */
 .scope-grid {

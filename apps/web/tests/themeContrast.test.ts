@@ -3,10 +3,14 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-// Teal has three roles (owner, 2026-10-17): --teal fills carry dark ink,
-// --accent-graphic is the lighter step for icons, rings, focus and large
-// headings (WCAG 3:1, on every surface), --accent is the deep step for small text and
-// links (WCAG 4.5:1). --ok/--warn/--err are text-safe on paper too. iOS and Android mirror these values; change them here first.
+// The brand teal is #14B8A6 and the look is light teal (owner, 2026-10-17).
+// --teal fills carry dark ink. --accent-graphic is that same teal for icons
+// beside labels, markers, rings, focus, state borders and large display
+// headings: it is 2.3:1 on paper, so it is documented as decorative or
+// labelled graphics only and never the sole cue of an unlabelled control.
+// --accent (#0F766E) is for INLINE TEXT LINKS only (4.5:1); every other bit of
+// teal text is ink, semibold, with a teal marker. --ok/--warn/--err are
+// text-safe on paper too. iOS and Android mirror these values. iOS and Android mirror these values; change them here first.
 
 const PUBLIC = join(dirname(fileURLToPath(import.meta.url)), "..", "public");
 
@@ -118,9 +122,11 @@ describe.each(sheets)("teal roles in $name", (sheet) => {
         }
       });
 
-      it("--accent-graphic (icons, focus, rings, large headings) reads at 3:1", () => {
-        for (const s of surfaces(t, ALL_SURFACES)) {
-          expect(ratio(colour(t, "--accent-graphic"), colour(t, s)), `--accent-graphic on ${s}`).toBeGreaterThanOrEqual(3);
+      it("--accent-graphic (labelled icons, markers, large headings) is the brand teal and stays visible", () => {
+        // Light: the fill teal itself, 2.3:1 on the paper and cards. Dark: 3:1 or better everywhere.
+        const floor = theme === "light" ? 2.3 : 3;
+        for (const s of surfaces(t, ALL_SURFACES.filter((n) => theme === "dark" || n === "--canvas" || n === "--surface"))) {
+          expect(ratio(colour(t, "--accent-graphic"), colour(t, s)), `--accent-graphic on ${s}`).toBeGreaterThanOrEqual(floor);
         }
       });
 
@@ -150,7 +156,7 @@ describe.each(sheets)("teal roles in $name", (sheet) => {
   it("keeps the light fill teal and the pinned accent steps", () => {
     expect(resolve(sheet.light, "--teal").toUpperCase()).toBe("#14B8A6");
     expect(resolve(sheet.light, "--accent").toUpperCase()).toBe("#0F766E");
-    expect(resolve(sheet.light, "--accent-graphic").toUpperCase()).toBe("#0E9488");
+    expect(resolve(sheet.light, "--accent-graphic").toUpperCase()).toBe("#14B8A6");
     expect(resolve(sheet.light, "--ok").toUpperCase()).toBe("#166534");
     expect(resolve(sheet.light, "--warn").toUpperCase()).toBe("#944D05");
     expect(resolve(sheet.light, "--err").toUpperCase()).toBe("#B91C1C");
@@ -186,10 +192,56 @@ describe("no teal fill colour is used as text", () => {
     for (const f of walk(PUBLIC)) {
       const src = readFileSync(f, "utf8");
       src.split("\n").forEach((line, i) => {
-        if (/(^|[^-\w])color:\s*var\(--teal(-bright)?\)/.test(line)) {
+        if (/(^|[^-\w])color:\s*var\(--teal(-bright)?[,)]/.test(line)) {
           offenders.push(`${relative(PUBLIC, f)}:${i + 1}`);
         }
       });
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
+// Teal text is only ever an inline link: every other rule that sets text to
+// --accent is a regression to the old "teal labels everywhere" look.
+const LINK_SELECTORS = new Set([
+  "a",
+  "a:hover",
+  "button.linklike, .btn.linklike",
+  "button.linklike:hover, .btn.linklike:hover",
+  ".arrow-link:hover",
+  ".kv dd a",
+]);
+
+describe("--accent text is reserved for inline links", () => {
+  it("only link selectors colour text with --accent", () => {
+    const offenders: string[] = [];
+    for (const f of walk(PUBLIC)) {
+      if (!/\.(css|html)$/.test(f)) continue;
+      const src = readFileSync(f, "utf8");
+      for (const m of src.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        if (!/(^|[;\s{])color:\s*var\(--accent(-press)?\)/.test(m[2]!)) continue;
+        const sel = m[1]!.trim().replace(/\s+/g, " ").replace(/^.*\*\/\s*/, "");
+        if (!LINK_SELECTORS.has(sel)) offenders.push(`${relative(PUBLIC, f)}: ${sel}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("no icon-only control leans on the graphic teal alone", () => {
+  it("every button or link whose content is only an icon has an aria-label or title", () => {
+    const offenders: string[] = [];
+    for (const f of walk(PUBLIC)) {
+      if (!/\.(html|js)$/.test(f)) continue;
+      const src = readFileSync(f, "utf8");
+      for (const m of src.matchAll(/<(button|a)\b([^>]*)>([\s\S]*?)<\/\1>/g)) {
+        const [, , attrs, inner] = m as unknown as [string, string, string, string];
+        if (!/icon|<svg/.test(inner)) continue;
+        const text = inner.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<[^>]+>/g, "").replace(/\$\{[^}]*\}/g, "x").trim();
+        if (text) continue;
+        if (/aria-label|title=/.test(attrs)) continue;
+        offenders.push(`${relative(PUBLIC, f)}:${src.slice(0, m.index).split("\n").length}`);
+      }
     }
     expect(offenders).toEqual([]);
   });

@@ -150,13 +150,15 @@
   --fg:              var(--ink);
   --fg-mute:         var(--ink-muted);
   --line:            var(--rule-strong);
-  /* Teal has three roles (owner, 2026-10-17: keep the light teal where it
-   * stays readable). --teal fills and carries --on-teal ink. --accent-graphic
-   * is for icons beside labels, focus rings, markers and large headings
-   * (3:1). --accent is the deep step for small text and links (4.5:1).
-   * apps/web/tests/themeContrast.test.ts pins every pairing in both themes. */
+  /* The brand teal is #14B8A6 and the look is light teal (owner,
+   * 2026-10-17). --teal fills and carries --on-teal ink. --accent-graphic is
+   * the same teal for icons beside labels, markers, focus, state borders and
+   * large headings (2.3:1 on paper: never the only cue for an unlabelled
+   * control). --accent is the deep step for inline text links ONLY (4.5:1);
+   * other teal text is ink, semibold, with a teal marker or underline.
+   * apps/web/tests/themeContrast.test.ts pins the pairings. */
   --accent:          #0F766E;
-  --accent-graphic:  #0E9488;
+  --accent-graphic:  #14B8A6;
   --accent-bright:   var(--teal-bright);
   --accent-press:    #0B5F58;
   --accent-deep:     var(--teal-deep);

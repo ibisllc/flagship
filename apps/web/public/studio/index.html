@@ -42,7 +42,7 @@
     .download.is-preferred { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
     .download strong { font-size: 17px; }
     .download span { color: var(--ink-muted); font-size: var(--body-sm-size); }
-    .download .recommended { display: none; color: var(--accent); font-family: var(--font-mono); font-size: 11px; }
+    .download .recommended { display: none; color: var(--ink); font-weight: 600; font-family: var(--font-mono); font-size: 11px; }
     .download.is-preferred .recommended { display: block; }
     .steps { counter-reset: studio-step; margin: var(--space-7) 0; padding: 0; list-style: none; }
     .steps li {
@@ -55,7 +55,7 @@
     }
     .steps li::before {
       content: counter(studio-step);
-      color: var(--accent);
+      color: var(--ink); font-weight: 600;
       font-family: var(--font-mono);
       font-size: 13px;
       padding-top: 2px;

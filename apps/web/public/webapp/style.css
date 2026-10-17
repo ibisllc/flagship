@@ -42,16 +42,17 @@
   --ink-muted:       #555149;
   --ink-faint:       #6B665C;
 
-  /* One accent, three roles (owner, 2026-10-17: keep the light teal where
-     it stays readable). --teal fills (buttons, selection, bars) and always
-     carries dark ink on top. --accent-graphic is a lighter step for icons
-     beside labels, focus rings, spinners, rings and sparklines (3:1 on the
-     canvas and cards); never for small text. --accent is the deep step for
-     small text and links (4.5:1). apps/web/tests/themeContrast.test.ts pins the
-     pairings. */
+  /* The brand teal is #14B8A6 and the look is light teal (owner,
+     2026-10-17). --teal fills (buttons, selection, bars) and carries dark
+     ink. --accent-graphic is the same teal for icons beside labels, markers,
+     rings, spinners, focus and state borders, and large display headings
+     (2.3:1 on paper, so never the only cue for something that has no label).
+     --accent is the deep step for inline text links ONLY (4.5:1); every other
+     bit of teal text is ink, semibold, with a teal marker or underline.
+     apps/web/tests/themeContrast.test.ts pins the pairings. */
   --teal:            #14B8A6;
   --teal-bright:     #2DD4BF;
-  --accent-graphic:  #0E9488;
+  --accent-graphic:  #14B8A6;
   --accent:          #0F766E;
   --accent-press:    #0B5F58;
   --accent-soft:     rgba(20, 184, 166, 0.10);
@@ -455,7 +456,8 @@ main {
   font-size: 13px;
 }
 .companion-mode-banner strong {
-  color: var(--accent);
+  color: var(--ink);
+  font-weight: 600;
   white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 11px;
@@ -652,7 +654,7 @@ button.secondary:hover, .btn.secondary:hover,
 button.pill:hover, button.ghost:hover {
   background: transparent;
   border-color: var(--teal);
-  color: var(--accent);
+  color: var(--ink);
 }
 button.secondary:disabled:hover, .btn.secondary:disabled:hover {
   border-color: var(--rule-strong);
@@ -881,8 +883,9 @@ button.card:hover { background: var(--canvas-2); border-color: var(--rule-strong
   border-color: color-mix(in srgb, var(--warn) 35%, transparent);
 }
 .pill.accent {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--ink);
+  font-weight: 600;
+  border-color: var(--accent-graphic);
 }
 .pill .pill-server-icon {
   width: 12px;
@@ -901,7 +904,7 @@ a.pill {
   text-decoration: none;
 }
 a.pill::before { content: none; }
-a.pill:hover { color: var(--accent); border-bottom-color: var(--accent); }
+a.pill:hover { color: var(--ink); border-bottom-color: var(--teal); }
 
 /* ── Form controls ──────────────────────────────────────────────── */
 input[type="password"], input[type="text"], input[type="email"],
@@ -1025,7 +1028,7 @@ a.secondary, a.primary {
   text-transform: uppercase;
   text-decoration: none;
 }
-a.secondary:hover { border-color: var(--teal); color: var(--accent); }
+a.secondary:hover { border-color: var(--teal); color: var(--ink); }
 a.primary { background: var(--teal); border-color: var(--teal); color: var(--accent-on); }
 a.primary:hover { background: var(--teal-bright); border-color: var(--teal-bright); }
 
@@ -1425,8 +1428,10 @@ section:not(.hidden) {
   color: var(--ink);
 }
 .tab-bar-btn.is-active {
-  color: var(--accent);
+  color: var(--ink);
+  font-weight: 600;
 }
+.tab-bar-btn.is-active .icon { color: var(--accent-graphic); }
 .tab-bar-btn.is-active::before {
   /* Thin top-stroke on mobile, bottom-stroke on desktop. */
   content: "";
@@ -1958,7 +1963,7 @@ section h2.fs-hero-title::before { content: none; }
   font-weight: 500;
   color: var(--ink-faint);
 }
-.fs-chip.is-selected .fs-chip-count { color: var(--accent); }
+.fs-chip.is-selected .fs-chip-count { color: var(--ink); }
 .fs-chip:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: 2px; }
 
 /* Pod-switcher leader marker: a small teal flag next to the main server's
@@ -2305,7 +2310,7 @@ section h2.fs-hero-title::before { content: none; }
 .build-session-row + .build-session-row { margin-top: var(--space-2); }
 .build-session-body { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .build-session-body .note { margin: 0; }
-.build-session-action { color: var(--accent); font-weight: 600; font-size: 14px; }
+.build-session-action { color: var(--ink); font-weight: 600; font-size: 14px; }
 .build-session-row.is-active .build-session-action { color: var(--ok); }
 .build-help-list { display: flex; flex-direction: column; gap: var(--space-3); margin: var(--space-3) 0; }
 .build-help-list h4 { margin: 0 0 4px; font-size: 14px; }
@@ -2337,7 +2342,7 @@ section h2.fs-hero-title::before { content: none; }
 .vc-msg-user {
   align-self: flex-end;
   background: var(--accent-soft);
-  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  border-color: color-mix(in srgb, var(--teal) 40%, transparent);
   border-bottom-right-radius: var(--radius-sm);
 }
 .vc-msg-attachments { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
@@ -2436,7 +2441,7 @@ section h2.fs-hero-title::before { content: none; }
 }
 .bk-save-row input { width: auto; margin: 0; }
 .vc-address { color: var(--ink-muted); }
-.vc-address-name { color: var(--accent); font-weight: 600; }
+.vc-address-name { color: var(--ink); font-weight: 600; }
 
 /* A live app's access list (docs/ai-privacy-and-staging.md §3a). */
 .sd-access-req { padding-top: var(--space-2); border-top: 1px solid var(--border-soft); overflow-wrap: anywhere; }
@@ -2707,7 +2712,7 @@ section h2.fs-hero-title::before { content: none; }
 }
 .mm-row:hover { background: var(--surface); }
 .mm-row:active { transform: none; }
-.mm-row.is-selected { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+.mm-row.is-selected { background: var(--accent-soft); border-color: color-mix(in srgb, var(--teal) 40%, transparent); }
 .mm-row-label { font-size: 14px; font-weight: 500; }
 .mm-row-sub { font-size: 12px; color: var(--ink-muted); line-height: 1.4; }
 .mm-row-sub.mm-muted { color: var(--ink-faint); }

@@ -313,7 +313,10 @@
 //       rings and focus, --accent for small text, --teal for fills.
 //  v139: light --accent-graphic is #0E9488 (3:1 on every surface); status
 //       text (--ok, --warn, --err) is deepened to 4.5:1 on paper.
-const SHELL_VERSION = "v139";
+//  v140: the light teal #14B8A6 is the look again: --accent-graphic is the
+//       brand teal, --accent is for inline links only, other teal text is ink;
+//       Create a server picks its backup policy with nothing preselected.
+const SHELL_VERSION = "v140";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

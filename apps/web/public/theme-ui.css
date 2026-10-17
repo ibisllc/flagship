@@ -41,7 +41,7 @@
   justify-content: center;
   transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
 }
-.theme-btn:hover { border-color: var(--teal, #14B8A6); color: var(--teal-bright, #2DD4BF); }
+.theme-btn:hover { border-color: var(--teal, #14B8A6); color: var(--ink); }
 .theme-btn svg { width: 16px; height: 16px; flex: none; }
 .theme-icon-moon { display: block; }
 .theme-icon-sun  { display: none; }
