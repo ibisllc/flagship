@@ -971,6 +971,31 @@ const OCTOBER: readonly Scenario[] = [
     },
   ),
   iosTotal(
+    "ios-oct-app-storage-limits",
+    "D6: Plants' page shows its files folder and database against their limits (2.0 GB of 5.0 GB; 300 MB of 1.0 GB) with no full note.",
+    O + "test_appStorageShowsLimits",
+    {
+      steps: [{ kind: "tap", describe: "Open Plants.", handle: "service-detail-storage" }],
+      assertions: [
+        { describe: "Files line", handle: "service-detail-storage-files", expect: "present" },
+        { describe: "No full note", handle: "service-detail-storage-full", expect: "absent" },
+      ],
+      screenshots: [shot("app-storage-limits", "Storage against limits.")],
+      dimension: "D6",
+    },
+  ),
+  iosTotal(
+    "ios-oct-app-storage-full",
+    "D6: a full app (Wiki's files folder) says new data is refused until space is freed or the limit raised.",
+    O + "test_aFullAppSaysNewDataIsRefused",
+    {
+      steps: [{ kind: "tap", describe: "Open Wiki.", handle: "service-detail-storage" }],
+      assertions: [{ describe: "Full sentence", handle: "service-detail-storage-full", expect: "present" }],
+      screenshots: [shot("app-storage-full", "The full sentence.")],
+      dimension: "D6",
+    },
+  ),
+  iosTotal(
     "ios-oct-access-alert-not-now",
     "D5: 'Not now' closes the access sheet and leaves the request on the box.",
     O + "test_appAccessAlertNotNowCloses",

@@ -8,12 +8,6 @@
 
 package com.flagshipserver.app.ui.shell
 
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
-import com.flagshipserver.app.ui.components.FSActionFooter
 import android.app.Activity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -57,6 +51,8 @@ import com.flagshipserver.app.keystore.BiometricAuthority
 import com.flagshipserver.app.keystore.BiometricCancelled
 import com.flagshipserver.app.keystore.BiometricGate
 import com.flagshipserver.app.keystore.Keystore
+import com.flagshipserver.app.ui.components.FSGhostButton
+import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import kotlinx.coroutines.launch
 
@@ -88,8 +84,6 @@ fun BiometricLockScreen() {
         modifier = Modifier
             .fillMaxSize()
             .background(FS.colors.bg)
-            // Edge-to-edge: keep the footer above the navigation bar.
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
             // A full-screen lock cover must swallow every touch, not just
             // paint over the shell behind it — Compose only routes taps to
             // composables that actually declare pointer input, so without
@@ -140,33 +134,38 @@ fun BiometricLockScreen() {
                 )
                 Spacer(Modifier.height(FS.space.s2))
             }
-            // Same footer as Welcome. Sign out is the always-present escape
-            // so broken/absent biometrics can never trap the user on this
-            // screen. It's a genuine Tier-2 SIGN OUT — it erases this
-            // device's local key material from the Keystore (every profile,
-            // since the locked user can't pick one) and drops to Welcome.
-            // Like the Settings sign-out it's snoop-hardening, not eviction:
-            // the same key comes back via passkey recovery (instant re-pair,
-            // no rotation). Confirm copy adapts on cloud recovery.
-            FSActionFooter(
-                primary = if (status == Status.Authenticating) "Authenticating…" else "Unlock",
-                primaryTag = "biometric-unlock-btn",
-                primaryEnabled = status != Status.Authenticating,
-                onPrimary = {
+            FSPrimaryButton(
+                label = if (status == Status.Authenticating) "Authenticating…" else "Unlock with biometrics",
+                onClick = {
                     if (activity == null) {
-                        status = Status.Failed("Lost activity context. Restart the app to try again.")
-                    } else {
-                        scope.launch { tryUnlock(activity) { newStatus ->
-                            status = newStatus
-                            if (newStatus == Status.Idle) unlocked()
-                        } }
+                        status = Status.Failed("Lost activity context — restart the app to retry.")
+                        return@FSPrimaryButton
                     }
+                    scope.launch { tryUnlock(activity) { newStatus ->
+                        status = newStatus
+                        if (newStatus == Status.Idle) unlocked()
+                    } }
                 },
-                secondary = "Sign out",
-                secondaryTag = "lock-sign-out-btn",
-                onSecondary = { showSignOut = true },
-                secondaryDescription = "Sign out. Erases this device's account key and returns to the start.",
+                enabled = status != Status.Authenticating,
+                block = true,
+                large = true,
+                modifier = Modifier.testTag("biometric-unlock-btn"),
             )
+            Spacer(Modifier.height(FS.space.s4))
+            // Always-present escape so broken/absent biometrics can never
+            // trap the user on this screen with no way forward. This is a
+            // genuine Tier-2 SIGN OUT — it erases this device's local key
+            // material from the Keystore (every profile, since the locked
+            // user can't pick one) and drops to Welcome. Like the Settings
+            // sign-out it's snoop-hardening, not eviction: the same key
+            // comes back via passkey recovery (instant re-pair, no
+            // rotation). Confirm copy adapts on cloud recovery.
+            FSGhostButton(
+                label = "Sign out",
+                onClick = { showSignOut = true },
+                block = true,
+            )
+            Spacer(Modifier.height(FS.space.s8))
         }
     }
     if (showSignOut) {

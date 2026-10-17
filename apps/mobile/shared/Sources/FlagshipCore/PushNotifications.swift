@@ -79,6 +79,10 @@ public final class PushNotifications: NSObject {
     /// account activity; older payloads without one still land there.
     public nonisolated static let inviteCreatedCategory = "invite-created"
 
+    /// `kind` of the local notice raised when an app on a server ran out of
+    /// its disk limit (docs/app-runtimes.md 5.3); a tap opens the app's page.
+    public nonisolated static let appStorageFullKind = "app-storage-full"
+
     /// Where a tapped push leads: its app link when it carries one, else
     /// what its `kind` / `category` names.
     public nonisolated static func link(forPush info: [AnyHashable: Any]) -> DeepLink? {
@@ -96,6 +100,12 @@ public final class PushNotifications: NSObject {
         if (kind ?? category) == "secret-request" { return .secretRequests }
         if (kind ?? category) == inviteCreatedCategory { return .accountActivity }
         if let category, accountNoticeCategories.contains(category) { return nil }
+        if kind == appStorageFullKind, let serviceId = info["serviceId"] as? String, !serviceId.isEmpty {
+            if let server = (info["server"] as? String)?.lowercased(), !server.isEmpty {
+                return .appDetailOnServer(serviceId: serviceId, serverFqdn: server)
+            }
+            return .appDetail(serviceId: serviceId)
+        }
         if kind == "vibecode-needs-you", let sessionId = info["sessionId"] as? String, !sessionId.isEmpty {
             if let server = (info["server"] as? String)?.lowercased(), !server.isEmpty {
                 return .vibeCodeChatOnServer(sessionId: sessionId, serverFqdn: server)
@@ -116,6 +126,22 @@ public final class PushNotifications: NSObject {
     /// `.vibeCodeChat(sessionId:)` exactly like a real Web-Push wake. Best-
     /// effort: if authorization wasn't granted the system drops it silently —
     /// the operations sliver already carries the signal.
+    public func notifyAppStorageFull(serviceId: String, server: String? = nil) {
+        let content = UNMutableNotificationContent()
+        content.title = "Flagship"
+        content.body = "An app on this server is full"
+        content.sound = .default
+        var info: [String: String] = ["kind": Self.appStorageFullKind, "serviceId": serviceId]
+        if let server, !server.isEmpty { info["server"] = server }
+        content.userInfo = info
+        let request = UNNotificationRequest(
+            identifier: "flagship-app-storage-\(serviceId)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+    }
+
     public func notifyAiChatNeedsYou(sessionId: String, isEnvVar: Bool, server: String? = nil) {
         let content = UNMutableNotificationContent()
         content.title = "Flagship"

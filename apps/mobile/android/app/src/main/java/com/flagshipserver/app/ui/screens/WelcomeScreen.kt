@@ -24,14 +24,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.flagshipserver.app.ui.components.FSActionFooter
+import com.flagshipserver.app.ui.components.FSGhostButton
+import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.ui.theme.FSLayout
 
 /**
  * D.2.1 — WelcomeScreen.
  *
- * Two CTAs: "Create your account" / "Connect to an existing account".
+ * Two CTAs: "Create account" / "I already have a server".
  * Subtle pulsing illustration of the box. Single primary action.
  */
 @Composable
@@ -80,18 +81,43 @@ fun WelcomeScreen(nav: NavController) {
             )
         }
 
-        // One page for both ways back in (ConnectAccountScreen): sign in with
-        // the account name, or join with a pairing code from another device
-        // of the account. Same footer as the app lock.
-        FSActionFooter(
-            primary = "Create your account",
-            primaryTag = "welcome-create",
-            onPrimary = { nav.navigate("username") },
-            secondary = "Connect to an existing account",
-            secondaryTag = "welcome-connect",
-            onSecondary = { nav.navigate("connect") },
-            secondaryDescription = "Connect to an existing account. Sign in with your account name, or join with a pairing code.",
-        )
+        // CTAs
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            FSPrimaryButton(
+                label = "Create your account",
+                onClick = { nav.navigate("username") },
+                block = true,
+                large = true,
+            )
+            FSGhostButton(
+                // Username-first Join (JoinAccountContainer): type your
+                // account handle → resolveAccount branches to demo /
+                // single / multi / unknown. Replaces the old
+                // assert-passkey-first entry that 404'd on a missing
+                // local recovery passkey.
+                label = "I already have an account",
+                onClick = { nav.navigate("recover") },
+                block = true,
+                large = true,
+            )
+            FSGhostButton(
+                // Phase 3b — cross-device pairing (collaborators). Opens
+                // the in-app scanner; scanning the admin's "Add a device"
+                // QR joins their account out-of-band. (The admin's QR is
+                // also an App-Links URL, so the native camera routes here
+                // directly.)
+                label = "Join with a pairing code",
+                onClick = { nav.navigate("join-device") },
+                block = true,
+            )
+            Text(
+                "Patent Pending",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 12.sp),
+                modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = FS.space.s2),
+            )
+            Spacer(Modifier.height(FS.space.s4))
+        }
       }
     }
 }

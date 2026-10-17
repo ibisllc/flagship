@@ -19,6 +19,9 @@ public enum PhoneAlert: Sendable, Equatable {
     /// human-readable question / env-var name is fetched over the paired-session
     /// BFF when the owner opens the chat.
     case aiChatNeedsYou(sessionId: String, request: AiChatRequest, toolUseId: String)
+    /// An app reached its disk limit (docs/app-runtimes.md 5.3): value-free,
+    /// the app's service id and which store ("files" or "postgres").
+    case appStorageFull(serviceId: String, store: String)
     /// Any other daemon alert kind — surfaced by its own feature, not here.
     case other(kind: String)
 
@@ -64,7 +67,7 @@ public struct PhoneAlertsResponse: Sendable, Equatable {
 
 extension PhoneAlert: Decodable {
     private enum CodingKeys: String, CodingKey {
-        case kind, serviceId, request, toolUseId
+        case kind, serviceId, request, toolUseId, store
     }
 
     public init(from decoder: Decoder) throws {
@@ -77,6 +80,10 @@ extension PhoneAlert: Decodable {
             let toolUseId = try c.decodeIfPresent(String.self, forKey: .toolUseId) ?? ""
             let request = AiChatRequest(rawValue: requestRaw) ?? .talkToUser
             self = .aiChatNeedsYou(sessionId: sessionId, request: request, toolUseId: toolUseId)
+        case "app-storage-full":
+            let serviceId = try c.decodeIfPresent(String.self, forKey: .serviceId) ?? ""
+            if serviceId.isEmpty { self = .other(kind: kind); return }
+            self = .appStorageFull(serviceId: serviceId, store: try c.decodeIfPresent(String.self, forKey: .store) ?? "")
         default:
             self = .other(kind: kind)
         }

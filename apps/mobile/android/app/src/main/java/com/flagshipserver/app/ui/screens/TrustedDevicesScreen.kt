@@ -196,22 +196,12 @@ fun TrustedDevicesScreen(nav: NavController) {
         // Phase 3b — admin entry to the cross-device pairing QR. Adds a
         // collaborator's OWN phone (no shared iCloud); the added device
         // lands quarantined + non-admin.
-        val canAddDevice = com.flagshipserver.app.core.AddServerGate.allowsAddDevice(app)
         com.flagshipserver.app.ui.components.FSSecondaryButton(
             label = "Add device",
-            onClick = { if (canAddDevice) nav.navigate("add-device") },
-            enabled = canAddDevice,
+            onClick = { nav.navigate("add-device") },
             block = true,
             modifier = Modifier.semantics { contentDescription = "trusted-devices-add" },
         )
-        if (!canAddDevice) {
-            Text(
-                com.flagshipserver.app.core.AddServerGate.ADD_DEVICE_ADMIN_ONLY,
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
-                modifier = Modifier.semantics { contentDescription = "trusted-devices-add-admin-only" },
-            )
-        }
         Spacer(Modifier.height(FS.space.s2))
         when (state) {
             is TrustedDevicesViewModel.State.Idle,

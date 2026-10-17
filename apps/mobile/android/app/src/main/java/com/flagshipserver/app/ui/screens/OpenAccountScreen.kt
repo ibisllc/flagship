@@ -57,8 +57,7 @@ fun OpenAccountScreen(
     }
     val phase by vm.phase.collectAsState()
 
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val deviceModel = remember { com.flagshipserver.app.core.DeviceDisplayName.suggested(context) }
+    val deviceModel = remember { (Build.MODEL ?: "").trim().ifEmpty { null } }
     var accountName by remember { mutableStateOf(vm.defaultAccountName()) }
     var deviceName by remember { mutableStateOf(vm.defaultDeviceName(deviceModel)) }
 

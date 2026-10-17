@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 import FlagshipAPI
 import FlagshipCore
 
-/// "Backup/clone server" button in the server page's Backup / Migrate card
+/// "Back up now (with a passcode)": the one-off Backup/clone server, below the server page's Backups section
 /// (docs/server-backup-and-clone.md).
 struct ServerBackupButton: View {
     @Environment(\.podScreensClients) private var clients
@@ -12,7 +12,7 @@ struct ServerBackupButton: View {
     @State private var showSheet = false
 
     var body: some View {
-        FSPrimaryButton("Backup/clone server", block: true) { showSheet = true }
+        FSPrimaryButton("Back up now (with a passcode)…", block: true) { showSheet = true }
             .accessibilityIdentifier("sd-backup-server")
             .sheet(isPresented: $showSheet) {
                 NavigationStack {
@@ -62,12 +62,12 @@ struct ServerBackupSheet: View {
             }
         case .ready(let bytes):
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("Backup ready: two files, \(ServerArchive.formatBytes(bytes)) in all. Keep them together.").foregroundColor(c.text)
+                Text("Backup ready: one .flagship file, \(ServerArchive.formatBytes(bytes)).").foregroundColor(c.text)
                 if !vm.leftOut.isEmpty {
                     Text("Left out (no source to rebuild them from): \(vm.leftOut.joined(separator: ", ")).")
                         .font(FS.font.caption()).foregroundColor(c.danger)
                 }
-                FSPrimaryButton("Download both files", block: true) { Task { await vm.download() } }
+                FSPrimaryButton("Download the backup", block: true) { Task { await vm.download() } }
                     .accessibilityIdentifier("backup-download")
             }
         case .downloading(let fraction):
@@ -77,12 +77,12 @@ struct ServerBackupSheet: View {
             }
         case .saved(let urls):
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("Downloaded. The server has removed its copy. Save both files together: to Files (a folder on this phone, iCloud Drive or a USB drive), or AirDrop them to a computer.")
+                Text("Downloaded. The server has removed its copy. Save the file: to Files (a folder on this phone, iCloud Drive or a USB drive), or AirDrop it to a computer.")
                     .foregroundColor(c.text)
                 ForEach(urls, id: \.self) { u in
                     Label(u.lastPathComponent, systemImage: "doc").font(FS.font.caption()).foregroundColor(c.textMuted)
                 }
-                ShareLink(items: urls) { Label("Save both files…", systemImage: "square.and.arrow.up") }
+                ShareLink(items: urls) { Label("Save the backup…", systemImage: "square.and.arrow.up") }
                     .accessibilityIdentifier("backup-share")
             }
         case .failed(let message):
@@ -97,6 +97,9 @@ struct ServerBackupSheet: View {
     private func passcodeStep(_ c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
             Text("Set the backup's passcode").font(FS.font.h4()).foregroundColor(c.text)
+            Text(ServerArchive.passcodeWhy).font(FS.font.bodySm()).foregroundColor(c.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("backup-passcode-why")
             Text(ServerArchive.passcodeNote).font(FS.font.bodySm()).foregroundColor(c.textMuted)
             if vm.useOwnPasscode {
                 SecureField("Your passcode", text: $vm.ownPasscode)
@@ -224,6 +227,14 @@ struct ImportBackupContainer: View {
                     clients: clients,
                     onRestored: { fqdn in app.podsAwaitingBackup[fqdn.lowercased()] = nil }
                 )
+                // Gym-only: the file a `-smoke-restore-*` launch prepared (the
+                // system file picker can't be driven from a test).
+                #if DEBUG
+                if let file = GymSweepSeams.importFile {
+                    GymSweepSeams.importFile = nil
+                    await vm?.choose([file])
+                }
+                #endif
             }
         }
         .onDisappear { vm?.stop() }
@@ -252,7 +263,7 @@ struct ImportBackupScreen: View {
         .background(c.bg.ignoresSafeArea())
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-        .fileImporter(isPresented: $picking, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
+        .fileImporter(isPresented: $picking, allowedContentTypes: [.data], allowsMultipleSelection: false) { result in
             if case .success(let urls) = result { Task { await vm.choose(urls) } }
         }
     }
@@ -273,7 +284,7 @@ struct ImportBackupScreen: View {
         switch vm.phase {
         case .pick:
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                Text(vm.targetFqdn.map { "\(serverName($0)) is waiting for its backup. Pick the backup's two files and this screen sends it." } ?? ServerArchive.importIntro)
+                Text(vm.targetFqdn.map { "\(serverName($0)) is waiting for its backup. Pick the backup's .flagship file and this screen sends it." } ?? ServerArchive.importIntro)
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
                 FSCard {
@@ -281,9 +292,9 @@ struct ImportBackupScreen: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("import-backup-files")
                 }
-                FSPrimaryButton(vm.backupFileName == nil && vm.dataFileName == nil ? "Choose the backup files" : "Choose the other file", block: true) { picking = true }
+                FSPrimaryButton(vm.fileName == nil ? "Choose the backup file" : "Choose another file", block: true) { picking = true }
                     .accessibilityIdentifier("import-backup-choose")
-                Text("You can pick both at once. They're read where they are; nothing is copied onto this phone.")
+                Text("It's read where it is; nothing is copied onto this phone.")
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
             }
@@ -363,7 +374,13 @@ struct ImportBackupScreen: View {
         case .done(let fqdn, let apps):
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 Text("\(serverName(fqdn)) is restored.").font(FS.font.h4()).foregroundColor(c.success)
-                ForEach(apps, id: \.serviceId) { Text(ImportBackupViewModel.describe($0)).font(FS.font.bodySm()).foregroundColor(c.textMuted) }
+                Text(ImportBackupViewModel.restoredLine(apps)).font(FS.font.body()).foregroundColor(c.text)
+                    .accessibilityIdentifier("import-backup-restored")
+                ForEach(ImportBackupViewModel.failedLines(apps), id: \.self) { line in
+                    Text(line).font(FS.font.bodySm()).foregroundColor(c.danger)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("import-backup-failed-app")
+                }
                 FSPrimaryButton("Done", block: true) { onClose() }
                     .accessibilityIdentifier("import-backup-done")
             }

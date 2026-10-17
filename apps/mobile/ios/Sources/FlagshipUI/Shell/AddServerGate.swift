@@ -64,6 +64,8 @@ public enum AdminOrderGate {
     public static let accessList = "Only an admin device can change this app's internet access."
     public static let apiKeys = "Only an admin device can create or revoke API keys."
     public static let dataWrite = "Only an admin device can change this app's data."
+    /// The server page's orders (backups, policy, update, power, ...); the webapp's SERVER_ADMIN_ONLY.
+    public static let server = "Only an admin device can change this server. This device can see it."
 }
 
 public struct AddServerRefused: LocalizedError, Equatable {

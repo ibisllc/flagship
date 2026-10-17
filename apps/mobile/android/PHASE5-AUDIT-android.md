@@ -17,7 +17,7 @@ preflight contradicted by a server-side missing envelope) is now pinned.
 
 | # | Flow / file | Network call | Absent / "not found" handling | Status |
 |---|---|---|---|---|
-| 1 | `ConnectAccountScreen.resolve` | `resolveAccount(handle)` | `account/resolve` is **200-always**. `kind="unknown"` → `NoAccountView` STATE ("No Flagship account by that name"). `demo` → `DemoFixtures.activate`. `single/multi` → hand off. The `catch` block fires ONLY for a genuine transport error (renders an inline retry message, not a 404). | clean |
+| 1 | `JoinAccountContainer.submit` | `resolveAccount(handle)` | `account/resolve` is **200-always**. `kind="unknown"` → `NoAccountView` STATE ("No Flagship account by that name"). `demo` → `DemoFixtures.activate`. `single/multi` → hand off. The `catch` block fires ONLY for a genuine transport error (renders an inline retry message, not a 404). | clean |
 | 2 | `LoginViewModel.begin` | (consumes preflight) | `recovery.present==false` → `LoginPhase.NoCloudBackup` STATE (single vs multi copy), never an error. Does not open the account or call the server. | clean |
 | 3 | `LoginViewModel.unwrapUmk` | `fetchRecoveryEnvelope(credentialId)` | Only reached when `recovery.present==true`. If the envelope is gone server-side (rare race), the 404 is caught → `LoginPhase.Failed` via `humanizedError` ("We couldn't find a recovery passkey…"), never a crash. **Now pinned** by `login_recoveryEnvelopeRace_landsOnFailedNotCrash`. | clean |
 | 4 | `LoginViewModel.confirmTakeover` | `initiateRePair` | This is an ACTION (mutating the device key), not a lookup — a genuine failure correctly lands on `LoginPhase.Failed`. Multi gates on the second factor first (Worker 401s without `totpProof`); that 401 is humanized, not surfaced raw. | clean |

@@ -69,6 +69,26 @@ final class AiChatAlertPollerTests: XCTestCase {
         XCTAssertEqual(client.fetchSinceCalls, [0])
     }
 
+    func test_storageFull_notifiesOncePerApp_andAcks() async {
+        let ops = ActiveOperationsCenter()
+        let env = { (id: Int) in PhoneAlertEnvelope(id: id, emittedAt: id, alert: .appStorageFull(serviceId: "a--wiki", store: "files")) }
+        let client = FakeClient(PhoneAlertsResponse(events: [env(3), env(4)], size: 2))
+        client.server = "home.a.flagship.services"
+        var storage: [(String, String?)] = []
+        let poller = AiChatAlertPoller(
+            operations: ops, client: client, isActive: { true },
+            notify: { _, _, _ in XCTFail("not an AI chat alert") },
+            notifyStorageFull: { storage.append(($0, $1)) },
+            pollIntervalNanos: 1
+        )
+        _ = await poller.drainOnce()
+        XCTAssertEqual(storage.count, 1)
+        XCTAssertEqual(storage.first?.0, "a--wiki")
+        XCTAssertEqual(storage.first?.1, "home.a.flagship.services")
+        XCTAssertEqual(client.ackedThrough, [4])
+        XCTAssertTrue(ops.operations.isEmpty)
+    }
+
     func test_dedup_reDrainSameTool_doesNotReNotify() async {
         let ops = ActiveOperationsCenter()
         let client = FakeClient(PhoneAlertsResponse(events: [aiChatEnv(1, "sess-a", .talkToUser, "tool-1")], size: 1))

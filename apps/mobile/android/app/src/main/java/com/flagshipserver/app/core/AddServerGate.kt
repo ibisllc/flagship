@@ -18,12 +18,6 @@ import kotlinx.serialization.json.jsonPrimitive
 object AddServerGate {
     const val ADMIN_ONLY = "Only an admin device of this account can add servers."
 
-    /** Adding a device over the pairing relay is admin-only too (owner rule
-     *  2026-10-16; packages/protocol/test-vectors/device-pairing `adminOnlyLine`). */
-    const val ADD_DEVICE_ADMIN_ONLY = "Only an admin device of this account can add devices."
-
-    fun allowsAddDevice(app: AppState): Boolean = allows(app)
-
     /** Home's nav routes that bring a server into the account. */
     private val ROUTES = setOf("create-server", "share-accept", "transfer-acquirer")
 

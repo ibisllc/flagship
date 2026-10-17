@@ -1,6 +1,6 @@
 // "Secure your account" — the SKIPPABLE backup nudge shown once, right
 // after a brand-new account is opened (create path only; the recovery /
-// "Connect to an existing account" path never sees this). It pre-selects the
+// "I already have an account" path never sees this). It pre-selects the
 // cloud (passkey) option when the device can do it, falls back to a
 // file-only / skip state when it can't, and never blocks the user from
 // reaching the app.

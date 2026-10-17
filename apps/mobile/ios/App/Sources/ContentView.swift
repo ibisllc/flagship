@@ -349,6 +349,11 @@ struct ContentView: View {
                         isEnvVar: request == .requestEnvVar,
                         server: server
                     )
+                },
+                notifyStorageFull: { serviceId, server in
+                    guard let delegate = UIApplication.shared.delegate as? AppDelegate,
+                          let push = delegate.push else { return }
+                    push.notifyAppStorageFull(serviceId: serviceId, server: server)
                 }
             )
             aiChatPoller = poller

@@ -72,13 +72,6 @@ fun AddDeviceScreen(
 
     // No live phone-to-phone relay exists yet: say so instead of pairing over
     // nothing. Debug builds use the in-memory relay so the gym can drive it.
-    if (!com.flagshipserver.app.core.AddServerGate.allowsAddDevice(app)) {
-        AddServerAdminOnlyScreen(
-            onBack = onCancel,
-            message = com.flagshipserver.app.core.AddServerGate.ADD_DEVICE_ADMIN_ONLY,
-        )
-        return
-    }
     val relays = remember { com.flagshipserver.app.core.Variant.devicePairingRelays() }
     if (relays == null) {
         DevicePairingUnavailable(title = "Add a device", onCancel = onCancel)

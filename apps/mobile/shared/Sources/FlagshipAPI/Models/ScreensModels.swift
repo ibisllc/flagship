@@ -93,6 +93,8 @@ public struct ServerDetailResponse: Codable, Equatable, Sendable {
     /// Owner debug access: an SSH key let in as `debug` until it ends.
     /// Absent from older daemons.
     public var debugAccess: DebugAccessView? = nil
+    /// Each app's disk use against its limits and the disk brake (docs/app-runtimes.md 5.3). Absent from older daemons.
+    public var storage: ServerStorage? = nil
 }
 
 /// Owner debug access as the box reports it (docs/recipe-delivery-and-remote-install.md
@@ -302,6 +304,8 @@ public struct AppDetailResponse: Codable {
     /// Built from a shared repo adaptation: the repo it adapts, so the page
     /// can offer to report a problem with it.
     public var adaptedFrom: AdaptedFrom? = nil
+    /// Files folder and database use against their limits. Absent on older boxes.
+    public var storage: AppDiskUsage? = nil
 
     public struct AdaptedFrom: Codable, Equatable {
         public let repo: String

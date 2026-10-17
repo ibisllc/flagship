@@ -38,6 +38,9 @@ public final class AiChatAlertPoller {
     /// Gate — only drain while this returns true (paired + unlocked). Mirrors
     /// the sliver's hide-under-lock so nothing surfaces over the lock screen.
     private let isActive: @MainActor () -> Bool
+    /// An app on `server` reached its disk limit: say so once per app.
+    private let notifyStorageFull: @MainActor (_ serviceId: String, _ server: String?) -> Void
+    private var storageNotified: Set<String> = []
     private let pollIntervalNanos: UInt64
 
     private var task: Task<Void, Never>?
@@ -56,8 +59,10 @@ public final class AiChatAlertPoller {
         client: any PhoneAlertClient,
         isActive: @escaping @MainActor () -> Bool,
         notify: @escaping @MainActor (_ sessionId: String, _ request: PhoneAlert.AiChatRequest, _ server: String?) -> Void,
+        notifyStorageFull: @escaping @MainActor (_ serviceId: String, _ server: String?) -> Void = { _, _ in },
         pollIntervalNanos: UInt64 = AiChatAlertPoller.pollInterval
     ) {
+        self.notifyStorageFull = notifyStorageFull
         self.operations = operations
         self.client = client
         self.isActive = isActive
@@ -128,6 +133,10 @@ public final class AiChatAlertPoller {
             if case .other(let kind) = env.alert,
                kind == AppAccessEvents.socketEvent || kind == AppAccessEvents.pushCategory {
                 AppAccessEvents.post()
+                continue
+            }
+            if case .appStorageFull(let serviceId, _) = env.alert {
+                if storageNotified.insert("\(key)|\(serviceId)").inserted { notifyStorageFull(serviceId, server) }
                 continue
             }
             guard let (sessionId, request, toolUseId) = env.alert.aiChat, !sessionId.isEmpty else {

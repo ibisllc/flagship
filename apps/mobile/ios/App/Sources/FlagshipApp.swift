@@ -97,7 +97,12 @@ struct FlagshipApp: App {
             activeBox: { await store.podBaseUrl.flatMap { URL(string: $0)?.host } },
             fetchHint: { try? await lanClient.lanHint() }
         )
-        self.livePodClients = .live(urlSession: pinnedSession, store: store)
+        let podClients = PodScreensClientFactory.live(urlSession: pinnedSession, store: store)
+        self.livePodClients = podClients
+        // The phone's copy of each phone-side server's newest backup, fetched
+        // in the background on power and Wi-Fi. Registered before launch ends.
+        PhoneBackupTask.register(clients: podClients)
+        PhoneBackupTask.schedule()
         // The lock/power-off + dead-man routes are signature-authed daemon
         // endpoints on the SAME box; share the box-pinned session so a rogue
         // `.com` cert can't intercept a power-off / affirmation either.

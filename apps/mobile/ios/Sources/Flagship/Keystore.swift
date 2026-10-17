@@ -3,6 +3,7 @@ import CryptoKit
 import LocalAuthentication
 import Security
 import FlagshipCore
+import FlagshipAPI
 
 /// User Master Key (UMK) — root of identity for a Flagship account.
 ///
@@ -476,6 +477,55 @@ public struct Keystore {
             throw KeystoreError.derivationFailed("server archive key")
         }
         return key
+    }
+
+    /// Keys for a server's scheduled backups (`flagship/server-archive-keys/v1`):
+    /// `count` fresh archive ids with the account's key for each, and the
+    /// sensitive-order key that signs the batch (the admin root when this
+    /// device holds it, else the IRK), under ONE approval: the UMK and the
+    /// admin root unseal through the same Secure-Enclave wrapper.
+    public static func mintServerArchiveKeys(
+        count: Int,
+        reason: String
+    ) async throws -> (keys: [ArchiveKey], signer: Curve25519.Signing.PrivateKey) {
+        #if DEBUG
+        if let seed = GymSeams.accountRootSeed {
+            let signer: Curve25519.Signing.PrivateKey
+            if let g = gymAdminRoot() { signer = g } else { signer = try await deriveIRK(reason: reason) }
+            return (ArchiveKeys.mint(umkSeed: seed, count: count), signer)
+        }
+        #endif
+        let profile = activeProfileId
+        if !hasAdminRoot {
+            let umk = try await unwrappedUMK(reason: reason)
+            let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
+            let irk = try Curve25519.Signing.PrivateKey(rawRepresentation: irkSeed.withUnsafeBytes { Data($0) })
+            return (ArchiveKeys.mint(umkSeed: umk.withUnsafeBytes { Data($0) }, count: count), irk)
+        }
+        let wrapper = try await WrappingKeypair.createOrLoad(reason: reason)
+        let umk: SymmetricKey
+        if let cached = cachedSessionUmk(profile) {
+            umk = cached
+        } else {
+            guard
+                let wrapped = keychainRead(account: account(KCKey.wrappedUmk)),
+                let ephemeralRaw = keychainRead(account: account(KCKey.ephemeralPub)),
+                let ephemeralPub = try? P256.KeyAgreement.PublicKey(x963Representation: ephemeralRaw)
+            else { throw KeystoreError.keyNotFound }
+            umk = try unwrapUMK(wrapped: wrapped, ephemeralPub: ephemeralPub, wrapper: wrapper, profile: profile)
+        }
+        let admin = try unwrapAdminRoot(wrapper: wrapper)
+        return (ArchiveKeys.mint(umkSeed: umk.withUnsafeBytes { Data($0) }, count: count), admin)
+    }
+
+    /// Whether `mintServerArchiveKeys` can run without a prompt now: the
+    /// session already holds the UMK and the signer needs nothing more (no
+    /// admin root to unseal), or the gym's fixed keys stand in.
+    public static var canMintServerArchiveKeysSilently: Bool {
+        #if DEBUG
+        if GymSeams.accountRootSeed != nil { return true }
+        #endif
+        return !hasAdminRoot && hasSessionKey()
     }
 
     /// Gating v2 (Wave 3) author path: unwrap the UMK ONCE and return the author's

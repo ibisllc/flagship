@@ -123,9 +123,6 @@ data class PairingBundle(
     val admitSig: String,
     val grant: PairingGrant,
     val grantSignature: String,
-    /** The account key (IRK) public key hex the admit and a member grant verify
-     *  under (`bundleKeys` in test-vectors/device-pairing). */
-    val irkPubHex: String? = null,
     /** Slice D (docs/device-admin-tier-spec.md §4.2, D-4) — the ADMIN MASTER
      *  ROOT seed (32 bytes, lowercased hex) when the admin chose to PROMOTE the
      *  joining device to admin in this synchronous SAS ceremony; null otherwise
@@ -158,10 +155,3 @@ data class PairingGrant(
     val expiresAt: Long,
     val signerRoot: String,
 )
-
-/** What an admin's pairing grant says (packages/protocol/test-vectors/device-pairing). */
-object PairingGrants {
-    /** A member device's scopes; promoting to admin grants every scope instead. */
-    val MEMBER_SCOPES: List<String> = listOf("browse", "install-service", "vibe-code", "view-directory")
-    const val GRANT_TTL_MS: Long = 90L * 24 * 3_600_000
-}

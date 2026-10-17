@@ -849,8 +849,6 @@ test.describe("gym webapp total", () => {
       // Re-stamp the session username so startPairing's guard sees it.
       const { getSession } = await import("/lib/state.js");
       getSession().username = "smoketest";
-      // Adding a device is for the account's admin devices only: play one.
-      getSession().adminRootSeed = crypto.getRandomValues(new Uint8Array(32));
     });
     await page.evaluate(async () => {
       const { enterAddDevice } = await import("/views/add-device.js");

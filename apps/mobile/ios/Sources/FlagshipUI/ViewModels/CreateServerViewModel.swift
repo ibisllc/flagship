@@ -113,14 +113,17 @@ public final class CreateServerViewModel {
     public var debugSshKey: String = ""
     public static let debugFriendlyWarning =
         "Anyone with this key can read everything on this server while it's on. It turns off by itself 7 days from now."
-    /// Draft-only metadata — backup policy the user wants applied to this
-    /// server once it's up. NOT signed into the InstallBlob (the audit
-    /// against InstallBlob.swift confirmed `backupPolicy` does not appear
-    /// in canonical bytes); the box reads this later via an owner-signed
-    /// `set-backup-policy` order. Defaults to "phone-only" to match the
-    /// webapp's draft schema.
+    /// The server's backup policy (docs/server-backup-and-clone.md, "Backup
+    /// policy"): signed as `flagship/backup-policy/v1` with the sensitive-order
+    /// key at mint time and carried beside the pairing order, so the box
+    /// adopts it when it pairs. Defaults to phone-side backups.
     public var backupPolicy: CreateServerDraftStore.BackupPolicy = .phoneOnly {
         didSet { draftStore.setBackupPolicy(backupPolicy) }
+    }
+    /// Phone-side: the space this phone keeps for the server's backup, which
+    /// is also the most the server's apps may hold.
+    public var phoneReserveBytes: Int64 = PhoneBackupRetention.defaultReserveBytes(freeBytes: DeviceStorage.freeBytes()) {
+        didSet { draftStore.setPhoneReserveBytes(phoneReserveBytes) }
     }
     /// Set when this server is made to restore a backup (Import a backup,
     /// docs/server-backup-and-clone.md): the owner-signed restore order rides
@@ -223,6 +226,7 @@ public final class CreateServerViewModel {
         // stored properties are assigned so the didSet observers don't
         // double-write the same value back.
         self.backupPolicy = draftStore.backupPolicy()
+        if let r = draftStore.phoneReserveBytes() { self.phoneReserveBytes = r }
     }
 
     /// The subdomain must be a valid, non-reserved DNS label — what the user
@@ -543,6 +547,14 @@ public final class CreateServerViewModel {
             // An admin-pinned box takes a restore order only from the admin root.
             let sig = try (adminKey ?? irk).signature(for: try order.canonicalBytes())
             pairingOrderJson = ServerBackupFormat.attachRestore(toPairingJson: json, order: order, signatureHex: HexUtil.encode(sig))
+        }
+        // The backup policy rides beside the pairing order too, signed like a
+        // restore order (the admin root; the IRK only on a demo account).
+        if let json = pairingOrderJson {
+            let order = BackupPolicyOrder.make(serverDomain: serverDomain, draft: backupPolicy, reserveBytes: phoneReserveBytes,
+                                               issuedAt: Int64(Date().timeIntervalSince1970 * 1000))
+            let sig = try (adminKey ?? irk).signature(for: try order.canonicalBytes())
+            pairingOrderJson = ServerBackupFormat.attachBackupPolicy(toPairingJson: json, order: order, signatureHex: HexUtil.encode(sig))
         }
 
         // Secret-free recipe (docs/recipe-delivery-and-remote-install.md).

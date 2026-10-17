@@ -84,7 +84,7 @@ public final class ShareAcceptMockWorld: ServerShareTransport, @unchecked Sendab
         lock.lock()
         defer { lock.unlock() }
         ownerRows = [["shareId": shareId, "serverDomain": serverDomain, "state": "accepted", "owner": owner,
-                      "acceptance": acceptance, "expiresAt": Int64(4_102_444_800_000), "unlock": false]]
+                      "acceptance": acceptance, "expiresAt": 4_102_444_800_000, "unlock": false]]
     }
 
     /// Opens a sealed acceptance and checks #3 and the admin proof, as the box would.
@@ -119,7 +119,7 @@ public final class ShareAcceptMockWorld: ServerShareTransport, @unchecked Sendab
                                                 plaintext: offer.jsonData())) ?? ""
             var view: [String: Any] = ["shareId": shareId, "serverDomain": serverDomain, "offer": sealed,
                                        "state": acceptanceHex == nil ? "offered" : "accepted",
-                                       "expiresAt": Int64(4_102_444_800_000), "unlock": false]
+                                       "expiresAt": 4_102_444_800_000, "unlock": false]
             if let acceptanceHex { view["acceptance"] = acceptanceHex }
             return (200, view)
         }

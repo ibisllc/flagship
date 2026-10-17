@@ -64,6 +64,32 @@ final class GymOctoberTests: XCTestCase {
 
     private func label(_ el: XCUIElement) -> String { el.label }
 
+    // ─── Per-app disk limits ─────────────────────────────────────────────────
+
+    /// Plants shows its files folder and database against their limits.
+    func test_appStorageShowsLimits() throws {
+        let app = launch(tab: "apps")
+        openPlants(app)
+        let files = app.staticTexts["service-detail-storage-files"]
+        XCTAssertTrue(reveal(app, files), "Plants' page shows its files folder use.")
+        XCTAssertEqual(files.label, "2.0 GB of 5.0 GB")
+        XCTAssertTrue(app.staticTexts["service-detail-storage-database"].label.hasPrefix("300 MB of "))
+        XCTAssertFalse(app.staticTexts["service-detail-storage-full"].exists)
+        gymShot(app, "app-storage-limits")
+    }
+
+    /// A full app says why new data is refused.
+    func test_aFullAppSaysNewDataIsRefused() throws {
+        let app = launch(tab: "apps")
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] %@", "wiki")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 20), "The demo Wiki app should be listed.")
+        row.tap()
+        let full = app.staticTexts["service-detail-storage-full"]
+        XCTAssertTrue(reveal(app, full), "Wiki's page says it is full.")
+        XCTAssertEqual(full.label, "Full: new data is refused until you free space or raise the limit.")
+        gymShot(app, "app-storage-full")
+    }
+
     // ─── Configure environment: one signed change per variable ──────────────
 
     /// Plants' Configure environment: a name the box can't take is refused

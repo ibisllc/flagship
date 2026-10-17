@@ -1,11 +1,12 @@
-// Peer-backup status view model (docs/peer-backup.md).
+// P9 — peer-backup management view model.
 //
-// Loads GET /api/screens/peer-backup/status via the daemon's ScreensClient: the
-// v2 screen (state, holders as Server 1..n, restore-by date, what this server
-// keeps for others). Peer backup is a backup policy now, so there is no
-// participation toggle here.
+// Loads GET /api/screens/peer-backup/status via the daemon's ScreensClient
+// and routes the participation toggle through
+// POST /api/screens/peer-backup/toggle. Both endpoints return the same
+// PeerBackupStatusResponse shape, so toggle replaces `state` with the
+// freshly-served snapshot.
 //
-// Mirrors the webapp's views/peer-backup.js.
+// Mirrors FlagshipUI/ViewModels/PeerBackupViewModel.swift 1:1.
 
 package com.flagshipserver.app.viewmodels
 
@@ -13,7 +14,6 @@ import com.flagshipserver.app.api.PeerBackupStatusResponse
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.ScreensError
 import com.flagshipserver.app.core.NetworkErrorHumanizer
-import com.flagshipserver.app.core.PeerBackup
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,6 +29,9 @@ class PeerBackupViewModel(
     private val _state = MutableStateFlow<LoadingState<PeerBackupStatusResponse>>(LoadingState.Idle)
     val state: StateFlow<LoadingState<PeerBackupStatusResponse>> = _state.asStateFlow()
 
+    private val _togglePending = MutableStateFlow(false)
+    val togglePending: StateFlow<Boolean> = _togglePending.asStateFlow()
+
     fun load() = scope.launch {
         _state.value = LoadingState.Loading
         runCatching { client.peerBackupStatus() }
@@ -38,14 +41,25 @@ class PeerBackupViewModel(
             )
     }
 
-    companion object {
-        const val NOT_SET_UP = "Peer backup isn't set up on this server yet."
-
-        fun failureMessage(t: Throwable): String = when {
-            t is ScreensError.Http && t.status == 404 -> PeerBackup.OLDER_ENGINE
-            t is ScreensError.Http && t.status == 503 -> NOT_SET_UP
-            t is ScreensError.Http -> NetworkErrorHumanizer.humanize(t)
-            else -> t.message ?: "couldn't load peer-backup status"
+    fun toggle() = scope.launch {
+        val next = when (val s = _state.value) {
+            is LoadingState.Loaded -> !s.value.participating
+            else -> true
         }
+        _togglePending.value = true
+        try {
+            runCatching { client.peerBackupToggle(next) }
+                .fold(
+                    onSuccess = { _state.value = LoadingState.Loaded(it) },
+                    onFailure = { t -> _state.value = LoadingState.Failed(failureMessage(t)) },
+                )
+        } finally {
+            _togglePending.value = false
+        }
+    }
+
+    private fun failureMessage(t: Throwable): String = when (t) {
+        is ScreensError.Http -> NetworkErrorHumanizer.humanize(t)
+        else -> t.message ?: "couldn't load peer-backup status"
     }
 }

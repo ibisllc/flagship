@@ -298,12 +298,6 @@ interface ScreensClient {
     // P9 — peer-backup management.
     suspend fun peerBackupStatus(): PeerBackupStatusResponse
     suspend fun peerBackupToggle(participate: Boolean): PeerBackupStatusResponse
-    /** A lost server's peer backup record, read by this running server. */
-    suspend fun peerBackupRoot(req: PeerRootRequest): PeerRootSummary =
-        throw ScreensError.NotImplemented("peer backup restore")
-    /** Have this waiting server fetch the backup's pieces from other servers. */
-    suspend fun serverRestoreFromPeers(req: PeerRootRequest): Unit =
-        throw ScreensError.NotImplemented("peer backup restore")
 
     // P14 — companion-dock (60s pairing ticket → 4h read-only browser).
     suspend fun companionMintTicket(req: CompanionMintTicketRequest): CompanionMintTicketResponse

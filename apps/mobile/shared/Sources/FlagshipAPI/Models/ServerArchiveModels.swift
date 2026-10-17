@@ -39,10 +39,15 @@ public struct ServerArchiveStatus: Codable, Equatable, Sendable {
     /** Apps that couldn't go in (no source to rebuild from), with why. */
     public let left: [ServerArchiveLeftApp]?
     public let reason: String?
+    /// The one `.flagship` file people keep: its name, size and SHA-256.
+    public let bundleFileName: String?
+    public let bundleBytes: Int64?
+    public let bundleSha256: String?
 
     public init(archiveId: String, state: String, startedAt: Int64 = 0, progress: ServerArchiveProgress? = nil,
                 bytes: Int64? = nil, sha256: String? = nil, backupFileName: String? = nil, dataFileName: String? = nil,
-                apps: [ServerArchiveApp]? = nil, left: [ServerArchiveLeftApp]? = nil, reason: String? = nil) {
+                apps: [ServerArchiveApp]? = nil, left: [ServerArchiveLeftApp]? = nil, reason: String? = nil,
+                bundleFileName: String? = nil, bundleBytes: Int64? = nil, bundleSha256: String? = nil) {
         self.archiveId = archiveId
         self.state = state
         self.startedAt = startedAt
@@ -54,6 +59,9 @@ public struct ServerArchiveStatus: Codable, Equatable, Sendable {
         self.apps = apps
         self.left = left
         self.reason = reason
+        self.bundleFileName = bundleFileName
+        self.bundleBytes = bundleBytes
+        self.bundleSha256 = bundleSha256
     }
 }
 

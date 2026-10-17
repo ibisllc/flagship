@@ -323,7 +323,6 @@ fun HomeTab() {
                 // over a transferred box is a link/QR ingestion (Slice C).
                 onAddServer = { nav.navigate("create-server") },
                 onImportBackup = { nav.navigate("import-backup") },
-                onRestoreFromPeers = { nav.navigate("restore-peers") },
                 onCoManage = { nav.navigate("share-accept") },
                 onMakeLeader = { pod -> saveOrder { orderSaver.makeLeader(pod.podId) } },
                 onReorder = { ids -> saveOrder { orderSaver.reorder(ids) } },
@@ -398,22 +397,6 @@ fun HomeTab() {
                 targetFqdn = target,
                 onServerCreated = { serverDomain, serial, name ->
                     // Like any new server: on Home at once, cancellable.
-                    app.upsertPendingPod(name = name, fqdn = serverDomain, serial = serial)
-                },
-                onClose = { nav.popBackStack("home-root", inclusive = false) },
-            )
-        }
-        composable("restore-peers") {
-            if (!AddServerGate.allows(app)) {
-                AddServerAdminOnlyScreen(onBack = { nav.popBackStack() })
-                return@composable
-            }
-            // Restore from other servers: the lost server's backup comes back from
-            // the pieces other accounts' servers keep (docs/peer-backup.md).
-            com.flagshipserver.app.ui.screens.ImportBackupRoute(
-                targetFqdn = null,
-                fromPeers = true,
-                onServerCreated = { serverDomain, serial, name ->
                     app.upsertPendingPod(name = name, fqdn = serverDomain, serial = serial)
                 },
                 onClose = { nav.popBackStack("home-root", inclusive = false) },

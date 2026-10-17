@@ -75,9 +75,9 @@ class OpenAccountViewModel(
     private val _phase = MutableStateFlow<OpenAccountPhase>(OpenAccountPhase.Ready)
     val phase: StateFlow<OpenAccountPhase> = _phase.asStateFlow()
 
-    /** Default, user-overridable, human-readable device name: the name in
-     *  Android Settings, else the model (DeviceDisplayName, passed in by the
-     *  host since a pure VM can't read them); else "<username>'s phone". */
+    /** Default, user-overridable, human-readable device name. Build.MODEL
+     *  isn't reachable from a pure VM, so the host passes it in; we fall
+     *  back to "<username>'s phone". */
     fun defaultDeviceName(deviceModel: String?): String =
         deviceModel?.takeIf { it.isNotBlank() } ?: "$username's phone"
 

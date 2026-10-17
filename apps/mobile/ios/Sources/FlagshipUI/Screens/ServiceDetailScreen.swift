@@ -89,6 +89,7 @@ public struct ServiceDetailScreen: View {
                         ApiKeysSection(controller: keys)
                     }
                     if vm.showsDatabase, let db = vm.database { databaseRow(db, c: c) }
+                    storageSection(d.storage, c: c)
                     logsAndBackup(d: d, c: c)
                     if vm.canUninstall {
                         removeButton(c: c)
@@ -153,6 +154,38 @@ public struct ServiceDetailScreen: View {
                         .lineLimit(2).truncationMode(.tail)
                 }
             }
+        }
+    }
+
+    /// The app's disk use against its limits (docs/app-runtimes.md 5.3), and why
+    /// new data is refused when it is full. Hidden on a box that sends none.
+    @ViewBuilder
+    private func storageSection(_ storage: AppDiskUsage?, c: FSColors) -> some View {
+        let lines = AppStorageText.appLines(storage)
+        if !lines.isEmpty {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                Text("Storage").font(FS.font.h4()).foregroundColor(c.text)
+                FSCard {
+                    VStack(alignment: .leading, spacing: FS.space.s2) {
+                        ForEach(lines, id: \.label) { l in
+                            HStack {
+                                Text(l.label).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                                Spacer()
+                                Text(l.text).font(FS.font.bodySm())
+                                    .foregroundColor(l.full ? c.danger : c.text)
+                                    .accessibilityIdentifier("service-detail-storage-\(l.label.lowercased())")
+                            }
+                            if !l.note.isEmpty {
+                                Text(l.note).font(FS.font.caption()).foregroundColor(c.danger)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .accessibilityIdentifier("service-detail-storage-full")
+                            }
+                        }
+                    }
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("service-detail-storage")
         }
     }
 

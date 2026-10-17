@@ -72,6 +72,12 @@ public enum GymOrderCanonical {
             else { return nil }
             return UninstallServiceOrder(serverId: server, creator: creator, slug: slug, issuedAt: at).canonicalBytes()
         }
+        signers.registerCanonical("server-archive-keys") { p in
+            try? (p as? ArchiveKeysDeposit)?.canonicalBytes()
+        }
+        signers.registerCanonical("backup-policy") { p in
+            try? (p as? BackupPolicyOrder)?.canonicalBytes()
+        }
     }
 
     private static func int64(_ v: Any?) -> Int64? {

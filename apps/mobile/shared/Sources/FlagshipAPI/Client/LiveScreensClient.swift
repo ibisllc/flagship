@@ -350,6 +350,30 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func serverArchiveBackupFile() async throws -> Data {
         try await requestData("/api/screens/server-archive/backup-file", timeout: 60)
     }
+    public func serverArchiveBundle(_ route: ServerArchiveRoute, offset: Int64) async throws -> Data {
+        try await requestData("\(route.base)/bundle?offset=\(offset)", timeout: 300)
+    }
+    public func savedBackups() async throws -> SavedBackupsView {
+        try await request("/api/screens/server-archive/backups")
+    }
+    public func savedBackupsSetSchedule(_ schedule: BackupSchedule) async throws -> SavedBackupsView {
+        try await request("/api/screens/server-archive/backups/schedule", method: "PUT", body: try JSONEncoder().encode(schedule))
+    }
+    public func savedBackupsDepositKeys(_ req: ArchiveKeysDepositRequest) async throws -> SavedBackupsView {
+        try await request("/api/screens/server-archive/backups/keys", method: "POST", body: try JSONEncoder().encode(req), timeout: 60)
+    }
+    public func savedBackupsRun() async throws -> SavedBackupRunResponse {
+        try await request("/api/screens/server-archive/backups/run", method: "POST", body: Data("{}".utf8), timeout: 30)
+    }
+    public func savedBackupDelete(archiveId: String) async throws -> SavedBackupsView {
+        try await request("/api/screens/server-archive/backups/\(esc(archiveId))", method: "DELETE", timeout: 30)
+    }
+    public func backupPolicy() async throws -> BackupPolicyView {
+        try await request("/api/screens/backup-policy")
+    }
+    public func setBackupPolicy(_ req: BackupPolicyRequest) async throws -> BackupPolicyView {
+        try await request("/api/screens/backup-policy", method: "POST", body: try JSONEncoder().encode(req), timeout: 30)
+    }
     public func serverArchiveForget() async throws {
         _ = try await requestData("/api/screens/server-archive", method: "DELETE", timeout: 30)
     }

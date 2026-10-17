@@ -1,6 +1,6 @@
 // "Import backup file" — brings this device into an account using its
 // `.flagshipkey` backup. Reached from the login/recovery flow (2 steps
-// on "Connect to an existing account", below any cloud option). Mirror of
+// after "I already have an account", below any cloud option). Mirror of
 // the iOS KeyfileImportSheet.
 //
 // Flow: pick a file (SAF) → enter passphrase → unwrap → install UMK →

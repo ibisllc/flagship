@@ -31,6 +31,8 @@ final class ServerArchiveViewModelTests: XCTestCase {
     // MARK: Backup
 
     func testBackupAsksForThePasscodeThenSendsBothSlots() async throws {
+        XCTAssertEqual(ServerArchive.passcodeWhy,
+                       "You'll need this passcode to import the backup into an account that isn't yours. Your own account opens it without the passcode.")
         let c = client()
         let kek = accountKek
         let vm = ServerBackupViewModel(serverFqdn: "Home.alice.flagship.services", clients: .shared(c),
@@ -48,7 +50,7 @@ final class ServerArchiveViewModelTests: XCTestCase {
         XCTAssertTrue(vm.canStart)
         await vm.start()
         guard case .ready(let bytes) = vm.phase else { return XCTFail("expected ready, got \(vm.phase)") }
-        XCTAssertEqual(bytes, 5_000)
+        XCTAssertEqual(bytes, Int64(c.archiveBundle.count), "the one file's size")
         let start = try XCTUnwrap(c.archiveStarts.first)
         XCTAssertTrue(ServerArchive.isArchiveId(start.archiveId))
         XCTAssertEqual(start.slots.map(\.kind), ["passcode", "account"])
@@ -59,9 +61,8 @@ final class ServerArchiveViewModelTests: XCTestCase {
 
         await vm.download()
         guard case .saved(let urls) = vm.phase else { return XCTFail("expected saved, got \(vm.phase)") }
-        XCTAssertEqual(urls.map { $0.pathExtension }, ["flagship-backup", "flagship-data"])
-        XCTAssertEqual(try Data(contentsOf: urls[0]), c.archiveBackupFile)
-        XCTAssertEqual(try Data(contentsOf: urls[1]), c.archiveBytes)
+        XCTAssertEqual(urls.map { $0.pathExtension }, ["flagship"], "one file only")
+        XCTAssertEqual(try Data(contentsOf: urls[0]), c.archiveBundle)
         XCTAssertTrue(c.archiveForgotten, "the server drops its copy once the files are safe here")
     }
 
@@ -76,7 +77,8 @@ final class ServerArchiveViewModelTests: XCTestCase {
         await vm.start()
         await vm.download()
         guard case .saved(let urls) = vm.phase else { return XCTFail("expected saved, got \(vm.phase)") }
-        XCTAssertEqual(try Data(contentsOf: urls[1]), c.archiveBytes)
+        XCTAssertEqual(try Data(contentsOf: urls[0]), c.archiveBundle)
+        XCTAssertGreaterThan(c.bundleReads.count, 2, "fetched in parts")
     }
 
     func testBackupFailureIsShownNotThrown() async {
@@ -94,8 +96,8 @@ final class ServerArchiveViewModelTests: XCTestCase {
     // MARK: Restore
 
     private struct Backup {
-        let backupURL: URL
-        let dataURL: URL
+        /// The one `.flagship` file.
+        let url: URL
         let archiveId: String
         let contentKey: Data
         let dataBytes: Int64
@@ -122,12 +124,10 @@ final class ServerArchiveViewModelTests: XCTestCase {
         let file = try ServerBackupFormat.sealFile(archiveId: id, contentKey: key, slots: [account],
                                                    bodyJson: try JSONSerialization.data(withJSONObject: body), nonce: Data(repeating: 1, count: 12))
         let text = "{\"magic\":\"flagship-backup\",\"v\":2,\"archiveId\":\"\(id)\",\"slots\":[{\"kind\":\"account\",\"nonceHex\":\"\(account.nonceHex)\",\"wrappedHex\":\"\(account.wrappedHex)\"}],\"bodyNonceHex\":\"\(file.bodyNonceHex)\",\"bodyHex\":\"\(file.bodyHex)\"}\n"
-        let backupURL = dir.appendingPathComponent("\(name)-2026-10-14.flagship-backup")
-        try Data(text.utf8).write(to: backupURL)
-        let dataURL = dir.appendingPathComponent("\(name)-2026-10-14.flagship-data")
+        let url = dir.appendingPathComponent("\(name)-2026-10-14.flagship")
         if corruptData { data[data.count - 1] ^= 1 }
-        try data.write(to: dataURL)
-        return Backup(backupURL: backupURL, dataURL: dataURL, archiveId: id, contentKey: key, dataBytes: Int64(data.count), sha256: sha)
+        try ServerBackupBundle.make(meta: Data(text.utf8), data: data).write(to: url)
+        return Backup(url: url, archiveId: id, contentKey: key, dataBytes: Int64(data.count), sha256: sha)
     }
 
     private func importVM(_ c: MockScreensClient, taken: Set<String> = [], waiting: [String: String] = [:],
@@ -146,11 +146,9 @@ final class ServerArchiveViewModelTests: XCTestCase {
         let c = client()
         var restored: [String] = []
         let vm = importVM(c, onRestored: { restored.append($0) })
-        await vm.choose([b.backupURL])
-        XCTAssertEqual(vm.phase, .pick, "the data file is still missing")
-        XCTAssertTrue(vm.filesSummary.contains("home-2026-10-14.flagship-data"), "it names the file it still needs")
-        await vm.choose([b.dataURL])
+        await vm.choose([b.url])
         XCTAssertEqual(vm.phase, .name)
+        XCTAssertTrue(vm.filesSummary.hasPrefix("home-2026-10-14.flagship"), vm.filesSummary)
         XCTAssertEqual(vm.name, "home", "the saved name, since the account has no server called that")
         XCTAssertEqual(vm.settingsLine, "Copied from the backup: asks your phone at every start, disk encrypted.")
         XCTAssertTrue(vm.canCreate)
@@ -176,7 +174,7 @@ final class ServerArchiveViewModelTests: XCTestCase {
         let c = client()
         c.restoreWaiting = ServerRestoreWaiting(archiveId: b.archiveId, bytes: b.dataBytes, sha256: b.sha256)
         let vm = importVM(c)
-        await vm.choose([b.backupURL, b.dataURL])
+        await vm.choose([b.url])
         vm.create()
         vm.send(to: "home.alice.flagship.services")
         try await waitFor { !c.restoreCommits.isEmpty }
@@ -189,7 +187,7 @@ final class ServerArchiveViewModelTests: XCTestCase {
     func testANameTheAccountUsesIsNotSuggestedAndIsRefused() async throws {
         let b = try makeBackup()
         let vm = importVM(client(), taken: ["home"])
-        await vm.choose([b.backupURL, b.dataURL])
+        await vm.choose([b.url])
         XCTAssertEqual(vm.phase, .name)
         XCTAssertEqual(vm.name, "")
         XCTAssertEqual(vm.nameProblem, "You already have a server called \"home\": pick another name.")
@@ -205,7 +203,7 @@ final class ServerArchiveViewModelTests: XCTestCase {
     func testAnotherAccountsBackupAsksForThePasscode() async throws {
         let b = try makeBackup()
         let vm = importVM(client(), kek: Data(count: 32))
-        await vm.choose([b.backupURL, b.dataURL])
+        await vm.choose([b.url])
         XCTAssertEqual(vm.phase, .passcode)
         vm.passcode = "wrong one"
         await vm.unlock()
@@ -216,16 +214,16 @@ final class ServerArchiveViewModelTests: XCTestCase {
     func testAChangedDataFileIsRefusedBeforeAnythingIsMade() async throws {
         let b = try makeBackup(corruptData: true)
         let vm = importVM(client())
-        await vm.choose([b.backupURL, b.dataURL])
+        await vm.choose([b.url])
         XCTAssertEqual(vm.phase, .pick)
-        XCTAssertEqual(vm.fileError, "The data file doesn't match the backup file: it was changed or is damaged.")
-        XCTAssertNil(vm.dataFileName, "it asks for the data file again")
+        XCTAssertEqual(vm.fileError, "This backup was changed or is damaged: its data doesn't match.")
+        XCTAssertNil(vm.fileName, "it asks for the file again")
     }
 
     func testAServerWaitingForThisBackupIsOffered() async throws {
         let b = try makeBackup()
         let vm = importVM(client(), waiting: [b.archiveId: "clone.alice.flagship.services"])
-        await vm.choose([b.backupURL, b.dataURL])
+        await vm.choose([b.url])
         XCTAssertEqual(vm.phase, .chooseTarget(fqdn: "clone.alice.flagship.services"))
     }
 
@@ -235,7 +233,7 @@ final class ServerArchiveViewModelTests: XCTestCase {
         c.restoreWaiting = ServerRestoreWaiting(archiveId: b.archiveId, bytes: b.dataBytes, sha256: b.sha256)
         c.restoreAlreadyReceived = 4 * 1024 * 1024
         let vm = importVM(c, waiting: [b.archiveId: "clone.alice.flagship.services"])
-        await vm.choose([b.backupURL, b.dataURL])
+        await vm.choose([b.url])
         vm.send(to: "clone.alice.flagship.services")
         try await waitFor { if case .done = vm.phase { return true }; return false }
         XCTAssertEqual(c.restoreChunks.map(\.offset), [4 * 1024 * 1024, 8 * 1024 * 1024])
@@ -247,7 +245,7 @@ final class ServerArchiveViewModelTests: XCTestCase {
         c.restoreWaiting = ServerRestoreWaiting(archiveId: b.archiveId, bytes: b.dataBytes, sha256: b.sha256)
         c.restoreFailure = "the backup's data file can't be opened: wrong key, or it was changed or cut short"
         let vm = importVM(c, waiting: [b.archiveId: "clone.alice.flagship.services"])
-        await vm.choose([b.backupURL, b.dataURL])
+        await vm.choose([b.url])
         vm.send(to: "clone.alice.flagship.services")
         try await waitFor { if case .failed = vm.phase { return true }; return false }
         guard case .failed(let message, let keepsWaiting) = vm.phase else { return XCTFail() }
@@ -255,12 +253,32 @@ final class ServerArchiveViewModelTests: XCTestCase {
         XCTAssertTrue(keepsWaiting)
     }
 
+    func testARestoreThatGivesUpOnOneAppNamesIt() async throws {
+        let b = try makeBackup()
+        let c = client()
+        c.restoreWaiting = ServerRestoreWaiting(archiveId: b.archiveId, bytes: b.dataBytes, sha256: b.sha256)
+        c.restoreApps = [ServerRestoreApp(serviceId: "alice--wiki", name: "Wiki", state: "done"),
+                         ServerRestoreApp(serviceId: "alice--notes", name: "Notes", state: "failed", reason: "its image didn't build")]
+        var restored: [String] = []
+        let vm = importVM(c, waiting: [b.archiveId: "clone.alice.flagship.services"], onRestored: { restored.append($0) })
+        await vm.choose([b.url])
+        vm.send(to: "clone.alice.flagship.services")
+        try await waitFor { if case .done = vm.phase { return true }; return false }
+        guard case .done(_, let apps) = vm.phase else { return XCTFail() }
+        XCTAssertEqual(ImportBackupViewModel.restoredLine(apps), "Restored 1 app")
+        XCTAssertEqual(ImportBackupViewModel.failedLines(apps), ["Couldn't restore: Notes: its image didn't build"])
+        XCTAssertEqual(restored, ["clone.alice.flagship.services"], "Home stops showing it waiting")
+    }
+
     func testPickingSomethingElseExplainsWhy() async throws {
         let url = tmp().appendingPathComponent("x.txt")
         try Data("hello\n".utf8).write(to: url)
         let vm = importVM(client())
         await vm.choose([url])
-        XCTAssertEqual(vm.fileError, "x.txt isn't a Flagship backup file or data file.")
+        XCTAssertEqual(vm.fileError, "This file is too short to be a Flagship backup.")
+        try Data(String(repeating: "not a backup ", count: 4).utf8).write(to: url)
+        await vm.choose([url])
+        XCTAssertEqual(vm.fileError, "This file isn't a Flagship backup.")
         XCTAssertEqual(vm.phase, .pick)
     }
 
