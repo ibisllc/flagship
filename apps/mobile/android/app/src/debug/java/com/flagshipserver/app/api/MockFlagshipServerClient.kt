@@ -89,7 +89,7 @@ class MockFlagshipServerClient(
     val registeredPushTokens: Map<String, PushTokenRegisterRequest.Inner> get() = _registeredPushTokens
 
     private suspend fun tick() {
-        if (simulatedLatencyMs > 0) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { kotlinx.coroutines.delay(simulatedLatencyMs) }
+        if (simulatedLatencyMs > 0) kotlinx.coroutines.delay(simulatedLatencyMs)
         if (shouldFail) throw HttpException(503, "simulated failure")
     }
 

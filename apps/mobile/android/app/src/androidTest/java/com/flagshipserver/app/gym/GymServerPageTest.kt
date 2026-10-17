@@ -61,7 +61,7 @@ class GymServerPageTest : GymBase() {
         waitUntilExists("share-admin-only", 30_000)
         assertEquals("Only an admin device can share this server.", textOfTag("share-admin-only"))
         composeRule.onNodeWithTag("share-server-open").scrollIfNeeded().assertIsNotEnabled()
-        assertEquals("nothing was signed", emptyList<String>(), signedChecks())
+        assertEquals("no order was signed (only the share world's own seeding)", emptyList<String>(), signedChecks().filterNot { it.startsWith("share-") })
         gymShot("non-admin-server-page")
     }
 
@@ -131,8 +131,13 @@ class GymServerPageTest : GymBase() {
         // Hold until the order goes out.
         val hold = composeRule.onNode(hasContentDescription("revoke-confirm-hold"))
         hold.performTouchInput { down(center) }
-        eventually(5_000, "the revoke") { comMock.revokedServers.isNotEmpty() }
-        hold.performTouchInput { up() }
+        waitText("Hold to confirm…", 3_000)
+        // The hold is a real-time 1.5 s timer.
+        Thread.sleep(1_800)
+        composeRule.mainClock.advanceTimeBy(500)
+        eventually(8_000, "the revoke") { comMock.revokedServers.isNotEmpty() }
+        // The sheet closes when the order goes out, taking the held finger with it.
+        runCatching { hold.performTouchInput { up() } }
         assertSigned("revoke", "admin")
         assertEquals("stolen", comMock.revokedServers.single().request.reason)
         waitUntilExists("sd-revoked-card", 15_000)
@@ -265,6 +270,17 @@ class GymServerPageTest : GymBase() {
     @Test
     fun migrateStartsTheHandOver() {
         openServer()
+        // Migrate moves the data through peer backup: someone must hold the pieces.
+        screensMock.peerBackupStatusFixture = kotlinx.coroutines.runBlocking { screensMock.peerBackupStatus() }.let {
+            it.copy(
+                participating = true,
+                peersBackingYouUp = listOf(com.flagshipserver.app.api.PeerBackupPeerHostingYou("server-1", 3, 1, true)),
+            )
+        }
+        // It also needs the box's own key from the account directory.
+        mailboxMock.directory = listOf(
+            com.flagshipserver.app.api.PodDirectoryEntry("home.bright-maple.flagship.services", "51".repeat(32)),
+        )
         tapDesc("sd-migrate-server", 20_000)
         waitUntilExistsDesc("migrate-start", 15_000)
         gymShot("migrate")

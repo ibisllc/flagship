@@ -68,7 +68,10 @@ abstract class GymBase {
     /** A failing scenario leaves what the screen showed in the log (tag GYMTREE). */
     @get:Rule(order = 2)
     val dumpOnFailure = object : org.junit.rules.TestWatcher() {
-        override fun failed(e: Throwable?, description: org.junit.runner.Description?) = dumpTree()
+        override fun failed(e: Throwable?, description: org.junit.runner.Description?) {
+            android.util.Log.w("GYMTREE", "=== ${description?.methodName}: ${e?.message?.lineSequence()?.firstOrNull()}")
+            dumpTree()
+        }
         override fun finished(description: org.junit.runner.Description?) {
             runCatching { scenario?.close() }
             scenario = null
@@ -282,6 +285,8 @@ abstract class GymBase {
     protected fun eventually(timeoutMs: Long = 10_000, what: String = "condition", check: () -> Boolean) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
+            // A frame, so continuations the test clock holds back (a mock's delay) run.
+            composeRule.mainClock.advanceTimeByFrame()
             composeRule.waitForIdle()
             if (check()) return
             Thread.sleep(50)
