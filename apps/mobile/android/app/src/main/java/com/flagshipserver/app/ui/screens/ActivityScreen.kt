@@ -1,9 +1,20 @@
-// Activity tab landing: merged feed of pending unlock-approvals,
-// recent install events, and post-recovery progress, sorted by time.
-// Mirrors FlagshipUI/Screens/ActivityScreen.swift.
+// Activity tab landing: accordion sections (server approvals, post-recovery,
+// your account, this server's log), one open at a time, each list scrolling
+// inside a bounded height and paging in place. Every row's time is a date and
+// time to the minute. Mirrors FlagshipUI/Screens/ActivityScreen.swift.
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.Divider
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import com.flagshipserver.app.viewmodels.ActivityDates
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -95,19 +106,14 @@ fun ActivityScreen(nav: NavController) {
                     style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium),
                     modifier = Modifier.testTag("activity-title"),
                 )
-                Text(
-                    "Pending approvals, install timelines, and recovery progress.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 14.sp),
-                )
             }
             FSGhostButton(label = "Refresh", onClick = { vm.load() })
         }
 
         // Server filter — shown only when the user owns more than one pod
         // (matches the Services list rule). "All servers" shows the full feed;
-        // a specific server narrows the pod-attributable rows (install events)
-        // while account-wide rows (audit, recovery) always stay visible.
+        // a specific server names the server section after it (account-wide
+        // rows stay either way).
         if (pods.size > 1) {
             Spacer(Modifier.height(FS.space.s4))
             PodSwitcher(
@@ -122,20 +128,230 @@ fun ActivityScreen(nav: NavController) {
 
         Spacer(Modifier.height(FS.space.s4))
 
+        // One section open at a time, so every title stays on screen.
+        var open by rememberSaveable { mutableStateOf<ActivitySection?>(null) }
+        fun toggle(which: ActivitySection) { open = if (open == which) null else which }
+
         // ALWAYS visible, OUTSIDE the loaded-state branch: a box waiting for an
         // unlock/entitlement approval is exactly when the daemon BFF (this feed)
         // can't load, so gating it behind Loaded hid it precisely when needed.
-        ApprovalsEntryCard(nav)
+        Accordion(
+            section = ActivitySection.Approvals,
+            title = "Server approvals",
+            hint = "Servers waiting for you to start them",
+            isOpen = open == ActivitySection.Approvals,
+            onToggle = { toggle(ActivitySection.Approvals) },
+        ) { ApprovalsEntryCard(nav) }
 
+        val serverTitle = activityServerTitle(pods, effectiveServerFilter)
         when (val s = state) {
-            is LoadingState.Loaded -> FeedBody(
-                ActivityFeed(items = ActivityFeedFilter.apply(s.value.items, filterPodName)),
-                nav,
-            )
-            is LoadingState.Failed -> ErrorCard(s.message, onRetry = { vm.load() })
-            else -> ServerCardSkeleton()
+            is LoadingState.Loaded -> {
+                val items = s.value.items
+                val recovery = items.firstOrNull { it is ActivityItem.RecoverySnapshot } as? ActivityItem.RecoverySnapshot
+                if (recovery != null) {
+                    Spacer(Modifier.height(FS.space.s3))
+                    Accordion(
+                        section = ActivitySection.Recovery,
+                        title = "Post-recovery",
+                        hint = recovery.title,
+                        isOpen = open == ActivitySection.Recovery,
+                        onToggle = { toggle(ActivitySection.Recovery) },
+                    ) { PostRecoveryCard(nav) }
+                }
+                val audit = items.filterIsInstance<ActivityItem.AuditEntry>()
+                Spacer(Modifier.height(FS.space.s3))
+                Accordion(
+                    section = ActivitySection.Account,
+                    title = "Your account",
+                    hint = "Devices, recovery and servers, across all your servers",
+                    count = audit.size,
+                    isOpen = open == ActivitySection.Account,
+                    onToggle = { toggle(ActivitySection.Account) },
+                ) {
+                    EventList(
+                        rows = audit,
+                        empty = "Nothing has happened on your account yet.",
+                        more = s.value.moreAudit,
+                        onMore = { vm.loadMoreAudit() },
+                        moreTag = "activity-load-more-account",
+                    )
+                }
+                val box = items.filterIsInstance<ActivityItem.BoxEvent>()
+                Spacer(Modifier.height(FS.space.s3))
+                Accordion(
+                    section = ActivitySection.Server,
+                    title = serverTitle,
+                    hint = "Updates, backups, apps and shares on this server",
+                    count = box.size,
+                    isOpen = open == ActivitySection.Server,
+                    onToggle = { toggle(ActivitySection.Server) },
+                ) {
+                    EventList(
+                        rows = box,
+                        empty = "Nothing has happened on this server yet.",
+                        more = s.value.moreBox,
+                        onMore = { vm.loadMoreBox() },
+                        moreTag = "activity-load-more-server",
+                    )
+                }
+            }
+            is LoadingState.Failed -> {
+                Spacer(Modifier.height(FS.space.s3))
+                ErrorCard(s.message, onRetry = { vm.load() })
+            }
+            else -> {
+                Spacer(Modifier.height(FS.space.s3))
+                ServerCardSkeleton()
+            }
         }
         Spacer(Modifier.height(FS.space.s12))
+    }
+}
+
+internal enum class ActivitySection { Approvals, Recovery, Account, Server }
+
+/** "Server · home2": the server this log belongs to (the one picked in the
+ *  switcher, else the only one). */
+internal fun activityServerTitle(pods: List<com.flagshipserver.app.core.PodInfo>, pickedPodId: String?): String {
+    val pod = pods.firstOrNull { it.podId == pickedPodId } ?: pods.singleOrNull()
+    val name = pod?.name?.takeIf { it.isNotEmpty() } ?: return "This server"
+    return "Server · $name"
+}
+
+@Composable
+private fun Accordion(
+    section: ActivitySection,
+    title: String,
+    hint: String,
+    isOpen: Boolean,
+    onToggle: () -> Unit,
+    count: Int? = null,
+    content: @Composable () -> Unit,
+) {
+    val tag = "activity-section-${section.name.lowercase()}"
+    FSCard(padding = PaddingValues(0.dp)) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClickLabel = if (isOpen) "Collapse" else "Expand", onClick = onToggle)
+                    .padding(FS.space.s4)
+                    .testTag(tag)
+                    .semantics(mergeDescendants = true) {
+                        stateDescription = if (isOpen) "expanded" else "collapsed"
+                        heading()
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(title, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
+                    Text(hint, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
+                }
+                if (count != null && count > 0) {
+                    Text("$count", color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
+                    Spacer(Modifier.width(FS.space.s2))
+                }
+                Icon(
+                    Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = FS.colors.textMuted,
+                    modifier = Modifier.rotate(if (isOpen) 180f else 0f),
+                )
+            }
+            if (isOpen) {
+                Divider(color = FS.colors.border)
+                Column(Modifier.fillMaxWidth().padding(FS.space.s4).testTag("$tag-body")) { content() }
+            }
+        }
+    }
+}
+
+/** The rolled-down list: scrolls inside a bounded height, so a long log never
+ *  pushes the other titles off screen; pages in place. */
+@Composable
+private fun EventList(
+    rows: List<ActivityItem>,
+    empty: String,
+    more: Boolean,
+    onMore: () -> Unit,
+    moreTag: String,
+) {
+    if (rows.isEmpty()) {
+        Text(empty, color = FS.colors.textMuted)
+        return
+    }
+    var loadingMore by remember { mutableStateOf(false) }
+    // The list grew (or the load ended): the button can be pressed again.
+    LaunchedEffect(rows.size, more) { loadingMore = false }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(max = ACTIVITY_LIST_MAX_HEIGHT)
+            .verticalScroll(rememberScrollState())
+            .testTag("activity-event-list"),
+        verticalArrangement = Arrangement.spacedBy(FS.space.s3),
+    ) {
+        rows.forEach { item ->
+            EventRow(item)
+            Divider(color = FS.colors.border)
+        }
+        if (more) {
+            FSGhostButton(
+                label = if (loadingMore) "Loading…" else "Load more",
+                onClick = { if (!loadingMore) { loadingMore = true; onMore() } },
+                modifier = Modifier.testTag(moreTag),
+            )
+        } else {
+            Text("That's everything.", color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp), modifier = Modifier.testTag("activity-everything"))
+        }
+    }
+}
+
+internal val ACTIVITY_LIST_MAX_HEIGHT = 360.dp
+
+@Composable
+private fun EventRow(item: ActivityItem) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (item.warning) {
+                    Icon(
+                        Icons.Filled.Warning,
+                        contentDescription = "Warning",
+                        tint = FS.colors.warning,
+                        modifier = Modifier.size(18.dp).testTag("activity-row-warning"),
+                    )
+                    Spacer(Modifier.width(FS.space.s2))
+                }
+                Text(
+                    item.title,
+                    color = if (item.warning) FS.colors.warning else FS.colors.text,
+                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                )
+            }
+            item.subtitle?.takeIf { it.isNotEmpty() }?.let { sub ->
+                Text(sub, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
+            }
+        }
+        Spacer(Modifier.width(FS.space.s2))
+        Text(
+            ActivityDates.format(item.at),
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 11.sp),
+            modifier = Modifier.testTag("activity-row-time"),
+        )
+    }
+}
+
+@Composable
+private fun PostRecoveryCard(nav: NavController) {
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+        Text(
+            "Membership re-attach snapshot from the most recent account key swap.",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 13.sp),
+        )
+        FSGhostButton(label = "View report", onClick = { nav.navigate("post-recovery") })
     }
 }
 
@@ -143,112 +359,17 @@ fun ActivityScreen(nav: NavController) {
 private fun ApprovalsEntryCard(nav: NavController) {
     // The in-app way to reach the relay approval list — ALWAYS available, since a
     // box waiting on an unlock/entitlement approval can't load its BFF feed.
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                "Approve a server's boot",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-            )
-            Text(
-                "Servers set to ask on every boot wait here for you to release their disk key.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
-            )
-            FSGhostButton(label = "Open approvals", onClick = { nav.navigate("secret-requests") })
-        }
-    }
-    Spacer(Modifier.height(FS.space.s3))
-}
-
-@Composable
-private fun FeedBody(feed: ActivityFeed, nav: NavController) {
-    if (feed.items.any { it is ActivityItem.RecoverySnapshot }) {
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                Text(
-                    "Post-recovery",
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-                )
-                Text(
-                    "Membership re-attach snapshot from the most recent account key swap.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
-                )
-                FSGhostButton(label = "View report", onClick = { nav.navigate("post-recovery") })
-            }
-        }
-        Spacer(Modifier.height(FS.space.s4))
-    }
-
-    Text(
-        "Recent",
-        color = FS.colors.text,
-        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-    )
-    Spacer(Modifier.height(FS.space.s2))
-
-    val recentRows = feed.items
-        .filter { it !is ActivityItem.RecoverySnapshot }
-    // P5 — always-present entry into the dedicated full-page audit log.
-    // Mirrors the webapp's "see all activity" + iOS
-    // ActivityScreen.viewFullAuditLogRow.
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                "View full audit log",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-            )
-            Text(
-                "Every signed account action — device changes, recovery rotations, URL renames.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
-            )
-            FSGhostButton(label = "Open audit log", onClick = { nav.navigate("audit-log") })
-        }
-    }
-    Spacer(Modifier.height(FS.space.s3))
-    if (recentRows.isEmpty()) {
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Text("No recent activity.", color = FS.colors.textMuted)
-        }
-    } else {
-        recentRows.forEach { item ->
-            FSCard(padding = PaddingValues(FS.space.s3)) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (item.warning) {
-                            Icon(
-                                Icons.Filled.Warning,
-                                contentDescription = "Warning",
-                                tint = FS.colors.warning,
-                                modifier = Modifier.size(18.dp).testTag("activity-row-warning"),
-                            )
-                            Spacer(Modifier.width(FS.space.s2))
-                        }
-                        Text(
-                            item.title,
-                            color = if (item.warning) FS.colors.warning else FS.colors.text,
-                            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-                        )
-                    }
-                    item.subtitle?.let { sub ->
-                        Text(
-                            sub,
-                            color = FS.colors.textMuted,
-                            style = TextStyle(fontSize = 12.sp),
-                        )
-                    }
-                    Text(
-                        FlagshipDateFormat.format(item.at, includeTime = true),
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 11.sp),
-                    )
-                }
-            }
-            Spacer(Modifier.height(FS.space.s2))
-        }
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+        Text(
+            "Approve a server's boot",
+            color = FS.colors.text,
+            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+        )
+        Text(
+            "Servers set to ask on every boot wait here for you to release their disk key.",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 13.sp),
+        )
+        FSGhostButton(label = "Open approvals", onClick = { nav.navigate("secret-requests") })
     }
 }

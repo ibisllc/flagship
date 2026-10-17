@@ -1480,12 +1480,14 @@ const SETTINGS_SWEEP: readonly Scenario[] = [
 
 const activity = sweep("GymActivityTest", "D8");
 const ACTIVITY_SWEEP: readonly Scenario[] = [
-  activity("activity-feed", "Activity merges the box's log and the account's events; owner writes left out; Refresh.", "feedMergesTheBoxLogAndAccountEvents",
-    ["Refresh"], ["Server updated", "A shared person signed in by Sam", "A device joined the account"], ["activity-feed"]),
-  activity("activity-server-filter", "The server filter keeps account-wide rows.", "serverFilterKeepsAccountRows",
-    ["pod-switcher", "pod-switcher-item-<office>"], ["A device joined the account"], ["activity-office"]),
-  activity("activity-approvals-audit", "Open approvals; Open audit log and Load more.", "openApprovalsAndTheAuditLog",
-    ["Open approvals", "Open audit log", "audit-log-load-more"], ["audit-log-list"], ["approvals", "audit-log"]),
+  activity("activity-sections", "Activity sections open one at a time in place; the server's log and the account's events are separate; every row has date and time.", "sectionsOpenOneAtATimeWithDatesAndTimes",
+    ["activity-section-server", "activity-section-account", "Refresh"], ["Server updated", "A shared person signed in by Sam", "A device joined the account"], ["activity-server-open", "activity-account-open"]),
+  activity("activity-load-more", "A long log scrolls inside its section; Load more pages in place until That's everything.", "longLogsPageInPlace",
+    ["activity-section-server", "activity-load-more-server"], ["activity-everything"], ["activity-everything"]),
+  activity("activity-server-filter", "The server section names the picked server; account-wide rows stay.", "serverFilterKeepsAccountRows",
+    ["pod-switcher", "pod-switcher-item-<office>", "activity-section-account"], ["Server · Office", "A device joined the account"], ["activity-office"]),
+  activity("activity-approvals", "Open the approvals section, then Open approvals.", "openApprovals",
+    ["activity-section-approvals", "Open approvals"], ["Open approvals closes"], ["approvals"]),
 ];
 
 const WATCH: readonly Scenario[] = [
