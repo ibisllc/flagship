@@ -8,6 +8,16 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Usb
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.draw.clip
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSecondaryButton
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -344,49 +354,38 @@ fun CreateServerScreen(
         return
     }
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-      // Reading column — clamp + center on expanded panes; a no-op on phones.
-      Column(
-        modifier = Modifier
-            .widthIn(max = FSLayout.readingMaxWidth)
-            .fillMaxWidth()
-            .padding(horizontal = FS.space.s6),
-      ) {
-        Spacer(Modifier.height(FS.space.s6))
-        // Small per-page title (was one big 28sp "New server"). Matches the iOS
-        // move of the title into a compact header per step/page.
-        val pageTitle = when (phase) {
-            Phase.Design -> when (designStep) {
-                0 -> "Name your server"
-                1 -> "Boot unlock"
-                else -> "Backups"
-            }
-            Phase.DeliveryChooser -> "Get it to a builder"
-            Phase.Scan -> "Scan the QR"
-            Phase.Match -> "Confirm match code"
-            else -> "New server"
+    // Small per-page title, like iOS's compact header per step/page.
+    val pageTitle = when (phase) {
+        Phase.Design -> when (designStep) {
+            0 -> "Name your server"
+            1 -> "Boot unlock"
+            else -> "Backups"
         }
-        Text(
-            pageTitle,
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold),
-        )
+        Phase.DeliveryChooser -> "Get it to a builder"
+        Phase.Scan -> "Scan the QR"
+        Phase.Match -> "Confirm match code"
+        else -> "New server"
+    }
+    FSScreen(
+        title = pageTitle,
+        // The app bar's back steps back through the design pages, else leaves.
+        onBack = {
+            when {
+                phase == Phase.Design && designStep > 0 -> designStep -= 1
+                else -> onCancel()
+            }
+        },
+        spacing = 0.dp,
+    ) {
         if (phase == Phase.Design && pendingBuilderLink != null) {
-            Spacer(Modifier.height(FS.space.s2))
             Text(
                 "Flagship Studio is waiting. Set up your server and it goes straight to Studio.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 14.sp, lineHeight = 19.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.testTag("create-server-studio-waiting"),
             )
+            Spacer(Modifier.height(FS.space.s4))
         }
-        Spacer(Modifier.height(FS.space.s4))
 
         when (phase) {
             Phase.Design -> DesignPhase(
@@ -633,8 +632,6 @@ fun CreateServerScreen(
                 },
             )
         }
-        Spacer(Modifier.height(FS.space.s12))
-      }
     }
 }
 
@@ -678,10 +675,16 @@ private fun DesignPhase(
     onContinue: () -> Unit,
     onCancel: () -> Unit,
 ) {
+    androidx.compose.material3.LinearProgressIndicator(
+        progress = { (step + 1).toFloat() / stepCount },
+        modifier = Modifier.fillMaxWidth(),
+        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    )
+    Spacer(Modifier.height(FS.space.s2))
     Text(
         "Step ${step + 1} of $stepCount",
-        color = FS.colors.textMuted,
-        style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.labelMedium,
     )
     Spacer(Modifier.height(FS.space.s3))
     FSCard(padding = PaddingValues(FS.space.s4)) {
@@ -702,8 +705,8 @@ private fun DesignPhase(
                     val previewLabel = ServerLabel.normalized(name).ifEmpty { "home" }
                     Text(
                         "$previewLabel.$username.${Endpoints.dataApex}",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -746,7 +749,7 @@ private fun DesignPhase(
     }
     if (error != null) {
         Spacer(Modifier.height(FS.space.s2))
-        Text(error, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+        Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
     }
     Spacer(Modifier.height(FS.space.s4))
     if (step < stepCount - 1) {
@@ -764,10 +767,11 @@ private fun DesignPhase(
             modifier = Modifier.testTag("cs-continue-button"),
         )
     }
+    Spacer(Modifier.height(FS.space.s2))
     if (step > 0) {
-        FSGhostButton(label = "Back", onClick = onBack, block = true)
+        FSSecondaryButton(label = "Back", onClick = onBack, block = true)
     } else {
-        FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+        FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
     }
 }
 
@@ -780,14 +784,13 @@ private fun RecipeTtlPicker(
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             "Recipe expires in",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 14.sp),
+            style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f),
         )
         Text(
             ttlLabel(hours),
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.labelLarge,
         )
     }
     Slider(
@@ -798,8 +801,8 @@ private fun RecipeTtlPicker(
     )
     Text(
         "After this window, the unused USB can't install — re-mint from this screen.",
-        color = FS.colors.textMuted,
-        style = TextStyle(fontSize = 12.sp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodySmall,
     )
 }
 
@@ -819,21 +822,20 @@ private fun BootUnlockPicker(
 ) {
     Text(
         "Boot unlock",
-        color = FS.colors.text,
-        style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+        style = MaterialTheme.typography.titleSmall,
     )
     Spacer(Modifier.height(FS.space.s2))
     BootUnlockOption(
         selected = mode == ServerSettingsStore.Mode.AUTO,
         title = "Reboots on its own",
-        subtitle = "Best for flaky power or connections. After you approve its first boot, the box self-unlocks on every reboot — no phone needed. Revocable any time.",
+        subtitle = "Best for flaky power or connections. After you approve its first boot, the server unlocks itself on every reboot — no phone needed. Revocable any time.",
         onClick = { onMode(ServerSettingsStore.Mode.AUTO) },
     )
     Spacer(Modifier.height(FS.space.s2))
     BootUnlockOption(
         selected = mode == ServerSettingsStore.Mode.APPROVE,
         title = "Authorize each boot",
-        subtitle = "Most theft-resistant. The box asks your phone on every reboot. Best for critical servers on stable infrastructure.",
+        subtitle = "Most theft-resistant. The server asks your phone on every reboot. Best for critical servers on stable infrastructure.",
         onClick = { onMode(ServerSettingsStore.Mode.APPROVE) },
     )
 }
@@ -850,22 +852,21 @@ private fun DiskEncryptionPicker(
 ) {
     Text(
         "Encrypt disk",
-        color = FS.colors.text,
-        style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+        style = MaterialTheme.typography.titleSmall,
         modifier = Modifier.testTag("cs-encrypt-disk-toggle"),
     )
     Spacer(Modifier.height(FS.space.s2))
     BootUnlockOption(
         selected = encryptDisk,
         title = "Encrypt the disk (recommended)",
-        subtitle = "Full-disk LUKS encryption. The box fetches its unlock key at boot, so it needs a network connection to come back up after a power cut.",
+        subtitle = "Full-disk LUKS encryption. The server fetches its unlock key at boot, so it needs a network connection to come back up after a power cut.",
         onClick = { onEncryptDisk(true) },
     )
     Spacer(Modifier.height(FS.space.s2))
     BootUnlockOption(
         selected = !encryptDisk,
         title = "Don't encrypt my disk",
-        subtitle = "Less safe — anyone with the disk can read it. Choose this only for a box that can't keep network at boot (Wi-Fi-only): it boots with no connection.",
+        subtitle = "Less safe — anyone with the disk can read it. Choose this only for a server that can't keep network at boot (Wi-Fi-only): it boots with no connection.",
         onClick = { onEncryptDisk(false) },
     )
 }
@@ -889,15 +890,11 @@ private fun AdvancedModePicker(
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(
-                "Advanced mode",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-            )
+            Text("Advanced mode", style = MaterialTheme.typography.titleSmall)
             Text(
                 "For people who know what they're doing.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 12.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
             )
         }
         Switch(
@@ -911,8 +908,7 @@ private fun AdvancedModePicker(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "Embed secrets for offline install",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.weight(1f),
             )
             Switch(
@@ -923,15 +919,14 @@ private fun AdvancedModePicker(
         }
         Text(
             "This embeds security keys directly in the recipe. Hence, the server will be able to boot even if the phone is offline.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
         )
         Spacer(Modifier.height(FS.space.s2))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "Debug-friendly server",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.weight(1f),
             )
             Switch(
@@ -942,8 +937,8 @@ private fun AdvancedModePicker(
         }
         Text(
             DebugAccess.CREATE_WARNING,
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
         )
         if (debugFriendly) {
             Spacer(Modifier.height(FS.space.s2))
@@ -973,8 +968,7 @@ private fun BackupPolicyPicker(
 ) {
     Text(
         "Backup policy",
-        color = FS.colors.text,
-        style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+        style = MaterialTheme.typography.titleSmall,
     )
     Spacer(Modifier.height(FS.space.s2))
     BackupPolicyOptions(
@@ -994,33 +988,28 @@ private fun BootUnlockOption(
     subtitle: String,
     onClick: () -> Unit,
 ) {
-    val border = if (selected) FS.colors.primary else FS.colors.border
-    Column(
+    val border = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+    Row(
         Modifier
             .fillMaxWidth()
+            .clip(MaterialTheme.shapes.small)
             .border(
                 width = if (selected) 2.dp else 1.dp,
                 color = border,
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(FS.radius.md),
+                shape = MaterialTheme.shapes.small,
             )
-            .clickable(onClick = onClick)
-            .padding(FS.space.s3),
+            .selectable(selected = selected, onClick = onClick, role = androidx.compose.ui.semantics.Role.RadioButton)
+            .padding(end = FS.space.s3, top = FS.space.s1, bottom = FS.space.s3),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(selected = selected, onClick = onClick)
-            Spacer(Modifier.width(FS.space.s2))
+        RadioButton(selected = selected, onClick = null, modifier = Modifier.padding(FS.space.s3))
+        Column(Modifier.weight(1f).padding(top = FS.space.s3), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
             Text(
-                title,
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                subtitle,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
             )
         }
-        Text(
-            subtitle,
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp, lineHeight = 17.sp),
-            modifier = Modifier.padding(start = FS.space.s2),
-        )
     }
 }
 
@@ -1034,21 +1023,23 @@ private fun ScanPhase(
 ) {
     Text(
         "Scan the code shown on flagshipserver.com. Both screens stay open until the browser acks.",
-        color = FS.colors.textMuted,
-        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodyMedium,
     )
     Spacer(Modifier.height(FS.space.s4))
     QRScanner(onScanned = onScanned)
     Spacer(Modifier.height(FS.space.s4))
     FSField(value = qrText, onValueChange = onQrText, label = "Or paste code manually")
     if (qrText.isNotBlank()) {
-        FSGhostButton(label = "Use this code", onClick = { onScanned(qrText) }, block = true)
+        Spacer(Modifier.height(FS.space.s2))
+        FSPrimaryButton(label = "Use this code", onClick = { onScanned(qrText) }, block = true)
     }
     if (error != null) {
         Spacer(Modifier.height(FS.space.s2))
-        Text(error, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+        Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
     }
-    FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+    Spacer(Modifier.height(FS.space.s2))
+    FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
 }
 
 @Composable
@@ -1060,26 +1051,28 @@ private fun MatchPhase(
 ) {
     Text(
         "Compare the code on this phone and the one shown on the browser. Confirm only if they match exactly — otherwise the relay has been tampered with.",
-        color = FS.colors.textMuted,
-        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodyMedium,
     )
     Spacer(Modifier.height(FS.space.s4))
     FSCard(padding = PaddingValues(FS.space.s8)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 QrRelay.formatMatchCode(matchCode),
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 44.sp, lineHeight = 56.sp, fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.displayMedium.copy(fontFamily = FontFamily.Monospace),
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
         }
     }
     if (error != null) {
         Spacer(Modifier.height(FS.space.s2))
-        Text(error, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+        Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
     }
     Spacer(Modifier.height(FS.space.s6))
     FSPrimaryButton(label = "Codes match — deliver", onClick = onConfirm, block = true)
-    FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+    Spacer(Modifier.height(FS.space.s2))
+    FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
 }
 
 // Delivery-method chooser shown after the design step. Mirrors iOS
@@ -1096,6 +1089,7 @@ private fun DeliveryChooserPhase(
     onCancel: () -> Unit,
 ) {
     DeliveryCard(
+        icon = Icons.Outlined.QrCodeScanner,
         title = "Pair with the builder app",
         body = "Scan the builder's QR (or type its code) and the recipe is sent over a secure live link. Easiest if the builder is open in front of you.",
         enabled = !busy,
@@ -1104,14 +1098,16 @@ private fun DeliveryChooserPhase(
     )
     Spacer(Modifier.height(FS.space.s3))
     DeliveryCard(
+        icon = Icons.Outlined.Share,
         title = "Save / share recipe file",
-        body = "Save the recipe as a file or send it. Whoever builds the box opens it in the builder. No secrets in the file.",
+        body = "Save the recipe as a file or send it. Whoever builds the server opens it in the builder. No secrets in the file.",
         enabled = !busy,
         testTag = "cs-delivery-share",
         onClick = onShare,
     )
     Spacer(Modifier.height(FS.space.s3))
     DeliveryCard(
+        icon = Icons.Outlined.ContentCopy,
         title = "Copy recipe to clipboard",
         body = "Copy the recipe text, then paste it into the builder's \"I have a recipe\" box.",
         enabled = !busy,
@@ -1120,6 +1116,7 @@ private fun DeliveryChooserPhase(
     )
     Spacer(Modifier.height(FS.space.s3))
     DeliveryCard(
+        icon = Icons.Outlined.Usb,
         title = "Burn to USB on this device",
         body = "Connect a USB drive with an OTG adapter and write the bootable installer right here — no computer needed.",
         enabled = !busy,
@@ -1128,35 +1125,41 @@ private fun DeliveryChooserPhase(
     )
     if (busy) {
         Spacer(Modifier.height(FS.space.s4))
-        Text("Working…", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+        androidx.compose.material3.LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
     }
     if (error != null) {
         Spacer(Modifier.height(FS.space.s2))
-        Text(error, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+        Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
     }
     Spacer(Modifier.height(FS.space.s4))
-    FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+    Spacer(Modifier.height(FS.space.s2))
+    FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
 }
 
 @Composable
 private fun DeliveryCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     body: String,
     enabled: Boolean,
     testTag: String,
     onClick: () -> Unit,
 ) {
-    FSCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
-            .testTag(testTag),
+    androidx.compose.material3.Surface(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth().testTag(testTag),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Column {
-            Text(title, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
-            Spacer(Modifier.height(FS.space.s1))
-            Text(body, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
-        }
+        com.flagshipserver.app.ui.components.FSRow(
+            title = title,
+            subtitle = body,
+            icon = icon,
+            iconTint = MaterialTheme.colorScheme.primary,
+            enabled = enabled,
+        )
     }
 }
 

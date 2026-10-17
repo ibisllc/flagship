@@ -5,6 +5,35 @@
 package com.flagshipserver.app.ui.screens
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.AddCircleOutline
+import androidx.compose.material.icons.outlined.Circle
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.GroupAdd
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.PauseCircle
+import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.SystemUpdateAlt
+import androidx.compose.material.icons.outlined.Verified
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import com.flagshipserver.app.ui.components.FSDivider
+import com.flagshipserver.app.ui.components.FSEmptyState
+import com.flagshipserver.app.ui.components.FSGroup
+import com.flagshipserver.app.ui.components.FSNote
+import com.flagshipserver.app.ui.components.FSRow
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSecondaryButton
+import com.flagshipserver.app.ui.components.FSSectionHeader
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -165,48 +194,20 @@ fun HomeScreen(
      *  fqdn → state), and the action that sends it (docs/server-backup-and-clone.md). */
     awaitingBackup: Map<String, com.flagshipserver.app.api.AwaitingBackupWire> = emptyMap(),
     onSendBackup: (PodInfo) -> Unit = {},
+    /** "Build a service" (iOS's quick action): opens the Services tab's
+     *  build chooser. Null hides it. */
+    onBuildService: (() -> Unit)? = null,
 ) {
-    var showAddOrImport by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var showAddOrImport by remember { mutableStateOf(false) }
     if (showAddOrImport) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showAddOrImport = false },
-            title = { androidx.compose.material3.Text("Add/Import a server") },
-            text = {
-                Column {
-                    androidx.compose.material3.TextButton(
-                        onClick = { showAddOrImport = false; onAddServer() },
-                        modifier = Modifier.testTag("home-add-new-server"),
-                    ) {
-                        androidx.compose.material3.Text("Create a new server")
-                    }
-                    androidx.compose.material3.TextButton(
-                        onClick = { showAddOrImport = false; onCoManage() },
-                        modifier = Modifier.testTag("home-co-manage"),
-                    ) {
-                        androidx.compose.material3.Text("Co-manage a running server")
-                    }
-                    androidx.compose.material3.TextButton(
-                        onClick = { showAddOrImport = false; onImportBackup() },
-                        modifier = Modifier.testTag("home-import-backup"),
-                    ) {
-                        androidx.compose.material3.Text("Import a backup")
-                    }
-                    androidx.compose.material3.TextButton(
-                        onClick = { showAddOrImport = false; onRestoreFromPeers() },
-                        modifier = Modifier.testTag("home-restore-peers"),
-                    ) {
-                        androidx.compose.material3.Text("Restore from other servers")
-                    }
-                }
-            },
-            confirmButton = {
-                androidx.compose.material3.TextButton(onClick = { showAddOrImport = false }) {
-                    androidx.compose.material3.Text("Cancel")
-                }
-            },
+        AddOrImportSheet(
+            onDismiss = { showAddOrImport = false },
+            onCreate = { showAddOrImport = false; onAddServer() },
+            onCoManage = { showAddOrImport = false; onCoManage() },
+            onImport = { showAddOrImport = false; onImportBackup() },
+            onRestoreFromPeers = { showAddOrImport = false; onRestoreFromPeers() },
         )
     }
-    val scroll = rememberScrollState()
     // Search text over the server list (name / fqdn / description). Pure
     // presentation — never mutates `pods`. Empty ⇒ no filtering.
     var search by remember { mutableStateOf("") }
@@ -240,51 +241,34 @@ fun HomeScreen(
         matchesFilter && matchesSearch
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    FSScreen(
+        title = "Home",
+        titleTag = "home-title",
+        subtitle = homeIdentityLine(accountDisplayName, username, deviceDisplayName),
+        subtitleTag = "home-welcome",
+        onRefresh = onRefresh,
+        spacing = FS.space.s6,
     ) {
-      // Reading column — on an expanded (tablet) pane the rows/cards/chip row
-      // are clamped to a comfortable measure and centered; a no-op on phones.
-      Column(
-        modifier = Modifier
-            .widthIn(max = FSLayout.readingMaxWidth)
-            .fillMaxWidth()
-            .padding(horizontal = FS.space.s6),
-      ) {
-        Spacer(Modifier.height(FS.space.s12))
-        // Large title + greeting subheader.
-        Text(
-            text = "Home",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Bold),
-            modifier = Modifier.testTag("home-title"),
-        )
-        Text(
-            text = homeIdentityLine(accountDisplayName, username, deviceDisplayName),
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
-            modifier = Modifier.testTag("home-welcome"),
-        )
-
         if (deviceCapability != null && !deviceCapability.isFullyScoped) {
-            Spacer(Modifier.height(FS.space.s2))
             DeviceCapabilityChip(cap = deviceCapability)
         }
 
         val listLocked = statusPaused && pods.none { it.status != PodInfo.Status.PENDING }
         if (statusPaused && !listLocked) {
-            Spacer(Modifier.height(FS.space.s2))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "Status paused",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                    modifier = Modifier.testTag("home-status-paused"),
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Icon(
+                    Icons.Outlined.PauseCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
                 )
                 Spacer(Modifier.width(FS.space.s2))
+                Text(
+                    text = "Status paused",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f).testTag("home-status-paused"),
+                )
                 FSGhostButton(
                     label = "Refresh status",
                     onClick = onShowServers,
@@ -306,7 +290,12 @@ fun HomeScreen(
             onDismissRecoveryNudge = onDismissRecoveryNudge,
         )
 
-        Spacer(Modifier.height(FS.space.s8))
+        if (pods.isNotEmpty() && onBuildService != null) {
+            // A restricted device without the build scope sees it disabled, with the reason.
+            val canBuild = deviceCapability == null ||
+                deviceCapability.scopeSet.contains(DeviceScope.VIBE_CODE)
+            BuildServiceAction(enabled = canBuild, onClick = onBuildService)
+        }
 
         if (listLocked) {
             LockedServerListCard(onShowServers = onShowServers)
@@ -314,6 +303,15 @@ fun HomeScreen(
             EmptyServerCard(canAddServers = canAddServers, onAddOrImport = { showAddOrImport = true })
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    FSSectionHeader("Your servers", modifier = Modifier.weight(1f).padding(bottom = FS.space.s1))
+                    Text(
+                        pods.size.toString(),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(end = FS.space.s4, top = FS.space.s2),
+                    )
+                }
                 if (canAddServers) AddOrImportServerButton(onClick = { showAddOrImport = true })
                 FSSearchField(
                     value = search,
@@ -328,13 +326,7 @@ fun HomeScreen(
                     onSelect = { statusFilter = it },
                 )
                 if (visiblePods.isEmpty()) {
-                    FSCard {
-                        Text(
-                            "No servers match “${if (search.isEmpty()) statusFilter.label.lowercase() else search}”.",
-                            color = FS.colors.textMuted,
-                            style = TextStyle(fontSize = 13.sp),
-                        )
-                    }
+                    FSNote("No servers match “${if (search.isEmpty()) statusFilter.label.lowercase() else search}”.")
                 } else {
                     val reorderable = canChangeServers && q.isEmpty() && statusFilter == HomeStatusFilter.ALL &&
                         pods.count(ServerOrderProtocol::orderable) >= 2
@@ -380,21 +372,68 @@ fun HomeScreen(
             }
         }
 
-        sharedWithMe?.let {
-            Spacer(Modifier.height(FS.space.s6))
-            it()
-        }
+        sharedWithMe?.invoke()
 
-        Spacer(Modifier.height(FS.space.s6))
-
-        // Never a "couldn't load" card on Home (mirror of iOS): with no server
-        // there is nothing to load, and each server row carries its own state.
-        // The current server's recent deploys show once it answers.
+        // Like iOS: Home never shows a "couldn't load" card. The server list
+        // carries each server's state; a failed load only drops this section.
         if (state is LoadingState.Loaded && pods.isNotEmpty()) {
             RecentActivitySection(state.value.recentInstallEvents)
         }
-        Spacer(Modifier.height(FS.space.s12))
-      }
+    }
+}
+
+/** "Create / Co-manage / Import": the Android sheet for iOS's action sheet. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun AddOrImportSheet(
+    onDismiss: () -> Unit,
+    onCreate: () -> Unit,
+    onCoManage: () -> Unit,
+    onImport: () -> Unit,
+    onRestoreFromPeers: () -> Unit,
+) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Text(
+            "Add/Import a server",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(horizontal = FS.space.s6, vertical = FS.space.s2),
+        )
+        FSRow(
+            title = "Create a new server",
+            subtitle = "Set up a server on your hardware or in the cloud.",
+            icon = Icons.Outlined.AddCircleOutline,
+            iconTint = MaterialTheme.colorScheme.primary,
+            onClick = onCreate,
+            modifier = Modifier.testTag("home-add-new-server"),
+        )
+        FSRow(
+            title = "Co-manage a running server",
+            subtitle = "Open a server another account shares with you.",
+            icon = Icons.Outlined.GroupAdd,
+            iconTint = MaterialTheme.colorScheme.primary,
+            onClick = onCoManage,
+            modifier = Modifier.testTag("home-co-manage"),
+        )
+        FSRow(
+            title = "Import a backup",
+            subtitle = "Restore a server's apps from a backup file.",
+            icon = Icons.Outlined.Restore,
+            iconTint = MaterialTheme.colorScheme.primary,
+            onClick = onImport,
+            modifier = Modifier.testTag("home-import-backup"),
+        )
+        FSRow(
+            title = "Restore from other servers",
+            subtitle = "Bring a lost server's apps back from the pieces other servers keep.",
+            icon = Icons.Outlined.Restore,
+            iconTint = MaterialTheme.colorScheme.primary,
+            onClick = onRestoreFromPeers,
+            modifier = Modifier.testTag("home-restore-peers"),
+        )
+        Spacer(Modifier.height(FS.space.s6))
     }
 }
 
@@ -414,7 +453,6 @@ private fun TopAnnouncement(
 ) {
     when {
         accountWasReset -> {
-            Spacer(Modifier.height(FS.space.s4))
             FSAnnouncementCard(
                 icon = Icons.Outlined.ErrorOutline,
                 title = "This device was removed from your account",
@@ -427,7 +465,6 @@ private fun TopAnnouncement(
             )
         }
         showRecoveryBackupBanner -> {
-            Spacer(Modifier.height(FS.space.s4))
             FSAnnouncementCard(
                 icon = Icons.Outlined.VpnKey,
                 title = "Your account isn't backed up yet",
@@ -439,7 +476,6 @@ private fun TopAnnouncement(
             )
         }
         showRecoveryNudge -> {
-            Spacer(Modifier.height(FS.space.s4))
             FSAnnouncementCard(
                 icon = Icons.Outlined.VpnKey,
                 title = "Set up recovery",
@@ -453,12 +489,8 @@ private fun TopAnnouncement(
     }
 }
 
-/// v2 device-addressing — "Device: <label> · browse-only" chip
-/// surfaced below the username when the active session is a
-/// restricted sub-identity. The detailed scope breakdown lives behind
-/// Settings → About this device (out-of-scope for this commit).
-/// `browse-only` is the canonical reviewer state; anything else
-/// summarises as "N scopes" so the chip stays one-line.
+/// v2 device-addressing — "Restricted device · browse-only" chip surfaced
+/// below the username when the active session is a restricted sub-identity.
 @Composable
 private fun DeviceCapabilityChip(cap: DeviceCapabilityBlock) {
     val summary = if (cap.scopeSet == setOf(DeviceScope.BROWSE)) {
@@ -469,44 +501,39 @@ private fun DeviceCapabilityChip(cap: DeviceCapabilityBlock) {
     val label = "Restricted device · $summary"
     Row(
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
         modifier = Modifier
-            .clip(RoundedCornerShape(FS.radius.sm))
-            .background(FS.colors.textMuted.copy(alpha = 0.08f))
-            .padding(horizontal = FS.space.s3, vertical = 4.dp)
+            .clip(MaterialTheme.shapes.small)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .padding(horizontal = FS.space.s3, vertical = 6.dp)
             .semantics { contentDescription = label }
             .testTag("device-capability-chip"),
     ) {
+        Icon(Icons.Outlined.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
         Text(
             text = label,
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelLarge,
         )
     }
 }
 
 @Composable
 private fun LockedServerListCard(onShowServers: () -> Unit) {
-    FSCard(padding = PaddingValues(FS.space.s6), modifier = Modifier.testTag("home-servers-locked")) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            Text(
-                "Your server list is locked",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
-            )
-            Text(
-                "Flagship only shows your servers to this device once it has proved it's yours. Confirm it's you once and your servers will appear.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
-            )
-            Spacer(Modifier.height(FS.space.s2))
+    FSEmptyState(
+        title = "Your server list is locked",
+        message = "Flagship only shows your servers to this device once it has proved it's yours. Confirm it's you once and your servers will appear.",
+        icon = Icons.Outlined.Lock,
+        modifier = Modifier.testTag("home-servers-locked"),
+        action = {
             FSPrimaryButton(
                 label = "Show my servers",
                 onClick = onShowServers,
                 block = true,
                 modifier = Modifier.testTag("home-show-servers"),
             )
-        }
-    }
+        },
+    )
 }
 
 /** Only an admin device of the account adds servers to it
@@ -520,35 +547,93 @@ fun showsAddServer(holdsAdminRoot: Boolean, isDemoAccount: Boolean): Boolean =
 internal const val ADD_SERVERS_ADMIN_ONLY = com.flagshipserver.app.core.AddServerGate.ADMIN_ONLY
 
 /** "Add/Import a server": the one way to bring a server in (Create /
- *  Co-manage / Import), above the list or on the empty state. */
+ *  Co-manage / Import), above the list or on the empty state. A tonal
+ *  button with a plus, the Android form of iOS's tinted add row. */
 @Composable
-private fun AddOrImportServerButton(onClick: () -> Unit) {
-    FSGhostButton(
-        label = "Add/Import a server",
+private fun AddOrImportServerButton(onClick: () -> Unit, primary: Boolean = false) {
+    val colors = if (primary) {
+        ButtonDefaults.buttonColors(containerColor = FS.colors.fill, contentColor = FS.colors.onAccent)
+    } else {
+        ButtonDefaults.filledTonalButtonColors()
+    }
+    Button(
         onClick = onClick,
-        block = true,
-        modifier = Modifier.testTag("home-add-server"),
-    )
+        colors = colors,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("home-add-server"),
+    ) {
+        Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(FS.space.s2))
+        Text("Add/Import a server", style = MaterialTheme.typography.labelLarge)
+    }
 }
 
 @Composable
 private fun EmptyServerCard(canAddServers: Boolean, onAddOrImport: () -> Unit) {
-    FSCard(padding = PaddingValues(FS.space.s6), modifier = Modifier.testTag("home-empty-state")) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            Text(
-                if (canAddServers) "Your account is ready" else "No servers yet",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
-            )
-            Text(
-                if (canAddServers) "Add your first server to start running your own services." else ADD_SERVERS_ADMIN_ONLY,
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
-            )
-            if (canAddServers) {
-                Spacer(Modifier.height(FS.space.s2))
-                // The same button and menu as a populated list.
-                AddOrImportServerButton(onClick = onAddOrImport)
+    FSEmptyState(
+        title = if (canAddServers) "Your account is ready" else "No servers yet",
+        message = if (canAddServers) "Add your first server to start running your own services." else ADD_SERVERS_ADMIN_ONLY,
+        icon = if (canAddServers) Icons.Outlined.Verified else Icons.Outlined.Dns,
+        iconTint = if (canAddServers) FS.colors.success else null,
+        modifier = Modifier.testTag("home-empty-state"),
+        // The same button and sheet as a populated list.
+        action = if (canAddServers) ({ AddOrImportServerButton(onClick = onAddOrImport, primary = true) }) else null,
+    )
+}
+
+/** The one quick action on Home, as on iOS: build a service. */
+@Composable
+private fun BuildServiceAction(enabled: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth().testTag("quick-action-vibe-code"),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        FSRow(
+            title = "Build a service",
+            subtitle = if (enabled) "Describe it in plain English. Your server builds and runs it."
+            else "This device cannot build new services. Use a primary device.",
+            icon = if (enabled) Icons.Outlined.AutoAwesome else Icons.Outlined.Lock,
+            iconTint = if (enabled) MaterialTheme.colorScheme.primary else null,
+            enabled = enabled,
+        )
+    }
+}
+
+/** Recent installs across the account, newest first (iOS HomeScreen.recentActivity). */
+@Composable
+private fun RecentActivitySection(events: List<com.flagshipserver.app.api.RecentInstallEvent>) {
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.testTag("home-recent-activity")) {
+        FSSectionHeader("Recent activity")
+        if (events.isEmpty()) {
+            FSNote("No recent activity.")
+        } else {
+            FSGroup {
+                events.forEachIndexed { i, e ->
+                    val (icon, tint, verb) = when (e.kind) {
+                        "installed" -> Triple(Icons.Outlined.Download, FS.colors.success, "Deployed")
+                        "uninstalled" -> Triple(Icons.Outlined.Delete, FS.colors.danger, "Removed")
+                        "deploy" -> Triple(Icons.Outlined.Sync, FS.colors.primary, "Redeployed")
+                        "update-pulled" -> Triple(Icons.Outlined.SystemUpdateAlt, FS.colors.primary, "Updated")
+                        else -> Triple(Icons.Outlined.Circle, FS.colors.textMuted, "Event:")
+                    }
+                    FSRow(
+                        title = "$verb ${e.serviceId}",
+                        subtitle = e.detail,
+                        icon = icon,
+                        iconTint = tint,
+                        trailing = {
+                            Text(
+                                com.flagshipserver.app.core.FlagshipDateFormat.format(e.at),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        },
+                    )
+                    if (i < events.size - 1) FSDivider()
+                }
             }
         }
     }
@@ -570,9 +655,10 @@ private fun serverSubtitle(pod: PodInfo, liveness: PodInfo.LivenessState): Strin
 
 /// A single server list row: a drag handle on the left while the list can be
 /// reordered, the name behind a small server glyph, the description/fqdn
-/// subtitle, the Leader badge + status pill under it, and a chevron. Tap opens
-/// the server; touch and hold opens the menu (make leader / open / delete).
-@OptIn(ExperimentalFoundationApi::class)
+/// subtitle, the Leader badge + status pill under it, and a menu button. Tap
+/// opens the server; the menu (also on touch and hold) makes it leader, opens
+/// or deletes it.
+@OptIn(ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun ServerRow(
     pod: PodInfo,
@@ -615,28 +701,31 @@ fun ServerRow(
     }
 
     Box {
+        Surface(
+            modifier = rowModifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = rowModifier
+            modifier = Modifier
                 .fillMaxWidth()
-                .height(IntrinsicSize.Min)
-                .clip(RoundedCornerShape(FS.radius.md))
-                .background(FS.colors.surface)
-                .border(1.dp, FS.colors.border, RoundedCornerShape(FS.radius.md)),
+                .height(IntrinsicSize.Min),
         ) {
             handle?.invoke()
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
+                horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
                 modifier = Modifier
                     .weight(1f)
                     .combinedClickable(onClick = onTap, onLongClick = { menuOpen = true })
                     .semantics { if (moveActions.isNotEmpty()) customActions = moveActions }
                     .padding(
                         start = if (handle != null) 0.dp else FS.space.s4,
-                        top = FS.space.s4,
-                        bottom = FS.space.s4,
-                        end = FS.space.s4,
+                        top = FS.space.s3,
+                        bottom = FS.space.s3,
+                        end = 0.dp,
                     ),
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -644,34 +733,33 @@ fun ServerRow(
                         Icon(
                             Icons.Outlined.Dns,
                             contentDescription = null,
-                            tint = FS.colors.textMuted,
-                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp),
                         )
                         Text(
                             pod.name,
-                            color = FS.colors.text,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                            style = MaterialTheme.typography.titleMedium,
                         )
                     }
                     val subtitle = serverSubtitle(pod, liveness)
                     if (subtitle.isNotEmpty()) {
                         Text(
                             subtitle,
-                            color = FS.colors.textMuted,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            style = TextStyle(fontSize = 13.sp),
+                            style = MaterialTheme.typography.bodyMedium,
                         )
                     }
                     Spacer(Modifier.height(FS.space.s1))
                     // Status pill (+ Leader badge) stacks UNDER the text on its own
                     // line — a long label like "Never came online" would be crushed
                     // against the server name.
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                    androidx.compose.foundation.layout.FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+                        verticalArrangement = Arrangement.spacedBy(FS.space.s1),
                     ) {
                         if (leader != null) LeaderPill(confirmed = leaderConfirmed)
                         // Per-service leadership (Phase 6): the services this box leads
@@ -694,15 +782,22 @@ fun ServerRow(
                     leader?.standingInFor?.let { names ->
                         Text(
                             "Standing in for $names",
-                            color = FS.colors.textMuted,
-                            style = TextStyle(fontSize = 12.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.testTag("pod-standing-in"),
                         )
                     }
                 }
-                // Navigation chevron stays right, vertically centered.
-                Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 18.sp))
             }
+            // The row's menu, also on touch and hold.
+            IconButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("pod-card-menu")) {
+                Icon(
+                    Icons.Outlined.MoreVert,
+                    contentDescription = "More for ${pod.name}",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         }
 
         DropdownMenu(expanded = menuOpen && !dragging, onDismissRequest = { menuOpen = false }) {
@@ -776,153 +871,29 @@ private fun LeaderPill(confirmed: Boolean) {
     }
 }
 
-/// Reusable compact server card — retained for previews / any non-Home caller.
-/// The Home list now renders each server as an [ServerRow]; this dense card is
-/// the legacy presentation and is no longer used by HomeScreen itself.
-@Composable
-fun PodCard(
-    pod: PodInfo,
-    isLeader: Boolean,
-    onTap: () -> Unit,
-    onSetLeader: () -> Unit,
-    /** Delete the server once [DeleteServerDialog] confirms. No-op default
-     *  keeps the card previewable. */
-    onDelete: () -> Unit = {},
-    /** Derived per-server liveness. Defaults to deriving from the pod alone
-     *  (no live unlock request known) so existing callers / previews keep
-     *  their behaviour; the Home list supplies the account-level signal. */
-    liveness: PodInfo.LivenessState = pod.livenessState(hasLiveUnlockRequest = false),
-) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.fillMaxWidth().padding(end = FS.space.s4)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
-                ) {
-                    Text(
-                        pod.name,
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
-                    )
-                    if (isLeader && pod.cameOnline && pod.status != PodInfo.Status.PENDING) FSPill("Leader", kind = FSPillKind.Online)
-                    // Per-service leadership (Phase 6): "Leads N" badge, tolerant
-                    // of absence (renders nothing when the box leads nothing).
-                    LeadServicesPill(pod)
-                }
-                if (!pod.description.isNullOrEmpty()) {
-                    Text(
-                        pod.description!!,
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 13.sp),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Spacer(Modifier.height(FS.space.s1))
-                FSPill(
-                    label = PodStatusStyle.label(pod, liveness),
-                    kind = PodStatusStyle.pillKind(liveness, pod.status),
-                )
-                val demo = pod.demoServer
-                if (demo != null &&
-                    ProvisionProgress.shouldShowProgressBar(demo.phase, demo.status)
-                ) {
-                    Spacer(Modifier.height(FS.space.s2))
-                    DemoProgressBar(
-                        fraction = ProvisionProgress.fraction(demo.phase),
-                        failed = demo.phase == "failed",
-                        modifier = Modifier.testTag("pod-card-install-progress"),
-                    )
-                }
-            }
-            FSGhostButton(label = "Open", onClick = onTap)
-        }
-        if (!isLeader && pod.status == PodInfo.Status.ONLINE && pod.cameOnline && !pod.isRevoked) {
-            Spacer(Modifier.height(FS.space.s2))
-            FSGhostButton(label = "Make leader", onClick = onSetLeader)
-        }
-        var confirming by remember { mutableStateOf(false) }
-        Spacer(Modifier.height(FS.space.s2))
-        FSGhostButton(
-            label = if (pod.status == PodInfo.Status.PENDING) "Delete server (free name)" else "Delete server",
-            onClick = { confirming = true },
-            modifier = Modifier.testTag("pod-card-delete"),
-        )
-        if (confirming) {
-            DeleteServerDialog(
-                pod = pod,
-                onConfirm = { confirming = false; onDelete() },
-                onDismiss = { confirming = false },
-            )
-        }
-    }
-}
-
-/** Home's recent deploys on the current server (iOS HomeScreen.recentActivity). */
-@Composable
-private fun RecentActivitySection(events: List<com.flagshipserver.app.api.RecentInstallEvent>) {
-    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3), modifier = Modifier.testTag("home-recent-activity")) {
-        Text(
-            "RECENT ACTIVITY",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
-        )
-        FSCard {
-            if (events.isEmpty()) {
-                Text("No recent activity.", color = FS.colors.textMuted)
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                    events.forEachIndexed { i, e ->
-                        Row(verticalAlignment = Alignment.Top) {
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text("${recentVerb(e.kind)} ${e.serviceId}", color = FS.colors.text, style = TextStyle(fontSize = 15.sp))
-                                e.detail?.let { Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp)) }
-                            }
-                            Spacer(Modifier.width(FS.space.s2))
-                            Text(
-                                com.flagshipserver.app.core.FlagshipDateFormat.format(e.at, includeTime = true),
-                                color = FS.colors.textMuted,
-                                style = TextStyle(fontSize = 12.sp),
-                            )
-                        }
-                        if (i < events.size - 1) {
-                            Box(Modifier.fillMaxWidth().height(1.dp).background(FS.colors.border))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-internal fun recentVerb(kind: String): String = when (kind) {
-    "installed" -> "Deployed"
-    "uninstalled" -> "Removed"
-    "deploy" -> "Redeployed"
-    "update-pulled" -> "Updated"
-    else -> "Event:"
-}
-
 @Composable
 fun ServerCardSkeleton() {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text("…", color = FS.colors.textMuted, style = TextStyle(fontSize = 16.sp))
-            Text("Loading…", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+    FSCard {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            androidx.compose.material3.LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            )
+            Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
 
 @Composable
 fun ErrorCard(message: String, onRetry: (() -> Unit)? = null) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text("Couldn't load", color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
-            Text(message, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
-            if (onRetry != null) FSGhostButton(label = "Retry", onClick = onRetry)
-        }
-    }
+    FSEmptyState(
+        title = "Couldn't load",
+        message = message,
+        icon = Icons.Outlined.ErrorOutline,
+        iconTint = FS.colors.danger,
+        action = if (onRetry != null) ({ FSSecondaryButton(label = "Try again", onClick = onRetry) }) else null,
+    )
 }
 
 /// Per-service leadership (Phase 6) — a small "Leads N" indicator for a box that

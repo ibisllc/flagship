@@ -26,6 +26,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccessTime
+import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.DeleteForever
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Laptop
+import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.PhonelinkErase
+import androidx.compose.material.icons.outlined.QrCode2
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.PhoneAndroid
@@ -33,7 +44,9 @@ import androidx.compose.material.icons.outlined.PhoneIphone
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -71,7 +84,15 @@ import com.flagshipserver.app.keystore.PasskeyRecoveryManager
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.PlatformWebAuthnProvider
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSBarAction
+import com.flagshipserver.app.ui.components.FSDivider
+import com.flagshipserver.app.ui.components.FSGroup
+import com.flagshipserver.app.ui.components.FSPill
+import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.components.FSRow
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSectionHeader
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.ReplaceDeviceViewModel
 import com.flagshipserver.app.viewmodels.TrustedDevicesViewModel
@@ -151,41 +172,27 @@ fun TrustedDevicesScreen(nav: NavController) {
 
     LaunchedEffect(Unit) { vm.load() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = FS.space.s6, vertical = FS.space.s8),
-        verticalArrangement = Arrangement.spacedBy(FS.space.s4),
+    FSScreen(
+        title = "Trusted devices",
+        onBack = { nav.popBackStack() },
+        actions = { FSBarAction(Icons.Outlined.Refresh, "Refresh", onClick = { vm.load() }) },
     ) {
-        Text(
-            "Trusted devices",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Text(
-            accountDisplayName ?: "@${app.currentUser.value.orEmpty()}",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-        )
-        Text(
-            "@${app.currentUser.value.orEmpty()}",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp),
-        )
-        if (canManageNames) {
-            TextButton(onClick = {
-                nameEditMode = "account"
-                nameDraft = accountDisplayName.orEmpty()
-                nameLocked = false
-            }) { Text("Edit account name") }
+        FSGroup(header = "Account") {
+            FSRow(
+                title = accountDisplayName ?: "@${app.currentUser.value.orEmpty()}",
+                subtitle = "@${app.currentUser.value.orEmpty()}",
+                icon = Icons.Outlined.AccountCircle,
+                iconTint = MaterialTheme.colorScheme.primary,
+                onClick = if (canManageNames) ({
+                    nameEditMode = "account"
+                    nameDraft = accountDisplayName.orEmpty()
+                    nameLocked = false
+                }) else null,
+                trailing = if (canManageNames) ({
+                    Icon(Icons.Outlined.Edit, contentDescription = "Edit account name", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }) else null,
+            )
         }
-        Text(
-            "Your own phones and tablets that hold your account keys. To give another person access, use Share this server on the server's page.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp),
-        )
-        Spacer(Modifier.height(FS.space.s2))
         // M4 — pending re-pair banner. A replace started on THIS or ANY
         // other device surfaces here with a grace countdown and a
         // "Finalize now" entry into the finalize screen.
@@ -193,45 +200,65 @@ fun TrustedDevicesScreen(nav: NavController) {
             snapshot = pendingRePair,
             onFinalize = { completesAt -> nav.navigate("replace-finalize/$completesAt") },
         )
-        // Phase 3b — admin entry to the cross-device pairing QR. Adds a
-        // collaborator's OWN phone (no shared iCloud); the added device
-        // lands quarantined + non-admin.
-        val canAddDevice = com.flagshipserver.app.core.AddServerGate.allowsAddDevice(app)
-        com.flagshipserver.app.ui.components.FSSecondaryButton(
-            label = "Add device",
-            onClick = { if (canAddDevice) nav.navigate("add-device") },
-            enabled = canAddDevice,
-            block = true,
-            modifier = Modifier.semantics { contentDescription = "trusted-devices-add" },
-        )
-        if (!canAddDevice) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            FSSectionHeader("Trusted devices")
             Text(
-                com.flagshipserver.app.core.AddServerGate.ADD_DEVICE_ADMIN_ONLY,
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
-                modifier = Modifier.semantics { contentDescription = "trusted-devices-add-admin-only" },
+                "Phones and tablets that hold your account keys.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = FS.space.s1),
             )
-        }
-        Spacer(Modifier.height(FS.space.s2))
-        when (state) {
-            is TrustedDevicesViewModel.State.Idle,
-            is TrustedDevicesViewModel.State.Loading -> LoadingRow()
-            is TrustedDevicesViewModel.State.Failed -> ErrorRow(message = state.reason)
-            is TrustedDevicesViewModel.State.Loaded -> {
-                if (state.devices.isEmpty()) {
-                    EmptyRow()
-                } else {
-                    state.devices.forEach { d ->
-                        TrustedDeviceRow(device = d, onMenu = { sheetTarget = d })
+            when (state) {
+                is TrustedDevicesViewModel.State.Idle,
+                is TrustedDevicesViewModel.State.Loading -> LoadingRow()
+                is TrustedDevicesViewModel.State.Failed -> ErrorRow(message = state.reason)
+                is TrustedDevicesViewModel.State.Loaded -> {
+                    if (state.devices.isEmpty()) {
+                        EmptyRow()
+                    } else {
+                        FSGroup {
+                            state.devices.forEachIndexed { idx, d ->
+                                TrustedDeviceRow(device = d, onMenu = { sheetTarget = d })
+                                if (idx < state.devices.size - 1) FSDivider()
+                            }
+                        }
                     }
                 }
             }
         }
-        snackbarMsg?.let {
-            Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+        // Phase 3b — admin entry to the cross-device pairing QR. Adds a
+        // collaborator's OWN phone (no shared iCloud); the added device
+        // lands quarantined + non-admin.
+        val canAddDevice = com.flagshipserver.app.core.AddServerGate.allowsAddDevice(app)
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            FSGroup {
+                FSRow(
+                    title = "Add a device",
+                    icon = Icons.Outlined.QrCode2,
+                    iconTint = if (canAddDevice) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    titleColor = if (canAddDevice) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    onClick = if (canAddDevice) { { nav.navigate("add-device") } } else null,
+                    modifier = Modifier.semantics { contentDescription = "trusted-devices-add" },
+                )
+            }
+            if (!canAddDevice) {
+                Text(
+                    com.flagshipserver.app.core.AddServerGate.ADD_DEVICE_ADMIN_ONLY,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(horizontal = FS.space.s1).semantics { contentDescription = "trusted-devices-add-admin-only" },
+                )
+            }
+            Text(
+                "For your own phones and tablets. To give another person access, use Share this server on the server's page.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = FS.space.s1),
+            )
         }
-        Spacer(Modifier.height(FS.space.s2))
-        com.flagshipserver.app.ui.components.FSGhostButton(label = "Back", onClick = { nav.popBackStack() })
+        snackbarMsg?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+        }
     }
 
     // Per-device actions: ModalBottomSheet is the Android idiom for
@@ -244,77 +271,98 @@ fun TrustedDevicesScreen(nav: NavController) {
     // window so users aren't confused by silent failure.
     sheetTarget?.let { target ->
         ModalBottomSheet(onDismissRequest = { sheetTarget = null }) {
-            Column(Modifier.padding(FS.space.s4), verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                Text(
-                    target.displayName,
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-                )
-                Text(
-                    "${platformDisplay(target.platformClass)} · Device ${target.supportCode}",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
-                )
+            Column(Modifier.padding(bottom = FS.space.s6)) {
+                Column(
+                    Modifier.padding(horizontal = FS.space.s6, vertical = FS.space.s2),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(target.displayName, style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        "${platformDisplay(target.platformClass)} · Device ${target.supportCode}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
                 if (target.isCurrent) {
-                    TextButton(onClick = {
-                        nameEditMode = "self"
-                        nameEditTarget = target
-                        nameDraft = target.displayName
-                        nameLocked = false
-                        sheetTarget = null
-                    }) { Text("Rename this device") }
+                    FSRow(
+                        title = "Rename this device",
+                        icon = Icons.Outlined.Edit,
+                        onClick = {
+                            nameEditMode = "self"
+                            nameEditTarget = target
+                            nameDraft = target.displayName
+                            nameLocked = false
+                            sheetTarget = null
+                        },
+                    )
                 }
                 if (canManageNames) {
-                    TextButton(onClick = {
-                        nameEditMode = "managed"
-                        nameEditTarget = target
-                        nameDraft = target.displayName
-                        nameLocked = target.isLocked
-                        sheetTarget = null
-                    }) { Text(if (target.isManaged) "Edit managed name" else "Set managed name") }
-                    if (target.isManaged) {
-                        TextButton(onClick = {
+                    FSRow(
+                        title = if (target.isManaged) "Edit managed name" else "Set managed name",
+                        icon = Icons.Outlined.Shield,
+                        onClick = {
+                            nameEditMode = "managed"
+                            nameEditTarget = target
+                            nameDraft = target.displayName
+                            nameLocked = target.isLocked
                             sheetTarget = null
-                            scope.launch {
-                                if (!vm.removeManagedName(target.deviceId)) snackbarMsg = "Couldn't remove the managed name."
-                            }
-                        }) { Text("Remove managed name", color = FS.colors.danger) }
+                        },
+                    )
+                    if (target.isManaged) {
+                        FSRow(
+                            title = "Remove managed name",
+                            icon = Icons.Outlined.LockOpen,
+                            iconTint = MaterialTheme.colorScheme.error,
+                            titleColor = MaterialTheme.colorScheme.error,
+                            onClick = {
+                                sheetTarget = null
+                                scope.launch {
+                                    if (!vm.removeManagedName(target.deviceId)) snackbarMsg = "Couldn't remove the managed name."
+                                }
+                            },
+                        )
                     }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
-                TextButton(
+                FSRow(
+                    title = "Revoke",
+                    icon = Icons.Outlined.PhonelinkErase,
+                    iconTint = MaterialTheme.colorScheme.error,
+                    titleColor = MaterialTheme.colorScheme.error,
+                    enabled = !target.isCurrent,
                     onClick = {
                         confirmDisconnect = target
                         sheetTarget = null
                     },
-                    enabled = !target.isCurrent,
                     modifier = Modifier.semantics { contentDescription = "trusted-device-disconnect" },
-                ) {
-                    Text("Revoke", color = FS.colors.danger)
-                }
+                )
                 // C7 — Replace device. Tap opens the scare dialog;
                 // confirmation drives the ReplaceDeviceViewModel.
-                TextButton(
+                FSRow(
+                    title = "Replace device",
+                    icon = Icons.Outlined.Sync,
+                    iconTint = MaterialTheme.colorScheme.error,
+                    titleColor = MaterialTheme.colorScheme.error,
+                    enabled = !target.isCurrent,
                     onClick = {
                         confirmReplace = true
                         sheetTarget = null
                     },
-                    enabled = !target.isCurrent,
                     modifier = Modifier.semantics { contentDescription = "trusted-device-replace" },
-                ) {
-                    Text("Replace device", color = FS.colors.danger)
-                }
+                )
                 // E5 — Wipe & restart. Live ceremony.
-                TextButton(
+                FSRow(
+                    title = "Wipe & restart",
+                    icon = Icons.Outlined.DeleteForever,
+                    iconTint = MaterialTheme.colorScheme.error,
+                    titleColor = MaterialTheme.colorScheme.error,
+                    enabled = !target.isCurrent,
                     onClick = {
                         confirmWipe = true
                         sheetTarget = null
                     },
-                    enabled = !target.isCurrent,
                     modifier = Modifier.semantics { contentDescription = "trusted-device-wipe" },
-                ) {
-                    Text("Wipe & restart", color = FS.colors.danger)
-                }
-                Spacer(Modifier.height(FS.space.s4))
+                )
             }
         }
     }
@@ -345,8 +393,8 @@ fun TrustedDevicesScreen(nav: NavController) {
                     }
                     Text(
                         "Names are encrypted and apply only inside this Flagship account.",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 13.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
                     )
                 }
             },
@@ -386,7 +434,7 @@ fun TrustedDevicesScreen(nav: NavController) {
                         if (!ok) snackbarMsg = "Couldn't disconnect — check your connection and try again."
                     }
                 }) {
-                    Text("Revoke", color = FS.colors.danger)
+                    Text("Revoke", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
@@ -402,7 +450,7 @@ fun TrustedDevicesScreen(nav: NavController) {
             title = { Text("Wipe and start over?") },
             text = {
                 Text(
-                    "Your account keeps the same username and your pods keep " +
+                    "Your account keeps the same username and your servers keep " +
                         "their data. Every device currently on this account will " +
                         "be disconnected — including this phone, which becomes " +
                         "the new root of trust. You'll re-pair each one fresh.\n\n" +
@@ -426,7 +474,7 @@ fun TrustedDevicesScreen(nav: NavController) {
                         }
                     }
                 }) {
-                    Text("Wipe and start over", color = FS.colors.danger)
+                    Text("Wipe and start over", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
@@ -444,7 +492,7 @@ fun TrustedDevicesScreen(nav: NavController) {
                 Text(
                     "Rotates your account's identity key. Other devices on " +
                         "this account will need to re-pair the next time they " +
-                        "open the app. Pods stay running, apps stay installed. " +
+                        "open the app. Servers stay running, apps stay installed. " +
                         "Takes effect after a 24-hour grace window. Your other " +
                         "devices are notified, and only this device can cancel it.",
                 )
@@ -468,7 +516,7 @@ fun TrustedDevicesScreen(nav: NavController) {
                         }
                     }
                 }) {
-                    Text("Replace device", color = FS.colors.danger)
+                    Text("Replace device", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
@@ -480,30 +528,29 @@ fun TrustedDevicesScreen(nav: NavController) {
 
 @Composable
 private fun LoadingRow() {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-        Text("Loading devices…", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+    FSCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+            Text("Loading devices…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        }
     }
 }
 
 @Composable
 private fun ErrorRow(message: String) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Text(message, color = FS.colors.danger, style = TextStyle(fontSize = 14.sp))
+    FSCard {
+        Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
 @Composable
 private fun EmptyRow() {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Just this device", color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
-            Text(
-                "Sign in on another phone or tablet to add a trusted device.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 12.sp),
-            )
-        }
+    FSGroup {
+        FSRow(
+            title = "Just this device",
+            subtitle = "Sign in on another phone or tablet to add a trusted device.",
+            icon = Icons.Outlined.PhoneAndroid,
+        )
     }
 }
 
@@ -528,14 +575,16 @@ private fun PendingRePairBanner(
     }
     val elapsed = ReplaceDeviceViewModel.graceElapsed(pending.completesAt, nowTick)
 
-    FSCard(padding = PaddingValues(FS.space.s4)) {
+    FSCard {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                "Replace pending",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-                modifier = Modifier.semantics { contentDescription = "pending-re-pair-banner" },
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                Icon(Icons.Outlined.Sync, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text(
+                    "Replace pending",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.semantics { contentDescription = "pending-re-pair-banner" },
+                )
+            }
             Text(
                 if (elapsed) {
                     "The grace window has elapsed — finalize the device replacement now."
@@ -543,8 +592,8 @@ private fun PendingRePairBanner(
                     "Replace pending — finalize when the 3-day grace elapses " +
                         "(${formatCompletesAt(pending.completesAt)})."
                 },
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.semantics { contentDescription = "pending-re-pair-banner-body" },
             )
             FSPrimaryButton(
@@ -556,7 +605,6 @@ private fun PendingRePairBanner(
             )
         }
     }
-    Spacer(Modifier.height(FS.space.s2))
 }
 
 /** Absolute locale timestamp for the pending-re-pair banner's unlock time
@@ -567,64 +615,41 @@ internal fun formatCompletesAt(ms: Long): String =
 
 @Composable
 private fun TrustedDeviceRow(device: TrustedDevicesViewModel.DirectoryDevice, onMenu: () -> Unit) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
-        ) {
-            Icon(
-                imageVector = platformIcon(device.platformClass),
-                contentDescription = null,
-                tint = FS.colors.primary,
-                modifier = Modifier.size(28.dp),
-            )
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        device.displayName,
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                    )
-                    if (device.isCurrent) {
-                        Text("This device", color = FS.colors.primary, style = TextStyle(fontSize = 12.sp))
-                    }
-                }
-                Text(
-                    "${platformDisplay(device.platformClass)} · Device ${device.supportCode}",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 12.sp),
-                )
-                if (device.isManaged) {
-                    Text(
-                        if (device.isLocked) "Administrator-managed · locked" else "Administrator-managed",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 12.sp),
-                    )
-                } else if (device.lastSeenAt > device.createdAt) {
-                    Text(
-                        "last seen ${relative(device.lastSeenAt)}",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 12.sp),
-                    )
-                }
-            }
-            IconButton(
-                onClick = onMenu,
-                modifier = Modifier.semantics {
-                    contentDescription = "trusted-device-menu-${device.deviceId}"
-                },
-            ) {
-                Icon(Icons.Outlined.Devices, contentDescription = null, tint = FS.colors.textMuted)
-            }
+    val lines = buildList {
+        add("${platformDisplay(device.platformClass)} · Device ${device.supportCode}")
+        if (device.isManaged) {
+            add(if (device.isLocked) "Administrator-managed · locked" else "Administrator-managed")
+        } else if (device.lastSeenAt > device.createdAt) {
+            add("last seen ${relative(device.lastSeenAt)}")
         }
     }
+    FSRow(
+        title = device.displayName,
+        subtitle = lines.joinToString("\n"),
+        icon = platformIcon(device.platformClass),
+        iconTint = MaterialTheme.colorScheme.primary,
+        onClick = onMenu,
+        trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                if (device.isCurrent) FSPill("This device", FSPillKind.Online)
+                IconButton(
+                    onClick = onMenu,
+                    modifier = Modifier.semantics {
+                        contentDescription = "trusted-device-menu-${device.deviceId}"
+                    },
+                ) {
+                    Icon(Icons.Outlined.MoreVert, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        },
+    )
 }
 
 private fun platformIcon(raw: String?): ImageVector = when (raw) {
     "ios" -> Icons.Outlined.PhoneIphone
     "android" -> Icons.Outlined.PhoneAndroid
     "web" -> Icons.Outlined.Language
+    "macos" -> Icons.Outlined.Laptop
     else      -> Icons.Outlined.Devices
 }
 

@@ -13,12 +13,19 @@ package com.flagshipserver.app.ui.screens
 
 import android.app.Activity
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,14 +34,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
@@ -50,10 +56,13 @@ import com.flagshipserver.app.keystore.PasskeyRecoveryManager
 import com.flagshipserver.app.keystore.WrappedUmk
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSField
-import com.flagshipserver.app.ui.components.FSGhostButton
+import com.flagshipserver.app.ui.components.FSGroup
 import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.components.FSRow
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -103,43 +112,24 @@ fun RecoveryScreen(nav: NavController) {
         }
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = FS.space.s6),
+    FSScreen(
+        title = "Cloud recovery",
+        onBack = { nav.popBackStack() },
     ) {
-        Spacer(Modifier.height(FS.space.s8))
-        FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
-        Spacer(Modifier.height(FS.space.s3))
-        Text(
-            "CLOUD RECOVERY",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
-        )
-        Spacer(Modifier.height(FS.space.s4))
-
         if (showReattachProgress) {
-            FSCard(padding = PaddingValues(FS.space.s4)) {
-                Text("Re-attach progress", color = FS.colors.text, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "See per-app re-anchoring after recovery.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
-                )
-                FSGhostButton(
-                    label = "View progress",
+            FSGroup {
+                FSRow(
+                    title = "Re-attach progress",
+                    subtitle = "See per-app re-anchoring after recovery.",
+                    icon = Icons.Outlined.Sync,
                     onClick = { nav.navigate("post-recovery") },
-                    block = true,
+                    modifier = Modifier.semantics { testTag = "recovery-open-reattach-progress" },
                 )
             }
-            Spacer(Modifier.height(FS.space.s3))
         }
 
         if (error != null) {
-            FSCard(padding = PaddingValues(FS.space.s3)) {
-                Text(error!!, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
-            }
-            Spacer(Modifier.height(FS.space.s2))
+            ErrorCard(error!!)
         }
         if (working && note != null) {
             FSCard(padding = PaddingValues(FS.space.s3), modifier = Modifier.semantics { testTag = "recovery-second-prompt" }) {
@@ -234,9 +224,7 @@ fun RecoveryScreen(nav: NavController) {
                 },
             )
         }
-        Spacer(Modifier.height(FS.space.s3))
         HowRecoveryWorksCard()
-        Spacer(Modifier.height(FS.space.s8))
     }
 }
 
@@ -246,46 +234,45 @@ private fun ChooseCard(
     savedIn: String?,
     onSetup: () -> Unit,
 ) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text("Cloud recovery", color = FS.colors.text,
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
-            FSPill(
-                when (cloudStatus) {
-                    CloudStatus.Configured -> "Configured"
-                    CloudStatus.NotConfigured -> "Not set up"
-                    CloudStatus.Failed -> "Couldn't check"
-                    CloudStatus.Unknown -> "Checking…"
-                },
-                kind = if (cloudStatus == CloudStatus.Configured) FSPillKind.Online else FSPillKind.Idle,
-            )
-            // Configured: what iOS shows ("Recovery active" and how to use
-            // it), never the set-up button again.
+    FSCard {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                Text("Cloud recovery", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                FSPill(
+                    when (cloudStatus) {
+                        CloudStatus.Configured -> "Configured"
+                        CloudStatus.NotConfigured -> "Not set up"
+                        CloudStatus.Failed -> "Couldn't check"
+                        CloudStatus.Unknown -> "Checking…"
+                    },
+                    kind = if (cloudStatus == CloudStatus.Configured) FSPillKind.Online else FSPillKind.Idle,
+                )
+            }
             if (cloudStatus == CloudStatus.Configured) {
                 Text(
                     "Recovery active",
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.semantics { testTag = "recovery-active" },
                 )
                 if (savedIn != null) {
                     Text(
                         "Your passkey is saved in $savedIn.",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 13.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
                 Text(
                     RECOVER_ON_NEW_DEVICE,
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.semantics { testTag = "recovery-new-device-hint" },
                 )
             } else {
                 Text(
                     "Store an encrypted copy of your account key for a new Android device.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
                 FSPrimaryButton(
                     label = "Set up cloud recovery",
@@ -311,10 +298,14 @@ private fun SetupCard(
     val canSubmit = !working &&
         passphrase.length >= CloudRecoveryEnrollment.MIN_PASSPHRASE &&
         passphrase == passphraseConfirm
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text("Set up cloud recovery", color = FS.colors.text,
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
+    FSCard {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Text("Set up cloud recovery", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Pick a passphrase (8+ characters) — treat it like a password and write it down somewhere safe. You'll need it, plus your passkey, to get back in on a new device. We can't reset it.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
             FSField(
                 value = passphrase,
                 onValueChange = onPassphrase,
@@ -334,25 +325,24 @@ private fun SetupCard(
                 enabled = canSubmit,
                 block = true,
             )
-            FSGhostButton(label = "Back", onClick = onCancel)
+            FSSecondaryButton(label = "Cancel", onClick = onCancel, enabled = !working, block = true)
         }
     }
 }
 
 @Composable
 private fun HowRecoveryWorksCard() {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                "How this works",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-            )
-            Text(
-                RECOVERY_HOW_IT_WORKS,
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
-            )
+    FSCard {
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Icon(Icons.Outlined.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("How this works", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    RECOVERY_HOW_IT_WORKS,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
         }
     }
 }

@@ -8,45 +8,57 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AdminPanelSettings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.dp
 import com.flagshipserver.app.core.AddServerGate
-import com.flagshipserver.app.ui.components.FSGhostButton
+import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.theme.FS
-import com.flagshipserver.app.ui.theme.FSLayout
 
 @Composable
 fun AddServerAdminOnlyScreen(onBack: () -> Unit, message: String = AddServerGate.ADMIN_ONLY) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            Modifier
-                .widthIn(max = FSLayout.readingMaxWidth)
-                .padding(FS.space.s6)
-                .testTag("add-server-admin-only"),
-            verticalArrangement = Arrangement.spacedBy(FS.space.s3),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                "Admin devices only",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
-            )
-            Text(
-                message,
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
-                textAlign = TextAlign.Center,
-            )
-            FSGhostButton(label = "Back", onClick = onBack)
+    FSScreen(title = "Add a server", onBack = onBack, scrollable = false) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(FS.space.s6)
+                    .semantics(mergeDescendants = true) {}
+                    .testTag("add-server-admin-only"),
+                verticalArrangement = Arrangement.spacedBy(FS.space.s3),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(
+                    Icons.Outlined.AdminPanelSettings,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(40.dp),
+                )
+                Text(
+                    "Admin devices only",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.titleLarge,
+                    textAlign = TextAlign.Center,
+                )
+                Text(
+                    message,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                )
+            }
         }
     }
 }

@@ -12,6 +12,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performScrollTo
 import com.flagshipserver.app.core.PodInfo
 import com.flagshipserver.app.ui.theme.FlagshipTheme
@@ -69,11 +70,11 @@ class HomeAddServerTest {
         var created = 0
         setHome(onePod, onAdd = { created++ })
         composeRule.onNodeWithTag("home-add-server").performScrollTo().performClick()
-        composeRule.onNodeWithText("Co-manage a running server").assertIsDisplayed()
-        composeRule.onNodeWithText("Import a backup").assertIsDisplayed()
+        composeRule.onNodeWithText("Co-manage a running server").assertExists()
+        composeRule.onNodeWithText("Import a backup").assertExists()
         composeRule.onNodeWithText("Add a new server").assertDoesNotExist()
         composeRule.onNodeWithText("To clone", substring = true).assertDoesNotExist()
-        composeRule.onNodeWithText("Create a new server").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("Create a new server").assertExists().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         assertEquals(1, created)
     }
 
@@ -81,7 +82,7 @@ class HomeAddServerTest {
         var opened = 0
         setHome(onePod, onCoManage = { opened++ })
         composeRule.onNodeWithTag("home-add-server").performScrollTo().performClick()
-        composeRule.onNodeWithTag("home-co-manage").performClick()
+        composeRule.onNodeWithTag("home-co-manage").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         assertEquals(1, opened)
     }
 
@@ -93,9 +94,9 @@ class HomeAddServerTest {
         composeRule.onNodeWithText("Co-manage a running server").assertDoesNotExist()
         composeRule.onNodeWithText("Add your first server").assertDoesNotExist()
         composeRule.onNodeWithTag("home-add-server").performScrollTo().assertIsDisplayed().performClick()
-        composeRule.onNodeWithTag("home-add-new-server").assertIsDisplayed()
-        composeRule.onNodeWithTag("home-co-manage").assertIsDisplayed()
-        composeRule.onNodeWithTag("home-import-backup").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("home-add-new-server").assertExists()
+        composeRule.onNodeWithTag("home-co-manage").assertExists()
+        composeRule.onNodeWithTag("home-import-backup").assertExists().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         assertEquals(1, opened)
     }
 

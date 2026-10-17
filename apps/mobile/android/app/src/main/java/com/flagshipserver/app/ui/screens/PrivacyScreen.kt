@@ -17,6 +17,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Fingerprint
+import androidx.compose.material.icons.outlined.Password
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,7 +42,9 @@ import com.flagshipserver.app.core.LocalPrivacySettings
 import com.flagshipserver.app.keystore.BiometricCancelled
 import com.flagshipserver.app.keystore.BiometricGate
 import com.flagshipserver.app.ui.components.FSCard
-import com.flagshipserver.app.ui.components.FSGhostButton
+import com.flagshipserver.app.ui.components.FSGroup
+import com.flagshipserver.app.ui.components.FSRow
+import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.theme.FS
 import kotlinx.coroutines.launch
 
@@ -52,116 +58,94 @@ fun PrivacyScreen(nav: NavController) {
     val passphraseEnabled = privacy?.requirePassphraseAtLaunch?.collectAsState()?.value ?: false
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6),
-    ) {
-        Spacer(Modifier.height(FS.space.s8))
-        Text(
-            "Privacy",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Spacer(Modifier.height(FS.space.s6))
-
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                androidx.compose.foundation.layout.Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                    modifier = Modifier.padding(end = FS.space.s2),
-                ) {
-                    Text(
-                        "Lock with biometrics",
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-                        modifier = Modifier.padding(end = FS.space.s4),
-                    )
-                    Switch(
-                        checked = enabled,
-                        onCheckedChange = { newValue ->
-                            errorMsg = null
-                            if (newValue) {
-                                val activity = ctx as? FragmentActivity
-                                if (activity == null) {
-                                    errorMsg = "Lost activity context; restart and retry."
-                                    return@Switch
-                                }
-                                scope.launch {
-                                    try {
-                                        BiometricGate.evaluate(
-                                            activity = activity,
-                                            title = "Enable biometric lock",
-                                            subtitle = "Confirm to enable",
-                                        )
-                                        privacy?.setRequireBiometricAtLaunch(true)
-                                        app.setRequireBiometricAtLaunch(true)
-                                        app.markUnlocked() // user just authed
-                                    } catch (_: BiometricCancelled) {
-                                        // No-op — user backed out.
-                                    } catch (e: Throwable) {
-                                        errorMsg = "Couldn't enable: ${e.message}"
-                                    }
-                                }
-                            } else {
-                                privacy?.setRequireBiometricAtLaunch(false)
-                                app.setRequireBiometricAtLaunch(false)
-                            }
-                        },
-                    )
-                }
-                Text(
-                    "On by default. Flagship asks for biometrics each time the app " +
-                        "launches or comes back from the background, so you stay signed " +
-                        "in without re-entering your passphrase. Turn it off to open " +
-                        "straight in. Either way your servers stay running; this just " +
-                        "controls who can see and tap.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                )
-                errorMsg?.let { msg ->
-                    Text(msg, color = FS.colors.danger, style = TextStyle(fontSize = 12.sp))
+    val onBiometricChange: (Boolean) -> Unit = { newValue ->
+        errorMsg = null
+        if (newValue) {
+            val activity = ctx as? FragmentActivity
+            if (activity == null) {
+                errorMsg = "Lost activity context; restart and retry."
+            } else {
+                scope.launch {
+                    try {
+                        BiometricGate.evaluate(
+                            activity = activity,
+                            title = "Enable biometric lock",
+                            subtitle = "Confirm to enable",
+                        )
+                        privacy?.setRequireBiometricAtLaunch(true)
+                        app.setRequireBiometricAtLaunch(true)
+                        app.markUnlocked() // user just authed
+                    } catch (_: BiometricCancelled) {
+                        // No-op — user backed out.
+                    } catch (e: Throwable) {
+                        errorMsg = "Couldn't enable: ${e.message}"
+                    }
                 }
             }
+        } else {
+            privacy?.setRequireBiometricAtLaunch(false)
+            app.setRequireBiometricAtLaunch(false)
         }
-
-        Spacer(Modifier.height(FS.space.s4))
-
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                androidx.compose.foundation.layout.Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                    modifier = Modifier.padding(end = FS.space.s2),
-                ) {
-                    Text(
-                        "Require your passphrase",
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-                        modifier = Modifier.padding(end = FS.space.s4),
-                    )
-                    Switch(
-                        checked = passphraseEnabled,
-                        onCheckedChange = { newValue ->
-                            privacy?.setRequirePassphraseAtLaunch(newValue)
-                        },
-                    )
-                }
-                Text(
-                    "Off by default. When on, Flagship doesn't keep you signed in — " +
-                        "each launch needs a full sign-in with your account passphrase, " +
-                        "not just biometrics. The strongest option, and the slowest.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                )
-            }
-        }
-
-        Spacer(Modifier.height(FS.space.s6))
-        FSGhostButton(label = "Back", onClick = { nav.popBackStack() })
-        Spacer(Modifier.height(FS.space.s12))
     }
+
+    FSScreen(title = "Privacy", onBack = { nav.popBackStack() }) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            FSGroup(header = "Lock the app") {
+                FSRow(
+                    title = "Lock with biometrics",
+                    icon = Icons.Outlined.Fingerprint,
+                    onClick = { onBiometricChange(!enabled) },
+                    trailing = { Switch(checked = enabled, onCheckedChange = onBiometricChange) },
+                )
+            }
+            Explainer(
+                "On by default. Flagship asks for biometrics each time the app " +
+                    "launches or comes back from the background, so you stay signed " +
+                    "in without re-entering your passphrase. Turn it off to open " +
+                    "straight in. Either way your servers stay running; this just " +
+                    "controls who can see and tap.",
+            )
+            errorMsg?.let { msg ->
+                Text(
+                    msg,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(horizontal = FS.space.s4),
+                )
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            FSGroup(header = "Require your passphrase") {
+                FSRow(
+                    title = "Sign in with your passphrase every time",
+                    icon = Icons.Outlined.Password,
+                    onClick = { privacy?.setRequirePassphraseAtLaunch(!passphraseEnabled) },
+                    trailing = {
+                        Switch(
+                            checked = passphraseEnabled,
+                            onCheckedChange = { newValue ->
+                                privacy?.setRequirePassphraseAtLaunch(newValue)
+                            },
+                        )
+                    },
+                )
+            }
+            Explainer(
+                "Off by default. When on, Flagship doesn't keep you signed in — " +
+                    "each launch needs a full sign-in with your account passphrase, " +
+                    "not just biometrics. The strongest option, and the slowest.",
+            )
+        }
+    }
+}
+
+@Composable
+private fun Explainer(text: String) {
+    Text(
+        text,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.padding(horizontal = FS.space.s4),
+    )
 }
