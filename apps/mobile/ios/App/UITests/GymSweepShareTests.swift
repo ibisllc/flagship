@@ -36,8 +36,12 @@ final class GymSweepShareTests: GymSweepCase {
 
     /// The text field an FSField with this identifier draws (the identifier
     /// lands on the field itself or on its container).
-    private func textField(in el: XCUIElement) -> XCUIElement {
-        el.elementType == .textField ? el : el.textFields.firstMatch
+    /// The text field of the form `el` names: FSField puts the identifier on
+    /// its label, so fall back to the screen's only text field.
+    private func textField(in el: XCUIElement, _ app: XCUIApplication) -> XCUIElement {
+        if el.elementType == .textField { return el }
+        let inside = el.textFields.firstMatch
+        return inside.exists ? inside : app.textFields.firstMatch
     }
 
     /// Flip a SwiftUI Toggle by tapping its switch (the label side doesn't toggle).
@@ -129,8 +133,8 @@ final class GymSweepShareTests: GymSweepCase {
         XCTAssertTrue(reveal(app, remove))
         remove.tap()
         XCTAssertTrue(app.staticTexts["Sam loses access to this server at once."].waitForExistence(timeout: 10))
-        let cancel = app.buttons["Cancel"].firstMatch
-        if cancel.waitForExistence(timeout: 3) { cancel.tap() } else { app.tap() }
+        let cancel = app.sheets.buttons["Cancel"].firstMatch
+        if cancel.waitForExistence(timeout: 3), cancel.isHittable { cancel.tap() } else { app.tap() }
         XCTAssertTrue(any(app, "share-row-\(sam)").exists, "Cancel keeps Sam.")
         expectNoProbe(app, "share-revoke")
         remove.tap()
@@ -160,7 +164,7 @@ final class GymSweepShareTests: GymSweepCase {
 
         open.tap()
         XCTAssertTrue(label.waitForExistence(timeout: 10))
-        let field = textField(in: label)
+        let field = textField(in: label, app)
         field.tap()
         field.typeText("Kim")
         app.buttons["share-level-manage"].tap()
@@ -242,7 +246,7 @@ final class GymSweepShareTests: GymSweepCase {
 
         let paste = any(app, "share-accept-paste")
         XCTAssertTrue(paste.waitForExistence(timeout: 10))
-        let field = textField(in: paste)
+        let field = textField(in: paste, app)
         field.tap()
         field.typeText("not a link")
         app.buttons["share-accept-open"].tap()
@@ -308,8 +312,8 @@ final class GymSweepShareTests: GymSweepCase {
         XCTAssertTrue(reveal(app, leave))
         leave.tap()
         XCTAssertTrue(app.staticTexts["Leave this server?"].waitForExistence(timeout: 10))
-        let cancel = app.buttons["Cancel"].firstMatch
-        if cancel.waitForExistence(timeout: 3) { cancel.tap() } else { app.tap() }
+        let cancel = app.sheets.buttons["Cancel"].firstMatch
+        if cancel.waitForExistence(timeout: 3), cancel.isHittable { cancel.tap() } else { app.tap() }
         XCTAssertTrue(app.navigationBars["Garage"].exists, "Cancel stays on the server.")
         expectNoProbe(app, "share-leave")
         leave.tap()

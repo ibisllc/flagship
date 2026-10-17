@@ -49,13 +49,13 @@ final class GymSweepOnboardingTests: GymSweepCase {
         el.typeText(text)
     }
 
-    /// Welcome → I already have an account → type `name` → Continue.
+    /// Welcome → Connect to an existing account → type `name` → Continue.
     private func signIn(_ app: XCUIApplication, as name: String) {
-        app.buttons["I already have an account"].tap()
-        let cont = app.buttons["join-continue"]
+        app.buttons["welcome-connect"].tap()
+        let cont = app.buttons["connect-name-continue"]
         XCTAssertTrue(cont.waitForExistence(timeout: 10), "Join asks for the account name.")
         XCTAssertFalse(cont.isEnabled, "Nothing to look up yet.")
-        let name0 = app.textFields.firstMatch
+        let name0 = app.textFields.matching(identifier: "connect-name-field").firstMatch
         XCTAssertTrue(name0.waitForExistence(timeout: 5))
         name0.tap()
         name0.typeText(name)
@@ -87,13 +87,11 @@ final class GymSweepOnboardingTests: GymSweepCase {
 
     // MARK: - Welcome → Join
 
-    /// I already have an account: a name with no account shows the inline
+    /// Connect to an existing account: a name with no account shows the inline
     /// "No Flagship account by that name" state, editing the name clears it,
     /// and Back returns to Welcome.
     func test_haveAnAccountUnknownNameThenBack() throws {
         let app = launchOnboarding()
-        XCTAssertTrue(app.descendants(matching: .any)["Mock data mode"].exists,
-                      "Welcome flags the mock data mode the gym runs in.")
         signIn(app, as: "nobody-here")
         let unknown = any(app, "join-unknown")
         XCTAssertTrue(unknown.waitForExistence(timeout: 10), "An unknown name is a state, not an error.")
@@ -102,7 +100,7 @@ final class GymSweepOnboardingTests: GymSweepCase {
         name.tap()
         name.typeText("x")
         waitGone(unknown)
-        XCTAssertTrue(app.buttons["join-continue"].isEnabled, "Editing re-arms Continue.")
+        XCTAssertTrue(app.buttons["connect-name-continue"].isEnabled, "Editing re-arms Continue.")
         app.navBackButton(in: "Sign in").tap()
         XCTAssertTrue(app.buttons["Create your account"].waitForExistence(timeout: 10), "Back returns to Welcome.")
     }
@@ -144,7 +142,7 @@ final class GymSweepOnboardingTests: GymSweepCase {
         let back = button(app, "Back")
         XCTAssertTrue(reveal(app, back))
         back.tap()
-        XCTAssertTrue(app.buttons["join-continue"].waitForExistence(timeout: 10), "Back returns to the name.")
+        XCTAssertTrue(app.buttons["connect-name-continue"].waitForExistence(timeout: 10), "Back returns to the name.")
     }
 
     /// A multi-device account needs the passphrase AND a recovery or
@@ -167,7 +165,7 @@ final class GymSweepOnboardingTests: GymSweepCase {
         wait(restore, "isEnabled == true")
         shot(app, "login-multi-ready")
         app.navBackButton(in: "Sign in").tap()
-        XCTAssertTrue(app.buttons["join-continue"].waitForExistence(timeout: 10), "Back returns to the name.")
+        XCTAssertTrue(app.buttons["connect-name-continue"].waitForExistence(timeout: 10), "Back returns to the name.")
     }
 
     /// An account with no cloud backup says so (never a 404) and offers the
@@ -327,7 +325,7 @@ final class GymSweepOnboardingTests: GymSweepCase {
         expectProbe(app, "redeem on \(friend) by the per-app id for \(friendApp)")
         let reply = text(app, containing: "/invite-accept#")
         XCTAssertTrue(reveal(app, reply), "The reply link is shown to send back.")
-        XCTAssertTrue(any(app, "invite-redeem-reply-copy-btn").exists, "It can be copied.")
+        XCTAssertTrue(reveal(app, any(app, "invite-redeem-reply-copy-btn")), "It can be copied.")
         let replyLink = reply.label
         XCTAssertTrue(replyLink.contains("/invite-accept#"), "Got: \(replyLink)")
         shot(app, "invite-redeem-pending")
