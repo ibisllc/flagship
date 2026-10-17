@@ -11,6 +11,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -132,6 +135,13 @@ private fun BoxIllustration() {
                 .border(1.dp, FS.colors.border, RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.BottomEnd,
         ) {
+            // The server: a drive-bay icon, so the card reads as a box
+            Icon(
+                Icons.Outlined.Dns,
+                contentDescription = null,
+                tint = FS.colors.primary,
+                modifier = Modifier.align(Alignment.Center).size(36.dp),
+            )
             // LED
             Box(
                 modifier = Modifier

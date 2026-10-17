@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,6 +43,8 @@ import com.flagshipserver.app.core.FlagshipDateFormat
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.PeerBackup
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSectionHeader
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
@@ -57,40 +60,23 @@ fun PeerBackupScreen(nav: NavController) {
 
     LaunchedEffect(Unit) { vm.load() }
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6)
-            .semantics { testTag = "peer-backup" },
+    FSScreen(
+        title = "Peer-backup",
+        subtitle = "How this server's backup is kept on other servers.",
+        onBack = { nav.popBackStack() },
+        onRefresh = { vm.load() },
+        refreshing = state is LoadingState.Loading,
+        modifier = Modifier.semantics { testTag = "peer-backup" },
     ) {
-        Spacer(Modifier.height(FS.space.s8))
-        Text(
-            "Peer-backup",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Text(
-            "How this server's backup is kept on other servers.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp),
-        )
-        Spacer(Modifier.height(FS.space.s4))
-
         when (val s = state) {
             is LoadingState.Loaded -> Body(s.value)
             is LoadingState.Failed -> ErrorCard(s.message, onRetry = { vm.load() })
             else -> {
                 ServerCardSkeleton()
-                Spacer(Modifier.height(FS.space.s2))
                 ServerCardSkeleton()
             }
         }
-        Spacer(Modifier.height(FS.space.s6))
         FSGhostButton(label = "Refresh", onClick = { vm.load() })
-        FSGhostButton(label = "Back", onClick = { nav.popBackStack() })
-        Spacer(Modifier.height(FS.space.s12))
     }
 }
 
@@ -113,22 +99,20 @@ private fun Body(s: PeerBackupStatusResponse) {
                 Spacer(Modifier.width(FS.space.s2))
                 FSPill(label = state, kind = pillKind(state))
             }
-            Text(PeerBackup.stateNote(state), color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+            Text(PeerBackup.stateNote(state), color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 13.sp))
             s.reason?.takeIf { it.isNotEmpty() }?.let {
-                Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 13.sp))
             }
             val total = s.totalBricks ?: 0
             if (total > 0) LabelValueRow("pieces safe", "${s.healthyBricks ?: 0} of $total")
             s.lastPlacedAt?.takeIf { it > 0 }?.let { LabelValueRow("last placed", fmtDate(it)) }
             PeerBackup.restoreByLine(s.keepUntil).takeIf { it.isNotEmpty() }?.let {
-                Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp), modifier = Modifier.semantics { testTag = "peer-backup-restore-by" })
+                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 13.sp), modifier = Modifier.semantics { testTag = "peer-backup-restore-by" })
             }
         }
     }
 
-    Spacer(Modifier.height(FS.space.s4))
-    SectionHeader("Servers holding your pieces")
-    Spacer(Modifier.height(FS.space.s2))
+    FSSectionHeader("Servers holding your pieces")
     val rows = PeerBackup.holderRows(s)
     if (rows.isEmpty()) {
         PlaceholderCard("None yet. Pieces are placed once your newest backup is ready and enough other servers can hold it.")
@@ -137,23 +121,20 @@ private fun Body(s: PeerBackupStatusResponse) {
             FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.semantics { testTag = "peer-backup-holder" }) {
                 Column {
                     Text(r.label, color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
-                    Text(r.line, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                    Text(r.line, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 13.sp))
                 }
             }
-            Spacer(Modifier.height(FS.space.s2))
         }
     }
 
     val host = PeerBackup.hostingLines(s)
     if (host.isNotEmpty()) {
-        Spacer(Modifier.height(FS.space.s4))
-        SectionHeader("Kept for other servers")
-        Spacer(Modifier.height(FS.space.s2))
+        FSSectionHeader("Kept for other servers")
         FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.semantics { testTag = "peer-backup-hosting" }) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-                host.forEach { Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp)) }
+                host.forEach { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 13.sp)) }
                 s.hosting?.reliability?.let {
-                    Text("Reliability score: $it of 100", color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
+                    Text("Reliability score: $it of 100", color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 12.sp))
                 }
             }
         }
@@ -168,21 +149,16 @@ private fun pillKind(state: String): FSPillKind = when (state) {
 }
 
 @Composable
-private fun SectionHeader(title: String) {
-    Text(title, color = FS.colors.text, style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold))
-}
-
-@Composable
 private fun PlaceholderCard(text: String) {
     FSCard(padding = PaddingValues(FS.space.s4)) {
-        Text(text, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 13.sp))
     }
 }
 
 @Composable
 private fun LabelValueRow(label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp))
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 14.sp))
         Spacer(Modifier.weight(1f))
         Text(value, color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
     }

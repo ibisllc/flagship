@@ -36,11 +36,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Switch
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -85,6 +89,8 @@ import com.flagshipserver.app.core.LocalBuildClient
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSectionHeader
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
@@ -129,36 +135,37 @@ private fun ScreenScaffold(
     action: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6),
+    FSScreen(
+        title = title,
+        subtitle = subtitle,
+        onBack = onBack,
+        actions = { action?.invoke() },
     ) {
-        Spacer(Modifier.height(FS.space.s12))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = title,
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-                modifier = Modifier.weight(1f),
-            )
-            action?.invoke()
-        }
-        if (subtitle != null) {
-            Spacer(Modifier.height(FS.space.s3))
-            Text(
-                text = subtitle,
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 16.sp, lineHeight = 22.sp),
-            )
-        }
-        Spacer(Modifier.height(FS.space.s6))
         content()
-        Spacer(Modifier.height(FS.space.s6))
-        FSGhostButton("Back", onClick = onBack, block = true)
-        Spacer(Modifier.height(FS.space.s12))
+    }
+}
+
+/** A one-line verdict with a Material check or warning icon (no text glyphs). */
+@Composable
+private fun StatusLine(
+    text: String,
+    color: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier,
+    ok: Boolean = true,
+    large: Boolean = false,
+) {
+    Row(modifier = modifier.semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+        Icon(
+            if (ok) Icons.Outlined.CheckCircle else Icons.Outlined.WarningAmber,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(if (large) 20.dp else 16.dp),
+        )
+        Text(
+            text,
+            color = color,
+            style = if (large) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 
@@ -183,7 +190,7 @@ private fun MonoField(value: String, onValueChange: (String) -> Unit, placeholde
             modifier = Modifier.fillMaxWidth().then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
         ) { inner ->
             if (value.isEmpty()) {
-                Text(placeholder, color = FS.colors.textMuted, style = TextStyle(fontSize = 15.sp))
+                Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 15.sp))
             }
             inner()
         }
@@ -215,7 +222,7 @@ fun BuildSourceChooserScreen(nav: NavController) {
         onBack = { nav.popBackStack() },
         action = {
             IconButton(onClick = { showHelp = true }, modifier = Modifier.testTag("build-source-help")) {
-                Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help", tint = FS.colors.textMuted)
+                Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
     ) {
@@ -228,7 +235,7 @@ fun BuildSourceChooserScreen(nav: NavController) {
             nav.navigate("build/journal")
         }
         Spacer(Modifier.height(FS.space.s5))
-        Text("New build", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
+        Text("New build", color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
         Spacer(Modifier.height(FS.space.s2))
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             SourceTile(
@@ -288,7 +295,7 @@ private fun ResumeRow(activeSessions: Int, onClick: () -> Unit) {
                 Text("$activeSessions", color = Color.White, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold))
             }
         }
-        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = FS.colors.textMuted)
+        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -316,14 +323,14 @@ private fun BuildHelpDialog(onDismiss: () -> Unit) {
             ) {
                 Text(
                     "Every option ends the same way: the app is installed and running on your own server, at its own web address.",
-                    color = FS.colors.textMuted,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
                 )
                 BUILD_HELP_ITEMS.forEach { (title, body) ->
                     Column {
                         Text(title, color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
                         Spacer(Modifier.height(FS.space.s1))
-                        Text(body, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
+                        Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
                     }
                 }
             }
@@ -348,7 +355,7 @@ private fun SourceTile(title: String, body: String, onClick: () -> Unit, testTag
         Spacer(Modifier.height(FS.space.s2))
         Text(
             text = body,
-            color = FS.colors.textMuted,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
         )
     }
@@ -409,14 +416,14 @@ private fun DetailAdaptCard(buildId: String, vm: BuildJournalViewModel, nav: Nav
         }
         is BuildJournalViewModel.DetailAdapt.Working -> InfoCard(s.text, "This can take several minutes. You can leave this screen.")
         is BuildJournalViewModel.DetailAdapt.Adapted -> FSCard(padding = PaddingValues(FS.space.s5)) {
-            Text("Adapted ✓", color = FS.colors.success, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
+            StatusLine("Adapted", FS.colors.success, large = true)
             Spacer(Modifier.height(FS.space.s2))
-            Text("The AI rewrote this repo into a Flagship service (${s.fileCount} file(s)).", color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+            Text("The AI rewrote this repo into a Flagship service (${s.fileCount} file(s)).", color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
             Spacer(Modifier.height(FS.space.s4))
             FSPrimaryButton("Install it", onClick = { vm.deployAgain(buildId) }, block = true, modifier = Modifier.testTag("build-journal-deploy"))
         }
         is BuildJournalViewModel.DetailAdapt.Deployed -> FSCard(padding = PaddingValues(FS.space.s5)) {
-            Text("Installed ✓", color = FS.colors.success, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold), modifier = Modifier.testTag("build-journal-deployed"))
+            StatusLine("Installed", FS.colors.success, large = true, modifier = Modifier.testTag("build-journal-deployed"))
             Spacer(Modifier.height(FS.space.s2))
             Text(s.url, color = FS.colors.primary, style = TextStyle(fontSize = 14.sp, fontFamily = FontFamily.Monospace))
         }
@@ -535,11 +542,11 @@ fun BuildGitScreen(nav: NavController) {
         Spacer(Modifier.height(FS.space.s2))
         Text(
             text = buildAnnotatedString {
-                withStyle(SpanStyle(color = FS.colors.textMuted)) { append("https://") }
+                withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) { append("https://") }
                 withStyle(SpanStyle(color = FS.colors.primary, fontWeight = FontWeight.SemiBold)) {
                     append(BuildGitViewModel.addressLabel(slug, assignedName))
                 }
-                withStyle(SpanStyle(color = FS.colors.textMuted)) { append(".$server") }
+                withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) { append(".$server") }
             },
             style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
             maxLines = 2,
@@ -548,20 +555,15 @@ fun BuildGitScreen(nav: NavController) {
         val warning = VibeCodeDescribe.warning(currentCheck, slug)
         if (warning != null) {
             Spacer(Modifier.height(FS.space.s2))
-            Text(
-                text = "⚠ $warning",
-                color = FS.colors.danger,
-                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-                modifier = Modifier.testTag("build-git-name-taken"),
-            )
+            StatusLine(warning, MaterialTheme.colorScheme.error, ok = false, modifier = Modifier.testTag("build-git-name-taken"))
         } else if (currentCheck != null && currentCheck.ok && currentCheck.name != null) {
             Spacer(Modifier.height(FS.space.s2))
-            Text("✓ Available", color = FS.colors.success, style = TextStyle(fontSize = 14.sp))
+            StatusLine("Available", FS.colors.success)
         } else if (slug.isEmpty()) {
             Spacer(Modifier.height(FS.space.s2))
             Text(
                 BuildGitViewModel.blankNameHint(ref),
-                color = FS.colors.textMuted,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
             )
         }
@@ -657,10 +659,10 @@ private fun VerdictCard(
     FSCard(padding = PaddingValues(FS.space.s5)) {
         if (p.fit) {
             VerdictHead(recheckEnabled, onCheckAgain) {
-                Text("Flagship-ready ✓", color = FS.colors.success, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
+                StatusLine("Flagship-ready", FS.colors.success, large = true)
             }
             Spacer(Modifier.height(FS.space.s2))
-            Text("${p.reason} — ${p.fileCount} file(s).", color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+            Text("${p.reason} — ${p.fileCount} file(s).", color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
             Spacer(Modifier.height(FS.space.s4))
             FSPrimaryButton("Install it", onClick = { vm.deploy() }, block = true)
         } else {
@@ -674,7 +676,7 @@ private fun VerdictCard(
             }
             adaptError?.let {
                 Spacer(Modifier.height(FS.space.s3))
-                Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp), modifier = Modifier.testTag("build-git-adapt-error"))
+                Text(it, color = MaterialTheme.colorScheme.error, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp), modifier = Modifier.testTag("build-git-adapt-error"))
                 RelayFailureAction(it)
                 // A restart cut the AI off: its files are kept, so the build
                 // can go live as it is (the button below runs the AI again).
@@ -713,7 +715,7 @@ private fun VerdictCard(
             }
             Text(
                 BuildGitViewModel.SHARE_NOTE,
-                color = FS.colors.textMuted,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
             )
         }
@@ -733,7 +735,7 @@ private fun VerdictHead(recheckEnabled: Boolean, onCheckAgain: () -> Unit, conte
             enabled = recheckEnabled,
             modifier = Modifier.testTag("build-git-recheck"),
         ) {
-            Icon(Icons.Default.Refresh, contentDescription = BuildGitViewModel.CHECK_AGAIN, tint = FS.colors.textMuted)
+            Icon(Icons.Default.Refresh, contentDescription = BuildGitViewModel.CHECK_AGAIN, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -759,7 +761,7 @@ private fun NotLiveCard(
         Spacer(Modifier.height(FS.space.s2))
         Text(
             reason,
-            color = FS.colors.textMuted,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
             modifier = Modifier.testTag("build-git-not-live-reason"),
         )
@@ -813,7 +815,7 @@ private fun AdaptingCard(progress: String?, phase: String?) {
             Spacer(Modifier.height(FS.space.s1))
             Text(
                 progress,
-                color = FS.colors.textMuted,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
                 maxLines = 2,
                 modifier = Modifier.testTag("build-git-progress"),
@@ -822,7 +824,7 @@ private fun AdaptingCard(progress: String?, phase: String?) {
         Spacer(Modifier.height(FS.space.s2))
         Text(
             "This can take several minutes. You can leave this screen; Build sessions shows how it went.",
-            color = FS.colors.textMuted,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
         )
     }
@@ -831,9 +833,9 @@ private fun AdaptingCard(progress: String?, phase: String?) {
 @Composable
 private fun AdaptedCard(p: BuildGitViewModel.GitPhase.Adapted, vm: BuildGitViewModel, nav: NavController) {
     FSCard(padding = PaddingValues(FS.space.s5)) {
-        Text("Adapted ✓", color = FS.colors.success, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
+        StatusLine("Adapted", FS.colors.success, large = true)
         Spacer(Modifier.height(FS.space.s2))
-        Text("The AI rewrote this repo into a Flagship service (${p.fileCount} file(s)).", color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+        Text("The AI rewrote this repo into a Flagship service (${p.fileCount} file(s)).", color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
         Spacer(Modifier.height(FS.space.s4))
         FSPrimaryButton("Install it", onClick = { vm.deploy() }, block = true)
         Spacer(Modifier.height(FS.space.s2))
@@ -846,7 +848,7 @@ private fun AdaptedCard(p: BuildGitViewModel.GitPhase.Adapted, vm: BuildGitViewM
 @Composable
 private fun DeployedCard(url: String, vm: BuildGitViewModel) {
     FSCard(padding = PaddingValues(FS.space.s5)) {
-        Text("Installed ✓", color = FS.colors.success, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
+        StatusLine("Installed", FS.colors.success, large = true)
         Spacer(Modifier.height(FS.space.s2))
         Text(url, color = FS.colors.primary, style = TextStyle(fontSize = 14.sp, fontFamily = FontFamily.Monospace))
         Spacer(Modifier.height(FS.space.s4))
@@ -871,12 +873,12 @@ private fun AdapterExport(vm: BuildGitViewModel) {
     Spacer(Modifier.height(FS.space.s2))
     Text(
         "Is this your repo? Commit this file at its root and every Flagship server will run it this way.",
-        color = FS.colors.textMuted,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
     )
     error?.let {
         Spacer(Modifier.height(FS.space.s2))
-        Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+        Text(it, color = MaterialTheme.colorScheme.error, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
     }
 }
 
@@ -898,7 +900,7 @@ private fun shareAdapterFile(ctx: Context, file: File) {
 @Composable
 private fun JournalLink(nav: NavController, buildId: String?) {
     if (buildId == null) return
-    FSGhostButton("View build journal →", onClick = { nav.navigate("build/journal/$buildId") }, block = true)
+    FSGhostButton("View build journal", onClick = { nav.navigate("build/journal/$buildId") }, block = true)
 }
 
 // ── mcp ─────────────────────────────────────────────────────────
@@ -989,7 +991,7 @@ private fun ConnectionCard(
     FSCard(padding = PaddingValues(FS.space.s5)) {
         Text(
             "Add this to your IDE's own settings, not a file in your project (the address names your server). The key works only for this build.",
-            color = FS.colors.textMuted,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
             modifier = Modifier.testTag("build-mcp-user-settings"),
         )
@@ -1016,7 +1018,7 @@ private fun ConnectionCard(
         }
         ide.where?.takeIf { it.isNotBlank() }?.let {
             Spacer(Modifier.height(FS.space.s2))
-            Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp), modifier = Modifier.testTag("build-mcp-ide-where"))
+            Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp), modifier = Modifier.testTag("build-mcp-ide-where"))
         }
         Spacer(Modifier.height(FS.space.s3))
         Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
@@ -1027,7 +1029,7 @@ private fun ConnectionCard(
         Box(Modifier.testTag("build-mcp-ide-config")) { CodeBlock(config) }
         ide.command?.let { command ->
             Spacer(Modifier.height(FS.space.s3))
-            Text("Or run:", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+            Text("Or run:", color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 13.sp))
             Spacer(Modifier.height(FS.space.s2))
             Box(Modifier.testTag("build-mcp-ide-command")) { CodeBlock(command) }
             Spacer(Modifier.height(FS.space.s2))
@@ -1041,14 +1043,14 @@ private fun ConnectionCard(
         Spacer(Modifier.height(FS.space.s4))
         Text(
             "Your editor's agent writes files, validates, requests any secrets (value-free), and deploys. You can also deploy here once it's done:",
-            color = FS.colors.textMuted,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
         )
         Spacer(Modifier.height(FS.space.s2))
         FSPrimaryButton("Deploy now", onClick = onDeploy, block = true)
         deployStatus?.let {
             Spacer(Modifier.height(FS.space.s2))
-            Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+            Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 13.sp))
         }
     }
     if (envRequests.isNotEmpty()) {
@@ -1064,7 +1066,7 @@ private fun EnvRequestsCard(requests: List<BuildEnvRequest>, onRefresh: () -> Un
         Spacer(Modifier.height(FS.space.s2))
         Text(
             "The editor and its AI never see the value — you set it here on your box. Open Configure environment on the service after it's deployed and enter each value there; it never travels through your IDE.",
-            color = FS.colors.textMuted,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
         )
         Spacer(Modifier.height(FS.space.s3))
@@ -1074,14 +1076,14 @@ private fun EnvRequestsCard(requests: List<BuildEnvRequest>, onRefresh: () -> Un
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(q.name, color = FS.colors.text, style = TextStyle(fontSize = 14.sp, fontFamily = FontFamily.Monospace))
-                Text(
-                    if (q.currentlySet) "set ✓" else "needs you",
-                    color = if (q.currentlySet) FS.colors.success else FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
-                )
+                if (q.currentlySet) {
+                    StatusLine("set", FS.colors.success)
+                } else {
+                    Text("needs you", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                }
             }
             q.why?.let {
-                Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp))
+                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp))
             }
         }
         Spacer(Modifier.height(FS.space.s3))
@@ -1092,7 +1094,7 @@ private fun EnvRequestsCard(requests: List<BuildEnvRequest>, onRefresh: () -> Un
 @Composable
 private fun KeyValueRow(label: String, value: String) {
     Column(Modifier.fillMaxWidth()) {
-        Text(label, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium))
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium))
         Text(value, color = FS.colors.text, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontFamily = FontFamily.Monospace))
     }
 }
@@ -1177,7 +1179,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                                             onClick = { confirmDiscardBuild = b },
                                             modifier = Modifier.testTag("build-discard-${b.buildId}"),
                                         ) {
-                                            Text("Discard…", color = FS.colors.danger, style = TextStyle(fontSize = 14.sp))
+                                            Text("Discard…", color = MaterialTheme.colorScheme.error, style = TextStyle(fontSize = 14.sp))
                                         }
                                     }
                                 }
@@ -1192,7 +1194,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                                                 onClick = { confirmDiscard = session },
                                                 modifier = Modifier.testTag("build-session-discard-${session.sessionId}"),
                                             ) {
-                                                Text("Discard…", color = FS.colors.danger, style = TextStyle(fontSize = 14.sp))
+                                                Text("Discard…", color = MaterialTheme.colorScheme.error, style = TextStyle(fontSize = 14.sp))
                                             }
                                         }
                                     }
@@ -1212,7 +1214,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                             if (failedServers.isNotEmpty()) {
                                 Text(
                                     BuildSessions.unreadServersLine(failedServers),
-                                    color = FS.colors.textMuted,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     style = TextStyle(fontSize = 13.sp),
                                     modifier = Modifier.testTag("build-sessions-unread-servers"),
                                 )
@@ -1235,7 +1237,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                 TextButton(onClick = {
                     confirmDiscard = null
                     vm.discard(session)
-                }) { Text("Discard build", color = FS.colors.danger) }
+                }) { Text("Discard build", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { confirmDiscard = null }) { Text("Cancel") } },
         )
@@ -1250,7 +1252,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                 TextButton(onClick = {
                     confirmDiscardBuild = null
                     vm.discard(b)
-                }) { Text("Discard build", color = FS.colors.danger) }
+                }) { Text("Discard build", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { confirmDiscardBuild = null }) { Text("Cancel") } },
         )
@@ -1259,7 +1261,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
 
 @Composable
 private fun SectionCaption(text: String) {
-    Text(text, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
+    FSSectionHeader(text)
 }
 
 @Composable
@@ -1283,7 +1285,7 @@ private fun SessionTile(session: VibeCodeSessionMeta, title: String, server: Str
             Spacer(Modifier.height(FS.space.s1))
             Text(
                 listOfNotNull("Started ${fmtTimestamp(session.startedAt)}", server?.let { "on $it" }).joinToString(" "),
-                color = FS.colors.textMuted,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = TextStyle(fontSize = 13.sp),
             )
             Spacer(Modifier.height(FS.space.s2))
@@ -1324,7 +1326,7 @@ private fun BuildTile(b: BuildSummary, startedOnly: Boolean = false, server: Str
         Text(
             (if (startedOnly) "Started ${fmtTimestamp(b.startedAt)}" else BuildSessions.pastBuildSubtitle(b, fmtTimestamp(b.startedAt))) +
                 (server?.let { " on $it" } ?: ""),
-            color = FS.colors.textMuted,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = TextStyle(fontSize = 13.sp),
         )
         Spacer(Modifier.height(FS.space.s2))
@@ -1338,7 +1340,7 @@ private fun TimelineCard(buildId: String, entries: List<BuildJournalEntry>) {
         Text("Build $buildId", color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
         Spacer(Modifier.height(FS.space.s3))
         if (entries.isEmpty()) {
-            Text("No steps recorded yet.", color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp))
+            Text("No steps recorded yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 14.sp))
         } else {
             entries.forEach { e ->
                 Column(Modifier.fillMaxWidth().padding(vertical = FS.space.s2)) {
@@ -1349,9 +1351,9 @@ private fun TimelineCard(buildId: String, entries: List<BuildJournalEntry>) {
                     Spacer(Modifier.height(FS.space.s1))
                     Text(e.summary, color = FS.colors.text, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
                     e.detail?.let {
-                        Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp))
+                        Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp))
                     }
-                    Text(fmtTimestamp(e.ts), color = FS.colors.textMuted, style = TextStyle(fontSize = 11.sp))
+                    Text(fmtTimestamp(e.ts), color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 11.sp))
                 }
             }
         }
@@ -1366,7 +1368,7 @@ private fun Badge(text: String) {
             .background(FS.colors.surfaceSunken)
             .padding(horizontal = 10.dp, vertical = 3.dp),
     ) {
-        Text(text, color = FS.colors.textMuted, style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium))
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium))
     }
 }
 
@@ -1382,15 +1384,15 @@ private fun InfoCard(title: String, body: String) {
     FSCard(padding = PaddingValues(FS.space.s5)) {
         Text(title, color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
         Spacer(Modifier.height(FS.space.s1))
-        Text(body, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+        Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
     }
 }
 
 @Composable
 private fun ErrorCardSimple(message: String) {
     FSCard(padding = PaddingValues(FS.space.s5)) {
-        Text("Something went wrong", color = FS.colors.danger, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
+        Text("Something went wrong", color = MaterialTheme.colorScheme.error, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
         Spacer(Modifier.height(FS.space.s1))
-        Text(message, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+        Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
     }
 }

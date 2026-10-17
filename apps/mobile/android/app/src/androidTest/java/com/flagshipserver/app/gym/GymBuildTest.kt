@@ -124,10 +124,10 @@ class GymBuildTest : GymBase() {
         tap("build-src-git")
         composeRule.onAllNodes(hasSetTextAction()).onFirst().performTextInput("https://github.com/gym/ready")
         tap("build-git-check")
-        waitText("Flagship-ready ✓", 15_000)
+        waitText("Flagship-ready", 15_000)
         gymShot("git-ready")
         tapText("Install it")
-        waitText("Installed ✓", 15_000)
+        waitText("Installed", 15_000)
         assertEquals(1, buildMock.deployCalls.size)
         assertEquals("https://github.com/gym/ready", buildMock.gitImportCalls.single().gitUrl)
     }
@@ -154,7 +154,7 @@ class GymBuildTest : GymBase() {
         waitUntilExists("build-git-deploy-anyway", 30_000)
         gymShot("git-cut-off")
         tap("build-git-deploy-anyway")
-        waitText("Installed ✓", 15_000)
+        waitText("Installed", 15_000)
         assertEquals(1, buildMock.adaptStartCalls.size)
     }
 
