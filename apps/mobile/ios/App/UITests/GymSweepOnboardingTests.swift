@@ -101,7 +101,7 @@ final class GymSweepOnboardingTests: GymSweepCase {
         name.typeText("x")
         waitGone(unknown)
         XCTAssertTrue(app.buttons["connect-name-continue"].isEnabled, "Editing re-arms Continue.")
-        app.navBackButton(in: "Sign in").tap()
+        app.buttons["BackButton"].firstMatch.tap()
         XCTAssertTrue(app.buttons["Create your account"].waitForExistence(timeout: 10), "Back returns to Welcome.")
     }
 
@@ -164,7 +164,7 @@ final class GymSweepOnboardingTests: GymSweepCase {
         code.typeText("123456")
         wait(restore, "isEnabled == true")
         shot(app, "login-multi-ready")
-        app.navBackButton(in: "Sign in").tap()
+        app.buttons["BackButton"].firstMatch.tap()
         XCTAssertTrue(app.buttons["connect-name-continue"].waitForExistence(timeout: 10), "Back returns to the name.")
     }
 

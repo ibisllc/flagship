@@ -62,7 +62,7 @@ final class GymSweepServerTests: GymSweepCase {
             office.tap()
             let remove = button(app, "Remove from Office")
             XCTAssertTrue(remove.waitForExistence(timeout: 10), "Unticking asks before removing.")
-            button(app, "Cancel").tap()
+            cancelDialog(app)
             waitGone(remove)
             expectNoProbe(app, "uninstall")
             office.tap()

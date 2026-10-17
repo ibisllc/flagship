@@ -29,6 +29,14 @@ class GymSweepCase: XCTestCase {
         launched = nil
     }
 
+    /// Put the keyboard away so it can't cover a button below the field.
+    func dismissKeyboard(_ app: XCUIApplication) {
+        guard app.keyboards.count > 0 else { return }
+        let ret = app.keyboards.buttons["return"].firstMatch
+        if ret.exists, ret.isHittable { ret.tap() }
+        if app.keyboards.count > 0 { app.navigationBars.firstMatch.tap() }
+    }
+
     /// Dismiss a confirmation dialog without acting. On iOS 27 an iPhone
     /// shows it as a popover with no Cancel button: press Cancel when there
     /// is one, else tap the popover's dismiss region.

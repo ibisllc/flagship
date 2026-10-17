@@ -418,8 +418,9 @@ final class GymSweepBuildTests: GymSweepCase {
 
         let relays = app.switches.matching(identifier: "build-key-relay")
         XCTAssertEqual(relays.count, 2)
-        let workRelay = relays.element(boundBy: 0)
-        XCTAssertEqual(workRelay.value as? String, AiRelay.on)
+        // Gym went in Direct; the saved Work key still goes through the relay.
+        let workRelay = relays.matching(NSPredicate(format: "value == %@", AiRelay.on)).firstMatch
+        XCTAssertTrue(workRelay.exists, "Work still goes through the relay.")
         flip(workRelay)
         wait(workRelay, "value == '\(AiRelay.off)'")
 
@@ -590,6 +591,7 @@ final class GymSweepBuildTests: GymSweepCase {
         app.navBackButton(in: "Build sessions").tap()
         XCTAssertTrue(app.navigationBars["Git import"].waitForExistence(timeout: 10))
 
+        dismissKeyboard(app)
         app.buttons["build-git-deploy"].tap()
         XCTAssertTrue(app.staticTexts["Installed"].waitForExistence(timeout: 15))
         expectProbe(app, "deployed build")
@@ -621,6 +623,7 @@ final class GymSweepBuildTests: GymSweepCase {
         app.buttons["build-key-confirm-active"].tap()
         expectProbe(app, "adapt started share=false provider=openai")
         XCTAssertTrue(app.staticTexts["Adapted"].waitForExistence(timeout: 20), "The AI adapted the repo.")
+        dismissKeyboard(app)
         app.buttons["build-git-deploy"].tap()
         XCTAssertTrue(app.staticTexts["Installed"].waitForExistence(timeout: 15))
         expectProbe(app, "deployed build")
@@ -663,6 +666,7 @@ final class GymSweepBuildTests: GymSweepCase {
         let again = app.buttons["build-git-check-again-sealed"]
         XCTAssertTrue(reveal(app, again))
         XCTAssertFalse(app.buttons["build-git-adapt"].exists, "No AI run on a sealed build.")
+        dismissKeyboard(app)
         again.tap()
         let twice = NSPredicate { _, _ in self.probeCount(app, "git check https://github.com/someone/notes-app") >= 2 }
         XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: twice, object: nil)], timeout: 15),
@@ -733,8 +737,8 @@ final class GymSweepBuildTests: GymSweepCase {
         XCTAssertTrue(reveal(app, deploy))
         deploy.tap()
         expectProbe(app, "deployed build")
-        XCTAssertTrue(app.links.matching(NSPredicate(format: "label CONTAINS 'imported-app.'")).firstMatch
-            .waitForExistence(timeout: 10), "Deploy shows the live address.")
+        let live = app.links.matching(NSPredicate(format: "label CONTAINS 'imported-app.'")).firstMatch
+        XCTAssertTrue(live.waitForExistence(timeout: 10) || reveal(app, live), "Deploy shows the live address.")
         let refresh = app.buttons["Refresh"]
         if reveal(app, refresh) {
             refresh.tap()
