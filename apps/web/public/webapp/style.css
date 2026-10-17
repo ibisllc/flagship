@@ -51,18 +51,18 @@
      pairings. */
   --teal:            #14B8A6;
   --teal-bright:     #2DD4BF;
-  --accent-graphic:  #0F9B8E;
+  --accent-graphic:  #0E9488;
   --accent:          #0F766E;
   --accent-press:    #0B5F58;
   --accent-soft:     rgba(20, 184, 166, 0.10);
   --accent-fill:     var(--teal);
   --accent-on:       #0A0A09;
 
-  --ok:              #15803D;
-  --warn:            #A15C07;
+  --ok:              #166534;
+  --warn:            #944D05;
   --err:             #B91C1C;
-  --ok-soft:         rgba(21, 128, 61, 0.08);
-  --warn-soft:       rgba(161, 92, 7, 0.08);
+  --ok-soft:         rgba(22, 101, 52, 0.08);
+  --warn-soft:       rgba(148, 77, 5, 0.08);
   --err-soft:        rgba(185, 28, 28, 0.06);
   --on-err:          #FFFFFF;
 

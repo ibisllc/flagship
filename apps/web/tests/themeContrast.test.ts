@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 
 // Teal has three roles (owner, 2026-10-17): --teal fills carry dark ink,
 // --accent-graphic is the lighter step for icons, rings, focus and large
-// headings (WCAG 3:1), --accent is the deep step for small text and links
-// (WCAG 4.5:1). iOS and Android mirror these values; change them here first.
+// headings (WCAG 3:1, on every surface), --accent is the deep step for small text and
+// links (WCAG 4.5:1). --ok/--warn/--err are text-safe on paper too. iOS and Android mirror these values; change them here first.
 
 const PUBLIC = join(dirname(fileURLToPath(import.meta.url)), "..", "public");
 
@@ -97,10 +97,6 @@ const sheets: Sheet[] = [
 ];
 
 const ALL_SURFACES = ["--canvas", "--canvas-2", "--surface", "--surface-sunken", "--surface-elev"] as const;
-// Light --accent-graphic is 3.18:1 on the canvas and 3.44:1 on a card; on the
-// two sunken beige tones it dips just under 3, so graphics there stay ink.
-const LIGHT_GRAPHIC_SURFACES = ["--canvas", "--surface"] as const;
-
 function surfaces(t: Tokens, list: readonly string[]): string[] {
   return list.filter((s) => t[s] !== undefined);
 }
@@ -123,8 +119,7 @@ describe.each(sheets)("teal roles in $name", (sheet) => {
       });
 
       it("--accent-graphic (icons, focus, rings, large headings) reads at 3:1", () => {
-        const list = theme === "light" ? LIGHT_GRAPHIC_SURFACES : ALL_SURFACES;
-        for (const s of surfaces(t, list)) {
+        for (const s of surfaces(t, ALL_SURFACES)) {
           expect(ratio(colour(t, "--accent-graphic"), colour(t, s)), `--accent-graphic on ${s}`).toBeGreaterThanOrEqual(3);
         }
       });
@@ -132,6 +127,16 @@ describe.each(sheets)("teal roles in $name", (sheet) => {
       it("--accent stays text-safe on the tinted selection wash", () => {
         const wash = over(colour(t, "--accent-soft"), colour(t, "--canvas"));
         expect(ratio(colour(t, "--accent"), wash)).toBeGreaterThanOrEqual(4.5);
+      });
+
+      it("status text (--ok, --warn, --err) reads at 4.5:1 on every surface and on its own wash", () => {
+        for (const [fg, wash] of [["--ok", "--ok-soft"], ["--warn", "--warn-soft"], ["--err", "--err-soft"]] as const) {
+          for (const s of surfaces(t, ALL_SURFACES)) {
+            expect(ratio(colour(t, fg), colour(t, s)), `${fg} on ${s}`).toBeGreaterThanOrEqual(4.5);
+            const tinted = over(colour(t, wash), colour(t, s));
+            expect(ratio(colour(t, fg), tinted), `${fg} on ${wash} over ${s}`).toBeGreaterThanOrEqual(4.5);
+          }
+        }
       });
 
       it("ink on a teal fill reads at 4.5:1 (rest and hover)", () => {
@@ -145,7 +150,13 @@ describe.each(sheets)("teal roles in $name", (sheet) => {
   it("keeps the light fill teal and the pinned accent steps", () => {
     expect(resolve(sheet.light, "--teal").toUpperCase()).toBe("#14B8A6");
     expect(resolve(sheet.light, "--accent").toUpperCase()).toBe("#0F766E");
-    expect(resolve(sheet.light, "--accent-graphic").toUpperCase()).toBe("#0F9B8E");
+    expect(resolve(sheet.light, "--accent-graphic").toUpperCase()).toBe("#0E9488");
+    expect(resolve(sheet.light, "--ok").toUpperCase()).toBe("#166534");
+    expect(resolve(sheet.light, "--warn").toUpperCase()).toBe("#944D05");
+    expect(resolve(sheet.light, "--err").toUpperCase()).toBe("#B91C1C");
+    expect(resolve(sheet.dark, "--ok").toUpperCase()).toBe("#4ADE80");
+    expect(resolve(sheet.dark, "--warn").toUpperCase()).toBe("#FBBF24");
+    expect(resolve(sheet.dark, "--err").toUpperCase()).toBe("#F87171");
     expect(resolve(sheet.dark, "--accent").toUpperCase()).toBe("#2DD4BF");
     expect(resolve(sheet.dark, "--accent-graphic").toUpperCase()).toBe("#2DD4BF");
   });
