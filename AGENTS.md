@@ -690,6 +690,18 @@ of the last check here: **not yet checked**.
   Android ports in progress (parity `share-accept-admin`). Needs a `.com`
   deploy, an endorsed box release (a box needs a live CA lease to accept),
   store builds; live gym `share` group updated, not yet run.
+- **Adding a device is admin-only; the webapp join works again (2026-10-17,
+  shell v133).** Only an admin device (holds the admin root) opens a pairing
+  code; others see Add device disabled with "Only an admin device of this
+  account can add devices." The sealed bundle carries `irkPubHex`, a device
+  `grant` + `grantSignature` (member scopes under the account key, or every
+  scope under the admin root when promoting); the joining browser verifies
+  both, posts grant + signed profile to `/devices/admit` (`.com` had refused
+  the webapp's join with 400 since July) and keeps its own device key wrapped
+  under the account key. Vectors `packages/protocol/test-vectors/device-pairing`
+  (webapp reads them). Open: iOS/Android keep the bundle shape but don't gate
+  Add device to admins or read the vectors yet (parity `device-pairing-admin-only`);
+  `.com` can't enforce admin-only (the admit is signed by the account key).
 - **Docker containers unreachable on VM appliances (fixed in `e81df698`).**
   The appliance's `Type=ether` networkd rule pulled every container's veth off
   its bridge: every app 502'd with "read ECONNRESET" after a 3 s ARP timeout
