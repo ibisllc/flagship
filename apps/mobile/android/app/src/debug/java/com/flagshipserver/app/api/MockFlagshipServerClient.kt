@@ -664,7 +664,8 @@ class MockFlagshipServerClient(
     override suspend fun getUsernameRecord(username: String): UsernameLookupResponse {
         tick()
         val u = username.lowercase()
-        val irk = _claimedUsernames[u] ?: throw HttpException(404, "not found")
+        // An account that enrolled 2FA here (the gym's smoke account was never claimed) still answers.
+        val irk = _claimedUsernames[u] ?: if (accountTypeByUser.containsKey(u)) "" else throw HttpException(404, "not found")
         return UsernameLookupResponse(
             username = u,
             irkPub = irk,

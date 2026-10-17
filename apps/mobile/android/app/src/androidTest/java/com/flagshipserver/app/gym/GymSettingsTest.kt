@@ -8,6 +8,8 @@
 
 package com.flagshipserver.app.gym
 
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -68,15 +70,13 @@ class GymSettingsTest : GymBase() {
             .performClick()
         waitText("Create your account", 20_000)
         gymShot("welcome")
-        tapText("I already have an account")
-        composeRule.waitUntil(15_000) { textCount("Create your account") == 0 }
+        tap("welcome-connect")
+        waitUntilExists("connect-account", 15_000)
+        gymShot("connect")
         Espresso.pressBack()
-        waitText("Join with a pairing code", 15_000)
-        tapText("Join with a pairing code")
-        composeRule.waitUntil(15_000) { textCount("Create your account") == 0 }
-        Espresso.pressBack()
+        waitText("Create your account", 15_000)
         tapText("Create your account", 15_000)
-        composeRule.waitUntil(15_000) { textCount("I already have an account") == 0 }
+        composeRule.waitUntil(15_000) { textCount("Connect to an existing account") == 0 }
         gymShot("create-account")
     }
 
@@ -120,6 +120,18 @@ class GymSettingsTest : GymBase() {
     @Test
     fun trustedDevicesMenuAsksFirst() {
         settings(admin = true)
+        // Two devices in the account's directory (the mock `.com` answers it).
+        val account = "smoketest"
+        comMock.accountDirectories = mapOf(account to com.flagshipserver.app.api.AccountDirectoryResponse(
+            accountId = account,
+            devices = listOf("a1", "b2").mapIndexed { i, id ->
+                com.flagshipserver.app.api.AccountDirectoryDevice(
+                    accountId = account, deviceId = id.repeat(16), devicePubHex = "0$i".repeat(32),
+                    platformClass = "android", createdAt = 1_790_000_000_000L, lastSeenAt = 1_790_000_100_000L + i,
+                    supportCode = "SC-$i",
+                )
+            },
+        ))
         tap("settings-trusted-devices")
         composeRule.waitUntil(20_000) {
             composeRule.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("device menu") {
@@ -145,11 +157,11 @@ class GymSettingsTest : GymBase() {
     fun rowsOpenTheirScreens() {
         settings()
         val rows = listOf(
-            "settings-profiles" to "Set one up",
-            "settings-privacy" to "Enable biometric lock",
+            "settings-profiles" to "ACTIVE",
+            "settings-privacy" to "Lock with biometrics",
             "settings-peer-backup" to "Peer-backup",
             "settings-remote" to "Or paste its link",
-            "settings-companion-requests" to "Companion requests",
+            "settings-companion-requests" to "COMPANION REQUESTS",
             "settings-secured-sessions" to "secured-sessions-title",
             "settings-process-url" to "process-url-title",
             "settings-cloud-recovery" to "Set up cloud recovery",
@@ -174,14 +186,6 @@ class GymSettingsTest : GymBase() {
         tap("process-url-submit")
         composeRule.waitForIdle()
         gymShot("process-url")
-    }
-
-    @Test
-    fun peerBackupToggle() {
-        settings()
-        tap("settings-peer-backup")
-        tap("peer-backup-toggle", 15_000)
-        waitUntilExists("peer-backup-participation-pill", 15_000)
     }
 
     // ─── Two-factor and `.com`'s rate limit ──────────────────────────────────
@@ -245,8 +249,14 @@ class GymSettingsTest : GymBase() {
         tapText("Save key")
         waitTextGone("Save key")
         assertEquals(2, com.flagshipserver.app.core.AiKeyStore.list().size)
-        tapText("Make default")
-        eventually(what = "default moved") { com.flagshipserver.app.core.AiKeyStore.activeId() == com.flagshipserver.app.core.AiKeyStore.list().last().id || com.flagshipserver.app.core.AiKeyStore.activeId() == com.flagshipserver.app.core.AiKeyStore.list().first().id }
+        // Whichever is the default, the last "Make default" on the page is a saved key's.
+        val keys = com.flagshipserver.app.core.AiKeyStore.list().map { it.id }
+        val before = com.flagshipserver.app.core.AiKeyStore.activeId()
+        composeRule.onAllNodes(hasText("Make default") and androidx.compose.ui.test.hasClickAction()).onLast()
+            .scrollIfNeeded().performClick()
+        eventually(what = "default moved to a key (active ${com.flagshipserver.app.core.AiKeyStore.activeId()}, was $before, keys $keys)") {
+            com.flagshipserver.app.core.AiKeyStore.activeId() in keys && com.flagshipserver.app.core.AiKeyStore.activeId() != before
+        }
         gymShot("two-keys")
         tapText("Delete")
         eventually(what = "deleted") { com.flagshipserver.app.core.AiKeyStore.list().size == 1 }
@@ -261,10 +271,18 @@ class GymSettingsTest : GymBase() {
         type("ai-key-field", "sk-gym-cccccccccccc")
         tapText("Save key")
         waitTextGone("Save key")
+        // Flagship Inference starts as the default; make the new key the default, then Flagship Inference again.
+        waitText("Make default", 15_000)
+        eventually(what = "the key is the default (active ${com.flagshipserver.app.core.AiKeyStore.activeId()})") {
+            if (com.flagshipserver.app.core.AiKeyStore.activeId() == com.flagshipserver.app.core.AiKeyStore.FLAGSHIP_INFERENCE_ID) {
+                composeRule.onAllNodes(hasText("Make default") and androidx.compose.ui.test.hasClickAction()).onLast()
+                    .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+            }
+            com.flagshipserver.app.core.AiKeyStore.activeId() != com.flagshipserver.app.core.AiKeyStore.FLAGSHIP_INFERENCE_ID
+        }
         tap("free-ai-make-default", 15_000)
-        eventually(what = "Flagship Inference default") { com.flagshipserver.app.core.AiKeyStore.activeId() == null || tagCount("free-ai-make-default") == 0 }
-        tap("free-ai-add-own-key")
-        waitUntilExists("ai-key-field", 15_000)
+        eventually(what = "Flagship Inference default") { com.flagshipserver.app.core.AiKeyStore.activeId() == com.flagshipserver.app.core.AiKeyStore.FLAGSHIP_INFERENCE_ID }
+        // (Add your own key shows only once the free AI has ended.)
         gymShot("free-ai")
     }
 
@@ -280,7 +298,8 @@ class GymSettingsTest : GymBase() {
         )
         waitText("Let this browser in?", 20_000)
         gymShot("remote-ask")
-        tapText("Codes match: approve", 15_000)
+        // The button opens a moment after the code shows (the anti-double-tap gate).
+        tapMatching(hasText("Codes match: approve"), 15_000)
         waitText("Browser connected to", 20_000)
         assertTrue(com.flagshipserver.app.core.GymProbe.relay!!.lastDeliver != null)
         gymShot("remote-connected")

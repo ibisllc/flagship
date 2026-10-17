@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.foundation.selection.toggleable
 import android.app.Activity
 import android.graphics.BitmapFactory
 import android.util.Base64
@@ -653,9 +654,12 @@ private fun Step4(
     }
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.semantics { contentDescription = "account-security-saved-toggle" },
+        modifier = Modifier
+            // The whole line is the control, so tapping its words ticks it too.
+            .toggleable(value = saved, onValueChange = onSavedChange, role = androidx.compose.ui.semantics.Role.Checkbox)
+            .semantics { contentDescription = "account-security-saved-toggle" },
     ) {
-        Checkbox(checked = saved, onCheckedChange = onSavedChange)
+        Checkbox(checked = saved, onCheckedChange = null)
         Text("I've saved these somewhere safe", color = FS.colors.text)
     }
 }
