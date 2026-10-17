@@ -1924,8 +1924,9 @@ def build_window(application, model: Optional[WizardModel] = None):
             transient_for=window,
             heading="Delete this server?",
             body=f"Delete {fqdn}?\n\nThe VM and its encrypted disk image are "
-            "removed from this PC. The server's identity and any backups live "
-            "with your phone/account, not here.",
+            "removed from this PC. The server's identity stays with your account. "
+            "Backups stored on this server are deleted with it; copies kept on "
+            "your phone or with peers (depending on its backup policy) are not.",
         )
         dialog.add_response("cancel", "Cancel")
         dialog.add_response("delete", "Delete")

@@ -330,7 +330,8 @@ public partial class MainWindow : Window
         var choice = MessageBox.Show(
             this,
             $"Delete {fqdn}?\n\nThe VM and its encrypted disk image are removed from this PC. " +
-            "The server's identity and any backups live with your phone/account, not here.",
+            "The server's identity stays with your account. Backups stored on this server are deleted with it; " +
+            "copies kept on your phone or with peers (depending on its backup policy) are not.",
             "Delete this server",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);

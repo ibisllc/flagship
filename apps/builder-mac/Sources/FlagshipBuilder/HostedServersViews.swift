@@ -53,7 +53,7 @@ struct HostedServersSidebar: View {
                         }
                     }
                 } message: { _ in
-                    Text("The VM and its encrypted disk image are removed from this Mac. The server's identity and any backups live with your phone/account, not here.")
+                    Text("The VM and its encrypted disk image are removed from this Mac. The server's identity stays with your account. Backups stored on this server are deleted with it; copies kept on your phone or with peers (depending on its backup policy) are not.")
                 }
                 if vmManager.isKeepingMacAwake {
                     keepAwakeNotice
@@ -668,7 +668,7 @@ struct VMDetailView: View {
                     }
                 }
             } message: {
-                Text("The VM and its encrypted disk image are removed from this Mac. The server's identity and any backups live with your phone/account, not here.")
+                Text("The VM and its encrypted disk image are removed from this Mac. The server's identity stays with your account. Backups stored on this server are deleted with it; copies kept on your phone or with peers (depending on its backup policy) are not.")
             }
         }
     }
