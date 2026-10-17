@@ -19,6 +19,20 @@
     { "check": "signed-tags", "key": "android:flagship/pin-wrap/v1", "reason": "The webapp's PIN lock; the native apps use biometrics." },
     { "check": "signed-tags", "key": "web:flagship/lan-hint/v1", "reason": "LAN-direct is native only (docs/lan-direct.md): a browser can't choose a LAN route." },
     { "check": "signed-tags", "key": "web:flagship/watch-delegate-key/v1", "reason": "A watch delegate is minted by a phone paired with a watch; the webapp has no watch." },
-    { "check": "signed-tags", "key": "web:flagship/revoke-watch-delegate/v1", "reason": "A watch delegate is minted by a phone paired with a watch; the webapp has no watch." }
+    { "check": "signed-tags", "key": "web:flagship/revoke-watch-delegate/v1", "reason": "A watch delegate is minted by a phone paired with a watch; the webapp has no watch." },
+    { "check": "signed-tags", "key": "android:flagship/account-key-attestation/v1", "reason": "No client builds these bytes: .com's CA-signed attestation is carried unchanged to the shared box, which checks the CA chain; iOS only names the tag in a doc comment." },
+    { "check": "signed-tags", "key": "web:flagship/account-key-attestation/v1", "reason": "No client builds these bytes: .com's CA-signed attestation is carried unchanged to the shared box, which checks the CA chain; iOS only names the tag in a doc comment." },
+    { "check": "signed-tags", "key": "android:flagship/bak/v1", "reason": "iOS's slash-form BAK (Keystore.deriveBAK) is its legacy boot-approval seed; the protocol, the webapp and Android use the dotted flagship.bak.v1 (keys.ts)." },
+    { "check": "signed-tags", "key": "web:flagship/bak/v1", "reason": "iOS's slash-form BAK (Keystore.deriveBAK) is its legacy boot-approval seed; the protocol and the webapp use the dotted flagship.bak.v1 (keys.ts)." },
+    { "check": "signed-tags", "key": "web:flagship/boot/v1", "reason": "flagship/boot/v1 is the phones' BAK challenge signature in BootAuthorization, which no server code verifies; the webapp's boot approval signs flagship/boot-auth/v1 (bootApproval.js)." },
+    { "check": "signed-tags", "key": "ios:flagship/build-relay/v1", "reason": "Only the webapp's unused deriveMatchCode names it (the old build relay, whose server module is gone); the phones' match code is QrRelayProtocol's SAS." },
+    { "check": "signed-tags", "key": "android:flagship/build-relay/v1", "reason": "Only the webapp's unused deriveMatchCode names it (the old build relay, whose server module is gone); the phones' match code is QrRelayProtocol's SAS." },
+    { "check": "signed-tags", "key": "web:flagship/builder-sid/v1", "reason": "Pairing a phone with Studio (desktop installer) is phone-only; the webapp never pairs Studio." },
+    { "check": "signed-tags", "key": "web:flagship/daemon-status/v1", "reason": "Phones re-verify the box's STK-signed report to pin its certificate fingerprint; a browser has no API to pin a certificate." },
+    { "check": "signed-tags", "key": "android:flagship/outstanding-orders/v1", "reason": "iOS's IRK-signed reconcile read; Android and the webapp reconcile pending servers from the unauthenticated /pods pending[] list (PendingServerReconciler.kt)." },
+    { "check": "signed-tags", "key": "web:flagship/outstanding-orders/v1", "reason": "iOS's IRK-signed reconcile read; the webapp reconciles pending servers from the unauthenticated /pods pending[] list." },
+    { "check": "signed-tags", "key": "web:flagship/recovery/v1", "reason": "The native default PRF salt; the webapp's passkey recovery derives its PRF salt from the user's passphrase (Argon2id in the recovery sub-origin)." },
+    { "check": "signed-tags", "key": "android:flagship/swk/v1", "reason": "iOS's slash-form app-backup SWK (Keystore.deriveSWK) is not used by any other client; Android and the webapp derive the dotted protocol SWK (ServerKeys.deriveSwk)." },
+    { "check": "signed-tags", "key": "web:flagship/voici-shorten/v1", "reason": "No client offers one-off voi.ci short links: iOS and Android carry only the unused canonical-bytes primitive, and the webapp has no such screen." }
   ]
 }

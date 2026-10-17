@@ -629,8 +629,8 @@ function checkSignedTags(repo) {
   const findings = [];
   const roots = {
     ios: ["apps/mobile/shared/Sources", "apps/mobile/ios/Sources", "apps/mobile/ios/App"],
-    android: ["apps/mobile/android/app/src/main"],
-    web: [P.webapp],
+    android: ["apps/mobile/android/app/src/main", "apps/mobile/android/app/src/debug"],
+    web: [P.webapp, "apps/web/public/recovery"],
   };
   const exts = [".swift", ".kt", ".js"];
   const sets = {};
