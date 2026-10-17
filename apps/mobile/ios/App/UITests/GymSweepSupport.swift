@@ -20,7 +20,7 @@ class GymSweepCase: XCTestCase {
     /// A failed scenario keeps the screen's accessibility tree, so a red
     /// assertion can be read without rerunning it.
     override func tearDownWithError() throws {
-        if let app = launched, let run = testRun, !run.hasSucceeded {
+        if let app = launched, let run = testRun, run.totalFailureCount > 0 {
             let a = XCTAttachment(string: app.debugDescription)
             a.name = "Screen at failure"
             a.lifetime = .keepAlways
