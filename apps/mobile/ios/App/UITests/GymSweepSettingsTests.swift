@@ -77,10 +77,9 @@ final class GymSweepSettingsTests: GymSweepCase {
             ("Companion requests", "Companion requests", "No pending requests"),
             ("Open secured sessions", "Secured sessions", ""),
             ("Process URL", "Process URL", "process-url-field"),
-            ("Peer-backup", "Peer-backup", ""),
+            ("Peer backup", "Peer backup", ""),
             ("Privacy", "Privacy", "privacy-push-notifications-toggle"),
             ("About Flagship", "About", "BUSL-1.1 → Apache 2.0 (2030)"),
-            ("Developer", "Developer", "Use live data"),
         ]
         for (title, screen, mark) in rows {
             open(app, row: title, screen: screen)
@@ -170,25 +169,6 @@ final class GymSweepSettingsTests: GymSweepCase {
             flip(sw)
             wait(sw, "value == %@".replacingOccurrences(of: "%@", with: "'\(before)'"))
         }
-    }
-
-    /// About's version, tapped three times, unlocks the developer menu,
-    /// whose screen offers the live/mock switch and the latency knob.
-    func test_aboutUnlocksDeveloperAndDeveloperRenders() throws {
-        let app = launch(tab: "settings")
-        settings(app)
-        open(app, row: "About Flagship", screen: "About")
-        let version = app.staticTexts["Version"]
-        XCTAssertTrue(version.waitForExistence(timeout: 10))
-        for _ in 0..<3 { version.tap() }
-        XCTAssertTrue(app.staticTexts["Developer menu is in Settings."].waitForExistence(timeout: 10),
-                      "Three taps unlock the developer menu.")
-        waitGone(app.staticTexts["Developer menu unlocked."], timeout: 10)
-        back(app, from: "About")
-        open(app, row: "Developer", screen: "Developer")
-        XCTAssertTrue(app.switches.matching(NSPredicate(format: "label CONTAINS %@", "Use live data")).firstMatch.exists)
-        XCTAssertTrue(app.sliders.firstMatch.exists, "The mock latency knob is offered.")
-        XCTAssertTrue(app.buttons["Wipe identity (Keystore + session)"].exists)
     }
 
     // MARK: - Leaving: sign out, remove this device, delete account

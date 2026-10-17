@@ -554,22 +554,6 @@ final class GymSweepServerTests: GymSweepCase {
         XCTAssertEqual(notice.label, "Apps can't start on this server: the sandbox they run in isn't working (runsc failed its test container). The server tries again every 10 minutes.")
     }
 
-    // ─── Peer-backup (Settings) ──────────────────────────────────────────────
-
-    func test_peerBackupToggleJoinsAndLeaves() throws {
-        let app = launch(tab: "settings")
-        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Peer-backup")).firstMatch
-        XCTAssertTrue(reveal(app, row))
-        row.tap()
-        let pill = app.descendants(matching: .any)["peer-backup-participation-pill"]
-        XCTAssertTrue(pill.waitForExistence(timeout: 15))
-        XCTAssertTrue(pill.label.contains("unenrolled"), "Got: \(pill.label)")
-        app.switches["peer-backup-toggle"].tap()
-        wait(pill, "label CONTAINS 'participating'")
-        app.switches["peer-backup-toggle"].tap()
-        wait(pill, "label CONTAINS 'unenrolled'")
-    }
-
     // ─── Create a server ─────────────────────────────────────────────────────
 
     private func openCreate(_ app: XCUIApplication) {

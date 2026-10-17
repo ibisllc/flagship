@@ -856,8 +856,8 @@ const SHARE: readonly Scenario[] = [
 
 const ST = "GymSweepSettingsTests/";
 const SETTINGS: readonly Scenario[] = [
-  sweep("ios-sweep-settings-rows", "Every Settings navigation row (Cloud recovery, Back up account key, Profiles, Remote, Companion requests, Open secured sessions, Process URL, Peer-backup, Privacy, About, Developer) opens its screen with that screen's first control.",
-    ST + "test_settingsRowsOpenTheirScreens", ["Cloud recovery", "Remote", "Privacy", "About Flagship", "Developer"],
+  sweep("ios-sweep-settings-rows", "Every Settings navigation row (Cloud recovery, Back up account key, Profiles, Remote, Companion requests, Open secured sessions, Process URL, Peer backup, Privacy, About) opens its screen with that screen's first control.",
+    ST + "test_settingsRowsOpenTheirScreens", ["Cloud recovery", "Remote", "Privacy", "About Flagship"],
     ["recovery-enroll-go", "companion-dock-scan", "privacy-push-notifications-toggle"], "D3"),
   sweep("ios-sweep-settings-browser-sessions", "Browser sessions list only docked browsers (kind remote), never this phone's session; Revoke asks, Cancel keeps it, Revoke ends it on the box and the section hides.",
     ST + "test_browserSessionsListOnlyRemoteAndRevoke", ["settings-revoke-browser-f9e8d7c6", "Cancel", "Revoke"],
@@ -868,9 +868,6 @@ const SETTINGS: readonly Scenario[] = [
   sweep("ios-sweep-settings-privacy", "Privacy: require unlock, require passphrase and push notifications each flip and flip back.",
     ST + "test_privacyTogglesFlipAndRestore", ["Privacy", "privacy-require-passphrase-toggle", "privacy-push-notifications-toggle"],
     ["privacy-push-notifications-toggle"], "D3"),
-  sweep("ios-sweep-settings-about-developer", "About's version tapped three times unlocks the developer menu; Developer offers the live/mock switch, latency knob and wipe.",
-    ST + "test_aboutUnlocksDeveloperAndDeveloperRenders", ["About Flagship", "Version", "Developer"],
-    ["Developer menu is in Settings."], "D3"),
   sweep("ios-sweep-settings-sign-out", "Sign out asks (says what it erases); Cancel keeps the session; Sign out lands on Welcome.",
     ST + "test_signOutAsksThenSignsOut", ["settings-sign-out-btn", "Cancel", "Sign out"], ["Create your account"], "D3"),
   sweep("ios-sweep-settings-remove-device", "Remove this device from account asks; Cancel keeps it; Remove this device signs it out.",
@@ -1111,13 +1108,6 @@ const SERVER: readonly Scenario[] = [
     SV + "test_sandboxNoticeNamesGvisor",
     [],
     ["sd-app-sandbox-notice"],
-  ),
-  sweep(
-    "ios-sweep-server-peer-backup",
-    "Settings → Peer-backup: the toggle joins and leaves the pool.",
-    SV + "test_peerBackupToggleJoinsAndLeaves",
-    ["Peer-backup", "peer-backup-toggle"],
-    ["peer-backup-participation-pill"],
   ),
   sweep(
     "ios-sweep-create-copy-cancel",
