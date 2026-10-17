@@ -193,7 +193,7 @@ class GymServerPageTest : GymBase() {
             .performClick()
         assertSigned("power", "admin")
         eventually(what = "the order") { boxDirect.calls.any { it.path == "/api/power" && it.body.contains("\"off\"") } }
-        waitText("This box is powering off")
+        waitText("This server is powering off")
         gymShot("powering-off")
     }
 
