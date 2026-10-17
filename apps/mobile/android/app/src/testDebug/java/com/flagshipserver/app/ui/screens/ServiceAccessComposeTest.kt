@@ -19,6 +19,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.flagshipserver.app.api.AppAccountMember
 import com.flagshipserver.app.api.AppMember
 import com.flagshipserver.app.api.AppMemberGrant
@@ -152,7 +153,7 @@ class ServiceAccessComposeTest {
         composeRule.waitUntil(10_000) { vm.members.value != null && vm.people.value.size == 4 }
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Open to all").assertIsDisplayed()
-        composeRule.onNodeWithText("MEMBERS (4)").assertIsDisplayed()
+        composeRule.onNodeWithText("Members (4)").assertIsDisplayed()
         composeRule.onNodeWithText("also in Family: Member").assertIsDisplayed()
         composeRule.onNodeWithTag("service-access-role-priya").assertIsDisplayed()
         composeRule.onNodeWithText("2 of 5 joined").assertIsDisplayed()
@@ -162,7 +163,7 @@ class ServiceAccessComposeTest {
         for (id in listOf("sam", "priya", "family", "jordan")) {
             composeRule.onNodeWithTag("service-access-remove-$id").assertExists()
         }
-        composeRule.onNodeWithText("ACCOUNT MEMBERS (3)").assertIsDisplayed()
+        composeRule.onNodeWithText("Account members (3)").assertIsDisplayed()
         composeRule.onNodeWithText("Pixel 9").assertIsDisplayed()
         composeRule.onNodeWithText("This device · Admin").assertIsDisplayed()
         composeRule.onNodeWithText("Kitchen iPad").assertIsDisplayed()
@@ -191,7 +192,7 @@ class ServiceAccessComposeTest {
         composeRule.waitForIdle()
         assertTrue(t.lastPostUrl!!.endsWith("/api/service-access"))
         // The members list never changes with the mode.
-        composeRule.onNodeWithText("MEMBERS (4)").assertIsDisplayed()
+        composeRule.onNodeWithText("Members (4)").assertIsDisplayed()
         composeRule.onNodeWithText("Only members and you can open it. Anyone else is asked to sign in.").assertIsDisplayed()
         shot("access-android-members-only")
 
@@ -233,7 +234,7 @@ class ServiceAccessComposeTest {
             .assertContentDescriptionEquals("Rank: Member")
         shot("access-android-rank-locked")
 
-        composeRule.onNodeWithTag("service-access-remove-jordan").performClick()
+        composeRule.onNodeWithTag("service-access-remove-jordan").performScrollTo().performClick()
         composeRule.onNodeWithTag("service-access-remove-confirm").performClick()
         composeRule.waitUntil(10_000) { t.posts.any { it.first.endsWith("/service-invites/revoke") } }
         composeRule.waitUntil(10_000) { t.posts.any { it.first.endsWith("/api/service-access/invite-withdraw") } }

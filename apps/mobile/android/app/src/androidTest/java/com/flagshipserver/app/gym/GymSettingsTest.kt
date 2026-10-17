@@ -157,11 +157,11 @@ class GymSettingsTest : GymBase() {
     fun rowsOpenTheirScreens() {
         settings()
         val rows = listOf(
-            "settings-profiles" to "ACTIVE",
+            "settings-profiles" to "Active",
             "settings-privacy" to "Lock with biometrics",
             "settings-peer-backup" to "Peer-backup",
             "settings-remote" to "Or paste its link",
-            "settings-companion-requests" to "COMPANION REQUESTS",
+            "settings-companion-requests" to "Companion requests",
             "settings-secured-sessions" to "secured-sessions-title",
             "settings-process-url" to "process-url-title",
             "settings-cloud-recovery" to "CLOUD RECOVERY",

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -166,7 +167,7 @@ fun FSScreen(
                 }
             }
         }
-        Box(Modifier.fillMaxSize().padding(inner).consumeWindowInsets(inner)) {
+        Box(Modifier.fillMaxSize().padding(inner).consumeWindowInsets(inner).imePadding()) {
             if (onRefresh != null) {
                 PullToRefreshBox(isRefreshing = refreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) { body() }
             } else {

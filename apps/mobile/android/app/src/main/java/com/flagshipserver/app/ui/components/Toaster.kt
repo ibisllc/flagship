@@ -1,5 +1,5 @@
-// Toast renderer: the active toasts as Material snackbars at the bottom of
-// the screen, above the navigation bar and the shell's tab bar. Subscribes
+// Toast renderer: the active toasts as Material snackbars at the top of
+// the screen, below the status bar. Subscribes
 // to ToastCenter.queue.
 
 package com.flagshipserver.app.ui.components
@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -27,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.flagshipserver.app.core.Toast
 import com.flagshipserver.app.ui.theme.DarkColors
@@ -36,13 +36,13 @@ import com.flagshipserver.app.ui.theme.FS
 @Composable
 fun Toaster(queue: List<Toast>, onDismiss: (String) -> Unit) {
     if (queue.isEmpty()) return
+    // At the top, below the status bar, as before: a toast at the bottom would
+    // sit over the buttons a person is about to press.
     Box(
         Modifier
             .fillMaxSize()
-            .navigationBarsPadding()
-            // Clears the shell's tab bar (80 dp) with a little air.
-            .padding(bottom = 88.dp, start = FS.space.s4, end = FS.space.s4),
-        contentAlignment = Alignment.BottomCenter,
+            .padding(top = FS.space.s8, start = FS.space.s4, end = FS.space.s4),
+        contentAlignment = Alignment.TopCenter,
     ) {
         Column(
             verticalArrangement = Arrangement.spacedBy(FS.space.s2),
@@ -72,7 +72,7 @@ private fun ToastRow(toast: Toast, onTap: () -> Unit) {
         color = MaterialTheme.colorScheme.inverseSurface,
         contentColor = MaterialTheme.colorScheme.inverseOnSurface,
         shadowElevation = 6.dp,
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
+        modifier = Modifier.fillMaxWidth().testTag("toast-row").clickable(onClick = onTap),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

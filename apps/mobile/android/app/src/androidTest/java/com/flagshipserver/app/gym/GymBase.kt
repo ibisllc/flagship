@@ -243,8 +243,17 @@ abstract class GymBase {
             dumpTree()
             throw e
         }
+        waitOutToasts()
         composeRule.onAllNodes(enabled).onFirst().scrollIfNeeded().performClick()
         composeRule.waitForIdle()
+    }
+
+    /** A toast floats over the bottom of the screen and takes touches; let it go
+     *  before tapping what it may cover. */
+    protected fun waitOutToasts(timeoutMs: Long = 12_000) {
+        runCatching {
+            composeRule.waitUntil(timeoutMs) { composeRule.onAllNodesWithTag("toast-row").fetchSemanticsNodes().isEmpty() }
+        }
     }
 
     /** Scroll to a tagged node and tap it (once it's enabled). */
@@ -257,6 +266,7 @@ abstract class GymBase {
     /** Tap the first node showing [text] (a button or row without a handle). */
     protected fun tapText(text: String, timeoutMs: Long = 10_000, substring: Boolean = false) {
         waitText(text, timeoutMs, substring)
+        waitOutToasts()
         val node = composeRule.onAllNodes(androidx.compose.ui.test.hasText(text, substring = substring) and androidx.compose.ui.test.hasClickAction())
             .fetchSemanticsNodes().firstOrNull()
         if (node != null) {
@@ -299,6 +309,12 @@ abstract class GymBase {
 
     /** On a failure: what the screen shows (texts, tags, descriptions) in the log, tag GYMTREE. */
     protected fun dumpTree() {
+        runCatching {
+            // Kept outside the app's data so a failed run leaves a picture to look at.
+            InstrumentationRegistry.getInstrumentation().uiAutomation
+                .executeShellCommand("screencap -p /data/local/tmp/gym-failure-${this::class.java.simpleName}.${testName.methodName}.png").close()
+            Thread.sleep(800)
+        }
         runCatching {
             composeRule.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("any") { true }, useUnmergedTree = true)
                 .fetchSemanticsNodes().forEach { n ->

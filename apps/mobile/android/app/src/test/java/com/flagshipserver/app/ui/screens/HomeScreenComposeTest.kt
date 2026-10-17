@@ -45,7 +45,7 @@ class HomeScreenComposeTest {
                 )
             }
         }
-        composeRule.onNodeWithText("Add/Import a server").assertIsDisplayed()
+        composeRule.onNodeWithText("Add/Import a server").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Harry's cloud > Pixel").assertIsDisplayed()
         composeRule.onNodeWithText("Build a service").assertDoesNotExist()
         composeRule.onNodeWithText("YOUR SERVERS").assertDoesNotExist()
@@ -171,7 +171,7 @@ class HomeScreenComposeTest {
         composeRule.onNodeWithText("Touch and hold a server", substring = true).assertDoesNotExist()
         composeRule.onNodeWithTag("home-server-handle-a").assertExists()
         composeRule.onNodeWithTag("home-server-handle-b").assertExists()
-        composeRule.onNodeWithText("Add/Import a server").assertIsDisplayed()
+        composeRule.onNodeWithText("Add/Import a server").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun theLeaderBadge_isGrayUntilTheLeaderHoldsTheOrder() {
