@@ -127,7 +127,7 @@ async function main(): Promise<number> {
     return 2;
   }
   const groups: Group[] = wanted.length ? GROUPS.filter((g) => wanted.includes(g.name)) : GROUPS;
-  const needs = new Set<Slot>(flag("--all-boxes") ? ["A1", "A2", "A3", "B1", "B2", "R1", "R2"] : groups.flatMap((g) => g.needs));
+  const needs = new Set<Slot>(flag("--all-boxes") ? ["A1", "A2", "A3", "B1", "B2", "B3", "R1", "R2"] : groups.flatMap((g) => g.needs));
   const keep = flag("--keep");
   const reusePath = opt("--reuse");
   const dir = runDir("live-run");
@@ -171,7 +171,7 @@ async function main(): Promise<number> {
   // group needs them. A box is provisioned up front unless a released box's
   // last phase comes before its first one: then it starts once that box is
   // gone, so the fleet's DNS records never peak above what the shared zone holds.
-  const RELEASABLE: Slot[] = ["A2", "A3", "B2", "R1", "R2"];
+  const RELEASABLE: Slot[] = ["A2", "A3", "B2", "B3", "R1", "R2"];
   const plan = new Map<Slot, number>();
   for (const s of needs) {
     const before = flag("--all-boxes") || !RELEASABLE.includes(s) ? [] : [...needs].filter((r) => r !== s && RELEASABLE.includes(r) && lastPhase(r) < firstPhase(s));
@@ -205,7 +205,7 @@ async function main(): Promise<number> {
   let A: Account | undefined;
   let B: Account | undefined;
   let R: Account | undefined;
-  const SLOT_NAME: Record<Slot, string> = { A1: "home", A2: "home2", A3: "home3", B1: "home", B2: "home2", R1: "home", R2: "home2" };
+  const SLOT_NAME: Record<Slot, string> = { A1: "home", A2: "home2", A3: "home3", B1: "home", B2: "home2", B3: "home3", R1: "home", R2: "home2" };
   const accountOf = (s: Slot) => (s[0] === "A" ? A : s[0] === "B" ? B : R);
   const slotBox = (s: Slot): Box | undefined => accountOf(s)?.boxes.find((b) => b.serverName === SLOT_NAME[s]);
   const accountMade = new Map<string, Promise<Account>>();
@@ -240,7 +240,9 @@ async function main(): Promise<number> {
           if (s === "A1" || s === "B1") return `${acct.username}: ${acct.box("home").fqdn} (demo flow)`;
           const extras = s[0] === "R"
             ? { provisionExtras: { swkHex: bytesToHex(deriveSWK({ seed: acct.keys.umk }, `home.${acct.username}.${SERVICES}`)), backupIntervalMs: 60_000 } }
-            : {};
+            : s === "B3"
+              ? { installerGitRef: "main" }
+              : {};
           const b = await addBox(acct, SLOT_NAME[s], extras);
           saveFleet(dir, accounts);
           return `${b.fqdn} (${b.serverId})`;

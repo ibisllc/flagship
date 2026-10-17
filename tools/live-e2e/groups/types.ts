@@ -1,8 +1,8 @@
 import type { Account, Box } from "../lib/fleet.js";
 import type { Recorder } from "../lib/harness.js";
 
-/** A1/A2/A3 = account A's `home`/`home2`/`home3`; B1/B2 = account B's `home`/`home2`; R1/R2 = the real account R's `home`/`home2`. */
-export type Slot = "A1" | "A2" | "A3" | "B1" | "B2" | "R1" | "R2";
+/** A1/A2/A3 = account A's `home`/`home2`/`home3`; B1/B2/B3 = account B's `home`/`home2`/`home3` (B3 clones `main`, which keeps the prod trust pin: only that pin lets a box list the endorsed releases); R1/R2 = the real account R's `home`/`home2`. */
+export type Slot = "A1" | "A2" | "A3" | "B1" | "B2" | "B3" | "R1" | "R2";
 
 export interface GroupCtx {
   A: Account;

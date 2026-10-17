@@ -228,6 +228,8 @@ export interface AddBoxOptions {
   blobExtras?: Record<string, unknown>;
   /** Gym-only provisioning fields (`swkHex`, `backupIntervalMs`): a migration's two boxes share an SWK. */
   provisionExtras?: Record<string, unknown>;
+  /** The ref the box clones (default the gym branch, which carries the gym trust pin). */
+  installerGitRef?: string;
 }
 
 /**
@@ -252,7 +254,7 @@ export async function addBox(acct: Account, serverName: string, opts: AddBoxOpti
     registrationUrl: `https://${CONTROL}/api/server/register`,
     authCode,
     authCodeUserSignature: signAuthCode(authCode, irk),
-    installerGitRef: process.env.GYM_INSTALLER_GIT_REF || "gym",
+    installerGitRef: opts.installerGitRef ?? (process.env.GYM_INSTALLER_GIT_REF || "gym"),
     rckPubKey: rck.publicKey,
   };
   const blobSignature = signInstallBlob(blob, irk);

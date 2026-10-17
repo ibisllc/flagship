@@ -399,6 +399,7 @@ export class LoopVolumes {
       freeze: a.freeze,
     });
     if (want !== u.ballastBytes) {
+      this.log(`[app-quota] ${volume}: ballast ${u.ballastBytes} -> ${want} (capacity ${u.sizeBytes}, avail ${u.availBytes}, limit ${a.limitBytes}, freeze ${a.freeze}, image ${u.imageBytes})`);
       await this.setBallast(volume, u.ballastBytes, want, u.availBytes);
       u = (await this.usage(volume)) ?? u;
     }
@@ -422,7 +423,8 @@ export class LoopVolumes {
     }
     try {
       await this.sh("fallocate", ["-l", String(want), path]);
-    } catch {
+    } catch (e) {
+      this.log(`[app-quota] fallocate of ${want} B failed (${(e as Error).message.slice(0, 200)}): taking what's free now`);
       // Less room than the limit wants (the app is over it): take what's free now.
       const most = Math.floor((current + availBytes - 64 * 1024) / 4096) * 4096;
       if (most > current) await this.sh("fallocate", ["-l", String(most), path]).catch(() => {});

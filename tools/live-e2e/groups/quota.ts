@@ -182,7 +182,7 @@ export const quota: Group = {
         filesLimit = Number((await appDetail())?.storage?.files?.limitBytes ?? 0);
         const r = await get(`/fill-files?mb=${Math.ceil(filesLimit / MiB) + 64}`);
         assert(r.json?.errno === 28 || /No space left/.test(String(r.json?.error)), `fill: ${short(r.text)}`);
-        assert(r.json.wroteMb * MiB <= filesLimit + 2 * MiB, `wrote ${r.json.wroteMb} MB past a ${Math.round(filesLimit / MiB)} MB limit`);
+        assert(r.json.wroteMb * MiB <= filesLimit + 2 * MiB, `files ${short((await appDetail())?.storage?.files, 400)} wrote ${r.json.wroteMb} MB past a ${Math.round(filesLimit / MiB)} MB limit`);
         return `${r.json.wroteMb} MB then ENOSPC (limit ${Math.round(filesLimit / MiB)} MB)`;
       });
       await rec.check("app-detail says the folder is full, and Activity has app.storage.full for it", async () => {
@@ -196,7 +196,7 @@ export const quota: Group = {
       await rec.check("freeing the files brings writes back", async () => {
         await get("/free-files");
         const r = await get("/fill-files?mb=4");
-        assert(r.json?.wroteMb === 4 && !r.json.error, `after free: ${short(r.text)}`);
+        assert(r.json?.wroteMb === 4 && !r.json.error, `after free: ${short(r.text)} storage ${short((await appDetail())?.storage?.files, 400)}`);
         await get("/free-files");
         return "4 MB written after freeing";
       });

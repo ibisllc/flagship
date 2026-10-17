@@ -1,8 +1,9 @@
 // Update this server (docs: AGENTS.md "Update this server"): the admin-root
 // signed update order to an ALREADY-ENDORSED release, deposited on .com with
 // IRK mailbox auth, consumed by the box (≤5 min poll), applied through the
-// endorsement gate, and reported back as lastUpdate. Gym boxes run main HEAD,
-// which no release endorses, so the target is the newest endorsed release the
+// endorsement gate, and reported back as lastUpdate. This box (B3) clones main, not the gym
+// branch: only main keeps the prod trust pin that lets a box list the endorsed
+// releases. Its HEAD is unendorsed, so the target is the newest endorsed release the
 // box lists (an "older" one): the release signature is what the box checks,
 // not the direction.
 import { randomBytes } from "node:crypto";
@@ -25,11 +26,11 @@ export function mailboxAuth(acct: Account): { auth: Record<string, unknown>; aut
 export const update: Group = {
   name: "update",
   title: "update this server to an endorsed release (signed order → box applies → lastUpdate)",
-  needs: ["B1"],
+  needs: ["B3"],
   phase: 9,
   async run({ B, rec, box }) {
     const acct = B!;
-    const b = box("B1");
+    const b = box("B3");
     const session = await pair(acct, b);
     const s = { "x-flagship-session": session };
     let current = "";
