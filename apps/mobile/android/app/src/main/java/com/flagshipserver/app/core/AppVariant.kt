@@ -20,6 +20,9 @@ interface AppVariant {
      *  the gym's backend apex). */
     fun applyLaunchOverrides(intent: Intent?)
 
+    /** True for a debug gym launch (the release build never is). */
+    fun isGymLaunch(intent: Intent?): Boolean
+
     /** A gym launch (debug only): seeds [appState] and returns the tab to open
      *  and, unless the run keeps the live clients, the mock clients. Null for a
      *  normal launch, and always in release. */

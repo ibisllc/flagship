@@ -27,6 +27,8 @@ object Variant : AppVariant {
 
     @Volatile private var mockRun = false
 
+    override fun isGymLaunch(intent: Intent?): Boolean = intent?.hasExtra(SmokeModeConfig.EXTRA_SMOKE_MODE) == true
+
     override fun applyLaunchOverrides(intent: Intent?) {
         // A gym scenario's in-memory key slot ends with its launch (the process lives on).
         com.flagshipserver.app.keystore.Keystore.restorePersistedActiveProfile()
