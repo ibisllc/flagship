@@ -402,11 +402,16 @@ final class GymSweepServerTests: GymSweepCase {
         XCTAssertTrue(app.staticTexts["sd-update-stale"].exists)
         again.tap()
         expectProbe(app, "signed server-update by admin-root")
-        let forget = app.buttons["sd-update-forget"]
-        XCTAssertTrue(reveal(app, forget))
+        XCTAssertTrue(revealUp(app, app.activityIndicators["sd-update-pending"]) || revealUp(app, any(app, "sd-update-pending")),
+                      "Sending again makes the order fresh again (no Forget it until it is stale).")
+
+        let app2 = launchServer(["-smoke-update-stale"])
+        openServerPage(app2, named: "Home")
+        let forget = app2.buttons["sd-update-forget"]
+        XCTAssertTrue(reveal(app2, forget), "A stale order can be forgotten.")
         wait(forget, "isEnabled == true")
         forget.tap()
-        XCTAssertTrue(reveal(app, app.buttons["sd-update-server"]), "Forget it brings back the update button.")
+        XCTAssertTrue(reveal(app2, app2.buttons["sd-update-server"]), "Forget it brings back the update button.")
     }
 
     // ─── Danger zone ─────────────────────────────────────────────────────────
@@ -573,8 +578,7 @@ final class GymSweepServerTests: GymSweepCase {
         openCreate(app)
         let name = app.textFields["cs-name-field"]
         XCTAssertTrue(name.waitForExistence(timeout: 15))
-        name.tap()
-        name.typeText("cellar")
+        replaceText(name, with: "cellar")
         XCTAssertTrue(app.staticTexts["cs-fqdn-preview"].label.hasPrefix("cellar."), "The address follows the name.")
         let desc = app.textFields["cs-description-field"]
         desc.tap()
@@ -614,8 +618,7 @@ final class GymSweepServerTests: GymSweepCase {
         openCreate(app)
         let name = app.textFields["cs-name-field"]
         XCTAssertTrue(name.waitForExistence(timeout: 15))
-        name.tap()
-        name.typeText("loft")
+        replaceText(name, with: "loft")
         app.buttons["cs-next-button"].tap()
         app.buttons["cs-next-button"].tap()
         app.buttons["cs-continue-button"].tap()
@@ -635,8 +638,7 @@ final class GymSweepServerTests: GymSweepCase {
         openCreate(app)
         let name = app.textFields["cs-name-field"]
         XCTAssertTrue(name.waitForExistence(timeout: 15))
-        name.tap()
-        name.typeText("den")
+        replaceText(name, with: "den")
         app.buttons["cs-next-button"].tap()
         app.buttons["cs-next-button"].tap()
         app.buttons["cs-continue-button"].tap()
@@ -674,8 +676,7 @@ final class GymSweepServerTests: GymSweepCase {
         openCreate(app)
         let name = app.textFields["cs-name-field"]
         XCTAssertTrue(name.waitForExistence(timeout: 15))
-        name.tap()
-        name.typeText("shed")
+        replaceText(name, with: "shed")
         app.buttons["cs-next-button"].tap()
         app.buttons["cs-next-button"].tap()
         app.buttons["cs-continue-button"].tap()
@@ -838,8 +839,7 @@ final class GymSweepServerTests: GymSweepCase {
         app.chooseAddNewServer()
         let name = app.textFields["cs-name-field"]
         XCTAssertTrue(name.waitForExistence(timeout: 15))
-        name.tap()
-        name.typeText("lab")
+        replaceText(name, with: "lab")
         app.buttons["cs-next-button"].tap()
         XCTAssertTrue(app.switches["cs-encrypt-disk-toggle"].waitForExistence(timeout: 10))
         app.buttons["cs-next-button"].tap()

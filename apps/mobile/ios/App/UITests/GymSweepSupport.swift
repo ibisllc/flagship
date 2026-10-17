@@ -29,6 +29,17 @@ class GymSweepCase: XCTestCase {
         launched = nil
     }
 
+    /// Replace a field's text: Create server starts with the next free
+    /// "home" name in it.
+    func replaceText(_ field: XCUIElement, with text: String) {
+        field.tap()
+        let current = (field.value as? String) ?? ""
+        if !current.isEmpty, current != (field.placeholderValue ?? "") {
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
+        }
+        field.typeText(text)
+    }
+
     /// Put the keyboard away so it can't cover a button below the field.
     func dismissKeyboard(_ app: XCUIApplication) {
         guard app.keyboards.count > 0 else { return }
