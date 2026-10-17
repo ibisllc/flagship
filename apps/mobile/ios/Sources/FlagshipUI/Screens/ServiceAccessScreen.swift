@@ -203,11 +203,7 @@ public struct ServiceAccessScreen: View {
         let rows = vm?.members?.account ?? []
         if !rows.isEmpty {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                Text("ACCOUNT MEMBERS (\(rows.count))")
-                    .font(FS.font.caption())
-                    .fontWeight(.semibold)
-                    .foregroundColor(c.textMuted)
-                    .accessibilityIdentifier("service-access-account-members-title")
+                FSSectionLabel("Account members (\(rows.count))", id: "service-access-account-members-title")
                 ForEach(rows) { row in accountRow(row, c: c) }
             }
         }
@@ -307,11 +303,7 @@ public struct ServiceAccessScreen: View {
     private func membersSection(c: FSColors) -> some View {
         let people = vm?.people ?? []
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("MEMBERS (\(people.count))")
-                .font(FS.font.caption())
-                .fontWeight(.semibold)
-                .foregroundColor(c.textMuted)
-                .accessibilityIdentifier("service-access-members-title")
+            FSSectionLabel("Members (\(people.count))", id: "service-access-members-title")
             if vm?.canInvite == true {
                 HStack(spacing: FS.space.s3) {
                     FSSecondaryButton("+ Add person", block: true) { openAdd(.person) }

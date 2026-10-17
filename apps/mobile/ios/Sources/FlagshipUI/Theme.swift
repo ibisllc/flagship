@@ -202,18 +202,26 @@ public enum FSFont {
 public struct FSSectionLabel: View {
     @Environment(\.colorScheme) private var scheme
     let title: String
-    public init(_ title: String) { self.title = title }
+    let id: String?
+    public init(_ title: String, id: String? = nil) { self.title = title; self.id = id }
     public var body: some View {
         let c = FSColors.scheme(scheme)
         HStack(spacing: 7) {
             Capsule().fill(c.accent).frame(width: 3, height: 13)
                 .accessibilityHidden(true)
-            Text(title)
-                .font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.text)
+            label(c)
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
+    }
+}
+
+public extension FSSectionLabel {
+    @ViewBuilder
+    func label(_ c: FSColors) -> some View {
+        let text = Text(title)
+            .font(FS.font.scaled(13, weight: .semibold))
+            .foregroundColor(c.text)
+            .accessibilityAddTraits(.isHeader)
+        if let id { text.accessibilityIdentifier(id) } else { text }
     }
 }
 

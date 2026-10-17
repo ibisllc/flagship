@@ -276,7 +276,7 @@ public struct ServiceDetailScreen: View {
     @ViewBuilder
     private func canonicalGroup(c: FSColors, defaultLabel: String) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            sectionLabel("CANONICAL (SHARED BY ALL INSTANCES)", c: c)
+            sectionLabel("Canonical (shared by all instances)", c: c)
             // UX-E — the permanent, verifiable address (its certificate is
             // pinned to your box); the short link above is just a redirect.
             Text("The permanent, verifiable address — safe to share.")
