@@ -1,0 +1,23 @@
+# Report log (simple-tasks pass, 2026-10-16). One entry per task: what, why simple, files, verification, result, risks.
+
+## T1 (B8 part): native wording fixes: LANDED 179858197
+- What: (a) Home backup banner got its closing full stop (iOS HomeScreen.swift, Android HomeScreen.kt); (b) "box"→"server" in Activity approvals (iOS "BOX APPROVALS"→"SERVER APPROVALS", "Approve a box's boot"→"Approve a server's boot"; Android same string) and "Sign in to approve a box."→"server." on both; (c) iOS RecoveryScreen explanation no longer says only "iCloud Keychain": "the passkey you saved for Flagship (in iCloud Keychain or your password manager)".
+- Why simple: string literals only, no logic; grep showed no test/doc/parity anchor pins the old strings.
+- Verification: `swiftc -parse` on 4 changed Swift files OK; Kotlin NOT compiled (literal edits); `git diff --check`. No test run (none relevant).
+- Deliberately NOT done: (1) webapp index.html "Approve a box's boot" h2 (needs a shell-version bump; 8 test files pin v131 and other agents race on the number) → ride along with the next webapp landing; (2) subdomain prefill "home" on iOS Create server (vm.name starts "", changes behaviour, needs Swift tests/build) → belongs to stream B; (3) the actionable iCloud Keychain error hints in RealAccountLoginViewModel (correct as advice).
+- Risks: the "box"→"server" sweep is only the strings the owner/agents reported; other user-visible "box" wording may remain elsewhere (not audited). Landed with only a whitespace check (no native compile).
+
+## T2: AGENTS.md stale status lines: LANDED 5e069d33c
+- What: six corrections: (1) "Clients at parity (shell v101)" → "since"; (2) .com Worker line: recorded deploy kept (3e8fef1de/f8c619da/v113) + note live is v114 (measured by curl), main is v131, D1 0104 pending; (3) iOS Live Activity "never starts" → starts on first checkpoint (b7c49cbf0); (4) stalled-boot advisory now Mac+Linux+Windows; (5)(6) feature-branch paragraph: rebased 2026-10-16, v117–v120 over v116, main now v131 so renumber again.
+- Why simple: docs only. Why it matters: AGENTS.md is the first thing every agent reads; a wrong ".com is current" line misleads deployers.
+- Verification (each claim checked, not taken from the audit): curl live service-worker.js → v114; git grep found the onStart caller (InstallProgressBridge.swift:68) and wireInstallProgressBridge in FlagshipApp.swift; "Taking longer than expected" found in builder-linux (wizard.py:2027, vm/manager.py:163) and builder-windows (VMManager.cs:94); each feat/* branch's service-worker.js read from origin (v117..v120); prod D1 query for pb_holders/pb_leases/pb_token_serials → empty (0104 not applied).
+- Rejected: nothing wrong with the audit's claims; but one first-pass grep (stalled advisory) wrongly suggested it was false until I widened the pattern. Lesson: negative grep results need a second query before editing.
+- Risks: the v114 deploy is unattributed (who/which commit unknown): line says so. Line numbers/phrases may shift as other agents edit AGENTS.md concurrently (landed by rebase, no conflict).
+
+## T3: Studio "delete server" dialog wording: LANDED 06f685ce4
+- What: the confirm-delete dialog on Mac Studio (2 places), Windows (MainWindow.xaml.cs:333) and Linux (wizard.py:1927) said "the server's identity and any backups live with your phone/account, not here". Now: "identity stays with your account. Backups stored on this server are deleted with it; copies kept on your phone or with peers (depending on its backup policy) are not."
+- Why it matters (more than cosmetic): scheduled backups are written to the box's own disk (serverArchive/saved.ts), so deleting a Studio VM deletes them; the old text could lead a user to destroy their only backup.
+- Why simple: four string literals, same sentence everywhere, no test pins it (git grep).
+- Verification: swiftc -parse OK; python py_compile OK; C# NOT compiled (no dotnet here; same string-concatenation pattern, eyeballed); Linux pytest NOT run (pytest not installed for this python); git diff --check.
+- Risks / critique targets: (1) the new text assumes the phone-side copy/peer engine exist; on main today the phone background fetch is NOT landed (only on wip branches), so "copies kept on your phone" is currently true only for manual downloads. The wording hedges with "depending on its backup policy" but a strict reviewer may want it softened further until the fetch lands. (2) Not re-checked: whether other Studio screens (e.g. Windows/Linux server detail text) make similar backup promises.
+- UPDATE: risk (2) resolved: git grep of 'backups' across builder-mac/windows/linux found no other promise.

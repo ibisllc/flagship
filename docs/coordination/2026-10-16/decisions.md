@@ -1,0 +1,17 @@
+# Owner decisions, 2026-10-16 (hand to any worker; also recorded in the docs named)
+- LAN-direct ships in the MVP, provided every failure is a no-op back to relay + a log line (docs/lan-direct.md, launch-mvp.md).
+- Co-managers can invite people at Member; demoted/removed/view-only co-managers can't (docs/service-access-gating.md "Co-manager invites").
+- GA: keep owner debug SSH, hardened (key only, admin-signed, expiring, revocable, visible) (docs/recipe-delivery-and-remote-install.md).
+- GA close-out happens after the gym's bugs are fixed.
+- Release builds contain no mock data and no developer mode (mocks live in debug/gym only).
+- Android: native Material 3 look, each page organised like the iOS app, with an Android feel; no emoji icons.
+- Welcome: one "Connect to an existing account" (sign in by account name OR scan/paste a pairing code/link on one page), all apps.
+- Welcome + lock screens: big green primary, secondary just below, gap, "Patent Pending" at the bottom, all apps.
+- Every manual test becomes a gym scenario (mock + live).
+- Backups: Backup and Migrate buttons stay one-off actions. The backup POLICY (set at create, viewable/editable on the server page) runs separately; phone policy caps the server at the phone's reserve; peer policy caps it at 1/3 of its disk, with cross-user blind-matched peer storage, random filler and storage challenges.
+- Manual backup passcode is mandatory; the UI says it's needed to import into an account that isn't yours.
+- Restore with failing apps: try every app, then stop waiting; list the failures.
+- Co-manage acceptance: no blind tokens; the joining account's ADMIN device signs the acceptance and the owner's server verifies it against that account's admin root; .com learns nothing new (docs/share-a-server.md).
+- Migrate v1: apps pause during the move; show an estimated downtime first, a 'moving to a new server' page while paused, and progress; live replication later.
+- Backups: ONE file only for users (magic FLGSHBK1 + u64 BE meta length + meta + data); no two-file option anywhere in the UI; streamed + resumable on every platform.
+- Adding a device to the account: admin devices only; non-admin devices see 'Only an admin device can add devices.'
