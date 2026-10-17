@@ -297,15 +297,15 @@ public enum ServerMigrationTimeline {
         if s.abortedAt != nil {
             return "Migration aborted — your old server stays active with all its data."
         }
-        if s.done { return "Migration complete — the server now runs on the new box." }
+        if s.done { return "Migration complete — the server now runs on the new server." }
         switch s.phase {
         case "initiated":
-            return "Waiting for the new box to come online. Apply the recipe on the new machine / VM; it will attach itself here."
+            return "Waiting for the new server to come online. Apply the recipe on it; it will attach itself here."
         case "provisioned":
             if let attachedAt = s.attachedAt, nowMs - attachedAt > preSeedStuckMs {
-                return "The new box attached but hasn't restored any data yet. If this server has no backup enabled, enable backup first — the migration restores from it."
+                return "The new server attached but hasn't restored any data yet. If this server has no backup enabled, enable backup first — the migration restores from it."
             }
-            return "New box attached — restoring this server's data from backup. The old server keeps serving meanwhile."
+            return "New server attached — restoring this server's data from backup. The old server keeps serving meanwhile."
         case "pre-seeded":
             return "Data restored. Confirm the hand-off when you're ready — the old server will briefly freeze writes while the name moves."
         case "ready":
@@ -313,9 +313,9 @@ public enum ServerMigrationTimeline {
         case "freezing":
             return s.finalDeltaAt == nil
                 ? "Old server is frozen and flushing its final backup…"
-                : "Final backup flushed — the new box is applying it and claiming the name…"
+                : "Final backup flushed — the new server is applying it and claiming the name…"
         case "taken-over":
-            return "The new box is serving the name. Waiting for the old box to close out."
+            return "The new server is serving the name. Waiting for the old server to close out."
         default:
             return ""
         }

@@ -345,7 +345,7 @@ final class ServerMigrationTimelineTests: XCTestCase {
 
     func testWaitCopyHonestPerPhase() {
         XCTAssertTrue(ServerMigrationTimeline.waitCopy(for: session(phase: "initiated"), nowMs: 10)
-            .contains("Waiting for the new box"))
+            .contains("Waiting for the new server"))
         XCTAssertTrue(ServerMigrationTimeline.waitCopy(for: session(phase: "pre-seeded", attachedAt: 2, preSeededAt: 3), nowMs: 10)
             .contains("Confirm the hand-off"))
         XCTAssertTrue(ServerMigrationTimeline.waitCopy(for: session(phase: "aborted", abortedAt: 9), nowMs: 10)

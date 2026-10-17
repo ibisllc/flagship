@@ -218,7 +218,7 @@ final class GymSweepServerTests: GymSweepCase {
         start.tap()
         expectProbe(app, "signed server-migration by admin-root")
         let handOff = app.buttons["migrate-hand-off"]
-        XCTAssertTrue(handOff.waitForExistence(timeout: 15), "Once the new box restored the backup, hand off is offered.")
+        XCTAssertTrue(handOff.waitForExistence(timeout: 15), "Once the new server restored the backup, hand off is offered.")
         shot(app, "migrate-pre-seeded")
         handOff.tap()
         expectProbe(app, "signed server-migration-control by admin-root")
@@ -368,7 +368,7 @@ final class GymSweepServerTests: GymSweepCase {
         let update = app.buttons["sd-update-server"]
         XCTAssertTrue(reveal(app, update))
         update.tap()
-        XCTAssertTrue(app.navigationBars["Update server"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.navigationBars["Software update"].waitForExistence(timeout: 15))
         let latest = app.buttons["update-latest-btn"]
         XCTAssertTrue(latest.waitForExistence(timeout: 15), "The sheet offers the latest endorsed release.")
 
@@ -385,7 +385,7 @@ final class GymSweepServerTests: GymSweepCase {
         expectProbe(app, "signed server-update by admin-root")
         XCTAssertTrue(app.descendants(matching: .any)["sd-update-pending"].waitForExistence(timeout: 15),
                       "The sheet says the update is on its way.")
-        app.navigationBars["Update server"].buttons["Done"].tap()
+        app.navigationBars["Software update"].buttons["Done"].tap()
         let pending = app.descendants(matching: .any)["sd-update-pending"]
         XCTAssertTrue(reveal(app, pending), "The card shows the pending update instead of the button.")
         XCTAssertFalse(app.buttons["sd-update-server"].exists)

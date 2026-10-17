@@ -208,7 +208,7 @@ public final class MigrationViewModel {
         working = true
         defer { working = false }
         do {
-            let (irk, orderKey) = try await signer("Migrate \(serverFqdn) to a new machine / VM")
+            let (irk, orderKey) = try await signer("Migrate \(serverFqdn) to a new server")
             let body = try ServerMigrationFlow.buildStartDeposit(
                 serverFqdn: serverFqdn,
                 username: username,

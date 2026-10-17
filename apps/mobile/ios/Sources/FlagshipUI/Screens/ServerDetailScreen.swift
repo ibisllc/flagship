@@ -960,7 +960,7 @@ struct UpdateServerCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            FSSectionLabel("Update server")
+            FSSectionLabel("Software update")
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     if let short = ServerDetailScreen.shortCommit(currentCommit) {
@@ -1196,7 +1196,7 @@ struct UpdateServerSheet: View {
             .padding(FS.space.s6)
         }
         .background(c.bg.ignoresSafeArea())
-        .navigationTitle("Update server")
+        .navigationTitle("Software update")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { if pending != nil { openedPending = true } }
         .task { await loadCatalog(refresh: false) }
