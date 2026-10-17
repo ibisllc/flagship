@@ -1642,7 +1642,10 @@ struct DeleteServerSheet: View {
     private func fire() async {
         guard armed, !working else { return }
         let appState = app
-        let podId = PodInfo.podId(forFqdn: serverDomain)
+        // A demo account's servers carry their own pod ids: find the row by
+        // its address, so the deleted server leaves Home either way.
+        let podId = appState.pods.first { $0.fqdn.lowercased() == serverDomain.lowercased() }?.podId
+            ?? PodInfo.podId(forFqdn: serverDomain)
         let m = vm ?? DeleteServerViewModel(
             server: server,
             mailbox: mailbox,
