@@ -50,7 +50,7 @@ import {
 } from "@flagship/protocol";
 import { renderDownloadPage } from "./downloadPage.js";
 import { mkdir, open, readFile, rename, rm, stat, statfs } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import { ARCHIVE_EXCLUDES, ARCHIVE_INCLUDES, buildServerArchive, estimateServerArchive, type ArchiveBuildDeps } from "./build.js";
@@ -60,6 +60,25 @@ import type { RestoreWait } from "./restoreWait.js";
 import { KEY_POOL_LOW, KEY_POOL_MAX, SAVED_BACKUP_FILE, SAVED_DATA_FILE, SavedBackups, type SavedBackupMeta, type SavedState } from "./saved.js";
 import { isDue, nextRunAt, parseSchedule, retained, slotStartAtOrBefore } from "./schedule.js";
 import type { MigratePause } from "./migratePause.js";
+
+/** statfs of a folder, or of its nearest existing parent: the backup folders are made on first use. */
+export async function statfsNearest(dir: string) {
+  let at = dir;
+  for (;;) {
+    try {
+      return await statfs(at);
+    } catch (e) {
+      const parent = dirname(at);
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT" || parent === at) throw e;
+      at = parent;
+    }
+  }
+}
+
+export async function freeBytesAt(dir: string): Promise<number> {
+  const s = await statfsNearest(dir);
+  return Number(s.bavail) * Number(s.bsize);
+}
 
 export const ARCHIVE_PATH = "/api/screens/server-archive";
 export const DOWNLOAD_PATH = "/api/archive-download/";
@@ -223,10 +242,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
 
   const json = (status: number, body: unknown): HttpResponse => ({ status, headers: J, body: JSON.stringify(body) });
   const err = (status: number, error: string, extra: Record<string, unknown> = {}) => json(status, { error, ...extra });
-  const free = opts.freeBytes ?? (async (dir: string) => {
-    const s = await statfs(dir);
-    return Number(s.bavail) * Number(s.bsize);
-  });
+  const free = opts.freeBytes ?? freeBytesAt;
 
   async function ensureDir(dir: string = opts.dir): Promise<void> {
     await mkdir(dir, { recursive: true, mode: 0o700 });
@@ -748,7 +764,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
 
   async function diskBytes(): Promise<number> {
     if (opts.saved?.diskBytes) return opts.saved.diskBytes(opts.saved.dir);
-    const s = await statfs(opts.saved!.dir);
+    const s = await statfsNearest(opts.saved!.dir);
     return Number(s.blocks) * Number(s.bsize);
   }
 
