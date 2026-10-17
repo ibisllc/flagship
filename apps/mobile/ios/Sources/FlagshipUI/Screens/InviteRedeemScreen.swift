@@ -135,6 +135,7 @@ public struct InviteRedeemScreen: View {
                     .accessibilityIdentifier("invite-redeem-pending-done")
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("invite-redeem-pending")
     }
 

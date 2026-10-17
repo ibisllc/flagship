@@ -82,8 +82,18 @@ final class GymTotalDetailTests: XCTestCase {
     /// Backup/clone server starts by setting the passcode: a suggested one,
     /// and "Make the backup" waits until the user says it's saved
     /// (docs/server-backup-and-clone.md).
-    func test_backupStartsWithThePasscode() throws {
+    /// A device without the admin root is not offered the one-off backup or
+    /// Migrate: the box would refuse both.
+    func test_nonAdminDeviceIsNotOfferedTheOneOffBackupOrMigrate() throws {
         let app = launch(tab: "home")
+        openPodDetail(app, named: "Home")
+        XCTAssertTrue(app.staticTexts["sd-backups-section"].exists || app.otherElements["sd-backups-section"].waitForExistence(timeout: 15) || revealBySwipe(app, app.otherElements["sd-backups-section"]))
+        XCTAssertFalse(app.buttons["sd-backup-server"].exists, "Back up now (with a passcode) is an admin device's.")
+        XCTAssertFalse(app.buttons["sd-migrate-server"].exists, "Migrate is an admin device's.")
+    }
+
+    func test_backupStartsWithThePasscode() throws {
+        let app = launch(tab: "home", extra: ["-smoke-admin-root"])
         openPodDetail(app, named: "Home")
         let backup = app.buttons["sd-backup-server"]
         XCTAssertTrue(revealBySwipe(app, backup), "The server page should offer Backup/clone server.")

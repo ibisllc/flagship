@@ -115,10 +115,14 @@ struct ServerBackupsSection: View {
             if let vm {
                 ServerBackupsCard(vm: vm)
             }
-            FSCard {
-                VStack(alignment: .leading, spacing: FS.space.s2) {
-                    ServerBackupButton(serverDomain: serverDomain)
-                    MigrateServerButton(serverDomain: serverDomain)
+            // One-off backup and Migrate are admin orders: another device
+            // doesn't get buttons the box would refuse (the card above says why).
+            if AdminOrderGate.allows(app) {
+                FSCard {
+                    VStack(alignment: .leading, spacing: FS.space.s2) {
+                        ServerBackupButton(serverDomain: serverDomain)
+                        MigrateServerButton(serverDomain: serverDomain)
+                    }
                 }
             }
         }
