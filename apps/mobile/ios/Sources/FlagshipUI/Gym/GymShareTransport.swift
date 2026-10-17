@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import CryptoKit
 import Flagship
@@ -311,3 +312,4 @@ extension ServerShareSession: ShareMemberSigned {}
 extension ServerShareUpdate: ShareMemberSigned {}
 extension ServerShareLeave: ShareMemberSigned {}
 extension ServerSharePush: ShareMemberSigned {}
+#endif

@@ -73,7 +73,11 @@ public struct VibeCodeSessionScreen: View {
         attachments: ChatAttachmentStager? = nil
     ) {
         _menu = State(initialValue: menu ?? GroupedModelMenu())
+        #if DEBUG
         _stager = State(initialValue: attachments ?? ChatAttachmentStager(staged: GymSweepSeams.chatAttachments))
+        #else
+        _stager = State(initialValue: attachments ?? ChatAttachmentStager())
+        #endif
         self.stream = stream
         self.serverFqdn = serverFqdn
         self.client = client

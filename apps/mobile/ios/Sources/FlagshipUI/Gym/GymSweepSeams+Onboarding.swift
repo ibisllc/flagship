@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import CryptoKit
 import FlagshipAPI
@@ -100,3 +101,4 @@ extension GymSweepSeams {
         }
     }
 }
+#endif
