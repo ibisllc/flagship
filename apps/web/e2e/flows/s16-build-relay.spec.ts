@@ -61,7 +61,7 @@ test.describe("S16 — Compose draft (#24)", () => {
     // Non-default choices, so the round-trip proves they persist.
     const serverName = `home-${Date.now().toString(36)}`;
     await page.fill("#cs-server-name", serverName);
-    await page.selectOption("#cs-backup-policy", "none");
+    await page.check('input[name="cs-backup-policy"][value="none"]');
     await page.uncheck("#cs-encrypt-disk");
     await page.click("#cs-save-draft");
 
@@ -75,13 +75,13 @@ test.describe("S16 — Compose draft (#24)", () => {
     // New resets the whole form to its defaults.
     await page.click("#cs-new");
     await expect(page.locator("#cs-server-name")).toHaveValue("");
-    await expect(page.locator("#cs-backup-policy")).toHaveValue("phone-only");
+    await expect(page.locator('input[name="cs-backup-policy"][value="phone-only"]')).toBeChecked();
     await expect(page.locator("#cs-encrypt-disk")).toBeChecked();
 
     // Resume the draft — the form re-populates.
     await page.click("#cs-drafts button[data-action='resume']");
     await expect(page.locator("#cs-server-name")).toHaveValue(serverName);
-    await expect(page.locator("#cs-backup-policy")).toHaveValue("none");
+    await expect(page.locator('input[name="cs-backup-policy"][value="none"]')).toBeChecked();
     await expect(page.locator("#cs-encrypt-disk")).not.toBeChecked();
     expect(pageErrors).toEqual([]);
   });

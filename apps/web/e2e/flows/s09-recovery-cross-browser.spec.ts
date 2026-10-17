@@ -113,7 +113,16 @@ test("S9 — sign in → recover with passkey takes the account over on this bro
   // Recovery IS the takeover (as on iOS): one explainer, no "keep both".
   await expect(page.locator(".modal-title")).toHaveText("Take over this account");
   await expect(page.locator("#view-post-recovery-choice")).toHaveCount(0);
+  await page.click("[data-modal-ok]");
+  // The owner picks the passphrase that locks the recovered key in this
+  // browser (typed twice) before the recovery popup opens.
+  const localPassphrase = "s9-local-passphrase-1234";
+  await expect(page.locator(".modal-title")).toHaveText("Lock this browser");
+  await page.locator(".modal-input").fill(localPassphrase);
   const popupPromise = page.waitForEvent("popup");
+  await page.click("[data-modal-ok]");
+  await expect(page.locator(".modal-title")).toHaveText("Confirm passphrase");
+  await page.locator(".modal-input").fill(localPassphrase);
   await page.click("[data-modal-ok]");
   const popup = await popupPromise;
   expect(popup.url()).toBe(`${recoveryOrigin}/#recover`);
