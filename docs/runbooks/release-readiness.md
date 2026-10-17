@@ -35,6 +35,7 @@ exits 1 when any phase is red; amber is a warning.
 | `e2e` | The webapp's Playwright flows against pod-sim and a local `wrangler dev` (as `.github/workflows/e2e.yml` does) | A browser flow broke. |
 | `gym` | `npm run gym:locked -- --surface web` (`web,ios,android` with `--native`) | A mock-only gym scenario fails on that surface. |
 | `parity` | `npm run parity -- --json` (`parity.md` in the report folder has the detail) | The apps disagree on a mirror, or a feature anchor in `parity/features.json` stopped matching. |
+| `ios-release` | Only with `--native`: `node scripts/ios-release-clean.mjs --build` (a Release build for a generic iOS device, scanned for mocks, gym seams and developer mode), under the native-build lock | A Release binary or source carries a gym or mock symbol, or the Release build fails (also what breaks the watch and 32-bit targets). |
 | `live` | `scripts/gym-refresh.sh`, then `npm run gym:live` (only with `--live`; "not available" until those exist) | A real-backend scenario fails. |
 
 ## Who fixes what

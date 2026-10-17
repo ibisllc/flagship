@@ -10,6 +10,8 @@ describe("release-readiness", () => {
   it("selects phases with --only, --skip and --live", () => {
     expect(selectPhases([])).toEqual(["branches", "tsc", "vitest", "e2e", "gym", "parity"]);
     expect(selectPhases(["--live"])).toContain("live");
+    expect(selectPhases([])).not.toContain("ios-release");
+    expect(selectPhases(["--native"])).toContain("ios-release");
     expect(selectPhases(["--only", "parity,branches"])).toEqual(["parity", "branches"]);
     expect(selectPhases(["--skip", "e2e,gym"])).toEqual(["branches", "tsc", "vitest", "parity"]);
     expect(() => selectPhases(["--only", "nope"])).toThrow(/unknown phase/);

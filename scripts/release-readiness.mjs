@@ -4,7 +4,7 @@
 // delta against the previous run. Exit 1 when any phase is red.
 //
 //   npm run ready                         branches, tsc, vitest, e2e, gym (web), parity
-//   npm run ready -- --native --live      + gym on ios/android, + the live gym
+//   npm run ready -- --native --live      + gym on ios/android, + the iOS Release build check, + the live gym
 //   npm run ready -- --only parity,branches
 //   npm run ready -- --skip e2e
 //   --no-fetch                            don't `git fetch origin` before the branch phase
@@ -12,7 +12,7 @@
 // See docs/runbooks/release-readiness.md.
 
 import { spawn, spawnSync } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -32,7 +32,7 @@ export const BRANCHES = [
   { branch: "gym", parent: "main" },
 ];
 
-export const PHASES = ["branches", "tsc", "vitest", "e2e", "gym", "parity", "live"];
+export const PHASES = ["branches", "tsc", "vitest", "e2e", "gym", "parity", "ios-release", "live"];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -227,6 +227,36 @@ function phaseParity(ctx) {
   };
 }
 
+/** Builds the iOS app for a generic device in Release and scans it for mocks, gym seams and developer mode. */
+async function phaseIosRelease(ctx) {
+  const lock = "/private/tmp/claude-501/flagship-locks/native-build.lock";
+  mkdirSync(dirname(lock), { recursive: true });
+  let held = false;
+  for (let i = 0; i < 240 && !held; i++) {
+    try {
+      mkdirSync(lock);
+      writeFileSync(join(lock, "owner"), `release-readiness ios-release ${new Date().toISOString()}\n`);
+      held = true;
+    } catch {
+      await new Promise((r) => setTimeout(r, 30_000));
+    }
+  }
+  if (!held) return { status: "red", summary: "could not take the native-build lock in 2 hours", metrics: {} };
+  try {
+    const r = run("node", [join(ROOT, "scripts/ios-release-clean.mjs"), "--build", "--derived-data", join(ctx.out, "ios-release-dd")], { log: join(ctx.out, "ios-release.log") });
+    const findings = (r.out.match(/^.*: \d+ finding\(s\)$/gm) ?? []).at(-1);
+    rmSync(join(ctx.out, "ios-release-dd"), { recursive: true, force: true });
+    return {
+      status: r.status === 0 ? "green" : "red",
+      summary: r.status === 0 ? "Release build for a generic iOS device is clean" : `Release build or scan failed (exit ${r.status}${findings ? `; ${findings.trim()}` : ""})`,
+      metrics: { exit: r.status },
+      ms: r.ms,
+    };
+  } finally {
+    rmSync(lock, { recursive: true, force: true });
+  }
+}
+
 function phaseLive(ctx) {
   const refresh = join(ROOT, "scripts/gym-refresh.sh");
   if (!existsSync(refresh)) return { status: "na", summary: "not available (no scripts/gym-refresh.sh yet)", metrics: {} };
@@ -237,7 +267,7 @@ function phaseLive(ctx) {
   return gymResult(run("npm", ["run", "gym:live", "--", "--surface", surfaces], { log }), `live ${surfaces}`);
 }
 
-const RUNNERS = { branches: phaseBranches, tsc: phaseTsc, vitest: phaseVitest, e2e: phaseE2e, gym: phaseGym, parity: phaseParity, live: phaseLive };
+const RUNNERS = { branches: phaseBranches, tsc: phaseTsc, vitest: phaseVitest, e2e: phaseE2e, gym: phaseGym, parity: phaseParity, "ios-release": phaseIosRelease, live: phaseLive };
 const TITLES = {
   branches: "Feature-branch drift",
   tsc: "Typecheck (tsc -b)",
@@ -245,6 +275,7 @@ const TITLES = {
   e2e: "Webapp e2e (Playwright + pod-sim)",
   gym: "Locked gym (mock-only)",
   parity: "Cross-client parity",
+  "ios-release": "iOS Release build is clean",
   live: "Live gym",
 };
 
@@ -323,7 +354,8 @@ export function selectPhases(args) {
   const skip = list("--skip") ?? [];
   for (const p of [...(only ?? []), ...skip]) if (!PHASES.includes(p)) throw new Error(`unknown phase "${p}" (phases: ${PHASES.join(", ")})`);
   const live = args.includes("--live");
-  const base = only ?? PHASES.filter((p) => p !== "live" || live);
+  const native = args.includes("--native");
+  const base = only ?? PHASES.filter((p) => (p !== "live" || live) && (p !== "ios-release" || native));
   return base.filter((p) => !skip.includes(p));
 }
 
