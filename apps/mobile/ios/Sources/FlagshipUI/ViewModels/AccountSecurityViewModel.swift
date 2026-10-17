@@ -132,7 +132,7 @@ public final class AccountSecurityViewModel {
         let irk: Curve25519.Signing.PrivateKey
         do {
             irk = try await Keystore.deriveIRK(
-                reason: "Enable multi-device + 2FA",
+                reason: "Turn on code protection",
                 version: Keystore.currentIrkVersion()
             )
         } catch {
@@ -162,7 +162,7 @@ public final class AccountSecurityViewModel {
                 issuer: resp.issuer
             ))
         } catch ScreensClientError.http(let status, _) where status == 503 {
-            phase = .failed("Multi-device + 2FA isn't configured on this server yet. Try again later.")
+            phase = .failed("Code protection isn't available on this server yet. Try again later.")
         } catch {
             phase = .failed("Couldn't start enrollment: \(error.localizedDescription)")
         }
@@ -193,7 +193,7 @@ public final class AccountSecurityViewModel {
         let irk: Curve25519.Signing.PrivateKey
         do {
             irk = try await Keystore.deriveIRK(
-                reason: "Confirm 2FA code",
+                reason: "Confirm your code",
                 version: Keystore.currentIrkVersion()
             )
         } catch {
@@ -262,7 +262,7 @@ public final class AccountSecurityViewModel {
         let irk: Curve25519.Signing.PrivateKey
         do {
             irk = try await Keystore.deriveIRK(
-                reason: "Disable multi-device + 2FA",
+                reason: "Turn off code protection",
                 version: Keystore.currentIrkVersion()
             )
         } catch {

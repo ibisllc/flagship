@@ -141,10 +141,9 @@ public struct ServiceAccessScreen: View {
                 Text(serviceLabel)
                     .font(FS.font.scaled(17, weight: .semibold))
                     .foregroundColor(c.text)
-                Text("id: \(serviceRef)")
+                Text("Who can open this app, and what they can do.")
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
-                    .textSelection(.enabled)
             }
         }
     }

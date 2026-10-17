@@ -258,58 +258,48 @@ public struct SettingsScreen: View {
 
     public var body: some View {
         let c = FSColors.scheme(scheme)
-        ScrollView {
-            VStack(alignment: .leading, spacing: FS.space.s6) {
-                // A compact, non-interactive cloud identifier. Account
-                // Security remains available in the Account group below.
-                Text("@\(username)")
-                    .font(FS.font.scaled(22, weight: .semibold))
-                    .foregroundColor(c.text)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .accessibilityIdentifier("settings-cloud-username")
-                    .padding(.top, FS.space.s2)
+        List {
+            // A compact, non-interactive cloud identifier. Account
+            // Security remains available in the Account group below.
+            Text("@\(username)")
+                .font(FS.font.scaled(22, weight: .semibold))
+                .foregroundColor(c.text)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .accessibilityIdentifier("settings-cloud-username")
+                .fsPlainListRow()
 
-                // Optional promo slot (empty unless flipped on).
-                if showPromo {
-                    FSAnnouncementCard(
-                        icon: "sparkles",
-                        title: "Welcome to Flagship",
-                        message: "Your stuff, on your hardware, with a real green padlock.",
-                        onDismiss: { showPromo = false }
-                    )
-                }
-
-                // Settings taxonomy (spec S1): Account · Devices · Web access ·
-                // Backup & peers · App · Danger zone · Developer (hidden). One
-                // tap to any row; account security leads the Account group.
-                accountGroup(c: c)
-                if !isDemoAccount {
-                    trustedDevicesSection(c: c)
-                }
-                browserSessionsSection(c: c)
-                deviceExtrasGroup(c: c)
-                webAccessGroup(c: c)
-                backupPeersGroup(c: c)
-                appSection(c: c)
-                sessionActions(c: c)
-                dangerZone(c: c)
-                about(c: c)
-
-                Spacer().frame(height: FS.space.s12)
+            // Optional promo slot (empty unless flipped on).
+            if showPromo {
+                FSAnnouncementCard(
+                    icon: "sparkles",
+                    title: "Welcome to Flagship",
+                    message: "Your stuff, on your hardware, with a real green padlock.",
+                    onDismiss: { showPromo = false }
+                )
+                .fsPlainListRow()
             }
-            .padding(.horizontal, FS.space.s6)
-            .fsReadingColumn()
-            // Hard-pin the scroll content to the ScrollView's own width. A
-            // vertical ScrollView rubber-bands sideways the moment ANY
-            // descendant reports a width past the viewport (an over-wide row,
-            // a long unbreakable value, a fixed-size child). containerRelative-
-            // Frame clamps the content to the container width exactly, so there
-            // is simply no horizontal scroll range left to drag — independent
-            // of which child would otherwise overflow.
-            .containerRelativeFrame(.horizontal)
+
+            // Settings taxonomy (spec S1): Account · Devices · Web access ·
+            // Backup & peers · App · Danger zone · Developer (hidden). One
+            // tap to any row; account security leads the Account group.
+            accountGroup(c: c)
+            if !isDemoAccount {
+                trustedDevicesSection(c: c).fsPlainListRow()
+            }
+            browserSessionsSection(c: c).fsPlainListRow()
+            deviceExtrasGroup(c: c)
+            webAccessGroup(c: c)
+            backupPeersGroup(c: c)
+            appSection(c: c).fsPlainListRow()
+            appRows
+            sessionActions(c: c).fsPlainListRow()
+            dangerZone(c: c).fsPlainListRow()
+            about(c: c).fsPlainListRow()
         }
-        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .listSectionSpacing(FS.space.s4)
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
@@ -441,7 +431,7 @@ public struct SettingsScreen: View {
     /// account-type state (single-device vs multi-device + 2FA) in its
     /// subtitle and drills into AccountSecurityScreen.
     private func accountGroup(c: FSColors) -> some View {
-        FSSettingsGroup("Account", rows: [
+        FSSettingsListSection("Account", rows: [
             FSSettingsRow(
                 icon: "person.text.rectangle",
                 title: "Display name",
@@ -457,7 +447,7 @@ public struct SettingsScreen: View {
                 iconTint: accountType == "multi" ? c.success : c.accent,
                 title: "Account security",
                 subtitle: accountType == "multi"
-                    ? "Multi-device + 2FA — recovery needs a code."
+                    ? "Code protection on — recovery needs a code."
                     : "Single-device — recovery is a 3-day wait.",
                 accessibilityId: "settings-open-account-security",
                 action: onOpenAccountSecurity
@@ -774,7 +764,7 @@ public struct SettingsScreen: View {
     /// right after those two sections so all device management reads as one
     /// area.
     private func deviceExtrasGroup(c: FSColors) -> some View {
-        FSSettingsGroup("Companions", rows: [
+        FSSettingsListSection("Companions", rows: [
             FSSettingsRow(icon: "laptopcomputer", title: "Remote", subtitle: "Read-only browser session (4h)", action: onOpenCompanionDock),
             FSSettingsRow(
                 icon: "tray.full",
@@ -788,7 +778,7 @@ public struct SettingsScreen: View {
 
     /// Web-access group (spec S1 group 3).
     private func webAccessGroup(c: FSColors) -> some View {
-        FSSettingsGroup("Web access", rows: [
+        FSSettingsListSection("Web access", rows: [
             FSSettingsRow(icon: "lock.open.laptopcomputer", title: "Open secured sessions", subtitle: "Sites you've signed a browser into", accessibilityId: "settings-open-secured-sessions", action: onOpenSecuredSessions),
             FSSettingsRow(icon: "link", title: "Process URL", subtitle: "Open a sign-in link you copied", action: onOpenProcessUrl),
         ])
@@ -796,7 +786,7 @@ public struct SettingsScreen: View {
 
     /// Backup-&-peers group (spec S1 group 4).
     private func backupPeersGroup(c: FSColors) -> some View {
-        FSSettingsGroup("Backup & peers", rows: [
+        FSSettingsListSection("Backup & peers", rows: [
             FSSettingsRow(icon: "externaldrive.connected.to.line.below.fill", title: "Peer backup", subtitle: "Where the pieces of your backup are kept", action: onOpenPeerBackup),
         ])
     }
@@ -906,13 +896,16 @@ public struct SettingsScreen: View {
                     selection: alternateIconName,
                     onSelect: { setAppIcon($0) }
                 )
-                FSSettingsGroup(rows: [
-                    FSSettingsRow(icon: "lock.shield.fill", title: "Privacy", subtitle: "App lock, push notifications", action: onOpenPrivacy),
-                    FSSettingsRow(icon: "info.circle.fill", title: "About Flagship", subtitle: "Version, license, source", action: onOpenAbout),
-                ])
             }
         }
         .onAppear { alternateIconName = UIApplication.shared.alternateIconName }
+    }
+
+    private var appRows: some View {
+        FSSettingsListSection(rows: [
+            FSSettingsRow(icon: "lock.shield.fill", title: "Privacy", subtitle: "App lock, push notifications", action: onOpenPrivacy),
+            FSSettingsRow(icon: "info.circle.fill", title: "About Flagship", subtitle: "Version, license, source", action: onOpenAbout),
+        ])
     }
 
     private func setAppIcon(_ name: String?) {

@@ -81,7 +81,7 @@ public struct AccountSecurityScreen: View {
             }
         }
         .alert(
-            "Disable multi-device + 2FA?",
+            "Turn off code protection?",
             isPresented: $showDisableSheet
         ) {
             TextField("6-digit code or recovery code", text: $disableCode)
@@ -99,7 +99,7 @@ public struct AccountSecurityScreen: View {
                 showDisableSheet = false
             }
         } message: {
-            Text("Drops your TOTP secret + recovery codes. The account goes back to single-device + 3-day recovery grace. Refused while other trusted devices exist.")
+            Text("Removes your authenticator and recovery codes. Recovery goes back to a 3-day wait. Refused while other trusted devices exist.")
         }
     }
 
@@ -111,12 +111,12 @@ public struct AccountSecurityScreen: View {
                     .imageScale(.large)
                     .foregroundColor(viewModel.isMultiDevice ? c.success : c.primary)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(viewModel.isMultiDevice ? "Multi-device + 2FA" : "Single-device account")
+                    Text(viewModel.isMultiDevice ? "Code protection is on" : "Single-device account")
                         .font(FS.font.scaled(16, weight: .semibold))
                         .foregroundColor(c.text)
                         .accessibilityIdentifier("account-security-badge")
                     Text(viewModel.isMultiDevice
-                         ? "Account recovery requires a 6-digit TOTP code (or a recovery code) plus a 24-hour grace window."
+                         ? "Recovering this account needs a 6-digit code from your authenticator app (or a recovery code) and a 24-hour wait."
                          : "Account recovery needs a recovery credential and then waits 3 days. Your other devices are alerted during the wait, but can't cancel it.")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
@@ -129,10 +129,10 @@ public struct AccountSecurityScreen: View {
     @ViewBuilder
     private func explainer(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            FSSectionLabel(viewModel.isMultiDevice ? "Currently enabled" : "Why enable this?")
+            FSSectionLabel(viewModel.isMultiDevice ? "Currently enabled" : "Why turn it on?")
             Text(viewModel.isMultiDevice
-                 ? "Your TOTP secret was generated on this device on \(formattedDate(viewModel.totpEnrolledAt)). Store your recovery codes somewhere safe — they're the only way back in if your authenticator app is lost."
-                 : "A second factor outside Apple's iCloud Keychain. If your iCloud password is ever compromised, the attacker still needs a live 6-digit code from your authenticator app to take over your account.")
+                 ? "Your authenticator was set up on this device on \(formattedDate(viewModel.totpEnrolledAt)). Store your recovery codes somewhere safe — they're the only way back in if your authenticator app is lost."
+                 : "A second check outside Apple's iCloud Keychain. If your iCloud password is ever stolen, the attacker still needs a live 6-digit code from your authenticator app to take over your account.")
                 .font(FS.font.bodySm())
                 .foregroundColor(c.text)
         }
@@ -142,12 +142,12 @@ public struct AccountSecurityScreen: View {
     private func actions(c: FSColors) -> some View {
         VStack(spacing: FS.space.s3) {
             if viewModel.isMultiDevice {
-                FSDangerButton("Disable multi-device + 2FA", block: true) {
+                FSDangerButton("Turn off code protection", block: true) {
                     showDisableSheet = true
                 }
                 .accessibilityIdentifier("account-security-disable-btn")
             } else {
-                FSPrimaryButton("Enable multi-device + 2FA", block: true, large: true) {
+                FSPrimaryButton("Turn on code protection", block: true, large: true) {
                     showEnableSheet = true
                 }
                 .accessibilityIdentifier("account-security-enable-btn")
@@ -383,7 +383,7 @@ struct AccountSecurityEnableSheet: View {
                 .padding(FS.space.s6)
             }
             .background(c.bg.ignoresSafeArea())
-            .navigationTitle("Enable multi-device + 2FA")
+            .navigationTitle("Turn on code protection")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -400,7 +400,7 @@ struct AccountSecurityEnableSheet: View {
             FSSectionLabel("Step 1 of 4")
             Text("You'll need an authenticator app like 1Password, Google Authenticator, or Authy. We'll show a QR code and a manual key — scan or paste either one.")
                 .foregroundColor(c.text)
-            Text("After 2FA is on, account recovery becomes a 24-hour grace window that requires your 6-digit code (or a recovery code) instead of the 3-day waiting period.")
+            Text("With code protection on, recovery needs your 6-digit code (or a recovery code) and a 24-hour wait instead of the 3-day wait.")
                 .font(FS.font.bodySm())
                 .foregroundColor(c.textMuted)
             FSPrimaryButton("Continue", block: true, large: true) {

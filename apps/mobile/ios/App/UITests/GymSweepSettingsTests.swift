@@ -452,7 +452,7 @@ final class GymSweepSettingsTests: GymSweepCase {
         done.tap()
         let badge = app.staticTexts["account-security-badge"]
         XCTAssertTrue(badge.waitForExistence(timeout: 10))
-        wait(badge, "label == 'Multi-device + 2FA'", timeout: 15)
+        wait(badge, "label == 'Code protection is on'", timeout: 15)
     }
 
     /// 2FA on: Disable asks for a code; a wrong code is refused with a
@@ -464,10 +464,10 @@ final class GymSweepSettingsTests: GymSweepCase {
         let disable = app.buttons["account-security-disable-btn"]
         XCTAssertTrue(disable.waitForExistence(timeout: 15), "An enrolled account offers Disable.")
         disable.tap()
-        let alert = app.alerts["Disable multi-device + 2FA?"]
+        let alert = app.alerts["Turn off code protection?"]
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
         alert.buttons["Cancel"].tap()
-        XCTAssertTrue(disable.exists, "Cancel keeps 2FA on.")
+        XCTAssertTrue(disable.exists, "Cancel keeps code protection on.")
         disable.tap()
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
         alert.textFields.firstMatch.typeText("000000")

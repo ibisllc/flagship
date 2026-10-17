@@ -293,7 +293,7 @@ public struct HomeScreen: View {
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Home")
         .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
-        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search servers")
+        .modifier(HomeSearch(text: $search, regular: sizeClass == .regular))
         .refreshable { await onRefresh() }
     }
 
@@ -1235,5 +1235,21 @@ private struct ServerRowFramesKey: PreferenceKey {
     static let defaultValue: [String: CGRect] = [:]
     static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
         value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
+
+/// Search under the large title on iPhone; on a regular-width iPad the
+/// system puts it in the navigation bar, beside the content it filters
+/// instead of stretched across the whole window.
+private struct HomeSearch: ViewModifier {
+    @Binding var text: String
+    let regular: Bool
+    func body(content: Content) -> some View {
+        if regular {
+            content.searchable(text: $text, prompt: "Search servers")
+        } else {
+            content.searchable(text: $text, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search servers")
+        }
     }
 }

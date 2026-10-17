@@ -122,32 +122,11 @@ public struct ServiceDetailScreen: View {
                     if let pill = AppServerState(d).pill { FSPill(pill.label, kind: pill.fsKind) }
                 }
                 Text("by \(d.creator)").foregroundColor(c.textMuted)
-                // V6 — version + package id sit on one line so the
-                // user can tell which app this is even after they've
-                // renamed the URL stem (display label hides the
-                // package name elsewhere). `urlLabel` is the canonical
-                // package handle: `scratchpad` if the user is the
-                // creator, `scratchpad--meta` / `scratchpad--harry`
-                // otherwise.
-                // V9 — `id:` is the IMMUTABLE composite package id
-                // (`<creator>--<slug>`, double dash), NOT the URL
-                // label. urlLabel rotates whenever the user hits
-                // Replace stem; serviceId stays put for the life of
-                // the package — it's what the manifest, the membership
-                // store, R2 backups, and the update-pack pull state
-                // are all keyed on. Showing urlLabel here (V6 bug)
-                // was wrong because a rename would silently change
-                // the "id" the user sees, when actually the only
-                // thing that changed is the user-facing URL stem.
-                HStack(spacing: FS.space.s2) {
-                    if let v = d.version {
-                        Text("ver: \(v)").font(FS.font.caption()).foregroundColor(c.textMuted)
-                        Text("·").font(FS.font.caption()).foregroundColor(c.textMuted)
-                    }
-                    Text("id: \(d.serviceId)")
+                if let v = d.version {
+                    Text("Version \(v)")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
-                        .accessibilityIdentifier("app-detail-package-id")
+                        .accessibilityIdentifier("app-detail-version")
                 }
                 if let summary = d.summary {
                     Text(summary).font(FS.font.bodySm()).foregroundColor(c.text)

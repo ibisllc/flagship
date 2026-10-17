@@ -57,7 +57,7 @@ public struct FSChip: View {
             .padding(.vertical, 4)
             .contentShape(Rectangle())
         }
-        .buttonStyle(FSPressStyle())
+        .buttonStyle(FSPressStyle(cornerRadius: 22))
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: selected)
         .sensoryFeedback(.selection, trigger: selected) { _, now in now }
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -410,6 +410,7 @@ public struct FSRowPressStyle: ButtonStyle {
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(configuration.isPressed ? FSColors.scheme(scheme).surfaceSunken : Color.clear)
+            .fsFocusRing(cornerRadius: FS.radius.sm)
     }
 }
 
@@ -457,6 +458,41 @@ public extension FSSettingsGroup where Content == _FSRowStack {
     init(_ header: String? = nil, rows: [FSSettingsRow]) {
         self.header = header
         self.content = { _FSRowStack(rows: rows) }
+    }
+}
+
+/// The same rows as a native List section (inset-grouped card, native
+/// separators and highlight), for screens built on `List`. Separators start
+/// under the text, past the icon tile.
+public struct FSSettingsListSection: View {
+    @Environment(\.colorScheme) private var scheme
+    let header: String?
+    let rows: [FSSettingsRow]
+    public init(_ header: String? = nil, rows: [FSSettingsRow]) { self.header = header; self.rows = rows }
+    public var body: some View {
+        let c = FSColors.scheme(scheme)
+        Section {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                row
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(c.surface)
+                    .listRowSeparatorTint(c.border)
+                    .alignmentGuide(.listRowSeparatorLeading) { _ in 60 }
+            }
+        } header: {
+            if let header { FSSectionLabel(header).textCase(nil) }
+        }
+    }
+}
+
+public extension View {
+    /// A block of custom content as one transparent List row: no card from
+    /// the list, no separators, so a screen can mix native groups with its own
+    /// cards and controls.
+    func fsPlainListRow(vertical: CGFloat = 6) -> some View {
+        listRowInsets(EdgeInsets(top: vertical, leading: 0, bottom: vertical, trailing: 0))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
     }
 }
 

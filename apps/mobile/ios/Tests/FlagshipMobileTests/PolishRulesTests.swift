@@ -74,6 +74,7 @@ final class PolishRulesTests: XCTestCase {
         _ = FSAdaptiveStack { Text("x") }
         _ = FSPressStyle()
         _ = FSRowPressStyle()
+        _ = Text("x").fsFocusRing()
     }
 
     /// The brand teal is a graphic: it never colours text, and an icon-only

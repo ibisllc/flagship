@@ -392,124 +392,80 @@ private struct iPhoneShell: View {
     }
 }
 
-// MARK: - iPad (custom sidebar + content)
+// MARK: - iPad (NavigationSplitView: sidebar + detail)
 
 struct iPadShell: View {
     @Binding var selected: RootDestination
     @Environment(\.colorScheme) private var scheme
     @Environment(AppState.self) private var app
-
-    /// 280pt on an iPad; on narrower regular-width displays (the iPhone Duo's
-    /// inner screen) it shrinks with the window, down to 220pt, so the
-    /// content pane keeps a usable width.
-    static func sidebarWidth(for totalWidth: CGFloat) -> CGFloat {
-        min(280, max(220, totalWidth * 0.3))
-    }
+    @State private var visited: Set<RootDestination> = []
+    @State private var columns: NavigationSplitViewVisibility = .all
 
     var body: some View {
         let c = FSColors.scheme(scheme)
-        GeometryReader { geo in
-            HStack(spacing: 0) {
-                Sidebar(selected: $selected, app: app, c: c)
-                    .frame(width: Self.sidebarWidth(for: geo.size.width))
-                    .background(c.sidebar)
-                    // Addressable so the gym's iPad pass can assert the regular
-                    // (iPad) shell renders the 280pt sidebar — and NOT the iPhone
-                    // TabView — at the iPad destination (§7-C, D8). iPhone (compact)
-                    // never builds this branch, so the id is iPad-only by construction.
-                    .accessibilityIdentifier("ipad-sidebar")
-                Divider()
-                // Every destination visited stays alive (hidden when not
-                // selected), as the iPhone TabView keeps its tabs: switching
-                // destinations keeps each one's navigation, so a server page
-                // opened on Home is still open after a visit to Services.
-                ZStack {
-                    ForEach(RootDestination.allCases.filter { visited.contains($0) || $0 == selected }) { dest in
-                        let on = dest == selected
-                        destinationContent(dest)
-                            .opacity(on ? 1 : 0)
-                            .allowsHitTesting(on)
-                            .accessibilityHidden(!on)
-                            .zIndex(on ? 1 : 0)
+        NavigationSplitView(columnVisibility: $columns) {
+            List(selection: Binding<RootDestination?>(
+                get: { selected },
+                set: { if let d = $0 { selected = d } }
+            )) {
+                Section {
+                    ForEach(RootDestination.allCases) { dest in
+                        Label(dest.title, systemImage: dest.systemImage)
+                            .tag(dest)
+                            .font(FS.font.scaled(17, weight: dest == selected ? .semibold : .regular))
+                            // Addressable so the gym's iPad pass can assert the
+                            // regular (iPad) shell renders the sidebar, not the
+                            // iPhone TabView. iPhone (compact) never builds this.
+                            .accessibilityIdentifier("ipad-sidebar")
+                            .accessibilityAddTraits(dest == selected ? .isSelected : [])
                     }
+                } header: {
+                    account(c)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .background(c.sidebar)
+            .navigationTitle("Flagship")
+            .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 320)
+        } detail: {
+            // Every destination visited stays alive (hidden when not
+            // selected), as the iPhone TabView keeps its tabs: switching
+            // destinations keeps each one's navigation, so a server page
+            // opened on Home is still open after a visit to Services.
+            ZStack {
+                ForEach(RootDestination.allCases.filter { visited.contains($0) || $0 == selected }) { dest in
+                    let on = dest == selected
+                    destinationContent(dest)
+                        .opacity(on ? 1 : 0)
+                        .allowsHitTesting(on)
+                        .accessibilityHidden(!on)
+                        .zIndex(on ? 1 : 0)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .toolbar(.hidden, for: .navigationBar)
         }
+        .navigationSplitViewStyle(.balanced)
         .tint(c.accent)
         .onAppear { visited.insert(selected) }
         .onChange(of: selected) { _, dest in visited.insert(dest) }
     }
 
-    @State private var visited: Set<RootDestination> = []
-}
-
-private struct Sidebar: View {
-    @Binding var selected: RootDestination
-    let app: AppState
-    let c: FSColors
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Flagship")
-                    .font(FS.font.scaled(28, weight: .bold))
+    @ViewBuilder
+    private func account(_ c: FSColors) -> some View {
+        if let user = app.currentUser {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(user)
+                    .font(FS.font.scaled(17, weight: .semibold))
                     .foregroundColor(c.text)
-                if let user = app.currentUser {
-                    Text(user)
-                        .font(FS.font.scaled(15, weight: .semibold))
-                        .foregroundColor(c.text)
-                    Text("\(app.pods.count) \(app.pods.count == 1 ? "server" : "servers")")
-                        .font(FS.font.caption())
-                        .foregroundColor(c.textMuted)
-                }
+                Text("\(app.pods.count) \(app.pods.count == 1 ? "server" : "servers")")
+                    .font(FS.font.scaled(13))
+                    .foregroundColor(c.textMuted)
             }
-            .padding(.horizontal, FS.space.s6)
-            .padding(.top, FS.space.s8)
-            .padding(.bottom, FS.space.s6)
-
-            FSSectionLabel("Destinations")
-                .padding(.horizontal, FS.space.s6)
-                .padding(.bottom, FS.space.s2)
-
-            VStack(spacing: 2) {
-                ForEach(RootDestination.allCases) { dest in
-                    SidebarRow(dest: dest, isSelected: dest == selected, c: c) {
-                        selected = dest
-                    }
-                }
-            }
-            .padding(.horizontal, FS.space.s3)
-            .background(Color.clear)
-
-            Spacer()
+            .textCase(nil)
+            .padding(.bottom, FS.space.s2)
         }
-    }
-}
-
-private struct SidebarRow: View {
-    let dest: RootDestination
-    let isSelected: Bool
-    let c: FSColors
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: FS.space.s3) {
-                Image(systemName: dest.systemImage)
-                    .foregroundColor(isSelected ? c.accent : c.textMuted)
-                    .frame(width: 22)
-                Text(dest.title)
-                    .font(FS.font.scaled(15, weight: isSelected ? .semibold : .regular))
-                    .foregroundColor(isSelected ? c.text : c.textMuted)
-                Spacer()
-            }
-            .padding(.horizontal, FS.space.s3)
-            .padding(.vertical, FS.space.s2)
-            .background(isSelected ? Color.white.opacity(0.85) : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
-        }
-        .buttonStyle(.plain)
     }
 }
 

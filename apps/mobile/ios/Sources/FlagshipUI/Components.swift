@@ -11,12 +11,47 @@ import SwiftUI
 /// Press feedback for every Flagship button: a small, springy settle and a
 /// dim, instead of the bare default highlight.
 public struct FSPressStyle: ButtonStyle {
-    public init() {}
+    var cornerRadius: CGFloat
+    public init(cornerRadius: CGFloat = FS.radius.md) { self.cornerRadius = cornerRadius }
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .opacity(configuration.isPressed ? 0.82 : 1)
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
             .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
+            .fsFocusRing(cornerRadius: cornerRadius)
+    }
+}
+
+/// The hardware-keyboard focus indicator, the same on every surface (and the
+/// web): a 2pt brand-teal ring with a 2pt ink (cream in dark) ring just inside
+/// it, so the focus shows on teal fills, on paper and on dark.
+public struct FSFocusRing: ViewModifier {
+    @Environment(\.isFocused) private var isFocused
+    @Environment(\.colorScheme) private var scheme
+    var cornerRadius: CGFloat
+    public func body(content: Content) -> some View {
+        let c = FSColors.scheme(scheme)
+        content
+            .focusEffectDisabled()
+            .overlay {
+                if isFocused {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(c.accent, lineWidth: 2)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: max(cornerRadius - 2, 0), style: .continuous)
+                                .strokeBorder(c.text, lineWidth: 2)
+                                .padding(2)
+                        )
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+    }
+}
+
+public extension View {
+    func fsFocusRing(cornerRadius: CGFloat = FS.radius.md) -> some View {
+        modifier(FSFocusRing(cornerRadius: cornerRadius))
     }
 }
 
@@ -170,6 +205,7 @@ public struct FSField: View {
     var error: String? = nil
     var secure: Bool = false
     var keyboard: UIKeyboardType = .default
+    @FocusState private var focused: Bool
 
     public init(value: Binding<String>, label: String, placeholder: String = "", helper: String? = nil, error: String? = nil, secure: Bool = false, keyboard: UIKeyboardType = .default) {
         self._value = value
@@ -203,6 +239,18 @@ public struct FSField: View {
                     .stroke(error != nil ? c.danger : c.border, lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
+            .overlay {
+                if focused {
+                    RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous)
+                        .strokeBorder(c.accent, lineWidth: 2)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: FS.radius.sm - 2, style: .continuous)
+                                .strokeBorder(c.text, lineWidth: 2).padding(2)
+                        )
+                        .allowsHitTesting(false)
+                }
+            }
+            .focused($focused)
 
             if let sub = error ?? helper {
                 Text(sub)

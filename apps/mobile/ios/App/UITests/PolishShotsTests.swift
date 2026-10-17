@@ -164,4 +164,107 @@ final class PolishShotsTests: GymSweepCase {
         let share = any(app, "share-server-card")
         if reveal(app, share) { snap("61-server-share-card") }
     }
+
+    private func tapIfThere(_ app: XCUIApplication, _ el: XCUIElement, scroll: Bool = true) -> Bool {
+        if scroll { _ = reveal(app, el, tries: 14) }
+        guard el.exists else { return false }
+        bringToMiddle(app, el)
+        el.tap()
+        return true
+    }
+
+    /// Create server, every step (name, boot unlock, the new Backups step with
+    /// and without a pick, then the delivery chooser).
+    func test_createServerSteps() throws {
+        let app = launch(tab: "home", admin: true)
+        XCTAssertTrue(app.buttons["home-add-server"].waitForExistence(timeout: 20))
+        app.buttons["home-add-server"].tap()
+        app.chooseAddNewServer()
+        let name = app.textFields["cs-name-field"]
+        XCTAssertTrue(name.waitForExistence(timeout: 15))
+        replaceText(name, with: "lab")
+        dismissKeyboard(app)
+        snap("70-create-1-name")
+        app.buttons["cs-next-button"].tap()
+        sleep(1)
+        snap("70-create-2-bootunlock")
+        scrolled(app, "70-create-2-bootunlock", pages: 2)
+        app.swipeDown(); app.swipeDown()
+        app.buttons["cs-next-button"].tap()
+        sleep(1)
+        snap("70-create-3-backups-nothing-picked")
+        app.chooseBackupPolicy("phone-only")
+        sleep(1)
+        snap("70-create-3-backups-phone")
+        if app.buttons["cs-continue-button"].exists {
+            app.buttons["cs-continue-button"].tap()
+            sleep(2)
+            snap("70-create-4-delivery")
+        }
+    }
+
+    /// Server page sub-screens: share, migrate (start + progress), backup editor, debug access.
+    func test_serverSubscreens() throws {
+        let app = launch(tab: "home", admin: true, ["-smoke-server-fresh", "-smoke-server-directory", "-smoke-shares"])
+        openServerPage(app, named: "Home")
+        if tapIfThere(app, app.buttons["share-server-open"]) { sleep(1); snap("71-share-server"); back(app) }
+        if tapIfThere(app, app.buttons["sd-debug-access-on"]) { sleep(1); snap("72-debug-access-form"); scrolled(app, "72-debug-access-form", pages: 1) }
+        let app2 = launch(tab: "home", admin: true, ["-smoke-server-fresh", "-smoke-server-directory"])
+        openServerPage(app2, named: "Home")
+        if tapIfThere(app2, app2.buttons["sd-migrate-server"]) {
+            sleep(2); snap("73-migrate-start")
+            let start = app2.buttons["migrate-start"]
+            if start.waitForExistence(timeout: 10), start.isEnabled {
+                start.tap(); sleep(3); snap("73-migrate-progress")
+                let hand = app2.buttons["migrate-hand-off"]
+                if hand.waitForExistence(timeout: 15) { hand.tap(); sleep(3); snap("73-migrate-handoff") }
+            }
+        }
+        let app3 = launch(tab: "home", admin: true, ["-smoke-backups-fresh"])
+        openServerPage(app3, named: "Home")
+        let change = app3.buttons["sd-backups-policy-change"]
+        if revealUp(app3, change), true { bringToMiddle(app3, change); change.tap(); sleep(1); snap("74-backup-policy-editor") }
+    }
+
+    /// App sub-screens: environment, database, browser; the build chooser and a ready chat.
+    func test_appSubscreensAndBuild() throws {
+        let app = launch(tab: "apps")
+        openApp(app, named: "Plants")
+        let nav = app.navigationBars["Plants"]
+        nav.buttons.element(boundBy: nav.buttons.count - 1).tap()
+        snap("75-app-menu")
+        let env = app.buttons["service-detail-env-menu-item"]
+        if env.waitForExistence(timeout: 10) { env.tap(); sleep(2); snap("75-environment"); back(app) }
+        if tapIfThere(app, app.buttons["service-detail-open-database"]) {
+            sleep(2); snap("76-database")
+            let table = app.buttons["database-table-plants"]
+            if table.waitForExistence(timeout: 10) { table.tap(); sleep(2); snap("76-database-table") }
+        }
+        let app2 = launch(tab: "apps")
+        openApp(app2, named: "Plants")
+        if tapIfThere(app2, app2.buttons["service-detail-open-browser-viewer"]) { sleep(2); snap("77-browser-tabs") }
+        let app3 = launch(tab: "apps", ["-smoke-chat"])
+        let build = app3.buttons["Build another service"]
+        if build.waitForExistence(timeout: 15) {
+            build.tap(); sleep(2); snap("78-build-chooser")
+            let link = app3.buttons["build-source-journal-link"]
+            if link.waitForExistence(timeout: 10) {
+                link.tap(); sleep(2); snap("78-build-sessions")
+                let row = app3.buttons["build-session-gym-ready"]
+                if reveal(app3, row) { row.tap(); sleep(3); snap("78-build-chat"); scrolled(app3, "78-build-chat", pages: 1) }
+            }
+        }
+    }
+
+    /// Recovery and sign-in states.
+    func test_recoveryStates() throws {
+        let app = XCUIApplication()
+        app.terminate()
+        app.launchArguments = ["-smoke-onboarding"]
+        app.launch()
+        XCTAssertTrue(app.buttons["welcome-connect"].waitForExistence(timeout: 20))
+        app.buttons["welcome-create"].tap()
+        sleep(2)
+        snap("79-create-account")
+    }
 }

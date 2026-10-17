@@ -71,48 +71,69 @@ public struct ActivityScreen: View {
         }
     }
 
+    private struct SectionInfo: Identifiable {
+        let id: Open
+        let icon: String
+        let title: String
+        let hint: String
+        var count: Int? = nil
+    }
+
+    /// The sections that exist right now, in order. Approvals is ALWAYS
+    /// reachable, outside the load state: a box waiting for an unlock or
+    /// entitlement approval is exactly the case where the daemon BFF (and
+    /// thus this feed) can't load, so gating the approvals entry behind
+    /// `.loaded` hid it precisely when needed.
+    private var sectionInfos: [SectionInfo] {
+        var out = [SectionInfo(id: .approvals, icon: "lock.open", title: "Server approvals", hint: "Servers waiting for you to start them")]
+        guard case .loaded(let feed) = state else { return out }
+        if let snap = feed.postRecovery, snap.lastReissue != nil || snap.state.lastSeen != nil {
+            out.append(SectionInfo(id: .recovery, icon: "arrow.triangle.2.circlepath", title: "Post-recovery", hint: postRecoveryHeadline(snap)))
+        }
+        out.append(SectionInfo(id: .account, icon: "person.crop.circle", title: "Your account",
+                               hint: "Devices, recovery and servers, across all your servers", count: feed.auditEvents.count))
+        let n = feed.boxEvents.filter { BoxEventLabels.title($0) != nil }.count
+        out.append(SectionInfo(id: .server, icon: "server.rack", title: serverTitle,
+                               hint: "Updates, backups, apps and shares on this server", count: n))
+        return out
+    }
+
+    @ViewBuilder
+    private func sectionContent(_ which: Open, bounded: Bool, c: FSColors) -> some View {
+        switch which {
+        case .approvals:
+            approvalsEntryCard(c: c)
+        case .recovery:
+            if case .loaded(let feed) = state, let snap = feed.postRecovery { postRecoveryCard(snap, c: c) }
+        case .account:
+            if case .loaded(let feed) = state {
+                eventList(
+                    empty: "Nothing has happened on your account yet.",
+                    rows: feed.auditEvents.indices.map { i in AnyView(auditRow(event: feed.auditEvents[i], c: c)) },
+                    more: feed.moreAudit, onMore: onLoadMoreAudit, bounded: bounded, c: c)
+            }
+        case .server:
+            if case .loaded(let feed) = state {
+                let rows = feed.boxEvents.filter { BoxEventLabels.title($0) != nil }
+                eventList(
+                    empty: "Nothing has happened on this server yet.",
+                    rows: rows.indices.map { i in AnyView(boxRow(entry: rows[i], c: c)) },
+                    more: feed.moreBoxEvents, onMore: onLoadMoreBox, bounded: bounded, c: c)
+            }
+        }
+    }
+
+    /// Regular width: the sections on the left, the selected one's log on the right.
+    private var selectedSection: Open {
+        if let open { return open }
+        if case .loaded = state { return .account }
+        return .approvals
+    }
+
     public var body: some View {
         let c = FSColors.scheme(scheme)
-        ScrollView {
-            VStack(alignment: .leading, spacing: FS.space.s3) {
-                // ALWAYS reachable, OUTSIDE the state switch: a box waiting for
-                // an unlock/entitlement approval is exactly the case where the
-                // daemon BFF (and thus this feed) can't load, so gating the
-                // approvals entry behind `.loaded` hid it precisely when needed.
-                accordion(.approvals, icon: "lock.open", title: "Server approvals", hint: "Servers waiting for you to start them", c: c) {
-                    approvalsEntryCard(c: c)
-                }
-                switch state {
-                case .idle, .loading:
-                    skeletons
-                case .failed(let msg):
-                    ErrorCard(message: msg, retry: onRefresh)
-                case .loaded(let feed):
-                    if let snap = feed.postRecovery,
-                       snap.lastReissue != nil || snap.state.lastSeen != nil {
-                        accordion(.recovery, icon: "arrow.triangle.2.circlepath", title: "Post-recovery", hint: postRecoveryHeadline(snap), c: c) {
-                            postRecoveryCard(snap, c: c)
-                        }
-                    }
-                    accordion(.account, icon: "person.crop.circle", title: "Your account", hint: "Devices, recovery and servers, across all your servers", count: feed.auditEvents.count, c: c) {
-                        eventList(
-                            empty: "Nothing has happened on your account yet.",
-                            rows: feed.auditEvents.indices.map { i in AnyView(auditRow(event: feed.auditEvents[i], c: c)) },
-                            more: feed.moreAudit, onMore: onLoadMoreAudit, c: c)
-                    }
-                    let rows = feed.boxEvents.filter { BoxEventLabels.title($0) != nil }
-                    accordion(.server, icon: "server.rack", title: serverTitle, hint: "Updates, backups, apps and shares on this server", count: rows.count, c: c) {
-                        eventList(
-                            empty: "Nothing has happened on this server yet.",
-                            rows: rows.indices.map { i in AnyView(boxRow(entry: rows[i], c: c)) },
-                            more: feed.moreBoxEvents, onMore: onLoadMoreBox, c: c)
-                    }
-                }
-                Spacer().frame(height: FS.space.s12)
-            }
-            .padding(.horizontal, FS.space.s6)
-            .padding(.top, FS.space.s2)
-            .fsReadingColumn()
+        Group {
+            if sizeClass == .regular { splitBody(c: c) } else { compactBody(c: c) }
         }
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Activity")
@@ -126,7 +147,97 @@ public struct ActivityScreen: View {
                 }
             }
         }
+    }
+
+    private func compactBody(c: FSColors) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                ForEach(sectionInfos.prefix(1)) { info in
+                    accordion(info, c: c) { sectionContent(info.id, bounded: true, c: c) }
+                }
+                switch state {
+                case .idle, .loading:
+                    skeletons
+                case .failed(let msg):
+                    ErrorCard(message: msg, retry: onRefresh)
+                case .loaded:
+                    ForEach(sectionInfos.dropFirst()) { info in
+                        accordion(info, c: c) { sectionContent(info.id, bounded: true, c: c) }
+                    }
+                }
+                Spacer().frame(height: FS.space.s12)
+            }
+            .padding(.horizontal, FS.space.s6)
+            .padding(.top, FS.space.s2)
+            .fsReadingColumn()
+        }
         .refreshable { await onRefresh() }
+    }
+
+    private func splitBody(c: FSColors) -> some View {
+        HStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    ForEach(sectionInfos) { info in sectionRow(info, c: c) }
+                    if case .failed(let msg) = state { ErrorCard(message: msg, retry: onRefresh) }
+                    if case .idle = state { skeletons } else if case .loading = state { skeletons }
+                }
+                .padding(FS.space.s4)
+            }
+            .frame(width: 340)
+            .background(c.sidebar.opacity(0.5))
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: FS.space.s4) {
+                    if let info = sectionInfos.first(where: { $0.id == selectedSection }) {
+                        Text(info.title).font(FS.font.h3()).foregroundColor(c.text)
+                            .accessibilityAddTraits(.isHeader)
+                        Text(info.hint).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                    }
+                    sectionContent(selectedSection, bounded: false, c: c)
+                }
+                .padding(FS.space.s6)
+                .frame(maxWidth: 720, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .refreshable { await onRefresh() }
+        }
+    }
+
+    private func sectionRow(_ info: SectionInfo, c: FSColors) -> some View {
+        let selected = selectedSection == info.id
+        return Button {
+            withAnimation(.snappy) { open = info.id }
+        } label: {
+            HStack(spacing: FS.space.s3) {
+                Image(systemName: info.icon)
+                    .font(FS.font.scaled(15, weight: .semibold))
+                    .foregroundColor(c.accent)
+                    .fsTile(tile, base: 32)
+                    .background(c.softTint(), in: RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(info.title).font(FS.font.scaled(17, weight: .semibold)).foregroundColor(c.text)
+                        .multilineTextAlignment(.leading)
+                    Text(info.hint).font(FS.font.scaled(13)).foregroundColor(c.textMuted).multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: FS.space.s2)
+                if let count = info.count, count > 0 {
+                    Text("\(count)").font(FS.font.scaled(13, weight: .medium)).foregroundColor(c.textMuted)
+                        .padding(.horizontal, 8).padding(.vertical, 2)
+                        .background(c.surfaceSunken, in: Capsule())
+                }
+            }
+            .padding(FS.space.s3)
+            .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+            .background(selected ? c.surface : Color.clear, in: RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(selected ? c.border : Color.clear, lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(FSRowPressStyle())
+        .sensoryFeedback(.selection, trigger: selected) { _, now in now }
+        .accessibilityIdentifier("activity-section-\(String(describing: info.id))")
+        .accessibilityAddTraits(selected ? [.isHeader, .isSelected] : .isHeader)
     }
 
     /// Entry into the relay approval list. A box set to "authorize each
@@ -239,7 +350,8 @@ public struct ActivityScreen: View {
         return "Server · \(name)"
     }
 
-    private func accordion<C: View>(_ which: Open, icon: String, title: String, hint: String, count: Int? = nil, c: FSColors, @ViewBuilder content: () -> C) -> some View {
+    private func accordion<C: View>(_ info: SectionInfo, c: FSColors, @ViewBuilder content: () -> C) -> some View {
+        let which = info.id, icon = info.icon, title = info.title, hint = info.hint, count = info.count
         let isOpen = open == which
         return VStack(alignment: .leading, spacing: 0) {
             Button {
@@ -292,31 +404,33 @@ public struct ActivityScreen: View {
 
     /// The rolled-down list: scrolls inside a bounded height, so a long log
     /// never pushes the other titles off screen.
-    private func eventList(empty: String, rows: [AnyView], more: Bool, onMore: @escaping () async -> Void, c: FSColors) -> some View {
+    private func eventList(empty: String, rows: [AnyView], more: Bool, onMore: @escaping () async -> Void, bounded: Bool = true, c: FSColors) -> some View {
         Group {
             if rows.isEmpty {
                 Text(empty).font(FS.font.scaled(15)).foregroundColor(c.textMuted)
             } else {
-                ScrollView {
-                    VStack(spacing: FS.space.s3) {
-                        ForEach(rows.indices, id: \.self) { i in
-                            rows[i]
-                            if i < rows.count - 1 { Divider().background(c.border) }
+                let list = VStack(spacing: FS.space.s3) {
+                    ForEach(rows.indices, id: \.self) { i in
+                        rows[i]
+                        if i < rows.count - 1 { Divider().background(c.border) }
+                    }
+                    if more {
+                        FSSecondaryButton(loadingMore ? "Loading…" : "Load more", block: true) {
+                            guard !loadingMore else { return }
+                            loadingMore = true
+                            Task { await onMore(); loadingMore = false }
                         }
-                        if more {
-                            FSSecondaryButton(loadingMore ? "Loading…" : "Load more", block: true) {
-                                guard !loadingMore else { return }
-                                loadingMore = true
-                                Task { await onMore(); loadingMore = false }
-                            }
-                            .disabled(loadingMore)
-                            .accessibilityIdentifier("activity-load-more")
-                        } else {
-                            Text("That's everything.").font(FS.font.caption()).foregroundColor(c.textMuted)
-                        }
+                        .disabled(loadingMore)
+                        .accessibilityIdentifier("activity-load-more")
+                    } else {
+                        Text("That's everything.").font(FS.font.caption()).foregroundColor(c.textMuted)
                     }
                 }
-                .frame(maxHeight: listMaxHeight)
+                if bounded {
+                    ScrollView { list }.frame(maxHeight: listMaxHeight)
+                } else {
+                    list
+                }
             }
         }
     }
