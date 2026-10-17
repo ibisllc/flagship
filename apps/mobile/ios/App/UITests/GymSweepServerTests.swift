@@ -492,15 +492,17 @@ final class GymSweepServerTests: GymSweepCase {
         app.navigationBars["Transfer box"].buttons["Done"].tap()
     }
 
-    /// Make leader: the new order is signed with the admin root.
-    func test_makeLeaderSignsWithTheAdminRoot() throws {
+    /// Make leader on a demo account (the smoke account is one): the order
+    /// is kept on the device, never signed or posted (ServerOrderTests cover
+    /// the signed path for a real account).
+    func test_makeLeaderOnADemoAccountKeepsTheOrderOnThePhone() throws {
         let app = launchServer()
         openServerPage(app, named: "Office")
         let make = app.buttons["sd-make-leader"]
         XCTAssertTrue(reveal(app, make))
         make.tap()
-        expectProbe(app, "signed server-order by admin-root")
         XCTAssertTrue(app.staticTexts["sd-is-leader"].waitForExistence(timeout: 15))
+        expectNoProbe(app, "server-order")
     }
 
     /// A device without the admin root sees the server read-only: one line
@@ -521,7 +523,7 @@ final class GymSweepServerTests: GymSweepCase {
                    "sd-revoke-server", "sd-delete-server"] {
             XCTAssertFalse(app.buttons[id].exists, "\(id) is an admin device's.")
         }
-        XCTAssertTrue(app.staticTexts["sd-backup-admin-only"].exists)
+        XCTAssertTrue(reveal(app, any(app, "sd-backups-admin-only")), "The Backups section says why it is read-only.")
         XCTAssertFalse(probe(app).contains("signed"), "Nothing was sent: \(probe(app))")
         shot(app, "non-admin-server-page")
     }

@@ -1076,10 +1076,10 @@ const SERVER: readonly Scenario[] = [
   ),
   sweep(
     "ios-sweep-server-make-leader",
-    "Make leader signs the new server order with the admin root.",
-    SV + "test_makeLeaderSignsWithTheAdminRoot",
+    "Make leader on a demo account (the smoke account) keeps the new order on the phone: the page shows This server leads and nothing is signed or posted.",
+    SV + "test_makeLeaderOnADemoAccountKeepsTheOrderOnThePhone",
     ["sd-make-leader"],
-    ["signed server-order by admin-root", "sd-is-leader"],
+    ["sd-is-leader"],
   ),
   sweep(
     "ios-sweep-server-non-admin",

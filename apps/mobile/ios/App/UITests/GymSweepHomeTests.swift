@@ -350,7 +350,7 @@ final class GymSweepHomeTests: GymSweepCase {
     /// Sign out anyway returns to Welcome. (Unlock itself needs the
     /// simulator's biometric, which the gym doesn't control.)
     func test_lockScreenSignOutAsksFirst() throws {
-        var app = launch(admin: true, ["-smoke-locked"])
+        var app = launch(admin: true, ["-smoke-locked", "-smoke-no-recovery"])
         var signOut = app.buttons["lock-sign-out-btn"]
         XCTAssertTrue(signOut.waitForExistence(timeout: 20))
         XCTAssertTrue(app.buttons["lock-unlock-btn"].exists, "The lock screen offers Unlock.")
@@ -358,11 +358,10 @@ final class GymSweepHomeTests: GymSweepCase {
         let anyway = button(app, "Sign out anyway")
         XCTAssertTrue(anyway.waitForExistence(timeout: 10), "Without recovery it asks to sign out anyway.")
         shot(app, "lock-sign-out-ask")
-        let cancel = button(app, "Cancel")
-        if cancel.exists { cancel.tap() } else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap() }
+        cancelDialog(app)
         waitGone(anyway)
 
-        app = launch(admin: true, ["-smoke-locked"])
+        app = launch(admin: true, ["-smoke-locked", "-smoke-no-recovery"])
         signOut = app.buttons["lock-sign-out-btn"]
         XCTAssertTrue(signOut.waitForExistence(timeout: 20))
         signOut.tap()
