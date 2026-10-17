@@ -18,6 +18,9 @@ public struct ActivityFeed: Sendable {
     /// alongside the daemon-side install events so the user sees their
     /// account history in one place. Sorted descending by seq.
     public let auditEvents: [AuditEvent]
+    /// True when the last fetch filled its page, so older entries may exist.
+    public var moreAudit: Bool = false
+    public var moreBoxEvents: Bool = false
 }
 
 @Observable
@@ -31,6 +34,13 @@ public final class ActivityViewModel {
     /// stays empty and the rest of the feed still loads.
     private let server: (any FlagshipServerClient)?
     private let currentUsername: @MainActor () -> String?
+    private static let pageSize = 30
+    private var auditLimit = ActivityViewModel.pageSize
+    private var boxLimit = ActivityViewModel.pageSize
+
+    /// Asks for the next page of account events (the list grows in place).
+    public func loadMoreAudit() async { auditLimit += Self.pageSize; await load(quiet: true) }
+    public func loadMoreBoxEvents() async { boxLimit += Self.pageSize; await load(quiet: true) }
 
     public init(
         client: any ScreensClient,
@@ -42,13 +52,16 @@ public final class ActivityViewModel {
         self.currentUsername = username
     }
 
-    public func load() async {
-        state = .loading
+    public func load() async { await load(quiet: false) }
+
+    private func load(quiet: Bool) async {
+        if !quiet { state = .loading }
         do {
             async let detail = client.serverDetail()
             async let sessions = client.pairedSessionsList()
+            let limit = boxLimit
             async let boxEvents: [BoxActivityEntry] = {
-                (try? await client.boxActivity(limit: 100, before: nil)) ?? []
+                (try? await client.boxActivity(limit: limit, before: nil)) ?? []
             }()
             // Post-recovery is tolerated as missing — a daemon that
             // hasn't shipped P1.23 returns a non-2xx, and we render
@@ -67,17 +80,21 @@ public final class ActivityViewModel {
             // outer task, not inside the unstructured child.
             let username = currentUsername()
             let serverRef = server
+            let auditN = auditLimit
             async let audit: [AuditEvent] = ActivityViewModel.fetchAuditOrEmpty(
                 server: serverRef,
                 username: username,
+                limit: auditN
             )
-            let feed = try await ActivityFeed(
+            var feed = try await ActivityFeed(
                 recentInstalls: detail.recentInstallEvents,
                 boxEvents: boxEvents,
                 pairedSessions: sessions.sessions,
                 postRecovery: recovery,
                 auditEvents: audit
             )
+            feed.moreAudit = feed.auditEvents.count >= auditN
+            feed.moreBoxEvents = feed.boxEvents.count >= limit
             state = .loaded(feed)
         } catch {
             state = .failed(error.localizedDescription)
@@ -91,10 +108,11 @@ public final class ActivityViewModel {
     private static func fetchAuditOrEmpty(
         server: (any FlagshipServerClient)?,
         username: String?,
+        limit: Int
     ) async -> [AuditEvent] {
         guard let server, let username, !username.isEmpty else { return [] }
         do {
-            return try await server.listAuditEvents(username: username, sinceSeq: 0, limit: 20).events
+            return try await server.listAuditEvents(username: username, sinceSeq: 0, limit: limit).events
         } catch {
             return []
         }
@@ -128,6 +146,25 @@ public enum BoxEventLabels {
         "server.restore.finished": "Import finished",
         "server.restore.failed": "Import failed",
         "app.installed": "App installed",
+        "app.access.edit": "Changed an app's internet access",
+        "app.access.dismiss": "Dismissed an app's access request",
+        "app.invite.create": "Invited someone to an app",
+        "app.invite.withdraw": "Withdrew an invite",
+        "app.update.accept": "Accepted an app update",
+        "app.storage.full": "An app ran out of space",
+        "app.storage.room": "An app has room again",
+        "server.backup.download-approved": "Approved a backup download",
+        "server.backup.policy": "Changed the backup policy",
+        "server.backup.schedule": "Changed the backup schedule",
+        "server.backup.removed": "Removed a backup",
+        "server.backup.over-limit": "Backups are over their limit",
+        "server.backup.under-limit": "Backups are back under their limit",
+        "server.disk.full": "The disk is nearly full",
+        "server.disk.room": "The disk has room again",
+        "server.migration.paused": "Paused apps for the move",
+        "server.migration.resumed": "Apps running again after the move",
+        "server.restore.pulled": "Fetched the backup data",
+        "server.restore.waiting": "Waiting for its backup",
         "app.updated": "App redeployed",
         "app.removed": "App removed",
         "share.granted": "Shared this server",
@@ -160,6 +197,7 @@ public enum BoxEventLabels {
         if key.hasPrefix("server.decommission") || key.hasPrefix("server.migration") { return "shippingbox.fill" }
         if key.hasPrefix("server.update") { return "arrow.up.circle.fill" }
         if key.hasPrefix("server.debug-access") { return "terminal.fill" }
+        if key.hasPrefix("server.disk") { return "internaldrive.fill" }
         if key.hasPrefix("app.") { return "app.badge.fill" }
         if key.hasPrefix("share.") { return "person.2.fill" }
         return "circle.fill"
