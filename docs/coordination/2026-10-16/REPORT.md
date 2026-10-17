@@ -1,4 +1,4 @@
-# Report for critique: the "simplest tasks" pass (2026-10-16 night)
+# Report for critique: the "simplest tasks" pass (2026-10-16 night) + Part 2 (device bugs, USB burn; 2026-10-17)
 
 Audience: a stronger model asked to critique this work. Everything below is checkable; commit ids and commands are given.
 Repo: `ibisllc/flagship` (personal-cloud project: phone is the trust root, user's own server, `.com` Worker for identity,
@@ -104,3 +104,45 @@ node scripts/parity-check.mjs --json | node -e 'const j=JSON.parse(require("fs")
 curl -s https://webapp.flagshipserver.com/service-worker.js | grep -m1 'SHELL_VERSION ='
 git grep -n "backups live with your phone" origin/main      # expect no output
 ```
+
+
+---
+# Part 2 (2026-10-17): real-phone bug fixing and the USB burn test
+
+Same rules as above (no trailers, only main deployed, land via `land-main.sh`). Per-task log: `REPORT-LOG.md` T5, T6, T6b.
+The owner's Samsung (Android 16) was driven over adb by me; agents only used the emulator; I never read private phone content
+(one accidental screenshot while a chat app showed was deleted unseen).
+
+## 11. Landed in Part 2
+| # | Commit | What | Evidence |
+|---|--------|------|----------|
+| T5a | `c4cccf4a4` (A1 agent) | Android: no mock fallback in live mode; mocks + developer mode moved to `src/debug`; release-clean check script; cloud-recovery fixes; subdomain default "home" + draft survival; error logging; BiometricGate (prompt only while RESUMED); cold-start lock; off-main-thread key wrap | verified on the real phone: M11, M12, no fixtures, M6 |
+| T5b | `1764bb9d5` (me) | `Keystore.irkPubHex()` read the unversioned `irk.seed` slot while `deriveIRK` caches `irk.seed.v<N>`: NullPointerException broke create server, delete, migrate, transfer, SWK deposit, trust bar on fresh accounts (M8) | root cause found from the new step log; 2 Robolectric tests fail on old code (9 run/2 failed), pass on fix; on device: mint, registered with .com, "Watching the new box come online" |
+| T6a | `250d2e68b`, `4575e7f2d` | Key-backup screen states the passphrase rule it enforces (12+ chars, 3 of 4 classes) with a "Too weak." error; iOS wording only (its rule is length-only) | first hypothesis (stale Compose enable) disproved by experiment; device log `wrap start/done` 0.65 s |
+| T6b | `a62f73b2b` | `@EncodeDefault` on `WireBlob.version/registrationUrl/installerGitRef` and `WireAuthCode.version`: kotlinx omits defaults, so the preseed engine rejected every Android recipe ("InstallBlob fields incomplete") | new JSON-shape test fails on old code; burn then succeeded |
+| B1 | `3576f5e66` (iOS agent) | iOS Release has no mocks/developer mode (`#if DEBUG`), `scripts/ios-release-clean.mjs` + vitest | Release scan clean on 4 Mach-O files, 1881 unit tests, mock gym 6/6 |
+
+## 12. USB burn on the phone (feat/phone-usb-burn rebased to e148b207c, unlaunched branch)
+Flow: Create server, Burn, "Choose local seed..." (debug-only, adb-pushed ISO, sha256 `ad91527d...`), owner granted USB access,
+"Erase and write", about 70 s, "All done". Two failures on the way were not USB bugs: prod `.com` rejects platform `android`
+(the server half exists only on the branch), and the Android recipe bug above (a real main bug).
+**Stick checked on the Mac (root copy run by the owner):** first 790,626,304 bytes byte-identical to the seed ISO; at LBA 1544192 a
+FAT16 volume `FLAGSHIP` with `PRESEED.CFG` (84,899 B) generated at burn time whose late_command references the install blob.
+**Not verified:** boot on metal (no spare PC), the blob's contents/signature, and the managed manifest-download path (needs the
+branch deployed to the gym; the permission system blocked D1/R2/SSH steps there, so three owner-run commands are listed in the gym-burn agent's report).
+
+## 13. Weak spots for the critic
+1. The burn used a **local seed**, so the product path (manifest download from `.com`) is untested end to end.
+2. I verified the write by byte comparison, not by booting; "All done" in the app proves nothing about the stick.
+3. I inspected the preseed by `grep` counts only; I did not parse or verify the embedded signed blob.
+4. The M8 fix lives in a getter with an `init` fallback; a better design might make the cache key a single constant owned by `deriveIRK`. Tests cover the symptom, not that invariant.
+5. Burn polling loop kept running two minutes after an error (token waste); fixed. Disk ran out twice (1.3 GB, 2.4 GB free); a Disk rule was added to the agent brief.
+6. Four stale pending orders (`home`..`home4`) sit in the throwaway account `nimble-caracal` because of my create tests; they expire by themselves.
+7. The debug gym-pinned APK shows "Control server certificate expired" against prod; the wording is misleading.
+8. The preseed still carries the known build-time disk passphrase (GA close-out item 2, tracked, not new).
+
+## 14. Questions for the critic (Part 2)
+1. Is a debug-only "Choose local seed..." an acceptable substitute for testing the manifest path, or should the gym deploy have been escalated to the owner first?
+2. Should `a62f73b2b` have shipped with a cross-platform golden vector (TS/Swift/Kotlin) for the recipe wire shape instead of an Android-only JSON test?
+3. Is moving the ownership of the IRK seed cache key into one place worth doing before store builds?
+4. Was handing the owner a `sudo` copy script the lowest-privilege way to verify the stick?
