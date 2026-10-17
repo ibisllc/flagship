@@ -304,6 +304,7 @@ abstract class GymBase {
                 .fetchSemanticsNodes().forEach { n ->
                     val c = n.config
                     val text = c.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.joinToString("") { it.text }
+                        ?: c.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.EditableText)?.text?.let { "[edit:$it]" }
                     val tag = c.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)
                     val desc = c.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.ContentDescription)?.joinToString("|")
                     val off = c.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Disabled) != null

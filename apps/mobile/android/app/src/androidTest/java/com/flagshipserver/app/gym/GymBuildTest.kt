@@ -111,7 +111,6 @@ class GymBuildTest : GymBase() {
         tap("build-source-journal-link")
         tapText("garden", 15_000)
         tap("build-journal-run-ai", 15_000)
-        tap("build-key-use-free-ai", 15_000)
         waitUntilExists("build-journal-deployed", 20_000)
         assertEquals("bld-restart2", buildMock.adaptStartCalls.single().first)
         gymShot("restart-ai-again")
@@ -152,7 +151,6 @@ class GymBuildTest : GymBase() {
             reason = "The server restarted while the AI was working on this build. Its files are kept: run the AI again, or deploy.",
         )
         tap("build-git-adapt")
-        tap("build-key-use-free-ai", 15_000)
         waitUntilExists("build-git-deploy-anyway", 30_000)
         gymShot("git-cut-off")
         tap("build-git-deploy-anyway")
@@ -186,12 +184,11 @@ class GymBuildTest : GymBase() {
     fun fromScratchWithFlagshipInference() {
         openChooser()
         tap("build-src-scratch")
-        waitUntilExists("build-key-use-free-ai", 15_000)
-        gymShot("key-step")
-        tap("build-key-use-free-ai")
+        // An owner with no AI key goes straight to the describe step (Flagship Inference).
+        waitUntilExists("vibe-describe-name", 15_000)
+        gymShot("describe-step")
         type("vibe-describe-name", "gymtodo")
-        composeRule.onNode(hasSetTextAction() and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag("vibe-describe-prompt")))
-            .performTextInput("A to-do list for the gym")
+        type("vibe-describe-prompt", "A to-do list for the gym")
         composeRule.onAllNodes(tagPrefix("vibe-describe-visibility-")).onFirst().scrollIfNeeded().performClick()
         tap("vibe-describe-build")
         eventually(10_000, "the build started") { screensMock.vibeCodeStartCalls.isNotEmpty() }
