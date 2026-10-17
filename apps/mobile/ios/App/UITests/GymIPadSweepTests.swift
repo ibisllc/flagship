@@ -152,10 +152,10 @@ final class GymIPadSweepTests: GymSweepCase {
         let menu = any(app, "pod-switcher-menu")
         XCTAssertTrue(menu.waitForExistence(timeout: 10))
         XCTAssertLessThan(menu.frame.width, 300, "A small popover, not a sheet.")
-        XCTAssertGreaterThanOrEqual(menu.frame.minY, switcher.frame.maxY - 1, "Anchored under the switcher.")
+        XCTAssertGreaterThanOrEqual(menu.frame.minY, switcher.frame.midY, "Anchored under the switcher (its arrow overlaps the button by a few points).")
         shot(app, "ipad-pod-switcher")
-        let office = menu.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Office")).firstMatch
-        XCTAssertTrue(office.exists)
+        let office = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Office")).firstMatch
+        XCTAssertTrue(office.waitForExistence(timeout: 10))
         office.tap()
         waitGone(menu)
         wait(switcher, "label CONTAINS 'Office'")

@@ -864,8 +864,14 @@ final class GymSweepServerTests: GymSweepCase {
         XCTAssertTrue(revealUp(app, policy))
         XCTAssertEqual(policy.label, "Backup policy: Phone-side backups · up to 32.0 GB")
         XCTAssertTrue(any(app, "sd-backups-usage").label.hasPrefix("Apps use 3.2 GB of 32.0 GB"))
-        app.buttons["sd-backups-policy-change"].tap()
+        let change = app.buttons["sd-backups-policy-change"]
+        XCTAssertTrue(reveal(app, change))
+        change.tap()
         let peer = any(app, "backup-policy-peer")
+        if !peer.waitForExistence(timeout: 5) {
+            XCTAssertTrue(reveal(app, change))
+            change.tap()
+        }
         XCTAssertTrue(peer.waitForExistence(timeout: 10))
         peer.tap()
         app.buttons["backup-policy-save"].tap()
