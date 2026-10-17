@@ -172,7 +172,7 @@ final class GymEveryMergeTests: XCTestCase {
     /// lists the servers but offers no Add/Import a server (and so no menu).
     func test_nonAdminHomeHasNoAddServer() throws {
         let app = launch(tab: "home")
-        XCTAssertTrue(app.staticTexts["YOUR SERVERS"].waitForExistence(timeout: 15), "Home should list the seeded servers.")
+        XCTAssertTrue(app.staticTexts["Your servers"].waitForExistence(timeout: 15), "Home should list the seeded servers.")
         XCTAssertFalse(app.buttons["home-add-server"].exists, "Only an admin device sees Add/Import a server.")
         XCTAssertFalse(app.buttons["home-add-new-server"].exists)
         gymShot(app, "home-non-admin")

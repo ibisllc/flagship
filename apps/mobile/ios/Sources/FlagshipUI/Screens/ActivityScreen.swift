@@ -86,7 +86,7 @@ public struct ActivityScreen: View {
                 case .idle, .loading:
                     skeletons
                 case .failed(let msg):
-                    ErrorCard(message: msg)
+                    ErrorCard(message: msg, retry: onRefresh)
                 case .loaded(let feed):
                     if let snap = feed.postRecovery,
                        snap.lastReissue != nil || snap.state.lastSeen != nil {

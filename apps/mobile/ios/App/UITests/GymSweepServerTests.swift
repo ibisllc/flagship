@@ -254,7 +254,7 @@ final class GymSweepServerTests: GymSweepCase {
         XCTAssertTrue(app.navigationBars["Migrate server"].waitForExistence(timeout: 15))
         // No directory entry for the box in the default fixture: it says it
         // can't read the box's key rather than offering a doomed start.
-        XCTAssertTrue(text(app, containing: "Couldn't read this box's current key").waitForExistence(timeout: 15))
+        XCTAssertTrue(text(app, containing: "Couldn't read this server's current key").waitForExistence(timeout: 15))
         XCTAssertFalse(app.buttons["migrate-start"].exists)
     }
 
@@ -472,7 +472,7 @@ final class GymSweepServerTests: GymSweepCase {
         confirm.tap()
         expectProbe(app, "signed server-decommission by admin-root")
         expectProbe(app, "signed release-server-name by admin-root")
-        XCTAssertTrue(app.staticTexts["YOUR SERVERS"].waitForExistence(timeout: 15), "Deleting returns to Home.")
+        XCTAssertTrue(app.staticTexts["Your servers"].waitForExistence(timeout: 15), "Deleting returns to Home.")
         waitGone(podRow(app, named: "Office"))
     }
 
@@ -607,7 +607,7 @@ final class GymSweepServerTests: GymSweepCase {
         cancel.tap()
         expectProbe(app, "signed release-server-name by admin-root")
         expectProbe(app, "auth code revoked")
-        XCTAssertTrue(app.staticTexts["YOUR SERVERS"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Your servers"].waitForExistence(timeout: 15))
         XCTAssertFalse(podRow(app, named: "Cellar").exists || podRow(app, named: "cellar").exists,
                        "A cancelled order leaves Home.")
     }

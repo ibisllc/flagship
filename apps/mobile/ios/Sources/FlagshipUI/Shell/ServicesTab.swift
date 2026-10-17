@@ -319,7 +319,7 @@ public struct ServicesTab: View {
                 ForEach(0..<3) { _ in ServerCardSkeleton() }
             }
         case .failed(let msg):
-            ErrorCard(message: msg)
+            ErrorCard(message: msg, retry: { await vm.load() })
         case .loaded:
             // Show the owner chips only when there's a meaningful split
             // (at least one shared app), so a solo user isn't given a

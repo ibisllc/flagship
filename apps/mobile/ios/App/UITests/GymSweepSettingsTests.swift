@@ -116,7 +116,7 @@ final class GymSweepSettingsTests: GymSweepCase {
         confirm.tap()
         expectProbe(app, "revoked paired session f9e8d7c6")
         waitGone(remote)
-        XCTAssertFalse(app.staticTexts["BROWSER SESSIONS"].exists, "With no browser left the section hides.")
+        XCTAssertFalse(app.staticTexts["Browser sessions"].exists, "With no browser left the section hides.")
         shot(app, "browser-sessions-revoked")
     }
 

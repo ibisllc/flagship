@@ -131,4 +131,37 @@ final class PolishShotsTests: GymSweepCase {
         snap("40-settings")
         scrolled(app, "40-settings", pages: 3)
     }
+
+    /// Every Settings row's screen, one after another.
+    func test_settingsScreens() throws {
+        let app = launch(tab: "settings")
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 20))
+        let rows = ["Account security", "AI keys", "Cloud recovery", "Back up account key", "Profiles", "Remote",
+                    "Companion requests", "Open secured sessions", "Process URL", "Peer backup", "Privacy", "About Flagship"]
+        for (i, title) in rows.enumerated() {
+            let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch
+            var tries = 0
+            while !(row.exists && row.isHittable) && tries < 12 { (tries < 6 ? app.swipeUp() : app.swipeDown()); tries += 1 }
+            guard row.exists, row.isHittable else { continue }
+            row.tap()
+            sleep(2)
+            snap(String(format: "50-settings-%02d-%@", i, title.replacingOccurrences(of: " ", with: "-")))
+            back(app)
+        }
+    }
+
+    /// The app page's sub-screens and the server's share card.
+    func test_appAndServerSubscreens() throws {
+        let app = launch(tab: "apps")
+        openApp(app, named: "Plants")
+        for (id, name) in [("service-detail-open-access", "60-app-access-control")] {
+            let b = app.buttons[id]
+            if reveal(app, b) { b.tap(); sleep(2); snap(name); scrolled(app, name, pages: 2); back(app) }
+        }
+        back(app)
+        go(app, "Home")
+        openServerPage(app, named: "Home")
+        let share = any(app, "share-server-card")
+        if reveal(app, share) { snap("61-server-share-card") }
+    }
 }
