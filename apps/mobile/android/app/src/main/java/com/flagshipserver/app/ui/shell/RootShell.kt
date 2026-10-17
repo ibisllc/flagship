@@ -158,15 +158,19 @@ private fun CompactShell(
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-                RootDestination.entries.forEach { dest ->
-                    NavigationBarItem(
-                        selected = dest == selected,
-                        onClick = { onSelect(dest) },
-                        icon = { Icon(iconFor(dest), contentDescription = dest.label) },
-                        label = { Text(dest.label) },
-                        modifier = Modifier.testTag("tab-${dest.key}"),
-                    )
+            // The bar's labels stop growing at 1.3x: four words across a phone cannot
+            // follow the largest text sizes without breaking mid-word (Material's own advice).
+            CappedFontScale {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+                    RootDestination.entries.forEach { dest ->
+                        NavigationBarItem(
+                            selected = dest == selected,
+                            onClick = { onSelect(dest) },
+                            icon = { Icon(iconFor(dest), contentDescription = dest.label) },
+                            label = { Text(dest.label, maxLines = 1) },
+                            modifier = Modifier.testTag("tab-${dest.key}"),
+                        )
+                    }
                 }
             }
         },
@@ -181,7 +185,7 @@ private fun ExpandedShell(
     onSelect: (RootDestination) -> Unit,
 ) {
     Row(Modifier.fillMaxSize()) {
-        NavigationRail(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+        CappedFontScale { NavigationRail(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
             RootDestination.entries.forEach { dest ->
                 NavigationRailItem(
                     selected = dest == selected,
@@ -191,7 +195,7 @@ private fun ExpandedShell(
                     modifier = Modifier.testTag("tab-${dest.key}"),
                 )
             }
-        }
+        } }
         // Unlike CompactShell (whose Scaffold reserves the NavigationBar's
         // inset-padded height), nothing here accounts for the gesture bar.
         Box(
@@ -224,4 +228,16 @@ private fun iconFor(dest: RootDestination) = when (dest) {
     RootDestination.APPS -> Icons.Outlined.Apps
     RootDestination.ACTIVITY -> Icons.Outlined.Timeline
     RootDestination.SETTINGS -> Icons.Outlined.Settings
+}
+
+
+/** Navigation chrome stops following the font size past [max]: its labels have a fixed
+ *  slot, and the content next to it carries the rest of the scaling. */
+@Composable
+private fun CappedFontScale(max: Float = 1.3f, content: @Composable () -> Unit) {
+    val d = androidx.compose.ui.platform.LocalDensity.current
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(d.density, minOf(d.fontScale, max)),
+        content = content,
+    )
 }

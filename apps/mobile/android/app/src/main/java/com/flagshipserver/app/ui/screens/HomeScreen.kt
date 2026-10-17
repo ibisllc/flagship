@@ -4,6 +4,8 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.heightIn
@@ -871,14 +873,29 @@ private fun LeaderPill(confirmed: Boolean) {
 
 @Composable
 fun ServerCardSkeleton() {
+    // Rows that breathe, in the shape of the list that is coming, instead of a bare bar.
+    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "skeleton")
+    val alpha by transition.animateFloat(
+        initialValue = 0.35f, targetValue = 0.8f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(900, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            androidx.compose.animation.core.RepeatMode.Reverse,
+        ),
+        label = "skeleton-alpha",
+    )
+    val block = MaterialTheme.colorScheme.surfaceContainerHighest
     FSCard {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            androidx.compose.material3.LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth(),
-                color = FS.colors.accentText,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-            )
-            Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s4)) {
+            repeat(2) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                    Box(Modifier.size(40.dp).graphicsLayer { this.alpha = alpha }.background(block, androidx.compose.foundation.shape.CircleShape))
+                    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.weight(1f)) {
+                        Box(Modifier.fillMaxWidth(0.55f).height(14.dp).graphicsLayer { this.alpha = alpha }.background(block, MaterialTheme.shapes.extraSmall))
+                        Box(Modifier.fillMaxWidth(0.8f).height(12.dp).graphicsLayer { this.alpha = alpha }.background(block, MaterialTheme.shapes.extraSmall))
+                    }
+                }
+            }
+            Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

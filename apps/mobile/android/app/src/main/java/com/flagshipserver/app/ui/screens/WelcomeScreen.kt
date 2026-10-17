@@ -1,5 +1,7 @@
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -48,12 +50,14 @@ fun WelcomeScreen(nav: NavController) {
         modifier = Modifier.fillMaxSize().navigationBarsPadding(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-      // Reading column — clamp + center on expanded panes; a no-op on phones.
+      // Reading column — clamp + center on expanded panes; a no-op on phones. At the
+      // largest text sizes it scrolls instead of clipping.
+      BoxWithConstraints(Modifier.widthIn(max = FSLayout.readingMaxWidth).fillMaxWidth().fillMaxHeight()) {
       Column(
         modifier = Modifier
-            .widthIn(max = FSLayout.readingMaxWidth)
             .fillMaxWidth()
-            .fillMaxHeight()
+            .verticalScroll(rememberScrollState())
+            .heightIn(min = maxHeight)
             .padding(horizontal = FS.space.s6),
         verticalArrangement = Arrangement.SpaceBetween,
       ) {
@@ -99,6 +103,7 @@ fun WelcomeScreen(nav: NavController) {
             onSecondary = { nav.navigate("connect") },
             secondaryDescription = "Connect to an existing account. Sign in with your account name, or join with a pairing code.",
         )
+      }
       }
     }
 }
