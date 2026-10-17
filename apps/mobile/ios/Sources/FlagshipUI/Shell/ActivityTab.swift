@@ -79,7 +79,9 @@ public struct ActivityTab: View {
                     onOpenApprovals: { path.append(.secretRequests) },
                     onOpenPostRecovery: { path.append(.postRecovery) },
                     onOpenAuditLog: { path.append(.auditLog) },
-                    onRefresh: { await vm.load() }
+                    onRefresh: { await vm.load() },
+                    onLoadMoreAudit: { await vm.loadMoreAudit() },
+                    onLoadMoreBox: { await vm.loadMoreBoxEvents() }
                 )
             } else {
                 ProgressView()
