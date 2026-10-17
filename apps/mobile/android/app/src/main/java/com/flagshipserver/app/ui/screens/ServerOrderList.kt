@@ -7,7 +7,10 @@
 package com.flagshipserver.app.ui.screens
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitVerticalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.verticalDrag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,6 +34,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -155,7 +160,78 @@ fun ReorderableServerList(
 
     val shown = applyDraft(pods, drag.draft).map { it.podId }
 
-    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3), modifier = Modifier.animateContentSize()) {
+    // The drag is read at the list, not on each row's handle: a row can be
+    // recomposed from scratch when the drag starts (its handle was a fresh
+    // pointer-input node, which Compose reset mid-gesture about one run in ten,
+    // leaving the order untouched). The list itself never leaves the
+    // composition, so the gesture survives whatever the rows do.
+    val tops = remember { mutableStateMapOf<String, Float>() }
+    var listTop by remember { mutableFloatStateOf(0f) }
+    val handleWidthPx = with(LocalDensity.current) { DRAG_HANDLE_WIDTH.toPx() }
+
+    fun handleAt(x: Float, y: Float): String? {
+        if (x < 0f || x > handleWidthPx) return null
+        val order = latestIds
+        return order.firstOrNull { id ->
+            val top = (tops[id] ?: return@firstOrNull false) - listTop
+            val h = (heights[id] ?: return@firstOrNull false).toFloat()
+            y >= top && y <= top + h
+        }?.takeIf { canMove(it) }
+    }
+
+    fun dragBy(id: String, dy: Float) {
+        drag.offset += dy
+        val order = drag.draft ?: latestIds
+        val i = order.indexOf(id)
+        val offset = drag.offset
+        if (offset > 0 && i in 0 until order.lastIndex && canMove(order[i + 1])) {
+            val h = (heights[order[i + 1]] ?: 0) + gap
+            if (h > gap && offset > h / 2) {
+                drag.draft = moveInOrder(order, id, +1, ::canMove) ?: order
+                drag.offset -= h
+            }
+        } else if (offset < 0 && i > 0 && canMove(order[i - 1])) {
+            val h = (heights[order[i - 1]] ?: 0) + gap
+            if (h > gap && -offset > h / 2) {
+                drag.draft = moveInOrder(order, id, -1, ::canMove) ?: order
+                drag.offset += h
+            }
+        }
+    }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(FS.space.s3),
+        modifier = Modifier
+            .animateContentSize()
+            .onGloballyPositioned { listTop = it.positionInRoot().y }
+            .then(
+                if (!enabled) Modifier else Modifier.pointerInput(Unit) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val id = handleAt(down.position.x, down.position.y) ?: return@awaitEachGesture
+                        try {
+                            val slop = awaitVerticalTouchSlopOrCancellation(down.id) { change, over ->
+                                change.consume()
+                                drag.draft = drag.draft ?: latestIds
+                                drag.draggingId = id
+                                drag.offset = 0f
+                                dragBy(id, over)
+                            }
+                            if (slop != null) {
+                                verticalDrag(slop.id) { change ->
+                                    // Read the move before consuming: consuming zeroes it.
+                                    val dy = change.positionChange().y
+                                    change.consume()
+                                    dragBy(id, dy)
+                                }
+                            }
+                        } finally {
+                            finish(id)
+                        }
+                    }
+                },
+            ),
+    ) {
         shown.forEach { id ->
             val pod = byId[id] ?: return@forEach
             key(id) {
@@ -163,7 +239,10 @@ fun ReorderableServerList(
                 val movable = enabled && canMove(id)
                 var rowModifier = Modifier
                     .testTag("home-server-row-$id")
-                    .onGloballyPositioned { heights[id] = it.size.height }
+                    .onGloballyPositioned {
+                        heights[id] = it.size.height
+                        tops[id] = it.positionInRoot().y
+                    }
                 if (isDragging) {
                     rowModifier = rowModifier
                         .zIndex(1f)
@@ -179,50 +258,13 @@ fun ReorderableServerList(
                 )
                 val handle: (@Composable () -> Unit)? = if (!enabled) null else {
                     {
+                        // Only the picture and the semantics: the list reads the gesture.
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
                                 .width(DRAG_HANDLE_WIDTH)
                                 .fillMaxHeight()
-                                .then(if (movable) Modifier.testTag("home-server-handle-$id") else Modifier)
-                                .then(
-                                    if (!movable) Modifier else Modifier.pointerInput(id) {
-                                        try {
-                                            detectVerticalDragGestures(
-                                                onDragStart = {
-                                                    drag.draft = drag.draft ?: latestIds
-                                                    drag.draggingId = id
-                                                    drag.offset = 0f
-                                                },
-                                                onVerticalDrag = { change, dy ->
-                                                    change.consume()
-                                                    drag.offset += dy
-                                                    val order = drag.draft ?: latestIds
-                                                    val i = order.indexOf(id)
-                                                    val offset = drag.offset
-                                                    if (offset > 0 && i in 0 until order.lastIndex && canMove(order[i + 1])) {
-                                                        val h = (heights[order[i + 1]] ?: 0) + gap
-                                                        if (h > gap && offset > h / 2) {
-                                                            drag.draft = moveInOrder(order, id, +1, ::canMove) ?: order
-                                                            drag.offset -= h
-                                                        }
-                                                    } else if (offset < 0 && i > 0 && canMove(order[i - 1])) {
-                                                        val h = (heights[order[i - 1]] ?: 0) + gap
-                                                        if (h > gap && -offset > h / 2) {
-                                                            drag.draft = moveInOrder(order, id, -1, ::canMove) ?: order
-                                                            drag.offset += h
-                                                        }
-                                                    }
-                                                },
-                                                onDragEnd = { finish(id) },
-                                                onDragCancel = { finish(id) },
-                                            )
-                                        } finally {
-                                            // The handle left the screen mid-drag.
-                                            finish(id)
-                                        }
-                                    },
-                                ),
+                                .then(if (movable) Modifier.testTag("home-server-handle-$id") else Modifier),
                         ) {
                             if (movable) {
                                 Icon(Icons.Outlined.DragHandle, contentDescription = null, tint = FS.colors.textMuted)
