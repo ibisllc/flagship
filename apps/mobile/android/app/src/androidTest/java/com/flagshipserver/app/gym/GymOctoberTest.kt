@@ -297,7 +297,7 @@ class GymOctoberTest : GymBase() {
         composeRule.onNodeWithTag("service-access-add-person").performClick()
         waitUntilExists("service-access-name-field")
         composeRule.onNodeWithTag("service-access-name-field").performTextInput("Gym friend")
-        // The button enables once the typed name has reached the view model; a click before that is a no-op.
+        // The button enables once the typed name has reached the view model; an earlier click does nothing.
         composeRule.waitUntil(10_000) {
             runCatching { composeRule.onNodeWithTag("service-access-create-invite").assertIsEnabled() }.isSuccess
         }
@@ -421,7 +421,7 @@ class GymOctoberTest : GymBase() {
         openHomeServerPage()
         waitUntilExists("server-create-app-here", timeoutMs = 20_000)
         composeRule.onNodeWithTag("server-create-app-here").performScrollTo().assertIsDisplayed()
-        // The app rows load after the page's own frame (the button exists first): wait for them.
+        // The app rows load after the page frame (the button exists first): wait for them.
         composeRule.waitUntil(20_000) { composeRule.onAllNodes(tagStartsWith("server-app-")).fetchSemanticsNodes().isNotEmpty() }
         gymShot("server-apps")
     }

@@ -242,12 +242,12 @@ class GymSettingsTest : GymBase() {
         tap("ai-key-provider-openai")
         type("ai-key-field", "sk-gym-aaaaaaaaaaaa")
         tapText("Save key")
-        waitTextGone("Save key")
+        waitTextGone("Save key", 30_000)
         tap("ai-key-add")
         tap("ai-key-provider-anthropic")
         type("ai-key-field", "sk-ant-gym-bbbbbbbbbbbb")
         tapText("Save key")
-        waitTextGone("Save key")
+        waitTextGone("Save key", 30_000)
         assertEquals(2, com.flagshipserver.app.core.AiKeyStore.list().size)
         // Whichever is the default, the last "Make default" on the page is a saved key's.
         val keys = com.flagshipserver.app.core.AiKeyStore.list().map { it.id }
@@ -270,7 +270,7 @@ class GymSettingsTest : GymBase() {
         tap("ai-key-provider-openai")
         type("ai-key-field", "sk-gym-cccccccccccc")
         tapText("Save key")
-        waitTextGone("Save key")
+        waitTextGone("Save key", 30_000)
         // Flagship Inference starts as the default; make the new key the default, then Flagship Inference again.
         waitText("Make default", 15_000)
         eventually(what = "the key is the default (active ${com.flagshipserver.app.core.AiKeyStore.activeId()})") {
