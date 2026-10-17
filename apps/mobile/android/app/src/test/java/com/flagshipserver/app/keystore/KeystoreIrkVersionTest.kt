@@ -94,4 +94,20 @@ class KeystoreIrkVersionTest {
         val second = Keystore.requireIrkSeedForVersion(3)
         assertArrayEquals(first, second)
     }
+
+    @Test fun irkPubHex_onAFreshAccount_doesNotThrow_andMatchesTheDerivedKey() = runBlocking {
+        val hex = Keystore.irkPubHex()
+        assertEquals(64, hex.length)
+        val seed = Keystore.requireIrkSeedForVersion(Keystore.currentIrkVersion())
+        val expected = com.flagshipserver.app.core.HexUtil.encode(
+            com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPairFromSeed(seed).publicKey,
+        )
+        assertEquals(expected, hex)
+    }
+
+    @Test fun irkPubHex_followsTheCurrentVersion() = runBlocking {
+        val v1 = Keystore.irkPubHex()
+        Keystore.setCurrentIrkVersion(2)
+        assertNotEquals(v1, Keystore.irkPubHex())
+    }
 }
