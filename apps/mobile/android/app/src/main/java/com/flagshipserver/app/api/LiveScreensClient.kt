@@ -487,6 +487,16 @@ class LiveScreensClient(
         return request("/api/screens/peer-backup/toggle", PeerBackupStatusResponse.serializer(), "POST", body)
     }
 
+    override suspend fun peerBackupRoot(req: PeerRootRequest): PeerRootSummary {
+        val body = json.encodeToString(PeerRootRequest.serializer(), req).toByteArray()
+        return request("/api/screens/peer-backup/root", PeerRootSummary.serializer(), "POST", body, readTimeoutSeconds = 60)
+    }
+
+    override suspend fun serverRestoreFromPeers(req: PeerRootRequest) {
+        val body = json.encodeToString(PeerRootRequest.serializer(), req).toByteArray()
+        request<Unit>("/api/screens/server-restore/from-peers", null, "POST", body, readTimeoutSeconds = 60)
+    }
+
     override suspend fun companionMintTicket(req: CompanionMintTicketRequest): CompanionMintTicketResponse {
         val body = json.encodeToString(CompanionMintTicketRequest.serializer(), req).toByteArray()
         return request("/api/screens/companion/mint-ticket", CompanionMintTicketResponse.serializer(), "POST", body)

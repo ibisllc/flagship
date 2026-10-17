@@ -115,6 +115,65 @@ const EVERY_MERGE: readonly Scenario[] = [
     },
   ),
   android(
+    "android-peer-backup-status",
+    "Settings > Peer-backup shows the v2 status: the state, the servers holding the pieces as Server 1..n (never named), the restore-by date and what this server keeps for others.",
+    `${PKG}.GymPeerBackupTest#theStatusPageNamesServersNotOwners`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch smokeTab=settings." },
+        { kind: "tap", describe: "Peer-backup." },
+      ],
+      assertions: [
+        { describe: "Protected", handle: "peer-backup-state-protected", expect: "present" },
+        { describe: "Holders", handle: "peer-backup-holder", expect: "present" },
+        { describe: "Restore by", handle: "peer-backup-restore-by", expect: "present" },
+      ],
+      screenshots: [shot("peer-backup-status", "The peer backup status.")],
+      dimension: "D1",
+    },
+  ),
+  android(
+    "android-restore-from-peers-find",
+    "Add/Import a server > Restore from other servers: the lost server's record is read, opened with this account's key and summarised; a missing record gets a sentence.",
+    `${PKG}.GymPeerBackupTest#restoreFromOtherServersFindsAndOpensTheRecord`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch smokeTab=home with the admin root." },
+        { kind: "tap", describe: "Add/Import a server, then Restore from other servers.", handle: "home-restore-peers" },
+        { kind: "type", describe: "The lost server's address.", handle: "restore-peers-lost" },
+        { kind: "tap", describe: "Find its backup.", handle: "restore-peers-find" },
+      ],
+      assertions: [{ describe: "Name step", handle: "import-backup-name", expect: "present" }],
+      screenshots: [shot("restore-peers-found", "The record found.")],
+      dimension: "D1",
+    },
+  ),
+  android(
+    "android-restore-from-peers-not-found",
+    "A lost server with no peer backup record gets the box's sentence and the picker stays.",
+    `${PKG}.GymPeerBackupTest#aMissingRecordSaysSo`,
+    {
+      steps: [{ kind: "tap", describe: "Find its backup for a server with no record.", handle: "restore-peers-find" }],
+      assertions: [{ describe: "Error", handle: "import-backup-error", expect: "present" }],
+      screenshots: [shot("restore-peers-not-found", "The sentence.")],
+      dimension: "D1",
+    },
+  ),
+  android(
+    "android-restore-from-peers-waiting-server",
+    "A server waiting for this backup fetches the pieces from other servers (nothing is uploaded from the phone), the phone commits the key and the apps restore.",
+    `${PKG}.GymPeerBackupTest#aWaitingServerFetchesThePiecesAndRestores`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch with the awaiting-backup server." },
+        { kind: "tap", describe: "Send it to the waiting server.", handle: "import-backup-send-existing" },
+      ],
+      assertions: [{ describe: "Restored", handle: "import-backup-restored", expect: "present" }],
+      screenshots: [shot("restore-peers-done", "The restore result.")],
+      dimension: "D1",
+    },
+  ),
+  android(
     "android-home-tab",
     "The Home tab renders its large-title landmark in smoke mode.",
     `${PKG}.GymEveryMergeTest#homeTabRenders`,

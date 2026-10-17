@@ -105,6 +105,11 @@ object ServerKeys {
         return hkdfSha256(umkSeed, "$INFO_SWK|$serverId".toByteArray(Charsets.UTF_8))
     }
 
+    /** HKDF-SHA256(ikm, empty salt, info) -> 32 bytes: the derivation every
+     *  `flagship/<purpose>/v1` key under a server key uses (peer backup's PBK
+     *  and root key). */
+    fun hkdf32(ikm: ByteArray, info: String): ByteArray = hkdfSha256(ikm, info.toByteArray(Charsets.UTF_8))
+
     fun deriveStkSeed(umkSeed: ByteArray, serverId: String): ByteArray =
         hkdfSha256(deriveSwk(umkSeed, serverId), INFO_STK.toByteArray(Charsets.UTF_8))
 

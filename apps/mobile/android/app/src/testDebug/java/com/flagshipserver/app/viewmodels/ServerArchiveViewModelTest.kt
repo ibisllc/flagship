@@ -4,6 +4,9 @@
 package com.flagshipserver.app.viewmodels
 
 import com.flagshipserver.app.api.MockScreensClient
+import com.flagshipserver.app.api.PeerRootArchive
+import com.flagshipserver.app.api.PeerRootRequest
+import com.flagshipserver.app.api.PeerRootSummary
 import com.flagshipserver.app.api.ServerArchiveStartRequest
 import com.flagshipserver.app.api.ServerBackupKdf
 import com.flagshipserver.app.api.ServerBackupSlot
@@ -11,6 +14,7 @@ import com.flagshipserver.app.api.ServerRestoreCommitRequest
 import com.flagshipserver.app.api.ServerRestoreStartRequest
 import com.flagshipserver.app.api.ServerRestoreWaiting
 import com.flagshipserver.app.core.HexUtil
+import com.flagshipserver.app.core.PeerBackup
 import com.flagshipserver.app.core.ServerArchive
 import com.flagshipserver.app.core.ServerBackupFormat
 import kotlinx.coroutines.CoroutineScope
@@ -453,5 +457,158 @@ class ServerArchiveViewModelTest {
         assertEquals("Wiki: restored", ImportBackupViewModel.describe(com.flagshipserver.app.api.ServerRestoreApp("a", "Wiki", "done")))
         assertEquals("Wiki: skipped (already here)", ImportBackupViewModel.describe(com.flagshipserver.app.api.ServerRestoreApp("a", "Wiki", "skipped")))
         assertEquals("Wiki: couldn't be restored (no space)", ImportBackupViewModel.describe(com.flagshipserver.app.api.ServerRestoreApp("a", "Wiki", "failed", "no space")))
+    }
+
+    // ── Restore from other servers (docs/peer-backup.md §9) ───────
+
+    private val lostServer = "home.alice.flagship.services"
+
+    private class FakePeers(
+        val root: PeerRootSummary?,
+        val error: Throwable? = null,
+        override val lostChoices: List<String> = listOf("home.alice.flagship.services"),
+    ) : PeerRestoreSource {
+        val described = mutableListOf<String>()
+        override suspend fun describe(lost: String): PeerRootSummary {
+            described += lost
+            error?.let { throw it }
+            return root!!
+        }
+        override suspend fun pbkHex(lost: String): String = "11".repeat(32)
+    }
+
+    private fun rootOf(b: Backup, bytes: Long = b.dataBytes): PeerRootSummary {
+        val whole = b.file.readBytes()
+        val layout = ServerBackupFormat.parseBundleHeader(whole.copyOf(16), whole.size.toLong())
+        val meta = String(whole.copyOfRange(16, layout.dataOffset.toInt()), Charsets.UTF_8)
+        return PeerRootSummary(
+            serverId = lostServer,
+            archive = PeerRootArchive(b.archiveId, 1_792_000_000_000, bytes, b.sha256, meta),
+            holders = 3,
+            needed = 2,
+            keepUntil = 1_799_776_000_000,
+        )
+    }
+
+    private fun peerVM(
+        c: MockScreensClient,
+        peers: PeerRestoreSource,
+        waiting: Map<String, String> = emptyMap(),
+        kek: ByteArray = accountKek,
+    ): ImportBackupViewModel {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scopes += it }
+        return ImportBackupViewModel(
+            username = "alice", takenNames = emptySet(), waitingServers = waiting,
+            clientFor = { c }, accountKek = { kek }, peers = peers, pollMs = 1, scope = scope,
+        )
+    }
+
+    @Test fun peerRestoreStartsOnTheLostServerPicker() = runBlocking {
+        val vm = peerVM(client(), FakePeers(null))
+        assertEquals(ImportBackupViewModel.Phase.PickLost, vm.phase.value)
+        assertTrue(vm.isPeerRestore)
+        assertEquals(listOf(lostServer), vm.lostChoices)
+    }
+
+    @Test fun peerRestoreFindsTheRecordOpensItWithTheAccountKeyAndAsksForAName() = runBlocking {
+        val b = makeBackup()
+        val peers = FakePeers(rootOf(b))
+        val vm = peerVM(client(), peers)
+        vm.lost = "  ${lostServer.uppercase()} "
+        vm.findPeerBackup()
+        assertEquals(listOf(lostServer), peers.described)
+        assertEquals(ImportBackupViewModel.Phase.Name, vm.phase.value)
+        assertEquals("home", vm.name)
+        val summary = vm.summary!!
+        assertTrue(summary, summary.contains("Backup of $lostServer"))
+        assertTrue(summary, summary.contains("3 servers hold its pieces; 2 bring it back."))
+        assertTrue(summary, summary.contains("Apps: Wiki."))
+        vm.create()
+        assertEquals(
+            ImportBackupViewModel.RestoreTarget(b.archiveId, b.dataBytes, b.sha256),
+            vm.createTarget?.restore,
+        )
+    }
+
+    @Test fun peerRestoreGetsThePiecesThenCommitsAndRestores() = runBlocking {
+        val b = makeBackup()
+        val c = client()
+        c.restoreWaiting = ServerRestoreWaiting(b.archiveId, b.dataBytes, b.sha256)
+        val restored = mutableListOf<String>()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scopes += it }
+        val vm = ImportBackupViewModel(
+            username = "alice", takenNames = emptySet(),
+            waitingServers = mapOf(b.archiveId to "clone.alice.flagship.services"),
+            clientFor = { c }, accountKek = { accountKek }, peers = FakePeers(rootOf(b)),
+            onRestored = { restored += it }, pollMs = 1, scope = scope,
+        )
+        vm.lost = lostServer
+        vm.findPeerBackup()
+        assertEquals(ImportBackupViewModel.Phase.ChooseTarget("clone.alice.flagship.services"), vm.phase.value)
+        vm.send("clone.alice.flagship.services")
+        waitFor { vm.phase.value is ImportBackupViewModel.Phase.Done }
+        assertEquals(listOf(PeerRootRequest(lostServer, "11".repeat(32))), c.peerFetches)
+        assertTrue("nothing is uploaded from the phone", c.restoreChunks.isEmpty())
+        assertEquals(listOf(ServerRestoreCommitRequest(HexUtil.encode(b.contentKey))), c.restoreCommits)
+        assertEquals(listOf("clone.alice.flagship.services"), restored)
+    }
+
+    @Test fun peerRestoreSaysTheBoxsSentenceWhenTheFetchFails() = runBlocking {
+        val b = makeBackup()
+        val mock = client()
+        mock.restoreWaiting = ServerRestoreWaiting(b.archiveId, b.dataBytes, b.sha256)
+        val c = object : com.flagshipserver.app.api.ScreensClient by mock {
+            override suspend fun serverRestoreStatus() = com.flagshipserver.app.api.ServerRestoreStatusResponse(
+                waiting = mock.restoreWaiting,
+                restore = com.flagshipserver.app.api.ServerRestoreStatus(
+                    archiveId = b.archiveId, state = "uploading", bytes = b.dataBytes,
+                    reason = "The backup from other servers came back the wrong size.",
+                ),
+            )
+        }
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scopes += it }
+        val vm = ImportBackupViewModel(
+            username = "alice", takenNames = emptySet(),
+            waitingServers = mapOf(b.archiveId to "clone.alice.flagship.services"),
+            clientFor = { c }, accountKek = { accountKek }, peers = FakePeers(rootOf(b)), pollMs = 1, scope = scope,
+        )
+        vm.lost = lostServer
+        vm.findPeerBackup()
+        vm.send("clone.alice.flagship.services")
+        waitFor { vm.phase.value is ImportBackupViewModel.Phase.Failed }
+        val failed = vm.phase.value as ImportBackupViewModel.Phase.Failed
+        assertEquals("The restore failed: The backup from other servers came back the wrong size.", failed.message)
+        assertTrue(failed.keepsWaiting)
+    }
+
+    @Test fun peerRestoreRefusesARecordThisAccountCantOpen() = runBlocking {
+        val b = makeBackup()
+        val vm = peerVM(client(), FakePeers(rootOf(b)), kek = ByteArray(32))
+        vm.lost = lostServer
+        vm.findPeerBackup()
+        assertEquals(ImportBackupViewModel.Phase.PickLost, vm.phase.value)
+        assertEquals("This backup can't be opened with this account's key.", vm.fileError)
+    }
+
+    @Test fun peerRestoreRefusesARecordThatDoesntMatchItsFile() = runBlocking {
+        val b = makeBackup()
+        val vm = peerVM(client(), FakePeers(rootOf(b, bytes = b.dataBytes + 1)))
+        vm.lost = lostServer
+        vm.findPeerBackup()
+        assertEquals(ImportBackupViewModel.Phase.PickLost, vm.phase.value)
+        assertEquals("The backup record doesn't match its file. Nothing was restored.", vm.fileError)
+    }
+
+    @Test fun peerRestoreShowsWhyNothingWasFound() = runBlocking {
+        val vm = peerVM(client(), FakePeers(null, error = PeerBackup.PeerBackupException("No peer backup of that server was found.")))
+        vm.lost = lostServer
+        vm.findPeerBackup()
+        assertEquals(ImportBackupViewModel.Phase.PickLost, vm.phase.value)
+        assertEquals("No peer backup of that server was found.", vm.fileError)
+        vm.lost = "a|b"
+        val sentence = peerVM(client(), FakePeers(null))
+        sentence.lost = "a|b"
+        sentence.findPeerBackup()
+        assertEquals("That isn't a server address.", sentence.fileError)
     }
 }

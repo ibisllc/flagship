@@ -10,6 +10,8 @@ import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.ScreensError
 import com.flagshipserver.app.api.ServerArchiveStartRequest
 import com.flagshipserver.app.api.ServerArchiveStatus
+import com.flagshipserver.app.api.PeerRootRequest
+import com.flagshipserver.app.api.PeerRootSummary
 import com.flagshipserver.app.api.ServerBackupSlot
 import com.flagshipserver.app.api.ServerRestoreApp
 import com.flagshipserver.app.api.ServerRestoreCommitRequest
@@ -19,6 +21,7 @@ import com.flagshipserver.app.api.userFacing
 import com.flagshipserver.app.core.ArchiveDownloader
 import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.HexUtil
+import com.flagshipserver.app.core.PeerBackup
 import com.flagshipserver.app.core.ServerArchive
 import com.flagshipserver.app.core.ServerBackupFormat
 import com.flagshipserver.app.core.ServerLabel
@@ -324,6 +327,16 @@ private class LimitedInputStream(private val inner: InputStream, private var lef
     override fun available(): Int = minOf(inner.available().toLong(), left).toInt()
 }
 
+/** Where "Restore from other servers" gets its facts: the account's servers to
+ *  pick the lost one from, the lost server's record (read by a running server of
+ *  the account, else from the sealed copy on `.com`), and its PBK. */
+interface PeerRestoreSource {
+    /** The account's servers, offline or deleted ones first. */
+    val lostChoices: List<String>
+    suspend fun describe(lost: String): PeerRootSummary
+    suspend fun pbkHex(lost: String): String
+}
+
 /** Home → Add/Import a server → Import a backup, or a waiting server's "Send
  *  the backup" (docs/server-backup-and-clone.md, "Restore a backup"): pick the
  *  one `.flagship` file, open its metadata part (this account's key, else its
@@ -345,6 +358,9 @@ class ImportBackupViewModel(
     },
     /** The server's backup is in (Home stops showing it waiting). */
     private val onRestored: (String) -> Unit = {},
+    /** Set for "Restore from other servers": the backup comes back from the pieces
+     *  other accounts' servers keep, not from a picked file (docs/peer-backup.md §9). */
+    private val peers: PeerRestoreSource? = null,
     private val pollMs: Long = 5_000,
     /** Runs the send, which outlives one composition until [stop]. */
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
@@ -352,6 +368,12 @@ class ImportBackupViewModel(
     sealed interface Phase {
         /** Pick the files (and say which one is still missing). */
         data object Pick : Phase
+        /** Restore from other servers: pick the lost server. */
+        data object PickLost : Phase
+        /** Reading the lost server's record. */
+        data object Finding : Phase
+        /** The new server is fetching the pieces from other servers. */
+        data class Fetching(val fqdn: String, val fraction: Double?) : Phase
         /** The account key didn't open it: ask for the passcode. */
         data object Passcode : Phase
         data object Opening : Phase
@@ -380,8 +402,15 @@ class ImportBackupViewModel(
     /** The backup a new server is made to wait for (its restore order names it). */
     data class RestoreTarget(val archiveId: String, val bytes: Long, val sha256: String)
 
-    private val _phase = MutableStateFlow<Phase>(Phase.Pick)
+    private val _phase = MutableStateFlow<Phase>(if (peers != null) Phase.PickLost else Phase.Pick)
     val phase: StateFlow<Phase> = _phase.asStateFlow()
+    /** The lost server's address typed or chosen (peer restore). */
+    var lost by mutableStateOf("")
+    /** The lost server's record once found (peer restore). */
+    var peerRoot by mutableStateOf<PeerRootSummary?>(null)
+        private set
+    val isPeerRestore: Boolean get() = peers != null
+    val lostChoices: List<String> get() = peers?.lostChoices.orEmpty()
     /** The picked `.flagship` file and its size. */
     var fileName by mutableStateOf<String?>(null)
         private set
@@ -449,9 +478,50 @@ class ImportBackupViewModel(
     val fileSummary: String
         get() = fileName?.let { "$it (${ServerArchive.formatBytes(fileSize ?: 0)})" } ?: "No backup picked yet"
 
+    /** Find the lost server's backup on other servers and open it with this
+     *  account's key (peer restore). */
+    suspend fun findPeerBackup() {
+        val source = peers ?: return
+        if (_phase.value != Phase.PickLost) return
+        fileError = null
+        _phase.value = Phase.Finding
+        try {
+            val id = PeerBackup.normalizeServerId(lost)
+            val root = source.describe(id)
+            val f = ServerBackupFormat.parse(root.archive.backupFile.toByteArray(Charsets.UTF_8))
+            val o = ServerBackupFormat.openWithAccountKey(f, accountKek(f.archiveId))
+                ?: throw PeerBackup.PeerBackupException("This backup can't be opened with this account's key.")
+            val a = root.archive
+            if (f.archiveId != a.archiveId || o.body.data.bytes != a.bytes || o.body.data.sha256 != a.sha256) {
+                throw PeerBackup.PeerBackupException("The backup record doesn't match its file. Nothing was restored.")
+            }
+            file = f
+            opened = o
+            peerRoot = root
+            lost = id
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            fileError = when (t) {
+                is PeerBackup.PeerBackupException -> t.message
+                is ServerBackupFormat.FormatException -> t.message
+                else -> message(t, "The backup couldn't be found.")
+            }
+            _phase.value = Phase.PickLost
+            return
+        }
+        val fqdn = targetFqdn ?: waitingServers[file!!.archiveId]
+        if (fqdn != null) _phase.value = Phase.ChooseTarget(fqdn) else showName()
+    }
+
     /** One line on what the backup holds, once it is open. */
     val summary: String?
         get() {
+            peerRoot?.let { root ->
+                val body = opened?.body
+                val apps = if (body == null || body.apps.isEmpty()) "no apps" else body.apps.joinToString(", ") { it.name }
+                return PeerBackup.rootLines(root).joinToString(" ") + " Apps: $apps."
+            }
             val body = opened?.body ?: return null
             val whenText = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(body.createdAt))
             val apps = if (body.apps.isEmpty()) "no apps" else body.apps.joinToString(", ") { it.name }
@@ -649,7 +719,9 @@ class ImportBackupViewModel(
 
     private suspend fun run(fqdn: String) {
         val o = opened ?: return
-        val data = dataPicked ?: return
+        val lostServer = if (peers != null) lost else null
+        val data = dataPicked
+        if (lostServer == null && data == null) return
         try {
             // Wait for the server to come online, pair with this device, and say
             // it waits for this backup.
@@ -661,7 +733,7 @@ class ImportBackupViewModel(
                     val waiting = st.waiting
                     if (waiting?.archiveId == o.file.archiveId) {
                         if (st.restore?.state == "checking" || st.restore?.state == "restoring") break
-                        upload(c, fqdn, data, o)
+                        if (lostServer != null) pullFromPeers(c, fqdn, lostServer) else upload(c, fqdn, data!!, o)
                         c.serverRestoreCommit(ServerRestoreCommitRequest(HexUtil.encode(o.contentKey)))
                         break
                     }
@@ -689,6 +761,25 @@ class ImportBackupViewModel(
             throw e
         } catch (t: Throwable) {
             setPhase(Phase.Failed(importMessage(t), keepsWaiting = true))
+        }
+    }
+
+    /** Have the waiting server fetch the pieces from other servers, and follow it
+     *  until the whole data file is there. Its own sentence comes back when the fetch fails. */
+    private suspend fun pullFromPeers(c: ScreensClient, fqdn: String, lostServer: String) {
+        val source = peers ?: return
+        setPhase(Phase.Fetching(fqdn, null))
+        c.serverRestoreFromPeers(PeerRootRequest(lostServer, source.pbkHex(lostServer)))
+        while (true) {
+            currentCoroutineContext().ensureActive()
+            val job = c.serverRestoreStatus().restore ?: throw ImportException(ImportException.Kind.VANISHED)
+            val reason = job.reason
+            if (!reason.isNullOrEmpty() && job.state in setOf("uploading", "failed")) {
+                throw ImportException(ImportException.Kind.FAILED, reason.trimEnd('.', ' '))
+            }
+            if (job.state in setOf("ready", "checking", "restoring", "done")) return
+            setPhase(Phase.Fetching(fqdn, if (job.bytes > 0) job.received.toDouble() / job.bytes else null))
+            delay(minOf(pollMs, 2_000))
         }
     }
 
