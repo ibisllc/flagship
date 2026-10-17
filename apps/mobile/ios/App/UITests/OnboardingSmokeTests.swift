@@ -54,8 +54,7 @@ final class OnboardingSmokeTests: XCTestCase {
         // 6. CreateServer — name it and advance through the design pages.
         let nameField = app.textFields.matching(identifier: "cs-name-field").firstMatch
         XCTAssertTrue(nameField.waitForExistence(timeout: 10))
-        nameField.tap()
-        nameField.typeText("Home")
+        app.typeServerName(nameField, "Home")
 
         let next = app.buttons["cs-next-button"]
         XCTAssertTrue(next.waitForExistence(timeout: 5))

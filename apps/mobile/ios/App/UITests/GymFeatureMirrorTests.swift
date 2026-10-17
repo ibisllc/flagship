@@ -145,8 +145,7 @@ final class GymFeatureMirrorTests: XCTestCase {
         app.chooseAddNewServer()
         let name = app.textFields["cs-name-field"]
         XCTAssertTrue(name.waitForExistence(timeout: 15), "Step 0 should show the name field.")
-        name.tap()
-        name.typeText("gymbox")
+        app.typeServerName(name, "gymbox")
         app.buttons["cs-next-button"].tap()
 
         let advanced = app.switches["cs-advanced-toggle"]

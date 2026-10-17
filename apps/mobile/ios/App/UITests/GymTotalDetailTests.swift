@@ -192,8 +192,7 @@ final class GymTotalDetailTests: XCTestCase {
         let name = app.textFields["cs-name-field"]
         XCTAssertTrue(name.waitForExistence(timeout: 15), "Step 0 should show the name field.")
         gymShot(app, "create-step0-name")
-        name.tap()
-        name.typeText("gymbox")
+        app.typeServerName(name, "gymbox")
         let next0 = app.buttons["cs-next-button"]
         XCTAssertTrue(next0.waitForExistence(timeout: 5), "Step 0 should offer Next once named.")
         next0.tap()

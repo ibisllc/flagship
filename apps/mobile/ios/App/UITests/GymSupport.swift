@@ -26,4 +26,16 @@ extension XCUIApplication {
                       file: file, line: line)
         add.tap()
     }
+
+    /// Create server starts with the next free "home" in the name field:
+    /// clears it, then types `text`.
+    func typeServerName(_ field: XCUIElement, _ text: String) {
+        // The caret goes to the end of the text, so the deletes clear all of it.
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.97)).tap()
+        let current = (field.value as? String) ?? ""
+        if !current.isEmpty, current != (field.placeholderValue ?? "") {
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
+        }
+        field.typeText(text)
+    }
 }

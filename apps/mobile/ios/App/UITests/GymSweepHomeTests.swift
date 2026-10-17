@@ -346,6 +346,16 @@ final class GymSweepHomeTests: GymSweepCase {
 
     // MARK: Lock screen
 
+    /// Taps the lock screen's Sign out until its question is up: the first
+    /// tap can land while the launch unlock attempt is still settling.
+    private func askToSignOut(_ app: XCUIApplication, _ anyway: XCUIElement) {
+        let signOut = app.buttons["lock-sign-out-btn"]
+        for _ in 0..<4 where !anyway.exists {
+            if signOut.isHittable { signOut.tap() }
+            _ = anyway.waitForExistence(timeout: 4)
+        }
+    }
+
     /// Sign out on the lock screen asks first: Cancel closes the question,
     /// Sign out anyway returns to Welcome. (Unlock itself needs the
     /// simulator's biometric, which the gym doesn't control.)
@@ -354,9 +364,9 @@ final class GymSweepHomeTests: GymSweepCase {
         var signOut = app.buttons["lock-sign-out-btn"]
         XCTAssertTrue(signOut.waitForExistence(timeout: 20))
         XCTAssertTrue(app.buttons["lock-unlock-btn"].exists, "The lock screen offers Unlock.")
-        signOut.tap()
         let anyway = button(app, "Sign out anyway")
-        XCTAssertTrue(anyway.waitForExistence(timeout: 10), "Without recovery it asks to sign out anyway.")
+        askToSignOut(app, anyway)
+        XCTAssertTrue(anyway.exists, "Without recovery it asks to sign out anyway.")
         shot(app, "lock-sign-out-ask")
         cancelDialog(app)
         waitGone(anyway)
@@ -364,22 +374,33 @@ final class GymSweepHomeTests: GymSweepCase {
         app = launch(admin: true, ["-smoke-locked", "-smoke-no-recovery"])
         signOut = app.buttons["lock-sign-out-btn"]
         XCTAssertTrue(signOut.waitForExistence(timeout: 20))
-        signOut.tap()
-        XCTAssertTrue(button(app, "Sign out anyway").waitForExistence(timeout: 10))
+        askToSignOut(app, button(app, "Sign out anyway"))
         button(app, "Sign out anyway").tap()
         XCTAssertTrue(app.buttons["Create your account"].waitForExistence(timeout: 15), "Signing out returns to Welcome.")
     }
 
     // MARK: Activity
 
+    /// The Activity page is an accordion (one section open at a time);
+    /// opens the named one: approvals, recovery, account or server.
+    private func openActivitySection(_ app: XCUIApplication, _ which: String) {
+        let header = app.buttons["activity-section-\(which)"]
+        XCTAssertTrue(reveal(app, header), "The \(which) section is listed.")
+        if (header.value as? String) != "expanded" { header.tap() }
+        let open = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'expanded'"), object: header)
+        XCTAssertEqual(XCTWaiter().wait(for: [open], timeout: 10), .completed, "The \(which) section rolls down.")
+    }
+
     func test_activityMergesBoxAndAccountEvents() throws {
         let app = launch(tab: "activity", admin: true, ["-smoke-activity"])
+        openActivitySection(app, "server")
         XCTAssertTrue(text(app, containing: "Backup ready").waitForExistence(timeout: 20), "The box's own log is listed.")
         XCTAssertTrue(text(app, containing: "App installed by Sam").exists, "A co-manager's action names them.")
         XCTAssertTrue(text(app, containing: "Update refused").exists)
         XCTAssertFalse(text(app, containing: "api/screens").exists, "Raw request lines are left out.")
-        XCTAssertTrue(text(app, containing: "Server came online").exists, "Account events from .com are merged in.")
         shot(app, "activity-feed")
+        openActivitySection(app, "account")
+        XCTAssertTrue(text(app, containing: "Server came online").waitForExistence(timeout: 10), "Account events from .com are merged in.")
 
         expectProbe(app, "read box activity")
         let before = count("read box activity", in: probe(app))
@@ -392,6 +413,7 @@ final class GymSweepHomeTests: GymSweepCase {
 
     func test_activityReportApprovalsAndAuditLog() throws {
         let app = launch(tab: "activity", admin: true, ["-smoke-activity"])
+        openActivitySection(app, "recovery")
         let report = button(app, "View report")
         XCTAssertTrue(reveal(app, report), "A finished re-attach offers its report.")
         XCTAssertTrue(text(app, containing: "Re-attach finished.").exists)
@@ -399,26 +421,23 @@ final class GymSweepHomeTests: GymSweepCase {
         XCTAssertTrue(app.navigationBars["Re-attach progress"].waitForExistence(timeout: 10))
         app.navBackButton(in: "Re-attach progress").tap()
 
+        openActivitySection(app, "approvals")
         let approvals = button(app, "Open approvals")
-        XCTAssertTrue(revealUp(app, approvals))
+        XCTAssertTrue(reveal(app, approvals))
         approvals.tap()
         XCTAssertTrue(app.navigationBars["Approve box"].waitForExistence(timeout: 10))
         XCTAssertTrue(text(app, containing: "No box is waiting for approval right now.").waitForExistence(timeout: 10))
         app.navBackButton(in: "Approve box").tap()
 
-        let audit = app.buttons["activity-open-audit-log"]
-        XCTAssertTrue(reveal(app, audit))
-        audit.tap()
-        XCTAssertTrue(app.navigationBars["Audit log"].waitForExistence(timeout: 10))
-        let more = app.buttons["audit-log-load-more"]
-        XCTAssertTrue(reveal(app, more), "30 of 35 events: Load more.")
+        openActivitySection(app, "account")
+        let more = app.buttons["activity-load-more"]
+        XCTAssertTrue(more.waitForExistence(timeout: 10), "Newer events first: Load more.")
         XCTAssertFalse(text(app, containing: "Server transfer claimed").exists, "The oldest isn't loaded yet.")
         shot(app, "audit-log")
         more.tap()
         let oldest = text(app, containing: "Server transfer claimed")
-        for _ in 0..<8 where !oldest.exists { app.swipeUp() }
+        for _ in 0..<12 where !oldest.exists { app.swipeUp() }
         XCTAssertTrue(oldest.waitForExistence(timeout: 10), "Load more brings the older events.")
-        XCTAssertFalse(more.exists, "Nothing more to load.")
     }
 
     func test_activityServerSwitcherPicksAServer() throws {

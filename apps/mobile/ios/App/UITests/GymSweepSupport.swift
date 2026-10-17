@@ -77,6 +77,7 @@ class GymSweepCase: XCTestCase {
         app.terminate()
         app.launchArguments = ["-smoke-mode", "-smoke-tab", tab, "-smoke-username", username]
             + (admin ? ["-smoke-admin-root"] : []) + extra
+            + ["-smoke-run-id", UUID().uuidString]
         app.launch()
         launched = app
         return app

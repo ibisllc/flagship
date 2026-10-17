@@ -127,8 +127,7 @@ final class GymEveryMergeTests: XCTestCase {
         gymShot(app, "create-server-form")
         // Name gates Next; type one, then advance to the boot-unlock /
         // disk-encryption step.
-        name.tap()
-        name.typeText("gymbox")
+        app.typeServerName(name, "gymbox")
         let next = app.buttons["cs-next-button"]
         XCTAssertTrue(next.waitForExistence(timeout: 5), "Step 0 should offer Next.")
         next.tap()
