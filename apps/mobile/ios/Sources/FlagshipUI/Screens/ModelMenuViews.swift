@@ -18,12 +18,12 @@ struct ModelMenuButton: View {
         Button { isOpen = true } label: {
             HStack(spacing: 4) {
                 Text(menu.shortName)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(FS.font.scaled(13, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+                Image(systemName: "chevron.down").font(FS.font.scaled(10, weight: .semibold))
             }
-            .foregroundColor(c.primary)
+            .foregroundColor(c.accent)
             .padding(.horizontal, 10).padding(.vertical, 5)
             .background(Capsule().fill(c.primary.opacity(0.10)))
             .frame(maxWidth: 180)
@@ -101,8 +101,8 @@ struct ModelMenuPanel: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .padding(8)
-                    .background(RoundedRectangle(cornerRadius: FS.radius.sm).fill(c.surfaceSunken))
-                    .overlay(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border, lineWidth: 1))
+                    .background(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).fill(c.surfaceSunken))
+                    .overlay(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border, lineWidth: 1))
                     .accessibilityIdentifier("model-menu-custom")
                 Text(r.reason == "rejected" ? ModelMenuText.keyRefused : "Type the model's name.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
@@ -126,7 +126,7 @@ struct ModelMenuPanel: View {
                 ForEach(efforts, id: \.self) { e in Text(ModelMenuText.effort(e)).tag(e) }
             }
             .pickerStyle(.menu)
-            .tint(c.primary)
+            .tint(c.accent)
             .accessibilityIdentifier("model-menu-effort")
         }
         .padding(.horizontal, FS.space.s4).padding(.vertical, FS.space.s1)
@@ -136,9 +136,8 @@ struct ModelMenuPanel: View {
 /// The rows both menus draw.
 enum ModelMenuRows {
     static func header(_ t: String, c: FSColors) -> some View {
-        Text(t.uppercased())
-            .font(.system(size: 11, weight: .semibold))
-            .tracking(0.6)
+        Text(t)
+            .font(FS.font.scaled(13, weight: .semibold))
             .foregroundColor(c.textMuted)
             .lineLimit(1)
             .truncationMode(.middle)
@@ -151,12 +150,12 @@ enum ModelMenuRows {
         Button(action: action) {
             HStack(alignment: .top, spacing: FS.space.s2) {
                 Image(systemName: "checkmark")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(c.primary)
+                    .font(FS.font.scaled(13, weight: .semibold))
+                    .foregroundColor(c.accent)
                     .opacity(selected ? 1 : 0)
                     .padding(.top, 2)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.system(size: 15, weight: selected ? .semibold : .regular)).foregroundColor(c.text)
+                    Text(title).font(FS.font.scaled(15, weight: selected ? .semibold : .regular)).foregroundColor(c.text)
                     if let subtitle {
                         Text(subtitle).font(FS.font.caption().weight(.regular)).foregroundColor(c.textMuted)
                             .fixedSize(horizontal: false, vertical: true)
@@ -186,12 +185,12 @@ struct GroupedModelMenuButton: View {
         Button { isOpen = true } label: {
             HStack(spacing: 4) {
                 Text(menu.shortName)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(FS.font.scaled(13, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+                Image(systemName: "chevron.down").font(FS.font.scaled(10, weight: .semibold))
             }
-            .foregroundColor(c.primary)
+            .foregroundColor(c.accent)
             .padding(.horizontal, 10).padding(.vertical, 5)
             .background(Capsule().fill(c.primary.opacity(0.10)))
             .frame(maxWidth: 200)
@@ -277,8 +276,8 @@ struct GroupedModelMenuPanel: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .padding(8)
-                    .background(RoundedRectangle(cornerRadius: FS.radius.sm).fill(c.surfaceSunken))
-                    .overlay(RoundedRectangle(cornerRadius: FS.radius.sm)
+                    .background(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).fill(c.surfaceSunken))
+                    .overlay(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous)
                         .stroke(chosen ? c.primary : c.border, lineWidth: 1))
                     .accessibilityIdentifier("model-menu-custom-\(g.id)")
                 Text(r.reason == "rejected" ? ModelMenuText.keyRefused : "Type the model's name.")
@@ -306,8 +305,8 @@ struct EffortMenuButton: View {
             }
         } label: {
             HStack(spacing: 4) {
-                Text(label).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+                Text(label).font(FS.font.scaled(13, weight: .medium)).lineLimit(1)
+                Image(systemName: "chevron.down").font(FS.font.scaled(10, weight: .semibold))
             }
             .foregroundColor(c.textMuted)
             .padding(.horizontal, 10).padding(.vertical, 5)
@@ -328,14 +327,14 @@ struct AttachmentChip: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         HStack(spacing: 5) {
-            Image(systemName: kind.symbol).font(.system(size: 12)).foregroundColor(c.primary)
-            Text(name).font(.system(size: 12, weight: .medium)).foregroundColor(c.text)
+            Image(systemName: kind.symbol).font(FS.font.scaled(12)).foregroundColor(c.accent)
+            Text(name).font(FS.font.scaled(12, weight: .medium)).foregroundColor(c.text)
                 .lineLimit(1).truncationMode(.middle)
                 .frame(maxWidth: 150, alignment: .leading)
                 .fixedSize(horizontal: true, vertical: false)
             if let onRemove {
                 Button(action: onRemove) {
-                    Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundColor(c.textMuted)
+                    Image(systemName: "xmark").font(FS.font.scaled(9, weight: .bold)).foregroundColor(c.textMuted)
                         .padding(3)
                 }
                 .buttonStyle(.plain)
@@ -343,8 +342,8 @@ struct AttachmentChip: View {
             }
         }
         .padding(.leading, 8).padding(.trailing, onRemove == nil ? 8 : 4).padding(.vertical, 4)
-        .background(RoundedRectangle(cornerRadius: FS.radius.sm).fill(c.surface))
-        .overlay(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).fill(c.surface))
+        .overlay(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border, lineWidth: 1))
     }
 }
 
@@ -377,8 +376,8 @@ struct AttachButton: View {
             Button { showFiles = true } label: { Label(ChatAttachmentCopy.file, systemImage: "doc") }
         } label: {
             Image(systemName: "paperclip")
-                .font(.system(size: 18, weight: .medium))
-                .foregroundColor(c.primary)
+                .font(FS.font.scaled(18, weight: .medium))
+                .foregroundColor(c.accent)
                 .frame(width: 30, height: 30)
         }
         .accessibilityLabel(ChatAttachmentCopy.attach)
@@ -429,15 +428,15 @@ struct StagedAttachmentsBar: View {
             }
             if alwaysShowNotice || !stager.isEmpty {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Image(systemName: "eye").font(.system(size: 10))
+                    Image(systemName: "eye").font(FS.font.scaled(10))
                     Text(stager.hasData ? "\(ChatAttachmentCopy.notice) \(ChatAttachmentCopy.sampleData)" : ChatAttachmentCopy.notice)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .font(.system(size: 12)).foregroundColor(c.textMuted)
+                .font(FS.font.scaled(12)).foregroundColor(c.textMuted)
                 .accessibilityIdentifier("chat-attach-notice")
             }
             if let e = stager.error {
-                Text(e).font(.system(size: 12)).foregroundColor(c.danger)
+                Text(e).font(FS.font.scaled(12)).foregroundColor(c.danger)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("chat-attach-error")
             }

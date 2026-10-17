@@ -237,6 +237,8 @@ public struct HomeScreen: View {
         false
     }
 
+    @ScaledMetric(relativeTo: .body) private var actionTile: CGFloat = 36
+
     public var body: some View {
         let c = FSColors.scheme(scheme)
         ScrollView {
@@ -375,7 +377,7 @@ public struct HomeScreen: View {
             // or not-yet-named account, since its name is ciphertext we may
             // not be able to read yet.
             Text(welcomeLine)
-                .font(.system(size: 17))
+                .font(FS.font.scaled(17))
                 .foregroundColor(c.textMuted)
             if let cap = deviceCapability, !cap.isFullyScoped {
                 deviceChip(cap, c: c)
@@ -398,15 +400,15 @@ public struct HomeScreen: View {
         return HStack(spacing: FS.space.s2) {
             Image(systemName: "lock.shield")
                 .foregroundColor(c.textMuted)
-                .font(.system(size: 12, weight: .semibold))
+                .font(FS.font.scaled(12, weight: .semibold))
             Text("Restricted device · \(summary)")
-                .font(.system(size: 13, weight: .medium))
+                .font(FS.font.scaled(13, weight: .medium))
                 .foregroundColor(c.textMuted)
         }
         .padding(.horizontal, FS.space.s3)
         .padding(.vertical, 4)
         .background(c.textMuted.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+        .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
         .accessibilityIdentifier("device-capability-chip")
         .accessibilityLabel("Restricted device, \(summary).")
     }
@@ -449,16 +451,16 @@ public struct HomeScreen: View {
             FSCard {
                 HStack(alignment: .top, spacing: FS.space.s3) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: FS.radius.sm)
+                        RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous)
                             .fill(accent.opacity(enabled ? 0.12 : 0.06))
                         Image(systemName: systemImage)
                             .foregroundColor(enabled ? accent : c.textMuted)
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(FS.font.scaled(17, weight: .semibold))
                     }
-                    .frame(width: 36, height: 36)
+                    .fsTile(actionTile, base: 36)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(title)
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(FS.font.scaled(17, weight: .semibold))
                             .foregroundColor(enabled ? c.text : c.textMuted)
                         Text(enabled ? subtitle : (disabledReason ?? subtitle))
                             .font(FS.font.bodySm())
@@ -471,7 +473,7 @@ public struct HomeScreen: View {
                 }
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(FSPressStyle())
         .disabled(!enabled)
         .opacity(enabled ? 1.0 : 0.6)
         .accessibilityHint(enabled ? "" : (disabledReason ?? ""))
@@ -496,7 +498,7 @@ public struct HomeScreen: View {
                         .foregroundColor(c.textMuted)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Your server list is locked")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(FS.font.scaled(17, weight: .semibold))
                             .foregroundColor(c.text)
                         Text("Flagship only shows your servers to your own devices. Unlock once on this phone to show them.")
                             .font(FS.font.bodySm())
@@ -551,7 +553,7 @@ public struct HomeScreen: View {
                                 .foregroundColor(empty.showsAddServer ? c.success : c.textMuted)
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(empty.headline)
-                                    .font(.system(size: 17, weight: .semibold))
+                                    .font(FS.font.scaled(17, weight: .semibold))
                                     .foregroundColor(c.text)
                                 Text(empty.hint)
                                     .font(FS.font.bodySm())
@@ -569,11 +571,11 @@ public struct HomeScreen: View {
                 .accessibilityIdentifier("home-empty-state")
             } else {
                 HStack {
-                    Text("YOUR SERVERS")
-                        .font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
+                    Text("Your servers")
+                        .font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
                     Spacer()
                     Text("\(pods.count)")
-                        .font(.system(size: 12, weight: .semibold)).foregroundColor(c.textMuted)
+                        .font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
                 }
                 if canAddServers { addServerButton(c: c) }
                 if !canChangeServers {
@@ -647,19 +649,17 @@ public struct HomeScreen: View {
     private func addServerButton(c: FSColors) -> some View {
         Button(action: { showAddOrImport = true }) {
             HStack(spacing: 8) {
-                Image(systemName: "plus.circle.fill").foregroundColor(c.primary)
-                Text("Add/Import a server").font(.system(size: 15, weight: .semibold)).foregroundColor(c.primary)
+                Image(systemName: "plus.circle.fill").foregroundColor(c.accent)
+                Text("Add/Import a server").font(FS.font.scaled(15, weight: .semibold)).foregroundColor(c.primary)
                 Spacer()
             }
             .padding(.horizontal, FS.space.s4)
             .padding(.vertical, FS.space.s3)
-            .background(c.primary.opacity(0.08))
-            .overlay(
-                RoundedRectangle(cornerRadius: FS.radius.md)
-                    .stroke(c.primary.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-            )
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+            .frame(minHeight: 44)
+            .background(c.primary.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
         }
+        .buttonStyle(FSPressStyle())
         .accessibilityIdentifier("home-add-server")
         .confirmationDialog("Add/Import a server", isPresented: $showAddOrImport, titleVisibility: .visible) {
             Button("Create a new server") { onAddServer() }
@@ -748,7 +748,7 @@ public struct HomeScreen: View {
         return HStack(spacing: 0) {
             if reorderable {
                 Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(FS.font.scaled(17, weight: .semibold))
                     .foregroundColor(draggable ? c.textMuted : .clear)
                     .frame(width: 44)
                     .frame(maxHeight: .infinity)
@@ -762,11 +762,11 @@ public struct HomeScreen: View {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
                             Image(systemName: "server.rack")
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(FS.font.scaled(13, weight: .semibold))
                                 .foregroundColor(c.textMuted)
                                 .accessibilityHidden(true)
                             Text(pod.name)
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(FS.font.scaled(16, weight: .semibold))
                                 .foregroundColor(c.text)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
@@ -822,8 +822,8 @@ public struct HomeScreen: View {
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(c.surface)
-        .overlay(RoundedRectangle(cornerRadius: FS.radius.md).stroke(c.border, lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+        .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(c.border, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
     }
 
     @ViewBuilder
@@ -886,9 +886,8 @@ public struct HomeScreen: View {
 
     private func recentActivity(events: [RecentInstallEvent], c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("RECENT ACTIVITY")
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
+            Text("Recent activity")
+                .font(FS.font.scaled(13, weight: .semibold))
                 .foregroundColor(c.textMuted)
             if events.isEmpty {
                 FSCard { Text("No recent activity.").foregroundColor(c.textMuted) }
@@ -977,16 +976,16 @@ public struct PodCard: View {
         FSCard {
             HStack(alignment: .top, spacing: FS.space.s3) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: FS.radius.sm)
+                    RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous)
                         .fill(c.primary.opacity(0.12))
                     Image(systemName: "server.rack")
-                        .foregroundColor(c.primary)
+                        .foregroundColor(c.accent)
                 }
                 .frame(width: 40, height: 40)
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: FS.space.s2) {
                         Text(pod.name)
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(FS.font.scaled(17, weight: .semibold))
                             .foregroundColor(c.text)
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -1172,7 +1171,7 @@ public struct LeaderBadge: View {
         let tint = confirmed ? c.primary : c.textMuted
         HStack(spacing: 6) {
             LeaderFlag(size: 11, tint: tint)
-            Text("Leader").font(.system(size: 11, weight: .semibold))
+            Text("Leader").font(FS.font.scaled(11, weight: .semibold))
         }
         .foregroundColor(tint)
         .padding(.horizontal, 10)
@@ -1200,8 +1199,8 @@ public struct LeadServicesBadge: View {
                 ? "Leads \(services[0])"
                 : "Leads \(services.count) services"
             HStack(spacing: 6) {
-                Image(systemName: "crown.fill").font(.system(size: 10, weight: .semibold))
-                Text(label).font(.system(size: 11, weight: .semibold)).lineLimit(1)
+                Image(systemName: "crown.fill").font(FS.font.scaled(10, weight: .semibold))
+                Text(label).font(FS.font.scaled(11, weight: .semibold)).lineLimit(1)
             }
             .foregroundColor(c.primary)
             .padding(.horizontal, 10)

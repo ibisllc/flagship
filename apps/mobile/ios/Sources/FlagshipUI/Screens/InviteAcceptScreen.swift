@@ -77,7 +77,7 @@ public struct InviteAcceptScreen: View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 Text("Approve this person")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(FS.font.scaled(17, weight: .semibold))
                     .foregroundColor(c.text)
                 Text("You sent an invite to \(serviceRef.isEmpty ? "a service" : serviceRef) and they accepted. Approving binds their access. (You won't see their username — only the label you gave them.)")
                     .font(FS.font.body())
@@ -102,7 +102,7 @@ public struct InviteAcceptScreen: View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 Label("Approved", systemImage: "checkmark.seal.fill")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(FS.font.scaled(17, weight: .semibold))
                     .foregroundColor(c.text)
                 Text("They now have access to \(serviceRef.isEmpty ? "the service" : serviceRef).")
                     .font(FS.font.body())

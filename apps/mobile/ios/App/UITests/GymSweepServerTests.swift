@@ -494,7 +494,7 @@ final class GymSweepServerTests: GymSweepCase {
         expectProbe(app, "signed transfer-offer by admin-root")
         XCTAssertTrue(text(app, containing: "Have the new owner scan this").waitForExistence(timeout: 15))
         shot(app, "transfer-qr")
-        app.navigationBars["Transfer box"].buttons["Done"].tap()
+        app.navigationBars["Transfer server"].buttons["Done"].tap()
     }
 
     /// Make leader on a demo account (the smoke account is one): the order

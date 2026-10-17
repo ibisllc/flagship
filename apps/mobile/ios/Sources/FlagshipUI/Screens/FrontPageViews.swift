@@ -25,9 +25,8 @@ struct FrontPageCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("FRONT PAGE")
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
+            Text("Front page")
+                .font(FS.font.scaled(13, weight: .semibold))
                 .foregroundColor(c.textMuted)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {

@@ -425,9 +425,9 @@ final class GymSweepHomeTests: GymSweepCase {
         let approvals = button(app, "Open approvals")
         XCTAssertTrue(reveal(app, approvals))
         approvals.tap()
-        XCTAssertTrue(app.navigationBars["Approve box"].waitForExistence(timeout: 10))
-        XCTAssertTrue(text(app, containing: "No box is waiting for approval right now.").waitForExistence(timeout: 10))
-        app.navBackButton(in: "Approve box").tap()
+        XCTAssertTrue(app.navigationBars["Approve server"].waitForExistence(timeout: 10))
+        XCTAssertTrue(text(app, containing: "No server is waiting for approval right now.").waitForExistence(timeout: 10))
+        app.navBackButton(in: "Approve server").tap()
 
         openActivitySection(app, "account")
         let more = app.buttons["activity-load-more"]

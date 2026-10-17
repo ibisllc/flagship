@@ -121,14 +121,14 @@ public final class DeadManViewModel {
                 signatureHex: env["signature"] as! String
             )
             guard result.ok else {
-                phase = .failed("The box rejected the change. Try again.")
+                phase = .failed("The server rejected the change. Try again.")
                 return
             }
         } catch let e as ScreensClientError {
             phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
             return
         } catch {
-            phase = .failed("Couldn't reach the box. Check your connection and try again.")
+            phase = .failed("Couldn't reach the server. Check your connection and try again.")
             return
         }
 
@@ -173,7 +173,7 @@ public final class DeadManViewModel {
                 signatureHex: env["signature"] as! String
             )
             guard result.ok else {
-                phase = .failed("The box rejected the affirmation. Try again.")
+                phase = .failed("The server rejected the affirmation. Try again.")
                 return
             }
             store.setLeaseExpiry(result.leaseExpiry, for: serverDomain)
@@ -183,7 +183,7 @@ public final class DeadManViewModel {
             phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
             return
         } catch {
-            phase = .failed("Couldn't reach the box. Check your connection and try again.")
+            phase = .failed("Couldn't reach the server. Check your connection and try again.")
             return
         }
         phase = .idle

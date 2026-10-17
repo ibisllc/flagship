@@ -660,7 +660,7 @@ struct PrivacyScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
                 Text("Lock the app")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(FS.font.scaled(17, weight: .semibold))
                     .foregroundColor(c.text)
                 Toggle(isOn: Binding(
                     get: { privacy.requireBiometricAtLaunch },
@@ -669,7 +669,7 @@ struct PrivacyScreen: View {
                     Text("Require unlock when the app opens")
                         .foregroundColor(c.text)
                 }
-                .tint(c.primary)
+                .tint(c.accent)
                 Text("On by default. Flagship asks you to unlock each time the app launches or returns from the background, so you stay signed in without re-entering your passphrase. Turn it off to open straight in. Either way your services keep running and your pods stay reachable — this only controls who can see and tap.")
                     .font(FS.font.bodySm())
                     .foregroundColor(c.textMuted)
@@ -680,7 +680,7 @@ struct PrivacyScreen: View {
                 Divider().padding(.vertical, FS.space.s2)
 
                 Text("Require your passphrase")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(FS.font.scaled(17, weight: .semibold))
                     .foregroundColor(c.text)
                 Toggle(isOn: Binding(
                     get: { privacy.requirePassphraseAtLaunch },
@@ -689,7 +689,7 @@ struct PrivacyScreen: View {
                     Text("Sign in with your passphrase every time")
                         .foregroundColor(c.text)
                 }
-                .tint(c.primary)
+                .tint(c.accent)
                 .accessibilityIdentifier("privacy-require-passphrase-toggle")
                 Text("Off by default. When on, Flagship doesn't keep you signed in — each launch needs a full sign-in with your account passphrase, not just a quick unlock. The strongest option, and the slowest.")
                     .font(FS.font.bodySm())
@@ -702,10 +702,10 @@ struct PrivacyScreen: View {
                     set: { privacy.pushNotificationsEnabled = $0 },
                 )) {
                     Text(PushPreferenceCopy.title)
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(FS.font.scaled(17, weight: .semibold))
                         .foregroundColor(c.text)
                 }
-                .tint(c.primary)
+                .tint(c.accent)
                 .accessibilityIdentifier("privacy-push-notifications-toggle")
                 Text(PushPreferenceCopy.detail)
                     .font(FS.font.bodySm())

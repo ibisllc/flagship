@@ -75,7 +75,7 @@ public struct InviteRedeemScreen: View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 Text("You've been invited")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(FS.font.scaled(17, weight: .semibold))
                     .foregroundColor(c.text)
                 Text("This grants your account access to a restricted service on \(serverDomain). The owner sees only a private label they assign you — your username and domain are never shared.")
                     .font(FS.font.body())
@@ -100,7 +100,7 @@ public struct InviteRedeemScreen: View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 Label("You're in", systemImage: "checkmark.seal.fill")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(FS.font.scaled(17, weight: .semibold))
                     .foregroundColor(c.text)
                 Text("Your account now has access to \(serviceRef.isEmpty ? "the service" : serviceRef).\(firstBind ? "" : " (You already had access — this link is linked to your account.)")")
                     .font(FS.font.body())
@@ -121,7 +121,7 @@ public struct InviteRedeemScreen: View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 Label("One more step", systemImage: "paperplane.fill")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(FS.font.scaled(17, weight: .semibold))
                     .foregroundColor(c.text)
                 Text("This invite needs the owner's approval. Send this reply back to them through the same channel they sent you the invite — they'll approve it and you'll be in.")
                     .font(FS.font.body())

@@ -27,9 +27,8 @@ struct ServerOrderCard: View {
         let c = FSColors.scheme(scheme)
         if ranked.count > 1, let pod, let position = ranked.firstIndex(where: { $0.podId == pod.podId }) {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                Text("SERVER ORDER")
-                    .font(.system(size: 12, weight: .semibold))
-                    .tracking(1)
+                Text("Server order")
+                    .font(FS.font.scaled(13, weight: .semibold))
                     .foregroundColor(c.textMuted)
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s2) {

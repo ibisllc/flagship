@@ -86,16 +86,16 @@ private struct TrustSliverLine: View {
         Button(action: onTap) {
             HStack(spacing: FS.space.s2) {
                 Image(systemName: "exclamationmark.shield.fill")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(FS.font.scaled(13, weight: .bold))
                     .foregroundColor(c.onDanger)
                 Text(failure.label)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(FS.font.scaled(14, weight: .semibold))
                     .foregroundColor(c.onDanger)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if serverCount > 1 {
                     Text("\(serverCount) servers")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(FS.font.scaled(11, weight: .bold))
                         .foregroundColor(c.onDanger.opacity(0.9))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -105,7 +105,7 @@ private struct TrustSliverLine: View {
                 Spacer(minLength: FS.space.s2)
                 if overridden {
                     Text("continuing")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(FS.font.scaled(11, weight: .bold))
                         .foregroundColor(c.onDanger)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -113,7 +113,7 @@ private struct TrustSliverLine: View {
                         .clipShape(Capsule())
                 } else {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(FS.font.scaled(12, weight: .semibold))
                         .foregroundColor(c.onDanger.opacity(0.85))
                 }
             }

@@ -57,13 +57,13 @@ public struct BuildSourceChooserScreen: View {
 
                     Button(action: onPastBuilds) {
                         HStack(spacing: FS.space.s3) {
-                            Image(systemName: "clock.arrow.circlepath").foregroundColor(c.primary)
+                            Image(systemName: "clock.arrow.circlepath").foregroundColor(c.accent)
                             Text("Resume or view past builds")
-                                .font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
+                                .font(FS.font.scaled(15, weight: .semibold)).foregroundColor(c.text)
                             Spacer()
                             if activeSessions > 0 {
                                 Text("\(activeSessions)")
-                                    .font(.system(size: 13, weight: .bold))
+                                    .font(FS.font.scaled(13, weight: .bold))
                                     .foregroundColor(c.onSuccess)
                                     .padding(.horizontal, 8).padding(.vertical, 2)
                                     .background(Capsule().fill(c.success))
@@ -73,9 +73,9 @@ public struct BuildSourceChooserScreen: View {
                         }
                         .padding(FS.space.s4)
                         .background(c.surface)
-                        .overlay(RoundedRectangle(cornerRadius: FS.radius.lg)
+                        .overlay(RoundedRectangle(cornerRadius: FS.radius.lg, style: .continuous)
                             .stroke(activeSessions > 0 ? c.success : c.border, lineWidth: 1))
-                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.lg))
+                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.lg, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("build-source-journal-link")
@@ -102,7 +102,7 @@ public struct BuildSourceChooserScreen: View {
                     BuildSourceTile(
                         icon: "laptopcomputer",
                         title: "Connect your IDE",
-                        subtitle: "Build from your own IDE (Claude Code, Cursor, VS Code or Cline) using your own AI. No model key ever touches the box.",
+                        subtitle: "Build from your own IDE (Claude Code, Cursor, VS Code or Cline) using your own AI. No model key ever touches the server.",
                         action: onMcp
                     )
                     .accessibilityIdentifier("build-src-mcp")
@@ -151,7 +151,7 @@ private struct BuildHelpSheet: View {
                         .font(FS.font.body()).foregroundColor(c.textMuted)
                     ForEach(items, id: \.1) { icon, title, body in
                         HStack(alignment: .top, spacing: FS.space.s3) {
-                            Image(systemName: icon).foregroundColor(c.primary).frame(width: 24)
+                            Image(systemName: icon).foregroundColor(c.accent).frame(width: 24)
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(title).font(FS.font.h4()).foregroundColor(c.text)
                                 Text(body).font(FS.font.bodySm()).foregroundColor(c.textMuted)
@@ -184,10 +184,10 @@ private struct BuildSourceTile: View {
         Button(action: action) {
             HStack(alignment: .top, spacing: FS.space.s3) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: FS.radius.md)
+                    RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
                         .fill(c.softTint())
                         .frame(width: 40, height: 40)
-                    Image(systemName: icon).foregroundColor(c.primary)
+                    Image(systemName: icon).foregroundColor(c.accent)
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title).font(FS.font.h4()).foregroundColor(c.text)
@@ -201,9 +201,9 @@ private struct BuildSourceTile: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(c.surface)
             .overlay(
-                RoundedRectangle(cornerRadius: FS.radius.lg).stroke(c.border, lineWidth: 1)
+                RoundedRectangle(cornerRadius: FS.radius.lg, style: .continuous).stroke(c.border, lineWidth: 1)
             )
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.lg))
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.lg, style: .continuous))
         }
         .buttonStyle(.plain)
     }
@@ -441,7 +441,7 @@ public struct BuildGitScreen: View {
                         VStack(alignment: .leading, spacing: FS.space.s1) {
                             Toggle(Self.shareToggle, isOn: $vm.share)
                                 .font(FS.font.body())
-                                .tint(c.primary)
+                                .tint(c.accent)
                                 .accessibilityIdentifier("build-git-share")
                             Text(Self.shareNote)
                                 .font(FS.font.bodySm()).foregroundColor(c.textMuted)
@@ -522,7 +522,7 @@ public struct BuildGitScreen: View {
             Task { await vm.checkRepo() }
         } label: {
             Image(systemName: "arrow.clockwise")
-                .font(.system(size: 17, weight: .semibold))
+                .font(FS.font.scaled(17, weight: .semibold))
                 .foregroundColor(vm.canCheck && !nameRefused ? c.primary : c.textMuted)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
@@ -577,7 +577,7 @@ public struct BuildMcpScreen: View {
                             .font(FS.font.body()).foregroundColor(c.textMuted)
                             .fixedSize(horizontal: false, vertical: true)
                     } else {
-                        Text("Your editor's agent builds against your box using your OWN AI subscription. No model key is stored on the box.")
+                        Text("Your editor's agent builds against your server using your OWN AI subscription. No model key is stored on the server.")
                             .font(FS.font.body()).foregroundColor(c.textMuted)
                     }
 
@@ -647,7 +647,7 @@ public struct BuildMcpScreen: View {
                             .padding(FS.space.s3)
                     }
                     .background(c.surfaceSunken)
-                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
                     .accessibilityIdentifier("build-mcp-ide-config")
                 }
 
@@ -661,7 +661,7 @@ public struct BuildMcpScreen: View {
                             .accessibilityIdentifier("build-mcp-ide-command")
                     }
                     .background(c.surfaceSunken)
-                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
                     FSSecondaryButton("Copy command", block: true) {
                         onCopy(command, "Command copied")
                     }
@@ -709,7 +709,7 @@ public struct BuildMcpScreen: View {
             // VALUE-FREE: the editor + its AI never see or send the value —
             // you set it on your box from Configure environment after the
             // service is installed; it never travels through your IDE.
-            Text("The editor and its AI never see the value — you set it here on your box. Open Configure environment on the service after it's deployed and enter each value there.")
+            Text("The editor and its AI never see the value — you set it here on your server. Open Configure environment on the service after it's deployed and enter each value there.")
                 .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
             ForEach(vm.envRequests) { req in
@@ -754,7 +754,7 @@ private struct CopyableRow: View {
                 .lineLimit(1).truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button(action: onCopy) {
-                Image(systemName: "doc.on.doc").foregroundColor(c.primary)
+                Image(systemName: "doc.on.doc").foregroundColor(c.accent)
             }
             .buttonStyle(.plain)
         }
@@ -871,7 +871,7 @@ public struct BuildJournalScreen: View {
                 ForEach(open) { b in
                     Button(action: { Task { await vm.loadDetail(buildId: b.buildId) } }) {
                         FSListRow(
-                            leading: .icon(modeIcon(b.mode), color: c.primary),
+                            leading: .icon(modeIcon(b.mode), color: c.accent),
                             title: b.displayName,
                             subtitle: Self.subtitle("Started \(Self.timeString(b.startedAt))", on: vm.serverName(forBuild: b.buildId)),
                             detail: nil,
@@ -905,10 +905,10 @@ public struct BuildJournalScreen: View {
                             }
                         ) {
                             Text(Self.sessionAction(session.status))
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(session.isActive ? c.success : c.primary)
+                                .font(FS.font.scaled(14, weight: .semibold))
+                                .foregroundColor(session.isActive ? c.success : c.accent)
                         }
-                        .overlay(RoundedRectangle(cornerRadius: FS.radius.md)
+                        .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
                             .stroke(session.isActive ? c.success.opacity(0.6) : .clear, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
@@ -940,7 +940,7 @@ public struct BuildJournalScreen: View {
                 ForEach(ended) { b in
                     Button(action: { Task { await vm.loadDetail(buildId: b.buildId) } }) {
                         FSListRow(
-                            leading: .icon(modeIcon(b.mode), color: c.primary),
+                            leading: .icon(modeIcon(b.mode), color: c.accent),
                             title: b.displayName,
                             subtitle: Self.subtitle("Started \(Self.timeString(b.startedAt)) · \(b.entryCount) step\(b.entryCount == 1 ? "" : "s")",
                                                     on: vm.serverName(forBuild: b.buildId)),
@@ -1068,7 +1068,7 @@ private struct JournalBadge: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         Text(text)
-            .font(.system(size: 11, weight: .medium))
+            .font(FS.font.scaled(11, weight: .medium))
             .foregroundColor(c.textMuted)
             .padding(.horizontal, 8).padding(.vertical, 2)
             .background(c.surfaceSunken)

@@ -156,8 +156,8 @@ public enum HumanError {
     // MARK: - Canonical copy (parity with Android + webapp)
 
     private static let certPinCopy =
-        "This box's security certificate doesn't match what we expected — "
-        + "someone may be intercepting the connection. Reinstall the box, or "
+        "This server's security certificate doesn't match what we expected — "
+        + "someone may be intercepting the connection. Reinstall the server, or "
         + "contact whoever runs it before continuing."
     private static let offlineCopy =
         "Couldn't reach the server. Check your connection and try again."

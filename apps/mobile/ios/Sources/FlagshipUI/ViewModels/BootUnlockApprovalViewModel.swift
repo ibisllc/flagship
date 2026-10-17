@@ -135,7 +135,7 @@ public final class BootUnlockApprovalViewModel {
     /// all under a single Face ID via the memoized coordinator.
     public func approve() async {
         guard let coord = makeCoordinator() else {
-            state = .failed("Sign in to approve this box.")
+            state = .failed("Sign in to approve this server.")
             return
         }
         state = .approving

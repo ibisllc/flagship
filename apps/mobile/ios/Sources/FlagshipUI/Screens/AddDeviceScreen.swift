@@ -102,7 +102,7 @@ public struct AddDeviceScreen: View {
                             Image(systemName: "key.horizontal.fill")
                                 .foregroundColor(vm.promoteNewDeviceToAdmin ? c.danger : c.primary)
                             Text("Also make this device an admin")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(FS.font.scaled(16, weight: .semibold))
                                 .foregroundColor(c.text)
                         }
                     }
@@ -142,7 +142,7 @@ public struct AddDeviceScreen: View {
                 Text("Both screens should show the same six digits. If they don't, stop — someone may be in the middle.")
                     .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 Text(QrRelay.formatMatchCode(matchCode))
-                    .font(.system(size: 34, weight: .semibold, design: .monospaced))
+                    .font(FS.font.scaled(34, weight: .semibold, design: .monospaced))
                     .tracking(6)
                     .foregroundColor(c.text)
                     .frame(maxWidth: .infinity)
@@ -157,7 +157,7 @@ public struct AddDeviceScreen: View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 HStack(spacing: FS.space.s2) {
-                    Image(systemName: system).foregroundColor(c.primary)
+                    Image(systemName: system).foregroundColor(c.accent)
                     Text(title).font(FS.font.h4()).foregroundColor(c.text)
                 }
                 Text(detail).font(FS.font.bodySm()).foregroundColor(c.textMuted)

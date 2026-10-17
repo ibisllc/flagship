@@ -554,7 +554,7 @@ public final class ServiceDetailViewModel {
             removePhase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
             return false
         } catch {
-            removePhase = .failed("Couldn't reach the box. Check your connection and try again.")
+            removePhase = .failed("Couldn't reach the server. Check your connection and try again.")
             return false
         }
     }

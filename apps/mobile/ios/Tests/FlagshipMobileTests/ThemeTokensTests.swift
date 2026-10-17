@@ -45,8 +45,11 @@ final class ThemeTokensTests: XCTestCase {
         XCTAssertEqual(hex(FSColors.dark.textMuted), "#A39D8F")
         XCTAssertEqual(hex(FSColors.dark.primary), "#2DD4BF")
         XCTAssertEqual(hex(FSColors.light.onPrimary), "#0A0A09", "text on the teal fill is dark ink, never white")
-        XCTAssertEqual(FSRadius.sm, 4)
-        XCTAssertEqual(FSRadius.lg, 6)
+        XCTAssertEqual(hex(FSColors.light.accent), "#0D9488")
+        XCTAssertEqual(hex(FSColors.dark.accent), "#2DD4BF")
+        XCTAssertEqual(FSRadius.sm, 8)
+        XCTAssertEqual(FSRadius.md, 12)
+        XCTAssertEqual(FSRadius.lg, 16)
     }
 
     func test_everyPairingClearsAA_inBothThemes() {
@@ -63,5 +66,19 @@ final class ThemeTokensTests: XCTestCase {
             }
             XCTAssertGreaterThanOrEqual(contrast(c.warning, c.bg), 4.5, "\(name) warning/bg")
         }
+    }
+
+    /// Small teal text and links use `primary` (>= 4.5); the lighter `accent`
+    /// is for graphics and large or bold text, where 3:1 is the bar.
+    func test_accentClearsTheGraphicsBar_inBothThemes() {
+        for (name, c) in [("light", FSColors.light), ("dark", FSColors.dark)] {
+            for (label, bg) in [("bg", c.bg), ("surface", c.surface), ("surfaceSunken", c.surfaceSunken)] {
+                XCTAssertGreaterThanOrEqual(contrast(c.accent, bg), 3.0, "\(name) accent/\(label)")
+                XCTAssertGreaterThanOrEqual(contrast(c.primary, bg), 4.5, "\(name) primary/\(label)")
+            }
+            XCTAssertGreaterThanOrEqual(contrast(c.onPrimary, c.primaryFill), 7.0, "\(name) onPrimary/fill")
+        }
+        XCTAssertLessThan(contrast(FSColors.light.accent, FSColors.light.bg), 4.5,
+                          "the accent is deliberately lighter than the text teal")
     }
 }

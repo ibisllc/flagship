@@ -36,9 +36,8 @@ struct LockPowerCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("POWER")
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
+            Text("Power")
+                .font(FS.font.scaled(13, weight: .semibold))
                 .foregroundColor(c.textMuted)
             FSCard {
                 switch vm?.phase {
@@ -109,15 +108,14 @@ struct DeadManCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("LOCK-DOWN")
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
+            Text("Lock-down")
+                .font(FS.font.scaled(13, weight: .semibold))
                 .foregroundColor(c.textMuted)
             Button { open = true } label: {
                 FSCard {
                     HStack {
                         Image(systemName: enabled ? "lock.fill" : "lock.open")
-                            .foregroundColor(enabled ? c.primary : c.textMuted)
+                            .foregroundColor(enabled ? c.accent : c.textMuted)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Auto lock-down")
                                 .font(FS.font.body())
@@ -208,7 +206,7 @@ struct DeadManScreen: View {
                 }
                 .disabled(isBusy)
                 .accessibilityIdentifier("deadman-toggle")
-                Text("If you don't affirm in time, this box locks itself — it powers off (or restarts) and needs your phone to come back.")
+                Text("If you don't affirm in time, this server locks itself — it powers off (or restarts) and needs your phone to come back.")
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
             }
@@ -218,7 +216,7 @@ struct DeadManScreen: View {
     @ViewBuilder
     private func windowSection(vm: DeadManViewModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("WINDOW").font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
+            Text("Window").font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     Picker("Window", selection: Binding(
@@ -246,7 +244,7 @@ struct DeadManScreen: View {
     @ViewBuilder
     private func lockoutSection(vm: DeadManViewModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("ON LAPSE").font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
+            Text("On lapse").font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
             FSCard {
                 Picker("On lapse", selection: Binding(
                     get: { vm.lockoutMode },
@@ -265,7 +263,7 @@ struct DeadManScreen: View {
     @ViewBuilder
     private func leaseSection(vm: DeadManViewModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("STAY UNLOCKED").font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
+            Text("Stay unlocked").font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
             FSCard {
                 // `nowTick` is read here so the countdown re-renders each
                 // second; the value itself is unused.
@@ -273,7 +271,7 @@ struct DeadManScreen: View {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     if let remaining = vm.leaseRemainingMs() {
                         Text(remaining > 0 ? "Locks in \(formatRemaining(remaining))" : "Window lapsed — affirm now")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(FS.font.scaled(17, weight: .semibold))
                             .foregroundColor(remaining > 0 ? c.text : c.danger)
                     } else {
                         Text("Not affirmed yet — affirm to start the window.")

@@ -79,10 +79,10 @@ struct AccountDeletionScreen: View {
     private func header(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 40, weight: .medium))
+                .font(FS.font.scaled(40, weight: .medium))
                 .foregroundColor(c.danger)
             Text("This permanently deletes your account")
-                .font(.system(size: 22, weight: .bold))
+                .font(FS.font.scaled(22, weight: .bold))
                 .foregroundColor(c.text)
             Text("There is no cloud recovery and no other device on this account, so the key on this phone is the only copy of your identity. Deleting it can't be undone.")
                 .font(FS.font.bodySm())
@@ -118,7 +118,7 @@ struct AccountDeletionScreen: View {
     private func consequence(icon: String, title: String, detail: String, c: FSColors) -> some View {
         HStack(alignment: .top, spacing: FS.space.s3) {
             Image(systemName: icon)
-                .font(.system(size: 16, weight: .semibold))
+                .font(FS.font.scaled(16, weight: .semibold))
                 .foregroundColor(c.danger)
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 2) {

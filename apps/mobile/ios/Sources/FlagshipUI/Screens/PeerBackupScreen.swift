@@ -62,7 +62,7 @@ public struct PeerBackupScreen: View {
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 HStack(spacing: 8) {
                     Text(PeerBackupText.stateTitle(s.state))
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(FS.font.scaled(15, weight: .semibold))
                         .foregroundColor(c.text)
                     FSPill(s.state ?? "", kind: pillKind(s.state))
                 }
@@ -95,7 +95,7 @@ public struct PeerBackupScreen: View {
                 ForEach(Array(vm.holderRows.enumerated()), id: \.offset) { i, h in
                     FSCard {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(h.label).font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
+                            Text(h.label).font(FS.font.scaled(15, weight: .semibold)).foregroundColor(c.text)
                             Text(h.line).font(FS.font.caption()).foregroundColor(c.textMuted)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)

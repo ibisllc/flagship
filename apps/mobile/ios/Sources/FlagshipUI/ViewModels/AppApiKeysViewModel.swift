@@ -6,7 +6,7 @@ import FlagshipAPI
 import FlagshipCore
 
 public enum AppApiKeysCopy {
-    public static let sectionTitle = "API KEYS"
+    public static let sectionTitle = "Api keys"
     public static let intro = "Let scripts, devices and other servers call this app. Each key works until you revoke it."
     public static let empty = "No API keys yet."
     public static let create = "Create key"

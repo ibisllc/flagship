@@ -88,7 +88,7 @@ public struct CompanionDockScreen: View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 Text("Connect a browser")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(FS.font.scaled(15, weight: .semibold))
                     .foregroundColor(c.text)
                 FSPrimaryButton("Scan the computer's code", block: true) {
                     scanError = nil
@@ -150,14 +150,14 @@ public struct CompanionDockScreen: View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 Text("Let this browser in?")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(FS.font.scaled(15, weight: .semibold))
                     .foregroundColor(c.text)
                 if let code {
                     Text("Check the computer shows the same code:")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
                     Text(QrRelay.formatMatchCode(code))
-                        .font(.system(size: 34, weight: .semibold, design: .monospaced))
+                        .font(FS.font.scaled(34, weight: .semibold, design: .monospaced))
                         .foregroundColor(c.text)
                         .frame(maxWidth: .infinity)
                         .accessibilityIdentifier("companion-dock-match-code")
@@ -197,9 +197,8 @@ public struct CompanionDockScreen: View {
     @ViewBuilder
     private func activeList(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("CONNECTED BROWSERS")
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
+            Text("Connected browsers")
+                .font(FS.font.scaled(13, weight: .semibold))
                 .foregroundColor(c.textMuted)
             switch vm.state {
             case .idle, .loading:
@@ -242,11 +241,11 @@ public struct CompanionDockScreen: View {
         return FSCard {
             HStack(alignment: .top, spacing: FS.space.s3) {
                 Image(systemName: "laptopcomputer")
-                    .foregroundColor(c.primary)
+                    .foregroundColor(c.accent)
                     .imageScale(.large)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(displayLabel(for: companion))
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(FS.font.scaled(15, weight: .semibold))
                         .foregroundColor(c.text)
                     Text("last seen \(relative(ms: companion.lastSeenMs))")
                         .font(FS.font.caption())
@@ -264,7 +263,7 @@ public struct CompanionDockScreen: View {
                         ProgressView()
                     } else {
                         Text("Revoke")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(FS.font.scaled(14, weight: .semibold))
                             .foregroundColor(c.danger)
                     }
                 }
@@ -312,7 +311,7 @@ private struct CompanionDockScannerSheet: View {
                     onError: onError,
                     validate: { CompanionDockViewModel.isRemoteLink($0) }
                 )
-                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
                 Button("Paste link instead") {
                     onPasteInstead()
                     dismiss()

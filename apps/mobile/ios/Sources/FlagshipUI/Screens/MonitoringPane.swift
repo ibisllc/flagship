@@ -122,9 +122,8 @@ struct MonitoringPane: View {
             let rows = MonitoringRows.build(health: health, metrics: metrics, cert: cert, nowMs: nowMs)
             if !rows.isEmpty {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
-                    Text("MONITORING")
-                        .font(.system(size: 12, weight: .semibold))
-                        .tracking(1)
+                    Text("Monitoring")
+                        .font(FS.font.scaled(13, weight: .semibold))
                         .foregroundColor(c.textMuted)
                         .accessibilityAddTraits(.isHeader)
                     VStack(spacing: 0) {
@@ -135,8 +134,8 @@ struct MonitoringPane: View {
                     .padding(.vertical, FS.space.s1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(c.surface)
-                    .overlay(RoundedRectangle(cornerRadius: FS.radius.md).stroke(c.border, lineWidth: 1))
-                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                    .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(c.border, lineWidth: 1))
+                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
                 }
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("sd-monitoring")
@@ -170,8 +169,8 @@ struct MonitoringPane: View {
             } label: {
                 HStack(spacing: FS.space.s3) {
                     Image(systemName: row.icon)
-                        .font(.system(size: 17))
-                        .foregroundColor(row.tone == .normal ? c.primary : toneColor)
+                        .font(FS.font.scaled(17))
+                        .foregroundColor(row.tone == .normal ? c.accent : toneColor)
                         .frame(width: 24)
                     Text(row.title)
                         .font(FS.font.body())
@@ -189,7 +188,7 @@ struct MonitoringPane: View {
                         ProgressView().controlSize(.small)
                     }
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(FS.font.scaled(13, weight: .semibold))
                         .foregroundColor(c.textMuted)
                         .rotationEffect(.degrees(isOpen ? 90 : 0))
                 }
@@ -256,10 +255,10 @@ struct MonitoringPane: View {
                 Chart(m.cpuHistory) { sample in
                     LineMark(x: .value("Time", date(sample.at)), y: .value("CPU", sample.value))
                         .interpolationMethod(.catmullRom)
-                        .foregroundStyle(c.primary)
+                        .foregroundStyle(c.accent)
                     AreaMark(x: .value("Time", date(sample.at)), y: .value("CPU", sample.value))
                         .interpolationMethod(.catmullRom)
-                        .foregroundStyle(LinearGradient(colors: [c.primary.opacity(0.25), c.primary.opacity(0)], startPoint: .top, endPoint: .bottom))
+                        .foregroundStyle(LinearGradient(colors: [c.accent.opacity(0.25), c.accent.opacity(0)], startPoint: .top, endPoint: .bottom))
                 }
                 .chartYScale(domain: 0...100)
                 .chartYAxis { AxisMarks(values: [0, 50, 100]) { _ in AxisGridLine().foregroundStyle(c.border) } }
@@ -298,7 +297,7 @@ struct MonitoringPane: View {
                             .stroke(diskColor(pct, c: c), style: StrokeStyle(lineWidth: 8, lineCap: .round))
                             .rotationEffect(.degrees(-90))
                         Text(String(format: "%.0f%%", pct * 100))
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(FS.font.scaled(14, weight: .semibold))
                             .foregroundColor(c.text)
                     }
                     .frame(width: 72, height: 72)
@@ -310,7 +309,7 @@ struct MonitoringPane: View {
                     }
                 }
                 HStack(spacing: FS.space.s4) {
-                    rate("Read", m.diskIOReadBytesPerSec, color: c.primary, c: c)
+                    rate("Read", m.diskIOReadBytesPerSec, color: c.accent, c: c)
                     rate("Write", m.diskIOWriteBytesPerSec, color: c.warning, c: c)
                 }
             }
@@ -376,7 +375,7 @@ struct MonitoringPane: View {
     private func diskColor(_ pct: Double, c: FSColors) -> Color {
         if pct > 0.9 { return c.danger }
         if pct > 0.75 { return c.warning }
-        return c.primary
+        return c.accent
     }
 
     private func labeled(_ label: String, _ value: String, c: FSColors) -> some View {
@@ -400,7 +399,7 @@ struct MonitoringPane: View {
                 Circle().fill(color).frame(width: 6, height: 6)
                 Text(label).font(FS.font.caption()).foregroundColor(c.textMuted)
             }
-            Text(formatRate(bps)).font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
+            Text(formatRate(bps)).font(FS.font.scaled(15, weight: .semibold)).foregroundColor(c.text)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)

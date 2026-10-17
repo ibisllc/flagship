@@ -94,11 +94,11 @@ public struct CompanionRequestsScreen: View {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 HStack(alignment: .top, spacing: FS.space.s3) {
                     Image(systemName: iconName(for: row.kind))
-                        .foregroundColor(c.primary)
+                        .foregroundColor(c.accent)
                         .imageScale(.large)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(title(for: row))
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(FS.font.scaled(15, weight: .semibold))
                             .foregroundColor(c.text)
                         Text(subtitle(for: row))
                             .font(FS.font.caption())
@@ -129,12 +129,12 @@ public struct CompanionRequestsScreen: View {
                         Task { await vm.deny(row) }
                     } label: {
                         Text(pending ? "Denying…" : "Deny")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(FS.font.scaled(14, weight: .semibold))
                             .frame(maxWidth: .infinity)
-                            .frame(height: 40)
+                            .frame(minHeight: 44)
                             .foregroundColor(c.danger)
                             .overlay(
-                                RoundedRectangle(cornerRadius: FS.radius.md)
+                                RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
                                     .stroke(c.danger, lineWidth: 1)
                             )
                     }
@@ -202,6 +202,7 @@ struct HoldToApproveButton: View {
     let onConfirm: () -> Void
 
     @State private var holding = false
+    @State private var confirms = 0
 
     static let holdSeconds: Double = 1.5
 
@@ -209,20 +210,32 @@ struct HoldToApproveButton: View {
         let c = FSColors.scheme(scheme)
         Button(action: {}) {
             Text(holding ? "Hold to confirm…" : label)
-                .font(.system(size: 14, weight: .semibold))
+                .font(FS.font.scaled(16, weight: .semibold))
+                .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
-                .frame(height: 40)
+                .frame(minHeight: 44)
                 .foregroundColor(enabled ? c.onPrimary : c.surface)
                 .background(enabled ? c.primaryFill : c.textMuted)
-                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                .overlay(alignment: .leading) {
+                    GeometryReader { g in
+                        Rectangle()
+                            .fill(c.onPrimary.opacity(0.2))
+                            .frame(width: holding ? g.size.width : 0)
+                            .animation(holding ? .linear(duration: Self.holdSeconds) : .easeOut(duration: 0.2), value: holding)
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
         }
+        .buttonStyle(.plain)
+        .sensoryFeedback(.impact(weight: .light), trigger: holding) { _, now in now }
+        .sensoryFeedback(.success, trigger: confirms)
         .disabled(!enabled)
         .simultaneousGesture(
             LongPressGesture(minimumDuration: Self.holdSeconds)
                 .onChanged { _ in holding = true }
                 .onEnded { _ in
                     holding = false
-                    if enabled { onConfirm() }
+                    if enabled { confirms += 1; onConfirm() }
                 }
         )
         .simultaneousGesture(

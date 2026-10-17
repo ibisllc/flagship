@@ -35,7 +35,7 @@ struct ServerBackupSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
                 Text("Back up this server")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(FS.font.scaled(22, weight: .semibold))
                     .foregroundColor(c.text)
                 content(c)
                 Text(ServerArchive.excludesNote)
@@ -107,14 +107,14 @@ struct ServerBackupSheet: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .padding(FS.space.s3)
-                    .background(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border))
+                    .background(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border))
                     .accessibilityIdentifier("backup-own-passcode")
                 SecureField("Type it again", text: $vm.ownPasscodeAgain)
                     .textContentType(.newPassword)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .padding(FS.space.s3)
-                    .background(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border))
+                    .background(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border))
                 if let hint = vm.ownPasscodeHint {
                     Text(hint).font(FS.font.caption()).foregroundColor(c.textMuted)
                 }
@@ -123,9 +123,9 @@ struct ServerBackupSheet: View {
             } else {
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s2) {
-                        Text("SUGGESTED PASSCODE").font(.system(size: 11, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
+                        Text("Suggested passcode").font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
                         Text(vm.suggestedPasscode)
-                            .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                            .font(FS.font.scaled(20, weight: .semibold, design: .monospaced))
                             .foregroundColor(c.text)
                             .textSelection(.enabled)
                             .accessibilityIdentifier("backup-suggested-passcode")
@@ -325,7 +325,7 @@ struct ImportBackupScreen: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .padding(FS.space.s3)
-                    .background(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border))
+                    .background(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border))
                     .accessibilityIdentifier("import-backup-passcode")
                 FSPrimaryButton("Open the backup", block: true) { Task { await vm.unlock() } }
                     .disabled(vm.passcode.isEmpty)
@@ -355,7 +355,7 @@ struct ImportBackupScreen: View {
                     .autocorrectionDisabled()
                     .accessibilityIdentifier("import-backup-name")
                 if vm.nameProblem == nil && !vm.name.isEmpty {
-                    Text(vm.previewFqdn).font(.system(size: 13, design: .monospaced)).foregroundColor(c.textMuted)
+                    Text(vm.previewFqdn).font(FS.font.scaled(13, design: .monospaced)).foregroundColor(c.textMuted)
                 }
                 if let s = vm.settingsLine {
                     Text(s).font(FS.font.bodySm()).foregroundColor(c.textMuted)
@@ -440,12 +440,12 @@ struct BackupDownloadApprovalScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
                 Text("Download a backup in a browser?")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(FS.font.scaled(22, weight: .semibold))
                     .foregroundColor(c.text)
                 Text("A browser is asking to download the backup of \(vm.serverFqdn). Approve only if this code is on the page in front of you:")
                     .foregroundColor(c.textMuted)
                 Text(vm.code)
-                    .font(.system(size: 34, weight: .semibold, design: .monospaced))
+                    .font(FS.font.scaled(34, weight: .semibold, design: .monospaced))
                     .tracking(6)
                     .foregroundColor(c.text)
                     .accessibilityIdentifier("backup-approve-code")

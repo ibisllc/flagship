@@ -40,7 +40,7 @@ enum VibeCodeDeployRun {
             let r = try await client.vibeCodeDeployStart(sessionId: sessionId, credential: credential)
             if r.started != true {
                 if r.ok != false, let url = r.url { return .deployed(url: url, inviteOnly: r.inviteOnly) }
-                return .failed("Deploy was rejected by the box.")
+                return .failed("Deploy was rejected by the server.")
             }
         } catch let ScreensClientError.http(status, _) where status == 409 {
             // Already deploying (a second tap, or another device): follow it.

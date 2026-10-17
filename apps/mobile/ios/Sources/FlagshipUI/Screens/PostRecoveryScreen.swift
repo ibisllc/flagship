@@ -118,9 +118,8 @@ public struct PostRecoveryScreen: View {
     private func phaseCard(c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                Text("STATUS")
-                    .font(.system(size: 12, weight: .semibold))
-                    .tracking(1)
+                Text("Status")
+                    .font(FS.font.scaled(13, weight: .semibold))
                     .foregroundColor(c.textMuted)
                 switch vm.phase {
                 case .loading:
@@ -132,7 +131,7 @@ public struct PostRecoveryScreen: View {
                     }
                 case .pendingSwap(let p):
                     HStack(spacing: FS.space.s2) {
-                        Image(systemName: "clock.fill").foregroundColor(c.primary)
+                        Image(systemName: "clock.fill").foregroundColor(c.accent)
                         Text("Grace window — this takes effect at \(timestamp(p.completesAt)).")
                             .foregroundColor(c.text)
                     }
@@ -153,9 +152,8 @@ public struct PostRecoveryScreen: View {
     private func appsCard(report r: ReissuanceReportPayload, c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                Text("PER-APP RESULTS")
-                    .font(.system(size: 12, weight: .semibold))
-                    .tracking(1)
+                Text("Per-app results")
+                    .font(FS.font.scaled(13, weight: .semibold))
                     .foregroundColor(c.textMuted)
                 ForEach(r.apps.filter { $0.rewrittenCount > 0 || $0.error != nil }) { app in
                     HStack(alignment: .top, spacing: FS.space.s2) {
@@ -183,7 +181,7 @@ public struct PostRecoveryScreen: View {
     private func undoCard(report r: ReissuanceReportPayload, c: FSColors) -> some View {
         FSCard {
             HStack(alignment: .top, spacing: FS.space.s2) {
-                Image(systemName: "info.circle.fill").foregroundColor(c.primary)
+                Image(systemName: "info.circle.fill").foregroundColor(c.accent)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Undo window")
                         .font(FS.font.bodySm())

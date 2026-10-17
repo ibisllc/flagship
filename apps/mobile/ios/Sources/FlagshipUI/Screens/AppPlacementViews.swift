@@ -38,15 +38,15 @@ public struct RunsOnPicker: View {
                         }
                     } label: {
                         HStack(spacing: 4) {
-                            Text(target.selectedName).font(.system(size: 16, weight: .semibold))
-                            Image(systemName: "chevron.up.chevron.down").font(.system(size: 12))
+                            Text(target.selectedName).font(FS.font.scaled(16, weight: .semibold))
+                            Image(systemName: "chevron.up.chevron.down").font(FS.font.scaled(12))
                         }
-                        .foregroundColor(c.primary)
+                        .foregroundColor(c.accent)
                     }
                     .accessibilityIdentifier("runs-on-picker")
                 } else {
                     Text(target.selectedName)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(FS.font.scaled(16, weight: .semibold))
                         .foregroundColor(c.text)
                         .accessibilityIdentifier("runs-on-fixed")
                 }
@@ -58,8 +58,8 @@ public struct RunsOnPicker: View {
         }
         .padding(FS.space.s4)
         .background(c.surface)
-        .overlay(RoundedRectangle(cornerRadius: FS.radius.lg).stroke(c.border, lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: FS.radius.lg))
+        .overlay(RoundedRectangle(cornerRadius: FS.radius.lg, style: .continuous).stroke(c.border, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: FS.radius.lg, style: .continuous))
     }
 
     private func menuLabel(_ pod: PodInfo) -> String {
@@ -101,7 +101,7 @@ struct ServerAppsSection: View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
             Text(AppPlacementCopy.serverAppsSection)
-                .font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
+                .font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
             switch controller.state {
             case .idle, .loading:
                 ServerCardSkeleton()
@@ -175,7 +175,7 @@ struct RunsOnSection: View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
             Text(AppPlacementCopy.runsOnSection)
-                .font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
+                .font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
             FSCard {
                 VStack(spacing: FS.space.s3) {
                     ForEach(controller.rows) { row in
@@ -228,7 +228,7 @@ struct RunsOnSection: View {
                         ProgressView().frame(width: 20, height: 20)
                     } else {
                         Image(systemName: icon(row))
-                            .font(.system(size: 20))
+                            .font(FS.font.scaled(20))
                             .foregroundColor(row.isTicked ? c.primary : c.textMuted)
                     }
                 }
@@ -240,7 +240,7 @@ struct RunsOnSection: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: FS.space.s2) {
-                    Text(row.name).font(.system(size: 16, weight: .semibold)).foregroundColor(c.text)
+                    Text(row.name).font(FS.font.scaled(16, weight: .semibold)).foregroundColor(c.text)
                     if row.pod.podId == app.leaderPodId { LeaderBadge() }
                 }
                 if let status = statusLine(row) {

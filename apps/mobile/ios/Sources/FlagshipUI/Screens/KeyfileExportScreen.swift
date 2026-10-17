@@ -144,7 +144,7 @@ public struct KeyfileExportScreen: View {
         Button(action: { isOn.wrappedValue.toggle() }) {
             HStack(alignment: .top, spacing: FS.space.s2) {
                 Image(systemName: isOn.wrappedValue ? "checkmark.square.fill" : "square")
-                    .foregroundColor(isOn.wrappedValue ? c.primary : c.textMuted)
+                    .foregroundColor(isOn.wrappedValue ? c.accent : c.textMuted)
                     .imageScale(.large)
                 Text(text)
                     .font(FS.font.bodySm())

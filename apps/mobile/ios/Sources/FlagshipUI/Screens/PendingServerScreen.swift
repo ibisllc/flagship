@@ -79,9 +79,8 @@ public struct PendingServerScreen: View {
                 if let domain = timeline?.status?.serverDomain, !domain.isEmpty {
                     FSCard {
                         VStack(alignment: .leading, spacing: FS.space.s2) {
-                            Text("ADDRESS")
-                                .font(.system(size: 12, weight: .semibold))
-                                .tracking(1)
+                            Text("Address")
+                                .font(FS.font.scaled(13, weight: .semibold))
                                 .foregroundColor(c.textMuted)
                             Text(domain)
                                 .font(FS.font.mono())
@@ -97,7 +96,7 @@ public struct PendingServerScreen: View {
                         Image(systemName: "book.fill")
                         Text("How to flash + boot")
                     }
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(FS.font.scaled(15, weight: .semibold))
                     .foregroundColor(c.primary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, FS.space.s3)
@@ -158,9 +157,9 @@ public struct PendingServerScreen: View {
         case .live:
             return "Your server finished provisioning and is coming online."
         case .none:
-            return "Your boot disk should have started downloading at flagshipserver.com. Flash it, boot any box, and progress will appear here as it phones home."
+            return "Your boot disk should have started downloading at flagshipserver.com. Flash it, boot any server, and progress will appear here as it phones home."
         default:
-            return "Your box is provisioning. This usually takes a few minutes."
+            return "Your server is provisioning. This usually takes a few minutes."
         }
     }
 

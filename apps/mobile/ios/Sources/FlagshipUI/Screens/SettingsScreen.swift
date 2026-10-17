@@ -263,7 +263,7 @@ public struct SettingsScreen: View {
                 // A compact, non-interactive cloud identifier. Account
                 // Security remains available in the Account group below.
                 Text("@\(username)")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(FS.font.scaled(22, weight: .semibold))
                     .foregroundColor(c.text)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -441,7 +441,7 @@ public struct SettingsScreen: View {
     /// account-type state (single-device vs multi-device + 2FA) in its
     /// subtitle and drills into AccountSecurityScreen.
     private func accountGroup(c: FSColors) -> some View {
-        FSSettingsGroup("ACCOUNT", rows: [
+        FSSettingsGroup("Account", rows: [
             FSSettingsRow(
                 icon: "person.text.rectangle",
                 title: "Display name",
@@ -454,7 +454,7 @@ public struct SettingsScreen: View {
             ),
             FSSettingsRow(
                 icon: accountType == "multi" ? "checkmark.shield.fill" : "shield.lefthalf.filled",
-                iconTint: accountType == "multi" ? c.success : c.primary,
+                iconTint: accountType == "multi" ? c.success : c.accent,
                 title: "Account security",
                 subtitle: accountType == "multi"
                     ? "Multi-device + 2FA — recovery needs a code."
@@ -472,7 +472,7 @@ public struct SettingsScreen: View {
     }
 
     private func trustedDevicesSection(c: FSColors) -> some View {
-        section("TRUSTED DEVICES", c: c) {
+        section("Trusted devices", c: c) {
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 // M4 — pending re-pair banner. A replace started on THIS or
                 // ANY other device surfaces here with a grace countdown and
@@ -514,11 +514,11 @@ public struct SettingsScreen: View {
                             Spacer()
                             Image(systemName: "chevron.right").imageScale(.small).foregroundColor(c.textMuted)
                         }
-                        .foregroundColor(c.primary)
+                        .foregroundColor(c.accent)
                         .padding(FS.space.s3)
                         .frame(maxWidth: .infinity)
                         .background(c.surface)
-                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
                     }
                     .disabled(!canAddDevice)
                     .opacity(canAddDevice ? 1 : 0.5)
@@ -542,7 +542,7 @@ public struct SettingsScreen: View {
                         .padding(FS.space.s3)
                         .frame(maxWidth: .infinity)
                         .background(c.surface)
-                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
                     }
                     .accessibilityIdentifier("settings-scan-pairing-code")
                 }
@@ -567,7 +567,7 @@ public struct SettingsScreen: View {
                     VStack(alignment: .leading, spacing: FS.space.s2) {
                         HStack(spacing: FS.space.s2) {
                             Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
-                                .foregroundColor(c.primary)
+                                .foregroundColor(c.accent)
                             Text("Replace pending")
                                 .font(FS.font.h4()).foregroundColor(c.text)
                             Spacer()
@@ -606,12 +606,12 @@ public struct SettingsScreen: View {
         return FSCard {
             HStack(alignment: .top, spacing: FS.space.s3) {
                 Image(systemName: platformIcon(d.platformClass))
-                    .foregroundColor(c.primary)
+                    .foregroundColor(c.accent)
                     .imageScale(.large)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(d.displayName)
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(FS.font.scaled(15, weight: .semibold))
                             .foregroundColor(c.text)
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -734,7 +734,7 @@ public struct SettingsScreen: View {
     @ViewBuilder
     private func browserSessionsSection(c: FSColors) -> some View {
         if case .loaded(let sessions) = controlDevices, !sessions.isEmpty {
-            section("BROWSER SESSIONS", c: c) {
+            section("Browser sessions", c: c) {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     Text("Computers you've docked a browser from. They can manage this account for a few hours, then expire.")
                         .font(FS.font.caption()).foregroundColor(c.textMuted)
@@ -774,7 +774,7 @@ public struct SettingsScreen: View {
     /// right after those two sections so all device management reads as one
     /// area.
     private func deviceExtrasGroup(c: FSColors) -> some View {
-        FSSettingsGroup("COMPANIONS", rows: [
+        FSSettingsGroup("Companions", rows: [
             FSSettingsRow(icon: "laptopcomputer", title: "Remote", subtitle: "Read-only browser session (4h)", action: onOpenCompanionDock),
             FSSettingsRow(
                 icon: "tray.full",
@@ -788,7 +788,7 @@ public struct SettingsScreen: View {
 
     /// Web-access group (spec S1 group 3).
     private func webAccessGroup(c: FSColors) -> some View {
-        FSSettingsGroup("WEB ACCESS", rows: [
+        FSSettingsGroup("Web access", rows: [
             FSSettingsRow(icon: "lock.open.laptopcomputer", title: "Open secured sessions", subtitle: "Sites you've signed a browser into", accessibilityId: "settings-open-secured-sessions", action: onOpenSecuredSessions),
             FSSettingsRow(icon: "link", title: "Process URL", subtitle: "Open a sign-in link you copied", action: onOpenProcessUrl),
         ])
@@ -796,7 +796,7 @@ public struct SettingsScreen: View {
 
     /// Backup-&-peers group (spec S1 group 4).
     private func backupPeersGroup(c: FSColors) -> some View {
-        FSSettingsGroup("BACKUP & PEERS", rows: [
+        FSSettingsGroup("Backup & peers", rows: [
             FSSettingsRow(icon: "externaldrive.connected.to.line.below.fill", title: "Peer backup", subtitle: "Where the pieces of your backup are kept", action: onOpenPeerBackup),
         ])
     }
@@ -847,7 +847,7 @@ public struct SettingsScreen: View {
         // enrolled, tap-while-greyed surfaces a toast. Boxed like a server
         // page's Danger zone; the confirmations carry the warnings.
         let gated = signOutPolicy == .blockedNoRecovery
-        return section("DANGER ZONE", c: c) {
+        return section("Danger zone", c: c) {
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     FSDangerButton("Remove this device from account", muted: gated, block: true) {
@@ -890,8 +890,8 @@ public struct SettingsScreen: View {
                     appearanceOption(.dark, systemImage: "moon.fill", text: nil, c: c)
                     appearanceOption(.auto, systemImage: nil, text: "AUTO", c: c)
                 }
-                Text("APP ICON")
-                    .font(.system(size: 12, weight: .semibold)).tracking(1)
+                Text("App icon")
+                    .font(FS.font.scaled(13, weight: .semibold))
                     .foregroundColor(c.textMuted)
                 HStack(spacing: FS.space.s2) {
                     appIconOption(name: nil, label: "Classic", c: c)
@@ -918,12 +918,12 @@ public struct SettingsScreen: View {
                 }
             }
         } label: {
-            Text(label).font(.system(size: 13, weight: .semibold))
+            Text(label).font(FS.font.scaled(13, weight: .semibold))
                 .frame(maxWidth: .infinity)
-                .frame(height: 46)
+                .frame(minHeight: 46)
                 .foregroundColor(selected ? c.onPrimary : c.text)
                 .background(selected ? c.primaryFill : c.surfaceSunken)
-                .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+                .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -943,16 +943,16 @@ public struct SettingsScreen: View {
         } label: {
             Group {
                 if let systemImage {
-                    Image(systemName: systemImage).font(.system(size: 18, weight: .medium))
+                    Image(systemName: systemImage).font(FS.font.scaled(18, weight: .medium))
                 } else if let text {
-                    Text(text).font(.system(size: 11, weight: .bold)).tracking(1.5)
+                    Text(text).font(FS.font.scaled(11, weight: .bold))
                 }
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 46)
+            .frame(minHeight: 46)
             .foregroundColor(selected ? c.onPrimary : c.text)
             .background(selected ? c.primaryFill : c.surfaceSunken)
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(mode == .auto ? "Automatic appearance" : (mode == .light ? "Light appearance" : "Dark appearance"))
@@ -977,7 +977,7 @@ public struct SettingsScreen: View {
     @ViewBuilder
     private func section<C: View>(_ label: String, c: FSColors, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text(label).font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
+            Text(label).font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
             content()
         }
     }

@@ -40,7 +40,7 @@ public struct ProcessUrlScreen: View {
                             .foregroundColor(c.text)
                             .padding(FS.space.s3)
                             .background(c.surfaceSunken)
-                            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+                            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
                             .accessibilityIdentifier("process-url-field")
                         if let error {
                             Text(error)

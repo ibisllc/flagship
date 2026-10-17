@@ -39,13 +39,13 @@ struct BiometricLockScreen: View {
             VStack(spacing: FS.space.s6) {
                 Spacer()
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 64, weight: .medium))
-                    .foregroundColor(c.primary)
+                    .font(FS.font.scaled(64, weight: .medium))
+                    .foregroundColor(c.accent)
                     // On the icon, not the whole screen: an identifier on a
                     // container covers its buttons' own.
                     .accessibilityIdentifier("biometric-lock-screen")
                 Text("Flagship is locked")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(FS.font.scaled(22, weight: .semibold))
                     .foregroundColor(c.text)
                 Text("Unlock to continue.")
                     .font(FS.font.bodySm())

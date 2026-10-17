@@ -43,7 +43,7 @@ struct ReplaceServiceStemSheet: View {
                     .foregroundColor(c.danger)
                     .imageScale(.large)
                 Text("Replace access URLs")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(FS.font.scaled(22, weight: .semibold))
                     .foregroundColor(c.text)
                 Spacer()
             }
@@ -52,18 +52,17 @@ struct ReplaceServiceStemSheet: View {
                 .foregroundColor(c.textMuted)
 
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("NEW STEM")
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(1)
+                Text("New stem")
+                    .font(FS.font.scaled(13, weight: .semibold))
                     .foregroundColor(c.textMuted)
                 TextField("mynotes", text: $draft)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .font(.system(size: 16, design: .monospaced))
+                    .font(FS.font.scaled(16, design: .monospaced))
                     .padding(FS.space.s3)
                     .background(c.surface)
                     .overlay(
-                        RoundedRectangle(cornerRadius: FS.radius.sm)
+                        RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous)
                             .stroke(c.border, lineWidth: 1)
                     )
                     .accessibilityIdentifier("replace-stem-field")

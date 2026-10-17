@@ -81,24 +81,24 @@ public struct PodSwitcher: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "server.rack")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(FS.font.scaled(13, weight: .semibold))
                     .foregroundColor(c.textMuted)
                 Text(currentName)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(FS.font.scaled(13, weight: .semibold))
                     .foregroundColor(c.text)
                 if let current = pods.first(where: { $0.podId == currentPodId }),
                    current.podId == leaderPodId, current.cameOnline, current.status != .pending {
-                    LeaderFlag(size: 12, tint: c.primary)
+                    LeaderFlag(size: 12, tint: c.accent)
                 }
                 Image(systemName: open ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(FS.font.scaled(13, weight: .semibold))
                     .foregroundColor(c.textMuted)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(c.surface)
             .overlay(
-                RoundedRectangle(cornerRadius: FS.radius.pill)
+                RoundedRectangle(cornerRadius: FS.radius.pill, style: .continuous)
                     .stroke(c.border, lineWidth: 1)
             )
             .clipShape(Capsule())
@@ -133,9 +133,9 @@ public struct PodSwitcher: View {
         }
         .frame(width: 230, alignment: .leading)
         .background(c.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
                 .stroke(c.border, lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.18), radius: 12, x: 0, y: 6)
@@ -152,10 +152,10 @@ public struct PodSwitcher: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Text(label)
-                    .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
+                    .font(FS.font.scaled(14, weight: isSelected ? .semibold : .regular))
                     .foregroundColor(c.text)
                 if isLeader {
-                    LeaderFlag(size: 13, tint: c.primary)
+                    LeaderFlag(size: 13, tint: c.accent)
                 }
                 Spacer(minLength: 8)
             }
@@ -164,7 +164,7 @@ public struct PodSwitcher: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             // Selection is shown ONLY by the teal background (no checkmark) so
             // it never reads as the leader marker.
-            .background(isSelected ? c.primary.opacity(0.16) : Color.clear)
+            .background(isSelected ? c.accent.opacity(0.16) : Color.clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

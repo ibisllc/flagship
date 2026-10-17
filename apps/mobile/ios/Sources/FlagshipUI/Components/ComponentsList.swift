@@ -39,24 +39,28 @@ public struct FSChip: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Text(label)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(FS.font.scaled(14, weight: .semibold))
                 if let count {
                     Text("\(count)")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(FS.font.scaled(12, weight: .semibold))
                         .foregroundColor(selected ? c.onPrimary.opacity(0.8) : c.textMuted)
                 }
             }
             .foregroundColor(selected ? c.onPrimary : c.text)
             .padding(.horizontal, FS.space.s4)
-            .frame(height: 34)
+            .frame(minHeight: 36)
             .background(selected ? c.primaryFill : c.surface)
             .overlay(
                 Capsule().stroke(selected ? Color.clear : c.border, lineWidth: 1)
             )
             .clipShape(Capsule())
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .animation(.easeOut(duration: 0.2), value: selected)
+        .buttonStyle(FSPressStyle())
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: selected)
+        .sensoryFeedback(.selection, trigger: selected) { _, now in now }
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -121,9 +125,9 @@ public struct FSSearchField: View {
         HStack(spacing: FS.space.s2) {
             Image(systemName: "magnifyingglass")
                 .foregroundColor(c.textMuted)
-                .font(.system(size: 15, weight: .medium))
+                .font(FS.font.scaled(15, weight: .medium))
             TextField(placeholder, text: $text)
-                .font(FS.font.body())
+                .font(.system(.body))
                 .foregroundColor(c.text)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
@@ -131,16 +135,16 @@ public struct FSSearchField: View {
                 Button { text = "" } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundColor(c.textMuted)
-                        .font(.system(size: 15))
+                        .font(FS.font.scaled(15))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
             }
         }
         .padding(.horizontal, 14)
-        .frame(height: 40)
+        .frame(minHeight: 44)
         .background(c.surfaceSunken)
-        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
         .accessibilityIdentifier("fs-search-field")
     }
 }
@@ -196,7 +200,7 @@ public struct FSProfileCard: View {
                 FSMonogram(name: name)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(name.isEmpty ? "Your account" : name)
-                        .font(.system(size: 22, weight: .semibold))
+                        .font(FS.font.scaled(22, weight: .semibold))
                         .foregroundColor(c.text)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -212,9 +216,9 @@ public struct FSProfileCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(c.surface)
             .overlay(
-                RoundedRectangle(cornerRadius: FS.radius.lg).stroke(c.border, lineWidth: 1)
+                RoundedRectangle(cornerRadius: FS.radius.lg, style: .continuous).stroke(c.border, lineWidth: 1)
             )
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.lg))
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.lg, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("fs-profile-card")
@@ -239,6 +243,7 @@ public struct FSAnnouncementCard: View {
     /// Accent for the icon + CTA + tinted fill. Pass `nil` to use the brand
     /// primary (teal); pass a semantic color for danger/warning variants.
     var tint: Color?
+    @ScaledMetric(relativeTo: .body) private var tile: CGFloat = 36
 
     public init(
         icon: String,
@@ -260,19 +265,19 @@ public struct FSAnnouncementCard: View {
 
     public var body: some View {
         let c = FSColors.scheme(scheme)
-        let accent = tint ?? c.primary
+        let accent = tint ?? c.accent
         VStack(alignment: .leading, spacing: FS.space.s3) {
             HStack(alignment: .top, spacing: FS.space.s3) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: FS.radius.sm).fill(accent.opacity(0.16))
+                    RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).fill(accent.opacity(0.16))
                     Image(systemName: icon)
                         .foregroundColor(accent)
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(FS.font.scaled(17, weight: .semibold))
                 }
-                .frame(width: 36, height: 36)
+                .fsTile(tile, base: 36)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(FS.font.scaled(17, weight: .semibold))
                         .foregroundColor(c.text)
                     Text(message)
                         .font(FS.font.bodySm())
@@ -283,11 +288,13 @@ public struct FSAnnouncementCard: View {
                 if let onDismiss {
                     Button(action: onDismiss) {
                         Image(systemName: "xmark")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(FS.font.scaled(13, weight: .semibold))
                             .foregroundColor(c.textMuted)
-                            .padding(6)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .padding(.top, -FS.space.s3).padding(.trailing, -FS.space.s3)
                     .accessibilityLabel("Dismiss")
                     .accessibilityIdentifier("fs-announcement-dismiss")
                 }
@@ -295,14 +302,14 @@ public struct FSAnnouncementCard: View {
             if let ctaLabel {
                 Button(action: onCta) {
                     Text(ctaLabel)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(FS.font.scaled(16, weight: .semibold))
                         .foregroundColor(tint == nil ? c.onPrimary : .white)
                         .padding(.horizontal, 20)
-                        .frame(height: 40)
+                        .frame(minHeight: 44)
                         .background(tint ?? c.primaryFill)
-                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(FSPressStyle())
                 .accessibilityIdentifier("fs-announcement-cta")
             }
         }
@@ -310,11 +317,21 @@ public struct FSAnnouncementCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(accent.opacity(0.06))
         .overlay(
-            RoundedRectangle(cornerRadius: FS.radius.lg).stroke(accent.opacity(0.22), lineWidth: 1)
+            RoundedRectangle(cornerRadius: FS.radius.lg, style: .continuous).stroke(accent.opacity(0.22), lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: FS.radius.lg))
+        .clipShape(RoundedRectangle(cornerRadius: FS.radius.lg, style: .continuous))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("fs-announcement-card")
+    }
+}
+
+/// Row press feedback inside a grouped list: a quick fill, no scaling.
+public struct FSRowPressStyle: ButtonStyle {
+    @Environment(\.colorScheme) private var scheme
+    public init() {}
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(configuration.isPressed ? FSColors.scheme(scheme).surfaceSunken : Color.clear)
     }
 }
 
@@ -342,8 +359,7 @@ public struct FSSettingsGroup<Content: View>: View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
             if let header {
                 Text(header)
-                    .font(.system(size: 12, weight: .semibold))
-                    .tracking(1)
+                    .font(FS.font.scaled(13, weight: .semibold))
                     .foregroundColor(c.textMuted)
                     .padding(.leading, FS.space.s1)
             }
@@ -351,9 +367,9 @@ public struct FSSettingsGroup<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(c.surface)
             .overlay(
-                RoundedRectangle(cornerRadius: FS.radius.lg).stroke(c.border, lineWidth: 1)
+                RoundedRectangle(cornerRadius: FS.radius.lg, style: .continuous).stroke(c.border, lineWidth: 1)
             )
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.lg))
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.lg, style: .continuous))
         }
     }
 }
@@ -409,6 +425,8 @@ public struct FSSettingsRow: View {
     /// caller) needs to address a specific row by handle rather than its label.
     var accessibilityId: String?
     let action: () -> Void
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @ScaledMetric(relativeTo: .body) private var tile: CGFloat = 30
 
     public init(
         icon: String,
@@ -434,26 +452,26 @@ public struct FSSettingsRow: View {
 
     public var body: some View {
         let c = FSColors.scheme(scheme)
-        let tint = iconTint ?? c.primary
+        let tint = iconTint ?? c.accent
         Button(action: action) {
             HStack(spacing: FS.space.s3) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: FS.radius.sm).fill(tint.opacity(0.14))
+                    RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).fill(tint.opacity(0.14))
                     Image(systemName: icon)
                         .foregroundColor(tint)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(FS.font.scaled(15, weight: .semibold))
                 }
-                .frame(width: 30, height: 30)
-                VStack(alignment: .leading, spacing: 1) {
+                .fsTile(tile, base: 30)
+                VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 16))
+                        .font(FS.font.scaled(17))
                         .foregroundColor(c.text)
-                        .lineLimit(1)
+                        .lineLimit(typeSize.isAccessibilitySize ? nil : 1)
                     if let subtitle {
                         Text(subtitle)
-                            .font(FS.font.caption())
+                            .font(FS.font.scaled(13))
                             .foregroundColor(c.textMuted)
-                            .lineLimit(1)
+                            .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
                     }
                 }
                 Spacer(minLength: FS.space.s2)
@@ -466,7 +484,7 @@ public struct FSSettingsRow: View {
                 }
                 if let badge, badge > 0 {
                     Text("\(badge)")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(FS.font.scaled(12, weight: .semibold))
                         .foregroundColor(c.onDanger)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
@@ -475,15 +493,16 @@ public struct FSSettingsRow: View {
                 }
                 if showsChevron {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(FS.font.scaled(13, weight: .semibold))
                         .foregroundColor(c.textMuted)
                 }
             }
             .padding(.horizontal, FS.space.s4)
+            .padding(.vertical, FS.space.s2)
             .frame(minHeight: 52)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(FSRowPressStyle())
         .modifier(OptionalAccessibilityId(id: accessibilityId))
     }
 }
@@ -516,6 +535,8 @@ public struct FSListRow<Trailing: View, Below: View>: View {
     /// crushed in the right-floated `trailing` slot. The chevron / navigation
     /// accessory stays in `trailing`; the pill goes here.
     @ViewBuilder let below: () -> Below
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @ScaledMetric(relativeTo: .body) private var tile: CGFloat = 42
 
     public enum Leading {
         /// SF Symbol on a soft tint of `color`.
@@ -546,20 +567,20 @@ public struct FSListRow<Trailing: View, Below: View>: View {
             leadingView(c: c)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(FS.font.scaled(17, weight: .semibold))
                     .foregroundColor(c.text)
-                    .lineLimit(1)
+                    .lineLimit(typeSize.isAccessibilitySize ? nil : 1)
                     .truncationMode(.tail)
                 if let subtitle, !subtitle.isEmpty {
                     Text(subtitle)
-                        .font(FS.font.bodySm())
+                        .font(FS.font.scaled(14))
                         .foregroundColor(c.textMuted)
-                        .lineLimit(1)
+                        .lineLimit(typeSize.isAccessibilitySize ? nil : 1)
                         .truncationMode(.tail)
                 }
                 if let detail, !detail.isEmpty {
                     Text(detail)
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(FS.font.scaled(12, design: .monospaced))
                         .foregroundColor(c.textMuted)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -576,9 +597,9 @@ public struct FSListRow<Trailing: View, Below: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(c.surface)
         .overlay(
-            RoundedRectangle(cornerRadius: FS.radius.md).stroke(c.border, lineWidth: 1)
+            RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(c.border, lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
         .contentShape(Rectangle())
     }
 
@@ -587,14 +608,14 @@ public struct FSListRow<Trailing: View, Below: View>: View {
         switch leading {
         case .icon(let symbol, let color):
             ZStack {
-                RoundedRectangle(cornerRadius: FS.radius.sm).fill(color.opacity(0.14))
+                RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).fill(color.opacity(0.14))
                 Image(systemName: symbol)
                     .foregroundColor(color)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(FS.font.scaled(17, weight: .semibold))
             }
-            .frame(width: 42, height: 42)
+            .fsTile(tile, base: 42)
         case .monogram(let name):
-            FSMonogram(name: name, size: 42)
+            FSMonogram(name: name, size: min(tile, 42 * 1.4))
         }
     }
 }

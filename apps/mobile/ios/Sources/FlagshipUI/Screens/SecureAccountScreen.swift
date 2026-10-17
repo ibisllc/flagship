@@ -93,7 +93,7 @@ public struct SecureAccountScreen: View {
                             .font(FS.font.body())
                             .foregroundColor(c.textMuted)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 44)
+                            .frame(minHeight: 44)
                     }
                     .buttonStyle(.plain)
                     .disabled(cloudWorking)
@@ -171,7 +171,7 @@ public struct SecureAccountScreen: View {
                 .textInputAutocapitalization(.never)
                 .padding(FS.space.s3)
                 .background(c.surface)
-                .overlay(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border))
+                .overlay(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border))
                 .accessibilityIdentifier("secure-account-passphrase")
             SecureField("Re-enter passphrase", text: $cloudPassphrase2)
                 .textContentType(.newPassword)
@@ -179,13 +179,13 @@ public struct SecureAccountScreen: View {
                 .textInputAutocapitalization(.never)
                 .padding(FS.space.s3)
                 .background(c.surface)
-                .overlay(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border))
+                .overlay(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border))
                 .accessibilityIdentifier("secure-account-passphrase-2")
         }
         .padding(FS.space.s4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(c.surface)
-        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
     }
 
     private func cloudRow(c: FSColors) -> some View {
@@ -232,7 +232,7 @@ public struct SecureAccountScreen: View {
             HStack(alignment: .top, spacing: FS.space.s3) {
                 Image(systemName: icon)
                     .imageScale(.large)
-                    .foregroundColor(enabled ? c.primary : c.textMuted)
+                    .foregroundColor(enabled ? c.accent : c.textMuted)
                     .frame(width: 28)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
@@ -247,16 +247,16 @@ public struct SecureAccountScreen: View {
                 Spacer(minLength: 0)
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                     .imageScale(.large)
-                    .foregroundColor(selected ? c.primary : c.border)
+                    .foregroundColor(selected ? c.accent : c.border)
             }
             .padding(FS.space.s4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(c.surface)
             .overlay(
-                RoundedRectangle(cornerRadius: FS.radius.md)
-                    .stroke(selected ? c.primary : c.border, lineWidth: selected ? 2 : 1)
+                RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
+                    .stroke(selected ? c.accent : c.border, lineWidth: selected ? 2 : 1)
             )
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
             .opacity(enabled ? 1 : 0.6)
         }
         .buttonStyle(.plain)

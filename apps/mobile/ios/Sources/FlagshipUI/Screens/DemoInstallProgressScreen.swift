@@ -21,7 +21,7 @@ public struct DemoProgressBar: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(c.border.opacity(0.5))
                 Capsule()
-                    .fill(failed ? c.danger : c.primary)
+                    .fill(failed ? c.danger : c.accent)
                     .frame(width: geo.size.width * CGFloat(fraction))
             }
         }
@@ -147,7 +147,7 @@ public struct DemoInstallProgressScreen: View {
         case .done:
             Image(systemName: "checkmark.circle.fill").foregroundColor(c.success)
         case .active:
-            ProgressView().scaleEffect(0.7).tint(c.primary)
+            ProgressView().scaleEffect(0.7).tint(c.accent)
         case .failed:
             Image(systemName: "exclamationmark.triangle.fill").foregroundColor(c.danger)
         case .pending:
@@ -161,8 +161,7 @@ public struct DemoInstallProgressScreen: View {
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     Text("This device")
-                        .font(.system(size: 12, weight: .semibold))
-                        .tracking(1)
+                        .font(FS.font.scaled(13, weight: .semibold))
                         .foregroundColor(c.textMuted)
                     if let ip = b.ip { infoRow("IP", ip, mono: true, c) }
                     if let region = b.region { infoRow("Location", region, mono: false, c) }

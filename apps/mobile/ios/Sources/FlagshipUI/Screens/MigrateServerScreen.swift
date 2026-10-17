@@ -24,7 +24,7 @@ private struct MigrateCallout: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(FS.space.s3)
             .background(color.opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
     }
 }
 
@@ -88,7 +88,7 @@ public struct MigrateServerScreen: View {
             } else {
                 MigrateCallout(
                     kind: .info,
-                    text: "Peer-backup is enrolled — the new box restores from it while this one keeps serving."
+                    text: "Peer-backup is enrolled — the new server restores from it while this one keeps serving."
                 )
             }
 
@@ -123,7 +123,7 @@ public struct MigrateServerScreen: View {
             if vm.session?.phase == "initiated" {
                 MigrateCallout(
                     kind: .info,
-                    text: "Next: add the NEW box via Add a server (any name — it becomes \(vm.serverFqdn) at take-over). It attaches here automatically once online."
+                    text: "Next: add the NEW server via Add a server (any name — it becomes \(vm.serverFqdn) at take-over). It attaches here automatically once online."
                 )
             }
 
@@ -134,7 +134,7 @@ public struct MigrateServerScreen: View {
             }
             .padding(FS.space.s3)
             .background(c.surface)
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
 
             if !vm.waitCopy.isEmpty {
                 Text(vm.waitCopy)
@@ -148,7 +148,7 @@ public struct MigrateServerScreen: View {
             }
 
             if vm.session?.phase == "pre-seeded" {
-                FSPrimaryButton(vm.working ? "Signing…" : "Hand off to the new box now", block: true, large: true) {
+                FSPrimaryButton(vm.working ? "Signing…" : "Hand off to the new server now", block: true, large: true) {
                     if !vm.working { Task { await vm.handOff() } }
                 }
                 .disabled(vm.working)
@@ -164,7 +164,7 @@ public struct MigrateServerScreen: View {
             if vm.session?.abortedAt != nil {
                 MigrateCallout(kind: .warning, text: "Migration aborted — your old server stays active with all its data.")
             } else if vm.session?.done == true {
-                MigrateCallout(kind: .success, text: "Migration complete — \(vm.serverFqdn) now runs on the new box.")
+                MigrateCallout(kind: .success, text: "Migration complete — \(vm.serverFqdn) now runs on the new server.")
             }
 
             if vm.canAbort {

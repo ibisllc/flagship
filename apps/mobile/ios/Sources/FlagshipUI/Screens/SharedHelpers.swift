@@ -8,13 +8,13 @@ struct ServerCardSkeleton: View {
         let c = FSColors.scheme(scheme)
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                RoundedRectangle(cornerRadius: 4)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
                     .fill(c.surfaceSunken)
                     .frame(width: 80, height: 20)
-                RoundedRectangle(cornerRadius: 4)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
                     .fill(c.surfaceSunken)
                     .frame(width: 240, height: 18)
-                RoundedRectangle(cornerRadius: 4)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
                     .fill(c.surfaceSunken)
                     .frame(width: 180, height: 14)
             }

@@ -80,7 +80,7 @@ public struct TieredConfirmationSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(FS.space.s3)
                 .background(accent.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+                .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
 
             if severity == .severe, let phrase = confirmPhrase, !phrase.isEmpty {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
@@ -91,7 +91,7 @@ public struct TieredConfirmationSheet: View {
                         .autocorrectionDisabled()
                         .padding(FS.space.s3)
                         .background(c.surface)
-                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
                         .accessibilityIdentifier("tiered-confirm-field")
                 }
             }

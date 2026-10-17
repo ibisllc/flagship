@@ -24,6 +24,19 @@ public struct Toaster: View {
         .padding(.top, FS.space.s4)
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: center.queue.count)
         .allowsHitTesting(!center.queue.isEmpty)
+        .sensoryFeedback(trigger: center.queue.count) { old, new in
+            guard new > old, let kind = center.queue.last?.kind else { return nil }
+            switch kind {
+            case .success: return .success
+            case .warning: return .warning
+            case .error: return .error
+            case .info: return nil
+            }
+        }
+        .onChange(of: center.queue.count) { old, new in
+            guard new > old, let message = center.queue.last?.message else { return }
+            UIAccessibility.post(notification: .announcement, argument: message)
+        }
     }
 }
 
@@ -37,7 +50,7 @@ private struct ToastView: View {
         HStack(alignment: .top, spacing: FS.space.s2) {
             Image(systemName: icon)
                 .foregroundColor(color)
-                .font(.system(size: 16, weight: .semibold))
+                .font(FS.font.scaled(16, weight: .semibold))
             Text(toast.message)
                 .font(FS.font.bodySm())
                 .foregroundColor(c.text)
@@ -48,16 +61,18 @@ private struct ToastView: View {
         .padding(.vertical, FS.space.s3)
         .background(c.surface)
         .overlay(
-            RoundedRectangle(cornerRadius: FS.radius.md)
+            RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
                 .stroke(color.opacity(0.3), lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
         .shadow(color: Color.black.opacity(0.08), radius: 12, y: 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Tap to dismiss")
     }
 
     private func appearance(c: FSColors) -> (String, Color) {
         switch toast.kind {
-        case .info:    return ("info.circle.fill", c.primary)
+        case .info:    return ("info.circle.fill", c.accent)
         case .success: return ("checkmark.seal.fill", c.success)
         case .warning: return ("exclamationmark.triangle.fill", c.warning)
         case .error:   return ("xmark.octagon.fill", c.danger)

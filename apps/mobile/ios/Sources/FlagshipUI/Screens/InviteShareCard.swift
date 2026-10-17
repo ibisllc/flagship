@@ -49,7 +49,7 @@ struct InviteShareCard: View {
                 .padding(.vertical, FS.space.s2)
                 .padding(.horizontal, FS.space.s3)
                 .background(c.surfaceSunken)
-                .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+                .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
                 .accessibilityIdentifier("\(idPrefix)-url")
             HStack(spacing: FS.space.s3) {
                 if let url = URL(string: link) {

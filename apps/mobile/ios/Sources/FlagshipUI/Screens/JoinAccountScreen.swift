@@ -105,7 +105,7 @@ public struct JoinAccountScreen: View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
             FSCard {
                 HStack(alignment: .top, spacing: FS.space.s2) {
-                    Image(systemName: "qrcode.viewfinder").foregroundColor(c.primary)
+                    Image(systemName: "qrcode.viewfinder").foregroundColor(c.accent)
                     Text("Point your camera at the pairing code on the admin's \"Add a device\" screen.")
                         .font(FS.font.bodySm()).foregroundColor(c.text)
                 }
@@ -118,7 +118,7 @@ public struct JoinAccountScreen: View {
                 validate: { raw in (try? PairingQr.parseJoinUrl(raw)) != nil }
             )
             .frame(height: 320)
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
             if let scanError {
                 Text(scanError).font(FS.font.caption()).foregroundColor(c.danger)
             }
@@ -135,7 +135,7 @@ public struct JoinAccountScreen: View {
                 Text("These six digits should match the admin's screen. Confirm the encrypted name this device will use only in this account.")
                     .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 Text(QrRelay.formatMatchCode(matchCode))
-                    .font(.system(size: 34, weight: .semibold, design: .monospaced))
+                    .font(FS.font.scaled(34, weight: .semibold, design: .monospaced))
                     .tracking(6)
                     .foregroundColor(c.text)
                     .frame(maxWidth: .infinity)
@@ -191,7 +191,7 @@ public struct JoinAccountScreen: View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 HStack(spacing: FS.space.s2) {
-                    Image(systemName: system).foregroundColor(c.primary)
+                    Image(systemName: system).foregroundColor(c.accent)
                     Text(title).font(FS.font.h4()).foregroundColor(c.text)
                 }
                 Text(detail).font(FS.font.bodySm()).foregroundColor(c.textMuted)

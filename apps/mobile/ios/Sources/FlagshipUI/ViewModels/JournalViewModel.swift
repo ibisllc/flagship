@@ -73,7 +73,7 @@ public final class JournalViewModel {
         } catch let e as ScreensClientError {
             phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
         } catch {
-            phase = .failed("Couldn't reach the box. Check your connection and try again.")
+            phase = .failed("Couldn't reach the server. Check your connection and try again.")
         }
     }
 }

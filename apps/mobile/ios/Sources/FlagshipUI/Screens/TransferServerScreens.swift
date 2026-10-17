@@ -18,7 +18,7 @@ private struct TransferCallout: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(FS.space.s3)
             .background(color.opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
     }
 }
 
@@ -57,7 +57,7 @@ public struct TransferGiverScreen: View {
             .padding(FS.space.s6)
         }
         .background(c.bg.ignoresSafeArea())
-        .navigationTitle("Transfer box")
+        .navigationTitle("Transfer server")
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -80,9 +80,9 @@ public struct TransferGiverScreen: View {
                 .autocorrectionDisabled()
                 .padding(FS.space.s3)
                 .background(c.surface)
-                .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+                .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
                 .accessibilityIdentifier("transfer-confirm-field")
-            FSDangerButton(working ? "Working…" : "Transfer this box", block: true) {
+            FSDangerButton(working ? "Working…" : "Transfer this server", block: true) {
                 if confirmed && !working { Task { await vm.start() } }
             }
             .opacity(confirmed ? 1 : 0.4)
@@ -94,7 +94,7 @@ public struct TransferGiverScreen: View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
             Text("Have the new owner scan this")
                 .font(FS.font.h3()).foregroundColor(c.text)
-            Text("On their phone: Add a server → Take over a transferred box. Keep this screen open until it completes — your phone hands off the disk key after they claim it.")
+            Text("On their phone: Add a server → Take over a transferred server. Keep this screen open until it completes — your phone hands off the disk key after they claim it.")
                 .font(FS.font.bodySm()).foregroundColor(c.textMuted)
             if let text = vm.qrText {
                 HStack { Spacer(); PairingQRView(text: text, size: 240); Spacer() }
@@ -143,7 +143,7 @@ public struct TransferAcquirerScreen: View {
                 case .scanned(let domain):
                     confirm(c, domain)
                 case .signing, .posting:
-                    ProgressView("Claiming the box…")
+                    ProgressView("Claiming the server…")
                 case .claimed(let newDomain):
                     TransferCallout(kind: .success, text: "You now own \(newDomain ?? "this box"). It will come online under your account shortly.")
                 case .failed(let msg):
@@ -154,7 +154,7 @@ public struct TransferAcquirerScreen: View {
             .padding(FS.space.s6)
         }
         .background(c.bg.ignoresSafeArea())
-        .navigationTitle("Take over a box")
+        .navigationTitle("Take over a server")
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -162,14 +162,14 @@ public struct TransferAcquirerScreen: View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
             Text("Point your camera at the transfer code")
                 .font(FS.font.h3()).foregroundColor(c.text)
-            Text("The current owner shows it from their box's page (Transfer to another account).")
+            Text("The current owner shows it from their server's page (Transfer to another account).")
                 .font(FS.font.bodySm()).foregroundColor(c.textMuted)
             QRScannerView(
                 onScan: { text in if scanning { scanning = false; _ = vm.ingest(text) } },
                 validate: { ServerTransferFlow.looksLikeTransferQR($0) }
             )
             .frame(height: 320)
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
             .accessibilityIdentifier("transfer-scanner")
         }
     }
@@ -186,13 +186,13 @@ public struct TransferAcquirerScreen: View {
         // (fired inside vm.confirm()). What you see (domain) is what you sign —
         // the same verified offer bytes drive both the display and the claim.
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            Text("Take over this box?").font(FS.font.h2()).foregroundColor(c.text)
+            Text("Take over this server?").font(FS.font.h2()).foregroundColor(c.text)
             TieredConfirmationSheet(
                 severity: .severe,
                 title: "You will become the owner of \(domain)",
                 message: "You'll own \(domain) and everything on it. The current owner loses control of it. This cannot be undone.",
                 confirmPhrase: domain,
-                confirmFieldLabel: "Type the box's address to confirm:",
+                confirmFieldLabel: "Type the server's address to confirm:",
                 actionTitle: "Take ownership",
                 busy: claiming
             ) {

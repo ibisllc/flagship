@@ -10,7 +10,7 @@ import FlagshipCore
 
 public enum AppPlacementCopy {
     public static let runsOn = "Runs on"
-    public static let runsOnSection = "RUNS ON"
+    public static let runsOnSection = "Runs on"
     public static let runsOnNote = "Tick a server to copy this app there: its code, data and files as they are now. Each copy then runs on its own. Untick a server to remove the app from it."
     public static let runsOnReadOnly = "Only the account owner's phone can copy or remove apps."
     public static let pickerNote = "New apps go to your preferred server unless you pick another."

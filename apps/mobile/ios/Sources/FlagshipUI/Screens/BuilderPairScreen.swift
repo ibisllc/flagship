@@ -93,7 +93,7 @@ public struct BuilderPairScreen: View {
                     validate: { BuilderPairing.looksLikeBuilderCode($0) }
                 )
                 .frame(height: 300)
-                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
             }
 
             Button("Enter the code instead") { vm.switchToEnterCode() }
@@ -143,7 +143,7 @@ public struct BuilderPairScreen: View {
             FSCard {
                 VStack(spacing: FS.space.s3) {
                     Text(BuilderPairing_format(code))
-                        .font(.system(size: 40, design: .monospaced).weight(.bold))
+                        .font(FS.font.scaled(40, design: .monospaced).weight(.bold))
                         .foregroundColor(c.text)
                         .frame(maxWidth: .infinity)
                 }

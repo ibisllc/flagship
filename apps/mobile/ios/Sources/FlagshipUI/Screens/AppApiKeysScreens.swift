@@ -14,7 +14,7 @@ struct ApiKeysSection: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text(AppApiKeysCopy.sectionTitle).font(.system(size: 12, weight: .semibold)).tracking(1)
+            Text(AppApiKeysCopy.sectionTitle).font(FS.font.scaled(13, weight: .semibold))
                 .foregroundColor(c.textMuted)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
@@ -75,7 +75,7 @@ struct ApiKeysSection: View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
             Divider()
             HStack(alignment: .top, spacing: FS.space.s3) {
-                Image(systemName: "key.horizontal").foregroundColor(key.isExpired() ? c.textMuted : c.primary)
+                Image(systemName: "key.horizontal").foregroundColor(key.isExpired() ? c.textMuted : c.accent)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(key.label.isEmpty ? key.keyId : key.label)
                         .font(FS.font.bodySm().weight(.semibold)).foregroundColor(c.text)
@@ -144,7 +144,7 @@ struct ApiKeyCreateSheet: View {
             .textInputAutocapitalization(.sentences)
             .padding(FS.space.s3)
             .background(c.surface)
-            .overlay(RoundedRectangle(cornerRadius: FS.radius.md).stroke(c.border, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(c.border, lineWidth: 1))
             .accessibilityIdentifier("api-key-label")
         Text("Access").font(FS.font.caption()).foregroundColor(c.textMuted)
         Picker("Access", selection: $scope) {
@@ -186,7 +186,7 @@ struct ApiKeyCreateSheet: View {
             .padding(FS.space.s3)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(c.surface)
-            .overlay(RoundedRectangle(cornerRadius: FS.radius.md).stroke(c.border, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(c.border, lineWidth: 1))
             .accessibilityIdentifier("api-key-secret")
         FSPrimaryButton(copied ? "Copied" : "Copy", block: true) {
             // Local only, and gone from the clipboard after 10 minutes.

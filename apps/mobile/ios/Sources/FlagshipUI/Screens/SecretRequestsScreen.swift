@@ -29,7 +29,7 @@ struct SecretRequestsContainer: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
-                Text("Your box is finishing setup. Confirm it's yours to release its boot secret — only your phone can.")
+                Text("Your server is finishing setup. Confirm it's yours to release its boot secret — only your phone can.")
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
 
@@ -40,7 +40,7 @@ struct SecretRequestsContainer: View {
                     ErrorCard(message: msg)
                 case .loaded(let requests):
                     if requests.isEmpty {
-                        FSCard { Text("No box is waiting for approval right now.").foregroundColor(c.textMuted) }
+                        FSCard { Text("No server is waiting for approval right now.").foregroundColor(c.textMuted) }
                     } else {
                         ForEach(requests) { req in
                             SecretRequestCard(
@@ -63,7 +63,7 @@ struct SecretRequestsContainer: View {
             }
             .padding(FS.space.s6)
         }
-        .navigationTitle("Approve box")
+        .navigationTitle("Approve server")
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await reload() }
         .task { if case .idle = state { await reload() } }
@@ -75,7 +75,7 @@ struct SecretRequestsContainer: View {
             mailbox: mailbox,
             username: username,
             irkProvider: {
-                try await Keystore.deriveIRK(reason: "Approve your box's boot secret")
+                try await Keystore.deriveIRK(reason: "Approve your server's boot secret")
             },
             unsealSeedProvider: { serverDomain in
                 // The installer seals the LUKS key against one of the
@@ -101,7 +101,7 @@ struct SecretRequestsContainer: View {
             // own Face ID — acceptable, and only on admin-root accounts.
             orderKeyProvider: {
                 Keystore.hasAdminRoot
-                    ? try await Keystore.adminRootKey(reason: "Authorize your box to serve")
+                    ? try await Keystore.adminRootKey(reason: "Authorize your server to serve")
                     : nil
             },
             // When the user opted into "Quick approve from Apple Watch", a
@@ -157,7 +157,7 @@ struct SecretRequestsContainer: View {
             let depositLease = bootUnlock.effectiveMode(for: req.serverDomain) == .auto
             let leaseId = try await coord.confirmAndRespond(req, depositAutoLease: depositLease)
             if let leaseId { bootUnlock.setLeaseId(leaseId, for: req.serverDomain) }
-            toasts.success("Approved \(req.serverDomain). Your box will pick it up.")
+            toasts.success("Approved \(req.serverDomain). Your server will pick it up.")
             await reload()
         } catch {
             toasts.error("Approval failed: \(error.localizedDescription)")
@@ -214,7 +214,7 @@ private struct SecretRequestCard: View {
                     .padding(.top, FS.space.s1)
 
                 FSPrimaryButton(
-                    isInFlight ? "Signing…" : "Yes, this is my box",
+                    isInFlight ? "Signing…" : "Yes, this is my server",
                     enabled: !isInFlight,
                     block: true,
                     large: true

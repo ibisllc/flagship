@@ -152,8 +152,8 @@ public struct VibeCodeSessionScreen: View {
                             withAnimation { proxy.scrollTo("tail", anchor: .bottom) }
                         } label: {
                             Image(systemName: "arrow.down.circle.fill")
-                                .font(.system(size: 28))
-                                .foregroundStyle(c.primary)
+                                .font(FS.font.scaled(28))
+                                .foregroundStyle(c.accent)
                                 .background(Circle().fill(c.surface))
                         }
                         .padding(FS.space.s3)
@@ -167,8 +167,8 @@ public struct VibeCodeSessionScreen: View {
                 .background(c.surface)
         }
         .background(c.surfaceSunken)
-        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
-        .overlay(RoundedRectangle(cornerRadius: FS.radius.md).stroke(c.border, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(c.border, lineWidth: 1))
         .padding(.horizontal, FS.space.s4)
         .padding(.vertical, FS.space.s3)
         .background(c.bg.ignoresSafeArea())
@@ -254,7 +254,7 @@ public struct VibeCodeSessionScreen: View {
         }
         ForEach(stream.buildLogs.indices, id: \.self) { i in
             Text(stream.buildLogs[i])
-                .font(.system(size: 12, design: .monospaced))
+                .font(FS.font.scaled(12, design: .monospaced))
                 .foregroundColor(c.textMuted)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -288,7 +288,7 @@ public struct VibeCodeSessionScreen: View {
                 }
                 if msg.role == "assistant", let credits = msg.credits {
                     Text(ModelMenuText.creditsUsed(credits))
-                        .font(.system(size: 11))
+                        .font(FS.font.scaled(11))
                         .foregroundColor(c.textMuted)
                         .accessibilityIdentifier("vibecode-credits")
                 }
@@ -420,7 +420,7 @@ public struct VibeCodeSessionScreen: View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
             if let notice = menu.contextNotice(for: state) {
                 Text(notice)
-                    .font(.system(size: 12)).foregroundColor(c.textMuted)
+                    .font(FS.font.scaled(12)).foregroundColor(c.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("vibecode-context-notice")
             }
@@ -435,7 +435,7 @@ public struct VibeCodeSessionScreen: View {
                     .accessibilityIdentifier("vibecode-reply-field")
                 Button { Task { await submitReply() } } label: {
                     Image(systemName: submitting ? "ellipsis.circle" : "arrow.up.circle.fill")
-                        .font(.system(size: 26)).foregroundColor(c.primary)
+                        .font(FS.font.scaled(26)).foregroundColor(c.accent)
                 }
                 .disabled(submitting || replyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .accessibilityIdentifier("vibecode-reply-send-btn")

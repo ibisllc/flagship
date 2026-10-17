@@ -26,6 +26,9 @@ public struct ActivityScreen: View {
     /// One section open at a time, so every title stays on screen.
     @State private var open: Open? = nil
     @State private var loadingMore = false
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @ScaledMetric(relativeTo: .body) private var listMaxHeight: CGFloat = 360
+    @ScaledMetric(relativeTo: .body) private var tile: CGFloat = 32
 
     public init(
         state: LoadingState<ActivityFeed>,
@@ -71,12 +74,12 @@ public struct ActivityScreen: View {
     public var body: some View {
         let c = FSColors.scheme(scheme)
         ScrollView {
-            VStack(alignment: .leading, spacing: FS.space.s6) {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
                 // ALWAYS reachable, OUTSIDE the state switch: a box waiting for
                 // an unlock/entitlement approval is exactly the case where the
                 // daemon BFF (and thus this feed) can't load, so gating the
                 // approvals entry behind `.loaded` hid it precisely when needed.
-                accordion(.approvals, title: "Server approvals", hint: "Servers waiting for you to start them", c: c) {
+                accordion(.approvals, icon: "lock.open", title: "Server approvals", hint: "Servers waiting for you to start them", c: c) {
                     approvalsEntryCard(c: c)
                 }
                 switch state {
@@ -87,18 +90,18 @@ public struct ActivityScreen: View {
                 case .loaded(let feed):
                     if let snap = feed.postRecovery,
                        snap.lastReissue != nil || snap.state.lastSeen != nil {
-                        accordion(.recovery, title: "Post-recovery", hint: postRecoveryHeadline(snap), c: c) {
+                        accordion(.recovery, icon: "arrow.triangle.2.circlepath", title: "Post-recovery", hint: postRecoveryHeadline(snap), c: c) {
                             postRecoveryCard(snap, c: c)
                         }
                     }
-                    accordion(.account, title: "Your account", hint: "Devices, recovery and servers, across all your servers", count: feed.auditEvents.count, c: c) {
+                    accordion(.account, icon: "person.crop.circle", title: "Your account", hint: "Devices, recovery and servers, across all your servers", count: feed.auditEvents.count, c: c) {
                         eventList(
                             empty: "Nothing has happened on your account yet.",
                             rows: feed.auditEvents.indices.map { i in AnyView(auditRow(event: feed.auditEvents[i], c: c)) },
                             more: feed.moreAudit, onMore: onLoadMoreAudit, c: c)
                     }
                     let rows = feed.boxEvents.filter { BoxEventLabels.title($0) != nil }
-                    accordion(.server, title: serverTitle, hint: "Updates, backups, apps and shares on this server", count: rows.count, c: c) {
+                    accordion(.server, icon: "server.rack", title: serverTitle, hint: "Updates, backups, apps and shares on this server", count: rows.count, c: c) {
                         eventList(
                             empty: "Nothing has happened on this server yet.",
                             rows: rows.indices.map { i in AnyView(boxRow(entry: rows[i], c: c)) },
@@ -147,7 +150,7 @@ public struct ActivityScreen: View {
                     if snap.lastReissue != nil {
                         Image(systemName: "checkmark.seal.fill").foregroundColor(c.success)
                     } else if snap.state.lastSeen != nil {
-                        Image(systemName: "clock.fill").foregroundColor(c.primary)
+                        Image(systemName: "clock.fill").foregroundColor(c.accent)
                     } else {
                         Image(systemName: "info.circle.fill").foregroundColor(c.textMuted)
                     }
@@ -171,19 +174,37 @@ public struct ActivityScreen: View {
     /// Account-level audit event row. Mirrors webapp activity.js'
     /// audit section + Android's pending C11 mirror.
     private func auditRow(event: AuditEvent, c: FSColors) -> some View {
-        HStack(alignment: .top) {
-            Image(systemName: AuditLogViewModel.icon(for: event.eventKind))
-                .foregroundColor(auditColor(for: event.eventKind, c: c))
-                .frame(width: 22)
+        eventRow(
+            symbol: AuditLogViewModel.icon(for: event.eventKind),
+            tint: auditColor(for: event.eventKind, c: c),
+            title: AuditLogViewModel.label(for: event.eventKind),
+            titleColor: c.text,
+            detail: AuditLogViewModel.displayDetail(for: event),
+            when: relative(ms: event.postedAt), c: c)
+    }
+
+    /// One log line: a tinted symbol tile, what happened, and when under it.
+    /// The time sits under the text (not beside it) so long details keep
+    /// their width at every text size.
+    private func eventRow(symbol: String, tint: Color, title: String, titleColor: Color,
+                          detail: String?, when: String, c: FSColors) -> some View {
+        HStack(alignment: .top, spacing: FS.space.s3) {
+            Image(systemName: symbol)
+                .font(FS.font.scaled(14, weight: .semibold))
+                .foregroundColor(tint)
+                .fsTile(tile * 0.9, base: 29)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(AuditLogViewModel.label(for: event.eventKind)).foregroundColor(c.text)
-                if let detail = AuditLogViewModel.displayDetail(for: event) {
-                    Text(detail).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                Text(title).font(FS.font.scaled(16)).foregroundColor(titleColor)
+                if let detail, !detail.isEmpty {
+                    Text(detail).font(FS.font.scaled(14)).foregroundColor(c.textMuted)
                 }
+                Text(when).font(FS.font.scaled(12)).foregroundColor(c.textMuted)
             }
-            Spacer()
-            Text(relative(ms: event.postedAt)).font(FS.font.caption()).foregroundColor(c.textMuted)
+            Spacer(minLength: 0)
         }
+        .accessibilityElement(children: .combine)
     }
 
     private func auditColor(for kind: String, c: FSColors) -> Color {
@@ -201,19 +222,13 @@ public struct ActivityScreen: View {
     }
 
     private func boxRow(entry: BoxActivityEntry, c: FSColors) -> some View {
-        HStack(alignment: .top) {
-            Image(systemName: BoxEventLabels.symbol(entry))
-                .foregroundColor(entry.ok ? c.primary : c.warning)
-                .frame(width: 22)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(BoxEventLabels.title(entry) ?? "").foregroundColor(entry.ok ? c.text : c.warning)
-                if let detail = entry.detail, !detail.isEmpty {
-                    Text(detail).font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                }
-            }
-            Spacer()
-            Text(relative(ms: entry.ts)).font(FS.font.caption()).foregroundColor(c.textMuted)
-        }
+        eventRow(
+            symbol: BoxEventLabels.symbol(entry),
+            tint: entry.ok ? c.primary : c.warning,
+            title: BoxEventLabels.title(entry) ?? "",
+            titleColor: entry.ok ? c.text : c.warning,
+            detail: entry.detail,
+            when: relative(ms: entry.ts), c: c)
     }
 
     /// "Server · home2": the server this log belongs to (the one picked in the
@@ -224,28 +239,42 @@ public struct ActivityScreen: View {
         return "Server · \(name)"
     }
 
-    private func accordion<C: View>(_ which: Open, title: String, hint: String, count: Int? = nil, c: FSColors, @ViewBuilder content: () -> C) -> some View {
+    private func accordion<C: View>(_ which: Open, icon: String, title: String, hint: String, count: Int? = nil, c: FSColors, @ViewBuilder content: () -> C) -> some View {
         let isOpen = open == which
         return VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) { open = isOpen ? nil : which }
+                withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) { open = isOpen ? nil : which }
             } label: {
                 HStack(spacing: FS.space.s3) {
+                    Image(systemName: icon)
+                        .font(FS.font.scaled(15, weight: .semibold))
+                        .foregroundColor(c.accent)
+                        .fsTile(tile, base: 32)
+                        .background(c.softTint(), in: RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
+                        .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(title).font(.system(size: 16, weight: .semibold)).foregroundColor(c.text)
-                        Text(hint).font(FS.font.caption()).foregroundColor(c.textMuted).multilineTextAlignment(.leading)
+                        Text(title).font(FS.font.scaled(17, weight: .semibold)).foregroundColor(c.text)
+                            .multilineTextAlignment(.leading)
+                        Text(hint).font(FS.font.scaled(13)).foregroundColor(c.textMuted).multilineTextAlignment(.leading)
                     }
-                    Spacer()
+                    Spacer(minLength: FS.space.s2)
                     if let count, count > 0 {
-                        Text("\(count)").font(FS.font.caption()).foregroundColor(c.textMuted)
+                        Text("\(count)").font(FS.font.scaled(13, weight: .medium)).foregroundColor(c.textMuted)
+                            .padding(.horizontal, 8).padding(.vertical, 2)
+                            .background(c.surfaceSunken, in: Capsule())
                     }
-                    Image(systemName: "chevron.down").foregroundColor(c.textMuted)
+                    Image(systemName: "chevron.down")
+                        .font(FS.font.scaled(13, weight: .semibold))
+                        .foregroundColor(c.textMuted)
                         .rotationEffect(.degrees(isOpen ? 180 : 0))
                 }
-                .padding(FS.space.s4)
+                .padding(.horizontal, FS.space.s4)
+                .padding(.vertical, FS.space.s3)
+                .frame(minHeight: 56)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(FSRowPressStyle())
+            .sensoryFeedback(.selection, trigger: isOpen)
             .accessibilityIdentifier("activity-section-\(String(describing: which))")
             .accessibilityAddTraits(.isHeader)
             .accessibilityValue(isOpen ? "expanded" : "collapsed")
@@ -253,11 +282,12 @@ public struct ActivityScreen: View {
                 Divider().background(c.border)
                 content()
                     .padding(FS.space.s4)
+                    .transition(.opacity)
             }
         }
         .background(c.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(c.border, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(c.border, lineWidth: 1))
     }
 
     /// The rolled-down list: scrolls inside a bounded height, so a long log
@@ -265,13 +295,13 @@ public struct ActivityScreen: View {
     private func eventList(empty: String, rows: [AnyView], more: Bool, onMore: @escaping () async -> Void, c: FSColors) -> some View {
         Group {
             if rows.isEmpty {
-                Text(empty).foregroundColor(c.textMuted)
+                Text(empty).font(FS.font.scaled(15)).foregroundColor(c.textMuted)
             } else {
                 ScrollView {
                     VStack(spacing: FS.space.s3) {
                         ForEach(rows.indices, id: \.self) { i in
                             rows[i]
-                            Divider().background(c.border)
+                            if i < rows.count - 1 { Divider().background(c.border) }
                         }
                         if more {
                             FSSecondaryButton(loadingMore ? "Loading…" : "Load more", block: true) {
@@ -286,7 +316,7 @@ public struct ActivityScreen: View {
                         }
                     }
                 }
-                .frame(maxHeight: 360)
+                .frame(maxHeight: listMaxHeight)
             }
         }
     }

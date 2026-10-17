@@ -31,7 +31,7 @@ public struct VibeCodeProviderPickScreen: View {
                         Text(FreeAiCopy.title).font(FS.font.h3())
                         FSColorReader { c in
                             Text(FreeAiCopy.note)
-                                .font(.system(size: 14)).foregroundColor(c.textMuted)
+                                .font(FS.font.scaled(14)).foregroundColor(c.textMuted)
                         }
                         FSPrimaryButton(FreeAiCopy.useButton, block: true, action: onPickPromo)
                     }
@@ -40,7 +40,7 @@ public struct VibeCodeProviderPickScreen: View {
                         Text("Bring your own key").font(FS.font.h3())
                         FSColorReader { c in
                             Text("Anthropic, OpenAI, or Google. No daily limits. Your key, your bill, your choice of model.")
-                                .font(.system(size: 14)).foregroundColor(c.textMuted)
+                                .font(FS.font.scaled(14)).foregroundColor(c.textMuted)
                         }
                         FSSecondaryButton("Set up a key", block: true, action: onPickBYOK)
                     }
@@ -182,7 +182,7 @@ public struct VibeCodeDescribeScreen: View {
                         .accessibilityIdentifier("describe-build")
                     FSColorReader { c in
                         Text("about 90 seconds")
-                            .font(.system(size: 13))
+                            .font(FS.font.scaled(13))
                             .foregroundColor(c.textMuted)
                     }
                     Spacer().frame(height: FS.space.s8)
@@ -313,7 +313,7 @@ private struct DescribeAttachRow: View {
             HStack(spacing: FS.space.s1) {
                 AttachButton(stager: stager)
                 FSColorReader { c in
-                    Text(ChatAttachmentCopy.notice).font(.system(size: 12)).foregroundColor(c.textMuted)
+                    Text(ChatAttachmentCopy.notice).font(FS.font.scaled(12)).foregroundColor(c.textMuted)
                 }
             }
             StagedAttachmentsBar(stager: stager)
@@ -353,10 +353,10 @@ private struct PromptArea: View {
                 .frame(height: 180)
                 .background(c.surfaceSunken)
                 .overlay(
-                    RoundedRectangle(cornerRadius: FS.radius.sm)
+                    RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous)
                         .stroke(c.border, lineWidth: 1)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+                .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
             Text("\(prompt.count)")
                 .font(FS.font.mono())
                 .foregroundColor(c.textMuted)
@@ -376,7 +376,7 @@ private struct ExampleChip: View {
             .padding(.horizontal, 12).padding(.vertical, 6)
             .background(c.surfaceSunken)
             .overlay(
-                RoundedRectangle(cornerRadius: FS.radius.pill).stroke(c.border, lineWidth: 1)
+                RoundedRectangle(cornerRadius: FS.radius.pill, style: .continuous).stroke(c.border, lineWidth: 1)
             )
             .clipShape(Capsule())
     }
@@ -391,7 +391,7 @@ private struct LabeledRow: View {
         HStack {
             Text(label).font(FS.font.bodySm()).foregroundColor(c.textMuted)
             Spacer()
-            Text(value).font(.system(size: 14, weight: .medium)).foregroundColor(c.text)
+            Text(value).font(FS.font.scaled(14, weight: .medium)).foregroundColor(c.text)
         }
         .padding(.vertical, FS.space.s2)
     }

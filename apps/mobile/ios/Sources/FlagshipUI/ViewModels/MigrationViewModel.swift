@@ -148,7 +148,7 @@ public final class MigrationViewModel {
         do {
             let pods = try await mailbox.fetchPods(username: username)
             guard let stk = pods.identityPubKey(forServerDomain: serverFqdn) else {
-                mode = .failed("Couldn't read this box's current key from the directory — is it online? It must be reachable to migrate.")
+                mode = .failed("Couldn't read this server's current key from the directory — is it online? It must be reachable to migrate.")
                 return
             }
             oldStkPubHex = stk
@@ -198,7 +198,7 @@ public final class MigrationViewModel {
     public func start() async {
         errorMessage = nil
         guard let oldStk = oldStkPubHex else {
-            errorMessage = "Couldn't read this box's current key — refresh and try again."
+            errorMessage = "Couldn't read this server's current key — refresh and try again."
             return
         }
         if backupMissing {
@@ -250,7 +250,7 @@ public final class MigrationViewModel {
         working = true
         defer { working = false }
         do {
-            let (irk, orderKey) = try await signer("Hand \(serverFqdn) off to the new box")
+            let (irk, orderKey) = try await signer("Hand \(serverFqdn) off to the new server")
             if s.phase == "pre-seeded" {
                 let confirm = try ServerMigrationFlow.buildControlDeposit(
                     action: "confirm-ready",

@@ -116,7 +116,7 @@ public final class PodPairViewModel {
             phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
             return
         } catch {
-            phase = .failed("Couldn't reach the box. Check your connection and try again.")
+            phase = .failed("Couldn't reach the server. Check your connection and try again.")
             return
         }
 

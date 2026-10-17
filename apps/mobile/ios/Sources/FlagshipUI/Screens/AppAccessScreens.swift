@@ -12,7 +12,7 @@ struct InternetAccessSection: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text(AppAccessCopy.sectionTitle).font(.system(size: 12, weight: .semibold)).tracking(1)
+            Text(AppAccessCopy.sectionTitle).font(FS.font.scaled(13, weight: .semibold))
                 .foregroundColor(c.textMuted)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
@@ -25,7 +25,7 @@ struct InternetAccessSection: View {
                     case .loaded:
                         if let draft = controller.draft { draftCard(draft, c: c) }
                         HStack(spacing: FS.space.s2) {
-                            Image(systemName: "network").foregroundColor(controller.pending.isEmpty ? c.primary : c.warning)
+                            Image(systemName: "network").foregroundColor(controller.pending.isEmpty ? c.accent : c.warning)
                             Text(AppAccessCopy.ruleCount(controller.ruleCount))
                                 .font(FS.font.bodySm()).foregroundColor(c.text)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -179,7 +179,7 @@ struct AppAccessListEditorScreen: View {
                         .frame(minHeight: 220)
                         .padding(FS.space.s2)
                         .background(c.surface)
-                        .overlay(RoundedRectangle(cornerRadius: FS.radius.md)
+                        .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
                             .stroke(model.lineErrors.isEmpty ? c.border : c.danger, lineWidth: 1))
                         .disabled(!model.canSaveAtAll)
                         .accessibilityIdentifier("access-list-editor")
@@ -262,7 +262,7 @@ public struct AppAccessAlertSheet: View {
     /// Review (that app's editor with the draft) or Not now.
     private func draftContent(_ d: AppAccessDraftEntry, item: AppAccessAlertCenter.Item, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            Image(systemName: "list.bullet.clipboard").font(.system(size: 34)).foregroundColor(c.warning)
+            Image(systemName: "list.bullet.clipboard").font(FS.font.scaled(34)).foregroundColor(c.warning)
             Text(AppAccessCopy.suggestsList(app: d.appName))
                 .font(FS.font.h3()).foregroundColor(c.text)
                 .fixedSize(horizontal: false, vertical: true)
@@ -300,7 +300,7 @@ public struct AppAccessAlertSheet: View {
 
     private func content(_ r: AppAccessRequest, item: AppAccessAlertCenter.Item, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            Image(systemName: "network.badge.shield.half.filled").font(.system(size: 34)).foregroundColor(c.warning)
+            Image(systemName: "network.badge.shield.half.filled").font(FS.font.scaled(34)).foregroundColor(c.warning)
             switch center.stage {
             case .done(let action):
                 Text(AppAccessCopy.answered(app: r.appName, host: r.host, action: action))

@@ -134,7 +134,7 @@ struct AppDatabaseScreen: View {
     private func storeSection(_ store: AppDbStore, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
             Text(AppDbCopy.storeTitle(store.store).uppercased())
-                .font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
+                .font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     if store.tables.isEmpty {
@@ -143,7 +143,7 @@ struct AppDatabaseScreen: View {
                     ForEach(store.tables) { t in
                         Button { onOpenTable(store.store, t.name) } label: {
                             HStack(spacing: FS.space.s3) {
-                                Image(systemName: t.isView ? "eye" : "tablecells").foregroundColor(c.primary)
+                                Image(systemName: t.isView ? "eye" : "tablecells").foregroundColor(c.accent)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(t.name).font(FS.font.mono()).foregroundColor(c.text)
                                         .lineLimit(1).truncationMode(.middle)
@@ -198,7 +198,7 @@ struct AppDbGrid: View {
                     ForEach(columns.indices, id: \.self) { i in
                         VStack(alignment: .leading, spacing: 1) {
                             Text(columns[i].name).font(FS.font.mono().weight(.semibold)).foregroundColor(c.text)
-                            Text(columns[i].type).font(.system(size: 11, design: .monospaced)).foregroundColor(c.textMuted)
+                            Text(columns[i].type).font(FS.font.scaled(11, design: .monospaced)).foregroundColor(c.textMuted)
                         }
                         .lineLimit(1)
                         .frame(width: w[i], alignment: .leading)
@@ -258,7 +258,7 @@ struct AppDbTableScreen: View {
                         Text(AppDbCopy.noTables).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                     } else {
                         AppDbGrid(columns: page.columns, rows: page.rows)
-                            .overlay(RoundedRectangle(cornerRadius: FS.radius.md).stroke(c.border, lineWidth: 1))
+                            .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(c.border, lineWidth: 1))
                     }
                     HStack(spacing: FS.space.s2) {
                         FSSecondaryButton("Previous") { Task { await controller.previous() } }
@@ -327,7 +327,7 @@ struct AppDbQueryScreen: View {
                         .accessibilityIdentifier("database-sql-editor")
                 }
                 .background(c.surface)
-                .overlay(RoundedRectangle(cornerRadius: FS.radius.md).stroke(c.border, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(c.border, lineWidth: 1))
 
                 FSPrimaryButton(controller.phase == .running ? "Running…" : AppDbCopy.run,
                                 enabled: controller.canRun, block: true) {
@@ -382,7 +382,7 @@ struct AppDbQueryScreen: View {
                     .accessibilityIdentifier("database-query-summary")
                 if !r.columns.isEmpty {
                     AppDbGrid(columns: r.columns, rows: Array(r.rows.prefix(Self.shownRows)))
-                        .overlay(RoundedRectangle(cornerRadius: FS.radius.md).stroke(c.border, lineWidth: 1))
+                        .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(c.border, lineWidth: 1))
                 }
                 if r.truncated || r.rows.count > Self.shownRows {
                     Text(r.truncated ? AppDbCopy.truncated

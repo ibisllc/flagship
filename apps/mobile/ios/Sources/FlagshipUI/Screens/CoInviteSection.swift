@@ -134,7 +134,7 @@ struct CoInviteSection: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("INVITE PEOPLE").font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
+            Text("Invite people").font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     FSSecondaryButton(ShareCoInviteCopy.open, block: true) {
@@ -197,7 +197,7 @@ struct CoInviteSection: View {
             Text(e).font(FS.font.bodySm()).foregroundColor(c.danger).fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("co-invite-error")
         }
-        Text(ShareCoInviteCopy.yours).font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
+        Text(ShareCoInviteCopy.yours).font(FS.font.scaled(15, weight: .semibold)).foregroundColor(c.text)
         if state.invites.isEmpty {
             Text(ShareCoInviteCopy.none).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 .accessibilityIdentifier("co-invite-none")

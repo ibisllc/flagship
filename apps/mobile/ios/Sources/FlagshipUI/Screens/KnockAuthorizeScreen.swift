@@ -107,7 +107,7 @@ public struct KnockAuthorizeScreen: View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 Text(title)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(FS.font.scaled(17, weight: .semibold))
                     .foregroundColor(c.text)
                     .accessibilityIdentifier("knock-authorize-title")
                 Text(siteLabel)
@@ -140,7 +140,7 @@ public struct KnockAuthorizeScreen: View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 Label("Signed in", systemImage: "checkmark.seal.fill")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(FS.font.scaled(17, weight: .semibold))
                     .foregroundColor(c.text)
                 Text("Go back to the browser: it opens \(svc.isEmpty ? "the app" : svc) on its own. You can refresh or stop this session anytime from Settings → Open secured sessions.")
                     .font(FS.font.body())

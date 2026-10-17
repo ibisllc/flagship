@@ -28,6 +28,11 @@ public struct FSColors {
     /// The teal as text, icons, links and outlines: `--accent`, deepened to
     /// #0F766E in light so it passes AA on paper.
     public let primary: Color
+    /// The teal for graphics and large or bold text only: icons beside a
+    /// label, section markers, switches, progress, chart bits, headers of
+    /// 14pt bold and up. Lighter than `primary` (3:1 is enough there, 4.5:1
+    /// is not promised); never for body-size text or links.
+    public let accent: Color
     public let primaryHover: Color
     /// The teal as a fill (primary buttons, selection, bars): `--teal`.
     public let primaryFill: Color
@@ -54,6 +59,7 @@ public struct FSColors {
         text: hex(0x14140F),
         textMuted: hex(0x555149),
         primary: hex(0x0F766E),
+        accent: hex(0x0D9488),
         primaryHover: hex(0x0B5F58),
         primaryFill: hex(0x14B8A6),
         onPrimary: hex(0x0A0A09),
@@ -73,6 +79,7 @@ public struct FSColors {
         text: hex(0xECE7D6),
         textMuted: hex(0xA39D8F),
         primary: hex(0x2DD4BF),
+        accent: hex(0x2DD4BF),
         primaryHover: hex(0x5EEAD4),
         primaryFill: hex(0x14B8A6),
         onPrimary: hex(0x0A0A09),
@@ -108,12 +115,12 @@ public enum FSSpace {
     public static let s16: CGFloat = 64
 }
 
-/// Small and square, like the site (design-system §5): 4 for buttons,
-/// inputs and chips, 6 for cards and sheets.
+/// Continuous-corner radii, as on iOS itself: 8 for inputs and small tiles,
+/// 12 for buttons and cards, 16 for sheets and hero surfaces.
 public enum FSRadius {
-    public static let sm: CGFloat = 4
-    public static let md: CGFloat = 4
-    public static let lg: CGFloat = 6
+    public static let sm: CGFloat = 8
+    public static let md: CGFloat = 12
+    public static let lg: CGFloat = 16
     public static let pill: CGFloat = 999
 }
 
@@ -138,16 +145,69 @@ public extension View {
     }
 }
 
+/// Type scale. Every role maps to a system text style so it follows the
+/// reader's Dynamic Type setting (a fixed point size ignores it). The sizes
+/// at the default setting match the old fixed ones to within a point.
 public enum FSFont {
-    public static func display() -> Font { .system(size: 56, weight: .medium, design: .default) }
-    public static func h1() -> Font { .system(size: 40, weight: .medium) }
-    public static func h2() -> Font { .system(size: 28, weight: .medium) }
-    public static func h3() -> Font { .system(size: 22, weight: .semibold) }
-    public static func h4() -> Font { .system(size: 17, weight: .semibold) }
-    public static func body() -> Font { .system(size: 15, weight: .regular) }
-    public static func bodySm() -> Font { .system(size: 14, weight: .regular) }
-    public static func caption() -> Font { .system(size: 12, weight: .medium) }
-    public static func mono() -> Font { .system(size: 13, weight: .regular, design: .monospaced) }
+    public static func display() -> Font { .system(.largeTitle, weight: .semibold) }
+    public static func h1() -> Font { .system(.largeTitle, weight: .semibold) }
+    public static func h2() -> Font { .system(.title, weight: .semibold) }
+    public static func h3() -> Font { .system(.title2, weight: .semibold) }
+    public static func h4() -> Font { .system(.headline) }
+    public static func body() -> Font { .system(.subheadline) }
+    public static func bodySm() -> Font { .system(.footnote) }
+    public static func caption() -> Font { .system(.caption, weight: .medium) }
+    public static func mono() -> Font { .system(.footnote, design: .monospaced) }
+
+    /// The text style whose default size is nearest `size`. Sizes from 36 up
+    /// (the big pairing and unlock digits) stay fixed.
+    public static func style(for size: CGFloat) -> Font.TextStyle? {
+        switch size {
+        case ..<11.5: return .caption2
+        case ..<12.5: return .caption
+        case ..<13.5: return .footnote
+        case ..<15.5: return .subheadline
+        case ..<16.5: return .callout
+        case ..<17.5: return .body
+        case ..<20.5: return .title3
+        case ..<22.5: return .title2
+        case ..<28.5: return .title
+        case ..<36: return .largeTitle
+        default: return nil
+        }
+    }
+
+    /// A drop-in for `.system(size:weight:design:)` that scales with Dynamic Type.
+    public static func scaled(_ size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
+        guard let style = style(for: size) else { return .system(size: size, weight: weight, design: design) }
+        return .system(style, design: design, weight: weight)
+    }
+}
+
+public extension View {
+    /// A leading icon tile that grows with the text size, but only so far:
+    /// past ~1.4x it would crowd the text out at the largest sizes.
+    func fsTile(_ scaled: CGFloat, base: CGFloat) -> some View {
+        frame(width: min(scaled, base * 1.4), height: min(scaled, base * 1.4))
+    }
+}
+
+/// Side by side at ordinary text sizes, stacked at the accessibility sizes,
+/// where a row of icon + text + chevron has no room to wrap.
+public struct FSAdaptiveStack<Content: View>: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
+    let alignment: VerticalAlignment
+    let spacing: CGFloat
+    let content: () -> Content
+    public init(alignment: VerticalAlignment = .top, spacing: CGFloat = FS.space.s3, @ViewBuilder content: @escaping () -> Content) {
+        self.alignment = alignment; self.spacing = spacing; self.content = content
+    }
+    public var body: some View {
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: spacing))
+            : AnyLayout(HStackLayout(alignment: alignment, spacing: spacing))
+        layout { content() }
+    }
 }
 
 /// Wrap an entire screen with this to get the Flagship background and
@@ -173,7 +233,7 @@ public extension FSColors {
     /// `--teal-soft` token. Pass a semantic color to tint other leading
     /// glyphs (status icons in a list row) at the same weight.
     func softTint(_ color: Color? = nil) -> Color {
-        (color ?? primary).opacity(0.12)
+        (color ?? accent).opacity(0.12)
     }
 }
 

@@ -81,8 +81,8 @@ public struct ReplaceDeviceFinalizeScreen: View {
     private func header(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
             Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
-                .font(.system(size: 40))
-                .foregroundColor(c.primary)
+                .font(FS.font.scaled(40))
+                .foregroundColor(c.accent)
             Text("Replacing this device")
                 .font(FS.font.h3())
                 .foregroundColor(c.text)
@@ -142,7 +142,7 @@ public struct ReplaceDeviceFinalizeScreen: View {
                 .font(FS.font.caption())
                 .foregroundColor(c.textMuted)
             Text(elapsed ? "Ready to complete" : remainingLabel(completesAt))
-                .font(.system(size: 30, weight: .semibold, design: .rounded))
+                .font(FS.font.scaled(30, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundColor(elapsed ? c.success : c.text)
                 .accessibilityIdentifier("replace-finalize-countdown")

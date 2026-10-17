@@ -8,6 +8,18 @@ import SwiftUI
 /// - FSPill (FSPillKind)
 /// - FSStack helpers via `VStack(spacing: FS.space.s4)`
 
+/// Press feedback for every Flagship button: a small, springy settle and a
+/// dim, instead of the bare default highlight.
+public struct FSPressStyle: ButtonStyle {
+    public init() {}
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.82 : 1)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+}
+
 public struct FSPrimaryButton: View {
     @Environment(\.colorScheme) private var scheme
     let label: String
@@ -27,14 +39,16 @@ public struct FSPrimaryButton: View {
         let c = FSColors.scheme(scheme)
         Button(action: action) {
             Text(label)
-                .font(.system(size: large ? 16 : 14, weight: .semibold))
+                .font(FS.font.scaled(large ? 17 : 16, weight: .semibold))
+                .multilineTextAlignment(.center)
                 .frame(maxWidth: block ? .infinity : nil)
-                .frame(minHeight: large ? 48 : 44)
+                .frame(minHeight: large ? 52 : 44)
                 .padding(.horizontal, large ? FS.space.s6 : FS.space.s5)
                 .background(c.primaryFill.opacity(enabled ? 1 : 0.4))
                 .foregroundColor(c.onPrimary)
-                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
         }
+        .buttonStyle(FSPressStyle())
         .disabled(!enabled)
         .animation(.easeOut(duration: 0.2), value: enabled)
     }
@@ -53,18 +67,20 @@ public struct FSSecondaryButton: View {
         let c = FSColors.scheme(scheme)
         Button(action: action) {
             Text(label)
-                .font(.system(size: large ? 16 : 14, weight: .semibold))
+                .font(FS.font.scaled(large ? 17 : 16, weight: .semibold))
+                .multilineTextAlignment(.center)
                 .frame(maxWidth: block ? .infinity : nil)
-                .frame(minHeight: large ? 48 : 44)
+                .frame(minHeight: large ? 52 : 44)
                 .padding(.horizontal, large ? FS.space.s6 : FS.space.s5)
                 .background(c.surface)
                 .foregroundColor(c.text)
                 .overlay(
-                    RoundedRectangle(cornerRadius: FS.radius.md)
+                    RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
                         .stroke(c.border, lineWidth: 1)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
         }
+        .buttonStyle(FSPressStyle())
     }
 }
 
@@ -81,12 +97,14 @@ public struct FSGhostButton: View {
         let c = FSColors.scheme(scheme)
         Button(action: action) {
             Text(label)
-                .font(.system(size: large ? 16 : 14, weight: .semibold))
+                .font(FS.font.scaled(large ? 17 : 16, weight: .semibold))
+                .multilineTextAlignment(.center)
                 .frame(maxWidth: block ? .infinity : nil)
-                .frame(minHeight: large ? 48 : 44)
+                .frame(minHeight: large ? 52 : 44)
                 .padding(.horizontal, large ? FS.space.s6 : FS.space.s5)
                 .foregroundColor(c.text)
         }
+        .buttonStyle(FSPressStyle())
     }
 }
 
@@ -109,16 +127,18 @@ public struct FSDangerButton: View {
         let fg = muted ? c.textMuted : c.danger
         Button(action: action) {
             Text(label)
-                .font(.system(size: large ? 16 : 14, weight: .semibold))
+                .font(FS.font.scaled(large ? 17 : 16, weight: .semibold))
+                .multilineTextAlignment(.center)
                 .frame(maxWidth: block ? .infinity : nil)
-                .frame(minHeight: large ? 48 : 44)
+                .frame(minHeight: large ? 52 : 44)
                 .padding(.horizontal, large ? FS.space.s6 : FS.space.s5)
                 .foregroundColor(fg)
                 .overlay(
-                    RoundedRectangle(cornerRadius: FS.radius.md)
+                    RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
                         .stroke(fg, lineWidth: 1)
                 )
         }
+        .buttonStyle(FSPressStyle())
     }
 }
 
@@ -136,10 +156,10 @@ public struct FSCard<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(c.surface)
             .overlay(
-                RoundedRectangle(cornerRadius: FS.radius.md)
+                RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
                     .stroke(c.border, lineWidth: 1)
             )
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
     }
 }
 
@@ -165,7 +185,7 @@ public struct FSField: View {
     public var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            Text(label).font(FS.font.caption()).foregroundColor(c.text)
+            Text(label).font(FS.font.scaled(13, weight: .medium)).foregroundColor(c.text)
             Group {
                 if secure {
                     SecureField(placeholder, text: $value)
@@ -176,15 +196,15 @@ public struct FSField: View {
                         .textInputAutocapitalization(.never)
                 }
             }
-            .font(FS.font.body())
+            .font(.system(.body))
             .padding(.horizontal, 14)
-            .frame(height: 40)
+            .frame(minHeight: 44)
             .background(c.surfaceSunken)
             .overlay(
-                RoundedRectangle(cornerRadius: FS.radius.sm)
+                RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous)
                     .stroke(error != nil ? c.danger : c.border, lineWidth: 1)
             )
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
 
             if let sub = error ?? helper {
                 Text(sub)
@@ -216,13 +236,13 @@ public struct FSPill: View {
                 Text(label).font(FS.font.caption()).foregroundColor(fg)
                 if let trailingIcon {
                     Image(systemName: trailingIcon)
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(FS.font.scaled(10, weight: .semibold))
                         .foregroundColor(c.textMuted)
                 }
             }
         }
-        .padding(.horizontal, 10).padding(.vertical, 2)
-        .frame(minHeight: 22)
+        .padding(.horizontal, 10).padding(.vertical, 3)
+        .frame(minHeight: 24)
         .background(bg)
         .clipShape(Capsule())
     }

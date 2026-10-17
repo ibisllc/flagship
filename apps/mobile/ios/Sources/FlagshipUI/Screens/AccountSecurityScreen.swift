@@ -112,7 +112,7 @@ public struct AccountSecurityScreen: View {
                     .foregroundColor(viewModel.isMultiDevice ? c.success : c.primary)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(viewModel.isMultiDevice ? "Multi-device + 2FA" : "Single-device account")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(FS.font.scaled(16, weight: .semibold))
                         .foregroundColor(c.text)
                         .accessibilityIdentifier("account-security-badge")
                     Text(viewModel.isMultiDevice
@@ -130,7 +130,7 @@ public struct AccountSecurityScreen: View {
     private func explainer(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
             Text(viewModel.isMultiDevice ? "Currently enabled" : "Why enable this?")
-                .font(.system(size: 12, weight: .semibold)).tracking(1)
+                .font(FS.font.scaled(13, weight: .semibold))
                 .foregroundColor(c.textMuted)
             Text(viewModel.isMultiDevice
                  ? "Your TOTP secret was generated on this device on \(formattedDate(viewModel.totpEnrolledAt)). Store your recovery codes somewhere safe — they're the only way back in if your authenticator app is lost."
@@ -178,9 +178,9 @@ public struct AccountSecurityScreen: View {
                 )) {
                     HStack(spacing: FS.space.s2) {
                         Image(systemName: "applewatch")
-                            .foregroundColor(c.primary)
+                            .foregroundColor(c.accent)
                         Text("Quick approve from Apple Watch")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(FS.font.scaled(16, weight: .semibold))
                             .foregroundColor(c.text)
                     }
                 }
@@ -228,7 +228,7 @@ public struct AccountSecurityScreen: View {
                 HStack(spacing: FS.space.s2) {
                     Image(systemName: "key.horizontal.fill").foregroundColor(c.danger)
                     Text("Rotate admin key")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(FS.font.scaled(16, weight: .semibold))
                         .foregroundColor(c.text)
                 }
                 Text("If a device might be lost or stolen, rotate your admin key. It becomes the only admin key; every other device loses admin until it recovers.")
@@ -296,10 +296,10 @@ public struct AccountSecurityScreen: View {
                 .padding(.horizontal, 12)
                 .background(c.surface)
                 .overlay(
-                    RoundedRectangle(cornerRadius: FS.radius.md)
+                    RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
                         .stroke(c.border, lineWidth: 1)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
                 .accessibilityIdentifier("rotate-admin-reescrow-passphrase")
 
             if let err = vm.recoveryUpdateError {
@@ -400,7 +400,7 @@ struct AccountSecurityEnableSheet: View {
     private func step1(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
             Text("Step 1 of 4")
-                .font(.system(size: 12, weight: .semibold)).tracking(1)
+                .font(FS.font.scaled(13, weight: .semibold))
                 .foregroundColor(c.textMuted)
             Text("You'll need an authenticator app like 1Password, Google Authenticator, or Authy. We'll show a QR code and a manual key — scan or paste either one.")
                 .foregroundColor(c.text)
@@ -421,7 +421,7 @@ struct AccountSecurityEnableSheet: View {
     private func step2(c: FSColors, staged: AccountSecurityViewModel.StagedSecret) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
             Text("Step 2 of 4 — scan or paste")
-                .font(.system(size: 12, weight: .semibold)).tracking(1)
+                .font(FS.font.scaled(13, weight: .semibold))
                 .foregroundColor(c.textMuted)
             FSCard {
                 if let image = pngImage(fromBase64: staged.qrPngBase64) {
@@ -454,15 +454,15 @@ struct AccountSecurityEnableSheet: View {
             TextField("123456", text: $sampleCode)
                 .keyboardType(.numberPad)
                 .textContentType(.oneTimeCode)
-                .font(.system(size: 22, weight: .medium, design: .monospaced))
+                .font(FS.font.scaled(22, weight: .medium, design: .monospaced))
                 .multilineTextAlignment(.center)
                 .padding(.vertical, 12)
                 .background(c.surface)
                 .overlay(
-                    RoundedRectangle(cornerRadius: FS.radius.md)
+                    RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
                         .stroke(c.border, lineWidth: 1)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
                 .accessibilityIdentifier("account-security-sample-code")
             FSPrimaryButton(
                 "Verify code",
@@ -491,7 +491,7 @@ struct AccountSecurityEnableSheet: View {
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.circle.fill").foregroundColor(c.success)
                 Text("Step 4 of 4 — save your recovery codes")
-                    .font(.system(size: 14, weight: .semibold)).foregroundColor(c.text)
+                    .font(FS.font.scaled(14, weight: .semibold)).foregroundColor(c.text)
             }
             Text("Print these or store them in a password manager. Each code works once if you lose your authenticator. They're the ONLY way back in.")
                 .foregroundColor(c.text)
@@ -530,7 +530,7 @@ struct AccountSecurityEnableSheet: View {
             HStack(spacing: 6) {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundColor(c.danger)
                 Text("Something went wrong")
-                    .font(.system(size: 14, weight: .semibold)).foregroundColor(c.danger)
+                    .font(FS.font.scaled(14, weight: .semibold)).foregroundColor(c.danger)
             }
             Text(message).foregroundColor(c.text)
                 .accessibilityIdentifier("account-security-failed-msg")

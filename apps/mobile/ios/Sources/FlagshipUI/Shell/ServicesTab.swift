@@ -283,7 +283,7 @@ public struct ServicesTab: View {
     @ViewBuilder
     private func subheader(c: FSColors, vm: ServicesListViewModel) -> some View {
         Text(headerSubtitle(vm: vm))
-            .font(.system(size: 17))
+            .font(FS.font.scaled(17))
             .foregroundColor(c.textMuted)
     }
 
@@ -360,19 +360,16 @@ public struct ServicesTab: View {
                 }
                 Button(action: { startCreation(pinnedFqdn: nil) }) {
                     HStack(spacing: 8) {
-                        Image(systemName: "sparkles").foregroundColor(c.primary)
-                        Text("Build another service").font(.system(size: 15, weight: .semibold)).foregroundColor(c.primary)
+                        Image(systemName: "sparkles").foregroundColor(c.accent)
+                        Text("Build another service").font(FS.font.scaled(15, weight: .semibold)).foregroundColor(c.primary)
                         Spacer()
                     }
                     .padding(.horizontal, FS.space.s4)
                     .padding(.vertical, FS.space.s3)
-                    .background(c.primary.opacity(0.08))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: FS.radius.md)
-                            .stroke(c.primary.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
-                }.buttonStyle(.plain)
+                    .frame(minHeight: 44)
+                    .background(c.primary.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
+                }.buttonStyle(FSPressStyle())
             }
             }
         }

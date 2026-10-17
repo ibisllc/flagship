@@ -60,7 +60,7 @@ public struct RecoveryScreen: View {
 
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
-                        Text("CLOUD RECOVERY").font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
+                        Text("Cloud recovery").font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
                         switch vm.phase {
                         case .idle:
                             Text("Recovery isn't set up yet.").foregroundColor(c.text)
@@ -72,7 +72,7 @@ public struct RecoveryScreen: View {
                                 .textInputAutocapitalization(.never)
                                 .padding(FS.space.s3)
                                 .background(c.surface)
-                                .overlay(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border))
+                                .overlay(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border))
                                 .accessibilityIdentifier("recovery-enroll-passphrase")
                             SecureField("Re-enter passphrase", text: $enrollPassphrase2)
                                 .textContentType(.newPassword)
@@ -80,7 +80,7 @@ public struct RecoveryScreen: View {
                                 .textInputAutocapitalization(.never)
                                 .padding(FS.space.s3)
                                 .background(c.surface)
-                                .overlay(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border))
+                                .overlay(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border))
                                 .accessibilityIdentifier("recovery-enroll-passphrase-2")
                             if let localError {
                                 Text(localError).font(FS.font.caption()).foregroundColor(c.danger)
@@ -116,7 +116,7 @@ public struct RecoveryScreen: View {
 
                 FSCard {
                     HStack(alignment: .top, spacing: FS.space.s2) {
-                        Image(systemName: "info.circle.fill").foregroundColor(c.primary)
+                        Image(systemName: "info.circle.fill").foregroundColor(c.accent)
                         VStack(alignment: .leading, spacing: 4) {
                             Text("How this works").font(FS.font.bodySm()).foregroundColor(c.text)
                             Text("Recovery requires both your recovery passphrase and access to the passkey you saved for Flagship (in iCloud Keychain or your password manager). Together they unlock the encrypted copy of your account key stored on our servers; we cannot read it or reset your passphrase.")

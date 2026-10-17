@@ -51,14 +51,14 @@ private struct OperationsSliver: View {
                     .controlSize(.small)
                     .tint(c.onPrimary)
                 Text(op.label)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(FS.font.scaled(14, weight: .semibold))
                     .foregroundColor(c.onPrimary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Spacer(minLength: FS.space.s2)
                 if extra > 0 {
                     Text("+\(extra)")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(FS.font.scaled(12, weight: .bold))
                         .foregroundColor(c.onPrimary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -66,7 +66,7 @@ private struct OperationsSliver: View {
                         .clipShape(Capsule())
                 }
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(FS.font.scaled(12, weight: .semibold))
                     .foregroundColor(c.onPrimary.opacity(0.85))
             }
             .padding(.horizontal, FS.space.s4)

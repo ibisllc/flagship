@@ -9,7 +9,7 @@ import FlagshipCore
 /// rows and SQL. Owner only: hidden on a restricted profile and whenever the
 /// box refuses (403, a companion) or doesn't have it (404, an older box).
 public enum AppDbCopy {
-    public static let sectionTitle = "DATABASE"
+    public static let sectionTitle = "Database"
     public static let rowTitle = "Database"
     public static let rowSubtitle = "Browse tables and run SQL on the live data"
     public static let screenTitle = "Database"

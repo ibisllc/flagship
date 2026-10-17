@@ -208,7 +208,7 @@ public final class ServiceAccessViewModel {
             noteOwnDeviceKey(ownDeviceKey())
             await loadNamesIfNeeded()
         } catch {
-            phase = .failed("Couldn't reach the box to load access settings.")
+            phase = .failed("Couldn't reach the server to load access settings.")
         }
     }
 
@@ -548,7 +548,7 @@ public final class ServiceAccessViewModel {
         async let roles: Void = refreshMembers()
         _ = await (refreshed, roles)
         if boxFailed {
-            phase = .failed("Removed from the directory, but couldn't reach the box to revoke access. Try again so they're fully removed.")
+            phase = .failed("Removed from the directory, but couldn't reach the server to revoke access. Try again so they're fully removed.")
         } else if revokeFailed {
             phase = .failed("Couldn't remove them. Try again in a moment.")
         }

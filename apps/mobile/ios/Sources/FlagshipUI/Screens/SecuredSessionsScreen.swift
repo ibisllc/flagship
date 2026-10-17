@@ -76,10 +76,10 @@ public struct SecuredSessionsScreen: View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 HStack(alignment: .top, spacing: FS.space.s2) {
-                    Image(systemName: "globe").foregroundColor(c.primary).imageScale(.large)
+                    Image(systemName: "globe").foregroundColor(c.accent).imageScale(.large)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(displayUrl(session))
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(FS.font.scaled(15, weight: .semibold))
                             .foregroundColor(c.text)
                             .lineLimit(1).truncationMode(.middle)
                         Text(session.browserAgent.isEmpty ? "Unknown browser" : session.browserAgent)
@@ -114,7 +114,7 @@ public struct SecuredSessionsScreen: View {
                     .accessibilityIdentifier("secured-session-refresh-\(session.secretId)")
                     Spacer()
                     Button("Stop") { stopTarget = session }
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(FS.font.scaled(14, weight: .semibold))
                         .foregroundColor(c.danger)
                         .accessibilityIdentifier("secured-session-stop-\(session.secretId)")
                 }

@@ -85,7 +85,7 @@ public struct BuildKeyScreen: View {
                             vm.showingForm = true
                         } label: {
                             Label("Add an API key", systemImage: "plus")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(FS.font.scaled(16, weight: .semibold))
                                 .foregroundColor(c.primary)
                         }
                         .buttonStyle(.plain)
@@ -95,7 +95,7 @@ public struct BuildKeyScreen: View {
                     savedKeys(c: c)
 
                     HStack(alignment: .top, spacing: FS.space.s2) {
-                        Image(systemName: "lock.shield").foregroundColor(c.primary)
+                        Image(systemName: "lock.shield").foregroundColor(c.accent)
                         Text("The keys are stored safely in your mobile app and your own servers.")
                             .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                             .fixedSize(horizontal: false, vertical: true)
@@ -194,7 +194,7 @@ public struct BuildKeyScreen: View {
                 FSCard {
                     HStack(spacing: FS.space.s3) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(e.label).font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
+                            Text(e.label).font(FS.font.scaled(15, weight: .semibold)).foregroundColor(c.text)
                                 .lineLimit(1)
                             Text(vm.slug(for: e)).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                                 .lineLimit(1).truncationMode(.middle)
@@ -237,7 +237,7 @@ struct FlagshipInferenceLabel: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: 2) {
-            Text(FreeAiCopy.providerTitle).font(.system(size: 15, weight: .semibold))
+            Text(FreeAiCopy.providerTitle).font(FS.font.scaled(15, weight: .semibold))
                 .foregroundColor(usable ? c.text : c.textMuted)
             Text(FreeAiCopy.providerSubtitle).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -302,7 +302,7 @@ struct AiKeyRelayRowToggle: View {
         Toggle(isOn: $relay) {
             Text(AiKeyRelayCopy.caption(relay)).font(FS.font.bodySm()).foregroundColor(c.textMuted)
         }
-        .tint(c.primary)
+        .tint(c.accent)
         .accessibilityLabel(AiKeyRelayCopy.toggle)
         .accessibilityValue(AiKeyRelayCopy.caption(relay))
         .accessibilityIdentifier(identifier)
@@ -352,7 +352,7 @@ struct AiKeyForm: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .tint(c.primary)
+            .tint(c.accent)
             .accessibilityIdentifier("ai-key-relay-toggle")
             if showSaveToggle {
                 Toggle(isOn: $saveOnDevice) {
@@ -362,7 +362,7 @@ struct AiKeyForm: View {
                             .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                     }
                 }
-                .tint(c.primary)
+                .tint(c.accent)
                 .accessibilityIdentifier("ai-key-save-toggle")
             }
             if let err = errorMessage {

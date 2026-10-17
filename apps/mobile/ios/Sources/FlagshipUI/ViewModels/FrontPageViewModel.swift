@@ -60,7 +60,7 @@ public final class FrontPageViewModel {
             options = o
             phase = .ready
         } catch {
-            phase = .failed("Couldn't reach the box to load front-page settings.")
+            phase = .failed("Couldn't reach the server to load front-page settings.")
         }
     }
 
@@ -99,7 +99,7 @@ public final class FrontPageViewModel {
             phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
             return
         } catch {
-            phase = .failed("Couldn't reach the box. Check your connection and try again.")
+            phase = .failed("Couldn't reach the server. Check your connection and try again.")
             return
         }
         current = label.isEmpty ? nil : label

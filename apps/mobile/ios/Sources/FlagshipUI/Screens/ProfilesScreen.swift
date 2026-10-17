@@ -83,16 +83,16 @@ public struct ProfilesScreen: View {
                 }
                 Spacer()
                 if isActive {
-                    Text("ACTIVE")
+                    Text("Active")
                         .font(FS.font.caption())
                         .foregroundColor(c.primary)
                 }
             }
             .padding(FS.space.s4)
             .background(c.surface)
-            .cornerRadius(12)
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
                     .strokeBorder(isActive ? c.primary : c.border, lineWidth: isActive ? 2 : 1)
             )
         }

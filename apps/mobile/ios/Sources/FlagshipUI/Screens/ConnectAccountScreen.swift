@@ -142,11 +142,11 @@ public struct ConnectAccountScreen: View {
                 onJoin(nil)
             } label: {
                 Label("Scan a code", systemImage: "qrcode.viewfinder")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(FS.font.scaled(16, weight: .semibold))
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: 48)
                     .foregroundColor(c.text)
-                    .overlay(RoundedRectangle(cornerRadius: FS.radius.md).stroke(c.border, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(c.border, lineWidth: 1))
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

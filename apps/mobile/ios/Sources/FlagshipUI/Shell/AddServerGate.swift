@@ -99,7 +99,7 @@ struct AddServerAdminOnlyScreen: View {
             c.bg.ignoresSafeArea()
             VStack(spacing: FS.space.s3) {
                 Image(systemName: "lock.shield")
-                    .font(.system(size: 36))
+                    .font(FS.font.scaled(36))
                     .foregroundColor(c.textMuted)
                 Text("Admin devices only")
                     .font(FS.font.h3())

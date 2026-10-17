@@ -14,7 +14,7 @@ import FlagshipCore
 // box-pinned session and the screens.
 
 public enum ServerShareCopy {
-    public static let sectionTitle = "SHARED WITH"
+    public static let sectionTitle = "Shared with"
     public static let shareButton = "Share this server"
     public static let nobodyYet = "Only you can use this server. Share it to let another person see it or help run it."
 

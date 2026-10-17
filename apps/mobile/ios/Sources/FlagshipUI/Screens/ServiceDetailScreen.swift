@@ -196,9 +196,8 @@ public struct ServiceDetailScreen: View {
         // Replace button floats top-right of the section header.
         VStack(alignment: .leading, spacing: FS.space.s3) {
             HStack(alignment: .firstTextBaseline) {
-                Text("WEB DOMAINS")
-                    .font(.system(size: 12, weight: .semibold))
-                    .tracking(1)
+                Text("Web domains")
+                    .font(FS.font.scaled(13, weight: .semibold))
                     .foregroundColor(c.textMuted)
                 Spacer()
                 Button {
@@ -209,7 +208,7 @@ public struct ServiceDetailScreen: View {
                         Image(systemName: "arrow.triangle.2.circlepath")
                         Text("Replace")
                     }
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(FS.font.scaled(13, weight: .semibold))
                     .foregroundColor(c.danger)
                     .padding(.horizontal, FS.space.s2)
                     .padding(.vertical, 4)
@@ -257,7 +256,7 @@ public struct ServiceDetailScreen: View {
     @ViewBuilder
     private func shortRedirectGroup(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            sectionLabel("SHORT REDIRECT", c: c)
+            sectionLabel("Short redirect", c: c)
             // UX-E — name the trust tradeoff vs. the canonical link below.
             Text("A convenient short link that redirects to your service.")
                 .font(FS.font.caption())
@@ -303,7 +302,7 @@ public struct ServiceDetailScreen: View {
         if !selected.isEmpty {
             let stem = vm.appLinks.value?.displayLabel ?? defaultLabel
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                sectionLabel("INDIVIDUAL INSTANCES", c: c)
+                sectionLabel("Individual instances", c: c)
                 ForEach(selected) { pod in
                     let url = "https://\(stem).\(SlugUtil.slugify(pod.name)).\(username ?? "you").\(Endpoints.dataApex)"
                     urlRow(url: url, style: .muted, c: c)
@@ -361,8 +360,7 @@ public struct ServiceDetailScreen: View {
 
     private func sectionLabel(_ s: String, c: FSColors) -> some View {
         Text(s)
-            .font(.system(size: 11, weight: .semibold))
-            .tracking(1)
+            .font(FS.font.scaled(13, weight: .semibold))
             .foregroundColor(c.textMuted)
     }
 
@@ -404,11 +402,11 @@ public struct ServiceDetailScreen: View {
     @ViewBuilder
     private func browserTabsRow(d: AppDetailResponse, c: FSColors) -> some View {
         if !d.browserTabs.isEmpty {
-            section("BROWSER", c: c) {
+            section("Browser", c: c) {
                 Button(action: onOpenBrowserTabs) {
                     FSCard {
                         HStack(spacing: FS.space.s3) {
-                            Image(systemName: "rectangle.on.rectangle").foregroundColor(c.primary)
+                            Image(systemName: "rectangle.on.rectangle").foregroundColor(c.accent)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Open browser viewer").foregroundColor(c.text)
                                 Text("\(d.browserTabs.count) tab\(d.browserTabs.count == 1 ? "" : "s") running server-side")
@@ -431,7 +429,7 @@ public struct ServiceDetailScreen: View {
             Button(action: onOpenDatabase) {
                 FSCard {
                     HStack(spacing: FS.space.s3) {
-                        Image(systemName: "cylinder.split.1x2").foregroundColor(c.primary)
+                        Image(systemName: "cylinder.split.1x2").foregroundColor(c.accent)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(AppDbCopy.rowTitle).foregroundColor(c.text)
                             Text(db.state.value == nil ? AppDbCopy.rowSubtitle : AppDbCopy.tableCount(db.tableCount))
@@ -452,7 +450,7 @@ public struct ServiceDetailScreen: View {
         Button(action: { showAdapterReport = true }) {
             FSCard {
                 HStack(spacing: FS.space.s3) {
-                    Image(systemName: "exclamationmark.bubble").foregroundColor(c.primary)
+                    Image(systemName: "exclamationmark.bubble").foregroundColor(c.accent)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Report a problem with this adaptation").foregroundColor(c.text)
                         Text("It was set up from a shared adaptation of \(repo)")
@@ -509,7 +507,7 @@ public struct ServiceDetailScreen: View {
                     .accessibilityIdentifier("service-detail-egress-pending")
                 }
                 if !card.approved.isEmpty {
-                    section("INTERNET ACCESS", c: c) {
+                    section("Internet access", c: c) {
                         FSCard {
                             VStack(alignment: .leading, spacing: FS.space.s2) {
                                 Text("This app may reach:").font(FS.font.bodySm()).foregroundColor(c.textMuted)
@@ -555,7 +553,7 @@ public struct ServiceDetailScreen: View {
         Button(action: onEdit) {
             FSCard {
                 HStack(spacing: FS.space.s3) {
-                    Image(systemName: "pencil.and.outline").foregroundColor(c.primary)
+                    Image(systemName: "pencil.and.outline").foregroundColor(c.accent)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Edit this service").foregroundColor(c.text)
                         Text("Change it with AI, or in your own editor")
@@ -572,11 +570,11 @@ public struct ServiceDetailScreen: View {
     }
 
     private func accessRow(c: FSColors) -> some View {
-        section("ACCESS CONTROL", c: c) {
+        section("Access control", c: c) {
             Button(action: onOpenAccess) {
                 FSCard {
                     HStack(spacing: FS.space.s3) {
-                        Image(systemName: "person.2.fill").foregroundColor(c.primary)
+                        Image(systemName: "person.2.fill").foregroundColor(c.accent)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Access control").foregroundColor(c.text)
                             Text("Open to all or members only, and each member's rank")
@@ -596,7 +594,7 @@ public struct ServiceDetailScreen: View {
     private func logsAndBackup(d: AppDetailResponse, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
             if !d.recentLogs.isEmpty {
-                section("RECENT LOGS", c: c) {
+                section("Recent logs", c: c) {
                     FSCard {
                         VStack(alignment: .leading, spacing: 4) {
                             ForEach(d.recentLogs, id: \.self) { line in
@@ -607,7 +605,7 @@ public struct ServiceDetailScreen: View {
                 }
             }
             if let backup = vm.backup {
-                section("BACKUP", c: c) {
+                section("Backup", c: c) {
                     FSCard { backupCard(backup, last: d.lastBackup, c: c) }
                 }
             }
@@ -676,7 +674,7 @@ public struct ServiceDetailScreen: View {
     @ViewBuilder
     private func section<C: View>(_ label: String, c: FSColors, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text(label).font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
+            Text(label).font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
             content()
         }
     }
@@ -724,7 +722,7 @@ struct AdapterReportSheet: View {
                                 .padding(10)
                                 .frame(height: 160)
                                 .background(c.surfaceSunken)
-                                .overlay(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border, lineWidth: 1))
+                                .overlay(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border, lineWidth: 1))
                                 .accessibilityIdentifier("adapter-report-text")
                             Text("\(detail.count) / 2000").font(FS.font.caption()).foregroundColor(c.textMuted)
                             if let error { ErrorCard(message: error) }

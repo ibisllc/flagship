@@ -138,7 +138,7 @@ public struct CreateServerStubScreen: View {
     private func deliveryChooserPage(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
             Button { startPair() } label: {
-                deliveryCard(icon: "qrcode.viewfinder", accent: c.primary,
+                deliveryCard(icon: "qrcode.viewfinder", accent: c.accent,
                              title: "Pair with the builder app",
                              body: "Scan the builder's QR (or type its code) and the recipe is sent over a secure live link. Easiest if the builder is open in front of you.",
                              c: c)
@@ -150,7 +150,7 @@ public struct CreateServerStubScreen: View {
             Button { Task { await shareRecipe() } } label: {
                 deliveryCard(icon: "square.and.arrow.up", accent: c.text,
                              title: "Save / share recipe file",
-                             body: "Save the recipe as a file or send it (AirDrop, Messages, Mail). Whoever builds the box opens it in the builder. No secrets in the file.",
+                             body: "Save the recipe as a file or send it (AirDrop, Messages, Mail). Whoever builds the server opens it in the builder. No secrets in the file.",
                              c: c)
             }
             .buttonStyle(.plain)
@@ -174,8 +174,8 @@ public struct CreateServerStubScreen: View {
         FSCard(padding: FS.space.s4) {
             HStack(alignment: .top, spacing: FS.space.s3) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: FS.radius.sm).fill(accent.opacity(0.12))
-                    Image(systemName: icon).foregroundColor(accent).font(.system(size: 16, weight: .semibold))
+                    RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).fill(accent.opacity(0.12))
+                    Image(systemName: icon).foregroundColor(accent).font(FS.font.scaled(16, weight: .semibold))
                 }
                 .frame(width: 32, height: 32)
                 VStack(alignment: .leading, spacing: 2) {
@@ -255,7 +255,7 @@ public struct CreateServerStubScreen: View {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     switch designStep {
                     case 0:
-                        FSField(value: $vm.name, label: "Subdomain", placeholder: "home", error: vm.nameError)
+                        FSField(value: $vm.name, label: "Server name", placeholder: "home", error: vm.nameError)
                             .accessibilityIdentifier("cs-name-field")
                             .textInputAutocapitalization(.never)
                         Text(vm.previewFqdn)
@@ -381,13 +381,13 @@ public struct CreateServerStubScreen: View {
             bootUnlockOption(
                 mode: .auto,
                 title: "Reboots on its own",
-                subtitle: "Best for flaky power or connections. After you approve its first boot, the box self-unlocks on every reboot — no phone needed. Revocable any time.",
+                subtitle: "Best for flaky power or connections. After you approve its first boot, the server self-unlocks on every reboot — no phone needed. Revocable any time.",
                 c: c
             )
             bootUnlockOption(
                 mode: .approve,
                 title: "Authorize each boot",
-                subtitle: "Most theft-resistant. The box asks your phone to unlock on every reboot. Best for critical servers on stable infrastructure.",
+                subtitle: "Most theft-resistant. The server asks your phone to unlock on every reboot. Best for critical servers on stable infrastructure.",
                 c: c
             )
         }
@@ -405,7 +405,7 @@ public struct CreateServerStubScreen: View {
         } label: {
             HStack(alignment: .top, spacing: FS.space.s3) {
                 Image(systemName: selected ? "largecircle.fill.circle" : "circle")
-                    .foregroundColor(selected ? c.primary : c.textMuted)
+                    .foregroundColor(selected ? c.accent : c.textMuted)
                     .padding(.top, 2)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.subheadline.weight(.medium)).foregroundColor(c.text)
@@ -415,8 +415,8 @@ public struct CreateServerStubScreen: View {
             }
             .padding(FS.space.s3)
             .background(
-                RoundedRectangle(cornerRadius: FS.radius.md)
-                    .stroke(selected ? c.primary : c.border, lineWidth: selected ? 2 : 1)
+                RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
+                    .stroke(selected ? c.accent : c.border, lineWidth: selected ? 2 : 1)
             )
         }
         .buttonStyle(.plain)
@@ -437,11 +437,11 @@ public struct CreateServerStubScreen: View {
                     .font(.subheadline.weight(.medium))
                     .foregroundColor(c.text)
             }
-            .tint(c.primary)
+            .tint(c.accent)
             .accessibilityIdentifier("cs-encrypt-disk-toggle")
             Text(vm.encryptDisk
-                 ? "Recommended. Your data disk is LUKS-encrypted; the box unlocks it at boot."
-                 : "Less safe — the disk is left unencrypted. Only for boxes that can't keep network at boot (e.g. Wi-Fi-only), where the boot-time unlock can't run.")
+                 ? "Recommended. Your data disk is LUKS-encrypted; the server unlocks it at boot."
+                 : "Less safe — the disk is left unencrypted. Only for servers that can't keep network at boot (e.g. Wi-Fi-only), where the boot-time unlock can't run.")
                 .font(.caption)
                 .foregroundColor(c.textMuted)
         }
@@ -468,7 +468,7 @@ public struct CreateServerStubScreen: View {
                         .foregroundColor(c.textMuted)
                 }
             }
-            .tint(c.primary)
+            .tint(c.accent)
             .accessibilityIdentifier("cs-advanced-toggle")
 
             if vm.advancedMode {
@@ -477,7 +477,7 @@ public struct CreateServerStubScreen: View {
                         .font(.subheadline.weight(.medium))
                         .foregroundColor(c.text)
                 }
-                .tint(c.primary)
+                .tint(c.accent)
                 .accessibilityIdentifier("cs-embed-secrets-toggle")
                 .padding(.leading, FS.space.s3)
                 Text("This embeds security keys directly in the recipe. Hence, the server will be able to boot even if the phone is offline.")
@@ -490,7 +490,7 @@ public struct CreateServerStubScreen: View {
                         .font(.subheadline.weight(.medium))
                         .foregroundColor(c.text)
                 }
-                .tint(c.primary)
+                .tint(c.accent)
                 .accessibilityIdentifier("cs-debug-friendly-toggle")
                 .padding(.leading, FS.space.s3)
                 if vm.debugFriendly {
@@ -551,7 +551,7 @@ public struct CreateServerStubScreen: View {
                     }
                 )
                 .frame(height: 300)
-                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
             }
             .accessibilityIdentifier("cs-scanner-card")
 
@@ -610,7 +610,7 @@ public struct CreateServerStubScreen: View {
             )
             FSCard(padding: FS.space.s6) {
                 Text(QrRelay.formatMatchCode(code))
-                    .font(.system(size: 44, weight: .semibold, design: .monospaced))
+                    .font(FS.font.scaled(44, weight: .semibold, design: .monospaced))
                     .foregroundColor(c.text)
                     .tracking(6)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -673,7 +673,7 @@ public struct CreateServerStubScreen: View {
                     Image(systemName: "book.fill")
                     Text("How to flash + boot")
                 }
-                .font(.system(size: 15, weight: .semibold))
+                .font(FS.font.scaled(15, weight: .semibold))
                 .foregroundColor(c.primary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, FS.space.s3)

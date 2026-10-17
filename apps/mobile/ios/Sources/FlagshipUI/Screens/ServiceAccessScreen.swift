@@ -139,7 +139,7 @@ public struct ServiceAccessScreen: View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 Text(serviceLabel)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(FS.font.scaled(17, weight: .semibold))
                     .foregroundColor(c.text)
                 Text("id: \(serviceRef)")
                     .font(FS.font.caption())
@@ -220,7 +220,7 @@ public struct ServiceAccessScreen: View {
                     .fill(c.surfaceSunken)
                     .frame(width: 36, height: 36)
                     .overlay(Image(systemName: a.isDevice ? "iphone" : "person.2.fill")
-                        .font(.system(size: 14)).foregroundColor(c.textMuted))
+                        .font(FS.font.scaled(14)).foregroundColor(c.textMuted))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(vm?.accountName(a) ?? "")
                         .font(FS.font.body()).foregroundColor(c.text).lineLimit(1)
@@ -267,13 +267,13 @@ public struct ServiceAccessScreen: View {
                 if busy { ProgressView().controlSize(.mini) }
                 if let current {
                     if current.crowned {
-                        Image(systemName: "crown.fill").font(.system(size: 12)).foregroundColor(Self.crownGold)
+                        Image(systemName: "crown.fill").font(FS.font.scaled(12)).foregroundColor(Self.crownGold)
                     }
-                    Text(current.label).font(.system(size: 14, weight: .semibold))
+                    Text(current.label).font(FS.font.scaled(14, weight: .semibold))
                 } else {
-                    Text("Refused").font(.system(size: 14, weight: .semibold))
+                    Text("Refused").font(FS.font.scaled(14, weight: .semibold))
                 }
-                Image(systemName: "chevron.up.chevron.down").font(.system(size: 11, weight: .semibold))
+                Image(systemName: "chevron.up.chevron.down").font(FS.font.scaled(11, weight: .semibold))
             }
             .foregroundColor(current == nil ? c.danger : c.primary)
             .padding(.horizontal, FS.space.s3)
@@ -288,7 +288,7 @@ public struct ServiceAccessScreen: View {
 
     private func refusedLabel(id: String, c: FSColors) -> some View {
         Text("Refused")
-            .font(.system(size: 14, weight: .semibold))
+            .font(FS.font.scaled(14, weight: .semibold))
             .foregroundColor(c.danger)
             .padding(.horizontal, FS.space.s3)
             .frame(minHeight: 32)
@@ -344,7 +344,7 @@ public struct ServiceAccessScreen: View {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 HStack {
                     Text(kind == .group ? "Add a group" : "Add a person")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(FS.font.scaled(16, weight: .semibold))
                         .foregroundColor(c.text)
                     Spacer()
                     Button { adding = nil; vm?.clearLink() } label: {
@@ -387,7 +387,7 @@ public struct ServiceAccessScreen: View {
                     Toggle(isOn: $approveFirst) {
                         Text("I approve them before they get in").foregroundColor(c.text)
                     }
-                    .tint(c.primary)
+                    .tint(c.accent)
                     .accessibilityIdentifier("service-access-approve-toggle")
                 }
                 FSPrimaryButton(vm?.busyAdd == true ? "Creating…" : "Create invite link", block: true, large: true) {
@@ -424,12 +424,12 @@ public struct ServiceAccessScreen: View {
             HStack(spacing: 4) {
                 if busy { ProgressView().controlSize(.mini) }
                 if selection.crowned {
-                    Image(systemName: "crown.fill").font(.system(size: 12)).foregroundColor(Color(red: 0.79, green: 0.64, blue: 0.15))
+                    Image(systemName: "crown.fill").font(FS.font.scaled(12)).foregroundColor(Color(red: 0.79, green: 0.64, blue: 0.15))
                 }
-                Text(selection.label).font(.system(size: 14, weight: .semibold))
-                Image(systemName: "chevron.up.chevron.down").font(.system(size: 11, weight: .semibold))
+                Text(selection.label).font(FS.font.scaled(14, weight: .semibold))
+                Image(systemName: "chevron.up.chevron.down").font(FS.font.scaled(11, weight: .semibold))
             }
-            .foregroundColor(c.primary)
+            .foregroundColor(c.accent)
             .padding(.horizontal, FS.space.s3)
             .frame(minHeight: 32)
             .background(c.surfaceSunken)
@@ -445,9 +445,9 @@ public struct ServiceAccessScreen: View {
         let c = FSColors.scheme(scheme)
         return HStack(spacing: 4) {
             if role.crowned {
-                Image(systemName: "crown.fill").font(.system(size: 12)).foregroundColor(Color(red: 0.79, green: 0.64, blue: 0.15))
+                Image(systemName: "crown.fill").font(FS.font.scaled(12)).foregroundColor(Color(red: 0.79, green: 0.64, blue: 0.15))
             }
-            Text(role.label).font(.system(size: 14, weight: .semibold))
+            Text(role.label).font(FS.font.scaled(14, weight: .semibold))
         }
         .foregroundColor(c.textMuted)
         .padding(.horizontal, FS.space.s3)
@@ -468,7 +468,7 @@ public struct ServiceAccessScreen: View {
             Toggle(isOn: $groupExpires) {
                 Text("Expire this link in 7 days").foregroundColor(c.text)
             }
-            .tint(c.primary)
+            .tint(c.accent)
             .accessibilityIdentifier("service-access-group-expires")
         }
     }
@@ -529,7 +529,7 @@ public struct ServiceAccessScreen: View {
                                 .accessibilityIdentifier("service-access-invited-by-\(p.inviteId)")
                             if vm?.isAdminDevice == true {
                                 Button("Revoke") { confirmRemove = p }
-                                    .font(.system(size: 13, weight: .semibold))
+                                    .font(FS.font.scaled(13, weight: .semibold))
                                     .foregroundColor(c.danger)
                                     .buttonStyle(.plain)
                                     .accessibilityLabel("Revoke \(p.name)")
@@ -586,7 +586,7 @@ public struct ServiceAccessScreen: View {
             Circle()
                 .fill(c.surfaceSunken)
                 .frame(width: 36, height: 36)
-                .overlay(Image(systemName: "person.3.fill").font(.system(size: 14)).foregroundColor(c.textMuted))
+                .overlay(Image(systemName: "person.3.fill").font(FS.font.scaled(14)).foregroundColor(c.textMuted))
         } else if let photo = p.photo, let img = imageFromDataUri(photo) {
             Image(uiImage: img)
                 .resizable()

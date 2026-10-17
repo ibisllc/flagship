@@ -19,10 +19,10 @@ public struct BrowserTabsScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
                 Text("Open tabs")
-                    .font(.system(size: 28, weight: .medium))
+                    .font(FS.font.scaled(28, weight: .medium))
                     .foregroundColor(c.text)
                 Text("Pick a tab to stream. Touches are forwarded to the headless browser.")
-                    .font(.system(size: 14))
+                    .font(FS.font.scaled(14))
                     .foregroundColor(c.textMuted)
                 switch vm.state {
                 case .idle, .loading:
@@ -63,18 +63,18 @@ public struct BrowserTabsScreen: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(tab.title ?? tab.tabId)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(FS.font.scaled(16, weight: .semibold))
                         .foregroundColor(c.text)
                     if let url = tab.currentUrl {
                         Text(url)
-                            .font(.system(size: 12, design: .monospaced))
+                            .font(FS.font.scaled(12, design: .monospaced))
                             .foregroundColor(c.textMuted)
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
                 }
                 Spacer()
-                Image(systemName: "play.circle.fill").foregroundColor(c.primary)
+                Image(systemName: "play.circle.fill").foregroundColor(c.accent)
             }
         }
     }

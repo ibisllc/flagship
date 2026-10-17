@@ -96,7 +96,7 @@ public struct RealAccountLoginScreen: View {
             FSCard {
                 HStack(alignment: .top, spacing: FS.space.s2) {
                     Image(systemName: "doc.badge.arrow.up")
-                        .foregroundColor(c.primary)
+                        .foregroundColor(c.accent)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Import backup file")
                             .font(FS.font.bodySm())
@@ -169,7 +169,7 @@ public struct RealAccountLoginScreen: View {
                 .textInputAutocapitalization(.never)
                 .padding(FS.space.s3)
                 .background(c.surface)
-                .overlay(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border))
+                .overlay(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border))
                 .accessibilityIdentifier("login-recovery-passphrase")
 
             if case .failed(let msg) = vm.phase {
@@ -298,7 +298,7 @@ public struct RealAccountLoginScreen: View {
                     .autocorrectionDisabled(true)
                     .padding(FS.space.s3)
                     .background(c.surface)
-                    .overlay(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border))
+                    .overlay(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border))
                     .accessibilityIdentifier("login-takeover-passphrase")
                 FSField(
                     value: $vm.secondFactorInput,
@@ -337,7 +337,7 @@ public struct RealAccountLoginScreen: View {
         FSCard {
             HStack(alignment: .top, spacing: FS.space.s2) {
                 Image(systemName: "clock.badge.exclamationmark")
-                    .foregroundColor(c.primary)
+                    .foregroundColor(c.accent)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(multi ? "24-hour security hold" : "3-day security hold")
                         .font(FS.font.bodySm()).foregroundColor(c.text)
@@ -365,7 +365,7 @@ public struct RealAccountLoginScreen: View {
                 FSCard {
                     HStack(alignment: .top, spacing: FS.space.s2) {
                         Image(systemName: "clock.badge.exclamationmark")
-                            .foregroundColor(c.primary)
+                            .foregroundColor(c.accent)
                         Text(elapsed
                              ? "The security hold is complete — you can finish restoring access now."
                              : "Access becomes active in \(Self.formatRemaining(remaining)). Any other device on your account has been notified.")

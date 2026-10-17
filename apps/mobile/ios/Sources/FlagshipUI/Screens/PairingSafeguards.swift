@@ -68,10 +68,10 @@ public struct CaptureProtected: ViewModifier {
             Color.black
             VStack(spacing: 12) {
                 Image(systemName: "eye.slash.fill")
-                    .font(.system(size: 32))
+                    .font(FS.font.scaled(32))
                     .foregroundColor(.white)
                 Text("Hidden while your screen is being recorded or shared.")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(FS.font.scaled(14, weight: .medium))
                     .multilineTextAlignment(.center)
                     .foregroundColor(.white)
                     .padding(.horizontal, 24)
@@ -119,12 +119,12 @@ public struct PairingQRView: View {
             #endif
         }
         .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+        .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
     }
 
     private var fallback: some View {
         Text(text)
-            .font(.system(size: 10, design: .monospaced))
+            .font(FS.font.scaled(10, design: .monospaced))
             .frame(width: size, height: size)
             .padding(8)
     }

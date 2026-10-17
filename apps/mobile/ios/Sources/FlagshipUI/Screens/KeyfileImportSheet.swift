@@ -148,7 +148,7 @@ public struct KeyfileImportSheet: View {
                 FSCard {
                     HStack(alignment: .top, spacing: FS.space.s2) {
                         Image(systemName: "clock.badge.exclamationmark")
-                            .foregroundColor(c.primary)
+                            .foregroundColor(c.accent)
                         Text(elapsed
                              ? "The grace period has elapsed — you can finish now."
                              : "This device takes over in \(RealAccountLoginScreen.formatRemaining(remaining)). Your other devices are being alerted.")

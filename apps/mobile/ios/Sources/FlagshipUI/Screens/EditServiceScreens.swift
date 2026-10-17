@@ -48,9 +48,9 @@ public struct EditServiceScreen: View {
         Button(action: action) {
             FSCard {
                 HStack(spacing: FS.space.s3) {
-                    Image(systemName: icon).font(.system(size: 20)).foregroundColor(c.primary).frame(width: 28)
+                    Image(systemName: icon).font(FS.font.scaled(20)).foregroundColor(c.accent).frame(width: 28)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(title).font(.system(size: 16, weight: .semibold)).foregroundColor(c.text)
+                        Text(title).font(FS.font.scaled(16, weight: .semibold)).foregroundColor(c.text)
                         Text(subtitle).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -101,8 +101,8 @@ public struct EditDescribeScreen: View {
                         .padding(10)
                         .frame(height: 180)
                         .background(c.surfaceSunken)
-                        .overlay(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border, lineWidth: 1))
-                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+                        .overlay(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border, lineWidth: 1))
+                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
                         .accessibilityIdentifier("edit-describe-prompt")
                     Text("For example: \"Add a due date to each item and sort by it.\"")
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted)

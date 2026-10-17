@@ -64,7 +64,7 @@ struct BackupPolicyOptions: View {
     private func option(_ p: CreateServerDraftStore.BackupPolicy, _ title: String, _ subtitle: String,
                         warning: Bool = false, c: FSColors) -> some View {
         let selected = policy == p
-        let accent = warning ? c.warning : c.primary
+        let accent = warning ? c.warning : c.accent
         return Button {
             policy = p
         } label: {
@@ -84,7 +84,7 @@ struct BackupPolicyOptions: View {
             }
             .padding(FS.space.s3)
             .background(
-                RoundedRectangle(cornerRadius: FS.radius.md)
+                RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
                     .stroke(selected ? accent : c.border, lineWidth: selected ? 2 : 1)
             )
         }
@@ -108,9 +108,8 @@ struct ServerBackupsSection: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("BACKUPS")
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
+            Text("Backups")
+                .font(FS.font.scaled(13, weight: .semibold))
                 .foregroundColor(c.textMuted)
             if let vm {
                 ServerBackupsCard(vm: vm)
@@ -200,7 +199,7 @@ struct ServerBackupsCard: View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
             HStack(alignment: .firstTextBaseline) {
                 Text(vm.policyLine)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(FS.font.scaled(15, weight: .semibold))
                     .foregroundColor(c.text)
                     .accessibilityIdentifier("sd-backups-policy")
                 Spacer()
@@ -212,7 +211,7 @@ struct ServerBackupsCard: View {
             if let usage = vm.usageLine {
                 if let f = vm.usageFraction {
                     ProgressView(value: f)
-                        .tint(vm.overLimitLine != nil ? c.danger : c.primary)
+                        .tint(vm.overLimitLine != nil ? c.danger : c.accent)
                 }
                 Text(usage).font(FS.font.caption()).foregroundColor(c.textMuted)
                     .accessibilityIdentifier("sd-backups-usage")
@@ -303,8 +302,8 @@ struct ServerBackupsCard: View {
     private func listBlock(_ c: FSColors) -> some View {
         if let backups = vm.saved?.backups, !backups.isEmpty {
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("ON THIS SERVER")
-                    .font(.system(size: 11, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
+                Text("On this server")
+                    .font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
                 ForEach(backups) { b in row(b, c) }
                 Text(ServerBackupsViewModel.oneFileNote)
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
@@ -358,7 +357,7 @@ struct ServerBackupsCard: View {
                     Text("Only on Wi-Fi while charging.").font(FS.font.caption()).foregroundColor(c.textMuted)
                 }
             }
-            .tint(c.primary)
+            .tint(c.accent)
             .accessibilityIdentifier("sd-backups-keep-copy")
             if vm.keepCopyOnPhone, let line = vm.phoneCopyLine {
                 HStack {

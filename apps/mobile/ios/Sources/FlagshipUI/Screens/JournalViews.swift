@@ -23,9 +23,8 @@ struct JournalCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("DIAGNOSTICS")
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
+            Text("Diagnostics")
+                .font(FS.font.scaled(13, weight: .semibold))
                 .foregroundColor(c.textMuted)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
@@ -44,7 +43,7 @@ struct JournalCard: View {
                     if case .loaded(let u, let lines) = vm?.phase {
                         ScrollView {
                             Text(lines.isEmpty ? "(\(u): journal is empty)" : lines.joined(separator: "\n"))
-                                .font(.system(size: 11, design: .monospaced))
+                                .font(FS.font.scaled(11, design: .monospaced))
                                 .foregroundColor(c.text)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .textSelection(.enabled)
@@ -52,7 +51,7 @@ struct JournalCard: View {
                         .frame(maxHeight: 280)
                         .padding(FS.space.s2)
                         .background(c.surface)
-                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
                     }
                 }
             }

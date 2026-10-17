@@ -318,10 +318,10 @@ public struct ServerDetailScreen: View {
                 HStack(alignment: .top, spacing: FS.space.s3) {
                     Image(systemName: "link.badge.plus")
                         .imageScale(.large)
-                        .foregroundColor(c.primary)
+                        .foregroundColor(c.accent)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("This server isn't paired with this device yet")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(FS.font.scaled(17, weight: .semibold))
                             .foregroundColor(c.text)
                         Text("Pair it to manage this server here. Your phone will ask you to unlock once to approve.")
                             .font(FS.font.bodySm())
@@ -351,7 +351,7 @@ public struct ServerDetailScreen: View {
                         .padding(.top, 2)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Connecting to your server…")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(FS.font.scaled(17, weight: .semibold))
                             .foregroundColor(c.text)
                         Text("Your server is online. We're fetching its details — this can take a moment right after it comes up. Pull down to refresh.")
                             .font(FS.font.bodySm())
@@ -376,9 +376,9 @@ public struct ServerDetailScreen: View {
                         .foregroundColor(c.danger)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("This server never came online")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(FS.font.scaled(17, weight: .semibold))
                             .foregroundColor(c.text)
-                        Text("The install reserved this name and registered the box, but its software never checked in. If the install failed, you can delete it below — that frees the name so you can try again.")
+                        Text("The install reserved this name and registered the server, but its software never checked in. If the install failed, you can delete it below — that frees the name so you can try again.")
                             .font(FS.font.bodySm())
                             .foregroundColor(c.textMuted)
                             .fixedSize(horizontal: false, vertical: true)
@@ -399,9 +399,9 @@ public struct ServerDetailScreen: View {
                         .foregroundColor(c.danger)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("This server is revoked")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(FS.font.scaled(17, weight: .semibold))
                             .foregroundColor(c.text)
-                        Text("It can't connect or unlock until you un-revoke it. Its name stays reserved. Un-revoke it below if you got the box back, or delete it to free the name.")
+                        Text("It can't connect or unlock until you un-revoke it. Its name stays reserved. Un-revoke it below if you got the server back, or delete it to free the name.")
                             .font(FS.font.bodySm())
                             .foregroundColor(c.textMuted)
                             .fixedSize(horizontal: false, vertical: true)
@@ -427,9 +427,9 @@ public struct ServerDetailScreen: View {
                             .foregroundColor(c.textMuted)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(lastSeen.map { "Offline — last seen \($0)" } ?? "Offline")
-                                .font(.system(size: 17, weight: .semibold))
+                                .font(FS.font.scaled(17, weight: .semibold))
                                 .foregroundColor(c.text)
-                            Text("This server has gone offline — its software isn't checking in right now. Its data is safe; it'll reconnect when the box is back online. Pull down to re-check.")
+                            Text("This server has gone offline — its software isn't checking in right now. Its data is safe; it'll reconnect when the server is back online. Pull down to re-check.")
                                 .font(FS.font.bodySm())
                                 .foregroundColor(c.textMuted)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -446,7 +446,7 @@ public struct ServerDetailScreen: View {
                             .padding(.top, 2)
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Still coming up…")
-                                .font(.system(size: 17, weight: .semibold))
+                                .font(FS.font.scaled(17, weight: .semibold))
                                 .foregroundColor(c.text)
                             Text("This server is registered and powering on, but hasn't checked in for the first time yet. This can take a few minutes after a fresh install. Pull down to re-check.")
                                 .font(FS.font.bodySm())
@@ -475,20 +475,27 @@ public struct ServerDetailScreen: View {
                 Text(d.serverFqdn)
                     .font(FS.font.mono())
                     .foregroundColor(c.text)
-                HStack(spacing: FS.space.s4) {
-                    stat("Apps", "\(d.serviceCount)", c: c)
-                    stat("Sessions", "\(d.pairedSessionCount)", c: c)
-                    stat("Daemon", d.daemonVersion, c: c)
-                    // The box-reported running commit (short) — the version the
-                    // update card orders away from. Hidden until the box reports.
-                    if let short = Self.shortCommit(d.currentCommit) {
-                        stat("Version", short, c: c)
-                    }
+                    .textSelection(.enabled)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: FS.space.s4) { overviewStats(d, c: c) }
+                    VStack(alignment: .leading, spacing: FS.space.s3) { overviewStats(d, c: c) }
                 }
                 Text("Up for \(uptime(ms: d.uptimeMs))")
                     .font(FS.font.bodySm())
                     .foregroundColor(c.textMuted)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func overviewStats(_ d: ServerDetailResponse, c: FSColors) -> some View {
+        stat("Apps", "\(d.serviceCount)", c: c)
+        stat("Sessions", "\(d.pairedSessionCount)", c: c)
+        stat("Daemon", d.daemonVersion, c: c)
+        // The box-reported running commit (short) — the version the
+        // update card orders away from. Hidden until the box reports.
+        if let short = Self.shortCommit(d.currentCommit) {
+            stat("Version", short, c: c)
         }
     }
 
@@ -505,8 +512,7 @@ public struct ServerDetailScreen: View {
     private func sectionWrap<C: View>(_ label: String, c: FSColors, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
             Text(label)
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
+                .font(FS.font.scaled(13, weight: .semibold))
                 .foregroundColor(c.textMuted)
             content()
         }
@@ -514,8 +520,8 @@ public struct ServerDetailScreen: View {
 
     private func stat(_ label: String, _ value: String, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(value).font(.system(size: 17, weight: .semibold)).foregroundColor(c.text)
-            Text(label).font(.system(size: 11)).foregroundColor(c.textMuted)
+            Text(value).font(FS.font.scaled(17, weight: .semibold)).foregroundColor(c.text)
+            Text(label).font(FS.font.scaled(12)).foregroundColor(c.textMuted)
         }
     }
 
@@ -564,9 +570,8 @@ struct BootUnlockCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("BOOT UNLOCK")
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
+            Text("Boot unlock")
+                .font(FS.font.scaled(13, weight: .semibold))
                 .foregroundColor(c.textMuted)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
@@ -576,7 +581,7 @@ struct BootUnlockCard: View {
                             .font(FS.font.body())
                             .foregroundColor(c.text)
                         if leaseId != nil {
-                            Text("This box self-unlocks its encrypted disk after a reboot — no phone needed. flagshipserver.com only ever holds a key it can't read.")
+                            Text("This server self-unlocks its encrypted disk after a reboot — no phone needed. flagshipserver.com only ever holds a key it can't read.")
                                 .font(FS.font.caption())
                                 .foregroundColor(c.textMuted)
                             FSDangerButton(
@@ -587,7 +592,7 @@ struct BootUnlockCard: View {
                             }
                             .accessibilityIdentifier("sd-revoke-autounlock")
                         } else {
-                            Text("After you approve its first boot, this box will self-unlock on future reboots. Nothing to do until then.")
+                            Text("After you approve its first boot, this server will self-unlock on future reboots. Nothing to do until then.")
                                 .font(FS.font.caption())
                                 .foregroundColor(c.textMuted)
                         }
@@ -595,7 +600,7 @@ struct BootUnlockCard: View {
                         Label("Authorize each boot", systemImage: "faceid")
                             .font(FS.font.body())
                             .foregroundColor(c.text)
-                        Text("This box asks your phone for approval on every reboot — the most theft-resistant mode.")
+                        Text("This server asks your phone for approval on every reboot — the most theft-resistant mode.")
                             .font(FS.font.caption())
                             .foregroundColor(c.textMuted)
                     }
@@ -625,7 +630,7 @@ struct BootUnlockCard: View {
             try await coord.revokeAutoUnlockLease(serverDomain: serverDomain, leaseId: leaseId)
             store.setLeaseId(nil, for: serverDomain)
             self.leaseId = nil
-            toasts.success("Auto-unlock disabled. This box will ask your phone on its next reboot.")
+            toasts.success("Auto-unlock disabled. This server will ask your phone on its next reboot.")
         } catch {
             toasts.error("Couldn't disable auto-unlock: \(error.localizedDescription)")
         }
@@ -666,18 +671,18 @@ struct BootUnlockApprovalCard: View {
 
     private var isEntitlement: Bool { purpose == .entitlement }
     private var headline: String {
-        isEntitlement ? "Your box is waiting for authorization to serve"
-                      : "Your box is waiting for your approval to unlock"
+        isEntitlement ? "Your server is waiting for authorization to serve"
+                      : "Your server is waiting for your approval to unlock"
     }
     private var bodyCopy: String {
         isEntitlement
-            ? "Authorize this box to serve your account so it can come online. Your phone will ask you to unlock once to approve."
+            ? "Authorize this server to serve your account so it can come online. Your phone will ask you to unlock once to approve."
             : "If you just powered it on, release its disk key to bring it online. Your phone will ask you to unlock once to approve."
     }
     private var ctaLabel: String { isEntitlement ? "Authorize" : "Approve unlock" }
     private var approvedCopy: String {
-        isEntitlement ? "Authorized — your box should come online shortly."
-                      : "Unlock approved — your box should come online shortly."
+        isEntitlement ? "Authorized — your server should come online shortly."
+                      : "Unlock approved — your server should come online shortly."
     }
 
     var body: some View {
@@ -738,11 +743,11 @@ struct BootUnlockApprovalCard: View {
     /// Deny DIRECTLY. No biometric has fired; Face ID fires once, only when
     /// they tap Approve (and covers the whole ceremony via memoized keys).
     private func requestCard(vm: BootUnlockApprovalViewModel, c: FSColors) -> some View {
-        sectionWrap("BOX WAITING", c: c) {
+        sectionWrap("Server waiting", c: c) {
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     Text(headline)
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(FS.font.scaled(17, weight: .semibold))
                         .foregroundColor(c.text)
                     Text(bodyCopy)
                         .font(FS.font.caption())
@@ -762,7 +767,7 @@ struct BootUnlockApprovalCard: View {
     }
 
     private func statusCard<C: View>(c: FSColors, @ViewBuilder content: @escaping () -> C) -> some View {
-        sectionWrap("BOOT UNLOCK", c: c) {
+        sectionWrap("Boot unlock", c: c) {
             FSCard { content() }
         }
     }
@@ -771,8 +776,7 @@ struct BootUnlockApprovalCard: View {
     private func sectionWrap<C: View>(_ label: String, c: FSColors, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
             Text(label)
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
+                .font(FS.font.scaled(13, weight: .semibold))
                 .foregroundColor(c.textMuted)
             content()
         }
@@ -815,7 +819,7 @@ private actor ApprovalKeyCache {
         // admin-root signature adds no second Face ID to the approve ceremony.
         let k = try await Keystore.deriveApprovalKeysWithAdminRoot(
             serverId: serverDomain,
-            reason: "Approve your box's boot unlock"
+            reason: "Approve your server's boot unlock"
         )
         cached = k
         return k
@@ -962,9 +966,8 @@ struct UpdateServerCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("UPDATE SERVER")
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
+            Text("Update server")
+                .font(FS.font.scaled(13, weight: .semibold))
                 .foregroundColor(c.textMuted)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
@@ -1273,7 +1276,7 @@ struct UpdateServerSheet: View {
                     .font(FS.font.mono())
                     .padding(FS.space.s3)
                     .background(c.surface)
-                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
                     .accessibilityIdentifier("update-target-field")
                 if let problem = vm.targetProblem(target) {
                     Text(problem).font(FS.font.caption()).foregroundColor(c.textMuted)
@@ -1374,9 +1377,8 @@ struct DangerZoneCard: View {
         let appState = app
         let fqdn = serverDomain
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("DANGER ZONE")
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
+            Text("Danger zone")
+                .font(FS.font.scaled(13, weight: .semibold))
                 .foregroundColor(c.textMuted)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
@@ -1478,6 +1480,7 @@ struct RevokeServerSheet: View {
     @State private var reason: RevokeServerViewModel.Reason = .stolen
     @State private var vm: RevokeServerViewModel?
     @State private var holding = false
+    @State private var revokeFired = 0
 
     /// Long-press duration. Pinned to docs/revocation-ui.md (1.5s).
     static let holdSeconds: Double = 1.5
@@ -1487,15 +1490,14 @@ struct RevokeServerSheet: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: FS.space.s4) {
                 Text("Revoke this server?")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(FS.font.scaled(22, weight: .semibold))
                     .foregroundColor(c.text)
-                Text("Locks \(serverDomain) out right away: it can't connect or unlock until you un-revoke it. Its name stays reserved. Use this if the box is lost or stolen. Other servers on your account keep running.")
+                Text("Locks \(serverDomain) out right away: it can't connect or unlock until you un-revoke it. Its name stays reserved. Use this if the server is lost or stolen. Other servers on your account keep running.")
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
 
-                Text("REASON")
-                    .font(.system(size: 12, weight: .semibold))
-                    .tracking(1)
+                Text("Reason")
+                    .font(FS.font.scaled(13, weight: .semibold))
                     .foregroundColor(c.textMuted)
                     .padding(.top, FS.space.s2)
 
@@ -1517,21 +1519,25 @@ struct RevokeServerSheet: View {
                 // to confirm. A short tap does nothing.
                 Button(action: {}) {
                     Text(buttonLabel)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(FS.font.scaled(16, weight: .semibold))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 48)
+                        .frame(minHeight: 48)
                         .foregroundColor(c.danger)
                         .overlay(
-                            RoundedRectangle(cornerRadius: FS.radius.md)
+                            RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
                                 .stroke(c.danger, lineWidth: 1)
                         )
                 }
                 .accessibilityIdentifier("revoke-confirm-hold")
+                .buttonStyle(.plain)
+                .sensoryFeedback(.impact(weight: .light), trigger: holding) { _, now in now }
+                .sensoryFeedback(.warning, trigger: revokeFired)
                 .simultaneousGesture(
                     LongPressGesture(minimumDuration: Self.holdSeconds)
                         .onChanged { _ in holding = true }
                         .onEnded { _ in
                             holding = false
+                            revokeFired += 1
                             Task { await fire() }
                         }
                 )
@@ -1612,9 +1618,9 @@ struct DeleteServerSheet: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: FS.space.s4) {
                 Text("Delete \(displayName)?")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(FS.font.scaled(22, weight: .semibold))
                     .foregroundColor(c.text)
-                Text("Deletes \(displayName) for good. If the box is online it erases its data and powers off; if it's offline it can never come back online. The name becomes free to reuse.")
+                Text("Deletes \(displayName) for good. If the server is online it erases its data and powers off; if it's offline it can never come back online. The name becomes free to reuse.")
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
                     .fixedSize(horizontal: false, vertical: true)

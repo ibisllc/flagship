@@ -436,7 +436,7 @@ struct iPadShell: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .tint(c.primary)
+        .tint(c.accent)
         .onAppear { visited.insert(selected) }
         .onChange(of: selected) { _, dest in visited.insert(dest) }
     }
@@ -453,11 +453,11 @@ private struct Sidebar: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Flagship")
-                    .font(.system(size: 28, weight: .bold))
+                    .font(FS.font.scaled(28, weight: .bold))
                     .foregroundColor(c.text)
                 if let user = app.currentUser {
                     Text(user)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(FS.font.scaled(15, weight: .semibold))
                         .foregroundColor(c.text)
                     Text("\(app.pods.count) \(app.pods.count == 1 ? "server" : "servers")")
                         .font(FS.font.caption())
@@ -468,9 +468,8 @@ private struct Sidebar: View {
             .padding(.top, FS.space.s8)
             .padding(.bottom, FS.space.s6)
 
-            Text("DESTINATIONS")
-                .font(.system(size: 11, weight: .semibold))
-                .tracking(1)
+            Text("Destinations")
+                .font(FS.font.scaled(13, weight: .semibold))
                 .foregroundColor(c.textMuted)
                 .padding(.horizontal, FS.space.s6)
                 .padding(.bottom, FS.space.s2)
@@ -500,17 +499,17 @@ private struct SidebarRow: View {
         Button(action: action) {
             HStack(spacing: FS.space.s3) {
                 Image(systemName: dest.systemImage)
-                    .foregroundColor(isSelected ? c.primary : c.textMuted)
+                    .foregroundColor(isSelected ? c.accent : c.textMuted)
                     .frame(width: 22)
                 Text(dest.title)
-                    .font(.system(size: 15, weight: isSelected ? .semibold : .regular))
+                    .font(FS.font.scaled(15, weight: isSelected ? .semibold : .regular))
                     .foregroundColor(isSelected ? c.text : c.textMuted)
                 Spacer()
             }
             .padding(.horizontal, FS.space.s3)
             .padding(.vertical, FS.space.s2)
             .background(isSelected ? Color.white.opacity(0.85) : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
         }
         .buttonStyle(.plain)
     }

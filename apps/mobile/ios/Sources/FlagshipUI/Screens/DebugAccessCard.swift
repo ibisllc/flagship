@@ -19,8 +19,8 @@ struct DebugAccessBanner: View {
             Spacer(minLength: 0)
         }
         .padding(FS.space.s3)
-        .background(RoundedRectangle(cornerRadius: 12).fill(c.danger.opacity(0.12)))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(c.danger.opacity(0.5), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).fill(c.danger.opacity(0.12)))
+        .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(c.danger.opacity(0.5), lineWidth: 1))
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("sd-debug-access-banner")
     }
@@ -43,9 +43,8 @@ struct DebugAccessCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("DEBUG ACCESS")
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
+            Text("Debug access")
+                .font(FS.font.scaled(13, weight: .semibold))
                 .foregroundColor(c.textMuted)
             FSCard {
                 if let vm {
@@ -142,7 +141,7 @@ struct DebugAccessCard: View {
                 .autocorrectionDisabled()
                 .lineLimit(1...4)
                 .padding(FS.space.s2)
-                .background(RoundedRectangle(cornerRadius: 8).stroke(c.border, lineWidth: 1))
+                .background(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border, lineWidth: 1))
                 .accessibilityIdentifier("sd-debug-access-key-field")
             Picker("For", selection: $vm.duration) {
                 ForEach(DebugAccess.Duration.allCases) { d in

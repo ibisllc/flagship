@@ -10,8 +10,7 @@ import FlagshipCore
 
 private func sectionHeader(_ title: String, c: FSColors) -> some View {
     Text(title)
-        .font(.system(size: 12, weight: .semibold))
-        .tracking(1)
+        .font(FS.font.scaled(13, weight: .semibold))
         .foregroundColor(c.textMuted)
 }
 
@@ -182,7 +181,7 @@ struct ShareServerCard: View {
             HStack(spacing: FS.space.s2) {
                 FSMonogram(name: row.label, size: 32)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(row.label).font(.system(size: 16, weight: .semibold)).foregroundColor(c.text)
+                    Text(row.label).font(FS.font.scaled(16, weight: .semibold)).foregroundColor(c.text)
                     if row.status == .active, let seen = row.lastSeenAt {
                         Text("Last here \(relative(seen))").font(FS.font.caption()).foregroundColor(c.textMuted)
                     }
@@ -201,7 +200,7 @@ struct ShareServerCard: View {
             case .awaitingConfirm(let sas):
                 Text(ServerShareCopy.awaitingConfirm(row.label)).font(FS.font.bodySm()).foregroundColor(c.text)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(sas).font(.system(size: 30, weight: .semibold, design: .monospaced)).foregroundColor(c.text)
+                Text(sas).font(FS.font.scaled(30, weight: .semibold, design: .monospaced)).foregroundColor(c.text)
                     .accessibilityIdentifier("share-sas-\(row.shareId)")
                 Text("Only confirm if it matches. A different code means someone else opened the link.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
@@ -278,7 +277,7 @@ struct ShareServerCard: View {
 
     private func activityCard(_ entries: [ShareActivityEntry], c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            sectionHeader("ACTIVITY", c: c)
+            sectionHeader("Activity", c: c)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     ForEach(entries.prefix(12)) { e in
@@ -309,7 +308,7 @@ private func optIn(_ title: String, _ line: String, warning: String? = nil, isOn
             }
         }
     }
-    .tint(c.primary)
+    .tint(c.accent)
 }
 
 // MARK: - Owner: the Share sheet
@@ -362,7 +361,7 @@ struct ShareServerSheet: View {
                 helper: "Only you and this server see this name.")
             .accessibilityIdentifier("share-label")
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            sectionHeader("WHAT THEY CAN DO", c: c)
+            sectionHeader("What they can do", c: c)
             ForEach(ServerShareLevel.allCases, id: \.self) { level in
                 Button { draft.level = level } label: {
                     HStack(alignment: .top, spacing: FS.space.s3) {
@@ -377,16 +376,16 @@ struct ShareServerSheet: View {
                     }
                     .padding(FS.space.s3)
                     .background(c.surface)
-                    .overlay(RoundedRectangle(cornerRadius: FS.radius.md)
+                    .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
                         .stroke(draft.level == level ? c.primary : c.border, lineWidth: 1))
-                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("share-level-\(level.rawValue)")
             }
         }
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            sectionHeader("ALSO LET THEM", c: c)
+            sectionHeader("Also let them", c: c)
             optIn(ServerShareCopy.unlockTitle, ServerShareCopy.unlockLine, warning: ServerShareCopy.unlockHouseKey,
                   isOn: $draft.unlockAtBoot, c: c)
                 .accessibilityIdentifier("share-draft-unlock")
@@ -421,7 +420,7 @@ struct ShareServerSheet: View {
             .padding(.vertical, FS.space.s2).padding(.horizontal, FS.space.s3)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(c.surfaceSunken)
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
             .accessibilityIdentifier("share-link")
         HStack(spacing: FS.space.s3) {
             if let url = URL(string: created.link) {
@@ -455,9 +454,9 @@ struct SharedWithMeSection: View {
         if !rows.isEmpty {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 HStack {
-                    sectionHeader("SHARED WITH ME", c: c)
+                    sectionHeader("Shared with me", c: c)
                     Spacer()
-                    Text("\(rows.count)").font(.system(size: 12, weight: .semibold)).foregroundColor(c.textMuted)
+                    Text("\(rows.count)").font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
                 }
                 LazyVStack(spacing: FS.space.s3) {
                     ForEach(rows) { row in
@@ -607,7 +606,7 @@ struct ShareAcceptScreen: View {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     HStack {
                         Text(inv.offer.serverName.isEmpty ? ServerShareNames.serverLabel(fromDomain: inv.offer.serverDomain) : inv.offer.serverName)
-                            .font(.system(size: 17, weight: .semibold)).foregroundColor(c.text)
+                            .font(FS.font.scaled(17, weight: .semibold)).foregroundColor(c.text)
                         Spacer()
                         FSPill(ServerShareCopy.levelName(inv.offer.level), kind: .online)
                     }
@@ -645,7 +644,7 @@ struct ShareAcceptScreen: View {
                 HStack {
                     Spacer()
                     Text(accepted.sas)
-                        .font(.system(size: 44, weight: .semibold, design: .monospaced))
+                        .font(FS.font.scaled(44, weight: .semibold, design: .monospaced))
                         .foregroundColor(c.text)
                         .accessibilityIdentifier("share-accept-sas")
                     Spacer()
@@ -753,7 +752,7 @@ struct SharedServerScreen: View {
             if model.session?.unlockAtBoot == true { startupNotices(model, c: c) }
             whatYouCanDo(model, c: c)
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                sectionHeader("LEAVE", c: c)
+                sectionHeader("Leave", c: c)
                 FSDangerButton("Leave this server", block: true) { confirmLeave = true }
                     .accessibilityIdentifier("shared-leave")
             }
@@ -764,7 +763,7 @@ struct SharedServerScreen: View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 HStack {
-                    Text(entry.displayName).font(.system(size: 20, weight: .semibold)).foregroundColor(c.text)
+                    Text(entry.displayName).font(FS.font.scaled(20, weight: .semibold)).foregroundColor(c.text)
                     Spacer()
                     if let level = model.level { FSPill(ServerShareCopy.levelName(level), kind: .online) }
                 }
@@ -777,11 +776,11 @@ struct SharedServerScreen: View {
 
     private func startupCard(_ s: VerifiedShareStartup, entry: SharedServerEntry, model: SharedServerModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            sectionHeader("START-UP", c: c)
+            sectionHeader("Start-up", c: c)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     Text("\(entry.displayName) is starting. Unlock it?")
-                        .font(.system(size: 17, weight: .semibold)).foregroundColor(c.text)
+                        .font(FS.font.scaled(17, weight: .semibold)).foregroundColor(c.text)
                     Text("It's waiting for its disk key. Unlock it only if you expected it to restart.")
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
                     FSPrimaryButton(model.approving ? "Unlocking…" : "Unlock with Face ID", enabled: !model.approving,
@@ -798,7 +797,7 @@ struct SharedServerScreen: View {
 
     private func status(_ d: ServerDetailResponse, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            sectionHeader("STATUS", c: c)
+            sectionHeader("Status", c: c)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     HStack {
@@ -818,7 +817,7 @@ struct SharedServerScreen: View {
 
     private func updateSection(_ d: ServerDetailResponse, model: SharedServerModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            sectionHeader("UPDATE", c: c)
+            sectionHeader("Update", c: c)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     Text("Version \(d.currentCommit.map { String($0.prefix(8)) } ?? "unknown")")
@@ -853,7 +852,7 @@ struct SharedServerScreen: View {
 
     private func startupNotices(_ model: SharedServerModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            sectionHeader("START-UP NOTICES", c: c)
+            sectionHeader("Start-up notices", c: c)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     optIn(ServerShareCopy.notifyTitle, ServerShareCopy.notifyNote, isOn: Binding(
@@ -873,7 +872,7 @@ struct SharedServerScreen: View {
     @ViewBuilder
     private func appsSection(_ model: SharedServerModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            sectionHeader("APPS", c: c)
+            sectionHeader("Apps", c: c)
             switch model.apps {
             case .loaded(let apps) where apps.isEmpty:
                 Text("No apps on this server yet.").font(FS.font.bodySm()).foregroundColor(c.textMuted)
@@ -908,7 +907,7 @@ struct SharedServerScreen: View {
 
     private func whatYouCanDo(_ model: SharedServerModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            sectionHeader("WHAT YOU CAN DO", c: c)
+            sectionHeader("What you can do", c: c)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     Text(ServerShareCopy.levelLine(model.level ?? .view)).font(FS.font.bodySm()).foregroundColor(c.text)
@@ -961,7 +960,7 @@ struct SharedAppScreen: View {
                     FSCard {
                         VStack(alignment: .leading, spacing: FS.space.s2) {
                             HStack {
-                                Text(appName).font(.system(size: 20, weight: .semibold)).foregroundColor(c.text)
+                                Text(appName).font(FS.font.scaled(20, weight: .semibold)).foregroundColor(c.text)
                                 Spacer()
                                 FSPill(app.status == "running" ? "Running" : app.status.capitalized,
                                        kind: app.status == "running" ? .online : .idle)

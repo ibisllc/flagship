@@ -86,20 +86,20 @@ public struct ProvisionTimelineView: View {
         switch state {
         case .done:
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 18))
+                .font(FS.font.scaled(18))
                 .foregroundColor(c.success)
         case .current:
             ProgressView()
                 .scaleEffect(0.7)
-                .tint(c.primary)
+                .tint(c.accent)
                 .frame(width: 18, height: 18)
         case .error:
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 18))
+                .font(FS.font.scaled(18))
                 .foregroundColor(c.danger)
         case .upcoming:
             Image(systemName: "circle")
-                .font(.system(size: 18))
+                .font(FS.font.scaled(18))
                 .foregroundColor(c.border)
         }
     }
