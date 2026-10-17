@@ -123,7 +123,7 @@ class BuildClientWireTest {
         val resp = mock.mcpCreate(BuildMcpRequest("android"))
         val cfg = resp.connection.ideConfig.jsonObject
         val servers = cfg["mcpServers"]!!.jsonObject
-        val entry = servers["flagship-build"]!!.jsonObject
+        val entry = servers["flagship-${resp.buildId}"]!!.jsonObject
         assertNotNull(entry["url"])
         assertNotNull(entry["headers"]!!.jsonObject["Authorization"])
         // Encoding the whole connection round-trips through the model.
