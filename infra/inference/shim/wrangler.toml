@@ -8,7 +8,7 @@ compatibility_flags = ["global_fetch_strictly_public"]
 # Public host the box reaches (put this host in .com's
 # FLAGSHIP_INFERENCE_ENDPOINT.baseUrl). Bind a custom domain in the
 # dashboard or uncomment:
-# routes = [{ pattern = "inference.flagshipserver.com", custom_domain = true }]
+routes = [{ pattern = "inference.flagshipserver.com", custom_domain = true }]
 
 [vars]
 # Two OpenAI-compatible upstreams, both in the US (a user-selectable US/EU
