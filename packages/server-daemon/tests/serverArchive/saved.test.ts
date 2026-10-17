@@ -5,8 +5,9 @@
  * schedule's retention, and restorable onto a new server like any backup.
  */
 import { mkdtempSync } from "node:fs";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { Readable } from "node:stream";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -27,6 +28,7 @@ import {
   type ArchiveKey,
 } from "@flagship/protocol";
 import { buildRestoreWait } from "../../src/serverArchive/restoreWait.js";
+import { buildMigratePause, movingPage, type MigratePause } from "../../src/serverArchive/migratePause.js";
 import { AppCopyOps } from "../../src/appCopy/ops.js";
 import { DataProvisioner, InMemoryFilesAdmin, InMemoryPostgresAdmin } from "../../src/dataLayer/index.js";
 import { ServicePlatform } from "../../src/servicePlatform.js";
@@ -105,7 +107,7 @@ const rng = (n: number) => {
   return b;
 };
 
-async function world(over: { free?: () => number; disk?: number; sized?: number; scheduleActive?: () => boolean } = {}) {
+async function world(over: { free?: () => number; disk?: number; sized?: number; scheduleActive?: () => boolean; migrate?: { pause: MigratePause } } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "saved-backups-"));
   const clock = { t: Date.UTC(2026, 9, 14, 12) };
   const src = platformFor(srcBox, "s".repeat(40));
@@ -132,6 +134,7 @@ async function world(over: { free?: () => number; disk?: number; sized?: number;
         diskBytes: async () => over.disk ?? 1e13,
         ...(over.scheduleActive ? { scheduleActive: over.scheduleActive } : {}),
       },
+      ...(over.migrate ? { migrate: over.migrate } : {}),
       now: () => clock.t,
     });
   const svc = make();
@@ -389,16 +392,28 @@ describe("saved backups", () => {
     expect(link).toMatchObject({ expiresAt: null, dataFileName: expect.stringMatching(/\.flagship-data$/) });
     const R = "0f1e2d3c4b5a69788796a5b4c3d2e1f0";
     const get = async (path: string) => (await w.svc.handleDownload({ method: "GET", path, headers: {}, body: Buffer.alloc(0) }))!;
-    expect((await get(`${link.path}/file?r=${R}`)).status).toBe(403);
+    expect((await get(`${link.path}/bundle?r=${R}`)).status).toBe(403);
     const approval = { serverDomain: SRC, archiveId: id, requestId: R, issuedAt: w.clock.t };
     const signature = Buffer.from(signArchiveDownloadApproval(approval, owner)).toString("hex");
     expect((await call(w.svc, "POST", "/api/screens/server-archive/approve", { approval, signature })).status).toBe(200);
-    expect((await get(`${link.path}/file?r=${R}`)).status).toBe(200);
-    expect((await get(`${link.path}/backup?r=${R}`)).status).toBe(200);
+    const one = await get(`${link.path}/bundle?r=${R}`);
+    expect(one.status).toBe(200);
+    expect(one.headers!["content-disposition"]).toContain(link.bundleFileName);
+    expect(link.bundleFileName).toBe("home-2026-10-14-1200.flagship");
+    const parts: Buffer[] = [];
+    for await (const c of one.stream!.open() as AsyncIterable<Buffer>) parts.push(c);
+    const whole = Buffer.concat(parts);
+    expect(createHash("sha256").update(whole).digest("hex")).toBe(link.bundleSha256);
+    // The saved list carries the same one file's name, size and checksum.
+    const listed = (await call(w.svc, "GET", SAVED_PATH)).json().backups[0];
+    expect(listed).toMatchObject({ bundleFileName: link.bundleFileName, bundleBytes: whole.length, bundleSha256: link.bundleSha256 });
+    // The phones' 4 MiB pieces of the same file.
+    const piece = await call(w.svc, "GET", `${SAVED_PATH}/${id}/bundle?offset=0`);
+    expect(Buffer.from(piece.body as Buffer)).toEqual(whole);
     const del = await call(w.svc, "DELETE", `${SAVED_PATH}/${id}`);
     expect(del.status).toBe(200);
     expect(del.json().backups).toEqual([]);
-    expect((await get(`${link.path}/file?r=${R}`)).status).toBe(404);
+    expect((await get(`${link.path}/bundle?r=${R}`)).status).toBe(404);
     expect((await call(w.svc, "DELETE", `${SAVED_PATH}/${id}`)).status).toBe(404);
   });
 
@@ -452,6 +467,8 @@ describe("saved backups", () => {
         setRestoring: () => {},
         finish: async () => {},
         heartbeatView: () => null,
+        adoptOrder: async () => null,
+        restoredAny: () => false,
       },
       build: { serverFqdn: DST, apps: () => [], containerName: () => "", ops: fakeOps().ops, envStore: null, access: null, accessList: null },
       restore: { serverFqdn: DST, platform: platformFor(dstBox, "t".repeat(40)).platform, dataProvisioner: null, ops: fakeOps().ops, signInstall: (r) => dstBox.signInstallService(r), envStore: null, access: null, egress: null, buildImage: async () => ({ ok: true as const }), pullImage: async () => {} },
@@ -474,9 +491,242 @@ describe("saved backups", () => {
     expect((await platform.install({ request: again, signature: signInstallService(again, owner), verify: verifyInstallService })).ok).toBe(true);
   });
 
+  it("serves a multi-GB one file from disk, piece by piece, past 4 GB offsets, without holding it", async () => {
+    const w = await world();
+    const id = "ab".repeat(16);
+    const dir = join(w.dir, "server-backups", id);
+    await mkdir(dir, { recursive: true });
+    const backupText = Buffer.from('{"magic":"flagship-backup","v":2}');
+    await writeFile(join(dir, "backup.flagship-backup"), backupText);
+    const DATA = 5 * GB + 123;
+    const fh = await open(join(dir, "data.flagship-data"), "w");
+    await fh.truncate(DATA);
+    await fh.write(Buffer.from("TAIL"), 0, 4, DATA - 4);
+    await fh.close();
+    const total = 16 + backupText.length + DATA;
+    await writeFile(
+      join(dir, "meta.json"),
+      JSON.stringify({ archiveId: id, createdAt: w.clock.t, trigger: "now", bytes: DATA, sha256: "00".repeat(32), backupBytes: backupText.length, backupFileName: "big.flagship-backup", dataFileName: "big.flagship-data", bundleFileName: "big.flagship", bundleBytes: total, bundleSha256: "11".repeat(32), apps: [], left: [] }),
+    );
+    const head = await call(w.svc, "GET", `${SAVED_PATH}/${id}/bundle?offset=0`);
+    expect(head.headers["x-flagship-bundle-bytes"]).toBe(String(total));
+    expect((head.body as Buffer).subarray(0, 8).toString()).toBe("FLGSHBK1");
+    expect((head.body as Buffer).length).toBe(4 * 1024 * 1024);
+    const before = process.memoryUsage().rss;
+    const tail = await call(w.svc, "GET", `${SAVED_PATH}/${id}/bundle?offset=${total - 1000}`);
+    expect((tail.body as Buffer).length).toBe(1000);
+    expect((tail.body as Buffer).subarray(996).toString()).toBe("TAIL");
+    expect(process.memoryUsage().rss - before).toBeLessThan(256 * 1024 * 1024);
+  });
+
   it("companion sessions can't see or change saved backups", async () => {
     const w = await world();
     const r = await w.svc.handle(SAVED_PATH, "GET", req("GET", SAVED_PATH), { companion: true });
     expect(r!.status).toBe(403);
+  });
+});
+
+// ───────────────────────────── Migrate on the archive path ─────────────────────────────
+
+/** A fetch that reaches `svc`'s public download/probe routes, as the new box reaches the old one. */
+function fetchVia(svc: Svc): typeof fetch {
+  return (async (input: string | URL, init?: { headers?: Record<string, string> }) => {
+    const u = new URL(String(input));
+    const r = (await svc.handleDownload({ method: "GET", path: `${u.pathname}${u.search}`, headers: init?.headers ?? {}, body: Buffer.alloc(0) }))!;
+    const body = r.stream ? (Readable.toWeb(Readable.from(r.stream.open() as AsyncIterable<Buffer>)) as unknown as ReadableStream) : Buffer.from(r.body as string | Buffer);
+    return new Response(body as BodyInit, { status: r.status, headers: r.headers });
+  }) as unknown as typeof fetch;
+}
+
+function pauseFor(dir: string, calls: string[][], containers = ["flagship-harry--notes"]) {
+  return buildMigratePause({ path: join(dir, "migrate-pause.json"), containers: () => containers, run: async (a) => void calls.push(a) });
+}
+
+describe("Migrate on the archive path", () => {
+  it("pauses the old server's apps, backs it up, and the new one pulls, restores and is done", async () => {
+    const calls: string[][] = [];
+    const dirP = mkdtempSync(join(tmpdir(), "migrate-pause-"));
+    const pause = pauseFor(dirP, calls);
+    await pause.load();
+    const w = await world({ migrate: { pause } });
+    await giveKeys(w, 3);
+    // 1. The old server: pause + the backup for the move.
+    const run = await call(w.svc, "POST", `${SAVED_PATH}/run`, { purpose: "migrate" });
+    expect(run.status).toBe(202);
+    await w.svc.settle();
+    const id = run.json().archiveId as string;
+    expect(calls).toEqual([["pause", "flagship-harry--notes"]]);
+    const v = (await call(w.svc, "GET", SAVED_PATH)).json();
+    expect(v.migratePause).toMatchObject({ archiveId: id, containers: ["flagship-harry--notes"] });
+    expect(movingPage().status).toBe(503);
+    expect(String(movingPage().body)).toContain("This app is moving to a new server");
+    // The move's backup is pinned: a keep-1 schedule doesn't drop it, nor Delete.
+    expect((await call(w.svc, "DELETE", `${SAVED_PATH}/${id}`)).status).toBe(409);
+    // 2. The phone opens the backup file with the account key.
+    const b = v.backups[0];
+    const opened = openBackupWithAccountKey(parseBackupFile(String((await call(w.svc, "GET", `${SAVED_PATH}/${id}/backup-file`)).body)), deriveServerArchiveKey(UMK, id))!;
+    // 3. The new server: a late restore order, then a box-to-box pull from an approved link.
+    const dst = platformFor(dstBox, "t".repeat(40));
+    const tOps = fakeOps();
+    const wait = buildRestoreWait({ path: join(w.dir, "wait.json"), donePath: join(w.dir, "done.json"), serverDomain: DST, ownerIrkPub: owner.publicKey, username: "harry" });
+    await wait.load();
+    const target = buildServerArchiveService({
+      dir: join(w.dir, "dst-archives"),
+      uploadDir: join(w.dir, "dst-upload"),
+      wait,
+      build: { serverFqdn: DST, apps: () => dst.platform.list(), containerName: () => "", ops: tOps.ops, envStore: null, access: null, accessList: null },
+      restore: {
+        serverFqdn: DST,
+        platform: dst.platform,
+        dataProvisioner: dst.provisioner,
+        ops: tOps.ops,
+        signInstall: (r) => dstBox.signInstallService(r),
+        envStore: new InMemoryAppEnvStore(),
+        access: null,
+        egress: null,
+        sourceDir: join(w.dir, "dst-clones"),
+        buildImage: async (a) => {
+          await writeSourceTree(a.contextDir, a.files, { binaries: a.binaries });
+          tOps.images.add(a.image);
+          return { ok: true as const };
+        },
+        pullImage: async () => {},
+      },
+      freeBytes: async () => 1e12,
+      fetchImpl: fetchVia(w.svc),
+    });
+    const tcall = async (method: string, path: string, body?: unknown) => {
+      const r = await target.handle(path.split("?")[0]!, method, req(method, path, body), { companion: false });
+      return { status: r!.status, json: () => JSON.parse(String(r!.body)) as Record<string, any> };
+    };
+    const order = { serverDomain: DST, archiveId: id, bytes: b.bytes, sha256: b.sha256, issuedAt: Date.now() };
+    const bad = await tcall("POST", `${RESTORE_PATH}/order`, { order, signatureHex: Buffer.from(signServerRestoreOrder(order, stranger)).toString("hex") });
+    expect(bad.status).toBe(403);
+    const ok = await tcall("POST", `${RESTORE_PATH}/order`, { order, signatureHex: Buffer.from(signServerRestoreOrder(order, owner)).toString("hex") });
+    expect(ok.status).toBe(200);
+    expect(ok.json().waiting).toMatchObject({ archiveId: id, bytes: b.bytes });
+    // The speed check: the new server times a probe link of the old one.
+    const probeLink = (await call(w.svc, "POST", "/api/screens/server-archive/probe-link")).json();
+    const sp = await tcall("POST", `${RESTORE_PATH}/probe`, { url: `https://${SRC}${probeLink.path}` });
+    expect(sp.status).toBe(200);
+    expect(sp.json()).toMatchObject({ bytes: 8 * 1024 * 1024, bytesPerSecond: expect.any(Number) });
+    // An approved link on the old server, pulled by the new one.
+    const link = (await call(w.svc, "POST", `${SAVED_PATH}/${id}/link`)).json();
+    const requestId = "0f1e2d3c4b5a69788796a5b4c3d2e1f0";
+    const approval = { serverDomain: SRC, archiveId: id, requestId, issuedAt: w.clock.t };
+    expect((await call(w.svc, "POST", "/api/screens/server-archive/approve", { approval, signature: Buffer.from(signArchiveDownloadApproval(approval, owner)).toString("hex") })).status).toBe(200);
+    const pulled = await tcall("POST", `${RESTORE_PATH}/pull`, { url: `https://${SRC}${link.path}`, requestId });
+    expect(pulled.status).toBe(202);
+    await expect.poll(async () => (await tcall("GET", RESTORE_PATH)).json().restore.state, { timeout: 10_000 }).toBe("ready");
+    expect((await tcall("GET", RESTORE_PATH)).json().restore).toMatchObject({ received: b.bytes, pulling: false });
+    // 4. The phone commits the content key: the apps are restored, the server stops waiting.
+    expect((await tcall("POST", `${RESTORE_PATH}/commit`, { key: Buffer.from(opened.contentKey).toString("hex") })).status).toBe(202);
+    await target.settle();
+    expect((await tcall("GET", RESTORE_PATH)).json()).toMatchObject({ waiting: null, restore: { state: "done", apps: [{ serviceId: SERVICE, state: "done" }] } });
+    expect(wait.restoredAny()).toBe(true);
+    expect(dst.platform.byServiceId(SERVICE)).toBeDefined();
+    // A second whole-server backup is refused now that the new server has apps.
+    const again = await tcall("POST", `${RESTORE_PATH}/order`, { order: { ...order, archiveId: "99".repeat(16) }, signatureHex: Buffer.from(signServerRestoreOrder({ ...order, archiveId: "99".repeat(16) }, owner)).toString("hex") });
+    expect(again.status).toBe(409);
+    expect(again.json().code).toBe("has-apps");
+  });
+
+  it("an aborted move resumes the old server's apps; a failed backup for the move resumes them too", async () => {
+    const calls: string[][] = [];
+    const pause = pauseFor(mkdtempSync(join(tmpdir(), "migrate-pause-")), calls);
+    await pause.load();
+    const w = await world({ migrate: { pause } });
+    await giveKeys(w, 3);
+    await call(w.svc, "POST", `${SAVED_PATH}/run`, { purpose: "migrate" });
+    await w.svc.settle();
+    const resumed = await call(w.svc, "POST", `${SAVED_PATH}/resume`);
+    expect(resumed.json().migratePause).toBeNull();
+    expect(calls).toEqual([["pause", "flagship-harry--notes"], ["unpause", "flagship-harry--notes"]]);
+    // A pause outlives a daemon restart (the marker), and lifts after a day without a freeze.
+    const calls2: string[][] = [];
+    const dir2 = mkdtempSync(join(tmpdir(), "migrate-pause-"));
+    let t = 1_000;
+    const p2 = buildMigratePause({ path: join(dir2, "m.json"), containers: () => ["c1"], run: async (a) => void calls2.push(a), now: () => t });
+    await p2.pause();
+    const p3 = buildMigratePause({ path: join(dir2, "m.json"), containers: () => ["c1"], run: async (a) => void calls2.push(a), now: () => t });
+    await p3.load();
+    expect(p3.paused()).toBe(true);
+    t += 25 * 60 * 60_000;
+    await p3.sweep();
+    expect(p3.paused()).toBe(false);
+    expect(calls2).toEqual([["pause", "c1"], ["unpause", "c1"]]);
+    // The backup for a move fails (too little room): the apps run again.
+    const calls3: string[][] = [];
+    const p4 = pauseFor(mkdtempSync(join(tmpdir(), "migrate-pause-")), calls3);
+    const w2 = await world({ migrate: { pause: p4 }, sized: 50 * GB, free: () => GB });
+    await giveKeys(w2, 2);
+    await call(w2.svc, "POST", `${SAVED_PATH}/run`, { purpose: "migrate" });
+    await w2.svc.settle();
+    expect(p4.paused()).toBe(false);
+    expect(calls3.map((c) => c[0])).toEqual(["pause", "unpause"]);
+    expect((await call(w2.svc, "GET", SAVED_PATH)).json().lastRun.reason).toMatch(/needs about/);
+  });
+});
+
+describe("restore from peer backups", () => {
+  it("a waiting server takes its backup from the peer engine, then restores it like an upload", async () => {
+    const w = await world();
+    await giveKeys(w, 1);
+    const id = await runNow(w);
+    const b = (await call(w.svc, "GET", SAVED_PATH)).json().backups[0];
+    const data = await readFile(join(w.dir, "server-backups", id, "data.flagship-data"));
+    const opened = openBackupWithAccountKey(parseBackupFile(String((await call(w.svc, "GET", `${SAVED_PATH}/${id}/backup-file`)).body)), deriveServerArchiveKey(UMK, id))!;
+    const dst = platformFor(dstBox, "t".repeat(40));
+    const tOps = fakeOps();
+    const wait = buildRestoreWait({ path: join(w.dir, "pw.json"), donePath: join(w.dir, "pd.json"), serverDomain: DST, ownerIrkPub: owner.publicKey, username: "harry" });
+    await wait.load();
+    const target = buildServerArchiveService({
+      dir: join(w.dir, "p-archives"),
+      uploadDir: join(w.dir, "p-upload"),
+      wait,
+      build: { serverFqdn: DST, apps: () => dst.platform.list(), containerName: () => "", ops: tOps.ops, envStore: null, access: null, accessList: null },
+      restore: {
+        serverFqdn: DST,
+        platform: dst.platform,
+        dataProvisioner: dst.provisioner,
+        ops: tOps.ops,
+        signInstall: (r) => dstBox.signInstallService(r),
+        envStore: new InMemoryAppEnvStore(),
+        access: null,
+        egress: null,
+        sourceDir: join(w.dir, "p-clones"),
+        buildImage: async (a) => {
+          await writeSourceTree(a.contextDir, a.files, { binaries: a.binaries });
+          tOps.images.add(a.image);
+          return { ok: true as const };
+        },
+        pullImage: async () => {},
+      },
+      freeBytes: async () => 1e12,
+    });
+    const tcall = async (method: string, path: string, body?: unknown) => {
+      const r = await target.handle(path.split("?")[0]!, method, req(method, path, body), { companion: false });
+      return { status: r!.status, json: () => JSON.parse(String(r!.body)) as Record<string, any> };
+    };
+    const body = { serverId: SRC, pbkHex: "ee".repeat(32) };
+    expect((await tcall("POST", `${RESTORE_PATH}/from-peers`, body)).status).toBe(404);
+    const asked: Array<{ serverId: string; archiveId: string; bytes: number; sha256: string }> = [];
+    target.setPeerFetcher(async (a) => {
+      asked.push({ serverId: a.serverId, archiveId: a.archiveId, bytes: a.bytes, sha256: a.sha256 });
+      expect(Buffer.from(a.pbk).toString("hex")).toBe("ee".repeat(32));
+      const out = join(w.dir, "from-peers.bin");
+      await writeFile(out, data);
+      a.onProgress?.(data.length);
+      return { dataPath: out };
+    });
+    expect((await tcall("POST", `${RESTORE_PATH}/from-peers`, body)).json().code).toBe("not-waiting");
+    const order = { serverDomain: DST, archiveId: id, bytes: b.bytes, sha256: b.sha256, issuedAt: Date.now() };
+    expect((await tcall("POST", `${RESTORE_PATH}/order`, { order, signatureHex: Buffer.from(signServerRestoreOrder(order, owner)).toString("hex") })).status).toBe(200);
+    expect((await tcall("POST", `${RESTORE_PATH}/from-peers`, body)).status).toBe(202);
+    await expect.poll(async () => (await tcall("GET", RESTORE_PATH)).json().restore.state).toBe("ready");
+    expect(asked).toEqual([{ serverId: SRC, archiveId: id, bytes: b.bytes, sha256: b.sha256 }]);
+    expect((await tcall("POST", `${RESTORE_PATH}/commit`, { key: Buffer.from(opened.contentKey).toString("hex") })).status).toBe(202);
+    await target.settle();
+    expect((await tcall("GET", RESTORE_PATH)).json().restore).toMatchObject({ state: "done", apps: [{ serviceId: SERVICE, state: "done" }] });
   });
 });

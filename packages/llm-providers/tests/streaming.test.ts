@@ -7,6 +7,7 @@ import {
   type ChatStreamEvent,
   type StreamingFetchLike,
 } from "../src/index.js";
+import { transientRetry } from "../src/providers/openai.js";
 
 /**
  * Build a streaming fetch fake that yields the given pre-baked
@@ -142,6 +143,65 @@ describe("openaiStreaming", () => {
     const end = events[events.length - 1];
     expect(end?.kind).toBe("end");
     if (end?.kind === "end") expect(end.stopReason).toBe("stop");
+  });
+});
+
+describe("openaiStreaming: a provider busy for a moment", () => {
+  const ok = [
+    `data: {"choices":[{"delta":{"content":"done"},"finish_reason":null}]}`,
+    `data: {"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+    `data: [DONE]`,
+  ];
+  /** Answers each call with the next of `replies` (status + body), then streams `ok`. */
+  function sequence(replies: Array<{ status: number; body: string }>) {
+    let n = 0;
+    const f: StreamingFetchLike = async () => {
+      const r = replies[n++];
+      return {
+        ok: !r,
+        status: r?.status ?? 200,
+        async text() { return r?.body ?? ""; },
+        lines() { return (async function* () { if (!r) for (const l of ok) yield l; })(); },
+      };
+    };
+    return { f, calls: () => n };
+  }
+  const run = async (f: StreamingFetchLike) => {
+    const events: ChatStreamEvent[] = [];
+    await openaiStreaming.chatStream({ model: "m", messages: [{ role: "user", content: "hi" }] }, { apiKey: "k", baseUrl: "https://api.example.com" }, (e) => events.push(e), f);
+    return events;
+  };
+
+  it("retries an overloaded / rate-limited answer before the turn fails (live: DeepInfra engine_overloaded)", async () => {
+    const saved = [...transientRetry.delaysMs];
+    transientRetry.delaysMs = [0, 0];
+    try {
+      const busy = `{"error":{"message":"Model busy, retry later","type":"invalid_request_error","code":"engine_overloaded"}}`;
+      const seq = sequence([{ status: 400, body: busy }, { status: 429, body: "slow down" }]);
+      const events = await run(seq.f);
+      expect(seq.calls()).toBe(3);
+      expect(events.some((e) => e.kind === "error")).toBe(false);
+      expect(events.at(-1)?.kind).toBe("end");
+    } finally {
+      transientRetry.delaysMs = saved;
+    }
+  });
+
+  it("gives up after its retries, and never retries a real refusal", async () => {
+    const saved = [...transientRetry.delaysMs];
+    transientRetry.delaysMs = [0, 0];
+    try {
+      const always = sequence([{ status: 503, body: "" }, { status: 503, body: "" }, { status: 503, body: "" }]);
+      const e1 = await run(always.f);
+      expect(always.calls()).toBe(3);
+      expect(e1.find((e) => e.kind === "error")).toMatchObject({ status: 503 });
+      const denied = sequence([{ status: 401, body: "invalid api key" }]);
+      const e2 = await run(denied.f);
+      expect(denied.calls()).toBe(1);
+      expect(e2.find((e) => e.kind === "error")).toMatchObject({ status: 401 });
+    } finally {
+      transientRetry.delaysMs = saved;
+    }
   });
 });
 

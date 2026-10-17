@@ -1,0 +1,55 @@
+{
+  "about": "The one-file backup (docs/server-backup-and-clone.md, 'The one file'): 8 bytes 'FLGSHBK1', the metadata part's length L as a u64 big-endian, the metadata part (the backup file), then the data part (the data file) to EOF. L is 1..262144.",
+  "headers": [
+    {
+      "metaLength": 1,
+      "headerHex": "464c475348424b310000000000000001"
+    },
+    {
+      "metaLength": 33,
+      "headerHex": "464c475348424b310000000000000021"
+    },
+    {
+      "metaLength": 4096,
+      "headerHex": "464c475348424b310000000000001000"
+    },
+    {
+      "metaLength": 262144,
+      "headerHex": "464c475348424b310000000000040000"
+    }
+  ],
+  "example": {
+    "metaHex": "7b226d61676963223a22666c6167736869702d6261636b7570222c2276223a327d",
+    "dataHex": "666c6167736869702d6261636b75702d646174612f76320a000102",
+    "bundleHex": "464c475348424b3100000000000000217b226d61676963223a22666c6167736869702d6261636b7570222c2276223a327d666c6167736869702d6261636b75702d646174612f76320a000102",
+    "metaLength": 33,
+    "dataOffset": 49
+  },
+  "invalid": [
+    {
+      "why": "not a Flagship backup",
+      "headHex": "464c475348424b320000000000000021",
+      "fileBytes": 100
+    },
+    {
+      "why": "zero-length metadata",
+      "headHex": "464c475348424b310000000000000000",
+      "fileBytes": 100
+    },
+    {
+      "why": "metadata longer than the limit",
+      "headHex": "464c475348424b310000000000040001",
+      "fileBytes": 1000000
+    },
+    {
+      "why": "cut short before the data",
+      "headHex": "464c475348424b310000000000000021",
+      "fileBytes": 49
+    },
+    {
+      "why": "shorter than a header",
+      "headHex": "464c475348424b31",
+      "fileBytes": 8
+    }
+  ]
+}

@@ -83,7 +83,7 @@ describe("debug-friendly + embed-secrets toggle wiring (webapp)", () => {
 
   it("the embed-secrets subtext is the EXACT new string", () => {
     expect(INDEX_HTML).toContain(
-      "This embeds security keys directly in the recipe. Hence, the server will be able to boot even if the phone is offline.",
+      "This embeds security keys directly in the recipe, so the server can boot even when none of your devices is online.",
     );
   });
 

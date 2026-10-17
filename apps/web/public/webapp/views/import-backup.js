@@ -1,6 +1,6 @@
 // Home → "+ Add/Import a server". Three doors: create a brand-new server (the
 // existing create flow), co-manage a server someone else runs (their share
-// link), or import a backup: pick its two files, pick a name, burn or host the
+// link), or import a backup: pick its .flagship file, pick a name, burn or host the
 // new server as usual, and this page sends it the backup once it is up
 // (docs/server-backup-and-clone.md, "Restore a backup").
 
@@ -20,16 +20,16 @@ import {
   archiveErrorText,
   commitRestore,
   describeRestoreApp,
+  restoreSummary,
   formatBytes,
   restoreStatus,
   uploadDataFile,
   waitForRestore,
 } from "../lib/serverArchive.js";
 import {
-  BACKUP_DATA_EXTENSION,
-  BACKUP_FILE_EXTENSION,
+  BACKUP_BUNDLE_EXTENSION,
   checkDataFile,
-  classifyPicked,
+  splitBundle,
   openWithAccountKey,
   openWithPasscode,
   parseBackupFile,
@@ -88,7 +88,7 @@ export function openAddOrImport({ onAdd, onCoManage }) {
 // ---------------------------------------------------------------------------
 
 export const IMPORT_INTRO =
-  "Pick the backup's two files (the .flagship-backup and its .flagship-data) from wherever you keep them. " +
+  "Pick the backup (its .flagship file) from wherever you keep it. " +
   "You choose a name; everything else comes from the backup. Then set up the new server as usual, " +
   "and this page sends it the backup as soon as it comes online.";
 
@@ -159,9 +159,9 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
     "Import a backup",
     `
     <h3 class="modal-title">Import a backup</h3>
-    <p class="note" data-imp-intro>${escapeHtml(targetFqdn ? `${podShortName(targetFqdn) || targetFqdn} is waiting for its backup. Pick the backup's two files and this page sends it.` : IMPORT_INTRO)}</p>
+    <p class="note" data-imp-intro>${escapeHtml(targetFqdn ? `${podShortName(targetFqdn) || targetFqdn} is waiting for its backup. Pick the backup's .flagship file and this page sends it.` : IMPORT_INTRO)}</p>
     <div data-imp-pick>
-      <input type="file" class="full-width" data-imp-file multiple accept="${BACKUP_FILE_EXTENSION},${BACKUP_DATA_EXTENSION},application/json,application/octet-stream" />
+      <input type="file" class="full-width" data-imp-file accept="${BACKUP_BUNDLE_EXTENSION},application/octet-stream" />
       <p class="note small" data-imp-files></p>
     </div>
     <div class="hidden" data-imp-pass>
@@ -242,12 +242,7 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
   const state = { backupFile: null, dataFile: null, parsed: null, opened: null, checked: false };
 
   const describeFiles = () => {
-    const b = state.backupFile ? `Backup file: ${state.backupFile.name}` : "Backup file: not picked yet";
-    const want = state.opened?.body?.data?.fileName;
-    const d = state.dataFile
-      ? `Data file: ${state.dataFile.name} (${formatBytes(state.dataFile.size)})`
-      : `Data file: not picked yet${want ? ` (${want})` : ""}`;
-    ui.filesEl.textContent = `${b}. ${d}.`;
+    ui.filesEl.textContent = state.backupFile ? `${state.backupFile.name} (${formatBytes(state.backupFile.size)})` : "";
   };
   describeFiles();
 
@@ -277,11 +272,8 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
   }
 
   async function checkData() {
-    if (!state.opened || !state.dataFile || state.checked) {
-      if (state.opened && !state.dataFile) status(`Now pick its data file, ${state.opened.body.data.fileName}.`);
-      return;
-    }
-    status("Checking the data file…");
+    if (!state.opened || !state.dataFile || state.checked) return;
+    status("Checking the backup…");
     bar(0, state.dataFile.size);
     await checkDataFile(state.dataFile, state.opened.body.data, { onProgress: (n, t) => bar(n, t), isCancelled });
     state.checked = true;
@@ -407,7 +399,7 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
       show(ui.barEl, false);
       show(ui.appsEl);
       ui.appsEl.innerHTML = done.apps.map((a) => `<li>${escapeHtml(describeRestoreApp(a))}</li>`).join("");
-      status(`${name} is restored.`);
+      status(`${name}: ${restoreSummary(done.apps)}`);
       toast("Backup restored", "ok");
     } catch (e) {
       show(ui.barEl, false);
@@ -420,25 +412,20 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
   ui.fileEl.addEventListener("change", async () => {
     clearError();
     try {
-      for (const f of Array.from(ui.fileEl.files ?? [])) {
-        const kind = await classifyPicked(f);
-        if (kind === "backup") {
-          state.backupFile = f;
-          state.parsed = parseBackupFile(await f.text());
-          state.opened = null;
-          state.checked = false;
-        } else if (kind === "data") {
-          state.dataFile = f;
-          state.checked = false;
-        } else {
-          throw userError(`${f.name} isn't a Flagship backup file or data file.`);
-        }
-      }
+      const f = ui.fileEl.files?.[0];
+      if (!f) return;
+      // One .flagship file: its header and metadata part are read now; the
+      // data part stays a lazy slice of the picked file, streamed by the check
+      // and the upload (never held in memory).
+      const { backupText, data } = await splitBundle(f);
+      state.backupFile = f;
+      state.parsed = parseBackupFile(backupText);
+      state.dataFile = data;
+      state.opened = null;
+      state.checked = false;
       ui.fileEl.value = "";
       describeFiles();
-      if (state.parsed && !state.opened) await openBackup();
-      else await checkData();
-      if (!state.parsed) status("Now pick the backup file (.flagship-backup).");
+      await openBackup();
     } catch (e) {
       bar(0, null);
       show(ui.barEl, false);

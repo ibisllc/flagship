@@ -24,7 +24,7 @@ object AddServerGate {
     fun allows(holdsAdminRoot: Boolean, isDemoAccount: Boolean): Boolean = holdsAdminRoot || isDemoAccount
 
     fun allows(app: AppState): Boolean =
-        allows(holdsAdminRoot = GymSeams.forceAdminRoot || Keystore.hasAdminRoot(), isDemoAccount = app.isDemoAccountNow())
+        allows(holdsAdminRoot = Variant.forceAdminRoot || Keystore.hasAdminRoot(), isDemoAccount = app.isDemoAccountNow())
 
     /** Whether a Home nav route (with or without its `?args`) adds a server. */
     fun addsServer(route: String?): Boolean = route?.substringBefore('?') in ROUTES

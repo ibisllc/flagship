@@ -29,10 +29,15 @@
  * the key opens it, then every frame as it unpacks.
  */
 import { createReadStream } from "node:fs";
+import { Readable } from "node:stream";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import {
+  BACKUP_BUNDLE_HEADER_BYTES,
   archiveDownloadCode,
   archiveKeysDigest,
+  backupBundleFileName,
+  backupBundleHeader,
+  parseBackupBundleHeader,
   parseArchiveDownloadApproval,
   parseArchiveKeys,
   parseArchiveKeysDeposit,
@@ -44,7 +49,7 @@ import {
   type BackupSlot,
 } from "@flagship/protocol";
 import { renderDownloadPage } from "./downloadPage.js";
-import { mkdir, open, readFile, rm, stat, statfs } from "node:fs/promises";
+import { mkdir, open, readFile, rename, rm, stat, statfs } from "node:fs/promises";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
@@ -54,9 +59,12 @@ import { installArchive, unpackArchive, type ArchiveRestoreDeps, type RestoreApp
 import type { RestoreWait } from "./restoreWait.js";
 import { KEY_POOL_LOW, KEY_POOL_MAX, SAVED_BACKUP_FILE, SAVED_DATA_FILE, SavedBackups, type SavedBackupMeta, type SavedState } from "./saved.js";
 import { isDue, nextRunAt, parseSchedule, retained, slotStartAtOrBefore } from "./schedule.js";
+import type { MigratePause } from "./migratePause.js";
 
 export const ARCHIVE_PATH = "/api/screens/server-archive";
 export const DOWNLOAD_PATH = "/api/archive-download/";
+/** Migrate's speed check: a few MiB the new server times (no session; a one-use token). */
+export const PROBE_PATH = "/api/archive-probe/";
 export const RESTORE_PATH = "/api/screens/server-restore";
 /** The saved backups (Back up now into the list, and the schedule). */
 export const SAVED_PATH = `${ARCHIVE_PATH}/backups`;
@@ -110,6 +118,10 @@ export interface ServerArchiveServiceOptions {
   };
   /** Whether an import of `bytes` may come onto this server (the backup policy's limit): null, or why not. */
   admitIncoming?: (bytes: number) => string | null;
+  /** Migrate on the archive path (docs/server-migration.md): the pause on the old box. */
+  migrate?: { pause: MigratePause };
+  /** Fetch for a box-to-box pull and the link probe (tests). */
+  fetchImpl?: typeof fetch;
   now?: () => number;
   log?: (m: string) => void;
 }
@@ -124,6 +136,8 @@ interface BackupJob {
   sha256?: string;
   /** The backup file's size. */
   backupBytes?: number;
+  /** The one file's SHA-256. */
+  bundleSha256?: string;
   /** What the box expects the data file to take, once it has sized it. */
   estimatedBytes?: number;
   apps?: Array<{ serviceId: string; name: string }>;
@@ -150,6 +164,16 @@ export function parseRange(header: string | undefined, size: number): { start: n
   }
   if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= size) return "unsatisfiable";
   return { start, end };
+}
+
+/** SHA-256 of the one `.flagship` file: the header, the backup file, the data file. */
+async function bundleDigest(backupPath: string, backupBytes: number, dataPath: string): Promise<string> {
+  const h = createHash("sha256");
+  h.update(Buffer.from(backupBundleHeader(backupBytes)));
+  for (const p of [backupPath, dataPath]) {
+    for await (const c of createReadStream(p)) h.update(c as Buffer);
+  }
+  return h.digest("hex");
 }
 
 function fileStem(sourceServer: string, at: number): string {
@@ -194,6 +218,8 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
   let backup: BackupJob | null = null;
   let restore: RestoreJob | null = null;
   let running = false;
+  /** A box-to-box pull of the backup this server waits for is under way. */
+  let pulling = false;
 
   const json = (status: number, body: unknown): HttpResponse => ({ status, headers: J, body: JSON.stringify(body) });
   const err = (status: number, error: string, extra: Record<string, unknown> = {}) => json(status, { error, ...extra });
@@ -242,7 +268,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     job: { progress: { done: number; total: number; app: string }; estimatedBytes?: number };
     /** Free room (e.g. drop older saved backups) until `need` bytes are free; returns the bytes free after. */
     makeRoom?: (need: number, estimate: number) => Promise<number>;
-  }): Promise<{ bytes: number; sha256: string; backupBytes: number; apps: Array<{ serviceId: string; name: string }>; left: Array<{ serviceId: string; name: string; reason: string }>; createdAt: number }> {
+  }): Promise<{ bytes: number; sha256: string; backupBytes: number; bundleSha256: string; apps: Array<{ serviceId: string; name: string }>; left: Array<{ serviceId: string; name: string; reason: string }>; createdAt: number }> {
     // Size it first: the data file, one app's scratch, and headroom so
     // the apps keep working. A box that can't size something goes ahead
     // on the flat minimum it already passed.
@@ -281,7 +307,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       data: { fileName: a.dataName, bytes: r.bytes, sha256: r.sha256, frameBytes: ARCHIVE_FRAME_BYTES },
     };
     const written = await writeBackupFile(a.backupPath, { archiveId: a.archiveId, key: a.key, slots: a.slots, body, nonce: randomBytes(12) });
-    return { ...r, backupBytes: written.bytes };
+    return { ...r, backupBytes: written.bytes, bundleSha256: await bundleDigest(a.backupPath, written.bytes, a.dataPath) };
   }
 
   function startBackup(req: HttpRequest): Promise<HttpResponse> {
@@ -323,6 +349,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           job.bytes = r.bytes;
           job.sha256 = r.sha256;
           job.backupBytes = r.backupBytes;
+          job.bundleSha256 = r.bundleSha256;
           job.apps = r.apps;
           job.left = r.left;
           key.fill(0);
@@ -363,8 +390,51 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     backupPath: string;
     backupFileName: string;
     dataFileName: string;
+    /** The backup file's size (the one file's metadata part). */
+    backupBytes: number;
+    /** The one `.flagship` file: its name, size and SHA-256 (served as a concatenation, never copied). */
+    bundleFileName: string;
+    bundleBytes: number;
+    bundleSha256: string;
     /** null: kept until it is removed (saved backups). */
     expiresAt: number | null;
+  }
+
+  /** Bytes [start, end] of the one file: header, then the backup file, then the data file. */
+  function bundleParts(d: Downloadable, start: number, end: number): Array<{ buf: Buffer } | { path: string; start: number; end: number }> {
+    const header = Buffer.from(backupBundleHeader(d.backupBytes));
+    const segs = [
+      { at: 0, size: header.length, buf: header as Buffer | null, path: "" },
+      { at: header.length, size: d.backupBytes, buf: null, path: d.backupPath },
+      { at: header.length + d.backupBytes, size: d.bytes, buf: null, path: d.dataPath },
+    ];
+    const out: Array<{ buf: Buffer } | { path: string; start: number; end: number }> = [];
+    for (const s of segs) {
+      const a = Math.max(start, s.at);
+      const b = Math.min(end, s.at + s.size - 1);
+      if (a > b) continue;
+      if (s.buf) out.push({ buf: s.buf.subarray(a - s.at, b - s.at + 1) });
+      else out.push({ path: s.path, start: a - s.at, end: b - s.at });
+    }
+    return out;
+  }
+
+  function bundleStream(d: Downloadable, start: number, end: number): NodeJS.ReadableStream {
+    const parts = bundleParts(d, start, end);
+    return Readable.from(
+      (async function* () {
+        for (const p of parts) {
+          if ("buf" in p) yield p.buf;
+          else for await (const c of createReadStream(p.path, { start: p.start, end: p.end })) yield c as Buffer;
+        }
+      })(),
+    );
+  }
+
+  async function bundleRead(d: Downloadable, start: number, len: number): Promise<Buffer> {
+    const chunks: Buffer[] = [];
+    for await (const c of bundleStream(d, start, start + len - 1)) chunks.push(c as Buffer);
+    return Buffer.concat(chunks);
   }
   /** Download links, by archive id; they die with the backup (and at a restart). */
   const links = new Map<string, { token: string; approved: Set<string> }>();
@@ -380,6 +450,10 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       backupPath: backupFile,
       backupFileName: backupFileName(opts.build.serverFqdn, backup.startedAt),
       dataFileName: dataFileName(opts.build.serverFqdn, backup.startedAt),
+      backupBytes: backup.backupBytes ?? 0,
+      bundleFileName: backupBundleFileName(dataFileName(opts.build.serverFqdn, backup.startedAt)),
+      bundleBytes: BACKUP_BUNDLE_HEADER_BYTES + (backup.backupBytes ?? 0) + backup.bytes,
+      bundleSha256: backup.bundleSha256 ?? "",
       expiresAt: backup.startedAt + KEEP_MS,
     };
   }
@@ -393,6 +467,10 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       backupPath: join(store!.entryDir(m.archiveId), SAVED_BACKUP_FILE),
       backupFileName: m.backupFileName,
       dataFileName: m.dataFileName,
+      backupBytes: m.backupBytes,
+      bundleFileName: m.bundleFileName,
+      bundleBytes: m.bundleBytes,
+      bundleSha256: m.bundleSha256,
       expiresAt: null,
     };
   }
@@ -443,6 +521,29 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     };
   }
 
+  /** `GET .../bundle?offset=N`: ≤ 4 MiB of the one `.flagship` file, for the phones' resumable downloader. */
+  async function bundleChunk(d: Downloadable | null, req: HttpRequest): Promise<HttpResponse> {
+    if (!d) return err(404, "no backup is ready");
+    const q = new URLSearchParams(req.path.includes("?") ? req.path.slice(req.path.indexOf("?") + 1) : "");
+    const offset = Number(q.get("offset") ?? "0");
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset > d.bundleBytes) return err(400, "bad offset");
+    const len = Math.min(ARCHIVE_CHUNK_BYTES, d.bundleBytes - offset);
+    const buf = len > 0 ? await bundleRead(d, offset, len) : Buffer.alloc(0);
+    if (buf.length !== len) return err(500, "the backup file changed while it was read");
+    if (offset + len >= d.bundleBytes) noteDownloaded(d);
+    return {
+      status: 200,
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-flagship-bundle-bytes": String(d.bundleBytes),
+        "x-flagship-bundle-sha256": d.bundleSha256,
+        "content-disposition": `attachment; filename="${d.bundleFileName}"`,
+        "cache-control": "no-store",
+      },
+      body: buf,
+    };
+  }
+
   async function backupFileResponse(d: Downloadable | null): Promise<HttpResponse> {
     if (!d) return err(404, "no backup is ready");
     let text: Buffer;
@@ -480,6 +581,9 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       path: `${DOWNLOAD_PATH}${l.token}`,
       backupFileName: d.backupFileName,
       dataFileName: d.dataFileName,
+      bundleFileName: d.bundleFileName,
+      bundleBytes: d.bundleBytes,
+      bundleSha256: d.bundleSha256,
       bytes: d.bytes,
       sha256: d.sha256,
       expiresAt: d.expiresAt,
@@ -533,11 +637,13 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
   /** The download link: the page, its status, and (approved only) the two files. */
   async function handleDownload(req: HttpRequest): Promise<HttpResponse | null> {
     const path = req.path.split("?")[0]!;
+    const probed = serveProbe(path);
+    if (probed) return probed;
     if (!path.startsWith(DOWNLOAD_PATH)) return null;
     const [token = "", kind = "", ...more] = path.slice(DOWNLOAD_PATH.length).split("/");
-    if (more.length > 0 || !["", "status", "file", "backup"].includes(kind)) return err(404, "not found");
+    if (more.length > 0 || !["", "status", "bundle"].includes(kind)) return err(404, "not found");
     const method = req.method.toUpperCase();
-    if (method !== "GET" && (method !== "HEAD" || kind !== "file")) return err(405, "method not allowed");
+    if (method !== "GET" && (method !== "HEAD" || kind !== "bundle")) return err(405, "method not allowed");
     const q = new URLSearchParams(req.path.includes("?") ? req.path.slice(req.path.indexOf("?") + 1) : "");
     const r = q.get("r") ?? "";
     const validR = /^[0-9a-f]{32}$/.test(r);
@@ -560,12 +666,10 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
         renderDownloadPage({
           appLink: `${appLinkBase}/app/backup-download#s=${encodeURIComponent(opts.build.serverFqdn)}&a=${d.archiveId}&r=${r}`,
           code: archiveDownloadCode(r),
-          backupFileName: d.backupFileName,
-          dataFileName: d.dataFileName,
-          sizeText: gb(d.bytes),
+          fileName: d.bundleFileName,
+          sizeText: gb(d.bundleBytes),
           statusUrl: `${base}/status?r=${r}`,
-          backupUrl: `${base}/backup?r=${r}`,
-          fileUrl: `${base}/file?r=${r}`,
+          fileUrl: `${base}/bundle?r=${r}`,
           expiresText: d.expiresAt === null ? "the backup is removed from the server" : new Date(d.expiresAt).toUTCString(),
         }),
       );
@@ -574,12 +678,12 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     const approved = link.approved.has(r);
     if (kind === "status") return json(200, { approved });
     if (!approved) return err(403, "this download hasn't been approved: scan the QR on the download page with the Flagship app");
-    if (kind === "backup") return backupFileResponse(d);
-    const size = d.bytes;
-    const etag = `"${d.sha256 || d.archiveId}"`;
+    // The one `.flagship` file, streamed as header + backup file + data file (no copy on disk).
+    const size = d.bundleBytes;
+    const etag = `"${d.bundleSha256 || d.archiveId}"`;
     const fileHeaders: Record<string, string> = {
       "content-type": "application/octet-stream",
-      "content-disposition": `attachment; filename="${d.dataFileName}"`,
+      "content-disposition": `attachment; filename="${d.bundleFileName}"`,
       "accept-ranges": "bytes",
       etag,
       "cache-control": "no-store",
@@ -597,8 +701,8 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       headers: { ...fileHeaders, ...(range ? { "content-range": `bytes ${start}-${end}/${size}` } : {}) },
       body: "",
       stream: {
-        length: size === 0 ? 0 : end - start + 1,
-        open: () => createReadStream(d.dataPath, { start, end }),
+        length: end - start + 1,
+        open: () => bundleStream(d, start, end),
       },
     };
   }
@@ -623,11 +727,16 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     pinnedArchiveIds?: () => Set<string>;
   } = {};
   function pinned(): Set<string> {
+    const out = new Set<string>();
     try {
-      return hooks.pinnedArchiveIds?.() ?? new Set();
+      for (const id of hooks.pinnedArchiveIds?.() ?? []) out.add(id);
     } catch {
-      return new Set();
+      /* the hook never fails a backup */
     }
+    // The backup a move is carrying stays until the move ends.
+    const moving = opts.migrate?.pause.pinnedArchiveId();
+    if (moving) out.add(moving);
+    return out;
   }
   const NO_KEYS =
     "an admin device of your account hasn't approved backups for this server yet: open this server in the Flagship app on an admin device";
@@ -688,12 +797,15 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
   }
 
   /** Start a saved backup now (Back up now, or the schedule). */
-  async function runSaved(trigger: "schedule" | "now"): Promise<HttpResponse> {
+  async function runSaved(trigger: "schedule" | "now", purpose: "backup" | "migrate" = "backup"): Promise<HttpResponse> {
     if (!store) return err(404, "this server doesn't keep backups");
     if (running) return err(409, "a backup or restore is already running here");
+    if (purpose === "migrate" && !opts.migrate) return err(404, "this server can't be moved yet: update it first");
     const s = await state();
     const k = keyPool[0];
     if (!k) return err(409, NO_KEYS, { code: "no-keys" });
+    // Migrate: pause every app first, so nothing is written after the backup.
+    if (purpose === "migrate") await opts.migrate!.pause.pause();
     // The key leaves the pool (on disk) before it is used, so it is never used twice.
     keyPool = keyPool.slice(1);
     await store.saveKeys(keyPool);
@@ -736,12 +848,16 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           bytes: r.bytes,
           sha256: r.sha256,
           backupBytes: r.backupBytes,
+          bundleFileName: `${stem}.flagship`,
+          bundleBytes: BACKUP_BUNDLE_HEADER_BYTES + r.backupBytes + r.bytes,
+          bundleSha256: r.bundleSha256,
           backupFileName: `${stem}.flagship-backup`,
           dataFileName: `${stem}.flagship-data`,
           apps: r.apps,
           left: r.left,
         };
         await store.commit(meta);
+        if (purpose === "migrate") await opts.migrate!.pause.setArchive(meta.archiveId);
         s.history.lastOk = true;
         s.lastRun = { at: startedAt, ok: true, trigger, archiveId: k.archiveId };
         await store.saveState(s);
@@ -770,6 +886,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
         await store.saveState(s).catch(() => {});
         note("server.backup.failed", `The ${trigger === "schedule" ? "scheduled " : ""}backup failed: ${reason}`, false);
         log(`[server-archive] saved backup failed: ${reason}`);
+        if (purpose === "migrate") await opts.migrate!.pause.resume("The backup for the move failed, so this server's apps are running again.").catch(() => {});
       })
       .finally(async () => {
         key.fill(0);
@@ -795,6 +912,8 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
         ? { archiveId: savedJob.archiveId, trigger: savedJob.trigger, startedAt: savedJob.startedAt, progress: savedJob.progress, ...(savedJob.estimatedBytes !== undefined ? { estimatedBytes: savedJob.estimatedBytes } : {}) }
         : null,
       keysLeft: keyPool.length,
+      /** Set while Migrate has this server's apps paused. */
+      migratePause: opts.migrate?.pause.current() ?? null,
       /** How many keys the apps should send (one approval), 0 while the pool is full enough. */
       keysWanted: keyPool.length < KEY_POOL_LOW ? Math.min(400, KEY_POOL_MAX - keyPool.length) : 0,
       ...(keyPool.length === 0 && s.schedule.frequency !== "off" ? { waitingReason: NO_KEYS } : {}),
@@ -862,8 +981,26 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     if (rest === "" && method === "GET") return json(200, await savedView());
     if (rest === "/schedule" && method === "PUT") return putSchedule(req);
     if (rest === "/keys" && method === "POST") return depositKeys(req);
-    if (rest === "/run" && method === "POST") return runSaved("now");
-    const m = /^\/([0-9a-f]{32})(\/backup-file|\/chunk|\/link)?$/.exec(rest);
+    if (rest === "/run" && method === "POST") {
+      let purpose: "backup" | "migrate" = "backup";
+      try {
+        const b = req.body.length > 0 ? (JSON.parse(req.body.toString("utf8")) as { purpose?: unknown }) : {};
+        if (b.purpose === "migrate") purpose = "migrate";
+      } catch {
+        return err(400, "invalid json");
+      }
+      return runSaved("now", purpose);
+    }
+    if (rest === "/resume" && method === "POST") {
+      if (!opts.migrate) return err(404, "not found");
+      await opts.migrate.pause.resume("The move was stopped, so this server's apps are running again.");
+      return json(200, await savedView());
+    }
+    if (rest === "/estimate" && method === "GET") {
+      const est = await estimateServerArchive(opts.build);
+      return json(200, { archiveBytes: est?.archiveBytes ?? null, apps: opts.build.apps().length });
+    }
+    const m = /^\/([0-9a-f]{32})(\/backup-file|\/chunk|\/bundle|\/link)?$/.exec(rest);
     if (!m) return err(404, "not found");
     const id = m[1]!;
     const sub = m[2] ?? "";
@@ -878,6 +1015,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     }
     if (sub === "/backup-file" && method === "GET") return backupFileResponse(await savedById(id));
     if (sub === "/chunk" && method === "GET") return chunk(await savedById(id), req);
+    if (sub === "/bundle" && method === "GET") return bundleChunk(await savedById(id), req);
     if (sub === "/link" && method === "POST") return mintLink(await savedById(id));
     return err(405, "method not allowed");
   }
@@ -893,6 +1031,13 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       dataFileName: dataFileName(opts.build.serverFqdn, backup.startedAt),
       ...(backup.bytes !== undefined ? { bytes: backup.bytes } : {}),
       ...(backup.backupBytes !== undefined ? { backupBytes: backup.backupBytes } : {}),
+      ...(backup.bytes !== undefined && backup.backupBytes !== undefined
+        ? {
+            bundleFileName: backupBundleFileName(dataFileName(opts.build.serverFqdn, backup.startedAt)),
+            bundleBytes: BACKUP_BUNDLE_HEADER_BYTES + backup.backupBytes + backup.bytes,
+            bundleSha256: backup.bundleSha256 ?? "",
+          }
+        : {}),
       ...(backup.estimatedBytes !== undefined ? { estimatedBytes: backup.estimatedBytes } : {}),
       ...(backup.sha256 ? { sha256: backup.sha256 } : {}),
       ...(backup.apps ? { apps: backup.apps } : {}),
@@ -1051,6 +1196,203 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     return json(202, { archiveId: job.archiveId });
   }
 
+  // -------------------------------------------------------------------------
+  // Migrate on the archive path (docs/server-migration.md, "Data path")
+  // -------------------------------------------------------------------------
+
+  /** `POST .../server-restore/order`: a restore order sent after pairing, on a server with no apps yet. */
+  async function lateOrder(req: HttpRequest): Promise<HttpResponse> {
+    if (!opts.wait) return err(404, "this server can't take a backup");
+    let b: { order?: unknown; signatureHex?: unknown };
+    try {
+      b = JSON.parse(req.body.toString("utf8")) as typeof b;
+    } catch {
+      return err(400, "invalid json");
+    }
+    if (opts.build.apps().length > 0 && !waiting()) {
+      return err(409, "this server already has apps, so it can't take a whole server's backup: use a new server", { code: "has-apps" });
+    }
+    const refused = await opts.wait.adoptOrder(b.order, b.signatureHex);
+    if (refused) return err(/admin device|different server/.test(refused) ? 403 : 409, refused);
+    return json(200, restoreView());
+  }
+
+  /**
+   * `POST .../server-restore/pull { url, requestId }`: fetch the backup this
+   * server waits for straight from the old server's approved download link
+   * (`<url>/bundle?r=<requestId>`), its data part only, resuming where the
+   * upload stands. The commit checks its size and SHA-256 as for an upload.
+   */
+  async function pull(req: HttpRequest): Promise<HttpResponse> {
+    let b: { url?: unknown; requestId?: unknown };
+    try {
+      b = JSON.parse(req.body.toString("utf8")) as typeof b;
+    } catch {
+      return err(400, "invalid json");
+    }
+    const w = waiting();
+    if (!w) return err(409, "this server isn't waiting for a backup", { code: "not-waiting" });
+    if (typeof b.url !== "string" || !/^https:\/\/[a-z0-9.-]+\/api\/archive-download\/[0-9a-f]{64}$/.test(b.url)) return err(400, "url must be a server's backup download link");
+    if (typeof b.requestId !== "string" || !/^[0-9a-f]{32}$/.test(b.requestId)) return err(400, "requestId must be 16 bytes of lowercase hex");
+    const started = await startRestore({ ...req, body: Buffer.from(JSON.stringify({ archiveId: w.archiveId, bytes: w.bytes })) });
+    if (started.status !== 202) return started;
+    const job = restore!;
+    if (job.state === "ready") return json(202, { archiveId: w.archiveId, received: job.received });
+    if (pulling) return json(202, { archiveId: w.archiveId, received: job.received });
+    pulling = true;
+    job.reason = undefined;
+    const fetchImpl = opts.fetchImpl ?? fetch;
+    const src = `${b.url}/bundle?r=${b.requestId}`;
+    void (async () => {
+      const head = await fetchImpl(src, { headers: { range: `bytes=0-${BACKUP_BUNDLE_HEADER_BYTES - 1}` } });
+      if (head.status !== 206 && head.status !== 200) throw new ArchiveError(`the old server refused the download (${head.status})`);
+      const headBytes = new Uint8Array(await head.arrayBuffer()).subarray(0, BACKUP_BUNDLE_HEADER_BYTES);
+      const total = Number(/\/(\d+)$/.exec(head.headers.get("content-range") ?? "")?.[1] ?? head.headers.get("content-length") ?? 0);
+      const parts = parseBackupBundleHeader(headBytes, total);
+      if (parts.dataLength !== job.bytes) throw new ArchiveError("the old server's backup isn't the one this server is waiting for (its size differs)");
+      const from = parts.dataOffset + job.received;
+      const res = await fetchImpl(src, { headers: { range: `bytes=${from}-` } });
+      if (res.status !== 206 || !res.body) throw new ArchiveError(`the old server didn't resume the download (${res.status})`);
+      const fh = await open(uploadFile, job.received === 0 ? "w" : "r+", 0o600);
+      try {
+        let at = job.received;
+        for await (const c of res.body as unknown as AsyncIterable<Uint8Array>) {
+          if (at + c.length > job.bytes) throw new ArchiveError("the old server sent more than the backup holds");
+          await fh.write(c, 0, c.length, at);
+          at += c.length;
+          job.received = at;
+        }
+        await fh.sync();
+      } finally {
+        await fh.close();
+      }
+      if (job.received !== job.bytes) throw new ArchiveError("the download from the old server stopped early: it resumes when you try again");
+      job.state = "ready";
+      note("server.restore.pulled", "The backup arrived from the old server.");
+    })()
+      .catch((e: Error) => {
+        job.reason = e instanceof ArchiveError || e instanceof Error ? e.message : String(e);
+        log(`[server-archive] pull failed: ${job.reason}`);
+      })
+      .finally(() => {
+        pulling = false;
+      });
+    return json(202, { archiveId: w.archiveId, received: job.received });
+  }
+
+  /** The peer engine's fetch of a lost server's backup from the bricks on other servers (setPeerFetcher). */
+  let peerFetcher:
+    | ((w: { serverId: string; pbk: Uint8Array; archiveId: string; bytes: number; sha256: string; outPath: string; onProgress?: (received: number) => void }) => Promise<{ dataPath: string }>)
+    | null = null;
+
+  /**
+   * `POST .../server-restore/from-peers { serverId, pbkHex }`: the backup this
+   * server waits for comes from the peer engine instead of an upload (the
+   * lost server's id and its PBK from the owner's device). The commit checks
+   * it as for an upload.
+   */
+  async function fromPeers(req: HttpRequest): Promise<HttpResponse> {
+    if (!peerFetcher) return err(404, "this server can't restore from peer backups");
+    let b: { serverId?: unknown; pbkHex?: unknown };
+    try {
+      b = JSON.parse(req.body.toString("utf8")) as typeof b;
+    } catch {
+      return err(400, "invalid json");
+    }
+    const w = waiting();
+    if (!w) return err(409, "this server isn't waiting for a backup", { code: "not-waiting" });
+    if (typeof b.serverId !== "string" || !/^[a-z0-9.-]+$/.test(b.serverId)) return err(400, "serverId must be the lost server's address");
+    if (typeof b.pbkHex !== "string" || !/^[0-9a-f]{64}$/.test(b.pbkHex)) return err(400, "pbkHex must be 32 bytes of lowercase hex");
+    const started = await startRestore({ ...req, body: Buffer.from(JSON.stringify({ archiveId: w.archiveId, bytes: w.bytes })) });
+    if (started.status !== 202) return started;
+    const job = restore!;
+    if (job.state === "ready" || pulling) return json(202, { archiveId: w.archiveId, received: job.received });
+    pulling = true;
+    job.reason = undefined;
+    const fetcher = peerFetcher;
+    const pbk = Buffer.from(b.pbkHex, "hex");
+    void (async () => {
+      const out = await fetcher({
+        serverId: b.serverId as string,
+        pbk,
+        archiveId: w.archiveId,
+        bytes: w.bytes,
+        sha256: w.sha256,
+        outPath: uploadFile,
+        onProgress: (n) => {
+          job.received = Math.min(n, job.bytes);
+        },
+      });
+      if (out.dataPath !== uploadFile) await rename(out.dataPath, uploadFile);
+      if ((await uploadedBytes()) !== job.bytes) throw new ArchiveError("the backup from other servers came back the wrong size");
+      job.received = job.bytes;
+      job.state = "ready";
+      note("server.restore.pulled", "The backup arrived from the servers keeping its pieces.");
+    })()
+      .catch((e: Error) => {
+        job.reason = e.message || "the backup couldn't be fetched from other servers";
+        log(`[server-archive] from-peers failed: ${job.reason}`);
+      })
+      .finally(() => {
+        pbk.fill(0);
+        pulling = false;
+      });
+    return json(202, { archiveId: w.archiveId, received: job.received });
+  }
+
+  /** `POST .../server-restore/probe { url }`: how fast this server reads from the old one (for the downtime estimate). */
+  async function probe(req: HttpRequest): Promise<HttpResponse> {
+    let b: { url?: unknown };
+    try {
+      b = JSON.parse(req.body.toString("utf8")) as typeof b;
+    } catch {
+      return err(400, "invalid json");
+    }
+    if (typeof b.url !== "string" || !/^https:\/\/[a-z0-9.-]+\/api\/archive-probe\/[0-9a-f]{64}$/.test(b.url)) return err(400, "url must be a server's probe link");
+    const fetchImpl = opts.fetchImpl ?? fetch;
+    const t0 = now();
+    let n = 0;
+    try {
+      const res = await fetchImpl(b.url);
+      if (res.status !== 200 || !res.body) return err(502, `the old server didn't answer the speed check (${res.status})`);
+      for await (const c of res.body as unknown as AsyncIterable<Uint8Array>) n += c.length;
+    } catch (e) {
+      return err(502, `the old server couldn't be reached: ${(e as Error).message}`);
+    }
+    const ms = Math.max(1, now() - t0);
+    return json(200, { bytes: n, ms, bytesPerSecond: Math.round((n * 1000) / ms) });
+  }
+
+  /** Probe links on the old server: a few MiB of zeros for the new one to time. */
+  const probes = new Map<string, number>();
+  const PROBE_BYTES = 8 * 1024 * 1024;
+  function mintProbe(): HttpResponse {
+    const token = randomBytes(32).toString("hex");
+    probes.set(token, now() + 10 * 60_000);
+    return json(200, { path: `${PROBE_PATH}${token}`, bytes: PROBE_BYTES });
+  }
+  function serveProbe(path: string): HttpResponse | null {
+    if (!path.startsWith(PROBE_PATH)) return null;
+    const token = path.slice(PROBE_PATH.length);
+    const until = probes.get(token);
+    if (!until || until < now()) return err(404, "this speed-check link has expired");
+    probes.delete(token);
+    const zero = Buffer.alloc(1024 * 1024);
+    return {
+      status: 200,
+      headers: { "content-type": "application/octet-stream", "cache-control": "no-store" },
+      body: "",
+      stream: {
+        length: PROBE_BYTES,
+        open: () =>
+          Readable.from(
+            (function* () {
+              for (let i = 0; i < PROBE_BYTES / zero.length; i++) yield zero;
+            })(),
+          ),
+      },
+    };
+  }
   function restoreView() {
     const r = restore
       ? {
@@ -1060,6 +1402,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           received: restore.received,
           apps: restore.apps,
           startedAt: restore.startedAt,
+          pulling,
           ...(restore.reason ? { reason: restore.reason } : {}),
         }
       : null;
@@ -1081,6 +1424,8 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           return backupFileResponse(manualDownloadable());
         case `GET ${ARCHIVE_PATH}/chunk`:
           return chunk(manualDownloadable(), req);
+        case `GET ${ARCHIVE_PATH}/bundle`:
+          return bundleChunk(manualDownloadable(), req);
         case `POST ${ARCHIVE_PATH}/link`:
           return mintLink(manualDownloadable());
         case `POST ${ARCHIVE_PATH}/approve`:
@@ -1091,6 +1436,16 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           backup = null;
           await dropBackupFiles();
           return json(200, { ok: true });
+        case `POST ${RESTORE_PATH}/order`:
+          return lateOrder(req);
+        case `POST ${RESTORE_PATH}/pull`:
+          return pull(req);
+        case `POST ${RESTORE_PATH}/probe`:
+          return probe(req);
+        case `POST ${RESTORE_PATH}/from-peers`:
+          return fromPeers(req);
+        case `POST ${ARCHIVE_PATH}/probe-link`:
+          return mintProbe();
         case `POST ${RESTORE_PATH}/start`:
           return startRestore(req);
         case `POST ${RESTORE_PATH}/chunk`:
@@ -1121,6 +1476,10 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     /** The peer engine plugs in here: told of each saved backup, and asked which it still needs. */
     setSavedHooks(h: typeof hooks): void {
       hooks = h;
+    },
+    /** The peer engine plugs in its fetch of a lost server's backup (POST .../server-restore/from-peers). */
+    setPeerFetcher(fn: typeof peerFetcher): void {
+      peerFetcher = fn;
     },
     /** Check the schedule every `everyMs` (default 5 minutes) until stopped. */
     startSchedule(everyMs = 5 * 60_000): () => void {

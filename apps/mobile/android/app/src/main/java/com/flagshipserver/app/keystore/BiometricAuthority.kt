@@ -60,8 +60,13 @@ class BiometricAuthority internal constructor(
             // Re-check inside the lock — another caller may have just
             // authenticated the session while we were queued.
             if (fresh) return
-            val p = prompter ?: return
+            val p = prompter ?: run {
+                com.flagshipserver.app.core.ErrorLog.step("biometric", "no prompter bound ($subtitle)")
+                return
+            }
+            com.flagshipserver.app.core.ErrorLog.step("biometric", "ask ($subtitle)")
             p.prompt(title, subtitle)
+            com.flagshipserver.app.core.ErrorLog.step("biometric", "passed")
             fresh = true
         }
     }
@@ -91,6 +96,12 @@ class BiometricAuthority internal constructor(
         @Volatile private var current: BiometricAuthority? = null
         fun set(authority: BiometricAuthority?) { current = authority }
         fun current(): BiometricAuthority? = current
+
+        /** Drop [authority] only if it is still the current one (a second
+         *  activity being destroyed must not unbind the one on screen). */
+        fun clearIf(authority: BiometricAuthority?) {
+            if (current === authority) current = null
+        }
 
         /** Test-only constructor — bypass the FragmentActivity wiring
          *  by injecting a prompter directly. */

@@ -316,8 +316,8 @@ export interface PbRoot {
   indexSegments: number;
   /** Stripe j holds segments s with s % stripes.length === j. Each has n members. */
   stripes: PbRootMember[][];
-  /** Merkle roots of the index bricks, segment-major then shard, hex. */
-  indexRoots: string[];
+  /** SHA-256 of each index shard's plaintext, segment-major then shard, hex. */
+  indexShardHashes: string[];
 }
 
 const TAG_ROOT_AAD = "flagship/pb-root/v1";

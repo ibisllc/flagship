@@ -21,6 +21,7 @@ import {
 import { authorizeSensitiveOrder } from "../../src/adminAuthorityLocal.js";
 import type { HttpRequest, HttpResponse } from "../../src/runtime.js";
 import { ActivityLog } from "../../src/shares/activityLog.js";
+import { adminProof, testVerifyAcceptAdmin } from "./acceptAdminFixture.js";
 import { ShareStore } from "../../src/shares/shareStore.js";
 import { ShareSessionStore, buildShares } from "../../src/shares/sharesHttp.js";
 import { buildShareUpdate, type ShareUpdateAnswer } from "../../src/shares/shareUpdate.js";
@@ -84,7 +85,7 @@ function setup(opts: { pending?: PendingVerifyMarker | null; endorsed?: string[]
   const auth = { ownerIrkPub: owner.publicKey, username: "harry" };
   const verifyOwnerGrant = (g: ServerShareGrant, sig: Uint8Array) =>
     authorizeSensitiveOrder({ ...auth, order: g, signature: sig, verify: verifyServerShareGrant });
-  const store = new ShareStore(null, { serverDomain: BOX, verifyOwnerGrant, now });
+  const store = new ShareStore(null, { serverDomain: BOX, verifyOwnerGrant, verifyAcceptAdmin: testVerifyAcceptAdmin(now), now });
   const sessions = new ShareSessionStore(null, now);
   const activity = new ActivityLog(null, now);
   const pendingStore = memoryPending(opts.pending ?? null);
@@ -162,7 +163,7 @@ async function grant(x: Setup, level: "view" | "manage", k: Keypair = member, sh
     issuedAt: clock++,
   };
   const accept = { serverDomain: BOX, shareId, memberPubHex: hex(k.publicKey), acceptedAt: clock };
-  const r = await x.store.put(g, hex(signServerShareGrant(g, owner)), accept, hex(signServerShareAccept(accept, k)));
+  const r = await x.store.put(g, hex(signServerShareGrant(g, owner)), accept, hex(signServerShareAccept(accept, k)), adminProof(accept));
   expect(r.ok).toBe(true);
 }
 

@@ -17,6 +17,7 @@ import {
   deriveServerArchiveKey,
   openBackupWithAccountKey,
   openBackupWithPasscode,
+  parseBackupBundleHeader,
   parseBackupFile,
   signArchiveDownloadApproval,
   signInstallService,
@@ -65,6 +66,8 @@ function lateWait(ref: { current: RestoreWait | null }): RestoreWait {
     setRestoring: (on) => ref.current?.setRestoring(on),
     finish: async (id) => ref.current?.finish(id),
     heartbeatView: () => ref.current?.heartbeatView() ?? null,
+    adoptOrder: async (o, s) => (ref.current ? ref.current.adoptOrder(o, s) : "not waiting"),
+    restoredAny: () => ref.current?.restoredAny() ?? false,
   };
 }
 
@@ -744,31 +747,62 @@ describe("the backup's download link (browser, approved with the app)", () => {
     expect(htmlText).toContain("<svg");
     expect(htmlText).not.toContain("flagship-archive\",");
     expect(asJson(await get(`${link.path}/status?r=${R}`))).toEqual({ approved: false });
-    expect((await get(`${link.path}/file?r=${R}`)).status).toBe(403);
+    expect((await get(`${link.path}/bundle?r=${R}`)).status).toBe(403);
   });
 
-  it("an approval signed by the owner opens the file to that browser only, with ranges", async () => {
+  it("an approval signed by the owner opens the one .flagship file to that browser only, with ranges", async () => {
     const { file, link, get, R, approve } = await ready();
     expect((await approve()).status).toBe(200);
     expect(asJson(await get(`${link.path}/status?r=${R}`))).toEqual({ approved: true });
-    const r = await get(`${link.path}/file?r=${R}`);
+    const r = await get(`${link.path}/bundle?r=${R}`);
     expect(r.status).toBe(200);
     expect(r.headers).toMatchObject({ "accept-ranges": "bytes", "content-type": "application/octet-stream" });
-    expect(await body(r)).toEqual(file);
-    const bk = await get(`${link.path}/backup?r=${R}`);
-    expect(bk.status).toBe(200);
-    expect(parseBackupFile(String(bk.body)).archiveId).toBe(ARCHIVE_ID);
-    expect((await get(`${link.path}/backup?r=${"11".repeat(16)}`)).status).toBe(403);
-    expect(link).toMatchObject({ backupFileName: expect.stringMatching(/\.flagship-backup$/), dataFileName: expect.stringMatching(/\.flagship-data$/) });
-    const part =await get(`${link.path}/file?r=${R}`, { range: "bytes=100-299" });
-    expect(part.status).toBe(206);
-    expect(await body(part)).toEqual(file.subarray(100, 300));
-    expect((await get(`${link.path}/file?r=${R}`, { range: `bytes=${file.length}-` })).status).toBe(416);
-    const resumeOther = await get(`${link.path}/file?r=${R}`, { range: "bytes=10-20", "if-range": '"not-this-file"' });
+    expect(r.headers!["content-disposition"]).toMatch(/home-\d{4}-\d{2}-\d{2}\.flagship"/);
+    const whole = await body(r);
+    expect(whole.length).toBe(link.bundleBytes);
+    expect(createHash("sha256").update(whole).digest("hex")).toBe(link.bundleSha256);
+    expect(r.headers!.etag).toBe(`"${link.bundleSha256}"`);
+    // Header, then the backup file, then the data file: nothing else.
+    const h = parseBackupBundleHeader(whole.subarray(0, 16), whole.length);
+    expect(parseBackupFile(whole.subarray(h.metaOffset, h.metaOffset + h.metaLength).toString("utf8")).archiveId).toBe(ARCHIVE_ID);
+    expect(whole.subarray(h.dataOffset)).toEqual(file);
+    expect(link).toMatchObject({ bundleFileName: expect.stringMatching(/\.flagship$/) });
+    // Ranges across the seams (header | backup file | data file) and resume.
+    for (const [a, b] of [[0, 15], [10, 40], [h.dataOffset - 5, h.dataOffset + 5], [100, 299], [whole.length - 7, whole.length - 1]] as const) {
+      const part = await get(`${link.path}/bundle?r=${R}`, { range: `bytes=${a}-${b}` });
+      expect(part.status).toBe(206);
+      expect(await body(part)).toEqual(whole.subarray(a, b + 1));
+    }
+    expect((await get(`${link.path}/bundle?r=${R}`, { range: `bytes=${whole.length}-` })).status).toBe(416);
+    const resumeOther = await get(`${link.path}/bundle?r=${R}`, { range: "bytes=10-20", "if-range": '"not-this-file"' });
     expect(resumeOther.status).toBe(200);
-    expect((await get(`${link.path}/file?r=${R}`, {}, "HEAD")).status).toBe(200);
+    expect((await get(`${link.path}/bundle?r=${R}`, {}, "HEAD")).status).toBe(200);
+    // The two parts are not served on their own any more.
+    expect((await get(`${link.path}/file?r=${R}`)).status).toBe(404);
+    expect((await get(`${link.path}/backup?r=${R}`)).status).toBe(404);
     // Another browser (another request id) is still locked out.
-    expect((await get(`${link.path}/file?r=${"11".repeat(16)}`)).status).toBe(403);
+    expect((await get(`${link.path}/bundle?r=${"11".repeat(16)}`)).status).toBe(403);
+  });
+
+  it("the phones' resumable downloader reads the same one file in 4 MiB pieces", async () => {
+    const { w, svc, link } = await ready();
+    void w;
+    const parts: Buffer[] = [];
+    let total = 0;
+    let sha = "";
+    for (let o = 0; ; ) {
+      const c = await call(svc, "GET", `${ARCHIVE_PATH}/bundle?offset=${o}`);
+      expect(c.status).toBe(200);
+      total = Number(c.headers["x-flagship-bundle-bytes"]);
+      sha = String(c.headers["x-flagship-bundle-sha256"]);
+      parts.push(c.body as Buffer);
+      o += (c.body as Buffer).length;
+      if (o >= total) break;
+    }
+    const whole = Buffer.concat(parts);
+    expect(total).toBe(link.bundleBytes);
+    expect(createHash("sha256").update(whole).digest("hex")).toBe(sha);
+    expect(asJson(await call(svc, "GET", ARCHIVE_PATH)).archive).toMatchObject({ bundleBytes: total, bundleSha256: sha });
   });
 
   it("refuses approvals that aren't the owner's, are stale, or name another server or backup", async () => {
@@ -783,11 +817,11 @@ describe("the backup's download link (browser, approved with the app)", () => {
   it("a wrong or old token, and other methods, get nothing", async () => {
     const { svc, link, get, R, approve } = await ready();
     await approve();
-    expect((await get(`${DOWNLOAD_PATH}${"0".repeat(64)}/file?r=${R}`)).status).toBe(404);
+    expect((await get(`${DOWNLOAD_PATH}${"0".repeat(64)}/bundle?r=${R}`)).status).toBe(404);
     expect((await get(`${DOWNLOAD_PATH}short`)).status).toBe(404);
-    expect((await get(`${link.path}/file?r=${R}`, {}, "POST")).status).toBe(405);
+    expect((await get(`${link.path}/bundle?r=${R}`, {}, "POST")).status).toBe(405);
     await call(svc, "DELETE", ARCHIVE_PATH);
-    expect((await get(`${link.path}/file?r=${R}`)).status).toBe(404);
+    expect((await get(`${link.path}/bundle?r=${R}`)).status).toBe(404);
   });
 
   it("parses Range headers", () => {

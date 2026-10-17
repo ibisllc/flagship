@@ -72,6 +72,16 @@
       }
     },
     {
+      "id": "share-accept-admin",
+      "title": "Only an admin device accepts a co-manage share: admin-root-signed server-share-accept-admin/v1 + .com's attestation, checked by the shared server (docs/share-a-server.md §5.1)",
+      "ref": "web",
+      "surfaces": {
+        "ios": { "status": "missing", "reason": "Built on the box, .com and the webapp first (2026-10-16); the iOS port follows docs/share-a-server.md §5.1.", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerShare.swift", "flagship/server-share-accept-admin/v1"]] },
+        "android": { "status": "missing", "reason": "Built on the box, .com and the webapp first (2026-10-16); the Android port follows docs/share-a-server.md §5.1.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerShare.kt", "flagship/server-share-accept-admin/v1"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverShare.js", "flagship/server-share-accept-admin/v1"], ["apps/web/public/webapp/lib/serverShares.js", "account-key-attestation"], ["apps/web/public/webapp/views/share-accept.js", "SHARE_ACCEPT_ADMIN_ONLY"]] }
+      }
+    },
+    {
       "id": "share-co-manager-invites",
       "title": "Co-manager invites: invite at Member from a shared server's app, withdraw your own (docs/service-access-gating.md \"Co-manager invites\")",
       "ref": "web",
@@ -246,7 +256,7 @@
       "title": "Welcome: Create your account + one Connect to an existing account page (account name or pairing code)",
       "ref": "ios",
       "surfaces": {
-        "ios": { "status": "missing", "reason": "Welcome still has the old separate entry.", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/ConnectAccountScreen.swift", "Connect to an existing account"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/WelcomeScreen.swift", "welcome-connect"]] },
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/ConnectAccountScreen.swift", "Connect to an existing account"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/WelcomeScreen.swift", "welcome-connect"]] },
         "android": { "status": "missing", "reason": "Welcome still has the old separate entries.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/onboarding/ConnectAccountScreen.kt", "Connect to an existing account"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/WelcomeScreen.kt", "welcome-connect"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/index.html", "data-testid=\"welcome-connect\"[^>]*>Connect to an existing account<"], ["apps/web/public/webapp/lib/connectAccount.js", "export function readNameField"]] }
       }
@@ -490,7 +500,7 @@
       "ref": "mac",
       "surfaces": {
         "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilderCore/IsoBaseCache.swift", "func pruneUnused"]] },
-        "win": { "status": "missing", "reason": "Not built.", "anchors": [["apps/builder-windows/src/IsoBaseCache.cs", "[Pp]rune"]] },
+        "win": { "status": "present", "anchors": [["apps/builder-windows/src/IsoBaseCache.cs", "public static void PruneUnused"]] },
         "linux": { "status": "partial", "reason": "The audit marks it partial; iso_base_cache.py prunes the base ISO cache, check its rule against the Mac's.", "anchors": [["apps/builder-linux/iso_base_cache.py", "prune_unused\\(keep_arch"]] }
       }
     },
@@ -510,8 +520,8 @@
       "ref": "mac",
       "surfaces": {
         "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift", "idleSystemSleepDisabled"]] },
-        "win": { "status": "missing", "reason": "Not built.", "anchors": [["apps/builder-windows/src/VM/VMManager.cs", "SetThreadExecutionState"]] },
-        "linux": { "status": "missing", "reason": "Not built.", "anchors": [["apps/builder-linux/vm/manager.py", "systemd-inhibit|Inhibit"]] }
+        "win": { "status": "present", "anchors": [["apps/builder-windows/src/HostPower.cs", "SetThreadExecutionState\\(on"]] },
+        "linux": { "status": "present", "anchors": [["apps/builder-linux/vm/host_power.py", "class SleepInhibitor"]] }
       }
     },
     {
@@ -520,8 +530,8 @@
       "ref": "mac",
       "surfaces": {
         "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilder/WifiCredentialStore.swift", "WifiCredentialStore"]] },
-        "win": { "status": "partial", "reason": "Asked for but not persisted.", "anchors": [["apps/builder-windows/src/Wizard.cs", "Wifi|WiFi"]] },
-        "linux": { "status": "missing", "reason": "Not built.", "anchors": [["apps/builder-linux/wizard.py", "[Ww]ifi|Wi-Fi"]] }
+        "win": { "status": "present", "anchors": [["apps/builder-windows/src/WifiCredentialStore.cs", "Dpapi\\.Protect"], ["apps/builder-windows/src/Wizard.cs", "WifiCredentialStore _wifiStore"]] },
+        "linux": { "status": "present", "anchors": [["apps/builder-linux/wifi_store.py", "def save"], ["apps/builder-linux/wizard.py", "from wifi_store import"]] }
       }
     },
     {
@@ -539,9 +549,9 @@
       "title": "Studio: version stamped from the release",
       "ref": "mac",
       "surfaces": {
-        "mac": { "status": "present", "anchors": [["apps/builder-mac/Info.plist", "CFBundleShortVersionString"]] },
-        "win": { "status": "partial", "reason": "FlagshipBuilder.csproj says 0.0.1 while the release is studio-v0.1.1.", "anchors": [["apps/builder-windows/FlagshipBuilder.csproj", "<Version>"]] },
-        "linux": { "status": "partial", "reason": "Hard-coded 0.1.0 in wizard.py.", "anchors": [["apps/builder-linux/wizard.py", "BUILDER_VERSION = \"0\\.1\\.0\""]] }
+        "mac": { "status": "partial", "reason": "Info.plist hard-codes 0.1.0 and release-studio.sh does not stamp the release version, so the shipped Mac app reports 0.1.0.", "anchors": [["apps/builder-mac/Info.plist", "CFBundleShortVersionString"]] },
+        "win": { "status": "present", "anchors": [["apps/builder-windows/FlagshipBuilder.csproj", "<Version>\\$\\(StudioVersion\\)</Version>"]] },
+        "linux": { "status": "present", "anchors": [["apps/builder-linux/wizard.py", "BUILDER_VERSION = VERSION"], ["apps/builder-linux/appimage/build.sh", "FLAGSHIP_STUDIO_VERSION"]] }
       }
     },
     {
@@ -592,6 +602,16 @@
         "ios": { "status": "missing", "reason": "Being built (debug-access v2).", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/DebugAccess.swift", "flagship/debug-access/v2"]] },
         "android": { "status": "missing", "reason": "Being built (debug-access v2).", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/DebugAccess.kt", "flagship/debug-access/v2"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/debugAccess.js", "flagship/debug-access/v2"], ["apps/web/public/webapp/views/debug-access.js", "debugAccessBanner"], ["apps/web/public/webapp/views/debug-access.js", "DEBUG_ADMIN_ONLY"], ["apps/web/public/webapp/views/create-server.js", "readDebugSshKey"], ["apps/web/public/webapp/lib/activityFeed.js", "server\\.debug-access\\.revoked"]] }
+      }
+    },
+    {
+      "id": "scheduled-backups",
+      "title": "Backups section: backup policy (phone / peer / none) with its size limit, scheduled backups (last / next run, schedule, saved list with Download and Delete, Back up now), one .flagship file; phones keep a copy",
+      "ref": "ios",
+      "surfaces": {
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/server-backups.js", "export function backupsSectionHtml"], ["apps/web/public/webapp/lib/savedBackups.js", "flagship/server-archive-keys/v1"], ["apps/web/public/webapp/lib/backupPolicy.js", "flagship/backup-policy/v1"], ["apps/web/public/webapp/lib/serverBackupFormat.js", "FLGSHBK1"], ["apps/web/public/webapp/views/create-server.js", "attachBackupPolicy"]] },
+        "ios": { "status": "missing", "reason": "being built by the backup agent's iOS sub-agent (2026-10-16)" },
+        "android": { "status": "missing", "reason": "being built by the backup agent's Android sub-agent (2026-10-16)" }
       }
     }
   ]

@@ -31,8 +31,12 @@ export interface PostgresAdmin {
 
 /** Per-app files folders: Docker named volumes, mounted at `/data`. */
 export interface FilesAdmin {
-  /** Create the volume; throws when it already exists (a fresh app gets an empty folder). */
-  createVolume(args: { volume: string; labels?: Record<string, string> }): Promise<void>;
+  /**
+   * Create the volume; throws when it already exists (a fresh app gets an
+   * empty folder). `sizeBytes` is the folder's limit where the box can hold
+   * one (appQuota/loopVolumes.ts).
+   */
+  createVolume(args: { volume: string; labels?: Record<string, string>; sizeBytes?: number }): Promise<void>;
   /** Remove the volume and everything in it; a volume already gone is fine. */
   removeVolume(volume: string): Promise<void>;
   /** Bytes the volume uses on disk, or null when the box can't tell. */
@@ -88,10 +92,14 @@ export class InMemoryPostgresAdmin implements PostgresAdmin {
 }
 
 export class InMemoryFilesAdmin implements FilesAdmin {
-  volumes = new Map<string, { labels: Record<string, string>; bytes: number }>();
-  async createVolume(args: { volume: string; labels?: Record<string, string> }): Promise<void> {
+  volumes = new Map<string, { labels: Record<string, string>; bytes: number; sizeBytes?: number }>();
+  async createVolume(args: { volume: string; labels?: Record<string, string>; sizeBytes?: number }): Promise<void> {
     if (this.volumes.has(args.volume)) throw new Error(`files volume ${args.volume} already exists`);
-    this.volumes.set(args.volume, { labels: { ...(args.labels ?? {}) }, bytes: 0 });
+    this.volumes.set(args.volume, {
+      labels: { ...(args.labels ?? {}) },
+      bytes: 0,
+      ...(args.sizeBytes !== undefined ? { sizeBytes: args.sizeBytes } : {}),
+    });
   }
   async removeVolume(volume: string): Promise<void> {
     this.volumes.delete(volume);

@@ -35,26 +35,6 @@ interface PodClients {
     }
 }
 
-/** The same clients for every server (mock mode, tests). */
-class FixedPodClients(
-    private val screens: ScreensClient,
-    private val build: BuildClient,
-) : PodClients {
-    override fun screens(pod: PodInfo): ScreensClient {
-        // The mock answers as whichever box it was last pointed at (iOS's
-        // HomeViewModel does the same), so each server page shows its own box,
-        // and a box that isn't online doesn't answer, as a real one wouldn't.
-        (screens as? com.flagshipserver.app.api.MockScreensClient)?.let { mock ->
-            val label = pod.fqdn.substringBefore('.')
-            mock.podContext = label
-            if (pod.status == PodInfo.Status.ONLINE) mock.unreachablePodContexts -= label
-            else mock.unreachablePodContexts += label
-        }
-        return screens
-    }
-    override fun build(pod: PodInfo): BuildClient = build
-}
-
 /** Live clients, one per server and session token, each pointed at
  *  `https://<fqdn>` with that server's own token from the per-pod store. */
 class LivePodClients(

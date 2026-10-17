@@ -27,27 +27,6 @@ interface BrowserStream {
     fun close()
 }
 
-/** In-memory stream for tests + previews. */
-class MockBrowserStream : BrowserStream {
-    val sent = mutableListOf<BrowserInput>()
-    private val flow = MutableSharedFlow<BrowserFrame>(
-        replay = 0, extraBufferCapacity = 64,
-    )
-    override val incoming: Flow<BrowserFrame> = flow
-
-    fun emit(frame: BrowserFrame) {
-        flow.tryEmit(frame)
-    }
-
-    override suspend fun send(input: BrowserInput) {
-        sent.add(input)
-    }
-
-    override fun close() {
-        // No-op for the mock; consumers handle their own cancellation.
-    }
-}
-
 /** OkHttp WebSocket-backed stream. Reconnects up to maxReconnects with
  *  exponential backoff on transient close. */
 class OkHttpBrowserStream(

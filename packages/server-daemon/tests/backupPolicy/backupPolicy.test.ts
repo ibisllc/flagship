@@ -102,7 +102,7 @@ describe("backup policy limit", () => {
     perApp = new Map([["harry--notes", app(4 * GB, 2 * GB)]]);
     await cap.refresh();
     expect(cap.overLimit()).toBe(true);
-    expect(cap.admit()).toMatch(/holds 6\.0 GB of app data, over its backup limit of 5\.0 GB \(the space your phone keeps/);
+    expect(cap.admit()).toMatch(/holds 6\.0 GB of app data, over its backup limit of 5\.0 GB \(the space your device keeps/);
     expect(cap.view()).toMatchObject({ limitBytes: 5 * GB, usedBytes: 6 * GB, overLimit: true, overReason: expect.any(String) });
     perApp = new Map([["harry--notes", app(GB, 0)]]);
     await cap.refresh();
@@ -165,7 +165,7 @@ describe("GET/POST /api/screens/backup-policy", () => {
     // A limit the server is already over can't be chosen: 1 GB held, a 0.5 GB phone reserve.
     const tooSmall = await http.handle("/api/screens/backup-policy", "POST", req("POST", signed({ phoneReserveBytes: GB / 2, issuedAt: 4000 })), { companion: false });
     expect(tooSmall!.status).toBe(409);
-    expect(JSON.parse(String(tooSmall!.body))).toMatchObject({ code: "over-backup-limit", error: expect.stringMatching(/Reserve at least 1\.0 GB on the phone/) });
+    expect(JSON.parse(String(tooSmall!.body))).toMatchObject({ code: "over-backup-limit", error: expect.stringMatching(/Reserve at least 1\.0 GB on that device/) });
     expect(s.current().policy).toBe("peer");
     expect(await http.handle("/api/screens/other", "GET", req("GET"), { companion: false })).toBeNull();
   });

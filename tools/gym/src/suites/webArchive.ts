@@ -12,15 +12,15 @@ import { webTotal, shot } from "./helpers.js";
 export const WEB_ARCHIVE: readonly Scenario[] = [
   webTotal(
     "web-total-archive-backup-suggested",
-    "Backup/clone server from Home → server card → Backup: the suggested passcode copies to the clipboard, Make the backup waits for 'I've saved the passcode', the box gets the archive id, key and both slots (passcode + account), progress then 'Backup ready' with the left-out app named; Copy download link copies the box's link; Download both files sends an admin-root-signed flagship/archive-download/v1 approval and starts both downloads; Delete from server removes the box's copy; Close closes.",
-    "gym archive backup from Home makes a sealed backup with the suggested passcode and downloads both files",
+    "Backup/clone server from Home → server card → Backup: the suggested passcode copies to the clipboard, Make the backup waits for 'I've saved the passcode', the box gets the archive id, key and both slots (passcode + account), progress then 'Backup ready' with the left-out app named; Copy download link copies the box's link; Download the backup sends an admin-root-signed flagship/archive-download/v1 approval and saves the one .flagship file; Delete from server removes the box's copy; Close closes.",
+    "gym archive backup from Home makes a sealed backup with the suggested passcode and downloads the one .flagship file",
     {
       steps: [
         { kind: "tap", describe: "Home → server card → Backup/clone server.", handle: "#backup-start-btn" },
         { kind: "tap", describe: "Copy the suggested passcode.", handle: "[data-bk-copy-pass]" },
         { kind: "tap", describe: "Tick 'I've saved the passcode', Make the backup.", handle: "[data-bk-go]" },
         { kind: "tap", describe: "Copy download link.", handle: "[data-bk-copy]" },
-        { kind: "tap", describe: "Download both files.", handle: "[data-bk-save]" },
+        { kind: "tap", describe: "Download the backup.", handle: "[data-bk-save]" },
         { kind: "tap", describe: "Delete from server, then Close.", handle: "[data-bk-remove]" },
       ],
       assertions: [
@@ -156,18 +156,23 @@ export const WEB_ARCHIVE: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-archive-migrate-start",
-    "Migrate: without peer backup the dialog says the server has no backup and Start migration is off (Close closes); with it, Start migration posts an admin-root-signed flagship/server-migration/v1 (wipe after hand-off), toasts, shows the timeline with Abort, and holds the SWK for the new box.",
-    "gym archive migrate waits for a backup, then starts under the admin root",
+    "Migrate needs no peer backup: the dialog says the move pauses the apps, backs the server up and sends the backup to the new server; Start migration posts an admin-root-signed flagship/server-migration/v1 (wipe after hand-off), toasts, shows the timeline with Abort, and holds the SWK for the new box.",
+    "gym archive migrate starts under the admin root with no peer backup needed",
     {
-      steps: [
-        { kind: "tap", describe: "Migrate with no backup; Close.", handle: "[data-mig-cancel]" },
-        { kind: "tap", describe: "Migrate with backup; Start migration.", handle: "[data-mig-action]" },
-      ],
-      assertions: [
-        { describe: "Gate", handle: "[data-mig-gate]", expect: "present" },
-        { describe: "Timeline", handle: "[data-mig-steps]", expect: "text", text: "Migration authorized" },
-      ],
-      screenshots: [shot("migrate-gated", "No backup."), shot("migrate-started", "Started.")],
+      steps: [{ kind: "tap", describe: "Start migration.", handle: "[data-mig-action]" }],
+      assertions: [{ describe: "Timeline", handle: "[data-mig-steps]", expect: "text", text: "Migration authorized" }],
+      screenshots: [shot("migrate-start", "Start."), shot("migrate-started", "Started.")],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-archive-migrate-move",
+    "Migrate moves the data on the archive path: the estimate (size, measured link speed, downtime); Move the data now pauses and backs up the old server (purpose migrate), signs a restore order for the new box under the admin root, approves a download link, has the new box pull it and commits the key; progress per step; a failed app is named and the move ends.",
+    "gym archive migrate moves the data: estimate, pause and back up, the new box pulls and restores",
+    {
+      steps: [{ kind: "tap", describe: "Move the data now.", handle: "[data-mig-move-btn]" }],
+      assertions: [{ describe: "Estimate", handle: "[data-mig-estimate]", expect: "text", text: "Your apps pause for" }],
+      screenshots: [shot("migrate-estimate", "The estimate."), shot("migrate-moved", "Moved.")],
       dimension: "D1",
     },
   ),
@@ -209,7 +214,7 @@ export const WEB_ARCHIVE: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-archive-pending-server",
-    "The pending-server page shows the order and its setup phase; Back returns Home; Cancel order asks first, revokes the auth code, releases the name under the admin root, drops the order and returns Home.",
+    "The pending-server page shows the order and its setup checklist from the order's own status; Back returns Home; Cancel order asks first, releases the name under the admin root (voiding the recipe), drops the order and returns Home.",
     "gym archive pending server page cancels the order and goes back",
     {
       steps: [
@@ -219,6 +224,80 @@ export const WEB_ARCHIVE: readonly Scenario[] = [
       assertions: [{ describe: "Home", handle: "#view-home", expect: "present" }],
       screenshots: [shot("pending-server", "The pending server.")],
       dimension: "D3",
+    },
+  ),
+  webTotal(
+    "web-total-archive-restore-one-app-fails",
+    "A restore where one app fails tries every app, then ends: 'Restored 1 app. 1 couldn't be restored; the server works with the rest.' and the failed app named with the box's reason.",
+    "gym archive a restore where one app fails names it with the box's reason and ends",
+    {
+      steps: [{ kind: "tap", describe: "Send it to the waiting server.", handle: "[data-imp-send-existing]" }],
+      assertions: [{ describe: "Ends", handle: "[data-imp-status]", expect: "text", text: "couldn't be restored" }],
+      screenshots: [shot("import-one-app-failed", "One app failed.")],
+      dimension: "D1",
+    },
+  ),
+  // The server page's Backups section and the create form's policy (gym-backups.spec.ts).
+  webTotal(
+    "web-total-backups-admin",
+    "Backups section on an admin device: policy and usage against its limit; the empty key pool is topped up with one admin-root-signed flagship/server-archive-keys/v1 batch of 400; Back up now shows progress then lists it; Download sends an admin-root approval and saves ONE .flagship file; Delete asks first.",
+    "gym backups an admin device approves backups once, backs up now, downloads one file and deletes",
+    {
+      steps: [
+        { kind: "tap", describe: "Back up now.", handle: "#bk-run-now" },
+        { kind: "tap", describe: "Download a backup.", handle: "[data-bk-download]" },
+        { kind: "tap", describe: "Delete a backup (confirm).", handle: "[data-bk-delete]" },
+      ],
+      assertions: [{ describe: "Policy", handle: "#bk-policy-value", expect: "text", text: "On my devices" }],
+      screenshots: [shot("backups-section", "The Backups section."), shot("backups-after-delete", "After Delete.")],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-backups-non-admin",
+    "Backups section on a non-admin device: the box's 'hasn't approved backups' sentence, Back up now / schedule / policy / Delete disabled with the admin-only line, Download still on, and no order sent.",
+    "gym backups a non-admin device sees the box's reason and sends no order",
+    {
+      steps: [],
+      assertions: [{ describe: "Admin-only line", handle: "[data-backups-admin-only]", expect: "present" }],
+      screenshots: [shot("backups-non-admin", "Non-admin device.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-total-backups-sentences",
+    "A failed scheduled run and an over-limit server show the box's own sentences; a phone reserve smaller than the data is refused in the box's words; Peer-distributed is signed under the admin root and the peer engine's status shows.",
+    "gym backups a failed run, an over-limit server and a refused policy show the box's own sentences",
+    {
+      steps: [
+        { kind: "tap", describe: "Change backup policy → Save (refused).", handle: "#bk-policy-save" },
+        { kind: "tap", describe: "Peer-distributed → Save.", handle: "#bk-policy-save" },
+      ],
+      assertions: [{ describe: "Failure", handle: "#bk-failed", expect: "text", text: "The last backup failed" }],
+      screenshots: [shot("backups-failed-over-limit", "Failure and over limit."), shot("backups-peer-policy", "Peer policy.")],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-backups-schedule",
+    "The schedule is chosen in local time (weekly, Wednesday 9:30 PM in Chicago) and sent to the box in UTC (Thursday 02:30).",
+    "gym backups the schedule is set in local time and sent in UTC",
+    {
+      steps: [{ kind: "tap", describe: "Change schedule → Save.", handle: "#bk-schedule-save" }],
+      assertions: [{ describe: "Schedule line", handle: "#bk-schedule-line", expect: "text", text: "Weekly on Wednesday" }],
+      screenshots: [shot("backups-schedule", "The schedule.")],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-backups-create-policy",
+    "The create form's three backup policies say what each does; Phone-side (default) with a 24 GB reserve and Peer-distributed (no reserve) are each signed under the admin root beside the pairing order.",
+    "gym backups the create form's policy is signed beside the pairing order",
+    {
+      steps: [{ kind: "tap", describe: "Download the recipe.", handle: "#cs-download-recipe" }],
+      assertions: [{ describe: "Reserve", handle: "#cs-reserve-row", expect: "present" }],
+      screenshots: [shot("create-backup-policy", "The create form's policy.")],
+      dimension: "D1",
     },
   ),
 ];

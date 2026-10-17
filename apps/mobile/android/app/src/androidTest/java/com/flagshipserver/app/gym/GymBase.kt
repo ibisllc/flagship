@@ -31,6 +31,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -90,6 +91,11 @@ abstract class GymBase {
         accessAlert: Boolean = false,
         shares: Boolean = false,
         deviceRank: String? = null,
+        live: Boolean = false,
+        apexHost: String? = null,
+        fakePasskeys: Boolean = false,
+        realBiometrics: Boolean = false,
+        persistSession: Boolean = false,
     ) {
         // A test may relaunch with different seeds (e.g. the admin/non-admin
         // state pair) — close the prior scenario so activities never stack.
@@ -107,8 +113,33 @@ abstract class GymBase {
             if (accessAlert) putExtra(SmokeModeConfig.EXTRA_SMOKE_ACCESS_ALERT, true)
             if (shares) putExtra(SmokeModeConfig.EXTRA_SMOKE_SHARES, true)
             if (deviceRank != null) putExtra(SmokeModeConfig.EXTRA_SMOKE_DEVICE_RANK, deviceRank)
+            if (live) putExtra(SmokeModeConfig.EXTRA_SMOKE_LIVE, true)
+            if (apexHost != null) putExtra("flagship.apexHost", apexHost)
+            if (fakePasskeys) putExtra(SmokeModeConfig.EXTRA_SMOKE_FAKE_PASSKEYS, true)
+            if (realBiometrics) putExtra(SmokeModeConfig.EXTRA_SMOKE_REAL_BIOMETRICS, true)
+            if (persistSession) putExtra(SmokeModeConfig.EXTRA_SMOKE_PERSIST_SESSION, true)
         }
         scenario = ActivityScenario.launch(intent)
+        composeRule.waitForIdle()
+    }
+
+    /** Launch the app the way the launcher does, with no gym extras (a cold
+     *  start of whatever the device holds), pointed at [apexHost]. */
+    protected fun launchPlain(apexHost: String = "flagship.invalid") {
+        scenario?.close()
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val intent = Intent(ctx, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            putExtra("flagship.apexHost", apexHost)
+        }
+        scenario = ActivityScenario.launch(intent)
+        composeRule.waitForIdle()
+    }
+
+    /** Recreate the activity (what Android does after a configuration change
+     *  or when it reclaims a backgrounded app), keeping saved state. */
+    protected fun recreateActivity() {
+        scenario?.recreate()
         composeRule.waitForIdle()
     }
 
@@ -147,8 +178,9 @@ abstract class GymBase {
     protected fun nameServerAndNext(name: String = "gymbox") {
         waitUntilExists("cs-name-field")
         // The tag sits on the field's wrapper; type into the text input inside it.
+        // The field starts prefilled ("home"): replace it.
         composeRule.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag("cs-name-field")))
-            .performTextInput(name)
+            .performTextReplacement(name)
         composeRule.onNodeWithTag("cs-next-button").performScrollTo().performClick()
         composeRule.waitForIdle()
     }

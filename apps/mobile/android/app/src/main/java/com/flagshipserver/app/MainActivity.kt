@@ -35,16 +35,11 @@ import com.flagshipserver.app.api.EncryptedSessionStore
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.LiveBuildClient
 import com.flagshipserver.app.api.LiveScreensClient
-import com.flagshipserver.app.api.MockBuildClient
 import com.flagshipserver.app.api.LiveSecretMailboxClient
 import com.flagshipserver.app.api.LiveServerTransferClient
-import com.flagshipserver.app.api.MockServerTransferClient
 import com.flagshipserver.app.api.ServerTransferClient
 import com.flagshipserver.app.core.LocalServerTransferClient
 import com.flagshipserver.app.api.LiveFlagshipServerClient
-import com.flagshipserver.app.api.MockFlagshipServerClient
-import com.flagshipserver.app.api.MockScreensClient
-import com.flagshipserver.app.api.MockSecretMailboxClient
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.api.SessionStoring
@@ -53,12 +48,10 @@ import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.AiKeyStore
 import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.DeepLinker
-import com.flagshipserver.app.core.DeveloperSettings
 import com.flagshipserver.app.core.LiveQrRelayClient
 import com.flagshipserver.app.core.LocalActiveOperationsCenter
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalDeepLinker
-import com.flagshipserver.app.core.LocalDeveloperSettings
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.LocalPrivacySettings
@@ -76,7 +69,6 @@ import com.flagshipserver.app.core.TrustCenter
 import com.flagshipserver.app.core.TrustChecker
 import com.flagshipserver.app.core.TrustGatedTransport
 import com.flagshipserver.app.ui.components.GlobalTrustBar
-import com.flagshipserver.app.core.MockQrRelayClient
 import com.flagshipserver.app.core.PrivacySettings
 import com.flagshipserver.app.core.ThemeMode
 import com.flagshipserver.app.core.QrRelayClient
@@ -110,7 +102,8 @@ class MainActivity : FragmentActivity() {
      *  launched with `flagship.smokeTab`. Null in production / a normal launch
      *  ⇒ RootShell defaults to Home. */
     private var smokeInitialTab: com.flagshipserver.app.core.RootDestination? = null
-    private var smokeConfig: com.flagshipserver.app.core.SmokeModeConfig? = null
+    /** The mock clients of a debug gym run; null everywhere else (always in release). */
+    private var gymMocks: com.flagshipserver.app.core.GymMocks? = null
 
     /** The activity is visible; internet-access requests are fetched only then. */
     private val foreground = MutableStateFlow(false)
@@ -135,16 +128,9 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         applyOrientationPolicy()
-        // FIRST: apply a backend-apex override from the launch intent, BEFORE
-        // the OkHttp client / clients are built below (the pinner + the live
-        // clients read Endpoints at construction). The gym test build launches
-        // with `--es flagship.apexHost gym.flagshipserver.com`; a prod launch
-        // passes nothing, so Endpoints stays on today's literal (and the prod
-        // SPKI pins still apply). A persisted DeveloperSettings.apexHost is the
-        // fallback when no intent extra is present.
-        intent?.getStringExtra("flagship.apexHost")?.let { host ->
-            if (host.isNotBlank()) DeveloperSettings.applyApexOverride(host)
-        }
+        // FIRST: a debug build's launch overrides (the gym's backend apex),
+        // BEFORE the clients below read Endpoints. A release build has none.
+        com.flagshipserver.app.core.Variant.applyLaunchOverrides(intent)
         Keystore.attach(applicationContext)
         FlagshipFcmService.ensureChannel(applicationContext)
         biometric = BiometricAuthority(this)
@@ -166,11 +152,22 @@ class MainActivity : FragmentActivity() {
                 if (Keystore.hasUmkSeed()) appState.restorePersistedSession(activeCloud)
             }
         }
+        // App lock (device bug M12): a cold start of a signed-in device with
+        // "Lock with biometrics" on opens locked. Logged (no account data) so
+        // a report of the app opening unlocked can be traced.
+        runCatching {
+            android.util.Log.i(
+                com.flagshipserver.app.core.ErrorLog.TAG,
+                "launch: lockOn=${privacy.requireBiometricAtLaunch.value} " +
+                    "passphraseOn=${privacy.requirePassphraseAtLaunch.value} " +
+                    "restored=${appState.isPaired.value} unlocked=${appState.isUnlocked.value}",
+            )
+        }
         val sessionStore = EncryptedSessionStore.create(applicationContext)
         appState.onSignedOut = { sessionStore.setDemoSession(null) }
         if (!appState.isPaired.value && !Keystore.hasUmkSeed()) {
             sessionStore.demoSession()?.let { demo ->
-                com.flagshipserver.app.core.DemoFixtures.activate(
+                com.flagshipserver.app.core.DemoAccount.activate(
                     appState,
                     demo.username,
                     demoServer = demo.server,
@@ -187,39 +184,21 @@ class MainActivity : FragmentActivity() {
         val trustCenter = TrustCenter()
         deepLinker = DeepLinker()
 
-        // GYM smoke-mode seam (§10 Phase-5) — DEBUG-ONLY, mirror of iOS
-        // FlagshipApp.applySmokeModeIfRequested. When the app is debuggable AND
-        // the launch intent carries `flagship.smokeMode`, seed DemoFixtures (no
-        // backend) + an optional ops/trust/server-event state and land on the
-        // requested tab. A RELEASE build skips this branch entirely, so an
-        // intent extra can never seed fixtures in production. The resulting
-        // initial tab is threaded into RootShell below.
-        val isDebuggable =
-            (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
-        if (isDebuggable) {
-            com.flagshipserver.app.core.SmokeModeConfig.from(intent)?.let { cfg ->
-                smokeConfig = cfg
-                smokeInitialTab = com.flagshipserver.app.core.SmokeMode.apply(
-                    config = cfg,
-                    appState = appState,
-                    operations = operations,
-                    trust = trustCenter,
-                )
-            }
+        // GYM launch (§10 Phase-5), debug builds only (src/debug Variant): seed
+        // the gym's state, land on the requested tab and, unless the run keeps
+        // the live clients, swap in the mocks. A release build has no gym code,
+        // so an intent can never seed fixtures there.
+        com.flagshipserver.app.core.Variant.gymLaunch(applicationContext, intent, appState, operations, trustCenter)?.let { gym ->
+            smokeInitialTab = gym.initialTab
+            gymMocks = gym.mocks
         }
+        val mocks = gymMocks
+        val useLive = mocks == null
 
-        val devSettings = DeveloperSettings.create(applicationContext)
         // The leader becomes the current server only when this device can
-        // talk to it (docs/app-placement.md §1). Mock mode needs no session.
+        // talk to it (docs/app-placement.md §1). A gym run on mocks needs no session.
         appState.hasSession = { podId ->
-            !devSettings.useLiveClient.value || sessionStore.sessionToken(forPodId = podId) != null
-        }
-        // GYM: a smoke-mode launch is NO-BACKEND by contract — force the MOCK
-        // client (in-memory only) so the shell renders from MockScreensClient
-        // and the live maintainer-trust check never runs (it would clobber the
-        // seeded untrusted verdict). Debug-gated with the smoke seam above.
-        if (isDebuggable && smokeInitialTab != null) {
-            devSettings.forceMockForSmokeRun()
+            !useLive || sessionStore.sessionToken(forPodId = podId) != null
         }
         AiKeyStore.attach(applicationContext)
         com.flagshipserver.app.core.SecuredSessionStore.attach(applicationContext)
@@ -270,12 +249,9 @@ class MainActivity : FragmentActivity() {
             }
         }
 
-        // Identity / security plane. Mock for emulator/dev; Live talks to the
-        // real flagshipserver.com (identity claims, login/resolve, recovery,
-        // device admit/replace/wipe, TOTP, audit, revoke, peer-backup, tier).
-        // Pivoted on the developer toggle below — previously this was hardwired
-        // to the mock, so a shipped build never reached the real backend.
-        val mockFlagshipServer = MockFlagshipServerClient()
+        // Identity / security plane: the real flagshipserver.com (identity
+        // claims, login/resolve, recovery, device admit/replace/wipe, TOTP,
+        // audit, revoke, peer-backup, tier).
         // Maintainer-trust short-circuit: the live `.com` transport refuses to
         // send when the control server is positively untrusted (and the owner
         // hasn't overridden). UNKNOWN/TRUSTED + any network-error no-verdict
@@ -284,23 +260,6 @@ class MainActivity : FragmentActivity() {
             TrustGatedTransport(OkHttpJsonTransport(okHttp)) { trustCenter.isServerTrusted },
         )
 
-        val mockScreens = MockScreensClient()
-        val smoke = smokeConfig?.takeIf { isDebuggable }
-        // The access dialogs ask about each waiting host in turn: give Plants a
-        // second one so Allow and Deny can both be answered (iOS has two).
-        if (smoke?.seedAccessAlert == true) {
-            mockScreens.accessFixture["bright-maple--plants"]?.let { plants ->
-                mockScreens.accessFixture["bright-maple--plants"] = plants.copy(
-                    pending = plants.pending + com.flagshipserver.app.api.AppAccessPending(
-                        "tile.openstreetmap.org",
-                        com.flagshipserver.app.api.AppAccessPending.SOURCE_ATTEMPT,
-                        3,
-                        System.currentTimeMillis() - 600_000L,
-                        System.currentTimeMillis() - 60_000L,
-                    ),
-                )
-            }
-        }
         val liveScreens = LiveScreensClient(client = okHttp, store = sessionStore)
         // #91 — drains the box's phone-pollable AlertInbox (GET /api/phone/alerts)
         // for AI-chat-needs-you events. Shares the box-pinned OkHttp + session
@@ -312,24 +271,10 @@ class MainActivity : FragmentActivity() {
             store = sessionStore,
         )
         val appContext = applicationContext
-        val mockBuild = MockBuildClient()
         val liveBuild = LiveBuildClient(client = okHttp, store = sessionStore)
-        val mockRelay = MockQrRelayClient()
         val liveRelay = LiveQrRelayClient(client = okHttp)
         val liveShares = com.flagshipserver.app.viewmodels.ServerShareRuntime.live(okHttp, appContext) { trustCenter.isServerTrusted }
-        // Smoke mode has no `.com` or box: an in-memory share world instead.
-        val mockShares = smoke?.takeIf { it.seedShares }?.let { cfg ->
-            val home = appState.pods.value.firstOrNull { it.name == "Home" }
-            com.flagshipserver.app.core.MockServerShares.runtime(
-                username = cfg.username,
-                homeDomain = home?.fqdn ?: "home.${cfg.username}.flagship.services",
-                homeStkPubHex = home?.identityPubKeyHex ?: "51".repeat(32),
-                memberScreens = mockScreens,
-            )
-        }
-        val mockTransfer = MockServerTransferClient()
         val liveTransfer = LiveServerTransferClient(OkHttpJsonTransport(okHttp))
-        val mockMailbox = MockSecretMailboxClient()
         // A′ pinning — every live /pods fetch reconciles the cert-pin
         // registry under STKs derived from THIS device's UMK. Live-only by
         // construction (the mock never invokes the observer), so demo/mock
@@ -393,35 +338,22 @@ class MainActivity : FragmentActivity() {
         intent?.let { handleIntent(it) }
 
         setContent {
-            // Pivot Mock vs Live on the developer toggle + presence of
-            // a stored session token. The CompositionLocal swap is
-            // automatic — every screen that reads LocalScreensClient
-            // re-composes when the value changes.
-            val useLive by devSettings.useLiveClient.collectAsState()
+            // Always the live clients, as iOS does; only a debug gym run swaps in
+            // its mocks. A live account with no server (or no session yet) gets
+            // the live client's "not paired" answer, which each screen turns
+            // into its empty state, never fixtures.
             val sessionToken by sessionStore.sessionToken.collectAsState()
-            val effectiveScreens: ScreensClient =
-                if (useLive && sessionToken != null) liveScreens else mockScreens
-            val effectiveBuild: BuildClient =
-                if (useLive && sessionToken != null) liveBuild else mockBuild
-            val effectiveRelay: QrRelayClient =
-                if (useLive) liveRelay else mockRelay
-            val effectiveMailbox: SecretMailboxClient =
-                if (useLive) liveMailbox else mockMailbox
-            val effectiveTransfer: ServerTransferClient =
-                if (useLive) liveTransfer else mockTransfer
-            // Identity calls are IRK-signed (not session-token gated), so this
-            // pivots on the toggle alone — like relay/mailbox above.
-            val effectiveFlagshipServer: FlagshipServerClient =
-                if (useLive) liveFlagshipServer else mockFlagshipServer
+            val effectiveScreens: ScreensClient = mocks?.screens ?: liveScreens
+            val effectiveBuild: BuildClient = mocks?.build ?: liveBuild
+            val effectiveRelay: QrRelayClient = mocks?.relay ?: liveRelay
+            val effectiveMailbox: SecretMailboxClient = mocks?.mailbox ?: liveMailbox
+            val effectiveTransfer: ServerTransferClient = mocks?.transfer ?: liveTransfer
+            val effectiveFlagshipServer: FlagshipServerClient = mocks?.flagshipServer ?: liveFlagshipServer
             // Clients bound to one server's own base URL and session, for the
             // screens that work on a server other than the current one
             // (docs/app-placement.md).
-            val podClients: com.flagshipserver.app.core.PodClients = remember(useLive) {
-                if (useLive) {
-                    com.flagshipserver.app.core.LivePodClients(okHttp, sessionStore)
-                } else {
-                    com.flagshipserver.app.core.FixedPodClients(mockScreens, mockBuild)
-                }
+            val podClients: com.flagshipserver.app.core.PodClients = remember {
+                mocks?.podClients ?: com.flagshipserver.app.core.LivePodClients(okHttp, sessionStore)
             }
 
             // Maintainer-trust check on launch (live only — the Mock control
@@ -519,14 +451,14 @@ class MainActivity : FragmentActivity() {
                     scope = this@MainActivity.lifecycleScope,
                 )
             }
-            // Smoke mode: the same dialogs, fed by the mock box (one fetch).
+            // A gym run: the same dialogs, fed by the mock box (one fetch).
             val smokeAccessCenter = remember {
-                if (smoke?.seedAccessAlert != true) null else com.flagshipserver.app.core.AccessRequestCenter(
-                    boxes = {
-                        appState.currentPod?.let { listOf(com.flagshipserver.app.core.AccessBox(it.podId, it.fqdn, mockScreens)) }.orEmpty()
-                    },
-                    isActiveGate = { appState.isPaired.value && appState.isUnlocked.value },
-                )
+                mocks?.accessBoxes?.let { boxes ->
+                    com.flagshipserver.app.core.AccessRequestCenter(
+                        boxes = { boxes(appState) },
+                        isActiveGate = { appState.isPaired.value && appState.isUnlocked.value },
+                    )
+                }
             }
             LaunchedEffect(smokeAccessCenter) { smokeAccessCenter?.refresh() }
             val accessScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -653,6 +585,13 @@ class MainActivity : FragmentActivity() {
                 ThemeMode.DARK -> true
             }
 
+            // With the app lock on, Recents shows no snapshot of the account
+            // (the lock screen only arrives after the app is already gone).
+            val lockOn by privacy.requireBiometricAtLaunch.collectAsState()
+            LaunchedEffect(lockOn) {
+                if (android.os.Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(!lockOn)
+            }
+
             FlagshipTheme(darkTheme = useDark) {
                 CompositionLocalProvider(
                     LocalAppState provides appState,
@@ -664,14 +603,13 @@ class MainActivity : FragmentActivity() {
                     LocalServerTransferClient provides effectiveTransfer,
                     LocalSessionStore provides sessionStore,
                     com.flagshipserver.app.core.LocalPodClients provides podClients,
-                    com.flagshipserver.app.viewmodels.LocalServerShares provides (if (useLive) liveShares else mockShares),
+                    com.flagshipserver.app.viewmodels.LocalServerShares provides (if (useLive) liveShares else mocks?.shares),
                     LocalToastCenter provides toasts,
                     LocalActiveOperationsCenter provides operations,
                     LocalTrustCenter provides trustCenter,
                     LocalDeepLinker provides deepLinker,
                     com.flagshipserver.app.core.LocalAccessRequestCenter provides
                         (if (useLive) accessCenter else smokeAccessCenter),
-                    LocalDeveloperSettings provides devSettings,
                     LocalPrivacySettings provides privacy,
                     com.flagshipserver.app.core.LocalPushNotificationsSwitch provides pushSwitch,
                     // Real IRK signer for SetServiceEnv envelopes (was the
@@ -703,7 +641,7 @@ class MainActivity : FragmentActivity() {
         super.onDestroy()
         PushHolder.registrar = null
         SecretRequestBridge.onSecretRequest = null
-        BiometricAuthority.set(null)
+        BiometricAuthority.clearIf(biometric)
     }
 
     /** C12 — re-arm the lock-screen gate when the activity moves to
@@ -715,6 +653,9 @@ class MainActivity : FragmentActivity() {
     override fun onStart() {
         super.onStart()
         foreground.value = true
+        // The visible activity owns the biometric prompt (another instance's
+        // onDestroy must never leave key use without one).
+        if (::biometric.isInitialized) BiometricAuthority.set(biometric)
     }
 
     override fun onStop() {

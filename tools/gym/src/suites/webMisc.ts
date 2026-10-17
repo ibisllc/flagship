@@ -209,7 +209,7 @@ export const WEB_MISC: readonly Scenario[] = [
   ),
   row(
     "web-total-misc-create-recipe",
-    "Create a server (from Add/Import): name, a 12-hour expiry and 'Authorize each boot' produce a downloaded, secret-free recipe whose AuthCode is IRK-signed, pins the admin root and is approved by it; the RCK is registered under the admin root.",
+    "Create a server (from Add/Import): name, a 12-hour expiry and 'Authorize each boot' produce a downloaded, secret-free recipe whose AuthCode is IRK-signed, pins the admin root and is approved by it; the RCK is registered under the admin root; Follow its setup opens the pending view on the order's own status.",
     "gym misc create server mints a recipe with its expiry and boot mode, approved under the admin root",
     "#cs-download-recipe",
     [{ describe: "Downloaded", handle: "#cs-status", expect: "text", text: "Recipe downloaded — open it in Flagship Studio." }],

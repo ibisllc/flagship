@@ -6,6 +6,7 @@ import { basename, join } from "node:path";
 import { buildModelRedactor } from "./llm/modelPrivacy.js";
 import { X509Certificate } from "node:crypto";
 import {
+  derivePeerBackupKey,
   ed,
   signServerRevokeBySelf,
   verifyRootEntitlement,
@@ -40,11 +41,9 @@ import {
 } from "./peerBackup/manifest.js";
 import {
   buildComStkResolver,
-  buildHttpShardFetcher,
   buildHttpShardPusher,
   buildLivePeerProvider,
 } from "./peerBackup/shipper.js";
-import { fsRestoreSink, runRestoreOnce } from "./peerBackup/restore.js";
 import { quiesceDataServices, walkDataDir } from "./dataDirWalker.js";
 import {
   dumpDataVolumes,
@@ -185,7 +184,11 @@ import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import { appSqlRunner } from "./dataLayer/appSql.js";
 import { DbWriteLedger, buildOwnerDbHttp } from "./dataLayer/ownerDb.js";
 import { ActivityLog, defaultActivityLogPath } from "./shares/activityLog.js";
+import { quotaNotices } from "./appQuota/notices.js";
+import { withQuotaUsage } from "./appQuota/usage.js";
 import { ShareStore, defaultShareStorePath } from "./shares/shareStore.js";
+import { checkShareAcceptAdmin } from "./shares/acceptAdmin.js";
+import { caTrustChainFromFolder } from "./releaseVerifier.js";
 import { buildShareUpdate } from "./shares/shareUpdate.js";
 import { ShareInviteStore, buildShareInvites, defaultShareInviteStorePath } from "./shares/shareInvites.js";
 import {
@@ -200,8 +203,10 @@ import { AppCopyStore } from "./appCopy/store.js";
 import { buildAppCopyTarget } from "./appCopy/target.js";
 import { buildServerArchiveService } from "./serverArchive/service.js";
 import { buildRestoreWait, type RestoreWait } from "./serverArchive/restoreWait.js";
+import { buildMigratePause, movingPage, type MigratePause } from "./serverArchive/migratePause.js";
 import { BackupPolicyStore } from "./backupPolicy/policy.js";
 import { BackupCap } from "./backupPolicy/cap.js";
+import { PeerBackupEngine } from "./peerNet/engine.js";
 import { buildBackupPolicyHttp } from "./backupPolicy/http.js";
 import { measureAppArchiveBytes } from "./serverArchive/build.js";
 import {
@@ -1183,6 +1188,37 @@ async function main(): Promise<void> {
       })
     : null;
   await backupPolicy?.load();
+  // Migrate's pause (docs/server-migration.md, "Data path"): the apps are
+  // paused while the server moves, and their URLs say so.
+  const migratePause = cfg
+    ? buildMigratePause({
+        path: `${dataDir}/migrate-pause.json`,
+        containers: () => (servicePlatformRefForServer.current?.list() ?? []).map((a) => `flagship-${a.serviceId}`),
+        run: async (args) => {
+          const { realCommandRunner } = await import("./serviceRunner.js");
+          await realCommandRunner.run("docker", args);
+        },
+        note: (kind, detail, ok) => activityLog.note(kind, detail, { ok: ok ?? true }),
+        log: (m) => console.log(m),
+      })
+    : null;
+  await migratePause?.load();
+  // Peer backup between accounts (docs/peer-backup.md): runs while the policy
+  // is Peer. Its pool is 2/3 of the disk, from the backup cap once that's up.
+  const peerCapRef: { current: { reservedForPeersBytes(): number | null } | null } = { current: null };
+  const peerEngine =
+    cfg && backupPolicy && swkHex && env.controlPlaneBaseUrl && env.serverFqdn
+      ? new PeerBackupEngine({
+          serverId: env.serverFqdn,
+          dataDir,
+          pbk: derivePeerBackupKey(hexToBytes(swkHex.trim())),
+          sign: (msg) => custodian.signAsBox(msg),
+          comBaseUrl: env.controlPlaneBaseUrl,
+          policy: backupPolicy,
+          reservedForPeersBytes: () => peerCapRef.current?.reservedForPeersBytes() ?? null,
+          log: (m) => console.log(`[peer-backup] ${m}`),
+        })
+      : null;
   const adoptPairingSiblings = async (json: string) => {
     await restoreWait?.adoptFromPairingJson(json);
     await backupPolicy?.adoptFromPairingJson(json);
@@ -1229,6 +1265,9 @@ async function main(): Promise<void> {
       wildcard: env.wildcard,
       dataDir,
       entitlements: () => entitlementBundle,
+      ...(peerEngine
+        ? { peerMail: { announcements: () => peerEngine.mailboxAnnouncements(), onMail: (id: string, e: Uint8Array) => peerEngine.handleMail(id, e) } }
+        : {}),
       // LAN-direct (docs/lan-direct.md): on by default at :443 on the box's
       // private LAN addresses only; FLAGSHIP_LAN_DIRECT=0 keeps the box
       // relay-only.
@@ -1456,6 +1495,9 @@ async function main(): Promise<void> {
       activityLog,
       restoreWait,
       backupPolicy,
+      migratePause,
+      peerEngine,
+      peerCapRef,
       serverOrder,
       serviceAccessRef,
       accessPrincipals,
@@ -1515,6 +1557,7 @@ async function main(): Promise<void> {
     servicePlatformRef: servicePlatformRefForServer,
     identityKeypair,
     backupLoop,
+    migratePause,
   });
 
   // ---- Peer-backup periodic pass ----
@@ -1554,16 +1597,14 @@ async function main(): Promise<void> {
   // ---- Server-migration consumer (docs/server-migration.md, the NEW box) ----
   // A freshly-provisioned pod polls `.com` for a migration assignment naming
   // its account. The admin-signed order is RE-VERIFIED under the config-pinned
-  // authority before anything runs. The restore pass opens the MIGRATING
-  // server's manifest with THIS box's provisioned SWK (the phone derives
-  // deriveSWK(umk, <migrating serverId>) into a migration recipe) and fetches
-  // shards from same-account peers authenticated as THIS pod. On take-over the
+  // authority before anything runs. The data comes on the archive path: the
+  // owner's app has this box pull the old server's backup and restore it (a
+  // server waiting for a backup), and the pre-seed is done once it is. On take-over the
   // box writes the re-home marker for the migrated name and restarts — the
   // same boot path transfer-a-box uses re-homes FQDN/cert/entitlement.
   // Armed only in production (cfg) with an SWK; a box with no session just
   // 404s cheaply on the heartbeat cadence.
   if (cfg && env.controlPlaneBaseUrl && env.serverFqdn && swkHex) {
-    const migrationSwk = hexToBytes(swkHex.trim());
     const controlPlaneBaseUrl = env.controlPlaneBaseUrl;
     const myServerDomain = env.serverFqdn;
     const migrationPoller = buildMigrationPoller({
@@ -1573,33 +1614,14 @@ async function main(): Promise<void> {
       ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
       username: cfg.userId,
       controlPlaneBaseUrl,
-      restore: async ({ serverId }) => {
-        const out = await runRestoreOnce({
-          serverId,
-          swk: migrationSwk,
-          mySTK: identityKeypair,
-          controlPlaneBaseUrl,
-          sink: fsRestoreSink(`${dataDir}/data`),
-          // Authenticate shard reads as THIS pod (its directory-bound STK);
-          // peers serve same-account depositors' shards to it.
-          source: buildHttpShardFetcher({
-            myServerId: myServerDomain,
-            mySTK: identityKeypair,
-          }),
-          onLog: (m) => console.log(`[migration] ${m}`),
-        });
-        if (out.status === "complete") return { complete: true };
-        if (out.status === "partial") {
-          return {
-            complete: false,
-            detail: `${out.report.failed.length} of ${out.report.chunksTotal} chunks not yet restorable`,
-          };
-        }
-        if (out.status === "no-manifest") {
-          return { complete: false, detail: "no backup manifest for the migrating server yet" };
-        }
-        return { complete: false, detail: out.reason };
-      },
+      // The data moves on the archive path (docs/server-migration.md, "Data
+      // path"): the owner's app pauses the old server, makes its backup and
+      // has this box pull and restore it as a server waiting for a backup.
+      // The pre-seed (and the final delta) is done once that restore is.
+      restore: async () =>
+        restoreWait?.restoredAny()
+          ? { complete: true }
+          : { complete: false, detail: "waiting for the old server's backup" },
       onTakeOver: async ({ serverDomain }) => {
         activityLog.note("server.migration.taken-over", "This server took over the name from the old server.");
         // Symmetric restore step: the shard restore above landed `_dumps/**`
@@ -2258,6 +2280,9 @@ async function wireRuntimeSurfaces(deps: {
   activityLog: ActivityLog;
   restoreWait: RestoreWait | null;
   backupPolicy: BackupPolicyStore | null;
+  migratePause: MigratePause | null;
+  peerEngine: PeerBackupEngine | null;
+  peerCapRef: { current: { reservedForPeersBytes(): number | null } | null };
   serviceAccessRef: { current: ServiceAccessStore | null };
   accessPrincipals: AccessPrincipals;
   accessSyncRef: { current: AccessSync | null };
@@ -2841,7 +2866,14 @@ async function wireRuntimeSurfaces(deps: {
     const ops = realAppCopyOps();
     const cap = new BackupCap({
       policy: deps.backupPolicy,
-      measure: () => measureAppArchiveBytes({ apps: () => platform.list(), ops, sourceDir: vibeAppDir, log: (m) => console.log(m) }),
+      // The quota manager's own numbers where it has them (statfs of each
+      // files image, pg_database_size), so the budgets and their enforcement
+      // count the same bytes.
+      measure: async () =>
+        withQuotaUsage(
+          await measureAppArchiveBytes({ apps: () => platform.list(), ops, sourceDir: vibeAppDir, log: (m) => console.log(m) }),
+          runtime.appQuota.measured(),
+        ),
       diskBytes: async () => {
         const s = await statfs(join(dataDir, "data")).catch(() => statfs(dataDir));
         return Number(s.blocks) * Number(s.bsize);
@@ -2852,7 +2884,16 @@ async function wireRuntimeSurfaces(deps: {
     platform.setAdmitNewApp(() => cap.admit());
     void cap.refresh();
     setInterval(() => void cap.refresh(), 10 * 60_000).unref();
-    deps.backupPolicy.onChange(() => void cap.refresh());
+    // A new limit holds at once: re-measure, then re-apply every app's share.
+    deps.backupPolicy.onChange(() => void cap.refresh().then(() => runtime.appQuota.kick()));
+    runtime.appQuota.setBudgets(
+      () => cap.appBudgets(),
+      () => {
+        const limit = cap.limitBytes();
+        const used = cap.usedBytes();
+        return limit === null || used === null ? null : limit - used;
+      },
+    );
     return cap;
   })();
   const backupPolicyHttp =
@@ -2863,6 +2904,30 @@ async function wireRuntimeSurfaces(deps: {
           note: (kind, detail, ok) => deps.activityLog.note(kind, detail, { ok: ok ?? true }),
         })
       : null;
+  deps.peerCapRef.current = backupCap;
+  const peerEngine = deps.peerEngine;
+  if (peerEngine) backupPolicyHttp?.setPeerStatus(() => peerEngine.policyStatus());
+  // Per-app disk limits (docs/app-runtimes.md §5.3): an app that fills up
+  // is an Activity entry, a phone alert and a content-free wake.
+  runtime.appQuota.setEvents(
+    quotaNotices({
+      note: (kind, detail, o) => deps.activityLog.note(kind, detail, o),
+      alert: (a) => void deps.alertInbox.emit(a),
+      ...(accessPushCfg
+        ? {
+            wake: () =>
+              sendPushRelay({
+                category: "generic",
+                targetUsername: accessPushCfg.userId,
+                signer: custodian,
+                controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+                logTag: "[app-quota] storage push",
+                log: (l) => console.log(l),
+              }),
+          }
+        : {}),
+    }),
+  );
 
   // Copying an app between the account's servers (docs/app-placement.md §5):
   // this box as source (the public export endpoint) and as target (the
@@ -3025,10 +3090,17 @@ async function wireRuntimeSurfaces(deps: {
         },
       },
       ...(backupCap ? { admitIncoming: (bytes: number) => backupCap.admit(bytes) } : {}),
+      ...(deps.migratePause ? { migrate: { pause: deps.migratePause } } : {}),
       ...(env.controlPlaneBaseUrl ? { appLinkBase: env.controlPlaneBaseUrl } : {}),
       log: (m) => console.log(m),
     });
     await service.init();
+    // While a move has the apps paused, every app URL says so instead of a 502.
+    const pause = deps.migratePause;
+    if (pause) {
+      runtime.addAppGate(async () => (pause.paused() ? movingPage() : null));
+      setInterval(() => void pause.sweep().catch(() => {}), 10 * 60_000).unref();
+    }
     service.startSchedule(
       (() => {
         const raw = Number(process.env.FLAGSHIP_BACKUP_SCHEDULE_TICK_MS);
@@ -3040,6 +3112,17 @@ async function wireRuntimeSurfaces(deps: {
     runtime.addHandler((req) => service.handleDownload(req));
     return service;
   })();
+  if (peerEngine && serverArchiveService) {
+    serverArchiveService.setSavedHooks({
+      onArchiveSaved: (meta, files) => peerEngine.onArchiveSaved(meta, files),
+      pinnedArchiveIds: () => peerEngine.pinnedArchiveIds(),
+    });
+    // A new server restoring a lost one from its pieces on other servers.
+    serverArchiveService.setPeerFetcher((w) =>
+      peerEngine.fetchArchive({ ...w, ...(w.onProgress ? { onProgress: (done: number) => w.onProgress!(done) } : {}) }),
+    );
+  }
+  peerEngine?.start();
 
   // Share this server (docs/share-a-server.md): another account's per-share
   // sessions, gated by level on every screens route, and the activity log.
@@ -3054,6 +3137,17 @@ async function wireRuntimeSurfaces(deps: {
       serverDomain: env.serverFqdn,
       verifyOwnerGrant: (g, sig) =>
         authorizeSensitiveOrder({ ...authority, order: g, signature: sig, verify: verifyServerShareGrant }),
+      // Only an admin device of the joining account accepts: its proof is
+      // checked against the maintainer CA chain this box ships with.
+      verifyAcceptAdmin: (accept, proof) => {
+        let chain = null;
+        try {
+          chain = caTrustChainFromFolder({ gitRepoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship" });
+        } catch {
+          chain = null;
+        }
+        return checkShareAcceptAdmin({ accept, proof, chain, now: Date.now() });
+      },
     });
     const { dropped } = await store.load();
     if (dropped > 0) console.warn(`[shares] dropped ${dropped} share(s) that no longer verify`);
@@ -3268,6 +3362,10 @@ async function wireRuntimeSurfaces(deps: {
     startedAt: Date.now(),
     servicePlatform: runtime.servicePlatform,
     filesBytes: runtime.dataProvisioner ? (v: string) => runtime.dataProvisioner!.filesBytes(v) : null,
+    storage: {
+      app: (id: string) => runtime.appQuota.appView(id),
+      server: () => runtime.appQuota.serverView(),
+    },
     pairedSessions,
     ...(adapterIndex
       ? {
@@ -3346,6 +3444,7 @@ async function wireRuntimeSurfaces(deps: {
       backupLoop,
       repairStats: repairAccumulator,
     },
+    peerNet: peerEngine,
     // P14 — companion-browser dock. Owner-gated mint/list/revoke +
     // public redeem. Companions land in the same `pairedSessions`
     // store (flagged `companion: true` + 4h `expiresAt`); the gate
@@ -3483,6 +3582,8 @@ async function wireOwnerHandlers(deps: {
   identityKeypair: Keypair;
   /** Peer-backup loop (null when no SWK) — flushed on a finalBackup decommission. */
   backupLoop: BackupLoop | null;
+  /** Migrate's pause: a move on the archive path needs no final flush. */
+  migratePause: MigratePause | null;
 }): Promise<void> {
   const { runtime, cfg, env, autoUnlockSuppressor, hostPowerRunner, identityKeypair } = deps;
   if (!cfg) return;
@@ -3717,6 +3818,8 @@ async function wireOwnerHandlers(deps: {
       // for any non-store files under data/. The epoch is recorded by the §9
       // epoch-complete report the consumer POSTs after this resolves.
       backupFlush: async (_epoch) => {
+        // A move on the archive path already carried the data and paused the apps.
+        if (deps.migratePause?.paused()) return;
         if (!deps.backupLoop) return;
         const dataRoot = `${dataDir}/data`;
         const walkOpts = await dumpVolumesBeforeWalk(dataRoot, (m) => console.log(m));

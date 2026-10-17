@@ -75,4 +75,91 @@ final class OnboardingSmokeTests: XCTestCase {
         shot.lifetime = .keepAlways
         add(shot)
     }
+
+    // MARK: - Connect to an existing account
+
+    private func launchToConnectPage() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-smoke-onboarding"]
+        app.launch()
+        XCTAssertTrue(app.buttons["welcome-create"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["I already have an account"].exists)
+        XCTAssertFalse(app.buttons["Join with a pairing code"].exists)
+        let connect = app.buttons["welcome-connect"]
+        XCTAssertTrue(connect.exists, "Welcome offers one Connect to an existing account.")
+        // The same footer as the app lock: the secondary right below the
+        // primary, then Patent Pending at the bottom.
+        let patent = app.staticTexts["patent-pending"]
+        XCTAssertTrue(patent.exists)
+        XCTAssertLessThan(app.buttons["welcome-create"].frame.maxY, connect.frame.minY)
+        XCTAssertLessThan(connect.frame.maxY, patent.frame.minY)
+        gymShot(app, "welcome")
+        connect.tap()
+        XCTAssertTrue(app.staticTexts["connect-account"].waitForExistence(timeout: 10))
+        return app
+    }
+
+    private func gymShot(_ app: XCUIApplication, _ name: String) {
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "gym-screenshot:\(name)"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
+    /// One page holds both halves: the account name above the "or", the
+    /// pairing code (scan + paste) below.
+    func test_connectPageHoldsSignInAndPairing() throws {
+        let app = launchToConnectPage()
+        XCTAssertTrue(app.textFields.matching(identifier: "connect-name-field").firstMatch.exists)
+        XCTAssertTrue(app.buttons["connect-name-continue"].exists)
+        XCTAssertTrue(app.otherElements["connect-or"].exists || app.staticTexts["connect-or"].exists)
+        XCTAssertTrue(app.buttons["connect-scan"].exists)
+        XCTAssertTrue(app.textFields.matching(identifier: "connect-pair-field").firstMatch.exists)
+        XCTAssertTrue(app.buttons["connect-pair-continue"].exists)
+        gymShot(app, "connect-account")
+
+        // An account name in the code field gets a sentence, and no join.
+        let code = app.textFields.matching(identifier: "connect-pair-field").firstMatch
+        code.tap()
+        code.typeText("bright-maple")
+        app.buttons["connect-pair-continue"].tap()
+        XCTAssertTrue(app.staticTexts["That looks like an account name. Type it under Sign in with your account name."].waitForExistence(timeout: 5))
+    }
+
+    /// The sign-in half: the mock directory's demo account opens the sandbox.
+    func test_connectSignInWithAccountName() throws {
+        let app = launchToConnectPage()
+        let name = app.textFields.matching(identifier: "connect-name-field").firstMatch
+        name.tap()
+        name.typeText("demo")
+        app.buttons["connect-name-continue"].tap()
+        XCTAssertTrue(
+            app.tabBars.buttons["Home"].waitForExistence(timeout: 20)
+                || app.buttons["Home"].waitForExistence(timeout: 1),
+            "Signing in to the demo account lands in the app."
+        )
+        gymShot(app, "connect-demo-home")
+    }
+
+    /// A pairing link pasted where the account name goes opens the join flow.
+    func test_connectPairingLinkInNameFieldOpensJoin() throws {
+        let app = launchToConnectPage()
+        let name = app.textFields.matching(identifier: "connect-name-field").firstMatch
+        name.tap()
+        name.typeText("https://flagshipserver.com/join?sid=gym123&pk=\(String(repeating: "A", count: 43))")
+        app.buttons["connect-name-continue"].tap()
+        XCTAssertTrue(
+            app.navigationBars["Join an account"].waitForExistence(timeout: 10),
+            "A pairing link in the name field joins instead of signing in."
+        )
+        gymShot(app, "connect-link-to-join")
+    }
+
+    /// Scan a code opens the in-app scanner.
+    func test_connectScanOpensScanner() throws {
+        let app = launchToConnectPage()
+        app.buttons["connect-scan"].tap()
+        XCTAssertTrue(app.navigationBars["Join an account"].waitForExistence(timeout: 10))
+        gymShot(app, "connect-scanner")
+    }
 }

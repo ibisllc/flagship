@@ -15,8 +15,11 @@ import com.flagshipserver.app.builder.iso.IsoInjector
 import com.flagshipserver.app.builder.iso.IsoManifestClient
 import com.flagshipserver.app.builder.iso.OkHttpBuilderHttp
 import com.flagshipserver.app.builder.iso.ParsedRecipe
+import com.flagshipserver.app.builder.iso.PreseedEngine
+import com.flagshipserver.app.builder.iso.PreseedSource
 import com.flagshipserver.app.builder.iso.RecipeParse
-import com.flagshipserver.app.builder.iso.VerbatimInjector
+import com.flagshipserver.app.builder.iso.SeedInjector
+import com.flagshipserver.app.builder.iso.SeedSource
 import com.flagshipserver.app.builder.usb.MassStorageWriter
 import com.flagshipserver.app.builder.usb.UsbHost
 import com.flagshipserver.app.builder.usb.UsbMassStorageDevice
@@ -31,10 +34,10 @@ import java.io.File
 class BuilderOnDeviceViewModel(
     app: Application,
     private val recipeJson: String,
-    private val injector: IsoInjector = VerbatimInjector(),
+    private val injector: IsoInjector = SeedInjector(AssetPreseedSource(app)),
 ) : AndroidViewModel(app) {
 
-    enum class Phase { Idle, NoUsb, NeedPermission, Ready, Downloading, Verifying, Injecting, Writing, Done, Error }
+    enum class Phase { Idle, NoUsb, NeedPermission, Ready, Downloading, Verifying, Injecting, Writing, Finalizing, Done, Error }
 
     data class State(
         val phase: Phase = Phase.Idle,
@@ -47,12 +50,31 @@ class BuilderOnDeviceViewModel(
         val recipeEmbedded: Boolean = false,
         val error: String? = null,
         val bytesWritten: Long = 0,
+        /** Dev-only: a locally-picked seed replacing the manifest download; null = managed. */
+        val localSeedLabel: String? = null,
     )
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
 
     private val usb: UsbManager = UsbHost.manager(app)
+
+    /** Debuggable build ⇒ dev affordances (local seed) are permitted. */
+    val devUnlocked: Boolean =
+        (app.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+
+    private var localSeedUri: String? = null
+
+    /**
+     * Dev-only: burn from a locally-supplied seed (a `content://` URI or a file
+     * path) instead of the manifest download, so a hardware tester can `adb push`
+     * a seed and burn with no hosting. Ignored on a non-debuggable build.
+     */
+    fun setLocalSeed(uri: String?, label: String?) {
+        if (!devUnlocked) return
+        localSeedUri = uri
+        _state.value = _state.value.copy(localSeedLabel = if (uri.isNullOrBlank()) null else (label ?: uri))
+    }
 
     init {
         // Parse the recipe up front so the UI can show what it's about to burn,
@@ -108,7 +130,7 @@ class BuilderOnDeviceViewModel(
         val s = _state.value
         val target = s.selected ?: return
         val recipe = s.recipe ?: return
-        if (s.phase in setOf(Phase.Downloading, Phase.Verifying, Phase.Injecting, Phase.Writing)) return
+        if (s.phase in setOf(Phase.Downloading, Phase.Verifying, Phase.Injecting, Phase.Writing, Phase.Finalizing)) return
         if (!UsbHost.hasPermission(usb, target.device)) {
             _state.value = s.copy(phase = Phase.NeedPermission)
             return
@@ -116,23 +138,29 @@ class BuilderOnDeviceViewModel(
 
         viewModelScope.launch {
             try {
-                // 1. Download + verify the base ISO (manifest-driven).
-                val cache = IsoBaseCache(
-                    client = IsoManifestClient(OkHttpBuilderHttp()),
-                    http = OkHttpBuilderHttp(),
-                    cacheDir = File(getApplication<Application>().cacheDir, "flagship-builder"),
-                    builderVersion = builderVersion(),
-                )
+                // 1. Obtain the seed ISO: a dev-only local file, or the
+                //    manifest-driven, sha-pinned download (production default).
                 set(Phase.Downloading, status = "Preparing the operating-system image…")
-                val baseIso = withContext(Dispatchers.IO) {
-                    cache.ensure { phase ->
-                        when (phase) {
-                            is IsoBaseCache.Phase.Inspected ->
-                                set(Phase.Downloading, status = "Checking cached image…")
-                            is IsoBaseCache.Phase.Downloading ->
-                                set(Phase.Downloading, progress = phase.progress, status = "Downloading the operating system…")
-                            is IsoBaseCache.Phase.Ready ->
-                                set(Phase.Verifying, progress = 1.0, status = if (phase.fromCache) "Using verified cached image." else "Image verified.")
+                val baseIso = when (val source = SeedSource.resolve(localSeedUri, devUnlocked)) {
+                    is SeedSource.LocalFile -> withContext(Dispatchers.IO) { copyLocalSeed(source.uri) }
+                    SeedSource.Managed -> {
+                        val cache = IsoBaseCache(
+                            client = IsoManifestClient(OkHttpBuilderHttp()),
+                            http = OkHttpBuilderHttp(),
+                            cacheDir = File(getApplication<Application>().cacheDir, "flagship-builder"),
+                            builderVersion = builderVersion(),
+                        )
+                        withContext(Dispatchers.IO) {
+                            cache.ensure { phase ->
+                                when (phase) {
+                                    is IsoBaseCache.Phase.Inspected ->
+                                        set(Phase.Downloading, status = "Checking cached image…")
+                                    is IsoBaseCache.Phase.Downloading ->
+                                        set(Phase.Downloading, progress = phase.progress, status = "Downloading the operating system…")
+                                    is IsoBaseCache.Phase.Ready ->
+                                        set(Phase.Verifying, progress = 1.0, status = if (phase.fromCache) "Using verified cached image." else "Image verified.")
+                                }
+                            }
                         }
                     }
                 }
@@ -155,12 +183,18 @@ class BuilderOnDeviceViewModel(
                             )
                         }
                         set(Phase.Writing, status = "Writing to the USB drive — do not unplug…")
-                        injected.stream.use { stream ->
+                        val n = injected.stream.use { stream ->
                             writer.writeImage(stream, injected.totalBytes, cap.blockSize) { w ->
                                 val frac = if (injected.totalBytes > 0) w.toDouble() / injected.totalBytes else 0.0
                                 set(Phase.Writing, progress = frac, status = "Writing to the USB drive — do not unplug…", bytes = w)
                             }
                         }
+                        // Seed-and-append: overwrite the seed's pre-declared FLAGSHIP region.
+                        injected.placement?.let { placement ->
+                            set(Phase.Finalizing, status = "Finalizing the install image — do not unplug…")
+                            placement.place(writer, cap)
+                        }
+                        n
                     }
                     injected.closeable.close()
                     val note = if (injected.recipeEmbedded) {
@@ -188,6 +222,28 @@ class BuilderOnDeviceViewModel(
         )
     }
 
+    /**
+     * Copy a dev-supplied seed ([uri]: a `content://` URI or a file path) into a
+     * private cache file the injector + writer can stream + memory-map. Reports
+     * progress on the Downloading/Verifying phases like the managed path.
+     */
+    private fun copyLocalSeed(uri: String): File {
+        set(Phase.Downloading, status = "Reading the local seed image…")
+        val app = getApplication<Application>()
+        val dir = File(app.cacheDir, "flagship-builder").apply { mkdirs() }
+        val out = File(dir, "local-seed.iso")
+        val input = if (uri.startsWith("content://")) {
+            app.contentResolver.openInputStream(android.net.Uri.parse(uri))
+                ?: throw RuntimeException("Couldn't open the local seed at $uri.")
+        } else {
+            File(uri.removePrefix("file://")).inputStream()
+        }
+        input.use { ins -> out.outputStream().use { os -> ins.copyTo(os, 1 shl 20) } }
+        if (out.length() == 0L) throw RuntimeException("The local seed at $uri is empty.")
+        set(Phase.Verifying, progress = 1.0, status = "Using local seed image (${human(out.length())}).")
+        return out
+    }
+
     private fun builderVersion(): String =
         runCatching {
             val pm = getApplication<Application>().packageManager
@@ -206,4 +262,21 @@ class BuilderOnDeviceViewModel(
             return String.format("%.1f %s", v, units[i])
         }
     }
+}
+
+/**
+ * Production [PreseedSource]: runs the SINGLE shared generator (the canonical
+ * bundle in app assets, via Rhino) for the already-signature-verified recipe.
+ * The engine is loaded lazily on first burn so an asset problem surfaces as a
+ * loud burn-time failure, never a silent verbatim write.
+ */
+class AssetPreseedSource(
+    context: android.content.Context,
+    private val burnOptsJson: String = "{}",
+) : PreseedSource {
+    private val appContext = context.applicationContext
+    private val engine by lazy { PreseedEngine.fromAssets(appContext) }
+
+    override fun preseedFor(recipe: ParsedRecipe, recipeJson: String): String =
+        engine.buildPreseedFromRecipe(recipeJson, burnOptsJson)
 }

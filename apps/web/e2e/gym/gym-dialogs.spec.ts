@@ -301,11 +301,14 @@ test.describe("gym webapp dialogs", () => {
     await shot(page, testInfo, "model-free-text");
     await free.fill("my-tuned-model");
     await free.press("Enter");
-    await free.dispatchEvent("change");
     await expect(bar.locator(".mm-trigger-text")).toContainText("my-tuned-model", { timeout: 10_000 });
-    // The typed id stays chosen when the menu closes.
-    await page.locator("header h1#title").click();
+    // The field keeps focus after the choice, so Escape still closes the menu
+    // and hands focus back to its button.
+    await expect(panel.locator("[data-mm-free]")).toBeFocused();
+    await page.keyboard.press("Escape");
     await expect(panel).toHaveCount(0);
+    await expect(bar.locator(".mm-trigger")).toBeFocused();
+    // The typed id stays chosen when the menu closes.
     await expect(bar.locator(".mm-trigger-text")).toContainText("my-tuned-model");
 
     await page.fill("#vc-prompt", "Add a weekly chart");

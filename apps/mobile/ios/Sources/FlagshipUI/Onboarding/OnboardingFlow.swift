@@ -16,7 +16,10 @@ import FlagshipAPI
 ///     │     ZERO servers + an "Add your first server" CTA. Provisioning
 ///     │     a box (the old CreateServer mint/relay flow, claim removed)
 ///     │     is now a reusable "Add a server" reachable from Home.
-///     └─ I already have an account → JoinUsernameScreen (username-first)
+///     └─ Connect to an existing account → ConnectAccountScreen, one page:
+///         ├─ Join with a pairing code (scan, or paste a code or link)
+///         │     → JoinAccountScreen (the incoming pairing join)
+///         └─ Sign in with your account name (username-first)
 ///           → preflight /api/account/resolve (200 always):
 ///             ├─ demo    → DemoFixtures.activate (attach a new device)
 ///             ├─ unknown → inline "no account by that name" state
@@ -39,7 +42,7 @@ public struct OnboardingFlow: View {
         NavigationStack(path: $path) {
             WelcomeScreen(
                 onCreate:   { path.append(.chooseUsername) },
-                onExisting: { path.append(.recoverFromWelcome) }
+                onExisting: { path.append(.connectAccount) }
             )
             .onChange(of: linker.pending) { _, link in consumePairingLink(link) }
             .task(id: linker.pending) { consumePairingLink(linker.pending) }
@@ -49,8 +52,8 @@ public struct OnboardingFlow: View {
                     // Create is create-only now. Demo + device-capability
                     // activation moved OUT of the create path and into
                     // Join (username-first preflight) per the login
-                    // redesign — typing a demo username under "I already
-                    // have an account" is the only demo entry. Continuing
+                    // redesign — typing a demo username under "Connect to
+                    // an existing account" is the only demo entry. Continuing
                     // pushes the Phase-2 Open-account step (NOT
                     // server-mint): account identity is created on its
                     // own, server provisioning is a later, optional act.
@@ -106,13 +109,14 @@ public struct OnboardingFlow: View {
                             app.completeOnboarding(username: username, pods: [])
                         }
                     )
-                case .recoverFromWelcome:
-                    // Username-first Join. The single preflight branches:
-                    // demo attaches a device + opens the sandbox here;
-                    // unknown renders inline on the screen; single/multi
-                    // push the Phase-3 RealAccountLoginScreen, which runs
-                    // the real takeover state machine.
-                    JoinUsernameScreen(
+                case .connectAccount:
+                    // One page, both ways in. Sign in by name: the single
+                    // preflight branches — demo attaches a device + opens
+                    // the sandbox here; unknown renders inline; single/
+                    // multi push the Phase-3 RealAccountLoginScreen. Join
+                    // with a pairing code: the incoming JoinAccountScreen
+                    // (nil = its scanner; a link connects at once).
+                    ConnectAccountScreen(
                         onDemo: { username, demoServer in
                             DemoFixtures.activate(
                                 app,
@@ -122,6 +126,9 @@ public struct OnboardingFlow: View {
                         },
                         onRealAccount: { resolution in
                             path.append(.realAccountLogin(resolution: resolution))
+                        },
+                        onJoin: { joinUrl in
+                            path.append(.joinByPairing(joinUrl: joinUrl))
                         }
                     )
                 case .realAccountLogin(let resolution):

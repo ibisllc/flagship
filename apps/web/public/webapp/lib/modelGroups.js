@@ -12,7 +12,9 @@ import {
   FLAGSHIP_TITLE,
   REFUSED_NOTE,
   effortLabel,
+  keepsFocus,
   optionFor,
+  refocusFreeInput,
   rowHtml,
   shortName,
   unknownNoteHtml,
@@ -238,7 +240,10 @@ export function mountGroupedModelMenu(host, { groups = [], choice = {}, loadGrou
     });
     host.querySelectorAll("[data-mm-free]").forEach((input) => {
       input.addEventListener("change", (ev) => {
-        set({ group: input.getAttribute("data-mm-group"), model: ev.target.value.trim() || null, effort: null });
+        const group = input.getAttribute("data-mm-group");
+        const keep = keepsFocus(input);
+        set({ group, model: ev.target.value.trim() || null, effort: null });
+        if (keep) refocusFreeInput(host, group);
       });
     });
     host.querySelector("[data-mm-effort]")?.addEventListener("change", (ev) => {
@@ -248,6 +253,7 @@ export function mountGroupedModelMenu(host, { groups = [], choice = {}, loadGrou
       if (ev.key === "Escape" && open) {
         open = false;
         render();
+        host.querySelector(".mm-trigger")?.focus();
       }
     });
   }

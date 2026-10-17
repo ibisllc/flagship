@@ -13,6 +13,7 @@ import { lifecycle } from "./lifecycle.js";
 import { mcpIde } from "./mcpIde.js";
 import { migrate } from "./migrate.js";
 import { oneList } from "./oneList.js";
+import { quota } from "./quota.js";
 import { realAccount } from "./realAccount.js";
 import { remote } from "./remote.js";
 import { runtimes } from "./runtimes.js";
@@ -42,6 +43,7 @@ export const GROUPS: Group[] = [
   archive,
   mcpIde,
   activity,
+  quota,
   oneList,
   update,
   lifecycle,

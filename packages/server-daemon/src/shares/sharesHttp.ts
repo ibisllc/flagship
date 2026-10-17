@@ -27,6 +27,7 @@ import {
   parseServerShareLeave,
   parseServerShareRevoke,
   parseServerShareSession,
+  parseShareAcceptAdminProof,
   verifyServerShareLeave,
   verifyServerShareSession,
   type ServerShareGrant,
@@ -340,9 +341,11 @@ export function buildShares(deps: SharesDeps) {
       const accept = b.accept === undefined ? undefined : parseServerShareAccept(b.accept);
       if (accept === null) return err(400, "malformed acceptance");
       const acceptSignature = typeof b.acceptSignature === "string" ? b.acceptSignature : undefined;
+      const acceptAdmin = b.acceptAdmin === undefined || b.acceptAdmin === null ? undefined : parseShareAcceptAdminProof(b.acceptAdmin);
+      if (acceptAdmin === null) return err(400, "malformed admin proof");
       // Sessions look the share up on every request, so a change applies at once.
-      const r = await deps.store.put(grant, b.signature, accept ?? undefined, acceptSignature);
-      if (!r.ok) return err(r.status, r.error);
+      const r = await deps.store.put(grant, b.signature, accept ?? undefined, acceptSignature, acceptAdmin);
+      if (!r.ok) return err(r.status, r.error, r.code ? { code: r.code } : {});
       deps.activity.record({
         actor: { kind: "owner" },
         action: r.created ? "share.granted" : "share.changed",

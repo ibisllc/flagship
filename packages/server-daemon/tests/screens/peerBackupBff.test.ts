@@ -562,3 +562,37 @@ function bytesToHex(b: Uint8Array): string {
   for (const x of b) s += x.toString(16).padStart(2, "0");
   return s;
 }
+
+// ---------- Peer backup between accounts (v2) ------------------------------
+
+describe("HTTP — peer backup between accounts", () => {
+  const peerNet = {
+    status: async () => ({ v: 2, state: "protected", holders: 8 }),
+    describeRoot: async (serverId: string, pbk: Uint8Array) => {
+      if (pbk[0] !== 7) throw new Error("The peer backup record doesn't open with this account's key.");
+      return { serverId, generation: 3 };
+    },
+  };
+
+  it("answers the v2 status when the engine is wired", async () => {
+    const handle = buildScreensHttp({ ...COMMON, gate: fakeGate(), peerNet });
+    const r = await handle(req({ path: "/api/screens/peer-backup/status" }));
+    expect(r?.status).toBe(200);
+    expect(JSON.parse(r!.body as string)).toEqual({ v: 2, state: "protected", holders: 8 });
+  });
+
+  it("opens a lost server's record with the PBK a device sends, and says why when it can't", async () => {
+    const handle = buildScreensHttp({ ...COMMON, gate: fakeGate(), peerNet });
+    const post = (body: unknown) =>
+      handle(req({ method: "POST", path: "/api/screens/peer-backup/root", body: Buffer.from(JSON.stringify(body)) }));
+    const ok = await post({ serverId: "old.alice.flagship.services", pbkHex: "07".repeat(32) });
+    expect(ok?.status).toBe(200);
+    expect(JSON.parse(ok!.body as string)).toEqual({ serverId: "old.alice.flagship.services", generation: 3 });
+    const wrong = await post({ serverId: "old.alice.flagship.services", pbkHex: "08".repeat(32) });
+    expect(wrong?.status).toBe(404);
+    expect(JSON.parse(wrong!.body as string).error).toMatch(/doesn't open/);
+    expect((await post({ serverId: "old.alice.flagship.services" }))?.status).toBe(400);
+    const anon = await handle(req({ method: "POST", path: "/api/screens/peer-backup/root", headers: {}, body: Buffer.from("{}") }));
+    expect(anon?.status).toBe(401);
+  });
+});

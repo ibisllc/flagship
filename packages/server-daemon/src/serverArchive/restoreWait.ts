@@ -34,10 +34,14 @@ export interface RestoreWait {
   current(): RestoreWaitState | null;
   /** Adopt the restore order riding in a verified pairing order's JSON. True when it took. */
   adoptFromPairingJson(json: string): Promise<boolean>;
+  /** Adopt a restore order sent after pairing (Migrate): null when taken, else the sentence why not. */
+  adoptOrder(order: unknown, signatureHex: unknown): Promise<string | null>;
   /** The import is running (Home says "Restoring its backup"). */
   setRestoring(on: boolean): void;
   /** The backup is in: stop waiting, for good. */
   finish(archiveId: string): Promise<void>;
+  /** Whether this server has restored a backup (Migrate's pre-seed is done). */
+  restoredAny(): boolean;
   /** For the heartbeat. */
   heartbeatView(): AwaitingBackup | null;
 }
@@ -112,6 +116,24 @@ export function buildRestoreWait(opts: {
       }
     },
     current: () => state,
+    async adoptOrder(rawOrder, signatureHex) {
+      const order = parseServerRestoreOrder(rawOrder);
+      if (!order) return "that restore order is malformed";
+      if (order.serverDomain.toLowerCase() !== opts.serverDomain.toLowerCase()) return "that restore order is for a different server";
+      if (typeof signatureHex !== "string" || !/^[0-9a-f]{128}$/.test(signatureHex) || !authorized(order, hexToBytes(signatureHex))) {
+        return "only an admin device of this account can send this server a backup";
+      }
+      if (done.has(order.archiveId)) return "this server has already restored that backup";
+      if (state && state.order.archiveId === order.archiveId) return null;
+      if (state) return "this server is already waiting for another backup";
+      const next: RestoreWaitState = { order, signatureHex, adoptedAt: now() };
+      await writeFileDurable(opts.path, JSON.stringify(next));
+      state = next;
+      log(`[restore-wait] waiting for backup ${order.archiveId} (${order.bytes} bytes), ordered after pairing`);
+      opts.note?.("server.restore.waiting", "This server is waiting for a backup to restore.");
+      changed();
+      return null;
+    },
     async adoptFromPairingJson(json) {
       const r = openRestoreFromPairingJson(json, authorized, opts.serverDomain);
       if (!r) return false;
@@ -144,6 +166,7 @@ export function buildRestoreWait(opts: {
       restoring = false;
       changed();
     },
+    restoredAny: () => done.size > 0,
     heartbeatView() {
       return state ? { archiveId: state.order.archiveId, state: restoring ? "restoring" : "waiting" } : null;
     },

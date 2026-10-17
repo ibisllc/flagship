@@ -401,11 +401,10 @@ describe("timeline mapping (the spec's 8 steps)", () => {
     expect(steps.some((s: any) => s.state === "active")).toBe(false);
   });
 
-  it("surfaces the enable-backup hint when pre-seed is stuck", () => {
-    const stuck = migrationWaitCopy(base, base.attachedAt + PRESEED_STUCK_MS + 1);
-    expect(stuck).toMatch(/enable backup/i);
-    const fresh = migrationWaitCopy(base, base.attachedAt + 1000);
-    expect(fresh).not.toMatch(/enable backup/i);
+  it("asks for the data move once the new box attached, never for peer backup", () => {
+    const later = migrationWaitCopy(base, base.attachedAt + PRESEED_STUCK_MS + 1);
+    expect(later).toMatch(/Move the data when you're ready/);
+    expect(later).not.toMatch(/enable backup/i);
   });
 
   it("abort copy is honest — the old server stays active with its data", () => {

@@ -47,7 +47,8 @@ Either side can end a share at any time: A revokes, B leaves.
 | Someone who sees the link before B opens it | accept the share in B's place | A confirms a 6-digit code that B's phone shows (SAS over the link secret and the accepting key) before signing the grant. A thief's acceptance shows a different code. One acceptance per link. |
 | B, or B's stolen phone | do owner things on S | every route is level-gated on the box, default deny; owner-only routes verify A's keys; B's manage actions that need a signature verify B's pairwise key **chained to A's grant**. |
 | B after the share ends | keep acting | the box tombstones the share id and drops B's sessions at once (A revokes on the box) or on the next poll of `.com` (≤5 min). A revoked share id can never be granted again. |
-| A server owner (A, or any other owner B is shared with) | link B across servers or apps | B's key toward S is `HKDF(UMK_B, "flagship/server-share-member/v1|<shareId>")`: per share, so per server. B's account name, global AID and IRK never reach S. The activity log names B by A's label only. |
+| A server owner (A, or any other owner B is shared with) | link B across servers or apps | B's key toward S is `HKDF(UMK_B, "flagship/server-share-member/v1|<shareId>")`: per share, so per server. B's account name, global AID and IRK never reach S. The activity log names B by A's label only. The one exception is B's admin root public key, which S keeps as the proof that an admin device accepted (§5.1, residual below). |
+| B's own non-admin device (or a thief holding one) | accept a share for B's account; owner rule 2026-10-16: only an admin device may | S takes a first grant only with #12 signed by B's sensitive key (admin root, else IRK) and `.com`'s CA attestation of that key (§5.1). A non-admin device holds no admin root, and `.com` attests an IRK only for an account that pins no admin root. |
 | An AI on S | learn who B is | B's label never enters a prompt; AI-facing text keeps going through `buildModelRedactor`. |
 
 Residual risks, stated plainly:
@@ -70,6 +71,15 @@ Residual risks, stated plainly:
   device, so together they can learn that this device helps with S. The
   switch says so, and the token goes with the unlock deposit.
 - The SAS loop defeats a leaked link only if A actually compares the code.
+- **S learns B's admin root public key** (never B's name: the attestation
+  names no account, and S asks `.com` nothing). It is long-lived, so two
+  owners who compare the keys their servers hold could tell they share with
+  the same account. This is the price of S enforcing the admin-only rule
+  itself (owner decision 2026-10-16); the member key stays per share.
+- **The attestation is `.com`'s word.** A rogue `.com` could attest a key B
+  doesn't hold; it still can't accept without the link and A's SAS check, so
+  this only weakens the admin-only rule, not who gets in. An attestation for
+  a root B has since rotated away stays usable until it expires (14 days).
 
 ## 3. Keys and identity
 
@@ -86,6 +96,7 @@ All HKDF is SHA-256 with an empty salt; all AEAD is AES-256-GCM with a fresh
 | inbox key | Ed25519 seed `HKDF(UMK_B, "flagship/share-inbox/v1", 32)`; inbox id = its public key, hex | B's devices (B's "Shared with me" list) |
 | inbox seal key | `HKDF(UMK_B, "flagship/share-inbox-key/v1", 32)` | B's devices |
 | owner record key | `deriveHouseholdKey(UMK_A)` | A's devices |
+| B's sensitive key | B's admin root; B's IRK only when B's account pins no admin root (`authorizeSensitiveOrder`'s rule) | B's admin devices (a demo account's lives on `.com`) |
 
 SAS (shown on both phones):
 `n = uint32_be(sha256("flagship/server-share/sas/v1|<shareId>|<memberPubHex>|<kHex>")[0..4]) mod 1000000`,
@@ -118,6 +129,8 @@ fields are lowercase; times are Unix ms, non-negative safe integers.
 | 9 | `flagship/share-inbox/v1` | `inboxPubHex\|op\|entryId\|ctSha256\|issuedAt` | B's inbox key | `.com` |
 | 10 | `flagship/server-share-push/v1` | `serverDomain\|shareId\|memberPubHex\|op\|platform\|tokenSha256\|issuedAt` | B's member key | `.com` |
 | 11 | `flagship/server-share-update/v1` | `serverDomain\|shareId\|memberPubHex\|targetCommit\|fromCommit\|nonce\|issuedAt` | B's member key | S |
+| 12 | `flagship/server-share-accept-admin/v1` | `serverDomain\|shareId\|memberPubHex\|acceptedAt\|keyKind\|keyPubHex` | B's sensitive key | S |
+| A | `flagship/account-key-attestation/v1` | `keyKind\|keyPubHex\|issuedAt\|expiresAt` | `.com`'s CA key | S (maintainer CA chain) |
 
 Field rules:
 
@@ -137,6 +150,14 @@ Field rules:
 - In #11, `targetCommit` and `fromCommit` are 40 lowercase hex and `nonce`
   is 64 lowercase hex. It shares no tag with A's `flagship/server-update/v1`,
   so neither order can stand in for the other.
+- In #12, `keyKind` is `admin-root` or `irk` and `keyPubHex` is that key;
+  the other four fields equal #3's. `test-vectors/server-share-accept-admin/vectors.json`
+  is its cross-platform reference (TS, webapp, Swift, Kotlin).
+- Attestation A is `.com`'s CA signature that `keyPubHex` is the current
+  sensitive key of some account (`keyKind` says which). It names no account.
+  It lives 14 days and is checked like every CA artifact: the baked
+  maintainer pin, the forward ca-track chain, a live CaEndorsement lease
+  (the box reads both from its own checkout), then the signature and TTL.
 - Distinct tags keep every signature single-purpose: an accept can't replay
   as a leave or a session, a grant can't replay as an unlock deposit.
 
@@ -149,7 +170,7 @@ Sealed payloads (JSON inside AEAD; no canonical form needed):
 | Payload | Key | AAD | Plaintext |
 |---|---|---|---|
 | offer | link key | `flagship/server-share/offer/v1\|<shareId>` | `{v:1, serverDomain, serverName, stkPubHex, level, unlockAtBoot, seeAppData, expiresAt}` |
-| acceptance | link key | `flagship/server-share/acceptance/v1\|<shareId>` | `{v:1, accept:{serverDomain, shareId, memberPubHex, acceptedAt}, signature}` |
+| acceptance | link key | `flagship/server-share/acceptance/v1\|<shareId>` | `{v:1, accept:{serverDomain, shareId, memberPubHex, acceptedAt}, signature, admin:{admit:#12, signature, attestation:A}}` |
 | owner record | household key (A) | `flagship/server-share/owner/v1\|<shareId>` | `{v:1, secretHex, label, level, unlockAtBoot, seeAppData}` |
 | inbox entry | inbox seal key (B) | `flagship/share-inbox/entry/v1\|<entryId>` | `{v:1, shareId, secretHex, serverDomain, serverName, acceptedAt}` |
 | boot copy | `sealForEd25519Recipient(diskKey, memberPub)` | (seal tag) | the LUKS key bytes |
@@ -169,6 +190,8 @@ A's phone                        .com                          B's phone        
  show link + QR  https://flagshipserver.com/share#s=<shareId>&k=<kHex>
                                    ◀──── GET /api/server-shares/<id>  (x-flagship-share-token)
                                                              open offer, show "A's server S, Can view"
+                                   ◀──── GET /api/users/B/account-key-attestation   (B asks about B)
+                                                             biometric → admin root signs #12
                                                              derive member key, sign #3
                                    ◀──── POST …/<id>/accept {acceptance (sealed)}  first write wins
                                                              put inbox entry (#9)
@@ -178,10 +201,45 @@ A's phone                        .com                          B's phone        
  show SAS "Does Sam's phone show 123 456?"
  Face ID/biometric → sign #1 (+ #8 if unlock) ─────────────────────────────────────────▶ POST /api/screens/shares
                                                                                           {grant, signature, accept, acceptSignature}
+                                                                                          S checks #12 + A, then the grant
                                                              GET /api/shares/nonce ─────▶
                                                              sign #5 ─ POST /api/shares/session ─▶ token (12 h)
 ```
 
+- **Only an admin device of B's account accepts** (owner decision
+  2026-10-16), and S enforces it with no blind tokens and nothing new for
+  `.com`. B's device fetches attestation A about its own account (`.com`
+  sees B read B's own keys, from B's network, as on any app start), signs
+  #12 with the key A names behind one biometric (the webapp: one fresh
+  unlock, `lib/freshUnlock.js`), and seals `{admit, signature, attestation}`
+  into the acceptance next to #3. `.com` relays it unread. A's app forwards
+  it to S as `acceptAdmin`; before the first grant for a share id S checks
+  that #12 names the same share, server, member key and time as #3, that it
+  verifies under `keyPubHex`, that A names that key and kind and verifies
+  under the CA chain S ships with, and that it is fresh. S keeps the proof
+  with the share. Refusals (403 unless noted, `{error, code}`; A's app shows
+  `error` as is):
+  - `accept-not-admin`: no proof, or an IRK signature while A names an
+    admin root. "Only an admin device of their account can accept a
+    co-manage invitation. Cancel this link and send a new one for them to
+    open on an admin device."
+  - `accept-signature`: #12 doesn't match #3, doesn't verify, or A isn't
+    the CA's or names another key. "Their acceptance isn't signed by their
+    account's admin key, so this server can't trust it. Cancel this link and
+    send a new one."
+  - `accept-stale`: A has expired, `acceptedAt` is more than 14 days old or
+    more than 5 minutes ahead. "Their acceptance is too old to check. Cancel
+    this link and send them a new one."
+  - `accept-unverifiable` (503): S has no live CA lease. "This server can't
+    check the acceptance right now because its list of trusted Flagship
+    keys is out of date. Update the server, then confirm again."
+- A **demo account** has an admin root, but its devices don't hold it (the
+  operator runs the account): they ask `POST /api/dev/sample-user/:u/share-accept {admit}`,
+  and `.com` signs #12 with the demo account's derived root. S checks it
+  exactly as any other. No biometric on a demo account.
+- A non-admin device never offers Accept: the link shows "Only an admin
+  device of your account can accept a co-manage invitation." (all three apps).
+- Shares S held before this rule stay; a later grant change needs no proof.
 - The offer lives 7 days; after that `.com` refuses reads and the acceptance.
 - A can finalize from any of A's devices: the owner record carries `k`.
 - If S is offline, A's app keeps the share as "Waiting for S" and retries
@@ -357,7 +415,7 @@ New box routes:
 | `POST /api/shares/update` | `{update, signature}` → 202 `{ok, accepted, targetCommit}`; `{error, code}` otherwise (§5.6) |
 | `POST /api/shares/leave` | `{leave, signature}` → `{ok}` |
 | `GET /api/screens/shares` | → `{shares:[{shareId, label, level, unlockAtBoot, seeAppData, memberPubHex, issuedAt, sharedAt, lastSeenAt}], ended:[{shareId, label, endedAt, reason}]}` (`memberPubHex` lets A re-sign a change) |
-| `POST /api/screens/shares` | `{grant, signature, accept?, acceptSignature?}` → `{ok, share}`; the first grant for an id must carry B's acceptance |
+| `POST /api/screens/shares` | `{grant, signature, accept?, acceptSignature?, acceptAdmin?}` → `{ok, share}`; the first grant for an id must carry B's acceptance and its admin proof (§5.1, refusal codes there) |
 | `POST /api/screens/shares/revoke` | `{revoke, signature}` → `{ok}` |
 | `GET /api/screens/activity?limit=` | → `{entries:[{ts, actor:{kind:"owner"} \| {kind:"share", shareId, label}, action, target?, ok}]}` |
 
@@ -374,6 +432,8 @@ New box routes:
 | `POST /api/server-shares/:id/leave` | share token + #4 | end the row, drop B's boot copy |
 | `POST /api/server-shares/:id/push` | share token + #10, an unlock deposit for that key | put or drop one device's start-up push token (§5.4) |
 | `GET /api/server/:domain/share-ends?since=` | none (signed envelopes; box verifies) | revokes and leaves for S |
+| `GET /api/users/:u/account-key-attestation` | none (public keys; `/api/username/:u` already serves them) | attestation A of `:u`'s sensitive key, naming no account (§5.1) |
+| `POST /api/dev/sample-user/:u/share-accept` | a demo username (the capability, as for pairing) | #12 signed with the demo account's admin root; only for `keyKind: admin-root` naming it |
 | `POST /api/share-inbox` | #9 | B's "Shared with me" entries: put / list / delete |
 | `GET /api/boot/share/pending/:domain`, `GET /api/boot/share/key/:domain`, `POST /api/boot/response` | boot gate role `share` | §5.4 |
 | `POST /api/users/:u/service-invites` with `relay` | S's STK over `flagship/service-invite-co-manager/v1` + B's member-key create | B's invite, relayed by S (§5.7); stored at tier `co-manager` with the member key, nothing about the share |
@@ -453,7 +513,9 @@ A's paired-session token, or B's share token (`fss_…`).
    `linkKey(k)`, check `accept` names this server and share, verify its
    signature with `accept.memberPubHex`, show "**<label>** accepted. Does their
    phone show **123 456**?" (`shareSas`). Confirm → sign #1 (sensitive key,
-   biometric) → `POST box/api/screens/shares {grant, signature, accept, acceptSignature}`;
+   biometric) → `POST box/api/screens/shares {grant, signature, accept, acceptSignature, acceptAdmin}`
+   (`acceptAdmin` is the acceptance's `admin`; on a 403/503 with an
+   `accept-*` code show the box's `error`);
    then, if unlock at boot, deposit (below).
 4. A row `offered`: "Waiting for <label> to open the link" with Copy link and Cancel.
 5. An active share: level and the two opt-ins are editable (a new #1, same
@@ -472,8 +534,15 @@ A's paired-session token, or B's share token (`fss_…`).
 1. Parse the link; `token = shareTokenFromSecret(k)`.
 2. `GET apex/api/server-shares/:id` with `x-flagship-share-token: token`
    → `{serverDomain, state, offer, …}`; open `offer`. 404 = bad link, 410 = an unaccepted link that expired; `state: "ended"` = the share is over.
-3. Accept → `member = deriveShareMemberKey(UMK, shareId)`; sign #3; seal
-   `{v:1, accept, signature}` with `linkKey(k)`, AAD "acceptance"|shareId;
+3. Accept (admin devices only; others show "Only an admin device of your
+   account can accept a co-manage invitation." instead of the button) →
+   one biometric; `GET apex/api/users/:u/account-key-attestation` → `{attestation}`;
+   `admit = {...accept, keyKind, keyPubHex}` from it (an `admin-root` key
+   must be this device's admin root, else refuse as above); sign #12 with
+   that key (`irk`: the IRK; demo: `POST apex/api/dev/sample-user/:u/share-accept {admit}`
+   → `{signature}`); `member = deriveShareMemberKey(UMK, shareId)`; sign #3;
+   seal `{v:1, accept, signature, admin:{admit, signature, attestation}}`
+   with `linkKey(k)`, AAD "acceptance"|shareId;
    `POST apex/api/server-shares/:id/accept {acceptance}` (409 = someone else used the link).
 4. Save to the inbox: random `entryId`; `ct = seal(inboxSealKey, "entry"|entryId, {v:1, shareId, secretHex, serverDomain, serverName, acceptedAt})`;
    sign #9 `put` with the inbox key; `POST apex/api/share-inbox {request, signature, ct}`.
@@ -540,11 +609,13 @@ start-up) and day-to-day upkeep without A. Owner decisions, 2026-10-14:
    manager-class there (§5.7).
 6. **Server updates at manage level: yes** (§5.6). The release endorsement is
    the safety check; B only picks when. View level can't.
-7. **Only B's admin devices accept a share** (owner rule 2026-10-16: adding
-   a server is admin-only), but only B's apps enforce it. A check by `.com`
-   or S would need B's admin root, which names B's account, and §2 keeps B
-   unknown to both. Creating, taking over and restoring are server-enforced
-   (`service-access-gating.md` "Adding a server").
+7. **Only B's admin devices accept a share, and S enforces it** (owner
+   decision 2026-10-16, replacing the apps-only rule of the same morning):
+   no blind tokens, and `.com` learns nothing new. B's admin root signs #12
+   and `.com`'s CA attests the key without naming B (§5.1), so S checks it
+   with the maintainer CA chain alone; S does learn B's admin root public
+   key (§2, residual). Creating, taking over and restoring are
+   server-enforced too (`service-access-gating.md` "Adding a server").
 
 ### Later
 

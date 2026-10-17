@@ -28,8 +28,6 @@ import com.flagshipserver.app.core.FreeAiCopy
 import com.flagshipserver.app.core.FreeAiService
 import com.flagshipserver.app.core.FreeAiState
 import com.flagshipserver.app.core.LocalAppState
-import com.flagshipserver.app.core.LocalDeveloperSettings
-import com.flagshipserver.app.core.MockFreeAiClient
 import com.flagshipserver.app.core.LocalPodScope
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
@@ -41,14 +39,15 @@ import com.flagshipserver.app.ui.theme.FS
 @Composable
 fun rememberFreeAiService(): FreeAiService {
     val appState = LocalAppState.current
-    val live = LocalDeveloperSettings.current?.useLiveClient?.collectAsState()?.value ?: true
-    return remember(appState, live) { freeAiServiceFor(appState, live) }
+    return remember(appState) { freeAiServiceFor(appState) }
 }
 
-/** The live `.com` client, or the mock one when the app runs on mock clients. */
-fun freeAiServiceFor(appState: AppState, live: Boolean = true): FreeAiService =
-    if (live) FreeAiService(username = { appState.currentUser.value })
-    else FreeAiService(client = MockFreeAiClient(), username = { appState.currentUser.value })
+/** The live `.com` client (a debug gym run on mocks: its mock one). */
+fun freeAiServiceFor(appState: AppState): FreeAiService {
+    val mock = com.flagshipserver.app.core.Variant.freeAiClient()
+    return if (mock == null) FreeAiService(username = { appState.currentUser.value })
+    else FreeAiService(client = mock, username = { appState.currentUser.value })
+}
 
 /** The box a build on this screen runs on: the chosen server, else the session's. */
 @Composable

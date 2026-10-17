@@ -137,10 +137,10 @@ describe("picked files", () => {
     await fmt.checkDataFile(blob, data, { sliceBytes: 1000, onProgress: (n: number) => seen.push(n) });
     expect(seen.at(-1)).toBe(raw.length);
     expect(seen.length).toBe(Math.ceil(raw.length / 1000));
-    await expect(fmt.checkDataFile(blob, { ...data, bytes: raw.length + 1 })).rejects.toThrow(/isn't this backup's/);
+    await expect(fmt.checkDataFile(blob, { ...data, bytes: raw.length + 1 })).rejects.toThrow(/wrong size/);
     await expect(fmt.checkDataFile(blob, { ...data, sha256: "00".repeat(32) })).rejects.toThrow(/doesn't match/);
     const notData = new Blob([Buffer.alloc(raw.length, 1)]);
-    await expect(fmt.checkDataFile(notData, data)).rejects.toThrow(/isn't a Flagship backup's data file/);
+    await expect(fmt.checkDataFile(notData, data)).rejects.toThrow(/its data part isn't a Flagship backup's/);
   });
 });
 
@@ -232,13 +232,13 @@ describe("backup and restore calls", () => {
     expect(archive.archiveErrorText(e)).toBe("The restore failed: wrong key.");
   });
 
-  it("downloading here approves a fresh request, then lets the browser fetch both files", async () => {
+  it("downloading here approves a fresh request, then lets the browser fetch the one .flagship file", async () => {
     const calls: string[] = [];
     const client = {
       baseUrl: "https://home.alice.flagship.services",
       fetch: async (path: string) => {
         calls.push(path);
-        return path.endsWith("/link") ? { path: `/api/archive-download/${"ab".repeat(32)}`, backupFileName: "home.flagship-backup", dataFileName: "home.flagship-data", expiresAt: 1 } : {};
+        return path.endsWith("/link") ? { path: `/api/archive-download/${"ab".repeat(32)}`, bundleFileName: "home.flagship", bundleBytes: 99, expiresAt: 1 } : {};
       },
     };
     const clicked: Array<{ href: string; download: string }> = [];
@@ -251,14 +251,10 @@ describe("backup and restore calls", () => {
       signWithIrk: async () => new Uint8Array(64),
       rng: () => seed("0f1e2d3c4b5a69788796a5b4c3d2e1f0"),
       doc,
-      gapMs: 0,
     });
     const base = `https://home.alice.flagship.services/api/archive-download/${"ab".repeat(32)}`;
     expect(calls).toEqual(["/api/screens/server-archive/link", "/api/screens/server-archive/approve"]);
-    expect(clicked).toEqual([
-      { href: `${base}/backup?r=0f1e2d3c4b5a69788796a5b4c3d2e1f0`, download: "home.flagship-backup" },
-      { href: `${base}/file?r=0f1e2d3c4b5a69788796a5b4c3d2e1f0`, download: "home.flagship-data" },
-    ]);
+    expect(clicked).toEqual([{ href: `${base}/bundle?r=0f1e2d3c4b5a69788796a5b4c3d2e1f0`, download: "home.flagship" }]);
   });
 
   it("names the two files after the server and the day", () => {

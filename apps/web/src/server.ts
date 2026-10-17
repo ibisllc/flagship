@@ -65,6 +65,8 @@ import { UsageMeter } from "./tunnel/usageMeter.js";
 import { overQuotaBytesPerSec } from "./tunnel/throttle.js";
 import { startTunnelHub } from "./tunnel/tunnelHub.js";
 import { OutboundRelay } from "./tunnel/outboundRelay.js";
+import { MailboxRegistry } from "./tunnel/mailboxRelay.js";
+import { registerMailboxRelay } from "./routes/mailboxRelayRoute.js";
 import {
   HubBlessingProvider,
   loadOrCreateHubKeypair,
@@ -360,6 +362,10 @@ export async function start(opts: {
   if (surface === "services" || surface === "both") {
     registerGossipFanout(app, { registry, apex: servicesApex });
   }
+  // Peer-backup mailboxes between accounts (docs/peer-backup.md §5.3).
+  // FLAGSHIP_PB_MAIL=off stops advertising them.
+  const mailboxes = (surface === "services" || surface === "both") && process.env.FLAGSHIP_PB_MAIL !== "off" ? new MailboxRegistry() : undefined;
+  if (mailboxes) registerMailboxRelay(app, { mailboxes });
   await app.listen({ port: httpPort, host });
   // Authenticate tunnel HELLOs against .com's server registry over HTTPS.
   // 5-minute cache so reconnects don't hammer the API.
@@ -455,6 +461,7 @@ export async function start(opts: {
     surface,
     apex: servicesApex,
     ...(outboundRelay ? { outboundRelay } : {}),
+    ...(mailboxes ? { mailboxes } : {}),
     authLookup: remoteAuthLookup,
     irkLookup,
     authorityLookup,

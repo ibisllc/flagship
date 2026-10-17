@@ -4,7 +4,7 @@
 // build can be picked back up later (e.g. user closes the tab to go find
 // their LLM provider key). Each draft carries:
 //   - serverName        (DNS label)
-//   - backupPolicy      ("none" | "phone-only" | "peer")
+//   - backupPolicy      ("none" | "phone-only" | "peer"), reserveGb (phone-side)
 //   - status            "draft" | "delivered" | "deployed"
 //
 // On "Deliver now" the composer:
@@ -75,6 +75,7 @@ export async function saveDraft(draft) {
     id,
     serverName: draft.serverName ?? "",
     backupPolicy: draft.backupPolicy ?? "phone-only",
+    reserveGb: draft.reserveGb,
     status: draft.status ?? "draft",
     createdAt: draft.createdAt ?? Date.now(),
     updatedAt: Date.now(),

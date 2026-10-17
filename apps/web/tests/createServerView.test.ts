@@ -105,6 +105,27 @@ describe("create-server view — static structure (#24)", () => {
   });
 });
 
+describe("create-server view — words for a browser", () => {
+  const section = INDEX_HTML.slice(
+    INDEX_HTML.indexOf('<section id="view-create-server"'),
+    INDEX_HTML.indexOf("</section>", INDEX_HTML.indexOf('<section id="view-create-server"')),
+  );
+
+  it("never talks about a phone, a QR hand-off or a relay (the wire value aside)", () => {
+    const visible = section.replace(/value="phone-only"/g, "").replace(/<[^>]+>/g, " ");
+    expect(visible).not.toMatch(/phone/i);
+    expect(visible).not.toMatch(/\bQR\b|relay|IRK/);
+    expect(visible).toContain("open it in Flagship Studio");
+  });
+
+  it("names the default backup policy for a browser, in the drafts list too", () => {
+    expect(section).toContain('<input type="radio" name="cs-backup-policy" value="phone-only" checked />');
+    expect(section).toContain('<span class="boot-unlock-title">On my devices (default)</span>');
+    expect(section).toContain("that device's free space");
+    expect(VIEW_SRC).toContain('"phone-only": "On my devices"');
+  });
+});
+
 describe("create-server view — boot-unlock-mode chooser (§7a.1)", () => {
   it("renders the question prompt", () => {
     expect(INDEX_HTML).toContain(
@@ -116,12 +137,12 @@ describe("create-server view — boot-unlock-mode chooser (§7a.1)", () => {
     // Reboots-on-its-own (DEFAULT)
     expect(INDEX_HTML).toContain(">Reboots on its own<");
     expect(INDEX_HTML).toContain(
-      "Restarts by itself, no phone needed — good for flaky power or connections. flagshipserver.com still can't read your disk key, and you can revoke a stolen server from your phone. Not theft-proof: someone who powers it on first could boot it.",
+      "Restarts by itself, no approval needed — good for flaky power or connections. flagshipserver.com still can't read your disk key, and you can revoke a stolen server from any of your devices. Not theft-proof: someone who powers it on first could boot it.",
     );
     // Authorize-each-boot
     expect(INDEX_HTML).toContain(">Authorize each boot<");
     expect(INDEX_HTML).toContain(
-      "Every restart waits for your approval on your phone. Nothing — not even flagshipserver.com — can start it without you. The cost: a power cut means it stays down until you approve.",
+      "Every restart waits for you to approve it from one of your devices. Nothing — not even flagshipserver.com — can start it without you. The cost: a power cut means it stays down until you approve.",
     );
   });
 

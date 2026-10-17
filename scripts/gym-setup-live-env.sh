@@ -91,13 +91,20 @@ fi
 # appended to the cache, never copied from prod.
 for v in GYM_ACCOUNT_READ_TOKEN_SECRET GYM_RECOVERY_PROOF_SECRET GYM_TOTP_KEK \
          GYM_SERVICES_CONTROL_SECRET GYM_USAGE_REPORT_SECRET GYM_BOOT_NOTIFY_SECRET \
-         GYM_INFERENCE_TOKEN_SECRET; do
+         GYM_INFERENCE_TOKEN_SECRET GYM_PB_FILLER_SECRET GYM_PB_TAG_SECRET; do
   if [ -z "${!v:-}" ]; then
     printf -v "$v" '%s' "$(openssl rand -hex 32)"
     ( umask 077; printf '%s="%s"\n' "$v" "${!v}" >> "$SECRETS_FILE" )
     ok "generated $v"
   fi
 done
+# Peer backup's blind-token key (docs/peer-backup.md §5.4): a 2048-bit RSA
+# private JWK, the gym's own. Cached single-quoted (it is JSON).
+if [ -z "${GYM_PB_TOKEN_RSA_JWK:-}" ]; then
+  GYM_PB_TOKEN_RSA_JWK="$(node -e 'process.stdout.write(JSON.stringify(require("node:crypto").generateKeyPairSync("rsa",{modulusLength:2048}).privateKey.export({format:"jwk"})))')"
+  ( umask 077; printf "GYM_PB_TOKEN_RSA_JWK='%s'\n" "$GYM_PB_TOKEN_RSA_JWK" >> "$SECRETS_FILE" )
+  ok "generated GYM_PB_TOKEN_RSA_JWK"
+fi
 GYM_UPCLOUD_TOKEN_FILE="${GYM_UPCLOUD_TOKEN_FILE:-$HOME/.config/flagship/upcloud-token}"
 if ! grep -q '^GYM_UPCLOUD_TOKEN_FILE=' "$SECRETS_FILE" 2>/dev/null; then
   ( umask 077; printf 'GYM_UPCLOUD_TOKEN_FILE="%s"\n' "$GYM_UPCLOUD_TOKEN_FILE" >> "$SECRETS_FILE" )
@@ -165,6 +172,9 @@ put_secret SERVICES_CONTROL_SECRET        "$GYM_SERVICES_CONTROL_SECRET"
 put_secret USAGE_REPORT_SECRET            "$GYM_USAGE_REPORT_SECRET"
 put_secret BOOT_NOTIFY_SECRET             "$GYM_BOOT_NOTIFY_SECRET"
 put_secret FLAGSHIP_INFERENCE_TOKEN_SECRET "$GYM_INFERENCE_TOKEN_SECRET"
+put_secret PB_TOKEN_RSA_JWK               "$GYM_PB_TOKEN_RSA_JWK"
+put_secret PB_FILLER_SECRET               "$GYM_PB_FILLER_SECRET"
+put_secret PB_TAG_SECRET                  "$GYM_PB_TAG_SECRET"
 put_secret WEBPUSH_CONTACT                "mailto:gym@flagshipserver.com"
 if [ -r "$GYM_UPCLOUD_TOKEN_FILE" ]; then
   tr -d '\n' < "$GYM_UPCLOUD_TOKEN_FILE" | wr secret put UPCLOUD_TOKEN --config "$WRANGLER_CFG" >/dev/null 2>&1 \

@@ -84,7 +84,7 @@ const root: PbRoot = {
   segments: 1,
   indexSegments: 1,
   stripes: [[{ pikPubHex, xPubHex, leaseId: "cd".repeat(16), leaseKeySeedHex: "ef".repeat(32), rev: 0, expiresAt: 1799776000000 }]],
-  indexRoots: [hex(levels[levels.length - 1]![0]!), hex(levels[levels.length - 1]![0]!)],
+  indexShardHashes: ["aa".repeat(32), "bb".repeat(32)],
 };
 const rootNonceHex = "0102030405060708090a0b0c";
 const sealedRoot = sealPbRoot(root, pbk, fromHex(rootNonceHex));

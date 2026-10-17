@@ -158,3 +158,26 @@ describe("build chat composer and wiring", () => {
     expect(src("style.css")).toContain(".mm-context");
   });
 });
+
+describe("model menu keeps focus after a typed model id", () => {
+  it("hands focus back after Enter or a click on nothing, but never steals it from another control", async () => {
+    const { keepsFocus } = await load("lib", "modelMenu.js");
+    const body = {};
+    const doc = (active: unknown) => ({ activeElement: active, body });
+    const input: Record<string, unknown> = {};
+    input.ownerDocument = doc(input);
+    expect(keepsFocus(input)).toBe(true); // Enter: still on the field
+    input.ownerDocument = doc(body);
+    expect(keepsFocus(input)).toBe(true); // a click on nothing focusable
+    input.ownerDocument = doc({ id: "vc-prompt" });
+    expect(keepsFocus(input)).toBe(false); // the composer took focus
+  });
+
+  it("both menus refocus the re-rendered field and return focus to the button on Escape", () => {
+    for (const f of ["modelMenu.js", "modelGroups.js"]) {
+      const s = src("lib", f);
+      expect(s).toContain("refocusFreeInput(host");
+      expect(s).toContain('host.querySelector(".mm-trigger")?.focus()');
+    }
+  });
+});

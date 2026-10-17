@@ -858,6 +858,63 @@ const OCTOBER: readonly Scenario[] = [
     },
   ),
   iosTotal(
+    "ios-connect-account-page",
+    "Welcome offers Create your account + one Connect to an existing account; the connect page holds sign-in by account name above an 'or' and the pairing code (scan + paste) below; a name in the code field gets a sentence (-smoke-onboarding).",
+    "FlagshipAppUITests/OnboardingSmokeTests/test_connectPageHoldsSignInAndPairing",
+    {
+      steps: [
+        { kind: "tap", describe: "Connect to an existing account.", handle: "welcome-connect" },
+        { kind: "assert", describe: "Both halves.", handle: "connect-pair-field" },
+        { kind: "tap", describe: "Join with an account name typed as the code.", handle: "connect-pair-continue" },
+      ],
+      assertions: [
+        { describe: "Sign-in field", handle: "connect-name-field", expect: "present" },
+        { describe: "Scan a code", handle: "connect-scan", expect: "present" },
+      ],
+      screenshots: [shot("welcome", "Welcome: primary, secondary, Patent Pending."), shot("connect-account", "The connect page.")],
+      dimension: "D1",
+    },
+  ),
+  iosTotal(
+    "ios-connect-sign-in-demo",
+    "Connect to an existing account → the account name 'demo' → Continue opens the mock demo account (-smoke-onboarding).",
+    "FlagshipAppUITests/OnboardingSmokeTests/test_connectSignInWithAccountName",
+    {
+      steps: [
+        { kind: "type", describe: "Type demo.", handle: "connect-name-field" },
+        { kind: "tap", describe: "Continue.", handle: "connect-name-continue" },
+      ],
+      assertions: [{ describe: "Lands in the app", handle: "Home", expect: "present" }],
+      screenshots: [shot("connect-demo-home", "The demo account's Home.")],
+      dimension: "D1",
+    },
+  ),
+  iosTotal(
+    "ios-connect-link-to-join",
+    "A pairing link typed into the account-name field opens the join flow (-smoke-onboarding).",
+    "FlagshipAppUITests/OnboardingSmokeTests/test_connectPairingLinkInNameFieldOpensJoin",
+    {
+      steps: [
+        { kind: "type", describe: "Paste a /join link as the name.", handle: "connect-name-field" },
+        { kind: "tap", describe: "Continue.", handle: "connect-name-continue" },
+      ],
+      assertions: [{ describe: "Join an account", handle: "Join an account", expect: "present" }],
+      screenshots: [shot("connect-link-to-join", "The join flow.")],
+      dimension: "D1",
+    },
+  ),
+  iosTotal(
+    "ios-connect-scan",
+    "Scan a code on the connect page opens the in-app scanner (-smoke-onboarding).",
+    "FlagshipAppUITests/OnboardingSmokeTests/test_connectScanOpensScanner",
+    {
+      steps: [{ kind: "tap", describe: "Scan a code.", handle: "connect-scan" }],
+      assertions: [{ describe: "Join an account", handle: "Join an account", expect: "present" }],
+      screenshots: [shot("connect-scanner", "The in-app scanner.")],
+      dimension: "D1",
+    },
+  ),
+  iosTotal(
     "ios-oct-access-alert-answer",
     "D5: the app-wide '<App> wants to reach <host>' sheet (-smoke-access-alert): Allow then Deny sign the list and confirm; then nothing covers Home.",
     O + "test_appAccessAlertAllowThenDeny",

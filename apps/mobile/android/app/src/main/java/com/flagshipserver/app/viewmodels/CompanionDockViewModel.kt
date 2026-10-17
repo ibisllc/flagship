@@ -205,8 +205,11 @@ class CompanionDockViewModel(
     }
 
     private fun failureMessage(t: Throwable): String = when (t) {
-        is ScreensError.Http -> NetworkErrorHumanizer.humanize(t)
-        else -> t.message ?: "Something went wrong. Try again."
+        is ScreensError.Http -> NetworkErrorHumanizer.humanize(t, "remote")
+        else -> {
+            com.flagshipserver.app.core.ErrorLog.caught("remote", t, NetworkErrorHumanizer.errorCode(t))
+            t.message ?: "Something went wrong. Try again."
+        }
     }
 
     private companion object {

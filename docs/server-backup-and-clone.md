@@ -55,7 +55,42 @@ every boot, whether its disk is encrypted), which the restore form copies.
 - the server's description (it lives on the owner's devices, not the box),
   peer backups and the Git host.
 
-## The two files (`packages/protocol/src/serverBackup.ts`)
+## The one file (owner, 2026-10-16)
+
+People only ever see, save and import ONE file, `<name>.flagship`. It is
+the two parts below glued together:
+
+```
+offset 0   8 bytes   "FLGSHBK1"
+offset 8   8 bytes   L, the metadata part's length (u64 big-endian, 1..262144)
+offset 16  L bytes   the metadata part: the backup file below, unchanged
+offset 16+L ...EOF   the data part: the data file below, unchanged
+```
+
+Nothing else, no padding (`backupBundleHeader` / `parseBackupBundleHeader`
+/ `backupBundleFileName` in `serverBackup.ts`; vectors
+`test-vectors/server-backup-bundle/vectors.json`). The box keeps the two
+parts as its storage and serves the one file as a concatenation, never a
+copy on disk: `GET .../bundle?offset=N` (≤ 4 MiB, for the phones'
+resumable downloader, with `x-flagship-bundle-bytes` and
+`x-flagship-bundle-sha256`, the SHA-256 of the whole file) and the browser
+link `.../bundle?r=` (HTTP Range, `ETag` = that SHA-256). An app imports
+the one file by reading its 16-byte header and the metadata part, then
+streaming the data part from offset 16+L (verification is unchanged: the
+data part's signed size and SHA-256). A file that isn't a backup, has a
+damaged header or ends before its data is refused with a sentence. No
+two-file backup is offered or accepted any more (pre-release).
+
+Splitting one for analysis needs only the shell:
+
+```sh
+L=$(dd if=home.flagship bs=1 skip=8 count=8 2>/dev/null | od -An -tu1 | awk '{for(i=1;i<=NF;i++) n=n*256+$i} END{print n}')
+tail -c +17 home.flagship | head -c "$L" > home.flagship-backup; tail -c +$((17 + L)) home.flagship > home.flagship-data
+```
+
+(`packages/protocol/tests/backupBundle.test.ts` runs exactly this.)
+
+## The two parts (`packages/protocol/src/serverBackup.ts`)
 
 ```
 home-2026-10-15.flagship-backup   the backup file: small JSON
@@ -173,7 +208,7 @@ in `ServicePlatform.install`, so installs, AI deploys of a new app, app
 copies and imports alike), an app copy that wouldn't fit, and an import
 that wouldn't fit (`507 code over-backup-limit`), with the sentence the
 owner sees ("This server holds 6.0 GB of app data, over its backup limit of
-5.0 GB (the space your phone keeps for its backup). Remove apps or data, or
+5.0 GB (the space your device keeps for its backup). Remove apps or data, or
 change the backup policy on the server page."). Redeploys of an app already
 there aren't refused. Crossing the limit, either way, goes into Activity.
 `appBudgets()` splits the limit per app (what each holds plus an equal share
@@ -333,6 +368,10 @@ GET    /api/screens/server-restore          → { waiting: { archiveId, bytes, s
 POST   /api/screens/server-restore/start    { archiveId, bytes }  → { received }   (409 code not-waiting | other-backup)
 POST   /api/screens/server-restore/chunk?offset=N      (raw bytes, in order)
 POST   /api/screens/server-restore/commit   { key }
+POST   /api/screens/server-restore/order    { order, signatureHex }   (a restore order after pairing: Migrate; refused on a server with apps)
+POST   /api/screens/server-restore/pull     { url, requestId }        (box to box from an approved link, data part only, resumable)
+POST   /api/screens/server-restore/from-peers { serverId, pbkHex }    (the lost server's backup from its pieces on other servers, via the peer engine)
+POST   /api/screens/server-restore/probe    { url }                   (time a probe link of the old server → bytesPerSecond)
 ```
 
 One backup and one restore at a time. The box's copy of a backup expires

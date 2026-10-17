@@ -2,6 +2,8 @@ import { Client as PgClient } from "pg";
 import type { FilesAdmin, PostgresAdmin } from "./admin.js";
 import type { CommandRunner } from "../serviceRunner.js";
 import { isFilesVolume } from "./naming.js";
+import type { LoopVolumes } from "../appQuota/loopVolumes.js";
+import { roleLimitStatements } from "../appQuota/pgQuota.js";
 
 /**
  * Real admin implementations: the box's Postgres (brought up by
@@ -60,6 +62,8 @@ export class RealPostgresAdmin implements PostgresAdmin {
       await c.query(`REVOKE CONNECT, TEMPORARY ON DATABASE "postgres" FROM PUBLIC`);
       await c.query(`REVOKE CONNECT, TEMPORARY ON DATABASE "template1" FROM PUBLIC`);
       await c.query(`CREATE ROLE "${args.role}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD ${pwLiteral}`);
+      // Connections, timeouts and temp files (appQuota/pgQuota.ts APP_ROLE_LIMITS).
+      for (const sql of roleLimitStatements(args.role)) await c.query(sql);
       await c.query(`CREATE DATABASE "${args.db}" OWNER "${args.role}"`);
       await c.query(`REVOKE ALL ON DATABASE "${args.db}" FROM PUBLIC`);
       await c.query(`GRANT CONNECT, TEMPORARY ON DATABASE "${args.db}" TO "${args.role}"`);
@@ -132,7 +136,15 @@ export class RealPostgresAdmin implements PostgresAdmin {
 export const FILES_VOLUME_LABEL = "flagship.files";
 
 export class RealFilesAdmin implements FilesAdmin {
-  constructor(private readonly cmd: CommandRunner) {}
+  /**
+   * `loop`: make each folder its own sized disk image (appQuota/
+   * loopVolumes.ts). Without it (a box that can't mount images, tests) a
+   * folder is a plain volume with no limit of its own.
+   */
+  constructor(
+    private readonly cmd: CommandRunner,
+    private readonly loop: LoopVolumes | null = null,
+  ) {}
 
   private async capture(args: string[]): Promise<string> {
     if (!this.cmd.capture) throw new Error("CommandRunner.capture is not configured");
@@ -148,8 +160,18 @@ export class RealFilesAdmin implements FilesAdmin {
     }
   }
 
-  async createVolume(args: { volume: string; labels?: Record<string, string> }): Promise<void> {
+  async createVolume(args: { volume: string; labels?: Record<string, string>; sizeBytes?: number }): Promise<void> {
     assertFilesVolume(args.volume);
+    if (this.loop && args.sizeBytes !== undefined) {
+      try {
+        await this.loop.create(args.volume, args.sizeBytes, args.labels ?? {});
+        return;
+      } catch (e) {
+        if (/already exists/.test((e as Error).message)) throw e;
+        // A box that can't make images (no loop device) still installs apps, without a folder limit.
+        console.warn(`[app-quota] ${args.volume}: no disk image (${(e as Error).message}); a plain volume instead`);
+      }
+    }
     if (await this.exists(args.volume)) throw new Error(`files volume ${args.volume} already exists`);
     const labels = Object.entries(args.labels ?? {}).flatMap(([k, v]) => ["--label", `${k}=${v}`]);
     await this.capture(["volume", "create", ...labels, args.volume]);
@@ -177,12 +199,18 @@ export class RealFilesAdmin implements FilesAdmin {
 
   async removeVolume(volume: string): Promise<void> {
     assertFilesVolume(volume);
+    if (this.loop) {
+      await this.loop.remove(volume);
+      return;
+    }
     if (!(await this.exists(volume))) return;
     await this.capture(["volume", "rm", volume]);
   }
 
   async volumeBytes(volume: string): Promise<number | null> {
     assertFilesVolume(volume);
+    const inImage = await this.loop?.usage(volume).catch(() => null);
+    if (inImage) return inImage.usedBytes;
     try {
       const mountpoint = (await this.capture(["volume", "inspect", "-f", "{{.Mountpoint}}", volume])).trim();
       if (!mountpoint.startsWith("/")) return null;

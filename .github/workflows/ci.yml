@@ -24,6 +24,22 @@ jobs:
   gate:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    services:
+      # The box's Postgres image, for the database size-limit tests
+      # (packages/server-daemon/tests/appQuotaPg.integration.test.ts).
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg18-trixie
+        env:
+          POSTGRES_PASSWORD: quota
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      FLAGSHIP_TEST_PG_URL: postgres://postgres:quota@127.0.0.1:5432/postgres
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -58,6 +74,12 @@ jobs:
       - name: Cross-client parity (report only)
         continue-on-error: true
         run: npm run parity -- --report >> "$GITHUB_STEP_SUMMARY"
+
+      # Per-app files folders as real loop-mounted ext4 images, and a real
+      # container on one: needs root (packages/server-daemon/tests/
+      # appQuotaLoop.integration.test.ts). Last, as it runs as root.
+      - name: Files-folder limits on real loop images (root)
+        run: sudo -E env "PATH=$PATH" FLAGSHIP_TEST_LOOP=1 FLAGSHIP_TEST_LOOP_DOCKER=1 npx vitest run packages/server-daemon/tests/appQuotaLoop.integration.test.ts
 
   # The web gym (docs/ui-test-gym.md, tools/gym/README.md): the real webapp
   # in chromium against a static server with every .com/box call stubbed, so

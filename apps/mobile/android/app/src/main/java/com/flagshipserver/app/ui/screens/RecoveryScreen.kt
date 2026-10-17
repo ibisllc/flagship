@@ -83,9 +83,12 @@ fun RecoveryScreen(nav: NavController) {
     var error by remember { mutableStateOf<String?>(null) }
     var passphrase by remember { mutableStateOf("") }
     var passphraseConfirm by remember { mutableStateOf("") }
+    // Why a second passkey prompt follows the create (see createPasskey).
+    var note by remember { mutableStateOf<String?>(null) }
+    var savedIn by remember { mutableStateOf(RecoveryProviderStore.read(ctx)) }
 
     LaunchedEffect(Unit) {
-        cloudStatus = try {
+        cloudStatus = if (RecoveryProviderStore.isConfigured(ctx)) CloudStatus.Configured else try {
             if (blockStore.fetch() == null) CloudStatus.NotConfigured else CloudStatus.Configured
         } catch (_: Throwable) {
             CloudStatus.Failed
@@ -138,10 +141,17 @@ fun RecoveryScreen(nav: NavController) {
             }
             Spacer(Modifier.height(FS.space.s2))
         }
+        if (working && note != null) {
+            FSCard(padding = PaddingValues(FS.space.s3), modifier = Modifier.semantics { testTag = "recovery-second-prompt" }) {
+                Text(note!!, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+            }
+            Spacer(Modifier.height(FS.space.s2))
+        }
 
         when (mode) {
             RecoveryMode.Choose -> ChooseCard(
                 cloudStatus = cloudStatus,
+                savedIn = savedIn,
                 onSetup = { mode = RecoveryMode.Setup },
             )
             RecoveryMode.Setup -> SetupCard(
@@ -156,7 +166,7 @@ fun RecoveryScreen(nav: NavController) {
                         return@SetupCard
                     }
                     scope.launch {
-                        working = true; error = null
+                        working = true; error = null; note = null
                         try {
                             val username = app.currentUser.value ?: "you"
                             // IRK access prompt up front (biometric) so the
@@ -171,10 +181,11 @@ fun RecoveryScreen(nav: NavController) {
                             // Argon2id (~1-2s) + the wrap math off the main
                             // thread; the passkey ceremony resumes on whatever
                             // dispatcher CredentialManager hops to internally.
+                            val ceremony = PasskeyCeremonyAdapter(passkeys, activity) { note = SECOND_PASSKEY_PROMPT }
                             val result = withContext(Dispatchers.Default) {
                                 CloudRecoveryEnrollment.enroll(
                                     server = flagshipServer,
-                                    passkeys = PasskeyCeremonyAdapter(passkeys, activity),
+                                    passkeys = ceremony,
                                     irk = irkMaterial.signer,
                                     username = username,
                                     umkSeed = umk,
@@ -187,21 +198,33 @@ fun RecoveryScreen(nav: NavController) {
                                 )
                             }
                             // Keep the Android Block Store copy so a new device
-                            // on the same Google account auto-restores.
-                            blockStore.save(
-                                WrappedUmk(
-                                    credentialId = result.credentialId,
-                                    wrappedUmkBase64 = result.wrappedUmk,
-                                ),
-                            )
+                            // on the same Google account auto-restores. A
+                            // convenience: the escrow on `.com` is done, so a
+                            // Block Store failure doesn't fail the set-up.
+                            runCatching {
+                                blockStore.save(
+                                    WrappedUmk(
+                                        credentialId = result.credentialId,
+                                        wrappedUmkBase64 = result.wrappedUmk,
+                                    ),
+                                )
+                            }.onFailure {
+                                com.flagshipserver.app.core.ErrorLog.caught(
+                                    "cloud-recovery-blockstore", it, NetworkErrorHumanizer.errorCode(it),
+                                )
+                            }
                             passphrase = ""; passphraseConfirm = ""
                             cloudStatus = CloudStatus.Configured
+                            app.setHasCloudRecovery(true)
+                            savedIn = ceremony.lastProvider
+                            RecoveryProviderStore.write(ctx, savedIn)
                             toasts.success("Cloud recovery configured.")
                             mode = RecoveryMode.Choose
                         } catch (t: Throwable) {
-                            error = NetworkErrorHumanizer.humanize(t)
+                            error = if (t is CloudRecoveryEnrollment.ValidationError) t.message
+                            else NetworkErrorHumanizer.humanize(t, "cloud-recovery-setup")
                         } finally {
-                            working = false
+                            working = false; note = null
                         }
                     }
                 },
@@ -220,6 +243,7 @@ fun RecoveryScreen(nav: NavController) {
 @Composable
 private fun ChooseCard(
     cloudStatus: CloudStatus,
+    savedIn: String?,
     onSetup: () -> Unit,
 ) {
     FSCard(padding = PaddingValues(FS.space.s4)) {
@@ -235,18 +259,39 @@ private fun ChooseCard(
                 },
                 kind = if (cloudStatus == CloudStatus.Configured) FSPillKind.Online else FSPillKind.Idle,
             )
-            Text(
-                "Store an encrypted copy of your account key for a new Android device.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
-            )
-            FSPrimaryButton(label = "Set up cloud recovery", onClick = onSetup, block = true)
+            // Configured: what iOS shows ("Recovery active" and how to use
+            // it), never the set-up button again.
             if (cloudStatus == CloudStatus.Configured) {
+                Text(
+                    "Recovery active",
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                    modifier = Modifier.semantics { testTag = "recovery-active" },
+                )
+                if (savedIn != null) {
+                    Text(
+                        "Your passkey is saved in $savedIn.",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 13.sp),
+                    )
+                }
                 Text(
                     RECOVER_ON_NEW_DEVICE,
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 13.sp),
                     modifier = Modifier.semantics { testTag = "recovery-new-device-hint" },
+                )
+            } else {
+                Text(
+                    "Store an encrypted copy of your account key for a new Android device.",
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp),
+                )
+                FSPrimaryButton(
+                    label = "Set up cloud recovery",
+                    onClick = onSetup,
+                    block = true,
+                    modifier = Modifier.semantics { testTag = "recovery-setup" },
                 )
             }
         }
@@ -304,13 +349,22 @@ private fun HowRecoveryWorksCard() {
                 style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
             )
             Text(
-                "Recovery requires both your recovery passphrase and access to the Google account that holds your Flagship passkey. Together they unlock the encrypted copy of your account key; we cannot read it or reset your passphrase.",
+                RECOVERY_HOW_IT_WORKS,
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp),
             )
         }
     }
 }
+
+/** Provider-neutral: on Android the passkey may land in Google Password
+ *  Manager, Samsung Pass or another passkey app. */
+internal const val RECOVERY_HOW_IT_WORKS =
+    "Recovery needs both your recovery passphrase and the passkey you saved for Flagship, in Google Password Manager, Samsung Pass or another passkey app. Together they unlock the encrypted copy of your account key; we cannot read it or reset your passphrase."
+
+/** Shown while the passkey app asks a second time right after the create. */
+internal const val SECOND_PASSKEY_PROMPT =
+    "Your passkey app needs one more check to hand Flagship the key it derives from your new passkey."
 
 /** Where restoring happens (iOS RecoveryScreen's line). */
 internal const val RECOVER_ON_NEW_DEVICE =

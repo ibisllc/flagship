@@ -351,13 +351,14 @@ object Keystore {
 
     /** Public-key half of the IRK, hex-encoded. */
     suspend fun irkPubHex(): String {
-        val p = requirePrefs()
-        val irkKey = pkey(KEY_IRK_SEED)
-        val seedHex = p.getString(irkKey, null) ?: run {
-            deriveIRK("init"); p.getString(irkKey, null)!!
-        }
-        val seed = HexUtil.decode(seedHex)!!
-        val pair = Ed25519Sign.KeyPair.newKeyPairFromSeed(seed)
+        // deriveIRK caches the seed per version ("irk.seed.v<N>"); the old
+        // unversioned slot is never written, so reading it threw a
+        // NullPointerException and broke create server and every other
+        // caller on a fresh account.
+        val version = currentIrkVersion()
+        val cacheKey = "${pkey(KEY_IRK_SEED)}.v$version"
+        if (requirePrefs().getString(cacheKey, null) == null) deriveIRK("init", version)
+        val pair = Ed25519Sign.KeyPair.newKeyPairFromSeed(requireIrkSeedForVersion(version))
         return HexUtil.encode(pair.publicKey)
     }
 

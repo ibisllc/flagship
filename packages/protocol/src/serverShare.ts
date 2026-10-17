@@ -3,7 +3,7 @@
  *
  * A is the owner of server S; B is the account A shares S with. B's identity
  * toward S is a per-share key derived from B's UMK, so no owner can link B
- * across servers or apps. Eleven '|'-joined envelopes (§4 of the spec), the
+ * across servers or apps. Twelve '|'-joined envelopes (§4 of the spec), the
  * link-secret derivations, the 6-digit code both phones show, and the sealed
  * JSON payloads `.com` relays without being able to read.
  *
@@ -15,6 +15,7 @@ import { sha256 } from "@noble/hashes/sha256";
 import { ed } from "./edSync.js";
 import { hex, legacyFieldGuard, resolveMsgSigner, type MsgSigner } from "./canonicalBase.js";
 import type { Bytes, Keypair, UserMasterKey } from "./types.js";
+import { parseAccountKeyAttestation, type AccountKeyAttestation, type AccountKeyKind } from "./accountKeyAttestation.js";
 
 export const TAG_SERVER_SHARE = "flagship/server-share/v1";
 export const TAG_SERVER_SHARE_REVOKE = "flagship/server-share-revoke/v1";
@@ -27,6 +28,7 @@ export const TAG_SERVER_SHARE_UNLOCK = "flagship/server-share-unlock/v1";
 export const TAG_SHARE_INBOX = "flagship/share-inbox/v1";
 export const TAG_SERVER_SHARE_PUSH = "flagship/server-share-push/v1";
 export const TAG_SERVER_SHARE_UPDATE = "flagship/server-share-update/v1";
+export const TAG_SERVER_SHARE_ACCEPT_ADMIN = "flagship/server-share-accept-admin/v1";
 
 const INFO_MEMBER = "flagship/server-share-member/v1";
 const INFO_TOKEN = "flagship/server-share/token/v1";
@@ -183,10 +185,22 @@ export interface ShareOwnerRecord {
   seeAppData: boolean;
 }
 
+/**
+ * The joining account's admin proof (§5.1): #12 signed by its sensitive key,
+ * and `.com`'s CA attestation that the key is that account's sensitive key.
+ */
+export interface ShareAcceptAdminProof {
+  admit: ServerShareAcceptAdmin;
+  signature: string;
+  attestation: AccountKeyAttestation;
+}
+
 export interface ShareAcceptancePayload {
   v: 1;
   accept: ServerShareAccept;
   signature: string;
+  /** Absent only when an older app accepted; the box then refuses the share. */
+  admin?: ShareAcceptAdminProof;
 }
 
 export interface ShareInboxEntry {
@@ -233,7 +247,19 @@ export function parseShareAcceptancePayload(v: unknown): ShareAcceptancePayload 
   const o = obj(v);
   if (!o || o.v !== 1 || typeof o.signature !== "string" || !/^[0-9a-f]{128}$/.test(o.signature)) return null;
   const accept = parseServerShareAccept(o.accept);
-  return accept ? { v: 1, accept, signature: o.signature } : null;
+  if (!accept) return null;
+  if (o.admin === undefined) return { v: 1, accept, signature: o.signature };
+  const admin = parseShareAcceptAdminProof(o.admin);
+  return admin ? { v: 1, accept, signature: o.signature, admin } : null;
+}
+
+/** Shape-check an admin proof (no signature checks). */
+export function parseShareAcceptAdminProof(v: unknown): ShareAcceptAdminProof | null {
+  const o = obj(v);
+  if (!o || typeof o.signature !== "string" || !/^[0-9a-f]{128}$/.test(o.signature)) return null;
+  const admit = parseServerShareAcceptAdmin(o.admit);
+  const attestation = parseAccountKeyAttestation(o.attestation);
+  return admit && attestation ? { admit, signature: o.signature, attestation } : null;
 }
 
 export function parseShareInboxEntry(v: unknown): ShareInboxEntry | null {
@@ -418,6 +444,21 @@ export interface ServerShareUpdate {
   issuedAt: number;
 }
 
+/**
+ * #12 — signed by the joining account's sensitive key (its admin root, or its
+ * IRK when it pins none): only an admin device of that account accepts a
+ * share. The fields of #3 plus which key signs, so the box can match it to
+ * the CA attestation.
+ */
+export interface ServerShareAcceptAdmin {
+  serverDomain: string;
+  shareId: string;
+  memberPubHex: string;
+  acceptedAt: number;
+  keyKind: AccountKeyKind;
+  keyPubHex: string;
+}
+
 export function serverShareGrantCanonicalBytes(g: ServerShareGrant): Bytes {
   domain(g.serverDomain);
   checkShareId(g.shareId);
@@ -452,6 +493,23 @@ export function serverShareAcceptCanonicalBytes(a: ServerShareAccept): Bytes {
   checkHex64("memberPubHex", a.memberPubHex);
   time("acceptedAt", a.acceptedAt);
   return join(TAG_SERVER_SHARE_ACCEPT, [a.serverDomain, a.shareId, a.memberPubHex, String(a.acceptedAt)]);
+}
+
+export function serverShareAcceptAdminCanonicalBytes(a: ServerShareAcceptAdmin): Bytes {
+  domain(a.serverDomain);
+  checkShareId(a.shareId);
+  checkHex64("memberPubHex", a.memberPubHex);
+  time("acceptedAt", a.acceptedAt);
+  if (a.keyKind !== "admin-root" && a.keyKind !== "irk") throw new Error("server-share: keyKind must be admin-root or irk");
+  checkHex64("keyPubHex", a.keyPubHex);
+  return join(TAG_SERVER_SHARE_ACCEPT_ADMIN, [
+    a.serverDomain,
+    a.shareId,
+    a.memberPubHex,
+    String(a.acceptedAt),
+    a.keyKind,
+    a.keyPubHex,
+  ]);
 }
 
 export function serverShareLeaveCanonicalBytes(l: ServerShareLeave): Bytes {
@@ -565,6 +623,8 @@ export const signServerShareRevoke = signer(serverShareRevokeCanonicalBytes);
 export const verifyServerShareRevoke = verifier(serverShareRevokeCanonicalBytes);
 export const signServerShareAccept = signer(serverShareAcceptCanonicalBytes);
 export const verifyServerShareAccept = verifier(serverShareAcceptCanonicalBytes);
+export const signServerShareAcceptAdmin = signer(serverShareAcceptAdminCanonicalBytes);
+export const verifyServerShareAcceptAdmin = verifier(serverShareAcceptAdminCanonicalBytes);
 export const signServerShareLeave = signer(serverShareLeaveCanonicalBytes);
 export const verifyServerShareLeave = verifier(serverShareLeaveCanonicalBytes);
 export const signServerShareSession = signer(serverShareSessionCanonicalBytes);
@@ -628,6 +688,20 @@ export const parseServerShareRevoke = parsed(serverShareRevokeCanonicalBytes, (o
 export const parseServerShareAccept = parsed(serverShareAcceptCanonicalBytes, (o) =>
   str(o.serverDomain) && str(o.shareId) && str(o.memberPubHex) && isTime(o.acceptedAt)
     ? { serverDomain: o.serverDomain, shareId: o.shareId, memberPubHex: o.memberPubHex, acceptedAt: o.acceptedAt }
+    : null,
+);
+
+export const parseServerShareAcceptAdmin = parsed(serverShareAcceptAdminCanonicalBytes, (o) =>
+  str(o.serverDomain) && str(o.shareId) && str(o.memberPubHex) && isTime(o.acceptedAt) &&
+  (o.keyKind === "admin-root" || o.keyKind === "irk") && str(o.keyPubHex)
+    ? {
+        serverDomain: o.serverDomain,
+        shareId: o.shareId,
+        memberPubHex: o.memberPubHex,
+        acceptedAt: o.acceptedAt,
+        keyKind: o.keyKind as AccountKeyKind,
+        keyPubHex: o.keyPubHex,
+      }
     : null,
 );
 

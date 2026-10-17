@@ -182,7 +182,7 @@ class PendingServerReconciler(
         // Drop ghosts: local pending pods whose box has since registered, OR
         // whose orderRef/fqdn is in NEITHER array (a dead order).
         //
-        // A demo pod (Plan A, DemoFixtures.samplePodFromDemoServer) is NEVER
+        // A demo pod (Plan A, DemoAccount.samplePodFromDemoServer) is NEVER
         // backed by a phone-minted auth-code order — it's provisioned via
         // `/api/dev/sample-user/{u}/connect`, a path this directory knows
         // nothing about. Without this exemption, a demo pod sitting PENDING

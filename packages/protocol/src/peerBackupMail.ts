@@ -19,6 +19,21 @@ const td = new TextDecoder();
 const VERSION = 0x01;
 const MAX_HEADER = 256 * 1024;
 
+/**
+ * AES-256-GCM. The default is pure JS (runs anywhere); a box passes
+ * node:crypto's, which is far faster on multi-megabyte bricks.
+ */
+export interface PbAead {
+  seal(key: Bytes, nonce: Bytes, aad: Bytes, plaintext: Bytes): Bytes;
+  /** Throws when the tag doesn't verify. */
+  open(key: Bytes, nonce: Bytes, aad: Bytes, ciphertext: Bytes): Bytes;
+}
+
+export const nobleAead: PbAead = {
+  seal: (key, nonce, aad, pt) => gcm(key, nonce, aad).encrypt(pt),
+  open: (key, nonce, aad, ct) => gcm(key, nonce, aad).decrypt(ct),
+};
+
 export interface PbMailMessage {
   header: Record<string, unknown>;
   body: Bytes;
@@ -72,13 +87,13 @@ export function sealPbMailRequest(
   holderXPub: Bytes,
   mailboxId: string,
   plaintext: Bytes,
-  opts: { ephSecret?: Bytes; nonce?: Bytes } = {},
+  opts: { ephSecret?: Bytes; nonce?: Bytes; aead?: PbAead } = {},
 ): { envelope: Bytes; keys: PbMailKeys } {
   const eph = opts.ephSecret ?? x25519.utils.randomSecretKey();
   const ephPub = x25519.getPublicKey(eph);
   const keys = keysFrom(x25519.getSharedSecret(eph, holderXPub), mailboxId);
   const nonce = opts.nonce ?? crypto.getRandomValues(new Uint8Array(12));
-  const ct = gcm(keys.req, nonce, te.encode(mailboxId)).encrypt(plaintext);
+  const ct = (opts.aead ?? nobleAead).seal(keys.req, nonce, te.encode(mailboxId), plaintext);
   const envelope = new Uint8Array(1 + 32 + 12 + ct.length);
   envelope[0] = VERSION;
   envelope.set(ephPub, 1);
@@ -92,17 +107,18 @@ export function openPbMailRequest(
   holderXSecret: Bytes,
   mailboxId: string,
   envelope: Bytes,
+  aead: PbAead = nobleAead,
 ): { plaintext: Bytes; keys: PbMailKeys } {
   if (envelope.length < 45 + 16 || envelope[0] !== VERSION) throw new Error("not a peer-backup envelope");
   const ephPub = envelope.subarray(1, 33);
   const keys = keysFrom(x25519.getSharedSecret(holderXSecret, ephPub), mailboxId);
-  const plaintext = gcm(keys.req, envelope.subarray(33, 45), te.encode(mailboxId)).decrypt(envelope.subarray(45));
+  const plaintext = aead.open(keys.req, envelope.subarray(33, 45), te.encode(mailboxId), envelope.subarray(45));
   return { plaintext, keys };
 }
 
-export function sealPbMailResponse(keys: PbMailKeys, mailboxId: string, plaintext: Bytes, nonce?: Bytes): Bytes {
+export function sealPbMailResponse(keys: PbMailKeys, mailboxId: string, plaintext: Bytes, nonce?: Bytes, aead: PbAead = nobleAead): Bytes {
   const n = nonce ?? crypto.getRandomValues(new Uint8Array(12));
-  const ct = gcm(keys.resp, n, te.encode(mailboxId)).encrypt(plaintext);
+  const ct = aead.seal(keys.resp, n, te.encode(mailboxId), plaintext);
   const out = new Uint8Array(1 + 12 + ct.length);
   out[0] = VERSION;
   out.set(n, 1);
@@ -110,7 +126,7 @@ export function sealPbMailResponse(keys: PbMailKeys, mailboxId: string, plaintex
   return out;
 }
 
-export function openPbMailResponse(keys: PbMailKeys, mailboxId: string, envelope: Bytes): Bytes {
+export function openPbMailResponse(keys: PbMailKeys, mailboxId: string, envelope: Bytes, aead: PbAead = nobleAead): Bytes {
   if (envelope.length < 13 + 16 || envelope[0] !== VERSION) throw new Error("not a peer-backup reply");
-  return gcm(keys.resp, envelope.subarray(1, 13), te.encode(mailboxId)).decrypt(envelope.subarray(13));
+  return aead.open(keys.resp, envelope.subarray(1, 13), te.encode(mailboxId), envelope.subarray(13));
 }

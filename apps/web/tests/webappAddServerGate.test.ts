@@ -160,7 +160,7 @@ describe("every way into a flow that adds a server", () => {
     const guard = enter.indexOf("if (!canAddServers()) {");
     expect(guard).toBeGreaterThan(-1);
     expect(guard).toBeLessThan(enter.indexOf("openShareLink("));
-    expect(enter.slice(guard, guard + 120)).toContain("errorCard(ADD_SERVERS_ADMIN_ONLY)");
+    expect(enter.slice(guard, guard + 120)).toContain("errorCard(SHARE_ACCEPT_ADMIN_ONLY)");
   });
 
   it("transfer and create-server deep links land on Home with the refusal", () => {

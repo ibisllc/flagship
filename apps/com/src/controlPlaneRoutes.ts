@@ -160,6 +160,7 @@ import {
   handlePostDaemonStatus,
   handlePostServerHealth,
   handleUserPubKeyCert,
+  handleAccountKeyAttestation,
   buildPushForwarder,
   wrapForwarderAsV12Fanout,
   handleGetEntitlementRevocations,
@@ -197,6 +198,7 @@ import {
   handleListDemoUsers,
   handleOrderDemoUpdate,
   handlePairDemoUser,
+  handleDemoShareAccept,
   handleGymProvision,
   handleMintDeviceGrant,
   handleListAccountDeviceGrants,
@@ -324,6 +326,26 @@ export interface ControlPlaneEnv {
    * Advanced mode.
    */
   FLAGSHIP_ISO_MANIFEST_ARM64?: string;
+
+  /**
+   * The blessed pre-baked Flagship SEED manifest, same JSON shape as
+   * `FLAGSHIP_ISO_MANIFEST`. Served ONLY to `platform: "android"` — on-device
+   * (phone) burning appends a FAT partition to this pre-baked seed instead of
+   * remastering a stock ISO. `url` MUST point at the transparent public
+   * artifact (the GitHub release asset) and `sha256` at the reproducible seed
+   * hash pinned in docs/iso-seed-and-on-device-burn.md
+   * (54be17b4…f12aaff3 for the Debian 13.6.0 amd64 base). Unset ⇒ android
+   * requests get `{ download: null }`. OWNER DEPLOY STEP: set this to the real
+   * release url + pinned seed sha before deploy; leave it unset in dev.
+   */
+  FLAGSHIP_ISO_SEED?: string;
+
+  /**
+   * The blessed arm64 SEED manifest, same JSON shape (parity/future). Served
+   * to android requests with `arch: "arm64"`. Unset ⇒ arm64 android requests
+   * get `{ download: null }` (they do NOT fall back to the amd64 seed).
+   */
+  FLAGSHIP_ISO_SEED_ARM64?: string;
 
   /**
    * The blessed in-house inference endpoint that backs the free-credits
@@ -521,6 +543,7 @@ const ROUTE_RE = {
   SERVER_REGISTRY_REVOKE: /^\/api\/server-registry\/revoke$/,
   SERVER_REGISTRY_UNREVOKE: /^\/api\/server-registry\/unrevoke$/,
   PUBKEY_CERT: /^\/api\/users\/([^/]+)\/pubkey-cert$/,
+  ACCOUNT_KEY_ATTESTATION: /^\/api\/users\/([^/]+)\/account-key-attestation$/,
   CA_CERT: /^\/api\/ca\/cert$/,
   MAINTAINER_BLESSING: /^\/api\/maintainer-blessing$/,
   // Relay blessing — the `.services` hub asks `.com` to bless its
@@ -737,6 +760,7 @@ const ROUTE_RE = {
   DEMO_USER_CREATE: /^\/api\/dev\/sample-user\/create$/,
   DEMO_USER_CLEANUP: /^\/api\/dev\/sample-user\/cleanup$/,
   DEMO_USER_PAIR: /^\/api\/dev\/sample-user\/([^/]+)\/pair$/,
+  DEMO_USER_SHARE_ACCEPT: /^\/api\/dev\/sample-user\/([^/]+)\/share-accept$/,
   DEMO_USER_ORDER_UPDATE: /^\/api\/dev\/sample-user\/([^/]+)\/order-update$/,
   DEMO_USER_GET: /^\/api\/dev\/sample-user\/([^/]+)$/,
   DEMO_USER_LIST: /^\/api\/dev\/sample-user$/,
@@ -1263,6 +1287,17 @@ export async function tryControlPlane(
   if (method === "GET" && (m = path.match(ROUTE_RE.PUBKEY_CERT))) {
     return finish(
       await handleUserPubKeyCert(
+        { ca, usernames: storage.usernames, caGate },
+        decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  // A device fetches this about its own account and seals it into a share
+  // acceptance, so the shared server can check that an admin device accepted
+  // without `.com` learning who joined (docs/share-a-server.md §5.1).
+  if (method === "GET" && (m = path.match(ROUTE_RE.ACCOUNT_KEY_ATTESTATION))) {
+    return finish(
+      await handleAccountKeyAttestation(
         { ca, usernames: storage.usernames, caGate },
         decodeURIComponent(m[1]!),
       ),
@@ -3033,6 +3068,8 @@ export async function tryControlPlane(
           blessedManifestArm64: parseBlessedIsoManifest(
             env.FLAGSHIP_ISO_MANIFEST_ARM64,
           ),
+          seedManifest: parseBlessedIsoManifest(env.FLAGSHIP_ISO_SEED),
+          seedManifestArm64: parseBlessedIsoManifest(env.FLAGSHIP_ISO_SEED_ARM64),
         },
         await readJson(request),
       ),
@@ -3353,8 +3390,9 @@ export async function tryControlPlane(
 
   // ──────────────────────────────────────────────────────────────────
   // One admin-owned demo lifecycle: create-or-resume, status, and exact-ID
-  // cleanup. Pairing is the sole public write: knowing a demo username is the
-  // capability, and the handler can sign only a non-sensitive paired session.
+  // cleanup. Pairing and share acceptance are the only public writes: knowing a
+  // demo username is the capability; pairing signs only a non-sensitive paired
+  // session, and share-accept only a share acceptance (#12) for that account.
   if (path.startsWith("/api/dev/sample-user")) {
     const demoServers = createDemoServerRouter(env);
     const sshKeyIdRaw = env.DEMO_PUBLIC_SSH_KEY_ID;
@@ -3396,6 +3434,15 @@ export async function tryControlPlane(
           });
           return { status: response.status };
         },
+      }, decodeURIComponent(m[1]!), await readJson(request)));
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_SHARE_ACCEPT))) {
+      if (!env.DEMO_IRK_KEK) {
+        return jsonResponse({ error: "demo share acceptance is not configured" }, 503);
+      }
+      return finishPlain(await handleDemoShareAccept({
+        storage: storage.demoUsers,
+        demoIrkKek: hexDecode(env.DEMO_IRK_KEK),
       }, decodeURIComponent(m[1]!), await readJson(request)));
     }
     if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_ORDER_UPDATE))) {

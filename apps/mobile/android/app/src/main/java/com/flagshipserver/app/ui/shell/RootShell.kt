@@ -63,7 +63,9 @@ fun RootShell(
      *  Home, the production default. */
     initialTab: RootDestination? = null,
 ) {
-    var selected by remember { mutableStateOf(initialTab ?: RootDestination.HOME) }
+    // Saveable: coming back to a recreated activity keeps the tab (and so
+    // the flow open on it), as iOS does.
+    var selected by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(initialTab ?: RootDestination.HOME) }
     val deepLinker = com.flagshipserver.app.core.LocalDeepLinker.current
     val pending by deepLinker.pending.collectAsState()
 

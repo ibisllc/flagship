@@ -257,6 +257,42 @@ export function serializeBackupFile(f) {
 // Picked files
 // ---------------------------------------------------------------------------
 
+// The one file people keep: "FLGSHBK1", a u64 big-endian metadata length L,
+// the backup file (L bytes), then the data file to the end. Must pass
+// packages/protocol/test-vectors/server-backup-bundle/vectors.json.
+export const BACKUP_BUNDLE_EXTENSION = ".flagship";
+export const BACKUP_BUNDLE_MAGIC = "FLGSHBK1";
+export const BACKUP_BUNDLE_HEADER_BYTES = 16;
+
+/** Where the parts of a `.flagship` file of `fileBytes` start, from its first 16 bytes. Throws a sentence. */
+export function parseBundleHeader(head, fileBytes) {
+  if (!head || head.length < BACKUP_BUNDLE_HEADER_BYTES) throw new BackupError("This file is too short to be a Flagship backup.", "malformed");
+  if (new TextDecoder().decode(head.subarray(0, 8)) !== BACKUP_BUNDLE_MAGIC) throw new BackupError("This file isn't a Flagship backup.", "malformed");
+  const len = new DataView(head.buffer, head.byteOffset, head.byteLength).getBigUint64(8, false);
+  if (len < 1n || len > BigInt(BACKUP_FILE_MAX_BYTES)) throw new BackupError("This backup's header is damaged.", "damaged");
+  const metaLength = Number(len);
+  const dataOffset = BACKUP_BUNDLE_HEADER_BYTES + metaLength;
+  if (!Number.isSafeInteger(fileBytes) || fileBytes <= dataOffset) throw new BackupError("This backup is cut short: it ends before its data.", "damaged");
+  return { metaOffset: BACKUP_BUNDLE_HEADER_BYTES, metaLength, dataOffset, dataLength: fileBytes - dataOffset };
+}
+
+/**
+ * Open a picked `.flagship` file without reading it into memory: the backup
+ * file's text (small) and the data part as a lazy Blob slice, which the check
+ * and the upload stream.
+ */
+export async function splitBundle(file) {
+  let head;
+  try {
+    head = new Uint8Array(await file.slice(0, BACKUP_BUNDLE_HEADER_BYTES).arrayBuffer());
+  } catch {
+    throw new BackupError("This file can't be read (was its drive removed?).", "damaged");
+  }
+  const h = parseBundleHeader(head, file.size);
+  const backupText = await file.slice(h.metaOffset, h.metaOffset + h.metaLength).text();
+  return { backupText, data: file.slice(h.dataOffset, file.size), dataOffset: h.dataOffset };
+}
+
 /** "backup" | "data" | null from a picked file's first bytes. */
 export async function classifyPicked(file) {
   const head = new Uint8Array(await file.slice(0, BACKUP_DATA_MAGIC.length).arrayBuffer());
@@ -277,7 +313,7 @@ export async function classifyPicked(file) {
  */
 export async function checkDataFile(blob, data, { onProgress, sliceBytes = 8 * 1024 * 1024, isCancelled = () => false } = {}) {
   if (blob.size !== data.bytes) {
-    throw new BackupError(`That data file isn't this backup's (it should be ${data.fileName}).`, "damaged");
+    throw new BackupError("This backup is damaged: its data part has the wrong size.", "damaged");
   }
   const h = sha256.create();
   for (let at = 0; at < blob.size; at += sliceBytes) {
@@ -286,16 +322,16 @@ export async function checkDataFile(blob, data, { onProgress, sliceBytes = 8 * 1
     try {
       part = new Uint8Array(await blob.slice(at, at + sliceBytes).arrayBuffer());
     } catch {
-      throw new BackupError("The data file can't be read any more (was its drive removed?).", "damaged");
+      throw new BackupError("The backup can't be read any more (was its drive removed?).", "damaged");
     }
     if (at === 0 && new TextDecoder().decode(part.subarray(0, BACKUP_DATA_MAGIC.length)) !== BACKUP_DATA_MAGIC) {
-      throw new BackupError("That isn't a Flagship backup's data file.", "damaged");
+      throw new BackupError("This backup is damaged: its data part isn't a Flagship backup's.", "damaged");
     }
     h.update(part);
     onProgress?.(Math.min(at + part.length, blob.size), blob.size);
   }
   if (bytesToHex(h.digest()) !== data.sha256) {
-    throw new BackupError("The data file doesn't match the backup file: it was changed or is damaged.", "damaged");
+    throw new BackupError("This backup is damaged or was changed: its data doesn't match its checksum.", "damaged");
   }
 }
 

@@ -47,6 +47,8 @@ import type {
   AppBackupStartRequest,
   AppBackupStartResponse,
   AppDetailResponse,
+  AppStorage,
+  ServerStorage,
   AppsListResponse,
   AppSummary,
   VibeCodeNameCheckResponse,
@@ -164,6 +166,11 @@ export interface ScreensHttpDeps {
   accessMode?: ((serviceId: string) => "open" | "members-only" | null) | null;
   /** Bytes an app's files volume uses (null when unknown); shown on its page. */
   filesBytes?: ((volume: string) => Promise<number | null>) | null;
+  /** Per-app disk limits (appQuota/manager.ts) for server-detail and app-detail. */
+  storage?: {
+    app: (serviceId: string) => AppStorage | null;
+    server: () => ServerStorage;
+  } | null;
   /**
    * Live apps' internet access (egress/approvals.ts): the signed access-list
    * endpoints (`/services/:id/access`, `.../access/dismiss`,
@@ -351,6 +358,15 @@ export interface ScreensHttpDeps {
    * payload when no peer-backup state is wired.
    */
   peerBackup?: PeerBackupSnapshotDeps | null;
+  /**
+   * Peer backup between accounts (docs/peer-backup.md). When set, the status
+   * route answers with its v2 status, and the root route opens a lost
+   * server's record with the PBK a device sends.
+   */
+  peerNet?: {
+    status(): Promise<unknown>;
+    describeRoot(serverId: string, pbk: Uint8Array): Promise<unknown>;
+  } | null;
   /**
    * P14 — Companion-browser dock. Wires the four
    * /api/screens/companion/* endpoints + the PUBLIC /api/companion/
@@ -1468,6 +1484,29 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     // Snapshot of the daemon's peer-backup participation, shard health,
     // peer topology, and repair history. Empty/zero values stand in for
     // any underlying state the daemon hasn't wired yet — never fabricated.
+    if (path === "/api/screens/peer-backup/status" && method === "GET" && deps.peerNet) {
+      return jok(await deps.peerNet.status());
+    }
+
+    // ---- POST /api/screens/peer-backup/root ----
+    //
+    // A device (holding the account key) sends a lost server's PBK; the box
+    // fetches that server's sealed record from .com, opens it, and answers
+    // what's there: the archive (with its small backup file, so the device
+    // can open the account slot) and how its holders stand.
+    if (path === "/api/screens/peer-backup/root" && method === "POST" && deps.peerNet) {
+      const body = parseJson(req.body) as { serverId?: unknown; pbkHex?: unknown } | null;
+      if (!body || typeof body.serverId !== "string" || !/^[a-z0-9.-]{1,253}$/.test(body.serverId)) {
+        return jerr(400, "serverId is required");
+      }
+      if (typeof body.pbkHex !== "string" || !/^[0-9a-f]{64}$/.test(body.pbkHex)) return jerr(400, "pbkHex is required");
+      try {
+        return jok(await deps.peerNet.describeRoot(body.serverId, new Uint8Array(Buffer.from(body.pbkHex, "hex"))));
+      } catch (e) {
+        return jerr(404, (e as Error).message);
+      }
+    }
+
     if (path === "/api/screens/peer-backup/status" && method === "GET") {
       const out: PeerBackupStatusResponse = buildPeerBackupStatus(
         deps.peerBackup ?? {},
@@ -1523,6 +1562,7 @@ function serverDetail(deps: ScreensHttpDeps, now: () => number): ServerDetailRes
     serviceCount: deps.servicePlatform?.list().length ?? 0,
     pairedSessionCount: deps.pairedSessions?.list().length ?? 0,
     recentInstallEvents,
+    ...(deps.storage ? { storage: deps.storage.server() } : {}),
   };
 }
 
@@ -1575,6 +1615,7 @@ function toSummary(
 
 async function appDetail(app: InstalledService, deps: ScreensHttpDeps): Promise<AppDetailResponse> {
   const dataLayerInstances = await collectDataLayerInstances(app, deps.filesBytes);
+  const storage = deps.storage?.app(app.serviceId) ?? null;
   const members = collectMembers(app.membership);
   const browserTabs = (deps.tabRegistry?.tabsForApp(app.serviceId) ?? []).map((tabId) => ({
     tabId,
@@ -1583,6 +1624,7 @@ async function appDetail(app: InstalledService, deps: ScreensHttpDeps): Promise<
     app: toSummary(app, deps.serverFqdn, deps.appEgress, await liveStates([app.serviceId], deps), deps.accessMode),
     manifest: app.manifest as unknown as Record<string, unknown>,
     dataLayerInstances,
+    ...(storage && (storage.files || storage.postgres) ? { storage } : {}),
     members,
     browserTabs,
     recentLogs: [],

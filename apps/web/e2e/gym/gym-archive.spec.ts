@@ -90,7 +90,9 @@ function archiveBox(page: Page, m: Mock, keys: Keys, { startRefusal = "" }: { st
         archiveId: archive.archiveId,
         backupFileName: "home-2026-10-16.flagship-backup",
         dataFileName: "home-2026-10-16.flagship-data",
+        bundleFileName: "home-2026-10-16.flagship",
         bytes: 5 * 1024 * 1024,
+        bundleBytes: 5 * 1024 * 1024,
         left: [{ serviceId: "smoketest--wiki", name: "wiki", reason: "no source" }],
       };
     }
@@ -104,9 +106,8 @@ function archiveBox(page: Page, m: Mock, keys: Keys, { startRefusal = "" }: { st
   });
   m.post(at(HOME, `${ARCHIVE}/link`), {
     path: "/api/archive-download/tok-gym",
-    backupFileName: "home-2026-10-16.flagship-backup",
-    dataFileName: "home-2026-10-16.flagship-data",
-    bytes: 5 * 1024 * 1024,
+    bundleFileName: "home-2026-10-16.flagship",
+    bundleBytes: 5 * 1024 * 1024,
     expiresAt: Date.now() + 86_400_000,
   });
   m.post(
@@ -123,8 +124,7 @@ function archiveBox(page: Page, m: Mock, keys: Keys, { startRefusal = "" }: { st
   });
   m.get((u) => u.host === HOME && u.pathname.startsWith("/api/archive-download/tok-gym/"), (call) => {
     box.downloads.push(`${call.url.pathname}?${call.url.searchParams.toString()}`);
-    const name = call.url.pathname.endsWith("/backup") ? "home.flagship-backup" : "home.flagship-data";
-    return { raw: "gym", contentType: "application/octet-stream", headers: { "content-disposition": `attachment; filename="${name}"` } };
+    return { raw: "gym", contentType: "application/octet-stream", headers: { "content-disposition": 'attachment; filename="home-2026-10-16.flagship"' } };
   });
   return box;
 }
@@ -190,32 +190,33 @@ async function makeBackup(page: Page, { account, passcode = "" }: { account: boo
   );
 }
 
+/** The one `.flagship` file: "FLGSHBK1", the backup file's length (u64 BE), the backup file, the data file. */
+function bundle(fx: Fixture): Buffer {
+  const meta = Buffer.from(fx.backupText);
+  const head = Buffer.alloc(16);
+  head.write("FLGSHBK1", 0, "latin1");
+  head.writeBigUInt64BE(BigInt(meta.length), 8);
+  return Buffer.concat([head, meta, Buffer.from(fx.data)]);
+}
+
 function files(fx: Fixture) {
-  return [
-    { name: "home-2026-10-15.flagship-backup", mimeType: "application/json", buffer: Buffer.from(fx.backupText) },
-    { name: fx.dataName, mimeType: "application/octet-stream", buffer: Buffer.from(fx.data) },
-  ];
+  return [{ name: "home-2026-10-15.flagship", mimeType: "application/octet-stream", buffer: bundle(fx) }];
 }
 
 /** A server that waits for `archiveId`: the restore lane (start, chunk, commit, then done). */
-function restoreBox(m: Mock, fqdn: string, archiveId: string) {
+function restoreBox(
+  m: Mock,
+  fqdn: string,
+  archiveId: string,
+  apps: Array<Record<string, unknown>> = [
+    { name: "notes", state: "done" },
+    { name: "blog", state: "skipped", reason: "already here" },
+  ],
+) {
   const box = { started: [] as Call[], chunks: [] as Call[], committed: [] as Call[] };
   let committed = false;
   m.get(at(fqdn, RESTORE), () =>
-    committed
-      ? {
-          json: {
-            waiting: null,
-            restore: {
-              state: "done",
-              apps: [
-                { name: "notes", state: "done" },
-                { name: "blog", state: "skipped", reason: "already here" },
-              ],
-            },
-          },
-        }
-      : { json: { waiting: { archiveId }, restore: null } },
+    committed ? { json: { waiting: null, restore: { state: "done", apps } } } : { json: { waiting: { archiveId }, restore: null } },
   );
   m.post(at(fqdn, `${RESTORE}/start`), (call) => {
     box.started.push(call);
@@ -295,14 +296,11 @@ function session(phase: string, extra: Record<string, unknown> = {}) {
   };
 }
 
-async function enrollPeerBackup(page: Page): Promise<void> {
-  await page.evaluate(async () => (await import("/lib/profilesStore.js")).set("peerBackupChoice", "enabled"));
-}
 
 // ───────────────────────────── tests ─────────────────────────────
 
 test.describe("gym webapp archive", () => {
-  test("gym archive backup from Home makes a sealed backup with the suggested passcode and downloads both files", async ({ page }, testInfo) => {
+  test("gym archive backup from Home makes a sealed backup with the suggested passcode and downloads the one .flagship file", async ({ page }, testInfo) => {
     test.setTimeout(120_000);
     await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
     const keys = await reachHome(page, { kind: "admin", servers: [HOME, OFFICE] });
@@ -339,7 +337,7 @@ test.describe("gym webapp archive", () => {
     expect(start.key).toMatch(/^[0-9a-f]{64}$/);
     expect(start.slots.map((s) => s.kind)).toEqual(["passcode", "account"]);
     const status = dlg.locator("[data-bk-status]");
-    await expect(status).toContainText("Backup ready: home-2026-10-16.flagship-backup and home-2026-10-16.flagship-data (5.0 MB)", { timeout: 30_000 });
+    await expect(status).toContainText("Backup ready: home-2026-10-16.flagship (5.0 MB)", { timeout: 30_000 });
     // An app with nothing to rebuild it from is named.
     await expect(dlg.locator("[data-bk-error]")).toHaveText("Left out (no source to rebuild them from): wiki.");
     await expect(dlg.locator("[data-bk-hint]")).toContainText("asks the Flagship app on your phone to approve");
@@ -351,7 +349,7 @@ test.describe("gym webapp archive", () => {
     await sawToast(page, "Download link copied", 10_000, mark2);
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`https://${HOME}/api/archive-download/tok-gym`);
 
-    // Download both files: an admin-root-signed approval for a fresh request, then both downloads.
+    // Download: an admin-root-signed approval for a fresh request, then the one file.
     const downloads: string[] = [];
     page.on("download", (d) => downloads.push(d.suggestedFilename()));
     await dlg.locator("[data-bk-save]").click();
@@ -360,12 +358,10 @@ test.describe("gym webapp archive", () => {
     expect(approve.approval.serverDomain).toBe(HOME);
     expect(approve.approval.archiveId).toBe(start.archiveId);
     expect(await signer(page, keys, DOWNLOAD_CANON, approve.approval, approve.signature)).toBe("admin");
-    await expect.poll(() => downloads.length, { timeout: 15_000 }).toBe(2);
-    expect(box.downloads).toEqual([
-      `/api/archive-download/tok-gym/backup?r=${approve.approval.requestId}`,
-      `/api/archive-download/tok-gym/file?r=${approve.approval.requestId}`,
-    ]);
-    await sawToast(page, "Downloads started");
+    await expect.poll(() => downloads.length, { timeout: 15_000 }).toBe(1);
+    expect(downloads).toEqual(["home-2026-10-16.flagship"]);
+    expect(box.downloads).toEqual([`/api/archive-download/tok-gym/bundle?r=${approve.approval.requestId}`]);
+    await sawToast(page, "Download started");
 
     // Delete from server: the box's copy goes, and the link with it.
     await dlg.locator("[data-bk-remove]").click();
@@ -462,7 +458,8 @@ test.describe("gym webapp archive", () => {
     }
     await page.locator("#backup-migrate-card").scrollIntoViewIfNeeded();
     await shot(page, testInfo, "backup-migrate-non-admin");
-    expect(m.calls.filter((c) => /server-archive|\/migration/.test(c.url.pathname))).toEqual([]);
+    // It may read the backups list (any owner device can download); it sends no order.
+    expect(m.calls.filter((c) => c.method !== "GET" && /server-archive|backup-policy|\/migration/.test(c.url.pathname))).toEqual([]);
   });
 
   test("gym archive import a backup creates a server that waits for it and sends it", async ({ page }, testInfo) => {
@@ -481,21 +478,18 @@ test.describe("gym webapp archive", () => {
     await page.click("#home-add-server");
     await page.locator('dialog[aria-label="Add or import a server"] [data-choice-import]').click();
     const dlg = page.locator('dialog[aria-label="Import a backup"]');
-    await expect(dlg.locator("[data-imp-intro]")).toContainText("Pick the backup's two files");
-    await expect(dlg.locator("[data-imp-files]")).toHaveText("Backup file: not picked yet. Data file: not picked yet.");
+    await expect(dlg.locator("[data-imp-intro]")).toContainText("Pick the backup (its .flagship file)");
+    await expect(dlg.locator("[data-imp-file]")).toHaveAttribute("accept", ".flagship,application/octet-stream");
+    await expect(dlg.locator("[data-imp-file]")).not.toHaveAttribute("multiple", /.*/);
 
-    // The backup file alone: it opens with this account's key and asks for its data file.
-    await dlg.locator("[data-imp-file]").setInputFiles([files(fx)[0]!]);
+    // The one file: it opens with this account's key, its data part is checked, then the name step (home is taken).
+    await dlg.locator("[data-imp-file]").setInputFiles(files(fx));
     await expect(dlg.locator("[data-imp-summary]")).toContainText(`From ${HOME}`);
     await expect(dlg.locator("[data-imp-summary]")).toContainText("notes, blog. Not in this backup: wiki.");
-    await expect(dlg.locator("[data-imp-status]")).toHaveText(`Now pick its data file, ${fx.dataName}.`);
     await expect(dlg.locator("[data-imp-pass]")).toBeHidden();
-
-    // The data file: checked, then the name step (home is taken).
-    await dlg.locator("[data-imp-file]").setInputFiles([files(fx)[1]!]);
     await expect(dlg.locator("[data-imp-name]")).toBeVisible({ timeout: 15_000 });
     await expect(dlg.locator("[data-imp-pick]")).toBeHidden();
-    await expect(dlg.locator("[data-imp-files]")).toHaveText(`Backup file: home-2026-10-15.flagship-backup. Data file: ${fx.dataName} (3 KB).`);
+    await expect(dlg.locator("[data-imp-files]")).toHaveText(/^home-2026-10-15\.flagship \(\d+ KB\)$/);
     const name = dlg.locator("#imp-server-name");
     await expect(name).toHaveValue("");
     await expect(dlg.locator("[data-imp-name-error]")).toHaveText('You already have a server called "home": pick another name.');
@@ -517,7 +511,7 @@ test.describe("gym webapp archive", () => {
     await create.click();
     await recipe;
     await expect(dlg.locator("[data-imp-summary] a[href='https://flagshipserver.com/studio']")).toHaveText("Get Flagship Studio");
-    await expect(dlg.locator("[data-imp-status]")).toHaveText("attic is restored.", { timeout: 30_000 });
+    await expect(dlg.locator("[data-imp-status]")).toHaveText("attic: Restored 1 app.", { timeout: 30_000 });
     await expect(dlg.locator("[data-imp-apps]")).toContainText("notes: restored");
     await expect(dlg.locator("[data-imp-apps]")).toContainText("blog: skipped (already here)");
     await sawToast(page, "Backup restored");
@@ -550,8 +544,11 @@ test.describe("gym webapp archive", () => {
     const dlg = page.locator('dialog[aria-label="Import a backup"]');
 
     // A file that isn't a backup is named.
-    await dlg.locator("[data-imp-file]").setInputFiles([{ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello") }]);
-    await expect(dlg.locator("[data-imp-error]")).toHaveText("notes.txt isn't a Flagship backup file or data file.");
+    await dlg.locator("[data-imp-file]").setInputFiles([{ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello there, ".repeat(10)) }]);
+    await expect(dlg.locator("[data-imp-error]")).toHaveText("This file isn't a Flagship backup.");
+    // A backup cut short (a download that stopped) is refused before anything is sent.
+    await dlg.locator("[data-imp-file]").setInputFiles([{ name: "home.flagship", mimeType: "application/octet-stream", buffer: bundle(fx).subarray(0, 16 + fx.backupText.length) }]);
+    await expect(dlg.locator("[data-imp-error]")).toHaveText("This backup is cut short: it ends before its data.");
 
     await dlg.locator("[data-imp-file]").setInputFiles(files(fx));
     await expect(dlg.locator("[data-imp-pass]")).toBeVisible({ timeout: 10_000 });
@@ -583,16 +580,37 @@ test.describe("gym webapp archive", () => {
     await send.click();
 
     const dlg = page.locator('dialog[aria-label="Import a backup"]');
-    await expect(dlg.locator("[data-imp-intro]")).toHaveText("office is waiting for its backup. Pick the backup's two files and this page sends it.");
+    await expect(dlg.locator("[data-imp-intro]")).toHaveText("office is waiting for its backup. Pick the backup's .flagship file and this page sends it.");
     await dlg.locator("[data-imp-file]").setInputFiles(files(fx));
     const sendExisting = dlg.locator("[data-imp-send-existing]");
     await expect(sendExisting).toHaveText("Send it to office (waiting for this backup)", { timeout: 15_000 });
     await expect(dlg.locator("[data-imp-new-instead]")).toBeVisible();
     await shot(page, testInfo, "import-send-existing");
     await sendExisting.click();
-    await expect(dlg.locator("[data-imp-status]")).toHaveText("office is restored.", { timeout: 30_000 });
+    await expect(dlg.locator("[data-imp-status]")).toHaveText("office: Restored 1 app.", { timeout: 30_000 });
     expect(box.started).toHaveLength(1);
     expect(box.committed).toHaveLength(1);
+  });
+
+  test("gym archive a restore where one app fails names it with the box's reason and ends", async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
+    await reachHome(page, { kind: "admin", servers: [HOME, OFFICE] });
+    const m = await mock(page);
+    const fx = await makeBackup(page, { account: true });
+    m.get("/api/users/smoketest/pods", { pods: [livePod(HOME), livePod(OFFICE, { awaitingBackup: { archiveId: fx.archiveId } })] });
+    restoreBox(m, OFFICE, fx.archiveId, [
+      { name: "notes", state: "done" },
+      { name: "blog", state: "failed", reason: "its image didn't build: npm ERR! missing script: start" },
+    ]);
+    await renderHome(page);
+    await page.locator(`#servers-list .js-send-backup[data-fqdn="${OFFICE}"]`).click();
+    const dlg = page.locator('dialog[aria-label="Import a backup"]');
+    await dlg.locator("[data-imp-file]").setInputFiles(files(fx));
+    await dlg.locator("[data-imp-send-existing]").click();
+    await expect(dlg.locator("[data-imp-status]")).toHaveText("office: Restored 1 app. 1 couldn't be restored; the server works with the rest.", { timeout: 30_000 });
+    await expect(dlg.locator("[data-imp-apps]")).toContainText("notes: restored");
+    await expect(dlg.locator("[data-imp-apps]")).toContainText("Couldn't restore blog: its image didn't build: npm ERR! missing script: start.");
+    await shot(page, testInfo, "import-one-app-failed");
   });
 
   test("gym archive a waiting server's backup can go to a new server instead", async ({ page }, testInfo) => {
@@ -625,7 +643,7 @@ test.describe("gym webapp archive", () => {
     await shot(page, testInfo, "import-non-admin");
   });
 
-  test("gym archive migrate waits for a backup, then starts under the admin root", async ({ page }, testInfo) => {
+  test("gym archive migrate starts under the admin root with no peer backup needed", async ({ page }, testInfo) => {
     const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
     const m = await mock(page);
     baseServer(m, [livePod(HOME)]);
@@ -635,20 +653,11 @@ test.describe("gym webapp archive", () => {
     const dlg = page.locator('dialog[aria-label="Migrate to new machine / VM"]');
     const action = dlg.locator("[data-mig-action]");
 
-    // No peer backup: the gate says so and Start migration is off.
-    await expect(dlg.locator("[data-mig-gate]")).toHaveText("This server has no backup yet, so it can't be migrated.", { timeout: 15_000 });
-    await expect(action).toHaveText("Start migration");
-    await expect(action).toBeDisabled();
-    await shot(page, testInfo, "migrate-gated");
-    await dlg.locator("[data-mig-cancel]").click();
-    await expect(dlg).toHaveCount(0);
-
-    // With peer backup: start.
-    await enrollPeerBackup(page);
-    await page.click("#migrate-start-btn");
-    await expect(dlg.locator("[data-mig-backup]")).toContainText("Peer-backup is enrolled", { timeout: 15_000 });
+    // No peer-backup gate any more: the move carries the server's own backup.
+    await expect(dlg.locator("[data-mig-backup]")).toContainText("backs it up and sends the backup straight to the new server", { timeout: 15_000 });
     await expect(dlg.locator("[data-mig-gate]")).toBeHidden();
     await expect(action).toBeEnabled();
+    await shot(page, testInfo, "migrate-start");
     await action.click();
     await sawToast(page, "Migration started — now add the new box");
     const init = m.last(`/api/server/${HOME}/migration`)!;
@@ -665,6 +674,93 @@ test.describe("gym webapp archive", () => {
     await shot(page, testInfo, "migrate-started");
     const hold = await page.evaluate(async () => (await import("/lib/serverMigration.js")).activeMigrationHolds());
     expect(hold).toEqual([HOME]);
+  });
+
+  test("gym archive migrate moves the data: estimate, pause and back up, the new box pulls and restores", async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
+    const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
+    const m = await mock(page);
+    baseServer(m, [livePod(HOME)]);
+    const NEW = "home2.smoketest.flagship.services";
+    migrationCom(page, m, keys, session("provisioned"));
+    const fx = await makeBackup(page, { account: true });
+    const SAVED = `${ARCHIVE}/backups`;
+    const old = { runs: [] as Call[], approved: [] as Call[], polls: 0 };
+    // The old box: estimate, speed-check link, keys in its pool, the move's backup, its file and link.
+    m.get(at(HOME, `${SAVED}/estimate`), { archiveBytes: 2 * 1024 ** 3, apps: 2 });
+    m.post(at(HOME, `${ARCHIVE}/probe-link`), { path: `/api/archive-probe/${"cd".repeat(32)}`, bytes: 8 * 1024 * 1024 });
+    m.get(at(HOME, SAVED), () => {
+      const done = old.runs.length > 0 && ++old.polls > 1;
+      return {
+        json: {
+          keysLeft: 300,
+          keysWanted: 0,
+          running: old.runs.length > 0 && !done ? { archiveId: fx.archiveId, progress: { done: 0, total: 2, app: "notes" } } : null,
+          lastRun: null,
+          backups: done ? [{ archiveId: fx.archiveId, createdAt: Date.now(), bytes: fx.bytes, backupBytes: fx.backupText.length, sha256: fx.sha256, apps: [], left: [] }] : [],
+        },
+      };
+    });
+    m.post(at(HOME, `${SAVED}/run`), (call) => {
+      old.runs.push(call);
+      return { status: 202, json: { archiveId: fx.archiveId } };
+    });
+    m.get(at(HOME, `${SAVED}/${fx.archiveId}/backup-file`), () => ({ raw: fx.backupText, contentType: "application/json" }));
+    m.post(at(HOME, `${SAVED}/${fx.archiveId}/link`), { path: `/api/archive-download/${"ab".repeat(32)}`, bundleFileName: "home.flagship", bundleBytes: fx.bytes + 16, expiresAt: null });
+    m.post(
+      at(HOME, `${ARCHIVE}/approve`),
+      sensitive(page, keys, DOWNLOAD_CANON, (b) => ({ arg: b.approval, sig: b.signature }), (call) => {
+        old.approved.push(call);
+        return { json: { ok: true } };
+      }),
+    );
+    // The new box: the speed check, the late restore order, the pull, then the restore.
+    const nb = { orders: [] as Call[], pulls: [] as Call[], committed: false, polls: 0 };
+    m.post(at(NEW, `${RESTORE}/probe`), { bytes: 8 * 1024 * 1024, ms: 400, bytesPerSecond: 20 * 1024 * 1024 });
+    m.post(
+      at(NEW, `${RESTORE}/order`),
+      sensitive(page, keys, RESTORE_CANON, (b) => ({ arg: b.order, sig: b.signatureHex }), (call) => {
+        nb.orders.push(call);
+        return { json: { waiting: { archiveId: fx.archiveId, bytes: fx.bytes, sha256: fx.sha256 }, restore: null } };
+      }),
+    );
+    m.post(at(NEW, `${RESTORE}/pull`), (call) => {
+      nb.pulls.push(call);
+      return { status: 202, json: { received: 0 } };
+    });
+    m.get(at(NEW, RESTORE), () => {
+      if (nb.committed) return { json: { waiting: null, restore: { state: "done", apps: [{ name: "notes", state: "done" }, { name: "blog", state: "failed", reason: "its image didn't build" }] } } };
+      const ready = ++nb.polls > 1;
+      return { json: { waiting: { archiveId: fx.archiveId }, restore: { state: ready ? "ready" : "uploading", bytes: fx.bytes, received: ready ? fx.bytes : fx.bytes / 2, pulling: !ready } } };
+    });
+    m.post(at(NEW, `${RESTORE}/commit`), () => {
+      nb.committed = true;
+      return { json: { ok: true } };
+    });
+    // This device created the new box, so it holds a session for it.
+    await page.evaluate(async (fqdn) => (await import("/lib/api.js")).setSessionTokenForPod(fqdn, "tok-new"), NEW);
+
+    await openServer(page, HOME);
+    await page.click("#migrate-start-btn");
+    const dlg = page.locator('dialog[aria-label="Migrate to new machine / VM"]');
+    await expect(dlg.locator("[data-mig-wait]")).toHaveText("New box attached. Move the data when you're ready: this server's apps pause until the new one takes over.", { timeout: 15_000 });
+    // The estimate: size, the measured link speed, the downtime.
+    await expect(dlg.locator("[data-mig-estimate]")).toContainText("About 2.0 GB to move at 20 MB/s between the servers.", { timeout: 15_000 });
+    await expect(dlg.locator("[data-mig-estimate]")).toContainText("Your apps pause for about 4 minutes");
+    await shot(page, testInfo, "migrate-estimate");
+    await dlg.locator("[data-mig-move-btn]").click();
+    await expect(dlg.locator("[data-mig-move-step]")).toHaveText("Restored 1 app. 1 couldn't be restored; the server works with the rest.", { timeout: 30_000 });
+    await expect(dlg.locator("[data-mig-move-apps]")).toContainText("Couldn't restore blog: its image didn't build.");
+    // The old box paused and backed up for the move; the new one got a signed order, an approved link, then the key.
+    expect(old.runs[0]!.body).toEqual({ purpose: "migrate" });
+    const order = nb.orders[0]!.body as { order: { serverDomain: string; archiveId: string; bytes: number; sha256: string }; signatureHex: string };
+    expect(order.order).toMatchObject({ serverDomain: NEW, archiveId: fx.archiveId, bytes: fx.bytes, sha256: fx.sha256 });
+    expect(await signer(page, keys, RESTORE_CANON, order.order, order.signatureHex)).toBe("admin");
+    const a = old.approved[0]!.body as { approval: { archiveId: string; requestId: string }; signature: string };
+    expect(a.approval.archiveId).toBe(fx.archiveId);
+    expect(nb.pulls[0]!.body).toEqual({ url: `https://${HOME}/api/archive-download/${"ab".repeat(32)}`, requestId: a.approval.requestId });
+    expect(m.last(`${RESTORE}/commit`)!.body.key).toMatch(/^[0-9a-f]{64}$/);
+    await shot(page, testInfo, "migrate-moved");
   });
 
   test("gym archive migrate hands off to the new box, then a ready one freezes", async ({ page }, testInfo) => {
@@ -688,7 +784,7 @@ test.describe("gym webapp archive", () => {
     const freeze = m.last("/migration/freeze")!;
     expect(freeze.body.order).toMatchObject({ retiredStkPubHex: STK[HOME], diskDisposition: "wipe-after-handoff" });
     expect(await signer(page, keys, DECOMMISSION_CANON, freeze.body.order, freeze.body.signature)).toBe("admin");
-    await expect(dlg.locator("[data-mig-wait]")).toHaveText("Old server is frozen and flushing its final backup…");
+    await expect(dlg.locator("[data-mig-wait]")).toHaveText("The old server is handing off…");
     await expect(action).toBeHidden();
     await dlg.locator("[data-mig-cancel]").click();
 
@@ -708,6 +804,11 @@ test.describe("gym webapp archive", () => {
     const m = await mock(page);
     baseServer(m, [livePod(HOME)]);
     const com = migrationCom(page, m, keys, session("provisioned"));
+    let resumed = 0;
+    m.post(at(HOME, `${ARCHIVE}/backups/resume`), () => {
+      resumed++;
+      return { json: { migratePause: null } };
+    });
     await page.evaluate(async (fqdn) => (await import("/lib/serverMigration.js")).setMigrationHold(fqdn), HOME);
     await openServer(page, HOME);
     await page.click("#migrate-start-btn");
@@ -718,6 +819,8 @@ test.describe("gym webapp archive", () => {
     await abort.click();
     await sawToast(page, "Migration aborted — your old server stays active");
     expect(com.posts).toEqual(["abort"]);
+    // The old server's apps run again.
+    await expect.poll(() => resumed).toBe(1);
     const sent = m.last("/migration/abort")!;
     expect(sent.body.control.action).toBe("abort");
     expect(await signer(page, keys, CONTROL_CANON, sent.body.control, sent.body.signature)).toBe("admin");
@@ -736,7 +839,6 @@ test.describe("gym webapp archive", () => {
     const m = await mock(page);
     baseServer(m, [livePod(HOME)]);
     const com = migrationCom(page, m, keys, null);
-    await enrollPeerBackup(page);
     await openServer(page, HOME);
     await page.click("#migrate-start-btn");
     const dlg = page.locator('dialog[aria-label="Migrate to new machine / VM"]');
@@ -753,7 +855,6 @@ test.describe("gym webapp archive", () => {
     const m = await mock(page);
     m.get("/api/users/smoketest/pods", { pods: [livePod(HOME)] });
     m.get("/api/order/SER-GYM-1/status", { phase: "installing" });
-    m.post("/api/auth-code/SER-GYM-1/revoke", { ok: true });
     m.post(
       "/api/server/release",
       sensitive(page, keys, (r: { username: string; serverDomain: string; issuedAt: number }) => `flagship/release-server-name/v1|${r.username}|${r.serverDomain}|${r.issuedAt}`, (b) => ({ arg: b.request, sig: b.signature }), () => ({ json: { ok: true } })),
@@ -765,15 +866,17 @@ test.describe("gym webapp archive", () => {
     }, order);
     await expect(page.locator("#pending-server-name")).toHaveText("garage");
     await expect(page.locator("#pending-server-fqdn")).toHaveText(order.fqdn);
-    await expect(page.locator("#pending-server-serial")).toHaveText("SER-GYM-1");
-    await expect(page.locator("#pending-server-note")).toContainText("Setup:", { timeout: 10_000 });
+    // The kept serial follows the order's own status: its phase and the checklist.
+    await expect(page.locator("#pending-server-note")).toHaveText("Installing", { timeout: 10_000 });
+    await expect(page.locator("#pending-server-progress .demo-step-active")).toContainText("Installing");
     await shot(page, testInfo, "pending-server");
 
     // ← Back returns Home and keeps the order.
     await page.click("#pending-server-back");
     await expect(page.locator("#view-home")).toBeVisible();
 
-    // Cancel order: the native confirm, the auth-code revoke, the name release, the order gone.
+    // Cancel order: the browser's confirm, then the name release under the admin
+    // root (which also voids the recipe's auth code on .com), and the order is gone.
     await page.evaluate(async (order) => (await import("/views/pending-server.js")).enterPendingServer(order), order);
     let confirmText = "";
     page.once("dialog", (d) => {
@@ -781,9 +884,8 @@ test.describe("gym webapp archive", () => {
       void d.accept();
     });
     await page.click("#pending-server-cancel");
-    await sawToast(page, "Order cancelled (garage)");
-    expect(confirmText).toContain('Cancel order for "garage"?');
-    expect(m.sent("/api/auth-code/SER-GYM-1/revoke")).toHaveLength(1);
+    await sawToast(page, `Deleted — "${order.fqdn}" is free again`);
+    expect(confirmText).toContain(`Delete "${order.fqdn}"? This frees the name for reuse`);
     const release = m.last("/api/server/release")!;
     expect(release.body.request.serverDomain).toBe(order.fqdn);
     expect(

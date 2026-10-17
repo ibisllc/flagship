@@ -88,8 +88,22 @@ export type AiChatAlert = {
   toolUseId: string;
 };
 
+/**
+ * An app reached its disk limit (docs/app-runtimes.md §5.3): its files
+ * folder is full, or its database's writes are blocked. The push that wakes
+ * the phone is content-free (`generic`); this says which app, and the phone
+ * shows "An app on this server is full" and opens the app's page, which
+ * carries the numbers (`storage` on app-detail).
+ */
+export type AppStorageAlert = {
+  kind: "app-storage-full";
+  serviceId: string;
+  store: "files" | "postgres";
+};
+
 export type PhoneAlert =
   | PhoneUpdateAlert
   | BrowserAlert
   | ReissuanceAlert
-  | AiChatAlert;
+  | AiChatAlert
+  | AppStorageAlert;

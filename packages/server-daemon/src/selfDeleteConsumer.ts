@@ -9,6 +9,7 @@ import {
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import { isFilesVolume } from "./dataLayer/naming.js";
+import { LoopVolumes } from "./appQuota/loopVolumes.js";
 
 const execFileP = promisify(execFile);
 
@@ -344,6 +345,22 @@ export async function realWipeContent(
     },
     capture: async (cmd, args) => (await execFileP(cmd, args, { timeout: 120_000 })).stdout,
   });
+  // The files folders' disk images (appQuota/loopVolumes.ts) hold the
+  // apps' files: removing the volumes leaves them, so unmount and delete.
+  await new LoopVolumes(
+    {
+      run: async (cmd, args) => {
+        await execFileP(cmd, args, { timeout: 120_000 });
+      },
+      capture: async (cmd, args) => {
+        const r = await execFileP(cmd, args, { timeout: 120_000 });
+        return { stdout: r.stdout, stderr: r.stderr };
+      },
+    },
+    { log: (m) => console.log(`[self-delete] ${m}`) },
+  )
+    .dropAll()
+    .catch((e: Error) => console.log(`[self-delete] files images not removed (continuing): ${e.message}`));
   // Best-effort prune of any dangling anonymous volumes the teardown left.
   await run("docker", ["volume", "prune", "-f"]);
   // Remove the daemon's per-app data tree (sealed creds, build workspaces, …).

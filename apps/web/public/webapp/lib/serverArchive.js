@@ -1,6 +1,6 @@
 // "Backup/clone server" (docs/server-backup-and-clone.md): the owner's device
-// asks a server to make a backup of all its apps (two files: a small backup
-// file and the data file), downloads both, and later restores them onto a new
+// asks a server to make a backup of all its apps (one .flagship file),
+// downloads it, and later restores it onto a new
 // server that was created to wait for exactly that backup.
 //
 // This device makes the content key and the key slots (a passcode slot via
@@ -26,7 +26,7 @@ export const BACKUP_TITLE = "Backup/clone server";
 export const BACKUP_EXCLUDES_NOTE =
   "Holds your apps' source, data and settings, never system images: the new server rebuilds each app, so any Flagship server can restore it. Not included: the server's keys and certificate, peer backups, and the Git host.";
 export const PASSCODE_NOTE =
-  "Anyone with both files and this passcode can restore the backup, on any account, so keep it somewhere safe and apart from the files. It can't be reset. Your own devices open your backups without it.";
+  "You'll need this passcode to import the backup into an account that isn't yours. Your own account opens it without the passcode. Anyone with the file and the passcode can restore it, so keep the passcode apart from the file. It can't be reset.";
 
 /** What a backup or restore step's failure says to the owner: this device's own
  *  sentence, the box's reason (e.g. "needs about 12 GB"), else humanError. */
@@ -113,16 +113,15 @@ export async function waitForBackup({ client, onProgress, sleep = (ms) => new Pr
 
 /**
  * A link to the ready backup on the server: its page asks the Flagship app to
- * approve, then the browser saves both files straight to disk (the data file
- * resumably). The link works until the backup expires.
+ * approve, then the browser saves the one .flagship file straight to disk
+ * (resumably). The link works until the backup expires.
  */
 export async function backupDownloadLink({ client }) {
   const r = await client.fetch(`${ARCHIVE_PATH}/link`, { method: "POST" });
   return {
     url: `${client.baseUrl.replace(/\/+$/, "")}${r.path}`,
-    backupFileName: r.backupFileName,
-    dataFileName: r.dataFileName,
-    bytes: r.bytes,
+    fileName: r.bundleFileName,
+    bytes: r.bundleBytes,
     expiresAt: r.expiresAt,
   };
 }
@@ -160,16 +159,14 @@ export async function approveArchiveDownload({ client, serverDomain, archiveId, 
 
 /**
  * Download the ready backup in THIS browser: approve a fresh request with this
- * device's own key, then let the browser fetch both files straight to disk.
+ * device's own key, then let the browser fetch the one file straight to disk.
  */
-export async function downloadHere({ client, serverDomain, archiveId, umk, signWithIrk, rng, doc, gapMs = 800 }) {
+export async function downloadHere({ client, serverDomain, archiveId, umk, signWithIrk, rng, doc }) {
   const link = await backupDownloadLink({ client });
   const requestId = newArchiveId(rng);
   await approveArchiveDownload({ client, serverDomain, archiveId, requestId, umk, signWithIrk });
-  startBrowserDownload(`${link.url}/backup?r=${requestId}`, link.backupFileName, doc);
-  // Some browsers drop a second download started in the same tick.
-  await new Promise((r) => setTimeout(r, gapMs));
-  startBrowserDownload(`${link.url}/file?r=${requestId}`, link.dataFileName, doc);
+  // The one .flagship file, straight to disk (the box serves it with HTTP Range, so it resumes).
+  startBrowserDownload(`${link.url}/bundle?r=${requestId}`, link.fileName, doc);
   return link;
 }
 
@@ -266,10 +263,17 @@ export async function waitForRestore({ client, onProgress, sleep = (ms) => new P
 }
 
 /** One readable line per app of a restore. */
+/** "Restored 3 apps." (+ "1 couldn't be restored." when some failed): every app was tried, then it ends. */
+export function restoreSummary(apps = []) {
+  const ok = apps.filter((a) => a.state === "done").length;
+  const failed = apps.filter((a) => a.state === "failed").length;
+  return `Restored ${ok} app${ok === 1 ? "" : "s"}.` + (failed ? ` ${failed} couldn't be restored; the server works with the rest.` : "");
+}
+
 export function describeRestoreApp(a) {
   if (a.state === "done") return `${a.name}: restored`;
   if (a.state === "skipped") return `${a.name}: skipped (${a.reason || "already here"})`;
-  if (a.state === "failed") return `${a.name}: couldn't be restored (${a.reason || "unknown reason"})`;
+  if (a.state === "failed") return `Couldn't restore ${a.name}: ${trimStop(a.reason) || "it couldn't be restored"}.`;
   if (a.state === "restoring") return `${a.name}: restoring…`;
   return `${a.name}: waiting`;
 }

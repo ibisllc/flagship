@@ -73,6 +73,13 @@ export const FRAME_OUTBOUND_OPEN = 0x40;
 export const FRAME_OUTBOUND_RESULT = 0x41;
 export const FRAME_OUTBOUND_CREDIT = 0x42;
 
+// Peer-backup mailboxes between accounts (docs/peer-backup.md §5.3). See
+// mailFrames.ts. A box sends these ONLY to a hub whose HELLO_ACK advertised
+// CAPABILITY_PB_MAIL_V1, for the same reason as the outbound frames.
+export const FRAME_PB_MAIL_REQ = 0x50;
+export const FRAME_PB_MAIL_RESP = 0x51;
+export const FRAME_PB_MAILBOX_ANNOUNCE = 0x52;
+
 export type FrameType =
   | typeof FRAME_HELLO
   | typeof FRAME_HELLO_ACK
@@ -92,7 +99,10 @@ export type FrameType =
   | typeof FRAME_PB_RESPONSE
   | typeof FRAME_OUTBOUND_OPEN
   | typeof FRAME_OUTBOUND_RESULT
-  | typeof FRAME_OUTBOUND_CREDIT;
+  | typeof FRAME_OUTBOUND_CREDIT
+  | typeof FRAME_PB_MAIL_REQ
+  | typeof FRAME_PB_MAIL_RESP
+  | typeof FRAME_PB_MAILBOX_ANNOUNCE;
 
 export interface Frame {
   streamId: number;
@@ -166,7 +176,10 @@ function isFrameType(t: number): t is FrameType {
     t === FRAME_PB_RESPONSE ||
     t === FRAME_OUTBOUND_OPEN ||
     t === FRAME_OUTBOUND_RESULT ||
-    t === FRAME_OUTBOUND_CREDIT
+    t === FRAME_OUTBOUND_CREDIT ||
+    t === FRAME_PB_MAIL_REQ ||
+    t === FRAME_PB_MAIL_RESP ||
+    t === FRAME_PB_MAILBOX_ANNOUNCE
   );
 }
 
@@ -234,6 +247,7 @@ export interface HelloAckTrust {
  * the tunnel on an unknown type. Old boxes ignore the field.
  */
 export const CAPABILITY_OUTBOUND_V1 = "outbound-v1";
+export const CAPABILITY_PB_MAIL_V1 = "pb-mail-v1";
 
 export function helloAckFrame(
   ok: boolean,

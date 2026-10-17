@@ -1,0 +1,62 @@
+name: iso-seed (reproducible build check)
+
+# Rebuilds the Flagship ISO seed from the pinned stock Debian base inside a
+# fixed Debian container and fails unless the output matches the published
+# sha256. This is the reference build: the seed is reproducible only for a
+# given xorriso + mtools, so the pin is whatever THIS environment produces,
+# and anyone can re-run it to check the seed .com serves.
+on:
+  push:
+    branches: [feat/phone-usb-burn]
+    paths:
+      - "iso-seed/**"
+      - ".github/workflows/iso-seed.yml"
+  pull_request:
+    paths:
+      - "iso-seed/**"
+      - ".github/workflows/iso-seed.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # Two xorriso generations must produce the same bytes (build-seed.sh
+        # neutralises the version stamp; the empty FAT is a committed image).
+        container: ["debian:12", "debian:13"]
+    container: ${{ matrix.container }}
+    env:
+      BASE_URL: https://cdimage.debian.org/cdimage/archive/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso
+      BASE_SHA256: 65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7
+      SEED_SHA256: 54be17b43ddafa10e2112b2e5966835f12aaff39a50d21415f942e06a7ae7f19
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends xorriso curl ca-certificates >/dev/null
+          dpkg-query -W -f='${Package} ${Version}\n' xorriso libisofs6 libisoburn1t64 libisoburn1 libburn4t64 libburn4 2>/dev/null || true
+      - name: Fetch + verify the stock base
+        run: |
+          curl -fsSL --retry 3 -o base.iso "$BASE_URL"
+          echo "$BASE_SHA256  base.iso" | sha256sum -c -
+      - name: Build the seed
+        run: bash iso-seed/build-seed.sh base.iso seed.iso
+      - name: Check the pin
+        run: |
+          got="$(sha256sum seed.iso | cut -d' ' -f1)"
+          echo "seed sha256: $got"
+          [ "$got" = "$SEED_SHA256" ] && exit 0
+          echo "::error::seed sha256 $got does not match the pin $SEED_SHA256"
+          size=$(stat -c %s seed.iso); echo "size $size"
+          i=0; while [ $((i*1048576)) -lt "$size" ]; do
+            printf '%d %s\n' $i "$(dd if=seed.iso bs=1M skip=$i count=1 status=none | sha256sum | cut -c1-16)"
+            i=$((i+1))
+          done > chunks.txt
+          exit 1

@@ -82,6 +82,15 @@ export async function sawToast(page: Page, text: string, timeout = 15_000, after
   );
 }
 
+/** Answer an admin action's fresh unlock (lib/freshUnlock.js, the browser's
+ *  Face ID per order): its title, then this device's passphrase. */
+export async function freshUnlock(page: Page, title: string, passphrase = PASSPHRASE): Promise<void> {
+  await expect(page.locator(".modal-title")).toHaveText(title, { timeout: 10_000 });
+  await expect(page.locator(".modal-message")).toContainText("Enter this device's passphrase to sign it.");
+  await page.fill(".modal-input", passphrase);
+  await page.click("[data-modal-ok]");
+}
+
 export async function toasts(page: Page): Promise<string[]> {
   return page.evaluate(() => (window as unknown as { __gymToasts?: string[] }).__gymToasts ?? []);
 }

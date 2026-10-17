@@ -17,6 +17,12 @@ import {
   FRAME_OUTBOUND_CREDIT,
   FRAME_OUTBOUND_RESULT,
   CAPABILITY_OUTBOUND_V1,
+  CAPABILITY_PB_MAIL_V1,
+  FRAME_PB_MAIL_REQ,
+  MailAssembler,
+  mailboxAnnounceFrame,
+  mailResponseFrames,
+  type MailboxAnnouncement,
   isOutboundStreamId,
   OUTBOUND_STREAM_ID_BASE,
   OUTBOUND_STREAM_ID_MAX,
@@ -158,6 +164,13 @@ export interface TunnelClientOptions {
     intervalMs: number;
     maxMissedPongs: number;
   };
+  /**
+   * Peer-backup mailboxes (docs/peer-backup.md §5.3). When the hub offers
+   * `pb-mail-v1`, the client announces these after every HELLO_ACK and each
+   * hour, and hands each sealed request to `onMail`.
+   */
+  mailboxAnnouncements?: () => Promise<MailboxAnnouncement[]>;
+  onMail?: (mailboxId: string, envelope: Uint8Array) => Promise<Uint8Array>;
   /** Test seam — replace WebSocket constructor + ready-state constants. */
   wsFactory?: WebSocketFactory;
   /** Test seam — replace setInterval/clearInterval (keep-alive cadence). */
@@ -232,6 +245,8 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
   // HELLO_ACK's hubSig, so the relay-trust verifier checks against it.
   let lastHelloNonce: Uint8Array = new Uint8Array(0);
   let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+  let announceTimer: ReturnType<typeof setInterval> | null = null;
+  const mailIn = new Map<number, MailAssembler>();
   let missedPongs = 0;
   let onCloseFired = false;
 
@@ -246,10 +261,58 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
     }
   }
 
+  function announceMailboxes(): void {
+    if (!opts.mailboxAnnouncements || !hubCapabilities.includes(CAPABILITY_PB_MAIL_V1)) return;
+    void opts
+      .mailboxAnnouncements()
+      .then((a) => {
+        if (a.length > 0) send(mailboxAnnounceFrame(a));
+      })
+      .catch(() => {
+        /* the next hour tries again */
+      });
+  }
+
+  function handleMailFrame(f: Frame): void {
+    let a = mailIn.get(f.streamId);
+    if (!a) {
+      a = new MailAssembler("req");
+      mailIn.set(f.streamId, a);
+    }
+    let r;
+    try {
+      r = a.push(f.payload);
+    } catch {
+      mailIn.delete(f.streamId);
+      for (const fr of mailResponseFrames(f.streamId, 400, new Uint8Array(0))) send(fr);
+      return;
+    }
+    if (!r.done) return;
+    mailIn.delete(f.streamId);
+    const mailboxId = a.mailboxId;
+    const handler = opts.onMail;
+    if (!handler) {
+      for (const fr of mailResponseFrames(f.streamId, 404, new Uint8Array(0))) send(fr);
+      return;
+    }
+    void handler(mailboxId, r.body).then(
+      (reply) => {
+        for (const fr of mailResponseFrames(f.streamId, 200, reply)) send(fr);
+      },
+      () => {
+        for (const fr of mailResponseFrames(f.streamId, 400, new Uint8Array(0))) send(fr);
+      },
+    );
+  }
+
   function fireOnClose(): void {
     if (onCloseFired) return;
     onCloseFired = true;
     stopKeepAlive();
+    if (announceTimer !== null) {
+      clearIntervalFn(announceTimer);
+      announceTimer = null;
+    }
     try {
       opts.onClose?.();
     } catch {
@@ -373,6 +436,7 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
   ws.on("close", () => {
     for (const sock of streams.values()) sock.destroy();
     streams.clear();
+    mailIn.clear();
     acked = false;
     for (const [id, o] of outboundOpening) {
       clearTimeout(o.timer);
@@ -430,7 +494,15 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
         acked = true;
         hubCapabilities = body.capabilities ?? [];
         resolveReady();
+        announceMailboxes();
+        if (announceTimer === null && opts.mailboxAnnouncements && hubCapabilities.includes(CAPABILITY_PB_MAIL_V1)) {
+          announceTimer = setIntervalFn(announceMailboxes, 60 * 60_000);
+        }
       } else rejectReady(new Error(body.reason ?? "HELLO_ACK rejected"));
+      return;
+    }
+    if (f.type === FRAME_PB_MAIL_REQ) {
+      handleMailFrame(f);
       return;
     }
     if (isOutboundStreamId(f.streamId)) {

@@ -51,7 +51,6 @@ import com.flagshipserver.app.core.LocalQrRelayClient
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.Endpoints
-import com.flagshipserver.app.core.MockQrRelayClient
 import com.flagshipserver.app.core.PodInfo
 import com.flagshipserver.app.core.QrRelay
 import com.flagshipserver.app.core.LocalToastCenter
@@ -94,7 +93,7 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
                     )
             },
             username = { latestUser },
-            relayFactory = { if (sharedRelay is MockQrRelayClient) sharedRelay else LiveQrRelayClient() },
+            relayFactory = { com.flagshipserver.app.core.Variant.reuseRelay(sharedRelay) ?: LiveQrRelayClient() },
         )
     }
     val state by vm.state.collectAsState()

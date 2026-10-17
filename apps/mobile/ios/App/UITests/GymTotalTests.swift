@@ -270,10 +270,19 @@ final class GymTotalTests: XCTestCase {
         // The biometric lock screen (its identified container surfaces as an
         // Other element; its "Flagship is locked" copy + sign-out are reliable
         // proxies if the container query is flaky across Xcode versions).
-        let locked = app.otherElements["biometric-lock-screen"].waitForExistence(timeout: 15)
+        let locked = app.images["biometric-lock-screen"].waitForExistence(timeout: 15)
             || app.staticTexts["Flagship is locked"].waitForExistence(timeout: 5)
             || app.buttons["lock-sign-out-btn"].waitForExistence(timeout: 5)
         XCTAssertTrue(locked, "Tapping Lock should present the biometric lock screen over the shell.")
+        // The same footer as Welcome: Unlock, Sign out right below, then
+        // Patent Pending at the bottom.
+        let unlock = app.buttons["lock-unlock-btn"]
+        let signOut = app.buttons["lock-sign-out-btn"]
+        let patent = app.staticTexts["patent-pending"]
+        XCTAssertTrue(unlock.waitForExistence(timeout: 5))
+        XCTAssertTrue(signOut.exists && patent.exists)
+        XCTAssertLessThan(unlock.frame.maxY, signOut.frame.minY)
+        XCTAssertLessThan(signOut.frame.maxY, patent.frame.minY)
         gymShot(app, "lock-screen")
     }
 

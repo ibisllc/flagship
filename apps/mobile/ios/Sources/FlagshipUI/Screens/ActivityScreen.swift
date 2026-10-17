@@ -65,7 +65,7 @@ public struct ActivityScreen: View {
                 // an unlock/entitlement approval is exactly the case where the
                 // daemon BFF (and thus this feed) can't load, so gating the
                 // approvals entry behind `.loaded` hid it precisely when needed.
-                section("BOX APPROVALS", c: c) {
+                section("SERVER APPROVALS", c: c) {
                     approvalsEntryCard(c: c)
                 }
                 switch state {
@@ -145,7 +145,7 @@ public struct ActivityScreen: View {
     private func approvalsEntryCard(c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("Approve a box's boot").foregroundColor(c.text)
+                Text("Approve a server's boot").foregroundColor(c.text)
                 Text("Servers set to ask on every boot wait here for you to release their disk key.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
                 FSPrimaryButton("Open approvals", block: true, action: onOpenApprovals)

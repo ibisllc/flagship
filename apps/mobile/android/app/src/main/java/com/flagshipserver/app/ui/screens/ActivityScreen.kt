@@ -146,7 +146,7 @@ private fun ApprovalsEntryCard(nav: NavController) {
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Text(
-                "Approve a box's boot",
+                "Approve a server's boot",
                 color = FS.colors.text,
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
             )

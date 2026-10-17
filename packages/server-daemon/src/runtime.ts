@@ -19,7 +19,7 @@ import {
   type AppApiKeysHttp,
 } from "./appApiKeys.js";
 import { FileAppEnvStore, type AppEnvStore } from "./serviceEnvStore.js";
-import { AppRunner, buildStartCheck, realCommandRunner, type CommandRunner } from "./serviceRunner.js";
+import { AppRunner, buildStartCheck, realCommandRunner, setBuildDiskWatch, setFilesVolumeGuard, type CommandRunner } from "./serviceRunner.js";
 import { ensureGvisor } from "./appSandbox/gvisor.js";
 import { keepAppSandbox, setEgressFence } from "./appSandbox/state.js";
 import { dockerRepaired, wakeDocker } from "./dockerHealth.js";
@@ -61,6 +61,7 @@ import { acceptSiblingUpgrade } from "./sibling/wsServer.js";
 import type { UpdateServer } from "./updateServer.js";
 import { bootEgress, type EgressRuntime } from "./egress/boot.js";
 import { ensureUnfencedNetworks } from "./egress/networks.js";
+import { AppQuotaManager, LoopVolumes, RealPgQuota, buildDiskWatcher, hostDiskUse } from "./appQuota/index.js";
 
 export interface DaemonRuntimeOptions {
   /** Server FQDN, e.g. "home.alice.flagship.services". */
@@ -171,6 +172,14 @@ export interface DaemonRuntimeOptions {
    * were forwarded.
    */
   onDomainGranted?: (e: { fqdn: string; ownerServerId: string }) => void;
+  /**
+   * Peer-backup mailboxes (docs/peer-backup.md §5.3): what the tunnel
+   * announces to a hub offering pb-mail-v1, and who answers the mail.
+   */
+  peerMail?: {
+    announcements: () => Promise<Array<{ pikPubHex: string; epoch: number; sigHex: string }>>;
+    onMail: (mailboxId: string, envelope: Uint8Array) => Promise<Uint8Array>;
+  };
   /**
    * Override the STK pubkey lookup used to verify inbound sibling-WS
    * handshakes. Production fetches from .com `/api/server/by-domain`;
@@ -466,6 +475,8 @@ export interface DaemonRuntime {
    */
   appRunner: AppRunner;
   dataProvisioner: DataProvisioner | null;
+  /** Per-app disk limits (appQuota/manager.ts): budgets and events are wired by index.ts. */
+  appQuota: AppQuotaManager;
   servicePlatform: ServicePlatform | null;
   /**
    * App-claim primitives: add/remove FQDNs from this pod's
@@ -1100,6 +1111,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     resolveBackend: () =>
       relayLockdown.isRelayAllowed() ? { host: "127.0.0.1", port: tlsPort } : null,
     onHelloAckTrust,
+    ...(opts.peerMail ? { mailboxAnnouncements: opts.peerMail.announcements, onMail: opts.peerMail.onMail } : {}),
     onDomainGranted: (e) => {
       siblingRouter.broadcastDomainGranted({
         fqdn: e.fqdn,
@@ -1358,13 +1370,54 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // provisioner asks it before every provision (dataLayer/stack.ts).
   const dataEnvFile = opts.servicePlatform?.dataServicesEnvFile;
   const dataStack = dataEnvFile ? new DataStack({ cmd: realCommandRunner, envFile: dataEnvFile }) : null;
+  // Per-app disk limits (appQuota/): each files folder is its own sized
+  // disk image, mounted here before any app starts; only on a real box
+  // (Linux, root), and FLAGSHIP_FILES_QUOTA=0 keeps plain volumes.
+  const loopVolumes =
+    process.platform === "linux" && process.getuid?.() === 0 && process.env.FLAGSHIP_FILES_QUOTA !== "0"
+      ? new LoopVolumes(realCommandRunner)
+      : null;
+  if (loopVolumes) {
+    const mounted = await loopVolumes.mountAll().catch((e: Error) => {
+      console.warn(`[app-quota] couldn't mount the files images: ${e.message}`);
+      return 0;
+    });
+    if (mounted > 0) console.log(`[app-quota] mounted ${mounted} files image(s)`);
+  }
   const dataProvisioner = await maybeBuildDataProvisioner(
     dataEnvFile,
     appRunner.dataHostAlias,
     dataStack,
-    new RealFilesAdmin(realCommandRunner),
+    new RealFilesAdmin(realCommandRunner, loopVolumes),
   );
   dataStack?.start();
+  const appQuota = new AppQuotaManager({
+    apps: () =>
+      (servicePlatformRef.current?.list() ?? []).map((a) => ({
+        serviceId: a.serviceId,
+        files: a.data?.files,
+        postgres: Object.values(a.data?.postgres ?? {}).map((p) => ({ database: p.database, role: p.role })),
+      })),
+    budgets: () => null,
+    files: loopVolumes,
+    pg: () => dataProvisioner?.pgQuota() ?? null,
+    ...(dataProvisioner ? { devDatabases: () => dataProvisioner.devDatabases() } : {}),
+    hostDisk: () => hostDiskUse(),
+    statePath: opts.dataDir ? `${opts.dataDir}/data/app-quota.json` : null,
+  });
+  await appQuota.load();
+  if (loopVolumes) {
+    dataProvisioner?.setFilesSize((volume) => appQuota.imageSizeFor(volume));
+    setFilesVolumeGuard(async (volume) => {
+      if ((await appQuota.prepareVolume(volume)) === "plain") {
+        console.warn(`[app-quota] ${volume} is still a plain volume (a container holds it); it has no limit until the app restarts`);
+      }
+    });
+  }
+  if (process.platform === "linux") {
+    setBuildDiskWatch(buildDiskWatcher({ disk: () => hostDiskUse() }));
+    appQuota.start();
+  }
 
   const apOpts = opts.servicePlatform;
   let aliasReconciler: AliasReconciler | null = null;
@@ -1432,6 +1485,17 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
           `[runtime] restored ${restored.length} installed service(s)` +
             (failed.length ? `; ${failed.length} would not start: ${failed.join(", ")}` : ""),
         );
+      }
+      // Files images no volume or installed app owns: set aside after a day,
+      // deleted a week later (loopVolumes.ts sweepOrphans). Only once the
+      // installed list is back, so an app's own image is never taken.
+      if (loopVolumes) {
+        const sweep = () => {
+          const keep = new Set((servicePlatformRef.current?.list() ?? []).flatMap((a) => (a.data?.files ? [a.data.files.volume] : [])));
+          void loopVolumes.sweepOrphans({ keep }).catch((e: Error) => console.warn(`[app-quota] orphan sweep skipped: ${e.message}`));
+        };
+        sweep();
+        setInterval(sweep, 24 * 60 * 60_000).unref();
       }
     });
     const extras: string[] = [];
@@ -1590,6 +1654,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     ready: () => Promise.resolve(),
     close: async () => {
       certRetryLoop?.stop();
+      appQuota.stop();
       relayLockdown.stop();
       if (renewalTimer) clearInterval(renewalTimer);
       aliasReconciler?.stop();
@@ -1600,6 +1665,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     certManager,
     appRunner,
     dataProvisioner,
+    appQuota,
     servicePlatform: servicePlatformRef.current,
     urlController,
     relayLockdown,
@@ -1722,7 +1788,7 @@ async function loadDataAdmins(
   envFile: string,
   appDataHost: string | undefined,
   quietOnMissing: boolean,
-): Promise<Pick<DataProvisionerOptions, "postgres" | "endpoints" | "nameKey"> | null> {
+): Promise<Pick<DataProvisionerOptions, "postgres" | "endpoints" | "nameKey" | "pgQuota"> | null> {
   let env: Record<string, string>;
   try {
     env = parseEnvFile(await readFile(envFile, "utf8"));
@@ -1751,6 +1817,7 @@ async function loadDataAdmins(
   console.log(`[runtime] data layer wired (postgres admin ready); app data host = ${appHost}`);
   return {
     postgres: new RealPostgresAdmin({ adminUrl: pgUrl }),
+    pgQuota: new RealPgQuota({ adminUrl: pgUrl }),
     nameKey: env.DATA_NAME_KEY!,
     endpoints: { postgresHost: appHost },
   };
@@ -1768,6 +1835,9 @@ export async function runAppSql(a: { pgUrl: string; sql: string }): Promise<void
   const c = new Client({ connectionString: url.toString(), connectionTimeoutMillis: 5000 });
   await c.connect();
   try {
+    // The role's 30 s statement timeout (appQuota/pgQuota.ts) is for the app, not its migrations.
+    await c.query("SET statement_timeout = 0");
+    await c.query("SET idle_in_transaction_session_timeout = 0");
     await c.query("BEGIN");
     try {
       await c.query(a.sql);

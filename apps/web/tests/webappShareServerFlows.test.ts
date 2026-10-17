@@ -7,13 +7,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deriveIRK,
   deriveShareMemberKey,
+  ed,
   verifyAppAccessGrant,
+  verifyServerShareAcceptAdmin,
   verifyServerShareGrant,
   verifyServerShareRevoke,
   verifyServerShareUpdate,
 } from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
 import {
+  deriveDemoAdminRoot,
+  handleDemoShareAccept,
+  handleAccountKeyAttestation,
   handleAcceptServerShare,
   handleCreateServerShare,
   handleGetServerShare,
@@ -27,6 +32,7 @@ import {
 import { ShareStore } from "../../../packages/server-daemon/src/shares/shareStore.js";
 import { ActivityLog } from "../../../packages/server-daemon/src/shares/activityLog.js";
 import { ShareSessionStore, buildShares } from "../../../packages/server-daemon/src/shares/sharesHttp.js";
+import { TEST_CA, testVerifyAcceptAdmin } from "../../../packages/server-daemon/tests/shares/acceptAdminFixture.js";
 
 const enterShareAccept = vi.fn(async () => {});
 vi.mock("../public/webapp/views/share-accept.js", () => ({ enterShareAccept }));
@@ -50,6 +56,9 @@ const umkC = new Uint8Array(32).fill(44);
 const owner = deriveIRK({ seed: umkA });
 const stk = deriveIRK({ seed: new Uint8Array(32).fill(33) });
 const impostor = deriveIRK({ seed: new Uint8Array(32).fill(55) });
+// Bob's admin root: the key his admin device holds and `.com` pins.
+const bobAdminSeed = new Uint8Array(32).fill(66);
+const bobAdminPub = ed.getPublicKey(bobAdminSeed);
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 const fromHex = (h: string) => new Uint8Array(Buffer.from(h, "hex"));
 
@@ -58,11 +67,13 @@ type Init = { method?: string; headers?: Record<string, string>; body?: string }
 async function world() {
   const storage = new InMemoryStorage();
   await storage.usernames.put({ username: "alice", irkPubHex: hex(owner.publicKey), claimedAt: 1 });
+  await storage.usernames.put({ username: "bob", irkPubHex: hex(deriveIRK({ seed: umkB }).publicKey), adminRootPubHex: hex(bobAdminPub), claimedAt: 1 });
   await storage.servers.put({ serverDomain: S, username: "alice", identityPubKeyHex: hex(stk.publicKey), registeredAt: 1 });
   const com = { shares: storage.serverShares, usernames: storage.usernames, servers: storage.servers };
   const store = new ShareStore(null, {
     serverDomain: S,
     verifyOwnerGrant: (g, sig) => verifyServerShareGrant(g, sig, owner.publicKey),
+    verifyAcceptAdmin: testVerifyAcceptAdmin(),
   });
   const updates: Array<{ level: string; memberPubHex: string; body: Record<string, any> }> = [];
   const box = buildShares({
@@ -99,7 +110,9 @@ async function world() {
     if (url.origin === APEX) {
       const token = headers["x-flagship-share-token"] ?? null;
       let r: { status: number; body: unknown } | null = null;
-      if (method === "POST" && p === "/api/users/alice/server-shares") r = await handleCreateServerShare(com, "alice", body);
+      if (method === "GET" && (m = p.match(/^\/api\/users\/([^/]+)\/account-key-attestation$/))) {
+        r = await handleAccountKeyAttestation({ ca: { keypair: TEST_CA, issuer: "test-ca" }, usernames: storage.usernames }, m[1]!);
+      } else if (method === "POST" && p === "/api/users/alice/server-shares") r = await handleCreateServerShare(com, "alice", body);
       else if (method === "POST" && p === "/api/users/alice/server-shares/list") r = await handleListServerShares(com, "alice", body);
       else if (method === "POST" && (m = p.match(/^\/api\/users\/alice\/server-shares\/([0-9a-f]{32})\/revoke$/))) r = await handleRevokeServerShare(com, "alice", m[1]!, body);
       else if (method === "POST" && (m = p.match(/^\/api\/users\/alice\/server-shares\/([0-9a-f]{32})\/unlock$/))) r = await handleServerShareUnlock(com, "alice", m[1]!, body);
@@ -162,7 +175,16 @@ async function world() {
   };
 
   const depsA = { fetch: fetchImpl, apex: APEX, boot: BOOT, umk: umkA, username: "alice", boxFetch };
-  const depsB = { fetch: fetchImpl, apex: APEX, boot: BOOT, umk: umkB, username: "bob" };
+  const depsB = {
+    fetch: fetchImpl,
+    apex: APEX,
+    boot: BOOT,
+    umk: umkB,
+    username: "bob",
+    adminRootSeed: bobAdminSeed as Uint8Array | null,
+    isDemo: false,
+    freshUnlock: async () => ({ ok: true }) as { ok: boolean; cancelled?: boolean; error?: string },
+  };
   return { storage, store, box, diskKey, log, boxPosts, accessPosts, boot, updates, fetchImpl, depsA, depsB };
 }
 
@@ -229,7 +251,14 @@ describe("share this server — owner and member flows", () => {
 
     await shares.confirmShare(S, a, w.depsA);
     const post = w.boxPosts.find((p) => p.path === "/api/screens/shares")!;
-    expect(Object.keys(post.body).sort()).toEqual(["accept", "acceptSignature", "grant", "signature"]);
+    expect(Object.keys(post.body).sort()).toEqual(["accept", "acceptAdmin", "acceptSignature", "grant", "signature"]);
+    // Bob's admin device signed #12 with his admin root; the box checked it.
+    const proof = post.body.acceptAdmin as { admit: Record<string, unknown>; signature: string; attestation: Record<string, unknown> };
+    expect(proof.admit).toMatchObject({ shareId: created.shareId, memberPubHex: memberPub, keyKind: "admin-root", keyPubHex: hex(bobAdminPub) });
+    expect(verifyServerShareAcceptAdmin(proof.admit as never, fromHex(proof.signature), bobAdminPub)).toBe(true);
+    expect(proof.attestation).toMatchObject({ kind: "AccountKeyAttestation", keyKind: "admin-root", keyPubHex: hex(bobAdminPub) });
+    expect(JSON.stringify(proof)).not.toContain("bob");
+    expect(w.store.get(created.shareId)?.acceptAdmin?.admit.keyPubHex).toBe(hex(bobAdminPub));
     expect(post.body.grant).toMatchObject({
       serverDomain: S,
       shareId: created.shareId,
@@ -260,6 +289,73 @@ describe("share this server — owner and member flows", () => {
     const lines = activity.map(shares.activityLine);
     expect(lines).toContain("Sam · signed in");
     expect(lines).toContain("You · shared this server with Sam");
+  });
+
+  it("a non-admin device of the account can't accept: nothing is sent", async () => {
+    const w = await world();
+    const created = await offerTo(w);
+    const link = parseShareLink(created.link)!;
+    const phone = { ...w.depsB, adminRootSeed: null };
+    let unlocks = 0;
+    phone.freshUnlock = async () => ((unlocks += 1), { ok: true });
+    await expect(shares.acceptShare(await shares.openShareLink(link, phone), phone)).rejects.toMatchObject({
+      code: "not-admin",
+      message: "Only an admin device of your account can accept a co-manage invitation.",
+    });
+    expect(unlocks).toBe(0);
+    expect(w.log.some((l) => l.endsWith("/accept"))).toBe(false);
+    // A device whose admin root isn't the one the account pins now is no admin either.
+    const stale = { ...w.depsB, adminRootSeed: new Uint8Array(32).fill(67) };
+    await expect(shares.acceptShare(await shares.openShareLink(link, stale), stale)).rejects.toMatchObject({ code: "not-admin" });
+    expect(w.log.some((l) => l.endsWith("/accept"))).toBe(false);
+  });
+
+  it("cancelling the fresh unlock accepts nothing", async () => {
+    const w = await world();
+    const link = parseShareLink((await offerTo(w)).link)!;
+    const deps = { ...w.depsB, freshUnlock: async () => ({ ok: false, cancelled: true }) };
+    await expect(shares.acceptShare(await shares.openShareLink(link, deps), deps)).rejects.toMatchObject({ code: "cancelled" });
+    expect(w.log.some((l) => l.endsWith("/accept"))).toBe(false);
+  });
+
+  it("an acceptance from an app that sent no admin proof: the owner sees the box's sentence", async () => {
+    const w = await world();
+    const created = await offerTo(w);
+    await shares.acceptShare(await shares.openShareLink(parseShareLink(created.link)!, w.depsB), w.depsB);
+    const [a] = (await shares.loadOwnerShares(S, w.depsA)).awaiting;
+    await expect(shares.confirmShare(S, { ...a, acceptAdmin: null }, w.depsA)).rejects.toMatchObject({
+      code: "accept-not-admin",
+      message:
+        "Only an admin device of their account can accept a co-manage invitation. Cancel this link and send a new one for them to open on an admin device.",
+    });
+    expect(w.store.get(created.shareId)).toBeNull();
+  });
+
+  it("a demo account's device accepts through .com's signer, and the box takes it", async () => {
+    const w = await world();
+    const KEK = new Uint8Array(32).fill(9);
+    const demoRoot = deriveDemoAdminRoot(KEK, "bob");
+    await w.storage.usernames.put({ username: "bob", irkPubHex: hex(deriveIRK({ seed: umkB }).publicKey), adminRootPubHex: hex(demoRoot.publicKey), claimedAt: 1 });
+    await w.storage.demoUsers.insert({
+      username: "bob", idempotencyKey: "demo-bob", snapshotId: null, isoR2Key: null, ttlIdleMinutes: 30, region: "fsn1", size: "cpx11",
+      activeServerId: null, activeServerIp: null, image: "debian-12", activeServerFqdn: null, lastActivityAt: 1, state: "ready",
+      createdAt: 1, provisionPhase: null, provisionPhaseAt: null, provisionLastError: null,
+    } as never);
+    const demoFetch = async (input: string, init: Init = {}) => {
+      if (input === `${APEX}/api/dev/sample-user/bob/share-accept`) {
+        const r = await handleDemoShareAccept({ storage: w.storage.demoUsers, demoIrkKek: KEK }, "bob", JSON.parse(init.body ?? "{}"));
+        return new Response(JSON.stringify(r.body), { status: r.status });
+      }
+      return w.fetchImpl(input, init);
+    };
+    let unlocks = 0;
+    const demo = { ...w.depsB, fetch: demoFetch, adminRootSeed: null, isDemo: true, freshUnlock: async () => ((unlocks += 1), { ok: true }) };
+    const created = await offerTo(w);
+    await shares.acceptShare(await shares.openShareLink(parseShareLink(created.link)!, demo), demo);
+    expect(unlocks).toBe(0);
+    const [a] = (await shares.loadOwnerShares(S, w.depsA)).awaiting;
+    await shares.confirmShare(S, a, w.depsA);
+    expect(w.store.get(created.shareId)?.acceptAdmin?.admit.keyPubHex).toBe(hex(demoRoot.publicKey));
   });
 
   it("someone who got the link first shows a different code, and the link works once", async () => {

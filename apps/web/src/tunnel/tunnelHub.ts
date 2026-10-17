@@ -13,6 +13,12 @@ import {
   FRAME_OUTBOUND_CREDIT,
   FRAME_OUTBOUND_OPEN,
   FRAME_REQUEST_TRANSFER,
+  FRAME_PB_MAILBOX_ANNOUNCE,
+  FRAME_PB_MAIL_RESP,
+  CAPABILITY_PB_MAIL_V1,
+  MailAssembler,
+  decodeMailboxAnnounce,
+  mailRequestFrames,
   helloAckFrame,
   isOutboundStreamId,
   OUTBOUND_STREAM_ID_BASE,
@@ -21,6 +27,7 @@ import {
   type HelloAckTrust,
 } from "@flagship/tunnel-protocol";
 import type { OutboundRelay, OutboundSession } from "./outboundRelay.js";
+import { verifyMailboxAnnouncements, type MailboxRegistry } from "./mailboxRelay.js";
 import {
   serviceEntitlementCertId,
   serviceGrantActiveAt,
@@ -167,6 +174,14 @@ export interface TunnelHubOptions {
    * public `host:443` connections through this hub. Omitted ⇒ not offered.
    */
   outboundRelay?: OutboundRelay;
+  /**
+   * Peer-backup mailboxes (docs/peer-backup.md §5.3). When set, HELLO_ACKs
+   * advertise `pb-mail-v1` and a box's PIK-signed announcements route
+   * `/pb/m/<mailboxId>` posts to its tunnel.
+   */
+  mailboxes?: MailboxRegistry;
+  /** How long a mailbox reply may take. Default 120 s. */
+  mailTimeoutMs?: number;
   now?: () => number;
 }
 
@@ -220,7 +235,16 @@ function attachTunnel(
 ): void {
   let registered: RegisteredTunnel | null = null;
   let outbound: OutboundSession | null = null;
-  const capabilities = opts.outboundRelay ? [CAPABILITY_OUTBOUND_V1] : undefined;
+  const caps = [
+    ...(opts.outboundRelay ? [CAPABILITY_OUTBOUND_V1] : []),
+    ...(opts.mailboxes ? [CAPABILITY_PB_MAIL_V1] : []),
+  ];
+  const capabilities = caps.length > 0 ? caps : undefined;
+  const mailOwner = {};
+  const mailWaiting = new Map<
+    number,
+    { asm: MailAssembler; resolve: (r: { status: number; body: Uint8Array }) => void; timer: ReturnType<typeof setTimeout> }
+  >();
   let lastHelloIssuedAt = 0;
   // Hub-opened stream ids stay below the box's outbound space.
   let nextStream = 1;
@@ -310,6 +334,12 @@ function attachTunnel(
 
   ws.on("close", () => {
     cancelIdleClose();
+    opts.mailboxes?.drop(mailOwner);
+    for (const w of mailWaiting.values()) {
+      clearTimeout(w.timer);
+      w.resolve({ status: 502, body: new Uint8Array(0) });
+    }
+    mailWaiting.clear();
     inbound.dispose();
     if (registered) {
       const result = registry.unregister(registered.podCanonical);
@@ -459,6 +489,42 @@ function attachTunnel(
       if (r.ok) {
         broadcastSnapshot(registry, r.affectedSet);
       }
+      return;
+    }
+    if (f.type === FRAME_PB_MAILBOX_ANNOUNCE) {
+      if (!opts.mailboxes) return;
+      const list = decodeMailboxAnnounce(f.payload);
+      const ids = list ? verifyMailboxAnnouncements(list, now()) : null;
+      if (!ids) return;
+      opts.mailboxes.register(ids, mailOwner, (mailboxId, envelope) =>
+        new Promise((resolve) => {
+          const id = takeStreamId();
+          const timer = setTimeout(() => {
+            mailWaiting.delete(id);
+            resolve({ status: 504, body: new Uint8Array(0) });
+          }, opts.mailTimeoutMs ?? 120_000);
+          mailWaiting.set(id, { asm: new MailAssembler("resp"), resolve, timer });
+          for (const fr of mailRequestFrames(id, mailboxId, envelope)) send(fr);
+        }),
+      );
+      return;
+    }
+    if (f.type === FRAME_PB_MAIL_RESP) {
+      const w = mailWaiting.get(f.streamId);
+      if (!w) return;
+      let r;
+      try {
+        r = w.asm.push(f.payload);
+      } catch {
+        clearTimeout(w.timer);
+        mailWaiting.delete(f.streamId);
+        w.resolve({ status: 502, body: new Uint8Array(0) });
+        return;
+      }
+      if (!r.done) return;
+      clearTimeout(w.timer);
+      mailWaiting.delete(f.streamId);
+      w.resolve({ status: w.asm.status, body: r.body });
       return;
     }
     if (

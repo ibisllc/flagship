@@ -52,6 +52,8 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/app-db-write/v1", //           a write to a live app's database
   "flagship/app-copy/v1", //               copy an app to another server
   "flagship/archive-download/v1", //       download a server backup in a browser
+  "flagship/server-archive-keys/v1", //    keys for a server's scheduled backups
+  "flagship/backup-policy/v1", //          a server's backup policy (and the size limit it sets)
   "flagship/app-rank/v1", //               a rank in an app, or refuse a device or co-manager
   "flagship/service-access-mode/v2", //    open to all / members only
   "flagship/service-allow-remove/v2", //   remove a person from an app
@@ -77,6 +79,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/server-share-revoke/v1", //    end a share (box + .com)
   "flagship/server-share-offer/v1", //     offer a share (.com)
   "flagship/server-share-unlock/v1", //    a share's copy of the disk key (.com)
+  "flagship/server-share-accept-admin/v1", // accept a share for this account (the shared box)
 ]);
 
 const _decoder = new TextDecoder();

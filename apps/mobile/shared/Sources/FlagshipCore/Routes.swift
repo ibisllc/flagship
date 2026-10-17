@@ -234,8 +234,8 @@ public enum RootDestination: String, CaseIterable, Hashable, Identifiable, Senda
 
 /// Onboarding sub-routes. Welcome is the root; the leaf flows are
 /// "create a new account" (Welcome → ChooseUsername → OpenAccount) and
-/// "I already have an account" (Welcome → Recovery via WebAuthn-PRF →
-/// the post-recovery choice). Both leave the user on the paired RootShell.
+/// "Connect to an existing account" (Welcome → ConnectAccount: sign in by
+/// account name, or join with a pairing code). Both leave the user on the paired RootShell.
 /// Provisioning a server is no longer part of onboarding — it's the
 /// in-shell "Add a server" flow (HomeRoute.provisionServer).
 public enum OnboardingRoute: Hashable, Sendable {
@@ -250,18 +250,19 @@ public enum OnboardingRoute: Hashable, Sendable {
     case openAccount(username: String)
     /// Skippable "Secure your account" step. Shown right after a
     /// brand-new account is opened (OpenAccount) and BEFORE the user
-    /// lands in the main app — the new-account path only (never the "I
-    /// already have an account" path). Nudges a backup with the cloud
+    /// lands in the main app — the new-account path only (never the
+    /// "Connect to an existing account" path). Nudges a backup with the cloud
     /// option pre-selected; lets the user skip behind a clear warning.
     /// Reuses the existing cloud-recovery + `.flagshipkey` mechanisms.
     case secureAccount(username: String)
-    /// Username-first Join ("I already have an account"). The FIRST
-    /// screen is a bare-username input; on submit a single preflight
+    /// "Connect to an existing account": one page with both ways in.
+    /// Sign in by account name — on submit a single preflight
     /// (`/api/account/resolve`, 200 always) branches: demo attaches a
     /// new device + opens the sandbox; unknown renders an inline state;
     /// single/multi push `.realAccountLogin`. This replaces the old
-    /// `assertAny()`-first recovery entry — Join no longer 404s.
-    case recoverFromWelcome
+    /// `assertAny()`-first recovery entry — Join no longer 404s. Or join
+    /// with a pairing code, which pushes `.joinByPairing`.
+    case connectAccount
     /// Phase 3 — the real single/multi login state machine for a
     /// resolved account. Carries the full `AccountResolution` from the
     /// preflight so the downstream screen branches on `kind` / `recovery`
@@ -278,7 +279,7 @@ public enum OnboardingRoute: Hashable, Sendable {
     case realAccountLogin(resolution: AccountResolution)
     /// Phase 3b — cross-device QR pairing as a brand-new collaborator
     /// (the app is UNPAIRED and a `/join` deeplink/scan arrives, or the
-    /// user picks "Scan a pairing code" from Welcome). Carries the
+    /// user scans or pastes a code on Connect to an existing account). Carries the
     /// scanned/deeplinked `/join` link; runs the incoming JoinAccount
     /// flow which attaches a FRESH device key + installs the shared UMK
     /// into a new per-profile slot, then completes onboarding paired.

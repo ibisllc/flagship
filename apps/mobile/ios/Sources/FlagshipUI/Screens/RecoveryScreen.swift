@@ -99,7 +99,7 @@ public struct RecoveryScreen: View {
                                 Text("Recovery active").foregroundColor(c.text)
                             }
                             Text("Passkey: \(credId)").font(FS.font.mono()).foregroundColor(c.textMuted).lineLimit(1).truncationMode(.middle)
-                            Text("If you lose this device, install Flagship on a new one, choose \"I already have an account,\" and recover with your passphrase.").font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                            Text("If you lose this device, install Flagship on a new one, choose \"Connect to an existing account,\" and recover with your passphrase.").font(FS.font.bodySm()).foregroundColor(c.textMuted)
                         case .recovering:
                             HStack { ProgressView(); Text("Verifying passkey…").foregroundColor(c.textMuted) }
                         case .recovered:
@@ -119,7 +119,7 @@ public struct RecoveryScreen: View {
                         Image(systemName: "info.circle.fill").foregroundColor(c.primary)
                         VStack(alignment: .leading, spacing: 4) {
                             Text("How this works").font(FS.font.bodySm()).foregroundColor(c.text)
-                            Text("Recovery requires both your recovery passphrase and access to the iCloud Keychain that holds your Flagship passkey. Together they unlock the encrypted copy of your account key stored on our servers; we cannot read it or reset your passphrase.")
+                            Text("Recovery requires both your recovery passphrase and access to the passkey you saved for Flagship (in iCloud Keychain or your password manager). Together they unlock the encrypted copy of your account key stored on our servers; we cannot read it or reset your passphrase.")
                                 .font(FS.font.caption())
                                 .foregroundColor(c.textMuted)
                         }

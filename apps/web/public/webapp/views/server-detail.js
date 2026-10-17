@@ -91,7 +91,9 @@ import {
   PASSCODE_NOTE,
   backupDownloadLink,
   backupStatus,
+  describeRestoreApp,
   downloadHere,
+  restoreSummary,
   formatBytes,
   forgetBackup,
   startServerBackup,
@@ -110,6 +112,7 @@ import {
   migrationWaitCopy,
   DEFAULT_MIGRATION_DISPOSITION,
   MIGRATE_LABEL,
+  MIGRATE_DATA_NOTE,
 } from "../lib/serverMigration.js";
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
@@ -129,6 +132,8 @@ import {
   wireMonitoringPane,
 } from "../lib/serverMonitoring.js";
 import { serverSharingHtml, wireServerSharing } from "./server-sharing.js";
+import { backupsSectionHtml, wireBackupsSection } from "./server-backups.js";
+import { downtimeText, estimateMove, moveData, resumeOld } from "../lib/migrateArchive.js";
 import { accountReadFetch } from "../lib/accountRead.js";
 import { SERVER_ADMIN_ONLY, canSignAdminOrders } from "../lib/addServerGate.js";
 import { isAdminDevice } from "../lib/memberRoles.js";
@@ -575,6 +580,7 @@ export async function renderServerDetail() {
       </div>
       ${serverSharingHtml(body)}
 
+      ${backupsSectionHtml(body)}
       <h2 class="mt-4">Backup / Migrate</h2>
       <div class="card" id="backup-migrate-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
         <button id="backup-start-btn" class="full-width">Backup/clone server</button>
@@ -617,6 +623,7 @@ export async function renderServerDetail() {
     wireUpdate(body);
     wireMigrate(body);
     wireBackup(body);
+    wireBackupsSection(body);
     wireDangerZone(body.serverFqdn, body.username, {
       revoked: isRestorableRevokedPod(detailPod),
       pod: detailPod,
@@ -1569,7 +1576,7 @@ async function openBackupDialog(body) {
     <p class="modal-error err-text hidden" data-bk-error></p>
     <div class="row-2 mt-3">
       <button class="secondary" data-bk-close>Close</button>
-      <button class="hidden" data-bk-save>Download both files</button>
+      <button class="hidden" data-bk-save>Download the backup</button>
     </div>
     <div class="row-2 mt-2">
       <button class="secondary hidden" data-bk-copy>Copy download link</button>
@@ -1662,7 +1669,7 @@ async function openBackupDialog(body) {
         },
       });
       barEl.value = 100;
-      statusEl.textContent = `Backup ready: ${archive.backupFileName} and ${archive.dataFileName} (${formatBytes(archive.bytes)}). Keep the two files together; your browser saves them straight to disk.`;
+      statusEl.textContent = `Backup ready: ${archive.bundleFileName} (${formatBytes(archive.bundleBytes)}). Your browser saves it straight to disk.`;
       if (Array.isArray(archive.left) && archive.left.length > 0) {
         errEl.textContent = `Left out (no source to rebuild them from): ${archive.left.map((a) => a.name).join(", ")}.`;
         errEl.classList.remove("hidden");
@@ -1685,7 +1692,7 @@ async function openBackupDialog(body) {
             umk: session.umk,
             signWithIrk: sensitiveSigner(),
           });
-          toast("Downloads started", "ok");
+          toast("Download started", "ok");
         } catch (e) {
           showError(e);
         } finally {
@@ -2141,6 +2148,13 @@ async function openMigrateDialog(body) {
     <div class="hidden" data-mig-progress>
       <ul class="mt-2" data-mig-steps style="list-style:none;padding-left:0"></ul>
       <p class="note" data-mig-wait></p>
+      <div class="hidden mt-2" data-mig-move>
+        <p class="note" data-mig-estimate>Measuring the link between the two servers…</p>
+        <p class="note small hidden" data-mig-move-step></p>
+        <progress class="full-width hidden" data-mig-move-bar max="100" value="0"></progress>
+        <ul class="note small hidden" data-mig-move-apps></ul>
+        <button class="full-width mt-2" data-mig-move-btn disabled>Move the data now</button>
+      </div>
     </div>
     <p class="modal-error err-text hidden" data-mig-error></p>
     <div class="row-2 mt-3">
@@ -2206,6 +2220,7 @@ async function openMigrateDialog(body) {
     if (s.abortedAt == null && s.takenOverAt == null) {
       abortRow.classList.remove("hidden");
     }
+    renderMove(s);
     if (s.phase === "pre-seeded") {
       actionBtn.textContent = "Hand off to the new box now";
       actionBtn.disabled = false;
@@ -2221,6 +2236,68 @@ async function openMigrateDialog(body) {
       clearMigrationHold(serverFqdn);
       cancelBtn.textContent = "Done";
     }
+  };
+
+  // -- the data move (docs/server-migration.md, "Data path") ------------------
+  const moveEl = dlg.querySelector("[data-mig-move]");
+  const estimateEl = dlg.querySelector("[data-mig-estimate]");
+  const moveStepEl = dlg.querySelector("[data-mig-move-step]");
+  const moveBarEl = dlg.querySelector("[data-mig-move-bar]");
+  const moveAppsEl = dlg.querySelector("[data-mig-move-apps]");
+  const moveBtn = dlg.querySelector("[data-mig-move-btn]");
+  let estimated = null;
+  let moving = false;
+  const renderMove = (s) => {
+    const show = s.phase === "provisioned" && !!s.newServerDomain && s.abortedAt == null;
+    moveEl.classList.toggle("hidden", !show && !moving);
+    if (!show || estimated || moving) return;
+    estimated = "pending";
+    const newFqdn = s.newServerDomain;
+    estimateMove({ oldClient: boxClient(serverFqdn), newClient: boxClient(newFqdn), oldFqdn: serverFqdn })
+      .then((e) => {
+        estimated = e;
+        estimateEl.textContent =
+          `About ${formatBytes(e.archiveBytes || 0)} to move at ${formatBytes(e.bytesPerSecond)}/s between the servers. ` +
+          `Your apps pause for ${downtimeText(e.downtimeSec)}: they show "moving to a new server" until the new one takes over.`;
+        moveBtn.disabled = !canSignAdminOrders();
+      })
+      .catch((e) => {
+        estimated = null;
+        estimateEl.textContent = `Couldn't measure the move: ${archiveErrorText(e)}`;
+      });
+    moveBtn.onclick = async () => {
+      errEl.classList.add("hidden");
+      moving = true;
+      moveBtn.disabled = true;
+      moveStepEl.classList.remove("hidden");
+      moveBarEl.classList.remove("hidden");
+      const label = { backup: "Backup", transfer: "Transfer", restore: "Restore" };
+      try {
+        const out = await moveData({
+          oldClient: boxClient(serverFqdn),
+          newClient: boxClient(newFqdn),
+          oldFqdn: serverFqdn,
+          newFqdn,
+          umk: session.umk,
+          sign: (bytes) => sensitiveSigner()(session.umk, bytes),
+          canSignAdmin: canSignAdminOrders(),
+          onProgress: (p) => {
+            moveStepEl.textContent = `${label[p.step]}: ${p.pct}%. ${p.text}`;
+            moveBarEl.value = p.pct;
+          },
+        });
+        moveStepEl.textContent = restoreSummary(out.apps);
+        moveAppsEl.innerHTML = out.apps.map((a) => `<li>${escapeHtml(describeRestoreApp(a))}</li>`).join("");
+        moveAppsEl.classList.remove("hidden");
+        moveBtn.classList.add("hidden");
+        await poll();
+      } catch (e) {
+        showError(e);
+        moveBtn.disabled = false;
+      } finally {
+        moving = false;
+      }
+    };
   };
 
   const poll = async () => {
@@ -2262,6 +2339,8 @@ async function openMigrateDialog(body) {
     abortBtn.textContent = "Aborting…";
     try {
       await abortMigration(signerArgs());
+      // The old server's apps run again (they were paused for the move).
+      await resumeOld({ oldClient: boxClient(serverFqdn) }).catch(() => {});
       clearMigrationHold(serverFqdn);
       toast("Migration aborted — your old server stays active", "ok");
       await poll();
@@ -2277,15 +2356,13 @@ async function openMigrateDialog(body) {
   const renderInitiate = () => {
     loadingEl.classList.add("hidden");
     initEl.classList.remove("hidden");
-    backupEl.textContent = ctx.backupEnrolled
-      ? "Peer-backup is enrolled — the new box restores from it while this one keeps serving."
-      : "No backup is enrolled for this server, and the migration moves data through backup. Enable backup first, or use Backup/clone server and restore it from Home onto a new server instead.";
+    backupEl.textContent = MIGRATE_DATA_NOTE;
     actionBtn.textContent = "Start migration";
     actionBtn.classList.remove("hidden");
 
-    const blocked = !ctx.backupEnrolled;
+    const blocked = !canSignAdminOrders();
     if (blocked) {
-      gateEl.textContent = "This server has no backup yet, so it can't be migrated.";
+      gateEl.textContent = SERVER_ADMIN_ONLY;
       gateEl.classList.remove("hidden");
     } else {
       gateEl.classList.add("hidden");

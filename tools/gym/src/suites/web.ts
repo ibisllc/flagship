@@ -1228,13 +1228,13 @@ const TOTAL: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-share-member-accept",
-    "Share a server (co-manager): opening a share link shows the offer, accepting shows the six-digit code and waits for the owner to confirm.",
+    "Share a server (co-manager): opening a share link shows the offer; Accept asks for this device's passphrase once, signs flagship/server-share-accept-admin/v1 with the account's admin root and seals it with .com's attestation of that key into the acceptance; then the six-digit code and waiting for the owner to confirm.",
     "gym share member accepts a link and reads the code",
     {
       steps: [
         { kind: "launch", describe: "Open the share link's accept view (stubbed offer)." },
         { kind: "assert", describe: "Offer shown.", handle: "#share-accept-content" },
-        { kind: "tap", describe: "Accept." },
+        { kind: "tap", describe: "Accept → this device's passphrase." },
         { kind: "assert", describe: "Code + waiting for the owner.", handle: "[data-share-waiting]" },
       ],
       assertions: [
@@ -1248,7 +1248,7 @@ const TOTAL: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-share-member-admin-only",
-    "Co-managing a server adds it to the account, so only an admin device may: on any other device a share link shows 'Only an admin device of this account can add servers.' and no Accept. Mirrors iOS and Android add-server-admin-only.",
+    "Co-managing a server adds it to the account, so only an admin device may (the shared server checks the admin root's signature): on any other device a share link shows 'Only an admin device of your account can accept a co-manage invitation.' and no Accept. Mirrors iOS and Android.",
     "gym share link on a device that is not an admin device shows the refusal",
     {
       steps: [
@@ -1256,7 +1256,7 @@ const TOTAL: readonly Scenario[] = [
         { kind: "assert", describe: "Refusal in place of the offer.", handle: "#share-accept-content" },
       ],
       assertions: [
-        { describe: "Refusal", handle: "#share-accept-content", expect: "text", text: "Only an admin device of this account can add servers." },
+        { describe: "Refusal", handle: "#share-accept-content", expect: "text", text: "Only an admin device of your account can accept a co-manage invitation." },
         { describe: "No Accept", handle: "[data-share-accept]", expect: "absent" },
       ],
       screenshots: [shot("member-admin-only", "The refusal on a non-admin device.")],

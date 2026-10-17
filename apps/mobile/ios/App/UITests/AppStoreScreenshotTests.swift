@@ -1,7 +1,7 @@
 import XCTest
 
 /// App Store screenshot driver. Drives the REAL reviewer path — a fresh install
-/// signs in to a live demo account through "I already have an account" — then
+/// signs in to a live demo account through "Connect to an existing account" — then
 /// visits each primary destination and writes a full-resolution PNG per screen.
 ///
 /// Opt-in only (skipped unless `SHOT_USER` is set), so the gym suites never run
@@ -68,16 +68,16 @@ final class AppStoreScreenshotTests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        let haveAccount = app.buttons["I already have an account"]
+        let haveAccount = app.buttons["welcome-connect"]
         XCTAssertTrue(haveAccount.waitForExistence(timeout: 15))
         shot(app, "01-welcome")
         haveAccount.tap()
 
-        let field = app.textFields.firstMatch
+        let field = app.textFields.matching(identifier: "connect-name-field").firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         field.tap()
         field.typeText(user)
-        app.buttons["join-continue"].tap()
+        app.buttons["connect-name-continue"].tap()
 
         XCTAssertTrue(
             app.buttons["home-add-server"].waitForExistence(timeout: 90),

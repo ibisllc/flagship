@@ -64,6 +64,7 @@ SERVICES_HEALTH="https://flagship-services-gym.fly.dev:8443/api/health"
 # Secrets prod has that the gym deliberately goes without: store pushes, the
 # public adapter index, the inference shim (the gym has none), and the
 # suspended Hetzner account.
+GYM_ONLY_SECRETS="PB_TOKEN_RSA_JWK PB_FILLER_SECRET PB_TAG_SECRET"
 NOT_NEEDED_IN_GYM="ADAPTERS_GITHUB_TOKEN APNS_BUNDLE_ID APNS_KEY_ID APNS_PRIVATE_KEY_PEM APNS_TEAM_ID FLAGSHIP_INFERENCE_ENDPOINT HCLOUD_TOKEN"
 
 phase() { echo; echo "──── gym-refresh: $1"; }
@@ -177,6 +178,8 @@ gym_value_var() {
     USAGE_REPORT_SECRET) echo GYM_USAGE_REPORT_SECRET ;;
     BOOT_NOTIFY_SECRET) echo GYM_BOOT_NOTIFY_SECRET ;;
     FLAGSHIP_INFERENCE_TOKEN_SECRET) echo GYM_INFERENCE_TOKEN_SECRET ;;
+    PB_FILLER_SECRET) echo GYM_PB_FILLER_SECRET ;;
+    PB_TAG_SECRET) echo GYM_PB_TAG_SECRET ;;
     *) echo "" ;;
   esac
 }
@@ -224,6 +227,22 @@ else
     die "gym Worker lacks secrets prod has and no gym value is known: ${unresolved[*]} (set them with 'wrangler secret put <NAME> --config $CFG', or add them to NOT_NEEDED_IN_GYM with the reason)"
   fi
   say "gym Worker has every secret prod has (except: $NOT_NEEDED_IN_GYM)"
+  # Secrets the gym needs whether or not prod has them yet: peer backup's
+  # (docs/peer-backup.md §13), so the live peer-backup group can run first.
+  for name in $GYM_ONLY_SECRETS; do
+    case "$gym_names" in *"$name"*) continue ;; esac
+    if [ "$name" = PB_TOKEN_RSA_JWK ]; then
+      if [ -z "${GYM_PB_TOKEN_RSA_JWK:-}" ]; then
+        GYM_PB_TOKEN_RSA_JWK="$(node -e 'process.stdout.write(JSON.stringify(require("node:crypto").generateKeyPairSync("rsa",{modulusLength:2048}).privateKey.export({format:"jwk"})))')"
+        ( umask 077; printf "GYM_PB_TOKEN_RSA_JWK='%s'\n" "$GYM_PB_TOKEN_RSA_JWK" >> "$SECRETS_FILE" )
+      fi
+      put_gym_secret PB_TOKEN_RSA_JWK "$GYM_PB_TOKEN_RSA_JWK" && say "set PB_TOKEN_RSA_JWK (gym value)" || die "could not set PB_TOKEN_RSA_JWK"
+    else
+      var="$(gym_value_var "$name")"
+      ensure_gym_value "$var"
+      put_gym_secret "$name" "${!var}" && say "set $name (gym value)" || die "could not set $name"
+    fi
+  done
 
   fly_names() { flyctl secrets list -a "$1" 2>/dev/null | awk 'NR>1 && $1 ~ /^[A-Z_]+$/ {print $1}' | sort -u; }
   fly_missing="$(comm -23 <(fly_names "$PROD_FLY_APP") <(fly_names "$FLY_APP") || true)"
