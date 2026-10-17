@@ -49,7 +49,8 @@ and the phone apps follow the device's setting. Both must be first-class.
 | `--ink` | `#14140F` | Primary copy. Near-black, warm. |
 | `--ink-muted` | `#555149` | Secondary copy, captions, mono labels. |
 | `--teal` | `#14B8A6` | The Flagship teal. Fills: primary buttons, selection, progress, the eyebrow rule. Text on it is dark ink (`#0A0A09`), never white or cream (contrast). |
-| `--accent` (webapp) | `#0F766E` | The teal deepened to pass AA as text: links, active tab, focus rings. |
+| `--accent` (webapp and site) | `#0F766E` | The teal deepened to pass AA (4.5:1) as small text: links, active tab label, pressed and hover text. Dark theme: `#2DD4BF`. |
+| `--accent-graphic` (webapp and site) | `#0F9B8E` | The lighter teal for graphics (3:1 on the canvas and cards): icons beside labels, focus rings, spinners, rings, sparklines, state borders, large headings. Never small text. Dark theme: `#2DD4BF`. Owner, 2026-10-17: keep the light teal wherever it stays readable. `apps/web/tests/themeContrast.test.ts` pins every pairing. |
 | `--ok` / `--warn` / `--err` (webapp) | `#15803D` / `#A15C07` / `#B91C1C` | Status text and icons; AA on paper. |
 
 ### 2.2 Dark theme

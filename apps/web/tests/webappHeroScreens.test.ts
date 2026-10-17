@@ -185,8 +185,9 @@ describe("Teal alignment — accent is teal, --ink is softened off pure black", 
     expect(TOKENS).toContain("--ink:             #14140F");
     expect(TOKENS).not.toMatch(/--ink:\s*#000000/);
   });
-  it("--accent + --primary resolve to teal", () => {
-    expect(TOKENS).toMatch(/--accent:\s*var\(--teal\)/);
+  it("--primary is the teal fill; --accent and --accent-graphic are its text and graphic steps", () => {
+    expect(TOKENS).toMatch(/--accent:\s*#0F766E/);
+    expect(TOKENS).toMatch(/--accent-graphic:\s*#0F9B8E/);
     expect(TOKENS).toMatch(/--primary:\s*var\(--teal\)/);
     expect(TOKENS).toContain("--teal:            #14B8A6");
     expect(TOKENS).toContain("--teal-bright:     #2DD4BF");

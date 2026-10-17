@@ -33,6 +33,6 @@ main h1:first-child {
   letter-spacing: -0.025em;
   margin: 0 0 var(--space-4);
 }
-main h1 .accent { color: var(--teal-bright); }
+main h1 .accent { color: var(--accent-graphic); }
 main h2 { margin: var(--space-12) 0 var(--space-4); }
 main h3 { margin: var(--space-6) 0 var(--space-2); }

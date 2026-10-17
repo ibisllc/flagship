@@ -42,11 +42,16 @@
   --ink-muted:       #555149;
   --ink-faint:       #6B665C;
 
-  /* One accent. --teal fills (buttons, selection, progress) and always
-     carries dark ink on top; --accent is the same hue deepened until it
-     reads as text, icon or border on this theme's canvas. */
+  /* One accent, three roles (owner, 2026-10-17: keep the light teal where
+     it stays readable). --teal fills (buttons, selection, bars) and always
+     carries dark ink on top. --accent-graphic is a lighter step for icons
+     beside labels, focus rings, spinners, rings and sparklines (3:1 on the
+     canvas and cards); never for small text. --accent is the deep step for
+     small text and links (4.5:1). apps/web/tests/themeContrast.test.ts pins the
+     pairings. */
   --teal:            #14B8A6;
   --teal-bright:     #2DD4BF;
+  --accent-graphic:  #0F9B8E;
   --accent:          #0F766E;
   --accent-press:    #0B5F58;
   --accent-soft:     rgba(20, 184, 166, 0.10);
@@ -129,6 +134,7 @@
     --ink-soft:        #C8C2B0;
     --ink-muted:       #A39D8F;
     --ink-faint:       #8A8478;
+    --accent-graphic:  #2DD4BF;
     --accent:          #2DD4BF;
     --accent-press:    #5EEAD4;
     --accent-soft:     rgba(45, 212, 191, 0.10);
@@ -158,6 +164,7 @@
   --ink-soft:        #C8C2B0;
   --ink-muted:       #A39D8F;
   --ink-faint:       #8A8478;
+  --accent-graphic:  #2DD4BF;
   --accent:          #2DD4BF;
   --accent-press:    #5EEAD4;
   --accent-soft:     rgba(45, 212, 191, 0.10);
@@ -435,7 +442,7 @@ main {
   main { padding-inline: 16px; }
 }
 .companion-mode-banner {
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--accent-graphic);
   background: var(--accent-soft);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   color: var(--ink-soft);
@@ -603,7 +610,7 @@ button:where(:not(:has(> :not(.icon, svg, .glyph)))),
 }
 button:where(:hover), .btn:where(:hover) { background: var(--teal-bright); border-color: var(--teal-bright); }
 button:where(:active), .btn:where(:active) { transform: translateY(1px); }
-button:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: 2px; }
 button:disabled, .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 button:where(:disabled:hover), .btn:where(:disabled:hover) { background: var(--teal); border-color: var(--teal); }
 /* Recovery-gated session buttons: greyed but still TAPPABLE (a tap shows a
@@ -922,7 +929,7 @@ input:focus, textarea:focus, select:focus {
   background: var(--canvas);
 }
 input:focus-visible, textarea:focus-visible, select:focus-visible {
-  border-color: var(--accent);
+  border-color: var(--accent-graphic);
 }
 input[type="checkbox"], input[type="radio"] { accent-color: var(--teal); }
 textarea {
@@ -1000,7 +1007,7 @@ a {
   transition: color var(--motion-state), text-decoration-color var(--motion-state);
 }
 a:hover { text-decoration-color: currentColor; }
-a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+a:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: 3px; border-radius: 2px; }
 /* An anchor dressed as a secondary button (e.g. "Get Flagship Studio"). */
 a.secondary, a.primary {
   display: flex;
@@ -1275,7 +1282,7 @@ section:not(.hidden) {
 
 /* Provider entry — active entry gets a left-edge accent strip. */
 .provider-entry { border-left: 3px solid transparent; }
-.provider-entry.is-active { border-left-color: var(--accent); }
+.provider-entry.is-active { border-left-color: var(--accent-graphic); }
 
 /* Tighter button-row used inside list-card actions. */
 .btn-row-sm { display: flex; gap: var(--space-1); }
@@ -1330,7 +1337,7 @@ section:not(.hidden) {
  * stays horizontal (so the page is still usable if the JS module
  * fails to load). */
 .home-grid button .icon { color: var(--ink-muted); transition: color var(--motion-state); }
-.home-grid button:hover .icon { color: var(--accent); }
+.home-grid button:hover .icon { color: var(--accent-graphic); }
 .home-grid button .icon + .label-text { display: block; }
 .home-grid button:has(.label-text) {
   flex-direction: column;
@@ -1431,7 +1438,7 @@ section:not(.hidden) {
   background: var(--teal);
 }
 .tab-bar-btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--accent-graphic);
   outline-offset: -4px;
   border-radius: 4px;
 }
@@ -1790,7 +1797,7 @@ button[data-device-restricted] {
 .demo-step { display: grid; grid-template-columns: 18px 1fr; row-gap: 2px; align-items: start; }
 .demo-step-icon { font-weight: 700; color: var(--ink-muted); }
 .demo-step-done .demo-step-icon { color: var(--ok); }
-.demo-step-active .demo-step-icon { color: var(--accent); }
+.demo-step-active .demo-step-icon { color: var(--accent-graphic); }
 .demo-step-failed .demo-step-icon { color: var(--err); }
 .demo-step-label { color: var(--ink-soft); }
 .demo-step-pending .demo-step-label { color: var(--ink-muted); }
@@ -1952,7 +1959,7 @@ section h2.fs-hero-title::before { content: none; }
   color: var(--ink-faint);
 }
 .fs-chip.is-selected .fs-chip-count { color: var(--accent); }
-.fs-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fs-chip:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: 2px; }
 
 /* Pod-switcher leader marker: a small teal flag next to the main server's
    chip. Tinted with the accent so it reads as "leader" distinctly from the
@@ -1964,11 +1971,11 @@ section h2.fs-hero-title::before { content: none; }
   width: 14px;
   height: 14px;
   margin-left: 5px;
-  color: var(--accent);
+  color: var(--accent-graphic);
   vertical-align: middle;
 }
 .pod-switcher-leader svg { width: 14px; height: 14px; }
-.fs-chip.is-selected .pod-switcher-leader { color: var(--accent); }
+.fs-chip.is-selected .pod-switcher-leader { color: var(--accent-graphic); }
 
 /* ── Search field ──────────────────────────────────────────────────── */
 .fs-search {
@@ -2112,7 +2119,7 @@ section h2.fs-hero-title::before { content: none; }
   width: 20px;
   height: 20px;
   margin-top: 1px;
-  color: var(--accent);
+  color: var(--accent-graphic);
 }
 .fs-announcement-icon svg { width: 18px; height: 18px; }
 .fs-announcement--danger .fs-announcement-icon { color: var(--err); }
@@ -2200,7 +2207,7 @@ section h2.fs-hero-title::before { content: none; }
   color: var(--ink-muted);
 }
 .fs-row-icon svg { width: 18px; height: 18px; stroke-width: 1.75; }
-.fs-row:hover .fs-row-icon { color: var(--accent); }
+.fs-row:hover .fs-row-icon { color: var(--accent-graphic); }
 .fs-row-icon--danger, .fs-row:hover .fs-row-icon--danger { color: var(--err); }
 .fs-row-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
 .fs-row-title { font-size: 15px; font-weight: 400; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2287,7 +2294,7 @@ section h2.fs-hero-title::before { content: none; }
 .build-resume-chevron { color: var(--ink-muted); font-size: 1.2rem; }
 /* "Edit this service" row on service detail, and its chooser's options. */
 .edit-row { display: flex; align-items: center; gap: var(--space-3); text-align: left; cursor: pointer; }
-.edit-row-icon { flex: 0 0 auto; display: inline-flex; color: var(--accent); }
+.edit-row-icon { flex: 0 0 auto; display: inline-flex; color: var(--accent-graphic); }
 .edit-row-icon svg { width: 22px; height: 22px; }
 .edit-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .edit-row-body strong { font-size: 1rem; }
@@ -2360,7 +2367,7 @@ section h2.fs-hero-title::before { content: none; }
 .build-git-verdict-head p { margin: 0; }
 .build-git-recheck { flex: 0 0 auto; min-height: 0; width: 32px; height: 32px; padding: 0; font-size: 16px; }
 .build-git-adapting { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--ink-muted); }
-.build-git-spinner { flex: 0 0 auto; width: 14px; height: 14px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent); border-top-color: var(--accent); animation: ops-bar-spin 0.7s linear infinite; }
+.build-git-spinner { flex: 0 0 auto; width: 14px; height: 14px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--accent-graphic) 30%, transparent); border-top-color: var(--accent-graphic); animation: ops-bar-spin 0.7s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .build-git-spinner { animation-duration: 1.4s; } }
 .vc-prompt-label { display: block; margin-top: var(--space-3); }
 .vc-first-turn-extras { display: flex; flex-direction: column; gap: var(--space-2); }
@@ -2456,7 +2463,7 @@ section h2.fs-hero-title::before { content: none; }
 
 .update-pending { display: flex; align-items: flex-start; gap: var(--space-2); }
 .update-pending p { margin: 0; }
-.update-pending-spinner { flex: 0 0 auto; width: 14px; height: 14px; margin-top: 3px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent); border-top-color: var(--accent); animation: ops-bar-spin 0.7s linear infinite; }
+.update-pending-spinner { flex: 0 0 auto; width: 14px; height: 14px; margin-top: 3px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--accent-graphic) 30%, transparent); border-top-color: var(--accent-graphic); animation: ops-bar-spin 0.7s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .update-pending-spinner { animation-duration: 1.4s; } }
 
 /* A live app's API keys (docs/app-apis.md §3). */
@@ -2471,7 +2478,7 @@ section h2.fs-hero-title::before { content: none; }
 .runs-on-line { margin: 0 0 8px; }
 .runs-on-line select { width: 100%; }
 .server-app-row { width: 100%; text-align: left; justify-content: flex-start; flex-wrap: wrap; gap: 6px 10px; cursor: pointer; }
-.server-app-row:hover { border-color: var(--accent); }
+.server-app-row:hover { border-color: var(--accent-graphic); }
 .server-app-row.is-copying { opacity: 0.55; cursor: default; }
 .server-app-row.is-copying:hover { border-color: inherit; }
 .runs-on-row { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; }
@@ -2500,7 +2507,7 @@ section h2.fs-hero-title::before { content: none; }
 }
 .monitor-row:hover { background: var(--surface-elev); }
 .monitor-row:active { transform: none; background: var(--surface-elev); }
-.monitor-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.monitor-row:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: -2px; }
 .monitor-name { display: inline-flex; align-items: center; gap: var(--space-3); flex: 1 1 auto; min-width: 0; }
 .monitor-value {
   flex: 0 1 auto;
@@ -2527,7 +2534,7 @@ section h2.fs-hero-title::before { content: none; }
 .monitor-spark { display: block; width: 100%; height: 48px; margin-bottom: var(--space-2); fill: none; stroke-width: 1.5; }
 .monitor-facts + .monitor-spark { margin-top: var(--space-3); }
 .monitor-spark polyline { vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
-.monitor-spark-accent { stroke: var(--accent); }
+.monitor-spark-accent { stroke: var(--accent-graphic); }
 .monitor-spark-ok { stroke: var(--ok); }
 .monitor-spark-err { stroke: var(--err); }
 .monitor-detail > .note.small { margin: 0; }
@@ -2537,7 +2544,7 @@ section h2.fs-hero-title::before { content: none; }
 .monitor-ring circle { fill: none; stroke-width: 8; }
 .monitor-ring-track { stroke: var(--surface-sunken); }
 .monitor-ring-fill { stroke-linecap: round; }
-.monitor-ring-accent .monitor-ring-fill { stroke: var(--accent); }
+.monitor-ring-accent .monitor-ring-fill { stroke: var(--accent-graphic); }
 .monitor-ring-warn .monitor-ring-fill { stroke: var(--warn); }
 .monitor-ring-err .monitor-ring-fill { stroke: var(--err); }
 .monitor-ring text { fill: var(--ink); font-family: var(--font-sans); font-size: 14px; font-weight: 600; }
@@ -2546,11 +2553,11 @@ section h2.fs-hero-title::before { content: none; }
 .monitor-rates strong { grid-column: 1 / -1; font-size: 15px; font-weight: 600; color: var(--ink); }
 .monitor-rate-label { color: var(--ink-muted); font-size: 12px; }
 .monitor-dot { width: 6px; height: 6px; border-radius: 50%; }
-.monitor-dot-accent { background: var(--accent); }
+.monitor-dot-accent { background: var(--accent-graphic); }
 .monitor-dot-warn { background: var(--warn); }
 .monitor-dot-ok { background: var(--ok); }
 .monitor-dot-err { background: var(--err); }
-.monitor-name .icon { color: var(--accent); }
+.monitor-name .icon { color: var(--accent-graphic); }
 .monitor-item[data-tone="warn"] .monitor-name .icon { color: var(--warn); }
 .monitor-item[data-tone="err"] .monitor-name .icon { color: var(--err); }
 @media (prefers-reduced-motion: reduce) { .monitor-chevron { transition: none; } }
@@ -2590,7 +2597,7 @@ section h2.fs-hero-title::before { content: none; }
   border-color: var(--border);
   color: var(--ink);
 }
-.fs-segmented > button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fs-segmented > button:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: 2px; }
 .fs-segmented[aria-disabled="true"] > button { cursor: progress; opacity: 0.7; }
 
 /* Access control — member rows (views/service-access.js). */

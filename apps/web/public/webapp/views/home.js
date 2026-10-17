@@ -71,8 +71,8 @@ registerView("view-home", { tab: "home" });
 const EMPTY_MARK_SVG = `
 <svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="empty-mark">
   <rect x="8" y="8" width="80" height="80" rx="22" fill="var(--accent-soft)"
-        stroke="var(--accent)" stroke-width="2" />
-  <circle cx="48" cy="48" r="20" fill="none" stroke="var(--accent)" stroke-width="4" />
+        stroke="var(--accent-graphic)" stroke-width="2" />
+  <circle cx="48" cy="48" r="20" fill="none" stroke="var(--accent-graphic)" stroke-width="4" />
 </svg>
 `;
 

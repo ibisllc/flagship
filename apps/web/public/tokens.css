@@ -55,6 +55,8 @@
   --teal-deep:       #0F8B7E;
   --teal-soft:       rgba(20,184,166,0.10);
   --teal-glow:       rgba(45,212,191,0.18);
+  /* Ink that sits on a --teal fill (7.96:1 on #14B8A6), in both themes. */
+  --on-teal:         #0A0A09;
 
   /* ── Status ──────────────────────────────────────────────────── */
   --ok:              #4ADE80;
@@ -146,12 +148,18 @@
   --fg:              var(--ink);
   --fg-mute:         var(--ink-muted);
   --line:            var(--rule-strong);
-  --accent:          var(--teal);
+  /* Teal has three roles (owner, 2026-10-17: keep the light teal where it
+   * stays readable). --teal fills and carries --on-teal ink. --accent-graphic
+   * is for icons beside labels, focus rings, markers and large headings
+   * (3:1). --accent is the deep step for small text and links (4.5:1).
+   * apps/web/tests/themeContrast.test.ts pins every pairing in both themes. */
+  --accent:          #0F766E;
+  --accent-graphic:  #0F9B8E;
   --accent-bright:   var(--teal-bright);
-  --accent-press:    var(--teal-deep);
+  --accent-press:    #0B5F58;
   --accent-deep:     var(--teal-deep);
   --accent-soft:     var(--teal-soft);
-  --accent-on:       var(--canvas);
+  --accent-on:       var(--on-teal);
   --primary:         var(--teal);
   --primary-hover:   var(--teal-bright);
   --success:         var(--ok);
@@ -201,6 +209,11 @@
   --shadow-inset:    inset 0 1px 0 rgba(255,255,255,0.04);
 
   color-scheme: dark;
+
+  /* Teal text and graphics are the bright step on the dark canvas. */
+  --accent:          #2DD4BF;
+  --accent-graphic:  #2DD4BF;
+  --accent-press:    #5EEAD4;
 
   /* Brand logo — outer square flips to white on the dark canvas */
   --lg-frame:        #FFFFFF;

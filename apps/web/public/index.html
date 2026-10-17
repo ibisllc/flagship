@@ -71,13 +71,13 @@
       font-feature-settings: "ss01","cv11";
     }
     body { min-height: 100dvh; }
-    ::selection { background: var(--teal); color: var(--canvas); }
+    ::selection { background: var(--teal); color: var(--on-teal); }
     .skip-link {
       position: absolute; top: -40px; left: 16px; z-index: 200;
-      background: var(--teal); color: var(--canvas); padding: 8px 14px;
+      background: var(--teal); color: var(--on-teal); padding: 8px 14px;
       font-family: var(--font-mono); font-size: 13px; border-bottom: 0;
     }
-    .skip-link:focus { top: 16px; color: var(--canvas); }
+    .skip-link:focus { top: 16px; color: var(--on-teal); }
 
     html {
       scroll-behavior: smooth;
@@ -137,9 +137,9 @@
       border-bottom: 1px solid transparent;
       transition: color 160ms ease, border-color 160ms ease;
     }
-    a:hover { color: var(--teal-bright); border-bottom-color: var(--teal); }
+    a:hover { color: var(--accent); border-bottom-color: var(--teal); }
     a:focus-visible {
-      outline: 2px solid var(--teal-bright);
+      outline: 2px solid var(--accent-graphic);
       outline-offset: 3px;
       border-bottom-color: transparent;
     }
@@ -147,7 +147,7 @@
     code, .ico-code {
       font-family: var(--type-mono);
       font-size: 0.88em;
-      color: var(--teal-bright);
+      color: var(--accent);
       padding: 1px 4px;
       background: var(--teal-soft);
       border-radius: 2px;
@@ -163,7 +163,7 @@
       position: absolute;
       top: -40px; left: 16px;
       background: var(--teal);
-      color: var(--canvas);
+      color: var(--on-teal);
       padding: 8px 12px;
       font-family: var(--type-mono);
       font-size: 12px;
@@ -207,7 +207,7 @@
       color: var(--ink);
       border-bottom: none;
     }
-    .wordmark:hover { color: var(--teal-bright); border-bottom: none; }
+    .wordmark:hover { color: var(--accent); border-bottom: none; }
     .wordmark .glyph {
       display: block;
       width: 40px; height: 40px;
@@ -232,7 +232,7 @@
       text-transform: uppercase;
     }
     .nav-links a { color: var(--muted); border-bottom: none; }
-    .nav-links a:hover { color: var(--teal-bright); border-bottom: none; }
+    .nav-links a:hover { color: var(--accent); border-bottom: none; }
     .ext-arrow {
       display: inline-block;
       width: 9px; height: 9px;
@@ -260,7 +260,7 @@
       justify-content: center;
       transition: border-color 160ms ease, color 160ms ease;
     }
-    .theme-btn:hover { border-color: var(--teal); color: var(--teal-bright); }
+    .theme-btn:hover { border-color: var(--teal); color: var(--accent); }
     .theme-btn svg { width: 16px; height: 16px; }
     /* Light theme: offer the moon (switch to dark). Dark theme: offer the sun. */
     .theme-icon-moon { display: block; }
@@ -283,7 +283,7 @@
       justify-content: center;
       transition: border-color 160ms ease, color 160ms ease;
     }
-    .nav-menu-btn:hover { border-color: var(--teal); color: var(--teal-bright); }
+    .nav-menu-btn:hover { border-color: var(--teal); color: var(--accent); }
     .nav-menu-btn svg { width: 16px; height: 16px; }
     @media (max-width: 880px) { .nav-menu-btn { display: inline-flex; } }
 
@@ -315,7 +315,7 @@
       border-bottom: none;
     }
     .nav-menu a:hover {
-      color: var(--teal-bright);
+      color: var(--accent);
       background: var(--canvas);
       border-bottom: none;
     }
@@ -346,13 +346,13 @@
     .btn:active { transform: translateY(1px); }
     .btn--solid {
       background: var(--teal);
-      color: var(--canvas);
+      color: var(--on-teal);
       border-color: var(--teal);
     }
     .btn--solid:hover {
       background: var(--teal-bright);
       border-color: var(--teal-bright);
-      color: var(--canvas);
+      color: var(--on-teal);
     }
     .btn--app {
       height: 36px;
@@ -365,7 +365,7 @@
       border-color: var(--rule-strong);
       color: var(--ink);
     }
-    .btn--ghost:hover { border-color: var(--teal); color: var(--teal); }
+    .btn--ghost:hover { border-color: var(--teal); color: var(--accent); }
     .btn--pending {
       background: color-mix(in srgb, var(--muted) 14%, var(--canvas));
       border-color: var(--rule-strong);
@@ -387,13 +387,13 @@
       border-bottom: 1px solid var(--teal);
       padding-bottom: 2px;
     }
-    .arrow-link .arrow { color: var(--teal); transition: transform 200ms ease; display: inline-block; }
+    .arrow-link .arrow { color: var(--accent-graphic); transition: transform 200ms ease; display: inline-block; }
     .arrow-link:hover .arrow { transform: translateX(4px); }
-    .arrow-link:hover { color: var(--teal-bright); border-bottom-color: var(--teal-bright); }
+    .arrow-link:hover { color: var(--accent); border-bottom-color: var(--teal-bright); }
     .arrow-link.muted { border-bottom-color: var(--rule-strong); color: var(--muted); }
     .arrow-link.muted .arrow { color: var(--muted); }
     .arrow-link.muted:hover { color: var(--ink); border-bottom-color: var(--ink); }
-    .arrow-link.muted:hover .arrow { color: var(--teal-bright); }
+    .arrow-link.muted:hover .arrow { color: var(--accent); }
 
     .eyebrow {
       display: inline-flex;
@@ -425,7 +425,7 @@
       font-family: var(--type-mono);
       font-size: 12px;
       letter-spacing: 0.16em;
-      color: var(--teal-bright);
+      color: var(--accent);
       padding-top: 6px;
     }
     section.band h2 {
@@ -520,7 +520,7 @@
       margin-right: 0.25ch;
       animation: blink 1.4s steps(2) infinite;
     }
-    .hero h1 .teal { color: var(--teal-bright); }
+    .hero h1 .teal { color: var(--accent-graphic); }
     @keyframes blink { 50% { opacity: 0; } }
     @media (prefers-reduced-motion: reduce) { .hero h1 .accent-bar { animation: none; } }
 
@@ -546,7 +546,7 @@
     }
     .studio-promo--center { justify-content: center; }
     .studio-promo__label { color: var(--muted); margin-right: 2px; border-bottom: none; }
-    .studio-promo__label:hover { color: var(--teal-bright); border-bottom: none; }
+    .studio-promo__label:hover { color: var(--accent); border-bottom: none; }
     .studio-download {
       min-height: 30px;
       display: inline-flex;
@@ -560,7 +560,7 @@
     .studio-download:hover,
     .studio-download.is-preferred {
       border-color: var(--teal);
-      color: var(--teal-bright);
+      color: var(--accent);
       background: var(--teal-soft);
     }
     @keyframes dotpulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
@@ -588,7 +588,7 @@
     .step-card .num {
       font-family: var(--type-mono);
       font-size: 11px;
-      color: var(--teal-bright);
+      color: var(--accent);
       letter-spacing: 0.18em;
       text-transform: uppercase;
     }
@@ -735,7 +735,7 @@
       font-family: var(--type-mono);
       font-size: 11px;
       letter-spacing: 0.04em;
-      color: var(--teal-bright);
+      color: var(--accent);
       padding-top: 3px;
     }
     details.q > summary::after {
@@ -747,8 +747,8 @@
       transition: color 200ms ease;
       line-height: 1;
     }
-    details.q[open] > summary::after { content: "−"; color: var(--teal-bright); }
-    details.q:hover > summary::after { color: var(--teal-bright); }
+    details.q[open] > summary::after { content: "−"; color: var(--accent); }
+    details.q:hover > summary::after { color: var(--accent); }
     details.q > .answer {
       margin: 8px 0 0 34px;
       max-width: 60ch;
@@ -822,7 +822,7 @@
     .footer-col li + li { margin-top: 6px; }
     .footer-col li:empty { display: none; }
     .footer-col a { color: var(--muted); font-size: 13px; border-bottom: none; }
-    .footer-col a:hover { color: var(--teal-bright); border-bottom: none; }
+    .footer-col a:hover { color: var(--accent); border-bottom: none; }
     .footer-col p { color: var(--muted); font-size: 13px; max-width: 32ch; margin: 10px 0 0; }
 
     .finale .footer-inner {
@@ -1030,7 +1030,7 @@
                 <path class="d-arrow" d="M0 0 L10 5 L0 10 z"/>
               </marker>
               <marker id="ar3-t" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-                <path d="M0 0 L10 5 L0 10 z" fill="#14B8A6"/>
+                <path d="M0 0 L10 5 L0 10 z" style="fill:var(--accent-graphic)"/>
               </marker>
             </defs>
             <g font-family="ui-monospace, monospace">
@@ -1053,12 +1053,12 @@
               <text class="d-label" x="90" y="99" font-size="10" letter-spacing="1.4" font-weight="500">FLAGSHIP.SERVICES</text>
               <text class="d-sub" x="90" y="110" font-size="9" letter-spacing="0.8">sees: encrypted bytes</text>
 
-              <path d="M96 116 V141 H114" fill="none" stroke="#14B8A6" stroke-width="1.4" marker-end="url(#ar3-t)"/>
+              <path d="M96 116 V141 H114" fill="none" style="stroke:var(--accent-graphic)" stroke-width="1.4" marker-end="url(#ar3-t)"/>
 
               <!-- Stage 4: YOUR OWN SERVER (indent 108) -->
-              <rect x="114" y="126" width="240" height="30" fill="none" stroke="#14B8A6" stroke-width="2"/>
-              <text x="126" y="139" font-size="10" letter-spacing="1.4" fill="#2DD4BF" font-weight="600">YOUR OWN SERVER</text>
-              <text x="126" y="150" font-size="9" letter-spacing="0.8" fill="#2DD4BF">creates HTTPS keys</text>
+              <rect x="114" y="126" width="240" height="30" fill="none" style="stroke:var(--accent-graphic)" stroke-width="2"/>
+              <text x="126" y="139" font-size="10" letter-spacing="1.4" style="fill:var(--accent)" font-weight="600">YOUR OWN SERVER</text>
+              <text x="126" y="150" font-size="9" letter-spacing="0.8" style="fill:var(--accent)">creates HTTPS keys</text>
             </g>
           </svg>
         </aside>
