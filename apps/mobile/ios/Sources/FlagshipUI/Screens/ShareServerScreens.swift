@@ -842,6 +842,7 @@ struct SharedServerScreen: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("shared-update-card")
     }
 

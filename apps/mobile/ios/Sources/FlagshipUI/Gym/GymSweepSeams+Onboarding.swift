@@ -9,6 +9,8 @@ extension GymSweepSeams {
     public static let gymFriendServer = "home.trent.flagship.services"
     public static let gymFriendApp = "trent--scratchpad"
 
+    nonisolated(unsafe) private static var visitorOwnersCleared = false
+
     /// Deep-link seams for GymSweepOnboardingTests (`-smoke-mode`).
     ///
     /// `-smoke-visitor`: the mock box names the keys a visitor may sign
@@ -19,7 +21,12 @@ extension GymSweepSeams {
     /// `-smoke-invite-manual`: the redeem needs the owner's approval.
     static func onboarding(_ args: [String], _ app: AppState, _ mocks: GymMocks) {
         guard args.contains("-smoke-visitor"), let seed = GymSeams.accountRootSeed else { return }
-        UserDefaults.standard.removeObject(forKey: "flagship.inviteOwners.v1")
+        // Once per launch: the shell's onAppear runs this again when a cover
+        // closes, which would forget the owner the redeem just remembered.
+        if !visitorOwnersCleared {
+            UserDefaults.standard.removeObject(forKey: "flagship.inviteOwners.v1")
+            visitorOwnersCleared = true
+        }
         var labels: [String: String] = [:]
         for ref in [gymFriendApp, "bright-maple--plants"] {
             if let pub = ServiceInvite.deriveAppAccountIdPub(umkSeed: seed, appRef: ref) {

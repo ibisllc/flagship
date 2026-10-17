@@ -120,8 +120,7 @@ final class GymSweepAppTests: GymSweepCase {
 
         view.tap()
         XCTAssertTrue(editor.waitForExistence(timeout: 10))
-        editor.tap()
-        editor.typeText("\nallow example.org")
+        replaceText(editor, with: "allow example.org")
         let save = app.buttons["access-list-save"]
         XCTAssertTrue(save.waitForExistence(timeout: 5))
         wait(save, "isEnabled == true")
@@ -613,8 +612,7 @@ final class GymSweepAppTests: GymSweepCase {
             field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
         }
         field.typeText("-bad-")
-        let replaces = app.buttons.matching(NSPredicate(format: "label == 'Replace'"))
-        let confirm = replaces.element(boundBy: replaces.count - 1)
+        let confirm = app.buttons.matching(NSPredicate(format: "label == 'Replace' AND identifier != 'app-replace-stem-btn'")).firstMatch
         XCTAssertFalse(confirm.isEnabled, "An invalid stem can't be used.")
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 5))
         field.typeText("greenhouse")
@@ -705,9 +703,7 @@ final class GymSweepAppTests: GymSweepCase {
         let ai = app.buttons["edit-service-ai"]
         XCTAssertTrue(ai.waitForExistence(timeout: 10))
         ai.tap()
-        let useFree = app.buttons["build-key-use-free-ai"]
-        XCTAssertTrue(useFree.waitForExistence(timeout: 15), "The AI-key step comes first.")
-        useFree.tap()
+        passAiKeyStep(app)
         let prompt = app.textViews["edit-describe-prompt"]
         XCTAssertTrue(prompt.waitForExistence(timeout: 15))
         let start = app.buttons["edit-describe-start"]
@@ -736,15 +732,21 @@ final class GymSweepAppTests: GymSweepCase {
         XCTAssertTrue(app.buttons["build-mcp-create"].waitForExistence(timeout: 15))
     }
 
+    /// An owner with no key of their own goes straight on to Describe on
+    /// Flagship Inference; one with a saved key is asked first.
+    private func passAiKeyStep(_ app: XCUIApplication) {
+        let useFree = app.buttons["build-key-use-free-ai"]
+        let prompt = app.textViews["edit-describe-prompt"]
+        if useFree.waitForExistence(timeout: 4), !prompt.exists { useFree.tap() }
+    }
+
     private func startEdit(_ app: XCUIApplication) {
         openApp(app, named: "Plants")
         let edit = app.buttons["service-detail-edit"]
         XCTAssertTrue(reveal(app, edit))
         edit.tap()
         app.buttons["edit-service-ai"].tap()
-        let useFree = app.buttons["build-key-use-free-ai"]
-        XCTAssertTrue(useFree.waitForExistence(timeout: 15))
-        useFree.tap()
+        passAiKeyStep(app)
         let prompt = app.textViews["edit-describe-prompt"]
         XCTAssertTrue(prompt.waitForExistence(timeout: 15))
         prompt.tap()

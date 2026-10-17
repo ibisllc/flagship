@@ -505,6 +505,7 @@ public struct ServiceDetailScreen: View {
                             }
                         }
                     }
+                    .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("service-detail-egress-pending")
                 }
                 if !card.approved.isEmpty {

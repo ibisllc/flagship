@@ -32,13 +32,16 @@ extension GymSweepSeams {
                 hosts: [AppAccessDraftHost(host: "api.open-meteo.com", why: "Weather for watering reminders")],
                 createdAt: 1_760_000_000_000)
         }
-        // Office runs its own box without Plants, so "Runs on" can tick it.
+        // Office and Music run their own boxes without Plants, so "Runs on"
+        // can tick them and Home holds its only copy.
         if args.contains("-smoke-office-lacks-plants") {
-            let office = MockScreensClient()
-            office.podContext = "office"
-            office.simulatedLatency = screens.simulatedLatency
-            office.hiddenApps = ["bright-maple--plants"]
-            podClients["office"] = office
+            for context in ["office", "music"] {
+                let box = MockScreensClient()
+                box.podContext = context
+                box.simulatedLatency = screens.simulatedLatency
+                box.hiddenApps = ["bright-maple--plants"]
+                podClients[context] = box
+            }
         }
         // Plants can be edited here, came from a shared adaptation and has a
         // headless-browser tab running.

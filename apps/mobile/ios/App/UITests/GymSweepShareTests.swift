@@ -166,6 +166,7 @@ final class GymSweepShareTests: GymSweepCase {
         let field = textField(in: label, app)
         field.tap()
         field.typeText("Kim")
+        dismissKeyboard(app)
         app.buttons["share-level-manage"].tap()
         flip(app.switches["share-draft-unlock"])
         flip(app.switches["share-draft-data"])

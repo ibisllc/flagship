@@ -39,6 +39,8 @@ extension GymSweepSeams {
             server.pendingRePairByUser[user.lowercased()] = PendingRePairInfo(
                 newIrkPub: String(repeating: "11", count: 32), oldIrkPub: String(repeating: "22", count: 32),
                 initiatedAt: now - 86_400_000 * 2, completesAt: now - 60_000)
+            // The phone holds the rotation it started, so Complete can sign it.
+            try? Keystore.setPendingIrkRotationVersion(Keystore.currentIrkVersion() + 1)
         }
 
         // `.com` knows the account (a single-device one, or with 2FA on).

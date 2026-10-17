@@ -32,7 +32,8 @@ class GymSweepCase: XCTestCase {
     /// Replace a field's text: Create server starts with the next free
     /// "home" name in it.
     func replaceText(_ field: XCUIElement, with text: String) {
-        field.tap()
+        // The caret goes to the end of the text, so the deletes clear all of it.
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.97)).tap()
         let current = (field.value as? String) ?? ""
         if !current.isEmpty, current != (field.placeholderValue ?? "") {
             field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
