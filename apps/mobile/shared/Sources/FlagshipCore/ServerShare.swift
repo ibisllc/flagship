@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 /// Swift mirror of `@flagship/protocol`'s `serverShare.ts` (docs/share-a-server.md):
-/// sharing a server with another account. The eleven `|`-joined envelopes, the
+/// sharing a server with another account. The twelve `|`-joined envelopes, the
 /// link-secret derivations, the six-digit code both phones show, and the sealed
 /// JSON payloads `.com` relays without being able to read.
 ///
@@ -20,6 +20,7 @@ public enum ServerShare {
     public static let tagInbox = "flagship/share-inbox/v1"
     public static let tagPush = "flagship/server-share-push/v1"
     public static let tagUpdate = "flagship/server-share-update/v1"
+    public static let tagAcceptAdmin = "flagship/server-share-accept-admin/v1"
 
     static let infoMember = "flagship/server-share-member/v1"
     static let infoToken = "flagship/server-share/token/v1"
@@ -470,6 +471,176 @@ public struct ServerShareAccept: ServerShareEnvelope {
     }
 }
 
+/// Which of an account's keys is its sensitive key: the admin root, or the IRK
+/// when the account pins no admin root (`authorizeSensitiveOrder`'s rule).
+public enum AccountKeyKind: String, Codable, Sendable, CaseIterable {
+    case adminRoot = "admin-root"
+    case irk
+}
+
+/// #12 — signed by the joining account's sensitive key: only an admin device of
+/// that account accepts a share (docs/share-a-server.md §5.1). The fields of #3
+/// plus which key signs, so the shared server can match it to the attestation.
+public struct ServerShareAcceptAdmin: ServerShareEnvelope {
+    public var serverDomain: String
+    public var shareId: String
+    public var memberPubHex: String
+    public var acceptedAt: Int64
+    public var keyKind: AccountKeyKind
+    public var keyPubHex: String
+
+    public init(serverDomain: String, shareId: String, memberPubHex: String, acceptedAt: Int64,
+                keyKind: AccountKeyKind, keyPubHex: String) {
+        self.serverDomain = serverDomain
+        self.shareId = shareId
+        self.memberPubHex = memberPubHex
+        self.acceptedAt = acceptedAt
+        self.keyKind = keyKind
+        self.keyPubHex = keyPubHex
+    }
+
+    public init(accept: ServerShareAccept, keyKind: AccountKeyKind, keyPubHex: String) {
+        self.init(serverDomain: accept.serverDomain, shareId: accept.shareId, memberPubHex: accept.memberPubHex,
+                  acceptedAt: accept.acceptedAt, keyKind: keyKind, keyPubHex: keyPubHex)
+    }
+
+    public func canonicalBytes() throws -> Data {
+        try ServerShare.nonEmpty("serverDomain", serverDomain)
+        try ServerShare.checkShareId(shareId)
+        try ServerShare.checkHex64("memberPubHex", memberPubHex)
+        try ServerShare.time("acceptedAt", acceptedAt)
+        try ServerShare.checkHex64("keyPubHex", keyPubHex)
+        return ServerShare.join(ServerShare.tagAcceptAdmin, [
+            serverDomain, shareId, memberPubHex, String(acceptedAt), keyKind.rawValue, keyPubHex,
+        ])
+    }
+
+    func jsonFragment() -> String {
+        let j = ServerShare.jsonString
+        return "{\"serverDomain\":\(j(serverDomain)),\"shareId\":\(j(shareId)),\"memberPubHex\":\(j(memberPubHex))," +
+            "\"acceptedAt\":\(acceptedAt),\"keyKind\":\(j(keyKind.rawValue)),\"keyPubHex\":\(j(keyPubHex))}"
+    }
+}
+
+/// `.com`'s CA-signed word that a key is some account's current sensitive key
+/// (`flagship/account-key-attestation/v1`). It names no account. The apps check
+/// its shape only and carry it unchanged; the shared server checks the CA chain.
+public struct AccountKeyAttestation: Codable, Equatable, Sendable {
+    public var keyKind: AccountKeyKind
+    public var keyPubHex: String
+    public var issuedAt: Int64
+    public var expiresAt: Int64
+    public var signedBy: String
+    public var signature: String
+
+    public init(keyKind: AccountKeyKind, keyPubHex: String, issuedAt: Int64, expiresAt: Int64, signedBy: String, signature: String) {
+        self.keyKind = keyKind
+        self.keyPubHex = keyPubHex
+        self.issuedAt = issuedAt
+        self.expiresAt = expiresAt
+        self.signedBy = signedBy
+        self.signature = signature
+    }
+
+    public init?(jsonObject v: Any) {
+        guard let o = v as? [String: Any],
+              o["kind"] as? String == "AccountKeyAttestation", ServerShare.jsonIsOne(o["version"]),
+              let k = o["keyKind"] as? String, let keyKind = AccountKeyKind(rawValue: k),
+              let keyPubHex = o["keyPubHex"] as? String, ServerShare.isLowerHex(keyPubHex, 64),
+              let signedBy = o["signedBy"] as? String, ServerShare.isLowerHex(signedBy, 64),
+              let signature = o["signature"] as? String, ServerShare.isLowerHex(signature, 128),
+              let issuedAt = ServerShare.jsonTime(o["issuedAt"]),
+              let expiresAt = ServerShare.jsonTime(o["expiresAt"]), expiresAt > issuedAt
+        else { return nil }
+        self.init(keyKind: keyKind, keyPubHex: keyPubHex, issuedAt: issuedAt, expiresAt: expiresAt, signedBy: signedBy, signature: signature)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case kind, version, keyKind, keyPubHex, issuedAt, expiresAt, signedBy, signature
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        guard try c.decode(String.self, forKey: .kind) == "AccountKeyAttestation", try c.decode(Int.self, forKey: .version) == 1 else {
+            throw ServerShareError.invalid("not an AccountKeyAttestation")
+        }
+        let a = AccountKeyAttestation(
+            keyKind: try c.decode(AccountKeyKind.self, forKey: .keyKind),
+            keyPubHex: try c.decode(String.self, forKey: .keyPubHex),
+            issuedAt: try c.decode(Int64.self, forKey: .issuedAt),
+            expiresAt: try c.decode(Int64.self, forKey: .expiresAt),
+            signedBy: try c.decode(String.self, forKey: .signedBy),
+            signature: try c.decode(String.self, forKey: .signature))
+        guard ServerShare.isLowerHex(a.keyPubHex, 64), ServerShare.isLowerHex(a.signedBy, 64),
+              ServerShare.isLowerHex(a.signature, 128), ServerShare.isTime(a.issuedAt), a.expiresAt > a.issuedAt
+        else { throw ServerShareError.invalid("malformed AccountKeyAttestation") }
+        self = a
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode("AccountKeyAttestation", forKey: .kind)
+        try c.encode(1, forKey: .version)
+        try c.encode(keyKind, forKey: .keyKind)
+        try c.encode(keyPubHex, forKey: .keyPubHex)
+        try c.encode(issuedAt, forKey: .issuedAt)
+        try c.encode(expiresAt, forKey: .expiresAt)
+        try c.encode(signedBy, forKey: .signedBy)
+        try c.encode(signature, forKey: .signature)
+    }
+
+    func jsonFragment() -> String {
+        let j = ServerShare.jsonString
+        return "{\"kind\":\"AccountKeyAttestation\",\"version\":1,\"keyKind\":\(j(keyKind.rawValue)),\"keyPubHex\":\(j(keyPubHex))," +
+            "\"issuedAt\":\(issuedAt),\"expiresAt\":\(expiresAt),\"signedBy\":\(j(signedBy)),\"signature\":\(j(signature))}"
+    }
+
+    public func jsonObject() -> [String: Any] {
+        (try? JSONSerialization.jsonObject(with: Data(jsonFragment().utf8))) as? [String: Any] ?? [:]
+    }
+}
+
+/// The joining account's admin proof sealed with an acceptance: #12, its
+/// signature, and `.com`'s attestation of the key that signed it.
+public struct ShareAcceptAdminProof: Encodable, Equatable, Sendable {
+    public var admit: ServerShareAcceptAdmin
+    public var signature: String
+    public var attestation: AccountKeyAttestation
+
+    public init(admit: ServerShareAcceptAdmin, signature: String, attestation: AccountKeyAttestation) {
+        self.admit = admit
+        self.signature = signature
+        self.attestation = attestation
+    }
+
+    public init?(jsonObject v: Any) {
+        guard let o = v as? [String: Any],
+              let signature = o["signature"] as? String, ServerShare.isLowerHex(signature, 128),
+              let a = o["admit"] as? [String: Any],
+              let serverDomain = a["serverDomain"] as? String,
+              let shareId = a["shareId"] as? String,
+              let memberPubHex = a["memberPubHex"] as? String,
+              let acceptedAt = ServerShare.jsonTime(a["acceptedAt"]),
+              let k = a["keyKind"] as? String, let keyKind = AccountKeyKind(rawValue: k),
+              let keyPubHex = a["keyPubHex"] as? String,
+              let attestation = o["attestation"].flatMap({ AccountKeyAttestation(jsonObject: $0) })
+        else { return nil }
+        let admit = ServerShareAcceptAdmin(serverDomain: serverDomain, shareId: shareId, memberPubHex: memberPubHex,
+                                           acceptedAt: acceptedAt, keyKind: keyKind, keyPubHex: keyPubHex)
+        guard (try? admit.canonicalBytes()) != nil else { return nil }
+        self.init(admit: admit, signature: signature, attestation: attestation)
+    }
+
+    func jsonFragment() -> String {
+        "{\"admit\":\(admit.jsonFragment()),\"signature\":\(ServerShare.jsonString(signature)),\"attestation\":\(attestation.jsonFragment())}"
+    }
+
+    /// As the box takes it in `POST /api/screens/shares` (`acceptAdmin`).
+    public func jsonObject() -> [String: Any] {
+        (try? JSONSerialization.jsonObject(with: Data(jsonFragment().utf8))) as? [String: Any] ?? [:]
+    }
+}
+
 /// #4 — signed by B's member key; ends the share id forever.
 public struct ServerShareLeave: ServerShareEnvelope {
     public var serverDomain: String
@@ -797,10 +968,14 @@ public struct ShareOwnerRecord: Equatable, Sendable {
 public struct ShareAcceptancePayload: Equatable, Sendable {
     public var accept: ServerShareAccept
     public var signature: String
+    /// The joining account's admin proof (§5.1); absent only from an older app,
+    /// and then the shared server refuses the share.
+    public var admin: ShareAcceptAdminProof?
 
-    public init(accept: ServerShareAccept, signature: String) {
+    public init(accept: ServerShareAccept, signature: String, admin: ShareAcceptAdminProof? = nil) {
         self.accept = accept
         self.signature = signature
+        self.admin = admin
     }
 
     public init?(jsonObject v: Any) {
@@ -814,14 +989,24 @@ public struct ShareAcceptancePayload: Equatable, Sendable {
         else { return nil }
         let accept = ServerShareAccept(serverDomain: serverDomain, shareId: shareId, memberPubHex: memberPubHex, acceptedAt: acceptedAt)
         guard (try? accept.canonicalBytes()) != nil else { return nil }
-        self.init(accept: accept, signature: signature)
+        var admin: ShareAcceptAdminProof?
+        if let raw = o["admin"] {
+            guard let proof = ShareAcceptAdminProof(jsonObject: raw) else { return nil }
+            admin = proof
+        }
+        self.init(accept: accept, signature: signature, admin: admin)
     }
 
     public func jsonData() -> Data {
         let j = ServerShare.jsonString
-        return Data(("{\"v\":1,\"accept\":{\"serverDomain\":\(j(accept.serverDomain)),\"shareId\":\(j(accept.shareId))," +
-            "\"memberPubHex\":\(j(accept.memberPubHex)),\"acceptedAt\":\(accept.acceptedAt)}," +
-            "\"signature\":\(j(signature))}").utf8)
+        var out = "{\"v\":1,\"accept\":{\"serverDomain\":" + j(accept.serverDomain)
+        out += ",\"shareId\":" + j(accept.shareId)
+        out += ",\"memberPubHex\":" + j(accept.memberPubHex)
+        out += ",\"acceptedAt\":" + String(accept.acceptedAt) + "}"
+        out += ",\"signature\":" + j(signature)
+        if let admin { out += ",\"admin\":" + admin.jsonFragment() }
+        out += "}"
+        return Data(out.utf8)
     }
 }
 

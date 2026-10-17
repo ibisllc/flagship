@@ -68,6 +68,29 @@ struct ShareServerCard: View {
     }
 
     private func start() async {
+        #if DEBUG
+        if model == nil, ServerShareDemo.route == "owner-refused" {
+            // The gym: a real Confirm against ShareAcceptMockWorld's `.com` and
+            // box, for an acceptance an older app sent with no admin proof.
+            let fqdn = serverDomain.lowercased()
+            let world = ShareAcceptMockWorld(shareId: String(repeating: "c3", count: 16), secret: Data(repeating: 0x5e, count: 32),
+                                             serverDomain: fqdn,
+                                             accountAdminPub: Data(repeating: 0, count: 32))
+            if let household = GymSeams.accountRootSeed.flatMap({ ServiceInvite.deriveHouseholdKey(umkSeed: $0) }) {
+                try? world.seedOldAcceptance(householdKey: household, label: "Riley")
+            }
+            model = ShareServerCardModel(
+                serverDomain: fqdn,
+                serverName: pod?.name ?? ServerShareNames.serverLabel(fromDomain: fqdn),
+                stkPubHex: pod?.identityPubKeyHex ?? "",
+                flow: ServerShareOwnerFlow(client: ServerShareServices.mockClient(world), username: app.currentUser ?? "bright-maple",
+                                           keys: ServerShareServices.ownerKeys(),
+                                           apexOrigin: { "https://flagshipserver.com" }),
+                ownerToken: { "gym-owner-token" },
+                keysUnlocked: { true }
+            )
+        }
+        #endif
         if model == nil {
             let store = sessionStore
             let fqdn = serverDomain.lowercased()
@@ -434,6 +457,7 @@ struct SharedWithMeSection: View {
 
 struct ShareAcceptScreen: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(AppState.self) private var app
     let shareId: String?
     let secretHex: String?
     var onOpenServer: (String) -> Void = { _ in }
@@ -458,8 +482,25 @@ struct ShareAcceptScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             if model == nil {
+                #if DEBUG
+                if ServerShareDemo.route == "accept-admin" {
+                    // The gym: a real accept against ShareAcceptMockWorld's `.com` and box.
+                    let world = ShareAcceptMockWorld.gym()
+                    let flow = ServerShareMemberFlow(
+                        client: ServerShareServices.mockClient(world), umkSeed: ServerShareServices.umkSeed,
+                        admin: ServerShareServices.acceptAdminKeys(username: app.currentUser ?? "bright-maple",
+                                                                   isDemoAccount: app.isDemoAccount))
+                    model = ShareAcceptModel(store: SharedWithMeStore(flow: flow), flow: flow)
+                    await model?.open(shareId: world.shareId, secretHex: HexUtil.encode(world.secret))
+                    return
+                }
+                #endif
                 let store = SharedWithMeStore.shared
-                model = ShareAcceptModel(store: store, flow: store.flow, demo: ServerShareDemo.isOn)
+                let demo = ServerShareDemo.isOn
+                model = ShareAcceptModel(store: store,
+                                         flow: demo ? store.flow : ServerShareServices.acceptFlow(username: app.currentUser,
+                                                                                                 isDemoAccount: app.isDemoAccount),
+                                         demo: demo)
                 if let shareId, let secretHex {
                     await model?.open(shareId: shareId, secretHex: secretHex)
                 }
@@ -549,10 +590,16 @@ struct ShareAcceptScreen: View {
             }
             Text("\(inv.ownerName) won't learn your account name. They see only the name they gave you.")
                 .font(FS.font.caption()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
-            FSPrimaryButton(accepting ? "Accepting…" : "Accept", enabled: !accepting, block: true, large: true) {
-                Task { await model.accept() }
+            if model.canAccept {
+                FSPrimaryButton(accepting ? "Accepting…" : "Accept", enabled: !accepting, block: true, large: true) {
+                    Task { await model.accept() }
+                }
+                .accessibilityIdentifier("share-accept")
+            } else {
+                Text(ServerShareFlowError.notAdminDeviceMessage)
+                    .font(FS.font.bodySm()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("share-accept-admin-only")
             }
-            .accessibilityIdentifier("share-accept")
         }
     }
 
