@@ -66,7 +66,7 @@ class GymHomeTest : GymBase() {
      *  and Cancel closes the menu. */
     @Test
     fun addImportMenuEachChoiceLandsOnItsFlow() {
-        launch(tab = "home", adminRoot = true)
+        launch(tab = "home", adminRoot = true, shares = true)
         tap("home-add-server")
         waitUntilExists("home-co-manage")
         assertEquals(1, tagCount("home-import-backup"))
