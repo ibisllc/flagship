@@ -159,6 +159,9 @@ abstract class GymBase {
      *  or when it reclaims a backgrounded app), keeping saved state. */
     protected fun recreateActivity() {
         scenario?.recreate()
+        composeRule.waitForIdle()
+    }
+
     // ─── Shared finders and waits (deterministic: each wait is bounded and
     //     returns as soon as its condition holds) ─────────────────────────────
 

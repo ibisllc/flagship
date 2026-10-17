@@ -202,7 +202,7 @@ class MainActivity : FragmentActivity() {
         AiKeyStore.attach(applicationContext)
         // GYM: each smoke launch starts with no saved AI keys (the store is
         // on-device and would carry one scenario's key into the next).
-        if (isDebuggable && smokeInitialTab != null) AiKeyStore.clear()
+        if (smokeInitialTab != null) AiKeyStore.clear()
         com.flagshipserver.app.core.SecuredSessionStore.attach(applicationContext)
         com.flagshipserver.app.core.InviteOwners.attach(applicationContext)
         val okHttp = buildOkHttp()
