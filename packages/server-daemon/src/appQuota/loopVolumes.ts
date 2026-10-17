@@ -37,9 +37,22 @@ export const QUOTA_LABEL = "flagship.quota";
 export const BALLAST_FILE = ".flagship-ballast";
 const MOUNT_OPTS = "loop,nodev,nosuid,discard,noinit_itable";
 
+/**
+ * The blocks ext4 holds back for its own use (`ext4_calculate_resv_clusters`:
+ * 2 % of the filesystem, at most 4096 blocks = 16 MiB with 4 KiB blocks), on
+ * top of the reserved-for-root share, which mkfs sets to 0 here. They are
+ * free in bfree but never in bavail, so a ballast sized from the capacity
+ * alone would leave an app that much less than its limit.
+ */
+export function ext4ReservedBlocks(blocks: number): number {
+  return Math.min(Math.floor(blocks / 50), 4096);
+}
+
 export interface FsUsage {
   /** Filesystem capacity (ext4's metadata already left out). */
   sizeBytes: number;
+  /** What ext4 keeps back from non-root writers (statfs's bavail never includes it). */
+  reservedBytes: number;
   /** What the app's files take (the ballast left out). */
   usedBytes: number;
   /** The ballast holding a lower limit, or the brake's freeze. */
@@ -365,6 +378,7 @@ export class LoopVolumes {
     const ballast = this.host.exists(this.ballastPath(volume)) ? await this.host.fileSize(this.ballastPath(volume)).catch(() => 0) : 0;
     return {
       sizeBytes: s.blocks * s.bsize,
+      reservedBytes: ext4ReservedBlocks(s.blocks) * s.bsize,
       usedBytes: Math.max(0, (s.blocks - s.bfree) * s.bsize - ballast),
       ballastBytes: ballast,
       availBytes: s.bavail * s.bsize,
@@ -392,14 +406,14 @@ export class LoopVolumes {
       u = (await this.usage(volume)) ?? u;
     }
     const want = ballastTarget({
-      capacityBytes: u.sizeBytes,
+      capacityBytes: u.sizeBytes - u.reservedBytes,
       ballastBytes: u.ballastBytes,
       availBytes: u.availBytes,
       limitBytes: a.limitBytes,
       freeze: a.freeze,
     });
     if (want !== u.ballastBytes) {
-      this.log(`[app-quota] ${volume}: ballast ${u.ballastBytes} -> ${want} (capacity ${u.sizeBytes}, avail ${u.availBytes}, limit ${a.limitBytes}, freeze ${a.freeze}, image ${u.imageBytes})`);
+      this.log(`[app-quota] ${volume}: ballast ${u.ballastBytes} -> ${want} (capacity ${u.sizeBytes}, reserved ${u.reservedBytes}, avail ${u.availBytes}, limit ${a.limitBytes}, freeze ${a.freeze}, image ${u.imageBytes})`);
       await this.setBallast(volume, u.ballastBytes, want, u.availBytes);
       u = (await this.usage(volume)) ?? u;
     }

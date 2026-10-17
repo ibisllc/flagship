@@ -5,7 +5,7 @@
  * appQuotaLoop.integration.test.ts on Linux as root.
  */
 import { describe, expect, it } from "vitest";
-import { LoopVolumes, type LoopHost } from "../src/appQuota/loopVolumes.js";
+import { LoopVolumes, ext4ReservedBlocks, type LoopHost } from "../src/appQuota/loopVolumes.js";
 import type { CommandRunner } from "../src/serviceRunner.js";
 import { RealFilesAdmin } from "../src/dataLayer/realAdmins.js";
 
@@ -190,21 +190,36 @@ describe("LoopVolumes", () => {
     expect(w.files.has(ballast)).toBe(false);
     w.calls.length = 0;
     await lv.applyLimit(VOL, { imageBytes: 64 * MiB, limitBytes: 80 * MiB, freeze: false });
-    expect(w.calls).toEqual([`fallocate -l ${20 * MiB} ${ballast}`]);
-    expect(w.files.get(ballast)).toBe(20 * MiB);
+    // 100 MiB minus the 2 MiB ext4 keeps back (2 % of the blocks) minus the 80 MiB limit.
+    expect(w.calls).toEqual([`fallocate -l ${18 * MiB} ${ballast}`]);
+    expect(w.files.get(ballast)).toBe(18 * MiB);
     // The ballast isn't the app's: usage leaves it out.
-    expect((await lv.usage(VOL))?.usedBytes).toBe(5_600 * 4096 - 20 * MiB);
+    expect((await lv.usage(VOL))?.usedBytes).toBe(5_600 * 4096 - 18 * MiB);
     w.calls.length = 0;
     await lv.applyLimit(VOL, { imageBytes: 64 * MiB, limitBytes: 80 * MiB, freeze: false });
     expect(w.calls).toEqual([]);
     // The brake: the ballast takes all that's free.
     await lv.applyLimit(VOL, { imageBytes: 64 * MiB, limitBytes: 80 * MiB, freeze: true });
-    expect(w.files.get(ballast)).toBe(20 * MiB + 20_000 * 4096);
+    expect(w.files.get(ballast)).toBe(18 * MiB + 20_000 * 4096);
     // A higher limit shrinks it; no limit drops it.
     await lv.applyLimit(VOL, { imageBytes: 64 * MiB, limitBytes: 90 * MiB, freeze: false });
-    expect(w.files.get(ballast)).toBe(10 * MiB);
+    expect(w.files.get(ballast)).toBe(8 * MiB);
     await lv.applyLimit(VOL, { imageBytes: 64 * MiB, limitBytes: null, freeze: false });
     expect(w.files.has(ballast)).toBe(false);
+  });
+
+  it("holds back the 16 MiB ext4 keeps from statfs's bavail, so a small limit leaves the app its whole limit", async () => {
+    expect(ext4ReservedBlocks(16_384)).toBe(327);
+    expect(ext4ReservedBlocks(9_042_000)).toBe(4096);
+    const w = world();
+    const lv = new LoopVolumes(w.runner, { host: w.host, log: () => {} });
+    await lv.create(VOL, 100 * MiB);
+    const blocks = 9_042_000;
+    w.statfs.set(`${ROOT}/${VOL}`, { blocks, bfree: blocks - 8, bavail: blocks - 8 - 4096, bsize: 4096 });
+    await lv.applyLimit(VOL, { imageBytes: 64 * MiB, limitBytes: 19 * MiB, freeze: false });
+    // What the app can write is bavail minus the ballast: its limit, not the limit less 16 MiB.
+    const ballast = w.files.get(`${ROOT}/${VOL}/.flagship-ballast`) ?? 0;
+    expect(blocks * 4096 - 16 * MiB - ballast).toBe(19 * MiB);
   });
 
   it("takes what's free when an app is already over a lower limit", async () => {
