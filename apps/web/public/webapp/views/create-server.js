@@ -70,12 +70,13 @@ const TAG_RCK_REGISTER = "flagship/rck-register/v1";
 // The browser's words for each backup policy (the wire values stay).
 const BACKUP_POLICY_LABELS = Object.freeze({
   "phone-only": "On my devices",
-  none: "None",
-  peer: "Reciprocal peer backup",
+  none: "No backup",
+  peer: "On other servers",
 });
 
 let activeDraftId = null;
 let _refreshGen = 0;
+let creating = false;
 
 function genSerial() {
   const r = crypto.getRandomValues(new Uint8Array(10));
@@ -119,7 +120,7 @@ function renderDraftList(drafts) {
       </div>
       <div class="row">
         <span class="label">backup</span>
-        <span class="value">${escapeHtml(BACKUP_POLICY_LABELS[d.backupPolicy] ?? d.backupPolicy ?? "")}</span>
+        <span class="value">${escapeHtml(BACKUP_POLICY_LABELS[d.backupPolicy] ?? d.backupPolicy ?? "not chosen yet")}</span>
       </div>
       <div class="row">
         <span class="label">updated</span>
@@ -280,7 +281,7 @@ async function resumeDraft(id) {
   toast(`Resumed ${d.serverName}`);
 }
 
-function readInputs() {
+function readInputs({ draft = false } = {}) {
   const serverName = $("cs-server-name").value.trim().toLowerCase();
   if (!SERVER_NAME_RE.test(serverName)) {
     throw new Error("server name must be a DNS label: 1–63 lowercase letters or digits, hyphens allowed between characters (not at the start or end)");
@@ -289,6 +290,7 @@ function readInputs() {
     throw new Error(`server name "${serverName}" is reserved`);
   }
   const backupPolicy = readBackupPolicyChoice();
+  if (!backupPolicy && !draft) throw new Error("Choose where this server's backups go.");
   const reserveGb = readReserveGb();
   // Recipe TTL in millis. Picker UI emits hours via #cs-ttl-hours;
   // absent input = default 6 hours.
@@ -380,17 +382,24 @@ export function readDiskEncryption() {
 
 // The backup policy radios (draft values "phone-only" | "peer" | "none") and
 // the phone reserve shown only for phone-side backups.
+// Nothing is preselected: the owner picks, and creating stays off until then.
 function readBackupPolicyChoice() {
   const checked = document.querySelector('input[name="cs-backup-policy"]:checked');
-  return checked ? checked.value : "phone-only";
+  return checked ? checked.value : null;
 }
 function setBackupPolicyChoice(v) {
-  const want = v === "peer" || v === "none" ? v : "phone-only";
+  const want = v === "peer" || v === "none" || v === "phone-only" ? v : null;
   for (const el of document.querySelectorAll('input[name="cs-backup-policy"]')) el.checked = el.value === want;
   syncReserveVisibility();
 }
 function syncReserveVisibility() {
-  $("cs-reserve-row")?.classList.toggle("hidden", readBackupPolicyChoice() !== "phone-only");
+  const choice = readBackupPolicyChoice();
+  $("cs-reserve-row")?.classList.toggle("hidden", choice !== "phone-only");
+  syncCreateEnabled();
+}
+function syncCreateEnabled() {
+  const btn = $("cs-download-recipe");
+  if (btn && !creating) btn.disabled = readBackupPolicyChoice() === null;
 }
 function readReserveGb() {
   const n = Math.round(Number($("cs-reserve-gb")?.value));
@@ -475,7 +484,7 @@ export function downloadRecipe(blobBundle) {
 
 async function handleSaveDraft() {
   try {
-    const inputs = readInputs();
+    const inputs = readInputs({ draft: true });
     const saved = await saveDraft({
       id: activeDraftId,
       ...inputs,
@@ -518,6 +527,7 @@ async function handleRecipeDownload() {
   const username = await ensureUsername();
 
   const btn = $("cs-download-recipe");
+  creating = true;
   if (btn) {
     btn.disabled = true;
     btn.textContent = "Creating recipe…";
@@ -528,6 +538,7 @@ async function handleRecipeDownload() {
     blobBundle = await mintInstallBlobBundle(session, username, inputs, { skipClaim: alreadyOpened });
   } catch (e) {
     setStatus("error", String(e.message || e));
+    creating = false;
     if (btn) {
       btn.disabled = false;
       btn.textContent = "Create and download recipe";
@@ -551,6 +562,7 @@ async function handleRecipeDownload() {
   } catch (e) {
     setStatus("error", String(e.message || e));
   } finally {
+    creating = false;
     if (btn) {
       btn.disabled = false;
       btn.textContent = "Create and download recipe";
@@ -961,7 +973,7 @@ export function initCreateServerView() {
     hideFollowSetup();
     activeDraftId = null;
     $("cs-server-name").value = "";
-    setBackupPolicyChoice("phone-only");
+    setBackupPolicyChoice(null);
     restoreDiskEncryption(null);
     setStatus("idle", "idle");
   });

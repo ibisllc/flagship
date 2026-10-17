@@ -75,7 +75,7 @@ test.describe("S16 — Compose draft (#24)", () => {
     // New resets the whole form to its defaults.
     await page.click("#cs-new");
     await expect(page.locator("#cs-server-name")).toHaveValue("");
-    await expect(page.locator('input[name="cs-backup-policy"][value="phone-only"]')).toBeChecked();
+    await expect(page.locator('input[name="cs-backup-policy"]:checked')).toHaveCount(0);
     await expect(page.locator("#cs-encrypt-disk")).toBeChecked();
 
     // Resume the draft — the form re-populates.

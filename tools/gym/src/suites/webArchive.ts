@@ -334,7 +334,7 @@ export const WEB_ARCHIVE: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-backups-create-policy",
-    "The create form's three backup policies say what each does; Phone-side (default) with a 24 GB reserve and Peer-distributed (no reserve) are each signed under the admin root beside the pairing order.",
+    "The create form's three backup choices (No backup, On my devices, On other servers) start with nothing picked and Create off until one is; On my devices with a 24 GB reserve and On other servers (no reserve) are each signed under the admin root beside the pairing order.",
     "gym backups the create form's policy is signed beside the pairing order",
     {
       steps: [{ kind: "tap", describe: "Download the recipe.", handle: "#cs-download-recipe" }],

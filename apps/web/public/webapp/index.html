@@ -861,22 +861,23 @@
                  aria-describedby="cs-server-name-hint" />
           <p id="cs-server-name-hint" class="faint-sm">lowercase letters, digits, and hyphens (not at the start or end) — e.g. media-server</p>
           <p id="cs-server-name-error" class="note err hidden" role="alert"></p>
-          <label class="mt-3">Backup policy</label>
-          <div id="cs-backup-policy" class="boot-unlock-options">
+          <label class="mt-3" id="cs-backup-policy-label">Where should this server's backups go?</label>
+          <p class="faint-sm" id="cs-backup-policy-hint">Pick one to continue. You can change it any time in the server's Backups section.</p>
+          <div id="cs-backup-policy" class="boot-unlock-options" role="radiogroup" aria-labelledby="cs-backup-policy-label">
             <label class="boot-unlock-option">
-              <input type="radio" name="cs-backup-policy" value="phone-only" checked />
-              <span class="boot-unlock-title">On my devices (default)</span>
-              <span class="boot-unlock-desc faint-sm">Your server makes an encrypted backup every night, and the Flagship app on one of your devices keeps a copy over Wi-Fi while charging. Your server's apps can hold up to the space you keep for it there, so its data can't grow larger than that device's free space.</span>
+              <input type="radio" name="cs-backup-policy" value="none" />
+              <span class="boot-unlock-title">No backup</span>
+              <span class="boot-unlock-desc faint-sm">Nothing is copied. You can turn backups on later.</span>
+            </label>
+            <label class="boot-unlock-option">
+              <input type="radio" name="cs-backup-policy" value="phone-only" />
+              <span class="boot-unlock-title">On my devices</span>
+              <span class="boot-unlock-desc faint-sm">An encrypted copy is kept on one of your devices.</span>
             </label>
             <label class="boot-unlock-option">
               <input type="radio" name="cs-backup-policy" value="peer" />
-              <span class="boot-unlock-title">Peer-distributed backups</span>
-              <span class="boot-unlock-desc faint-sm">Encrypted pieces of your backup are kept on other Flagship servers, and yours keeps theirs. Your apps can use up to a third of this server's disk; the rest holds other servers' pieces.</span>
-            </label>
-            <label class="boot-unlock-option">
-              <input type="radio" name="cs-backup-policy" value="none" />
-              <span class="boot-unlock-title">No backups</span>
-              <span class="boot-unlock-desc faint-sm err">Nothing is backed up. If this server's disk fails, its apps and data are gone. You can still use Back up now on the server page.</span>
+              <span class="boot-unlock-title">On other servers</span>
+              <span class="boot-unlock-desc faint-sm">Encrypted pieces are kept on other Flagship servers, and yours keeps theirs.</span>
             </label>
           </div>
           <div id="cs-reserve-row">
@@ -941,7 +942,7 @@
             <span class="label">Status</span>
             <span class="pill" id="cs-status">idle</span>
           </div>
-          <button id="cs-download-recipe" class="full-width mt-2">Create and download recipe</button>
+          <button id="cs-download-recipe" class="full-width mt-2" disabled>Create and download recipe</button>
           <button id="cs-follow-setup" class="secondary full-width mt-2 hidden">Follow its setup</button>
           <a class="secondary full-width mt-2" href="https://flagshipserver.com/studio" target="_blank" rel="noopener">Get Flagship Studio</a>
         </div>

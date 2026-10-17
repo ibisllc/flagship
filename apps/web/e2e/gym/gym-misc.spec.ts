@@ -829,6 +829,7 @@ test.describe("gym webapp misc", () => {
     await page.locator('dialog[aria-label="Add or import a server"] [data-choice-add]').click();
     await expect(page.locator("#view-create-server")).toBeVisible({ timeout: 10_000 });
     await page.fill("#cs-server-name", "attic");
+    await page.check('input[name="cs-backup-policy"][value="none"]');
     await page.fill("#cs-ttl-hours", "12");
     await page.check('input[name="cs-boot-unlock"][value="approve"]');
     await expect(page.locator('input[name="cs-boot-unlock"][value="auto"]')).not.toBeChecked();

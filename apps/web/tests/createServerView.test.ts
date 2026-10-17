@@ -118,11 +118,29 @@ describe("create-server view — words for a browser", () => {
     expect(visible).toContain("open it in Flagship Studio");
   });
 
-  it("names the default backup policy for a browser, in the drafts list too", () => {
-    expect(section).toContain('<input type="radio" name="cs-backup-policy" value="phone-only" checked />');
-    expect(section).toContain('<span class="boot-unlock-title">On my devices (default)</span>');
-    expect(section).toContain("that device's free space");
+  it("offers the three backup choices in order with nothing preselected", () => {
+    expect(section).not.toMatch(/name="cs-backup-policy"[^>]*checked/);
+    const order = [...section.matchAll(/name="cs-backup-policy" value="([\w-]+)"/g)].map((m) => m[1]);
+    expect(order).toEqual(["none", "phone-only", "peer"]);
+    const titles = [...section.matchAll(/<span class="boot-unlock-title">([^<]+)<\/span>/g)].map((m) => m[1]);
+    expect(titles.slice(0, 3)).toEqual(["No backup", "On my devices", "On other servers"]);
+    expect(section).toContain("Nothing is copied. You can turn backups on later.");
+    expect(section).toContain("You can change it any time in the server's Backups section.");
     expect(VIEW_SRC).toContain('"phone-only": "On my devices"');
+  });
+
+  it("keeps Create off until a backup choice is made and refuses without one", () => {
+    expect(section).toMatch(/id="cs-download-recipe"[^>]*disabled/);
+    expect(VIEW_SRC).toContain("syncCreateEnabled");
+    expect(VIEW_SRC).toContain("readBackupPolicyChoice() === null");
+    expect(VIEW_SRC).toContain("Choose where this server's backups go.");
+    expect(VIEW_SRC).toMatch(/setBackupPolicyChoice\(null\)/);
+  });
+
+  it("the server page's Backups section can change the policy (so the promise holds)", () => {
+    const backups = readFileSync(join(__dirname, "..", "public", "webapp", "views", "server-backups.js"), "utf8");
+    expect(backups).toContain("Change backup policy");
+    expect(backups).toContain('name="bk-policy"');
   });
 });
 

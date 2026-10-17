@@ -332,14 +332,18 @@ test.describe("gym webapp backups", () => {
     await page.click("#home-add-server");
     await page.locator('dialog[aria-label="Add or import a server"] [data-choice-add]').click();
     await expect(page.locator("#view-create-server")).toBeVisible({ timeout: 10_000 });
-    // The three choices say what each one does; phone-side is the default with its reserve.
-    await expect(page.locator('input[name="cs-backup-policy"][value="phone-only"]')).toBeChecked();
-    await expect(page.locator("#cs-backup-policy")).toContainText("so its data can't grow larger than that device's free space.");
-    await expect(page.locator("#cs-backup-policy")).toContainText("Your apps can use up to a third of this server's disk");
-    await expect(page.locator("#cs-backup-policy")).toContainText("If this server's disk fails, its apps and data are gone.");
+    // Nothing is preselected; Create stays off until the owner picks, and the three choices come in order.
+    for (const v of ["none", "phone-only", "peer"]) await expect(page.locator(`input[name="cs-backup-policy"][value="${v}"]`)).not.toBeChecked();
+    await expect(page.locator("#cs-backup-policy .boot-unlock-title")).toHaveText(["No backup", "On my devices", "On other servers"]);
+    await expect(page.locator("#cs-backup-policy")).toContainText("Nothing is copied. You can turn backups on later.");
+    await expect(page.locator("#cs-backup-policy-hint")).toContainText("You can change it any time in the server's Backups section.");
+    await expect(page.locator("#cs-reserve-row")).toBeHidden();
+    await page.fill("#cs-server-name", "attic");
+    await expect(page.locator("#cs-download-recipe")).toBeDisabled();
+    await page.check('input[name="cs-backup-policy"][value="phone-only"]');
+    await expect(page.locator("#cs-download-recipe")).toBeEnabled();
     await expect(page.locator("#cs-reserve-row")).toBeVisible();
     await page.fill("#cs-reserve-gb", "24");
-    await page.fill("#cs-server-name", "attic");
     await shot(page, testInfo, "create-backup-policy");
     const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#cs-download-recipe")]);
     void dl;
@@ -351,6 +355,7 @@ test.describe("gym webapp backups", () => {
 
     // Peer: no reserve.
     await page.click("#cs-new");
+    await expect(page.locator("#cs-download-recipe")).toBeDisabled();
     await page.check('input[name="cs-backup-policy"][value="peer"]');
     await expect(page.locator("#cs-reserve-row")).toBeHidden();
     await page.fill("#cs-server-name", "loft");
