@@ -238,11 +238,21 @@ class GymHomeTest : GymBase() {
             stable >= 3
         }
         val height = handle.fetchSemanticsNode().size.height.toFloat()
-        handle.performTouchInput {
-            down(center)
-            repeat(12) { moveBy(androidx.compose.ui.geometry.Offset(0f, height * 1.4f / 12)) }
-            up()
+        // Compose can reset a handle's pointer input a few milliseconds into a gesture (logged as
+        // PointerInputResetException; about one run in ten, also before this slice's changes). The
+        // drop then leaves the order as it was, exactly as for a person, who drags again: so does the scenario.
+        var saved = false
+        for (attempt in 1..2) {
+            composeRule.waitForIdle()
+            handle.performTouchInput {
+                down(center)
+                repeat(12) { moveBy(androidx.compose.ui.geometry.Offset(0f, height * 1.4f / 12)) }
+                up()
+            }
+            saved = runCatching { eventually(what = "the order saved", timeoutMs = 6_000) { mailboxMock.serverOrders.isNotEmpty() } }.isSuccess
+            if (saved) break
         }
+        assertTrue("the drag never saved a new order (shown=${shownOrder()})", saved)
         assertSigned("server-order", "admin")
         eventually(what = "the dragged server second") { shownOrder().indexOf(before.first()) == 1 }
         gymShot("dragged")
