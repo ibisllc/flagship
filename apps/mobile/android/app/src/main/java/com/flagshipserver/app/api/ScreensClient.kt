@@ -216,6 +216,16 @@ interface ScreensClient {
     suspend fun deliverServerOrder(wire: com.flagshipserver.app.core.ServerOrderWire): ServerOrderDeliveryResponse =
         throw ScreensError.NotImplemented("server order")
 
+    /** `POST /api/screens/debug-access` with `{grant, signatureHex}` (the JSON
+     *  string from DebugAccess.envelopeJson). A refusal carries the box's
+     *  sentence (`boxError()`); a box from before answers 404. */
+    suspend fun debugAccessGrant(bodyJson: String): DebugAccessChangeResponse =
+        throw ScreensError.NotImplemented("debug access")
+
+    /** `POST /api/screens/debug-access/revoke` with `{revoke, signatureHex}`. */
+    suspend fun debugAccessRevoke(bodyJson: String): DebugAccessChangeResponse =
+        throw ScreensError.NotImplemented("debug access")
+
     /** `POST /api/screens/services/copy` (docs/app-placement.md §5), sent to
      *  the TARGET box with the owner's signed grant: 202 `{copyId}`; 400
      *  malformed, 403 bad signature / not this box / stale, 409 already there
