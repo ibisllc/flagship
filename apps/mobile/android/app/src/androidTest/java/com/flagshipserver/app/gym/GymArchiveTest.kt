@@ -49,7 +49,8 @@ class GymArchiveTest : GymBase() {
         waitUntilExists("backup-share", 20_000)
         gymShot("backup-downloaded")
         tap("backup-share")
-        eventually(what = "the folder picker") { startedIntents.any { it.action == android.content.Intent.ACTION_OPEN_DOCUMENT_TREE } }
+        eventually(what = "the save dialog") { startedIntents.any { it.action == android.content.Intent.ACTION_CREATE_DOCUMENT } }
+        eventually(what = "the .flagship file saved") { savedDocument.length() > 0 }
         tapText("Done")
     }
 

@@ -59,11 +59,21 @@ import java.io.FileOutputStream
 abstract class GymBase {
 
     /** Empty rule (no auto-launched activity) so we control the launch Intent. */
-    @get:Rule
+    @get:Rule(order = 0)
     val composeRule: ComposeTestRule = createEmptyComposeRule()
 
-    @get:Rule
+    @get:Rule(order = 1)
     val testName = TestName()
+
+    /** A failing scenario leaves what the screen showed in the log (tag GYMTREE). */
+    @get:Rule(order = 2)
+    val dumpOnFailure = object : org.junit.rules.TestWatcher() {
+        override fun failed(e: Throwable?, description: org.junit.runner.Description?) = dumpTree()
+        override fun finished(description: org.junit.runner.Description?) {
+            runCatching { scenario?.close() }
+            scenario = null
+        }
+    }
 
     private var scenario: ActivityScenario<MainActivity>? = null
     /** The directory the gym adapter pulls bitmaps from (cleared each scenario). */
@@ -292,8 +302,9 @@ abstract class GymBase {
                     val tag = c.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)
                     val desc = c.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.ContentDescription)?.joinToString("|")
                     val off = c.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Disabled) != null
+                    val toggle = c.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.ToggleableState)
                     if (text != null || tag != null || desc != null) {
-                        android.util.Log.w("GYMTREE", "tag=$tag text=$text desc=$desc${if (off) " DISABLED" else ""}")
+                        android.util.Log.w("GYMTREE", "tag=$tag text=$text desc=$desc${if (off) " DISABLED" else ""}${if (toggle != null) " toggle=$toggle" else ""}")
                     }
                 }
         }
@@ -458,11 +469,6 @@ abstract class GymBase {
         composeRule.waitForIdle()
     }
 
-    @After
-    fun tearDownScenario() {
-        scenario?.close()
-        scenario = null
-    }
 
     /**
      * Capture a screenshot of the current screen and write it under the gym's
