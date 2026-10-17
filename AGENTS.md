@@ -252,29 +252,33 @@ of the last check here: **not yet checked**.
   Postgres 18 and real loop images on a Debian 13 VM (CI runs both). Needs
   an endorsed box release; the webapp (shell v132) and Android show `storage` and the alert, iOS doesn't yet;
   live gym group `quota` not run yet.
-- **Live gym on UpCloud, all green (2026-10-15).** `bash scripts/gym-refresh.sh`
-  (rebases `gym` onto main in `~/.cache/flagship/gym-worktree` and pushes it,
-  gym D1 migrations, gym-vs-prod secret parity, deploys the gym Worker from
-  `gym` and the gym Fly app, health) is gym:weekly's phase 0; the live half is
-  `npx tsx tools/live-e2e/shared-run.ts` (one fleet: account A `home`+`home2`,
-  B `home`; groups core, gating, enforcement, server-order, runtimes,
-  access-lists, ai-staging, share, app-copy, update, lifecycle; always torn
-  down through the gym-only `/api/gym/teardown`, label `flagship-env=gym` +
-  the run's DNS). Run `live-run-2026-10-15T18-53-15-632Z`: 112 checks, 0
-  failed, ~11 min, 3 STARTER-4xCPU-8GB boxes. Fixed on `main` from what it
-  found: gym boxes never showed online (`daemon_status` matched a hard-coded
-  apex), invites of admin-pinned accounts could never be redeemed (box now
-  accepts the admin root; non-admin devices now invite with their own
-  device key, see "Account members"), gVisor apps had
-  no DNS so egress approvals never worked (resolv.conf now names the gateway),
-  app backup "include user data" always failed, concurrent pairings 500'd, and
-  the `.services` Fly image didn't build (build-eval). Leftover gym DNS had
-  filled the shared `flagship.services` zone (200-record cap), breaking DNS-01
-  for new boxes, prod included, until reaped (37 records) on 2026-10-15.
-  Open: the `update` group can only move a gym box (unendorsed main HEAD) to
-  an older endorsed release; `/api/dev/sample-user/<u>/order-update` assumes
-  the prod apex.
-
+- **Live gym on UpCloud, all green (2026-10-17).** `bash scripts/gym-refresh.sh`
+  (rebases `gym` onto main, gym D1 migrations, secret parity, deploys the gym
+  Worker and Fly app) is gym:weekly's phase 0; the live half is
+  `npx tsx tools/live-e2e/shared-run.ts` (`--list` shows the 22 groups: core,
+  gating, invites, enforcement, server-order, runtimes, real-account,
+  access-lists, ai-staging, share, api-keys, remote, ai-chat, migrate,
+  app-copy, archive, mcp-ide, activity, quota, backups, one-list, update,
+  lifecycle). It tears everything down through the gym-only
+  `/api/gym/teardown`; never pass `--keep` for a full run (it turns off the
+  staged release of boxes, and the shared `flagship.services` zone, 154 of 200
+  records without the gym, then fills). Latest runs: 244 checks, 22 groups, ~67
+  min, peak 4 boxes. Rules learnt: gym boxes clone the **`gym` branch**, not
+  main (only it carries the gym trust pin, and the gym CA chain in
+  `.maintainers/`, which a box reads from its checkout; without them a share's
+  account-key attestation is `accept-unverifiable`), except the `update`
+  group's box (B3, home3 of account B), which clones **main** because only main
+  keeps the prod pin that lets a box list endorsed releases. Box fixes need
+  landing on main, then `gym-refresh.sh`, before a rerun; a box reads its
+  daemon log with `tools/live-e2e/journal-cli.ts <demo-user> home 2000 <regex>`
+  (demo accounts only) while a group runs. Found by it and fixed on main: a
+  first saved/migrate backup failed with ENOENT on a never-made folder, and a
+  small files limit left an app 16 MiB less than its limit (ext4's reserve is
+  never in bavail). Cloudflare rate-limits DNS deletes: if a sweep reports
+  `dnsFailed`, wait 30 s and run `fleet-cli.ts sweep --destroy` again until the
+  zone is back to its base. Open: the `update` group can only move a gym box
+  (unendorsed main HEAD) to an older endorsed release;
+  `/api/dev/sample-user/<u>/order-update` assumes the prod apex.
 - **Scheduled backups, backup policy, one `.flagship` file, Migrate on the
   archive path (2026-10-16/17, `docs/server-backup-and-clone.md`).** Box:
   scheduled backups with retention and a KEK-pool deposit
