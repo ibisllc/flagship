@@ -1,0 +1,101 @@
+{
+  "about": "Adding a device over the pairing relay (owner rule 2026-10-16: admin devices only; a device without the admin root shows the line in `adminOnlyLine` and never opens a code). The admin device vouches with a flagship/device-admit/v2 admit signed by the account key (IRK), and signs a device grant for the new device's key: a MEMBER grant (memberScopes, signerRoot 'membership', signed by the IRK) or, when it promotes the device to admin, an admin grant (every scope, signerRoot 'admin-root', signed by the admin root, whose seed also rides in `wrappedAdminRoot`). The sealed relay bundle is JSON with exactly the keys in `bundleKeys`; the joining device checks the admit and the grant, signs its encrypted name (flagship/device-profile-self/v1) with its own key, and POSTs /api/users/<u>/devices/admit with exactly the keys in `postKeys`; .com answers 400 'missing device bootstrap' without grant, grantSignature and profile. Grants last 90 days. Scopes sort by their index in DEVICE_SCOPES (scopeOrder), not alphabetically. Seeds are raw Ed25519 seeds.",
+  "adminOnlyLine": "Only an admin device of this account can add devices.",
+  "keys": {
+    "irkSeedHex": "1111111111111111111111111111111111111111111111111111111111111111",
+    "irkPubHex": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+    "adminRootSeedHex": "2222222222222222222222222222222222222222222222222222222222222222",
+    "adminRootPubHex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+    "deviceSeedHex": "4444444444444444444444444444444444444444444444444444444444444444",
+    "devicePubHex": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48"
+  },
+  "scopeOrder": [
+    "browse",
+    "install-service",
+    "vibe-code",
+    "add-device",
+    "manage-services",
+    "revoke-others",
+    "demo-provision",
+    "admin",
+    "view-directory"
+  ],
+  "memberScopes": [
+    "browse",
+    "install-service",
+    "vibe-code",
+    "view-directory"
+  ],
+  "grantTtlMs": 7776000000,
+  "bundleKeys": [
+    "umkSeedHex",
+    "admit",
+    "admitSig",
+    "irkPubHex",
+    "grant",
+    "grantSignature",
+    "wrappedAdminRoot?"
+  ],
+  "postKeys": [
+    "admit",
+    "admitSig",
+    "grant",
+    "grantSignature",
+    "profile",
+    "request",
+    "signature"
+  ],
+  "admit": {
+    "fields": {
+      "username": "harry",
+      "deviceId": "10101010101010101010101010101010",
+      "newDevicePubHex": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48",
+      "issuedAt": 1760000000000
+    },
+    "canonical": "flagship/device-admit/v2|harry|10101010101010101010101010101010|d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48|1760000000000",
+    "signatureHex": "4df0e3727d06fa5cc307b45f8067109f00be4d872f41055920da3f7702ba71ab7303ad98b045eac82f9933bffbb7ac3c076f32df027c8adfe7d84d15a0bdcf07"
+  },
+  "memberGrant": {
+    "grant": {
+      "grantId": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f50617283",
+      "username": "harry",
+      "deviceId": "10101010101010101010101010101010",
+      "devicePubHex": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48",
+      "scopes": [
+        "browse",
+        "install-service",
+        "vibe-code",
+        "view-directory"
+      ],
+      "issuedAt": 1760000000000,
+      "expiresAt": 1767776000000,
+      "signerRoot": "membership"
+    },
+    "canonical": "flagship/device-capability-grant/v2|0a0b0c0d-0e0f-4a1b-8c2d-3e4f50617283|harry|10101010101010101010101010101010|d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48|browse,install-service,vibe-code,view-directory|1760000000000|1767776000000",
+    "signatureHex": "7684f5decdbab99befff943f963779cdd2facb7f9ea3163ef320218dc8a82c053dc4fcdd267149629339aeec5cd4a84c1953b85d08365eb9f17dda39b472a206"
+  },
+  "adminGrant": {
+    "grant": {
+      "grantId": "1a1b1c1d-1e1f-4a1b-8c2d-3e4f50617283",
+      "username": "harry",
+      "deviceId": "10101010101010101010101010101010",
+      "devicePubHex": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48",
+      "scopes": [
+        "browse",
+        "install-service",
+        "vibe-code",
+        "add-device",
+        "manage-services",
+        "revoke-others",
+        "demo-provision",
+        "admin",
+        "view-directory"
+      ],
+      "issuedAt": 1760000000000,
+      "expiresAt": 1767776000000,
+      "signerRoot": "admin-root"
+    },
+    "canonical": "flagship/device-capability-grant/v2|1a1b1c1d-1e1f-4a1b-8c2d-3e4f50617283|harry|10101010101010101010101010101010|d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48|browse,install-service,vibe-code,add-device,manage-services,revoke-others,demo-provision,admin,view-directory|1760000000000|1767776000000",
+    "signatureHex": "f298d64c497ae06f724d93cf679f48b3fadbeac0072e0f8a9d2012e95bb0cf51b7d8f3ef5c3316bff84b15233fe0c7dd146cc11f125961b2c1b49821253bd204"
+  }
+}

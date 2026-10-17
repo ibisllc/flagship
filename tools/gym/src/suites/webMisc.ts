@@ -65,6 +65,17 @@ export const WEB_MISC: readonly Scenario[] = [
     "D4",
   ),
   row(
+    "web-total-misc-add-device-non-admin",
+    "Adding a device is for admin devices only: a non-admin device sees Add device disabled with the line \"Only an admin device of this account can add devices.\" and never opens a pairing code.",
+    "gym misc a non-admin device can't add a device",
+    "#settings-tab-trusted-devices",
+    [
+      { describe: "Add device disabled", handle: "#trusted-devices-add", expect: "disabled" },
+      { describe: "Admin-only line", handle: "#trusted-devices-add-note", expect: "text", text: "Only an admin device of this account can add devices." },
+    ],
+    [["add-device-non-admin", "Add device disabled on a non-admin device."]],
+  ),
+  row(
     "web-total-misc-add-device-new-code",
     "Add a device: New code starts a fresh pairing (a different join link); Back returns to Trusted devices.",
     "gym misc add a device's New code starts a fresh pairing link",

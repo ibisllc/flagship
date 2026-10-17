@@ -282,6 +282,16 @@
       }
     },
     {
+      "id": "device-pairing-admin-only",
+      "title": "Adding a device over the pairing relay is admin-only; the join sends the device grant + profile .com requires; vectors device-pairing",
+      "ref": "web",
+      "surfaces": {
+        "ios": { "status": "partial", "reason": "The sealed bundle already carries the grant (same keys as the vectors), but Add device is not yet limited to admin devices and Swift does not read test-vectors/device-pairing yet.", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/PairingBundle.swift", "grantSignature"]] },
+        "android": { "status": "partial", "reason": "Same as iOS: the bundle carries the grant, Add device is not yet admin-only and Kotlin does not read test-vectors/device-pairing yet.", "anchors": [["apps/mobile/android/app/src/test/java/com/flagshipserver/app/core/DevicePairingTest.kt", "grant"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/crossDevicePairing.js", "ADD_DEVICE_ADMIN_ONLY"], ["apps/web/public/webapp/views/join.js", "signWithDevice"], ["packages/protocol/test-vectors/device-pairing/vectors.json", "adminOnlyLine"]] }
+      }
+    },
+    {
       "id": "account-lifecycle",
       "title": "Wipe & restart, delete account",
       "ref": "ios",

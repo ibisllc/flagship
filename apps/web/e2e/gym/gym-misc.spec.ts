@@ -296,6 +296,19 @@ test.describe("gym webapp misc", () => {
     await shot(page, testInfo, "devices-non-admin");
   });
 
+  test("gym misc a non-admin device can't add a device", async ({ page }, testInfo) => {
+    await noSockets(page);
+    await reachHome(page, { kind: "non-admin", servers: [HOME] });
+    const m = await mock(page);
+    basePods(m);
+    m.get(`/api/accounts/${ACCOUNT_ID}/directory`, { accountId: ACCOUNT_ID, devices: [], selfProfiles: [], managedProfiles: [], grants: [] });
+    await openSettings(page);
+    await page.click("#settings-tab-trusted-devices");
+    await expect(page.locator("#trusted-devices-add")).toBeDisabled({ timeout: 10_000 });
+    await expect(page.locator("#trusted-devices-add-note")).toHaveText("Only an admin device of this account can add devices.");
+    await shot(page, testInfo, "add-device-non-admin");
+  });
+
   test("gym misc add a device's New code starts a fresh pairing link", async ({ page }, testInfo) => {
     await noSockets(page);
     await reachHome(page, { kind: "admin", servers: [HOME] });
@@ -897,6 +910,17 @@ test.describe("gym webapp misc", () => {
       // The admin's vouch: the account IRK signs this device's key.
       expect(admit.body.admit.username).toBe(USER);
       expect(await verifies(page, ["/lib/crossDevicePairing.js", "deviceAdmitCanonicalBytes"], admit.body.admit, admit.body.admitSig, keys.irkPubHex)).toBe(true);
+      // What .com now requires (400 "missing device bootstrap" without it): a
+      // member grant for the new device's key, signed by the account key, and
+      // the device's own signed, encrypted name.
+      const body = admit.body;
+      expect(body.grant).toMatchObject({
+        username: USER, deviceId: body.admit.deviceId, devicePubHex: body.admit.newDevicePubHex,
+        signerRoot: "membership", scopes: ["browse", "install-service", "vibe-code", "view-directory"],
+      });
+      expect(await verifies(page, ["/lib/crossDevicePairing.js", "deviceGrantCanonicalBytes"], body.grant, body.grantSignature, keys.irkPubHex)).toBe(true);
+      expect(body.profile).toMatchObject({ accountId: USER, deviceId: body.admit.deviceId, signerPubHex: body.admit.newDevicePubHex });
+      expect(body.profile.ciphertextHex).toMatch(/^[0-9a-f]+$/);
       await shot(joiner, testInfo, "join-under-review");
       await joiner.click("#join-open");
       await expect(joiner.locator("#view-join")).toBeHidden({ timeout: 15_000 });
@@ -919,6 +943,14 @@ test.describe("gym webapp misc", () => {
         return { username: s.username, umkHex: (await import("/keystore.js")).bytesToHex(s.umk) };
       });
       expect(reopened).toEqual({ username: USER, umkHex });
+      const deviceSigns = await joiner.evaluate(async ({ id, pub }) => {
+        const ks = await import("/keystore.js");
+        const { getSession } = await import("/lib/state.js");
+        const msg = new Uint8Array([9, 8, 7]);
+        const sig = await ks.signWithAccountDeviceKey(getSession().umk, "smoketest", id, msg);
+        return ks.verifyWithEd25519Pub(ks.hexToBytes(pub), sig, msg);
+      }, { id: admit.body.admit.deviceId, pub: admit.body.admit.newDevicePubHex });
+      expect(deviceSigns).toBe(true);
       await shot(joiner, testInfo, "join-reload-unlocked");
     } finally {
       await other.close();
