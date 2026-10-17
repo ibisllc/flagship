@@ -41,7 +41,7 @@ public final class DebugAccessViewModel {
         serverDomain: String,
         view: DebugAccessView?,
         client: any ScreensClient,
-        canManage: Bool = GymSeams.forceAdminRoot || Keystore.hasAdminRoot,
+        canManage: Bool = Keystore.hasAdminRoot,
         grantSigner: Signer? = nil,
         revokeSigner: Signer? = nil,
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
