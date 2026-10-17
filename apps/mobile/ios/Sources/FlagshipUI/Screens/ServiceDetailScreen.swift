@@ -164,7 +164,7 @@ public struct ServiceDetailScreen: View {
         let lines = AppStorageText.appLines(storage)
         if !lines.isEmpty {
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("Storage").font(FS.font.h4()).foregroundColor(c.text)
+                Text("Storage").font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s2) {
                         ForEach(lines, id: \.label) { l in
