@@ -286,15 +286,25 @@ of the last check here: **not yet checked**.
   endorsed box release and a `.com` deploy. Android client on `main`
   (2026-10-17: policy, Backups section, one file, wizard policy, phone copy
   by WorkManager; unit + 14 emulator mock-gym checks green, the worker not
-  run on a device). Missing: the iOS client (`wip/backups-ios-2026-10-16`),
-  live-gym checks (Migrate: two boxes, data moves, old
+  run on a device). iOS client on `main` (2026-10-17, `e4c9c4e82`,
+  `cc12850a8`: Backups section, policy, one file, phone copy, per-app disk
+  use and the `app-storage-full` alert, peer backup v2 status and "Restore
+  from other servers"; not built for a device or run on a real box).
+  Missing: live-gym checks (Migrate: two boxes, data moves, old
   box wiped). Webapp peer backup (2026-10-17, shell v134): Settings →
   Peer-backup is the v2 status (the v1 pool toggle is gone), and Add/Import →
   "Restore from other servers" derives the lost server's PBK from the UMK,
   has a running server (or the browser, from the sealed `.com` record) read
   the record, opens its backup, creates the server and calls `from-peers`
-  (`lib/peerBackup.js`, parity `peer-backup-v2`; iOS/Android still show the
-  v1 screen).
+  (`lib/peerBackup.js`, parity `peer-backup-v2`; iOS the same; Android still
+  shows the v1 screen).
+- **iOS stream, admin and IDE items (2026-10-16/17).** Debug access v2 on the
+  server page (SSH key, admin-signed, expiry, Face ID per grant; Keystore-only
+  root, no gym seam in Release: `79c8021b7`..`5d97446bf`). Share-accept
+  admin: only an admin device accepts a co-manage share, with .com's key
+  attestation and the box's refusal sentences (`6ba659a3a`). Connect your IDE
+  shows each IDE's own config (`f514ec4ff`). Add a device is admin-only
+  (`831d87ec1`). All mock-gym covered; not run on a physical iPhone.
 - **Backup/clone server, Add/Import a server, Migrate wipes, Activity
   (2026-10-15):** `docs/server-backup-and-clone.md`. A backup is two files:
   a small `.flagship-backup` (key slots + the saved server's settings, apps,
