@@ -457,7 +457,7 @@ of the last check here: **not yet checked**.
   `.com` keeps signed revokes, migration 0102; the box prunes only for
   revokes it verifies); a demoted creator's links stop admitting new people.
   Access state moved to `<dataDir>/data/flagship-access/` (Migrate carries
-  it), uninstall drops it. Clients at parity (webapp shell v101):
+  it), uninstall drops it. Clients at parity since webapp shell v101:
   webapp `0c86ea9ab`/`d24323173`, Android `559ec1694`..`4125224cc`, iOS
   `e8209c1de`..`62db48867` (mock gym scenarios for admin, Manager and Member
   devices on all three); `flagship/app-member-role/v1` retired
@@ -701,7 +701,9 @@ allowances (1M / 5M / 20M a month) are placeholders.
 
 - **`.com` Worker:** current with `main` as of 2026-10-15 (`3e8fef1de`,
   version `f8c619da`, webapp shell **v113**, D1 through migration 0103).
-  Always `npx tsc -b` first and apply pending D1 migrations before deploying.
+  Measured live on 2026-10-16 evening: shell **v114** (a later deploy was not
+  recorded here); `main` is at **v131** with D1 0104 (peer backup) pending, so
+  a `.com` deploy is due. Always `npx tsc -b` first and apply pending D1 migrations before deploying.
 - **Rate limits count in Durable Objects (2026-10-15):** every budget in
   `apps/com/src/rateLimit.ts` is applied as written (any window, counted once
   worldwide) by `RateLimitCounter` objects, one per endpoint, axis and id;
@@ -818,7 +820,7 @@ allowances (1M / 5M / 20M a month) are placeholders.
   the app session is unlocked and Account security → "Quick approve from
   watch" is on). Not yet run on a device or watch; the Play listing needs the
   Wear OS form factor and the watch APK uploaded. iOS's install Live Activity
-  never starts: nothing calls `InstallProgressBridge.onStart`.
+  starts on an install's first checkpoint (`b7c49cbf0`).
 - **Data layer = Postgres 18 + a files folder per app (2026-10-12):** on
   `main`, needs an endorsed update for existing boxes (and a `.com` redeploy
   for the demo cloud-init copy of the unit). MinIO, Redis, Adminer,
@@ -1018,7 +1020,7 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
     re-verify on expiry).
 14. **VM boot observability:** the wired initramfs unlock log isn't persisted to
     the FLAGSHIP_BOOT partition (the Wi-Fi path's is), and the "taking longer
-    than expected" stalled-boot advisory exists on Mac only, not Linux/Windows.
+    than expected" stalled-boot advisory exists on Mac, Linux and Windows Studio.
 15. **Obsolete plaintext display-name fixtures** remain in some active tests.
 16. **Repo adapters** (`docs/repo-adapters.md`): built and deployed
     2026-10-11 — single-file format, the public store
@@ -1064,13 +1066,14 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
 
 ### Feature branches (each = `main` + one feature; rebase when `main` moves)
 
-All rebased onto `main` 2026-10-15 (the Oct 9 tips are kept as
-`backup/<slug>-pre-rebase-2026-10-14`, the script's later pass as `…-2026-10-15`). `scripts/rebase-features.sh` reports
+All rebased onto `main` 2026-10-16 (the earlier tips are kept as
+`backup/<slug>-pre-rebase-<date>`; `main` has moved since, so they are behind again). `scripts/rebase-features.sh` reports
 how far each branch is behind its parent and the conflicts a rebase would hit;
 `--apply` rebases and pushes the clean ones and lists the rest. A branch that
 changes the webapp runs its own shell version above its parent's
-(marketplace v102, custom-domains v103, custom-names v104, outbound-proxy
-v105 over `main`'s v101):
+(marketplace v117, custom-domains v118, custom-names v119, outbound-proxy
+v120 over `main`'s v116 at that rebase; `main` is at v131 now, so the next
+rebase renumbers them again):
 when `main` passes it, take the next unused number and move the tests' pins.
 Not compiled since the rebase: the iOS and Android code on any branch.
 
