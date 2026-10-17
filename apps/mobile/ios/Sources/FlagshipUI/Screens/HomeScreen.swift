@@ -248,6 +248,8 @@ public struct HomeScreen: View {
                 // account-reset (danger) suppresses everything; otherwise the
                 // backup banner, then the recovery nudge.
                 topAnnouncement(c: c)
+                    .transition(.scale(scale: 0.96).combined(with: .opacity))
+                    .animation(.snappy, value: [accountWasReset, showRecoveryBackupBanner, showRecoveryNudge])
                 if statusPaused && !pods.isEmpty {
                     HStack(spacing: FS.space.s2) {
                         Label("Status paused", systemImage: "pause.circle")
@@ -267,6 +269,8 @@ public struct HomeScreen: View {
                     quickActions(c: c)
                 }
                 serversSection(c: c)
+                    .animation(.snappy, value: statusFilter)
+                    .animation(.snappy, value: pods.map(\.podId))
                 SharedWithMeSection(rows: sharedServers, onOpen: onOpenShared)
                 switch state {
                 case .loaded(let d):

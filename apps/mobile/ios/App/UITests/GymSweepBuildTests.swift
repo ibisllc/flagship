@@ -236,7 +236,7 @@ final class GymSweepBuildTests: GymSweepCase {
                       "Flagship Inference's models are listed.")
         let gpt = ownModelRow(app, "gpt-5.4-mini")
         XCTAssertTrue(gpt.waitForExistence(timeout: 15), "So are the saved key's models.")
-        XCTAssertTrue(app.staticTexts["OPENAI · WORK"].exists, "Grouped under the key.")
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "OpenAI · Work")).firstMatch.exists, "Grouped under the key.")
         shot(app, "chat-model-menu")
         gpt.tap()
         closePopover(app)

@@ -90,6 +90,21 @@ class GymSweepCase: XCTestCase {
         return el.waitForExistence(timeout: 5)
     }
 
+    /// Nudge a revealed element away from the top or bottom edge, where the
+    /// floating navigation bar and the tab bar sit over the scrolled page and
+    /// swallow a tap that `isHittable` still allows.
+    func bringToMiddle(_ app: XCUIApplication, _ el: XCUIElement) {
+        let h = app.windows.firstMatch.frame.height
+        guard el.exists, h > 0 else { return }
+        let y = el.frame.midY
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        if y < h * 0.3 {
+            start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5 + 0.25)))
+        } else if y > h * 0.75 {
+            start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5 - 0.25)))
+        }
+    }
+
     /// Scroll back up until `el` is on screen (bounded).
     @discardableResult
     func revealUp(_ app: XCUIApplication, _ el: XCUIElement, tries: Int = 10) -> Bool {

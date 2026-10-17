@@ -910,6 +910,7 @@ final class GymSweepServerTests: GymSweepCase {
         openBackups(app, "-smoke-backups-fresh")
         let choose = app.buttons["sd-backups-policy-change"]
         XCTAssertTrue(revealUp(app, choose))
+        bringToMiddle(app, choose)
         XCTAssertEqual(choose.label, "Choose")
         choose.tap()
         let none = any(app, "backup-policy-none")
