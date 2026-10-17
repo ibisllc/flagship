@@ -39,6 +39,15 @@ object BackupsText {
     const val NONE_BODY =
         "Nothing is backed up. If this server's disk fails, its apps and data are gone. You can still use Back up now on the server page."
 
+    // Create-server's backup step: short, plain, nothing preselected.
+    const val CREATE_NONE_TITLE = "No backup"
+    const val CREATE_NONE_BODY = "Nothing is saved off this server. If its disk fails, its apps and data are gone."
+    const val CREATE_PHONE_TITLE = "On my phone"
+    const val CREATE_PHONE_BODY = "Your phone keeps an encrypted copy of each night's backup."
+    const val CREATE_PEER_TITLE = "On other servers"
+    const val CREATE_PEER_BODY = "Encrypted pieces of your backup are kept on other Flagship servers."
+    const val CREATE_CHANGE_NOTE = "You can change this any time in the server's Backups section."
+
     const val NO_BACKUPS = "No backups yet."
     const val SCHEDULE_OFF = "Scheduled backups are off."
     const val APPROVE = "Approve backups for this server"

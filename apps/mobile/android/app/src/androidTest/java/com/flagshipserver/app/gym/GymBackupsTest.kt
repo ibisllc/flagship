@@ -12,6 +12,7 @@ package com.flagshipserver.app.gym
 
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasSetTextAction
@@ -179,8 +180,8 @@ class GymBackupsTest : GymBase() {
         assertEquals(listOf(oldest.archiveId), mock.backupDeletes)
     }
 
-    // 7. The create wizard's backup step: the three policies in the shared
-    // words, and the phone's reserve (the signed sibling is pinned in
+    // 7. The create wizard's backup step: the three choices (no backup first, none
+    // preselected), and the phone's reserve (the signed sibling is pinned in
     // CreateServerBackupPolicyTest: the gym never reaches the box's deposit).
     @Test
     fun theWizardOffersTheThreePoliciesWithAReserve() {
@@ -190,11 +191,18 @@ class GymBackupsTest : GymBase() {
         waitUntilExists("cs-next-button")
         composeRule.onNodeWithTag("cs-next-button").performScrollTo().performClick()
         waitUntilExists("cs-backup-policy-phone", timeoutMs = 15_000)
-        waitUntilTextExists(BackupsText.PHONE_BODY)
-        waitUntilTextExists(BackupsText.PEER_BODY)
-        waitUntilTextExists(BackupsText.NONE_BODY)
+        // Nothing is preselected, so there is no reserve stepper and Continue waits for a pick.
+        assertTrue(!exists("cs-backup-policy-reserve"))
+        composeRule.onNodeWithTag("cs-continue-button").performScrollTo().assertIsNotEnabled()
+        waitUntilTextExists(BackupsText.CREATE_NONE_BODY)
+        waitUntilTextExists(BackupsText.CREATE_PHONE_BODY)
+        waitUntilTextExists(BackupsText.CREATE_PEER_BODY)
+        waitUntilTextExists(BackupsText.CREATE_CHANGE_NOTE)
+        composeRule.onNodeWithTag("cs-backup-policy-phone").performScrollTo().performClick()
+        waitUntilExists("cs-backup-policy-reserve")
         assertTrue(textOf("cs-backup-policy-reserve").endsWith(" GB"))
         waitUntilTextExists("This phone has ")
+        composeRule.onNodeWithTag("cs-continue-button").performScrollTo().assertIsEnabled()
         gymShot("wizard-backup-policy")
         composeRule.onNodeWithTag("cs-backup-policy-peer").performScrollTo().performClick()
         composeRule.waitUntil(5_000) { !exists("cs-backup-policy-reserve") }

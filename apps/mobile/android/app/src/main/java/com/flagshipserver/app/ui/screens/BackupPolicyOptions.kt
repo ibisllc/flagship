@@ -35,15 +35,20 @@ import com.flagshipserver.app.ui.theme.FS
 /** [policy]: `phone` | `peer` | `none`; [reserveGb] is the phone's reserve (phone only). */
 @Composable
 internal fun BackupPolicyOptions(
-    policy: String,
+    policy: String?,
     onPolicy: (String) -> Unit,
     reserveGb: Int,
     onReserveGb: (Int) -> Unit,
     phoneFreeBytes: Long,
     tagPrefix: String,
+    /** Create-server's step: nothing preselected, No backup first, one short sentence each. */
+    forCreate: Boolean = false,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-        PolicyOption(policy == "phone", BackupsText.PHONE_TITLE, BackupsText.PHONE_BODY, warn = false, tag = "$tagPrefix-phone") { onPolicy("phone") }
+        if (forCreate) {
+            PolicyOption(policy == "none", BackupsText.CREATE_NONE_TITLE, BackupsText.CREATE_NONE_BODY, warn = false, tag = "$tagPrefix-none") { onPolicy("none") }
+        }
+        PolicyOption(policy == "phone", if (forCreate) BackupsText.CREATE_PHONE_TITLE else BackupsText.PHONE_TITLE, if (forCreate) BackupsText.CREATE_PHONE_BODY else BackupsText.PHONE_BODY, warn = false, tag = "$tagPrefix-phone") { onPolicy("phone") }
         if (policy == "phone") {
             val maxGb = maxOf(BackupsText.defaultReserveGb(phoneFreeBytes), (phoneFreeBytes / BackupsText.GB).toInt())
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = FS.space.s4)) {
@@ -72,8 +77,13 @@ internal fun BackupPolicyOptions(
                 modifier = Modifier.padding(start = FS.space.s4),
             )
         }
-        PolicyOption(policy == "peer", BackupsText.PEER_TITLE, BackupsText.PEER_BODY, warn = false, tag = "$tagPrefix-peer") { onPolicy("peer") }
-        PolicyOption(policy == "none", BackupsText.NONE_TITLE, BackupsText.NONE_BODY, warn = true, tag = "$tagPrefix-none") { onPolicy("none") }
+        PolicyOption(policy == "peer", if (forCreate) BackupsText.CREATE_PEER_TITLE else BackupsText.PEER_TITLE, if (forCreate) BackupsText.CREATE_PEER_BODY else BackupsText.PEER_BODY, warn = false, tag = "$tagPrefix-peer") { onPolicy("peer") }
+        if (!forCreate) {
+            PolicyOption(policy == "none", BackupsText.NONE_TITLE, BackupsText.NONE_BODY, warn = true, tag = "$tagPrefix-none") { onPolicy("none") }
+        }
+        if (forCreate) {
+            Text(BackupsText.CREATE_CHANGE_NOTE, color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = FS.space.s1).testTag("$tagPrefix-note"))
+        }
     }
 }
 

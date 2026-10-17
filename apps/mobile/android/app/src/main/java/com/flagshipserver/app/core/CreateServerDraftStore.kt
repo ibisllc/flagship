@@ -21,7 +21,7 @@ import android.content.SharedPreferences
 
 class CreateServerDraftStore(private val prefs: SharedPreferences) {
     enum class BackupPolicy(val wire: String) {
-        /** Phone-side backups; the default. Mirrors the webapp default. */
+        /** Phone-side backups. */
         PHONE_ONLY("phone-only"),
 
         /** Peer-backup distribution to other Flagship users. */
@@ -46,9 +46,9 @@ class CreateServerDraftStore(private val prefs: SharedPreferences) {
         prefs.edit().putInt(RESERVE_KEY, gb).apply()
     }
 
-    /** The user's chosen backup policy — absent ⇒ the default ("phone-only"). */
-    fun backupPolicy(): BackupPolicy =
-        BackupPolicy.fromWire(prefs.getString(BACKUP_POLICY_KEY, null)) ?: BackupPolicy.PHONE_ONLY
+    /** The user's chosen backup policy; absent until they pick one (there is no default). */
+    fun backupPolicy(): BackupPolicy? =
+        BackupPolicy.fromWire(prefs.getString(BACKUP_POLICY_KEY, null))
 
     fun setBackupPolicy(policy: BackupPolicy) {
         prefs.edit().putString(BACKUP_POLICY_KEY, policy.wire).apply()

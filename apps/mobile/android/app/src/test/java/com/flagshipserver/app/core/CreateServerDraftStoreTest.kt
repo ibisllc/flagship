@@ -23,8 +23,8 @@ class CreateServerDraftStoreTest {
         return CreateServerDraftStore(prefs)
     }
 
-    @Test fun defaultsToPhoneOnly() {
-        assertEquals(CreateServerDraftStore.BackupPolicy.PHONE_ONLY, freshStore().backupPolicy())
+    @Test fun hasNoDefaultBackupPolicy() {
+        assertEquals(null, freshStore().backupPolicy())
     }
 
     @Test fun backupPolicyRoundTrips() {
@@ -35,12 +35,12 @@ class CreateServerDraftStoreTest {
         assertEquals(CreateServerDraftStore.BackupPolicy.NONE, store.backupPolicy())
     }
 
-    @Test fun resetReturnsToTheDefault() {
+    @Test fun resetClearsThePick() {
         val store = freshStore()
         store.setBackupPolicy(CreateServerDraftStore.BackupPolicy.NONE)
         store.reset()
-        // After a successful delivery a fresh "Add a server" starts at default.
-        assertEquals(CreateServerDraftStore.BackupPolicy.PHONE_ONLY, store.backupPolicy())
+        // After a successful delivery a fresh "Add a server" starts with nothing picked.
+        assertEquals(null, store.backupPolicy())
     }
 
     // The wire tokens must match the webapp draft + iOS raw values exactly so

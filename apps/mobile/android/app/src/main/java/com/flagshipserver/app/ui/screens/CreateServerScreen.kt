@@ -236,10 +236,12 @@ fun CreateServerScreen(
     // Backup policy (phone-side default) and the phone's reserve: hydrated from
     // the draft store so flipping away mid-fill doesn't lose the pick; signed as
     // a `flagship/backup-policy/v1` order beside the pairing order at mint.
-    var backupPolicy by remember { mutableStateOf(draftStore.backupPolicy()) }
+    // Nothing is preselected: Continue stays disabled until one is picked.
+    var backupPolicyWire by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    val backupPolicy = CreateServerDraftStore.BackupPolicy.fromWire(backupPolicyWire)
     val phoneFree = remember { phoneFreeBytes(context) }
     var reserveGb by remember { mutableStateOf(draftStore.reserveGb() ?: com.flagshipserver.app.core.BackupsText.defaultReserveGb(phoneFree)) }
-    val backupChoice = BackupPolicyChoice(backupPolicy.order, reserveGb.toLong() * com.flagshipserver.app.core.BackupsText.GB)
+    val backupChoice = backupPolicy?.let { BackupPolicyChoice(it.order, reserveGb.toLong() * com.flagshipserver.app.core.BackupsText.GB) }
     // Builder-pairing controller (built when the user picks "Pair with the
     // builder app") + on-device-burn recipe (minted before showing the burn UI).
     var pairController by remember { mutableStateOf<BuilderPairController?>(null) }
@@ -426,7 +428,7 @@ fun CreateServerScreen(
                 },
                 phoneFreeBytes = phoneFree,
                 onBackupPolicy = {
-                    backupPolicy = it
+                    backupPolicyWire = it.wire
                     draftStore.setBackupPolicy(it)
                 },
                 error = error,
@@ -667,7 +669,7 @@ private fun DesignPhase(
     onDebugFriendly: (Boolean) -> Unit,
     debugSshKey: String,
     onDebugSshKey: (String) -> Unit,
-    backupPolicy: CreateServerDraftStore.BackupPolicy,
+    backupPolicy: CreateServerDraftStore.BackupPolicy?,
     reserveGb: Int,
     onReserveGb: (Int) -> Unit,
     phoneFreeBytes: Long,
@@ -767,6 +769,7 @@ private fun DesignPhase(
         FSPrimaryButton(
             label = "Continue",
             onClick = onContinue,
+            enabled = backupPolicy != null,
             block = true,
             modifier = Modifier.testTag("cs-continue-button"),
         )
@@ -967,19 +970,20 @@ private fun AdvancedModePicker(
 // the webapp (BackupPolicyOptions).
 @Composable
 private fun BackupPolicyPicker(
-    policy: CreateServerDraftStore.BackupPolicy,
+    policy: CreateServerDraftStore.BackupPolicy?,
     onPolicy: (CreateServerDraftStore.BackupPolicy) -> Unit,
     reserveGb: Int,
     onReserveGb: (Int) -> Unit,
     phoneFreeBytes: Long,
 ) {
     Text(
-        "Backup policy",
+        "Where should backups go?",
         style = MaterialTheme.typography.titleSmall,
     )
     Spacer(Modifier.height(FS.space.s2))
     BackupPolicyOptions(
-        policy = policy.order,
+        policy = policy?.order,
+        forCreate = true,
         onPolicy = { k -> CreateServerDraftStore.BackupPolicy.fromOrder(k)?.let(onPolicy) },
         reserveGb = reserveGb,
         onReserveGb = onReserveGb,
