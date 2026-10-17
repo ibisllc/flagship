@@ -34,6 +34,20 @@ public enum AddServerGate {
     }
 }
 
+/// Adding a device over the pairing relay is admin-only too (owner rule
+/// 2026-10-16): a device without the admin root shows the line instead of a
+/// button that opens a code. Same rule as adding servers.
+public enum AddDeviceGate {
+    public static let adminOnlyLine = DeviceCapabilityGrantEnvelope.addDeviceAdminOnlyLine
+
+    public static func allows(holdsAdminRoot: Bool, isDemoAccount: Bool) -> Bool {
+        AddServerGate.allows(holdsAdminRoot: holdsAdminRoot, isDemoAccount: isDemoAccount)
+    }
+
+    @MainActor
+    public static func allows(_ app: AppState) -> Bool { AddServerGate.allows(app) }
+}
+
 /// Orders a box checks under the account's admin root once the box pins one
 /// (docs/service-access-gating.md "Account members"): removing an app, ticking
 /// or unticking "Runs on", answering or saving an access list, creating or

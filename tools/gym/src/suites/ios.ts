@@ -832,16 +832,18 @@ const FEATURE_MIRRORS: readonly Scenario[] = [
   ),
   iosTotal(
     "ios-total-promote-admin-toggle",
-    "D3 (Slice D D-4): the promote-to-admin toggle appears ONLY on an admin device's add-device SAS ceremony (default OFF); a non-admin device omits it.",
+    "D3 (Slice D D-4): the promote-to-admin toggle appears ONLY on an admin device's add-device SAS ceremony (default OFF); a non-admin device cannot add a device at all (the row is disabled with \"Only an admin device of this account can add devices.\").",
     "FlagshipAppUITests/GymFeatureMirrorTests/test_promoteAdminToggleAdminOnly",
     {
       steps: [
-        { kind: "launch", describe: "Settings → Add a device (no admin seed)." },
+        { kind: "launch", describe: "Settings (no admin seed): the Add a device row is disabled." },
+        { kind: "assert", describe: "The admin-only sentence replaces the note.", handle: "settings-add-device-admin-only" },
         { kind: "assert", describe: "No promote toggle.", handle: "add-device-promote-admin-toggle" },
         { kind: "launch", describe: "Relaunch with -smoke-admin-root; reopen Add a device." },
         { kind: "assert", describe: "Promote toggle present, default OFF.", handle: "add-device-promote-admin-toggle" },
       ],
       assertions: [
+        { describe: "Admin-only sentence on a non-admin device", handle: "settings-add-device-admin-only", expect: "present" },
         { describe: "Toggle absent on a non-admin device", handle: "add-device-promote-admin-toggle", expect: "absent" },
         { describe: "Toggle present + default OFF on an admin device", handle: "add-device-promote-admin-toggle", expect: "present" },
       ],

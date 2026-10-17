@@ -76,6 +76,9 @@ public struct SettingsScreen: View {
     /// Phase 3b — admin opens the "Add a device" cross-device QR pairing
     /// (Settings → Trusted devices → Add a device).
     var onAddDevice: () -> Void = {}
+    /// Only an admin device (or a demo account's) adds devices; any other
+    /// shows the sentence in place of the button.
+    var canAddDevice: Bool = true
     /// Phase 3b — open the in-app pairing-code scanner to JOIN another
     /// account on this device (the incoming/collaborator side).
     var onScanPairingCode: () -> Void = {}
@@ -169,6 +172,7 @@ public struct SettingsScreen: View {
         trustedDevices: LoadingState<[SettingsViewModel.DirectoryDevice]> = .loaded([]),
         pendingRePair: PendingRePairSnapshot? = nil,
         accountType: String? = nil,
+        canAddDevice: Bool = true,
         onAddDevice: @escaping () -> Void = {},
         onScanPairingCode: @escaping () -> Void = {},
         onRevokeDevice: @escaping (PairedSessionSummary) -> Void = { _ in },
@@ -216,6 +220,7 @@ public struct SettingsScreen: View {
         self.onSetManagedDeviceName = onSetManagedDeviceName
         self.onRemoveManagedDeviceName = onRemoveManagedDeviceName
         self.accountType = accountType
+        self.canAddDevice = canAddDevice
         self.onAddDevice = onAddDevice
         self.onScanPairingCode = onScanPairingCode
         self.onRevokeDevice = onRevokeDevice
@@ -515,13 +520,17 @@ public struct SettingsScreen: View {
                         .background(c.surface)
                         .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
                     }
+                    .disabled(!canAddDevice)
+                    .opacity(canAddDevice ? 1 : 0.5)
                     .accessibilityIdentifier("settings-add-device")
-                    Text("For your own phones and tablets. To give another person access, use Share this server on the server's page.")
+                    Text(canAddDevice
+                         ? "For your own phones and tablets. To give another person access, use Share this server on the server's page."
+                         : AddDeviceGate.adminOnlyLine)
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("settings-add-device-note")
+                        .accessibilityIdentifier(canAddDevice ? "settings-add-device-note" : "settings-add-device-admin-only")
                     Button(action: onScanPairingCode) {
                         HStack(spacing: FS.space.s2) {
                             Image(systemName: "qrcode.viewfinder")

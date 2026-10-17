@@ -185,6 +185,15 @@ public struct DeviceCapabilityGrantEnvelope: Equatable, Sendable {
         "view-directory",
     ]
 
+    /// What a device added from another device gets unless it is promoted to
+    /// admin (packages/protocol/test-vectors/device-pairing `memberScopes`).
+    public static let memberScopes: [String] = ["browse", "install-service", "vibe-code", "view-directory"]
+
+    /// Adding a device is for admin devices only (owner rule 2026-10-16); this
+    /// is the sentence a device without the admin root shows in place of the
+    /// button (test-vectors/device-pairing `adminOnlyLine`).
+    public static let addDeviceAdminOnlyLine = "Only an admin device of this account can add devices."
+
     public let grantId: String
     public let username: String
     public let deviceId: String

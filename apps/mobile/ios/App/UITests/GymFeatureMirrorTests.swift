@@ -239,13 +239,18 @@ final class GymFeatureMirrorTests: XCTestCase {
     /// The promote-to-admin toggle appears ONLY on an admin device's add-device
     /// SAS ceremony, default OFF; a non-admin device omits it entirely.
     func test_promoteAdminToggleAdminOnly() throws {
-        // Non-admin half: the ceremony renders with NO promote section.
+        // Non-admin half: adding a device is admin-only, so the row is
+        // disabled and says why; no ceremony (and no promote toggle) opens.
         var app = launch(tab: "settings")
-        openAddDevice(app)
-        XCTAssertFalse(
-            app.switches["add-device-promote-admin-toggle"].exists,
-            "A non-admin device must NOT offer promote-to-admin."
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 20), "Settings should render.")
+        let row = app.buttons["settings-add-device"]
+        XCTAssertTrue(revealBySwipe(app, row), "Settings should list the add-device row.")
+        XCTAssertFalse(row.isEnabled, "A non-admin device must not be able to add a device.")
+        XCTAssertTrue(
+            app.staticTexts["Only an admin device of this account can add devices."].exists,
+            "A non-admin device should read why."
         )
+        XCTAssertFalse(app.switches["add-device-promote-admin-toggle"].exists)
         gymShot(app, "promote-absent-non-admin")
 
         // Admin half: the toggle renders, default OFF.

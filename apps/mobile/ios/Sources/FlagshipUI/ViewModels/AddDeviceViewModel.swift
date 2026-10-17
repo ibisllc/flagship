@@ -210,7 +210,7 @@ public final class AddDeviceViewModel {
             let promoted = wrappedAdminRoot != nil
             let scopes = promoted
                 ? DeviceCapabilityGrantEnvelope.deviceScopeOrder
-                : ["browse", "install-service", "vibe-code", "view-directory"]
+                : DeviceCapabilityGrantEnvelope.memberScopes
             let expiresAt = issuedAt + 90 * 24 * 3_600_000
             let grantEnvelope = DeviceCapabilityGrantEnvelope(
                 grantId: grantId,

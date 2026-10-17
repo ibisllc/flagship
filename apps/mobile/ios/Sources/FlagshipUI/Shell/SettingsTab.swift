@@ -99,7 +99,9 @@ public struct SettingsTab: View {
                     controlDevices: vm.controlDevices,
                     trustedDevices: vm.trustedDevices,
                     pendingRePair: vm.pendingRePair,
+                    canAddDevice: AddDeviceGate.allows(app),
                     onAddDevice: {
+                        guard AddDeviceGate.allows(app) else { return }
                         // Adding a device hands over the UMK (account master
                         // key) — gate it behind an explicit Face ID before we
                         // even reveal the pairing QR.
