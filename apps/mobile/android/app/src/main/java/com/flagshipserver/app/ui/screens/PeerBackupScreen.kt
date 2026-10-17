@@ -104,8 +104,8 @@ private fun Body(s: PeerBackupStatusResponse) {
                 Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
             val total = s.totalBricks ?: 0
-            if (total > 0) LabelValueRow("pieces safe", "${s.healthyBricks ?: 0} of $total")
-            s.lastPlacedAt?.takeIf { it > 0 }?.let { LabelValueRow("last placed", fmtDate(it)) }
+            if (total > 0) LabelValueRow("Pieces safe", "${s.healthyBricks ?: 0} of $total")
+            s.lastPlacedAt?.takeIf { it > 0 }?.let { LabelValueRow("Last placed", fmtDate(it)) }
             PeerBackup.restoreByLine(s.keepUntil).takeIf { it.isNotEmpty() }?.let {
                 Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.semantics { testTag = "peer-backup-restore-by" })
             }

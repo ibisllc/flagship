@@ -110,7 +110,7 @@ fun BiometricLockScreen() {
             Icon(
                 Icons.Outlined.Lock,
                 contentDescription = null,
-                tint = FS.colors.primary,
+                tint = FS.colors.accent,
                 modifier = Modifier.size(64.dp),
             )
             Text(

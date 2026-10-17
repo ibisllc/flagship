@@ -416,7 +416,8 @@ class GymOctoberTest : GymBase() {
         openHomeServerPage()
         waitUntilExists("server-create-app-here", timeoutMs = 20_000)
         composeRule.onNodeWithTag("server-create-app-here").performScrollTo().assertIsDisplayed()
-        assertTrue(composeRule.onAllNodes(tagStartsWith("server-app-")).fetchSemanticsNodes().isNotEmpty())
+        // The app rows load after the page's own frame (the button exists first): wait for them.
+        composeRule.waitUntil(20_000) { composeRule.onAllNodes(tagStartsWith("server-app-")).fetchSemanticsNodes().isNotEmpty() }
         gymShot("server-apps")
     }
 

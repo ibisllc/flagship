@@ -28,3 +28,18 @@ object FSMotion {
         fadeOut(tween(90)) + slideOutHorizontally(tween(280)) { it / DRIFT }
     }
 }
+
+/** A list row that fades in when it first appears (a filter or a refresh adds
+ *  it), instead of popping. Pair with `animateContentSize` on the list so the
+ *  rows below slide to make room. */
+@androidx.compose.runtime.Composable
+fun FSAppear(content: @androidx.compose.runtime.Composable () -> Unit) {
+    val state = androidx.compose.runtime.remember {
+        androidx.compose.animation.core.MutableTransitionState(false).apply { targetState = true }
+    }
+    androidx.compose.animation.AnimatedVisibility(
+        visibleState = state,
+        enter = androidx.compose.animation.fadeIn(tween(220)),
+        exit = androidx.compose.animation.fadeOut(tween(120)),
+    ) { content() }
+}

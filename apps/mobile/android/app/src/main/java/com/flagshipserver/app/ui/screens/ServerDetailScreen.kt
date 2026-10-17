@@ -574,7 +574,7 @@ private fun BootUnlockApprovalCard(
                         Icon(
                             if (isEntitlement) Icons.Outlined.VerifiedUser else Icons.Outlined.LockOpen,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = FS.colors.accent,
                         )
                         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
                             Text(
@@ -837,8 +837,9 @@ private fun FrontPageCard(serverDomain: String) {
         FSSectionHeader("Front page")
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                Text("What visitors see", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "What visitors see at $serverDomain. Point it at one of your apps, or keep the default Flagship page.",
+                    "Point $serverDomain at one of your apps, or keep the default Flagship page.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -868,17 +869,18 @@ private fun FrontPageCard(serverDomain: String) {
                         // An assigned-but-uninstalled label still shows (marked)
                         // so the owner can see and clear a stale assignment.
                         val rows = buildList {
-                            add("" to "Default Flagship page")
-                            for (o in options) add(o.urlLabel to "${o.name ?: o.urlLabel} — ${o.urlLabel}")
+                            add(Triple("", "Default Flagship page", null as String?))
+                            for (o in options) add(Triple(o.urlLabel, o.name ?: o.urlLabel, o.name?.let { o.urlLabel }))
                             current?.let { cur ->
-                                if (options.none { it.urlLabel == cur }) add(cur to "$cur (no longer installed)")
+                                if (options.none { it.urlLabel == cur }) add(Triple(cur, cur, "No longer installed"))
                             }
                         }
-                        for ((value, labelText) in rows) {
+                        for ((value, labelText, detailText) in rows) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .testTag("sd-front-page-option-${value.ifEmpty { "default" }}")
                                     .selectable(selected = selection == value, enabled = !busy) {
                                         selection = value
                                     },
@@ -887,10 +889,19 @@ private fun FrontPageCard(serverDomain: String) {
                                     selected = selection == value,
                                     onClick = { if (!busy) selection = value },
                                 )
-                                Text(labelText, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
+                                Column(Modifier.padding(vertical = FS.space.s1)) {
+                                    Text(labelText, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
+                                    if (detailText != null) {
+                                        Text(
+                                            detailText,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                                        )
+                                    }
+                                }
                             }
                         }
-                        FSSecondaryButton(
+                        FSPrimaryButton(
                             label = if (busy) "Saving…" else "Save",
                             onClick = {
                                 if (!busy && selection != (current ?: "")) {
@@ -955,7 +966,7 @@ private fun LeaderCard(serverDomain: String) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (isLeader) {
-                        Icon(Icons.Outlined.Flag, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Outlined.Flag, contentDescription = null, tint = FS.colors.accent, modifier = Modifier.size(20.dp))
                     }
                     Text(
                         if (isLeader) "This server leads"
@@ -1478,7 +1489,7 @@ internal fun UpdateServerCard(
                             horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(Icons.Outlined.Upgrade, contentDescription = null, tint = FS.colors.primary, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Outlined.Upgrade, contentDescription = null, tint = FS.colors.accent, modifier = Modifier.size(20.dp))
                             Text(
                                 "New release available: $tag",
                                 color = FS.colors.primary,
@@ -1506,13 +1517,26 @@ internal fun UpdateServerCard(
                         onForget = { vm.forget() },
                     )
                 } else {
-                    FSDangerButton(
-                        label = if (latestTag == null) "Update this server" else "Update to latest",
-                        onClick = { vm.clearFailure(); showSheet = true },
-                        block = true,
-                        enabled = reported && !LocalServerReadOnly.current,
-                        modifier = Modifier.semantics { contentDescription = "sd-update-server" },
-                    )
+                    val updateLabel = if (latestTag == null) "Update this server" else "Update to latest"
+                    val updateEnabled = reported && !LocalServerReadOnly.current
+                    val updateMod = Modifier.semantics { contentDescription = "sd-update-server" }
+                    if (latestTag == null) {
+                        com.flagshipserver.app.ui.components.FSSecondaryButton(
+                            label = updateLabel,
+                            onClick = { vm.clearFailure(); showSheet = true },
+                            block = true,
+                            enabled = updateEnabled,
+                            modifier = updateMod,
+                        )
+                    } else {
+                        FSPrimaryButton(
+                            label = updateLabel,
+                            onClick = { vm.clearFailure(); showSheet = true },
+                            block = true,
+                            enabled = updateEnabled,
+                            modifier = updateMod,
+                        )
+                    }
                     if (!reported) {
                         Text(
                             "Waiting for this server to report its current version — it can't be updated in place until it does.",
@@ -1918,7 +1942,7 @@ private fun MigrateServerButton(serverDomain: String) {
     val username by app.currentUser.collectAsState()
     var showSheet by remember { mutableStateOf(false) }
 
-    FSPrimaryButton(
+    com.flagshipserver.app.ui.components.FSSecondaryButton(
         label = "Migrate to new machine / VM",
         onClick = { showSheet = true },
         block = true,

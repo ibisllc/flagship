@@ -230,7 +230,7 @@ private fun GraceView(completesAt: Long, onFinish: () -> Unit) {
         Text("Bringing this device in", style = MaterialTheme.typography.titleLarge)
         FSCard {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                Icon(Icons.Outlined.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                Icon(Icons.Outlined.Schedule, contentDescription = null, tint = FS.colors.accent, modifier = Modifier.size(24.dp))
                 Text(
                     if (elapsed) "The grace period has elapsed — you can finish now."
                     else "This device takes over in ${formatRemaining(remaining)}. Your other devices are being alerted.",

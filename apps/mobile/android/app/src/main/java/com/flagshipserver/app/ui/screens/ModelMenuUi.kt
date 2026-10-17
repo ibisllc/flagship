@@ -169,7 +169,7 @@ private fun MenuRow(title: String, subtitle: String?, selected: Boolean, tag: St
             }
         },
         trailingIcon = {
-            if (selected) Icon(Icons.Outlined.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+            if (selected) Icon(Icons.Outlined.Check, contentDescription = "Selected", tint = FS.colors.accent, modifier = Modifier.size(18.dp))
         },
         onClick = onClick,
         modifier = Modifier.testTag(tag),

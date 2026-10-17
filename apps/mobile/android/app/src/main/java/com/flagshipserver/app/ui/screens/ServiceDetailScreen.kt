@@ -262,7 +262,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                                 title = EditService.ROW_TITLE,
                                 subtitle = EditService.ROW_CAPTION,
                                 icon = Icons.Outlined.EditNote,
-                                iconTint = MaterialTheme.colorScheme.primary,
+                                iconTint = FS.colors.accent,
                                 onClick = { nav.navigate("edit-service/$serviceId") },
                                 modifier = Modifier.semantics { testTag = "service-detail-edit" },
                             )
@@ -273,7 +273,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                                 title = AdapterReport.ROW_TITLE,
                                 subtitle = AdapterReport.rowCaption(adaptedFrom.repo),
                                 icon = Icons.Outlined.Feedback,
-                                iconTint = MaterialTheme.colorScheme.primary,
+                                iconTint = FS.colors.accent,
                                 onClick = { showAdapterReport = true },
                                 modifier = Modifier.semantics { testTag = "service-detail-report-adapter" },
                             )
@@ -320,7 +320,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                             title = "Open browser viewer",
                             subtitle = "${plural(resp.browserTabs.size, "tab")} running on your server",
                             icon = Icons.Outlined.Tab,
-                            iconTint = MaterialTheme.colorScheme.primary,
+                            iconTint = FS.colors.accent,
                             onClick = { nav.navigate("browser-tabs/$serviceId") },
                             modifier = Modifier.semantics { testTag = "service-detail-open-browser-viewer" },
                         )
@@ -333,7 +333,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                         title = "Access control",
                         subtitle = "Open to all or members only, and each member's rank",
                         icon = Icons.Filled.People,
-                        iconTint = MaterialTheme.colorScheme.primary,
+                        iconTint = FS.colors.accent,
                         onClick = { nav.navigate("service-access/$serviceId") },
                         modifier = Modifier.semantics { testTag = "service-detail-access-row" },
                     )
@@ -345,7 +345,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                         title = "Configure environment",
                         subtitle = "Set API keys and secrets. Values stay on your server.",
                         icon = Icons.Outlined.Tune,
-                        iconTint = MaterialTheme.colorScheme.primary,
+                        iconTint = FS.colors.accent,
                         onClick = { nav.navigate("service-env/$serviceId") },
                         modifier = Modifier.semantics { testTag = "service-detail-env-row" },
                     )

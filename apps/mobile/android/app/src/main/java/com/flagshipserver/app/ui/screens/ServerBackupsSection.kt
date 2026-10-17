@@ -48,7 +48,6 @@ import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.PhoneBackupCopies
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.ui.components.FSCard
-import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
@@ -104,7 +103,7 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
     com.flagshipserver.app.ui.components.FSSectionHeader("Backups")
     Spacer(Modifier.height(FS.space.s2))
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("sd-backups")) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             // ── Policy ──
             val p = vm.policy
             if (p != null) {
@@ -211,10 +210,9 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
                         val progress = vm.downloading[b.archiveId]
                         if (progress != null) LinearProgressIndicator(progress = { progress.toFloat() }, modifier = Modifier.fillMaxWidth())
                         val file = downloaded[b.archiveId]
-                        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
                             if (file == null) {
-                                FSSecondaryButton(
-                                    label = if (progress != null) "Downloading…" else "Download",
+                                TextButton(
                                     onClick = {
                                         scope.launch {
                                             vm.download(b)?.let { f -> downloaded = downloaded + (b.archiveId to f) }
@@ -222,10 +220,9 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
                                     },
                                     enabled = progress == null,
                                     modifier = Modifier.testTag("sd-backups-download-${b.archiveId}"),
-                                )
+                                ) { Text(if (progress != null) "Downloading…" else "Download") }
                             } else {
-                                FSPrimaryButton(
-                                    label = if (saving) "Saving…" else "Save…",
+                                TextButton(
                                     onClick = {
                                         saveNote = null
                                         saveTarget = file
@@ -233,14 +230,14 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
                                     },
                                     enabled = !saving,
                                     modifier = Modifier.testTag("sd-backups-save-${b.archiveId}"),
-                                )
+                                ) { Text(if (saving) "Saving…" else "Save…") }
                             }
-                            FSDangerButton(
-                                label = "Delete",
+                            TextButton(
                                 onClick = { confirmDelete = b },
                                 enabled = vm.isAdmin,
+                                colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                                 modifier = Modifier.testTag("sd-backups-delete-${b.archiveId}"),
-                            )
+                            ) { Text("Delete") }
                         }
                         if (file != null) Text("Downloaded ${file.name}.", color = FS.colors.success, style = caption, modifier = Modifier.testTag("sd-backups-downloaded-${b.archiveId}"))
                     }

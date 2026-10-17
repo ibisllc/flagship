@@ -37,9 +37,16 @@ data class FlagshipColors(
     val border: Color,
     val text: Color,
     val textMuted: Color,
-    /** The teal as a foreground: text, links, icons, outlines, the cursor
-     *  (the webapp's `--accent`: deepened in light so it passes AA as text). */
+    /** Small teal TEXT and links (webapp `--accent`): deepened in light so it
+     *  passes 4.5:1. Same value as [accentText]; kept as `primary` for the
+     *  Material roles that draw text (text buttons, links). */
     val primary: Color,
+    /** The teal for GRAPHICS and large bold headers: icons beside labels,
+     *  section markers, switches, progress. Lighter than [accentText]
+     *  (3:1 is enough off text); bright teal in dark. */
+    val accent: Color,
+    /** Small teal text and links; token name shared with iOS `accentText`. */
+    val accentText: Color,
     /** Pressed / hovered [primary] (`--accent-press`). */
     val primaryHover: Color,
     /** The Flagship teal as a filled surface: primary buttons, the selected
@@ -65,6 +72,8 @@ val LightColors = FlagshipColors(
     text            = Color(0xFF14140F), // --ink
     textMuted       = Color(0xFF555149), // --ink-muted
     primary         = Color(0xFF0F766E), // --accent
+    accent          = Color(0xFF0D9488), // graphics, large bold
+    accentText      = Color(0xFF0F766E), // small text, links
     primaryHover    = Color(0xFF0B5F58), // --accent-press
     fill            = Color(0xFF14B8A6), // --teal
     onAccent        = Color(0xFF0A0A09), // --accent-on
@@ -81,6 +90,8 @@ val DarkColors = FlagshipColors(
     text            = Color(0xFFECE7D6), // --ink (warm cream)
     textMuted       = Color(0xFFA39D8F), // --ink-muted
     primary         = Color(0xFF2DD4BF), // --accent (--teal-bright)
+    accent          = Color(0xFF2DD4BF), // graphics, large bold
+    accentText      = Color(0xFF2DD4BF), // small text, links
     primaryHover    = Color(0xFF5EEAD4), // --accent-press
     fill            = Color(0xFF14B8A6), // --teal
     onAccent        = Color(0xFF0A0A09), // --accent-on
@@ -185,8 +196,9 @@ internal fun flagshipColorScheme(dark: Boolean): ColorScheme {
             inversePrimary = Color(0xFF0F766E),
             secondary = c.primary,
             onSecondary = c.onAccent,
-            secondaryContainer = Color(0xFF103A34),
-            onSecondaryContainer = Color(0xFF99F6E4),
+            // Selection (nav indicator, selected chip/segment) is the bright fill with dark ink.
+            secondaryContainer = c.fill,
+            onSecondaryContainer = c.onAccent,
             tertiary = c.primary,
             onTertiary = c.onAccent,
             tertiaryContainer = Color(0xFF103A34),
@@ -225,8 +237,8 @@ internal fun flagshipColorScheme(dark: Boolean): ColorScheme {
             inversePrimary = Color(0xFF2DD4BF),
             secondary = c.primary,
             onSecondary = c.bg,
-            secondaryContainer = Color(0xFFD3ECE6),
-            onSecondaryContainer = c.primaryHover,
+            secondaryContainer = c.fill,
+            onSecondaryContainer = c.onAccent,
             tertiary = c.primary,
             onTertiary = c.bg,
             tertiaryContainer = Color(0xFFD3ECE6),

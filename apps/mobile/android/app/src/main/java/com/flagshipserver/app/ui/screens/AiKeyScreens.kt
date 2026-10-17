@@ -161,7 +161,7 @@ fun AiKeyStepScreen(
                 FSRow(
                     title = AiKeyStep.ADD_LABEL,
                     icon = Icons.Filled.Add,
-                    iconTint = MaterialTheme.colorScheme.primary,
+                    iconTint = FS.colors.accent,
                     titleColor = MaterialTheme.colorScheme.primary,
                     onClick = { showForm = true },
                     modifier = Modifier.testTag("build-key-add"),
@@ -194,7 +194,7 @@ fun AiKeyStepScreen(
             Icon(
                 Icons.Outlined.Lock,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = FS.colors.accent,
                 modifier = Modifier.size(18.dp),
             )
             Text(

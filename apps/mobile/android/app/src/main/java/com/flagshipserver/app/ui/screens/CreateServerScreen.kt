@@ -8,6 +8,8 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -676,16 +678,17 @@ private fun DesignPhase(
     onContinue: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    androidx.compose.material3.LinearProgressIndicator(
-        progress = { (step + 1).toFloat() / stepCount },
-        modifier = Modifier.fillMaxWidth(),
-        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-    )
-    Spacer(Modifier.height(FS.space.s2))
     Text(
         "Step ${step + 1} of $stepCount",
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+        style = MaterialTheme.typography.titleSmall,
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    androidx.compose.material3.LinearProgressIndicator(
+        progress = { (step + 1).toFloat() / stepCount },
+        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        drawStopIndicator = {},
     )
     Spacer(Modifier.height(FS.space.s3))
     FSCard(padding = PaddingValues(FS.space.s4)) {
@@ -791,14 +794,15 @@ private fun RecipeTtlPicker(
         Text(
             ttlLabel(hours),
             color = MaterialTheme.colorScheme.primary,
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.titleMedium,
         )
     }
+    // Half-hour snaps without 47 tick dots; the label above is the value.
     Slider(
         value = hours.toFloat(),
-        onValueChange = { onRecipeTtlMs((it * 3_600_000.0).toLong()) },
+        onValueChange = { onRecipeTtlMs((Math.round(it * 2f) / 2.0 * 3_600_000.0).toLong()) },
         valueRange = 0.5f..24f,
-        steps = 47, // (24-0.5)/0.5 = 47 stops
+        modifier = Modifier.semantics { stateDescription = ttlLabel(hours) },
     )
     Text(
         "After this window, the unused USB can't install — re-mint from this screen.",
@@ -1157,7 +1161,7 @@ private fun DeliveryCard(
             title = title,
             subtitle = body,
             icon = icon,
-            iconTint = MaterialTheme.colorScheme.primary,
+            iconTint = FS.colors.accent,
             enabled = enabled,
         )
     }

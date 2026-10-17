@@ -277,7 +277,7 @@ private fun ResumeRow(activeSessions: Int, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
     ) {
-        Icon(Icons.Outlined.History, contentDescription = null, tint = FS.colors.primary)
+        Icon(Icons.Outlined.History, contentDescription = null, tint = FS.colors.accent)
         Text(
             "Resume or view past builds",
             color = FS.colors.text,

@@ -155,7 +155,7 @@ fun EditServiceScreen(nav: NavController, serviceId: String) {
                 title = EditService.AI_TITLE,
                 subtitle = EditService.AI_SUBTITLE,
                 icon = Icons.Outlined.AutoAwesome,
-                iconTint = MaterialTheme.colorScheme.primary,
+                iconTint = FS.colors.accent,
                 onClick = { nav.navigate(EditService.keyRoute(serviceId)) },
                 modifier = Modifier.testTag("edit-service-ai"),
             )
@@ -164,7 +164,7 @@ fun EditServiceScreen(nav: NavController, serviceId: String) {
                 title = EditService.IDE_TITLE,
                 subtitle = EditService.IDE_SUBTITLE,
                 icon = Icons.Outlined.Laptop,
-                iconTint = MaterialTheme.colorScheme.primary,
+                iconTint = FS.colors.accent,
                 onClick = { nav.navigate(EditService.mcpRoute(serviceId)) },
                 modifier = Modifier.testTag("edit-service-ide"),
             )

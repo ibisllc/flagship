@@ -94,7 +94,7 @@ fun VibeCodeProviderPickScreen(nav: NavController) {
         FSCard(padding = PaddingValues(FS.space.s5)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                    Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = FS.colors.accent)
                     Text(
                         text = FreeAiCopy.TITLE,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -117,7 +117,7 @@ fun VibeCodeProviderPickScreen(nav: NavController) {
         FSCard(padding = PaddingValues(FS.space.s5)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                    Icon(Icons.Outlined.Key, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Outlined.Key, contentDescription = null, tint = FS.colors.accent)
                     Text(
                         text = "Bring your own key",
                         color = MaterialTheme.colorScheme.onSurface,

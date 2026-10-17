@@ -182,7 +182,7 @@ fun TrustedDevicesScreen(nav: NavController) {
                 title = accountDisplayName ?: "@${app.currentUser.value.orEmpty()}",
                 subtitle = "@${app.currentUser.value.orEmpty()}",
                 icon = Icons.Outlined.AccountCircle,
-                iconTint = MaterialTheme.colorScheme.primary,
+                iconTint = FS.colors.accent,
                 onClick = if (canManageNames) ({
                     nameEditMode = "account"
                     nameDraft = accountDisplayName.orEmpty()
@@ -579,7 +579,7 @@ private fun PendingRePairBanner(
     FSCard {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                Icon(Icons.Outlined.Sync, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Outlined.Sync, contentDescription = null, tint = FS.colors.accent)
                 Text(
                     "Replace pending",
                     style = MaterialTheme.typography.titleMedium,
@@ -628,7 +628,7 @@ private fun TrustedDeviceRow(device: TrustedDevicesViewModel.DirectoryDevice, on
         title = device.displayName,
         subtitle = lines.joinToString("\n"),
         icon = platformIcon(device.platformClass),
-        iconTint = MaterialTheme.colorScheme.primary,
+        iconTint = FS.colors.accent,
         onClick = onMenu,
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s1)) {

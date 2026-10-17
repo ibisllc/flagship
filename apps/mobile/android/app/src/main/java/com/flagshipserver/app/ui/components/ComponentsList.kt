@@ -2,10 +2,13 @@ package com.flagshipserver.app.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -90,7 +93,7 @@ fun FSChip(
         label = {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(label)
-                if (count != null) Text(count.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (count != null) Text(count.toString(), color = if (selected) Color.Unspecified else MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         leadingIcon = if (selected) {
@@ -108,18 +111,33 @@ fun <T> FSChipRow(
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
-        modifier = modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-    ) {
-        for (item in items) {
-            FSChip(
-                label = item.label,
-                selected = item.value == selection,
-                count = item.count,
-                onClick = { onSelect(item.value) },
+    val scroll = rememberScrollState()
+    val page = MaterialTheme.colorScheme.background
+    // The row fades out at an edge that has more chips beyond it, so it reads as scrollable.
+    Box(modifier = modifier.fillMaxWidth()) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+            modifier = Modifier.fillMaxWidth().horizontalScroll(scroll),
+        ) {
+            for (item in items) {
+                FSChip(
+                    label = item.label,
+                    selected = item.value == selection,
+                    count = item.count,
+                    onClick = { onSelect(item.value) },
+                )
+            }
+        }
+        if (scroll.canScrollForward) {
+            Box(
+                Modifier.align(Alignment.CenterEnd).width(36.dp).fillMaxHeight()
+                    .background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color.Transparent, page))),
+            )
+        }
+        if (scroll.canScrollBackward) {
+            Box(
+                Modifier.align(Alignment.CenterStart).width(36.dp).fillMaxHeight()
+                    .background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(page, Color.Transparent))),
             )
         }
     }
@@ -292,18 +310,29 @@ data class FSSettingsRowData(
     val testTag: String? = null,
 )
 
-/** A section header above a group: Material's list subheader, in the accent
- *  colour, sentence case. */
+/** A section header above a group: on-surface semibold with a small teal
+ *  marker (the accent is a graphic here, never small teal text). */
 @Composable
 fun FSSectionHeader(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text = text,
-        color = MaterialTheme.colorScheme.primary,
-        style = MaterialTheme.typography.titleSmall,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
         modifier = modifier
             .padding(start = FS.space.s1, top = FS.space.s2)
             .semantics { heading() },
-    )
+    ) {
+        Box(
+            Modifier
+                .size(width = 3.dp, height = 14.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(FS.colors.accent),
+        )
+        Text(
+            text = text,
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+        )
+    }
 }
 
 /** A titled group of rows in one card, with hairlines between rows. */

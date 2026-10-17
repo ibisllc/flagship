@@ -405,7 +405,7 @@ private fun AddOrImportSheet(
             title = "Create a new server",
             subtitle = "Set up a server on your hardware or in the cloud.",
             icon = Icons.Outlined.AddCircleOutline,
-            iconTint = MaterialTheme.colorScheme.primary,
+            iconTint = FS.colors.accent,
             onClick = onCreate,
             modifier = Modifier.testTag("home-add-new-server"),
         )
@@ -413,7 +413,7 @@ private fun AddOrImportSheet(
             title = "Co-manage a running server",
             subtitle = "Open a server another account shares with you.",
             icon = Icons.Outlined.GroupAdd,
-            iconTint = MaterialTheme.colorScheme.primary,
+            iconTint = FS.colors.accent,
             onClick = onCoManage,
             modifier = Modifier.testTag("home-co-manage"),
         )
@@ -421,7 +421,7 @@ private fun AddOrImportSheet(
             title = "Import a backup",
             subtitle = "Restore a server's apps from a backup file.",
             icon = Icons.Outlined.Restore,
-            iconTint = MaterialTheme.colorScheme.primary,
+            iconTint = FS.colors.accent,
             onClick = onImport,
             modifier = Modifier.testTag("home-import-backup"),
         )
@@ -429,7 +429,7 @@ private fun AddOrImportSheet(
             title = "Restore from other servers",
             subtitle = "Bring a lost server's apps back from the pieces other servers keep.",
             icon = Icons.Outlined.Restore,
-            iconTint = MaterialTheme.colorScheme.primary,
+            iconTint = FS.colors.accent,
             onClick = onRestoreFromPeers,
             modifier = Modifier.testTag("home-restore-peers"),
         )
@@ -554,7 +554,7 @@ private fun AddOrImportServerButton(onClick: () -> Unit, primary: Boolean = fals
     val colors = if (primary) {
         ButtonDefaults.buttonColors(containerColor = FS.colors.fill, contentColor = FS.colors.onAccent)
     } else {
-        ButtonDefaults.filledTonalButtonColors()
+        ButtonDefaults.filledTonalButtonColors(containerColor = FS.colors.accent.copy(alpha = 0.14f), contentColor = FS.colors.accentText)
     }
     androidx.compose.material3.FilledTonalButton(
         onClick = onClick,

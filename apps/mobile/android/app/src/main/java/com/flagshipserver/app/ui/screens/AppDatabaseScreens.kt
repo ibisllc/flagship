@@ -114,7 +114,7 @@ fun DatabaseEntrySection(nav: NavController, serviceId: String, detail: AppDetai
                 else -> "Loading…"
             },
             icon = Icons.Outlined.Storage,
-            iconTint = MaterialTheme.colorScheme.primary,
+            iconTint = FS.colors.accent,
             onClick = { nav.navigate(appDbRoute(serviceId)) },
             modifier = Modifier.testTag("service-detail-database"),
         )

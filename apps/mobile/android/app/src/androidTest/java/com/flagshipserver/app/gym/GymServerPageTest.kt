@@ -230,8 +230,8 @@ class GymServerPageTest : GymBase() {
     @Test
     fun frontPagePicksAnApp() {
         openServer()
-        waitText("Plants — plants", 20_000)
-        tapText("Plants — plants")
+        waitUntilExists("sd-front-page-option-plants", 20_000)
+        composeRule.onNodeWithTag("sd-front-page-option-plants").performScrollTo().performClick()
         tapDesc("sd-front-page-save")
         assertSigned("front-page", "admin")
         waitText("Front page set to plants")

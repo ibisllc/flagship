@@ -582,6 +582,11 @@ class ImportBackupViewModel(
         checkData()
     }
 
+    /** System back on the passcode step returns to choosing the file. */
+    fun backFromPasscode() {
+        if (_phase.value == Phase.Passcode) { passcode = ""; _phase.value = Phase.Pick }
+    }
+
     private suspend fun checkData() {
         val o = opened ?: return
         val data = dataPicked

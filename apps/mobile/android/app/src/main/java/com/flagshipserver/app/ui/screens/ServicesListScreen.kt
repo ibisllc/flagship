@@ -1,5 +1,6 @@
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
@@ -195,7 +196,7 @@ fun ServicesListScreen(nav: NavController) {
                 title = "Build your first service",
                 message = "Describe what you want in plain English. The AI writes it; your server runs it.",
                 icon = Icons.Outlined.AutoAwesome,
-                iconTint = FS.colors.primary,
+                iconTint = FS.colors.accent,
                 action = {
                     FSPrimaryButton(
                         label = "Build a service",
@@ -237,9 +238,13 @@ fun ServicesListScreen(nav: NavController) {
                     onSelect = { ownerFilter = it },
                 )
             }
-            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3), modifier = Modifier.animateContentSize()) {
                 apps.forEach { app ->
-                    AppRow(app, me = me, onClick = { nav.navigate("app-detail/${app.serviceId}") })
+                    androidx.compose.runtime.key(app.serviceId) {
+                        com.flagshipserver.app.ui.theme.FSAppear {
+                            AppRow(app, me = me, onClick = { nav.navigate("app-detail/${app.serviceId}") })
+                        }
+                    }
                 }
                 BuildAnotherAppRow(onClick = { nav.navigate("build/source") })
             }

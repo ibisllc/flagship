@@ -6,6 +6,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -154,7 +155,7 @@ fun ReorderableServerList(
 
     val shown = applyDraft(pods, drag.draft).map { it.podId }
 
-    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3), modifier = Modifier.animateContentSize()) {
         shown.forEach { id ->
             val pod = byId[id] ?: return@forEach
             key(id) {

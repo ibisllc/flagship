@@ -103,7 +103,7 @@ private fun TabsBody(tabs: List<BrowserTab>, onPick: (BrowserTab) -> Unit) {
                 icon = Icons.Outlined.Tab,
                 onClick = { onPick(tab) },
                 trailing = {
-                    Icon(Icons.Outlined.PlayCircle, contentDescription = "Stream", tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Outlined.PlayCircle, contentDescription = "Stream", tint = FS.colors.accent)
                 },
             )
         }

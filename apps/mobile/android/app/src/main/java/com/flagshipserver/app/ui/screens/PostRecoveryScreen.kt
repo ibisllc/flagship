@@ -114,7 +114,7 @@ fun PostRecoveryScreen(nav: NavController) {
 
                 FSCard {
                     Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3), verticalAlignment = Alignment.Top) {
-                        Icon(Icons.Outlined.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                        Icon(Icons.Outlined.Info, contentDescription = null, tint = FS.colors.accent, modifier = Modifier.size(24.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("Undo window", style = MaterialTheme.typography.titleSmall)
                             Text(

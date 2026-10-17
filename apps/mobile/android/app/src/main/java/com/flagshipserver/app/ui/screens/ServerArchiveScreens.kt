@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.foundation.selection.selectable
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -84,7 +85,7 @@ private val bodySmStyle: TextStyle @Composable get() = MaterialTheme.typography.
 @Composable
 internal fun ServerBackupButton(serverDomain: String) {
     var show by remember { mutableStateOf(false) }
-    FSPrimaryButton(
+    FSSecondaryButton(
         label = "Backup/clone server",
         onClick = { show = true },
         block = true,
@@ -436,6 +437,7 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
     }
     fun serverName(fqdn: String) = fqdn.substringBefore('.')
 
+    androidx.activity.compose.BackHandler(enabled = phase == ImportBackupViewModel.Phase.Passcode) { vm.backFromPasscode() }
     FSScreen(title = title, onBack = onClose, modifier = Modifier.testTag("import-backup")) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             val summary = vm.summary
@@ -473,13 +475,23 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
                         placeholder = "home.you.flagship.services",
                         fieldTag = "restore-peers-lost",
                     )
-                    vm.lostChoices.take(6).forEach { choice ->
-                        FSSecondaryButton(
-                            label = choice,
-                            onClick = { vm.lost = choice },
-                            block = true,
-                            modifier = Modifier.testTag("restore-peers-choice-$choice"),
-                        )
+                    if (vm.lostChoices.isNotEmpty()) {
+                        com.flagshipserver.app.ui.components.FSGroup {
+                            vm.lostChoices.take(6).forEachIndexed { i, choice ->
+                                if (i > 0) com.flagshipserver.app.ui.components.FSDivider(inset = FS.space.s4)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("restore-peers-choice-$choice")
+                                        .selectable(selected = vm.lost == choice, role = androidx.compose.ui.semantics.Role.RadioButton) { vm.lost = choice }
+                                        .padding(horizontal = FS.space.s2, vertical = FS.space.s1),
+                                ) {
+                                    androidx.compose.material3.RadioButton(selected = vm.lost == choice, onClick = null, modifier = Modifier.padding(FS.space.s2))
+                                    Text(choice, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = FS.space.s2))
+                                }
+                            }
+                        }
                     }
                     FSPrimaryButton(
                         label = "Find its backup",

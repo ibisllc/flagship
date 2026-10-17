@@ -225,7 +225,7 @@ private fun ImportBackupOption(onImport: () -> Unit) {
                 .clickable { onImport() }
                 .semantics { contentDescription = "login-import-backup" },
         ) {
-            Icon(Icons.Outlined.Lock, contentDescription = null, tint = FS.colors.primary, modifier = Modifier.size(20.dp))
+            Icon(Icons.Outlined.Lock, contentDescription = null, tint = FS.colors.accent, modifier = Modifier.size(20.dp))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Import backup file", color = FS.colors.text, style = MaterialTheme.typography.bodyMedium)
             }
@@ -363,7 +363,7 @@ private fun TakeoverExplainerView(
         )
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                Icon(Icons.Outlined.Info, contentDescription = null, tint = FS.colors.primary, modifier = Modifier.size(20.dp))
+                Icon(Icons.Outlined.Info, contentDescription = null, tint = FS.colors.accent, modifier = Modifier.size(20.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("This device becomes the admin", color = FS.colors.text, style = MaterialTheme.typography.bodyMedium)
                     Text(
@@ -415,7 +415,7 @@ private fun GraceCountdownView(
         )
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                Icon(Icons.Outlined.Info, contentDescription = null, tint = FS.colors.primary, modifier = Modifier.size(20.dp))
+                Icon(Icons.Outlined.Info, contentDescription = null, tint = FS.colors.accent, modifier = Modifier.size(20.dp))
                 Text(
                     if (elapsed) "The grace period has elapsed — you can take over now."
                     else "This device takes over in ${formatRemaining(remaining)}. Your other devices are alerted.",
