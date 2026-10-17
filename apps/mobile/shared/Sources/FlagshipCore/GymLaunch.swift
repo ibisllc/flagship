@@ -16,6 +16,10 @@ public enum GymLaunch {
         return args.contains("-smoke-mode") || args.contains("-smoke-onboarding")
     }
 
+    public static var startsOnWelcome: Bool {
+        ProcessInfo.processInfo.arguments.contains("-smoke-onboarding")
+    }
+
     /// Retarget `Endpoints` from `-apex-host <host>`, before any client is
     /// built (the live clients capture their base URL at init).
     public static func applyApexHostArg() {

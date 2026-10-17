@@ -388,6 +388,16 @@ struct FlagshipApp: App {
         }
     }
 
+    // A gym onboarding walk starts on Welcome, even after an earlier walk
+    // signed in to the mock demo. Release builds have no such walk.
+    private static var gymStartsOnWelcome: Bool {
+        #if DEBUG
+        return GymLaunch.startsOnWelcome
+        #else
+        return false
+        #endif
+    }
+
     /// One-to-one translation from the canonical `ProvisionStatusPhase`
     /// to the widget-extension's ActivityAttributes.Step (the
     /// widget-local twin of the same vocabulary). They're separate types
@@ -715,9 +725,7 @@ struct FlagshipApp: App {
                     orphanedPersistedUsername = username
                 }
             } else if !Keystore.hasWrappedUMK,
-                      // A gym onboarding walk starts on Welcome, even after
-                      // an earlier walk signed in to the mock demo.
-                      !ProcessInfo.processInfo.arguments.contains("-smoke-onboarding"),
+                      !Self.gymStartsOnWelcome,
                       let demo = await sessionStore.demoSession {
                 DemoAccount.activate(
                     appState,
