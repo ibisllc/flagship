@@ -27,13 +27,24 @@ object Variant : AppVariant {
 
     @Volatile private var mockRun = false
 
+    /** Empty every saved-settings file but the key store's own (its keys are reset per run). */
+    private fun freshInstall(context: android.content.Context) {
+        val dir = java.io.File(context.applicationInfo.dataDir, "shared_prefs")
+        dir.listFiles { f -> f.name.endsWith(".xml") }?.forEach { f ->
+            val name = f.name.removeSuffix(".xml")
+            if (name == "flagship-keystore") return@forEach
+            runCatching { context.getSharedPreferences(name, android.content.Context.MODE_PRIVATE).edit().clear().commit() }
+        }
+    }
+
     override fun isGymLaunch(intent: Intent?): Boolean = intent?.hasExtra(SmokeModeConfig.EXTRA_SMOKE_MODE) == true
 
     override fun applyLaunchOverrides(intent: Intent?) {
         // A gym scenario's in-memory key slot ends with its launch (the process lives on).
         com.flagshipserver.app.keystore.Keystore.restorePersistedActiveProfile()
         val host = intent?.getStringExtra(EXTRA_APEX_HOST)?.trim()?.lowercase().orEmpty()
-        if (host.isEmpty()) return
+        // No apex asked: the production one, whatever an earlier scenario in this process pointed at.
+        if (host.isEmpty()) { Endpoints.setOverride(null as Endpoints.Override?); return }
         if (host == Endpoints.PROD_CONTROL_HOST) Endpoints.setOverride(null as Endpoints.Override?) else Endpoints.setOverride(host)
     }
 
@@ -53,6 +64,11 @@ object Variant : AppVariant {
             PodDirect.transport = { OkHttpJsonTransport() }
             return null
         }
+        // One process runs every scenario: whatever an earlier one saved on the device
+        // (a configured cloud recovery, a seen link, settings) must not reach the next,
+        // so each starts like a fresh install. A persisted-session run is the exception:
+        // its later plain launch is meant to find what it left.
+        if (!cfg.persistSession) freshInstall(context)
         if (cfg.persistSession) {
             // A real-looking signed-in device: an active keystore profile with
             // an account key and the lock on, as a cold start finds it.
@@ -60,9 +76,6 @@ object Variant : AppVariant {
             com.flagshipserver.app.keystore.Keystore.loadOrCreateUmkSeed()
             PrivacySettings.fromContext(context).setRequireBiometricAtLaunch(true)
         }
-        // One process runs every scenario: a pending update order from one must not
-        // replace the next one's Update button.
-        context.getSharedPreferences("flagship.pendingUpdate", android.content.Context.MODE_PRIVATE).edit().clear().commit()
         val tab = SmokeMode.apply(config = cfg, appState = appState, operations = operations, trust = trust)
         mockRun = !cfg.live
         if (cfg.live) return GymLaunch(tab, mocks = null)

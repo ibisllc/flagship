@@ -207,14 +207,19 @@ class MainActivity : FragmentActivity() {
         com.flagshipserver.app.core.InviteOwners.attach(applicationContext)
         val okHttp = buildOkHttp()
         // LAN-direct probes are only valid for the network they ran on.
-        getSystemService(android.net.ConnectivityManager::class.java)?.registerDefaultNetworkCallback(
-            object : android.net.ConnectivityManager.NetworkCallback() {
-                override fun onAvailable(network: android.net.Network) =
-                    com.flagshipserver.app.core.LanDirectRegistry.shared.onNetworkChanged()
-                override fun onLost(network: android.net.Network) =
-                    com.flagshipserver.app.core.LanDirectRegistry.shared.onNetworkChanged()
-            },
-        )
+        // Registered once per activity and dropped with it: the system allows only
+        // about a hundred per app, and an unremoved one made a long-lived process
+        // (many recreations) fail with TooManyRequestsException.
+        val networkCallback = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) =
+                com.flagshipserver.app.core.LanDirectRegistry.shared.onNetworkChanged()
+            override fun onLost(network: android.net.Network) =
+                com.flagshipserver.app.core.LanDirectRegistry.shared.onNetworkChanged()
+        }
+        getSystemService(android.net.ConnectivityManager::class.java)?.let { cm ->
+            runCatching { cm.registerDefaultNetworkCallback(networkCallback) }
+                .onSuccess { registeredNetworkCallback = networkCallback }
+        }
 
         // Identity / security plane: the real flagshipserver.com (identity
         // claims, login/resolve, recovery, device admit/replace/wipe, TOTP,
@@ -650,8 +655,14 @@ class MainActivity : FragmentActivity() {
         handleIntent(intent)
     }
 
+    private var registeredNetworkCallback: android.net.ConnectivityManager.NetworkCallback? = null
+
     override fun onDestroy() {
         super.onDestroy()
+        registeredNetworkCallback?.let { cb ->
+            runCatching { getSystemService(android.net.ConnectivityManager::class.java)?.unregisterNetworkCallback(cb) }
+        }
+        registeredNetworkCallback = null
         PushHolder.registrar = null
         SecretRequestBridge.onSecretRequest = null
         BiometricAuthority.clearIf(biometric)
