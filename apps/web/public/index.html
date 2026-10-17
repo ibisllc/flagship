@@ -15,10 +15,10 @@
       }
     })();
   </script>
-  <title>Flagship — A personal cloud you actually own</title>
-  <meta name="description" content="Plug in at home, pair with your mobile device, build and share apps privately. TLS terminates on your hardware — not even we can eavesdrop.">
+  <title>Flagship: a personal cloud you actually own</title>
+  <meta name="description" content="Plug in at home, pair with your mobile device, build and share apps privately. TLS terminates on your hardware. Not even we can eavesdrop.">
   <meta name="theme-color" content="#FFFFFF">
-  <meta property="og:title" content="Flagship — A personal cloud you actually own">
+  <meta property="og:title" content="Flagship: a personal cloud you actually own">
   <meta property="og:description" content="Plug in at home, pair with your mobile device, build and share apps privately. Not even we can eavesdrop.">
   <meta property="og:image" content="/og?title=Your%20stuff,%20on%20your%20hardware&subtitle=A%20personal%20cloud%20with%20a%20real%20green%20padlock,%20signed%20by%20a%20key%20only%20you%20hold.">
   <meta property="og:url" content="https://flagshipserver.com/">
@@ -340,10 +340,9 @@
       cursor: pointer;
       transition: background 160ms ease, color 160ms ease, border-color 160ms ease, transform 120ms ease;
       text-decoration: none;
-      border-bottom: none;
       white-space: nowrap;
     }
-    .btn:hover { border-bottom: none; }
+    .btn:hover { border-bottom-color: transparent; }
     .btn:active { transform: translateY(1px); }
     .btn--solid {
       background: var(--teal);
@@ -862,7 +861,7 @@
 
 <header class="nav">
   <div class="nav-inner">
-    <a href="/" class="wordmark" aria-label="Flagship — home">
+    <a href="/" class="wordmark" aria-label="Flagship home">
       <svg class="glyph" viewBox="0 0 64 64" aria-hidden="true">
         <rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7" stroke-width="2"/>
         <circle class="lg-ring" cx="32" cy="32" r="18"/>
@@ -930,7 +929,7 @@
           </h1>
 
           <p class="lede">
-            Plug a small box in at home. Pair it with the mobile app on your device. Build and share services privately — at <code>yours.flagship.services</code>, with a certificate signed by a key only your hardware holds. Not even we can eavesdrop.
+            Plug a small box in at home. Pair it with the mobile app on your device. Build and share services privately at <code>yours.flagship.services</code>, with a certificate signed by a key only your hardware holds. Not even we can eavesdrop.
           </p>
 
           <div class="hero-ctas" id="install">
@@ -978,7 +977,7 @@
         <article class="step-card">
           <span class="num">01 · Pair</span>
           <h3>Mobile app is the keychain.</h3>
-          <p>Secure Enclave (iOS) or StrongBox (Android) holds the only key. Lose your device without cloud recovery and the data's gone — like a hardware wallet.</p>
+          <p>Secure Enclave (iOS) or StrongBox (Android) holds the only key. Lose your device without cloud recovery and the data's gone, like a hardware wallet.</p>
         </article>
         <article class="step-card">
           <span class="num">02 · Boot</span>
@@ -1013,8 +1012,8 @@
 
       <div class="trust-section">
         <div class="trust-claim">
-          <p><code>flagshipserver.com</code> handles identity — a username and a sealed blob it can't read. <code>flagship.services</code> is a dumb pipe that routes raw TCP by SNI. TLS terminates on <em>your</em> hardware, with a Let's Encrypt certificate signed by a key only your daemon holds.</p>
-          <p>Mobile devices initiate every consequential action. Servers never call out unsolicited. No shared database in a third party decides who can see what — every authorization is enforced by the data's own server.</p>
+          <p><code>flagshipserver.com</code> handles identity: a username and a sealed blob it can't read. <code>flagship.services</code> is a dumb pipe that routes raw TCP by SNI. TLS terminates on <em>your</em> hardware, with a Let's Encrypt certificate signed by a key only your daemon holds.</p>
+          <p>Mobile devices initiate every consequential action. Servers never call out unsolicited. No shared database in a third party decides who can see what. Every authorization is enforced by the data's own server.</p>
           <div class="takeaway">
             The green padlock in your browser is real. It's signed by a key that lives on your hardware. Nobody else holds a copy.
           </div>
@@ -1087,7 +1086,7 @@
         </details>
         <details class="q">
           <summary>What happens when I lose my mobile device?</summary>
-          <div class="answer"><p>If you set up cloud recovery (a passkey wraps your master key, ciphertext lives on <code>.com</code>), your new device unwraps it. If you didn't, the data's gone — like a hardware wallet that lost its seed phrase.</p></div>
+          <div class="answer"><p>If you set up cloud recovery (a passkey wraps your master key, ciphertext lives on <code>.com</code>), your new device unwraps it. If you didn't, the data's gone, like a hardware wallet that lost its seed phrase.</p></div>
         </details>
         <details class="q">
           <summary>Do I need to be a developer?</summary>
@@ -1099,7 +1098,7 @@
         </details>
         <details class="q">
           <summary>Is this open source?</summary>
-          <div class="answer"><p>Yes. BUSL-1.1, with automatic conversion to Apache 2.0 on May 3, 2030. Daemon, image-builder, mobile clients, webapp, protocol — all public.</p></div>
+          <div class="answer"><p>Yes. BUSL-1.1, with automatic conversion to Apache 2.0 on May 3, 2030. Daemon, image-builder, mobile clients, webapp, protocol: all public.</p></div>
         </details>
         <details class="q">
           <summary>What if Flagship the company goes away?</summary>
@@ -1107,7 +1106,7 @@
         </details>
         <details class="q">
           <summary>How does sharing work without a central account system?</summary>
-          <div class="answer"><p>Each pod issues signed invite tokens — short-lived, revocable, scoped to one app. Authorization is enforced by the data's own server.</p></div>
+          <div class="answer"><p>Each pod issues signed invite tokens that are short-lived, revocable and scoped to one app. Authorization is enforced by the data's own server.</p></div>
         </details>
       </div>
     </div>
@@ -1119,7 +1118,7 @@
 
       <div class="finale-cta">
         <h2 id="finale-h2">Take ten minutes.<br>Get the rest of your data back.</h2>
-        <p>A USB stick, an old PC, a mobile device, and a vibe. We've kept it in production six months — your turn.</p>
+        <p>A USB stick, an old PC, a mobile device, and a vibe. We've kept it in production six months. Your turn.</p>
         <div class="actions center">
           <span class="btn btn--app btn--solid btn--pending" data-app-store="ios" aria-disabled="true" title="The iOS app is not ready yet">
             <span class="glyph" aria-hidden="true">

@@ -187,7 +187,7 @@ main {
   transition: background var(--motion-state), color var(--motion-state),
               border-color var(--motion-state), transform 120ms var(--ease-out);
 }
-.btn:hover { border-bottom: none; }
+.btn:hover { border-bottom-color: transparent; }
 .btn:active:not(:disabled) { transform: translateY(1px); }
 .btn:disabled, .btn[aria-disabled="true"] { opacity: 0.4; cursor: not-allowed; }
 .btn:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: 3px; box-shadow: 0 0 0 3px var(--focus-inner); }
