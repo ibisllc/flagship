@@ -152,11 +152,16 @@ export interface StoreUsage {
   limitBytes: number | null;
   /** At its limit: new writes fail (ENOSPC, or Postgres refuses INSERT/UPDATE). */
   full: boolean;
+  /** Files only: the folder is its own image, so the limit is enforced by the disk. */
+  enforced?: boolean;
+  /** Postgres only: INSERT and UPDATE are refused. */
+  writesBlocked?: boolean;
+  /** Postgres only: it grew past its limit while blocked, so its database is closed until it's under again. */
+  stopped?: boolean;
 }
 
 export interface AppStorage {
   files?: StoreUsage & { enforced: boolean };
-  /** `stopped`: it grew past its limit while blocked, so its database is closed until it's under again. */
   postgres?: StoreUsage & { writesBlocked: boolean; stopped: boolean };
 }
 
@@ -901,6 +906,23 @@ export interface PeerBackupStatusResponse {
   shards: PeerBackupShardSummary[];
   repair: PeerBackupRepairStatus;
   stats: PeerBackupStats;
+  // The v2 screen (docs/peer-backup.md, PeerBackupStatusV2 in peerNet/engine.ts).
+  // The box sends it with the v1 fields above filled from it; a box still on
+  // the pre-v2 engine sends none of these (then `v` is absent).
+  v?: 2;
+  /** waiting-for-peers | filling | placing | protected | at-risk | leaving | off */
+  state?: "waiting-for-peers" | "filling" | "placing" | "protected" | "at-risk" | "leaving" | "off";
+  reason?: string;
+  policy?: "unset" | "phone" | "peer" | "none";
+  lastPlacedAt?: number | null;
+  healthyBricks?: number;
+  totalBricks?: number;
+  archiveCreatedAt?: number | null;
+  /** Holders appear as "Server 1..n", never by name. */
+  holderList?: Array<{ label: string; state: "ok" | "checking" | "failing" | "offline"; lastProofAt: number | null; bricks: number }>;
+  keepUntil?: number | null;
+  /** What this server keeps for others. */
+  hosting?: { poolBytes: number; realBytes: number; fillerBytes: number; provenBytes: number; leases: number; bricks: number; reliability: number | null; leaving: boolean };
 }
 
 export interface PeerBackupToggleRequest {

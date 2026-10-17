@@ -14,6 +14,10 @@ describe("device-pairing vectors (adding a device is admin-only)", () => {
     expect(V).toEqual(JSON.parse(JSON.stringify(buildDevicePairingVectors())));
   });
 
+  it("reads the shared set at packages/protocol/test-vectors/device-pairing/vectors.json", () => {
+    expect(VECTORS_PATH.replace(/\\/g, "/").endsWith("test-vectors/device-pairing/vectors.json")).toBe(true);
+  });
+
   it("the scope order is the protocol's", () => {
     expect(V.scopeOrder).toEqual([...DEVICE_SCOPES]);
   });

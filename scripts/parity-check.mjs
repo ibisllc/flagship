@@ -483,6 +483,7 @@ const P = {
   pushBridge: "packages/control-plane/src/pushBridge.ts",
   screensTs: "packages/server-daemon/src/screens/types.ts",
   screensSwift: "apps/mobile/shared/Sources/FlagshipAPI/Models/ScreensModels.swift",
+  screensSwiftMore: ["apps/mobile/shared/Sources/FlagshipAPI/Models/AppStorageModels.swift"],
   screensKt: "apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/ScreensModels.kt",
   golden: "apps/desktop-shared/golden/vm-core-vectors.json",
 };
@@ -646,10 +647,15 @@ function checkSignedTags(repo) {
   return { id: "signed-tags", title: "Canonical signed-message tags across iOS, Android, webapp", findings, data: { counts: Object.fromEntries(Object.entries(sets).map(([k, v]) => [k, v.length])) } };
 }
 
+const SWIFT_NAME_ALIASES = { AppStorage: "AppDiskUsage" };
+
 function checkScreensBff(repo) {
   const findings = [];
   const ts = parseTsInterfaces(repo.read(P.screensTs));
   const sw = parseSwiftStructs(repo.read(P.screensSwift));
+  for (const extra of P.screensSwiftMore) Object.assign(sw, parseSwiftStructs(repo.read(extra)));
+  // SwiftUI owns the name AppStorage, so iOS calls the TS/Kotlin AppStorage AppDiskUsage.
+  for (const [tsName, swName] of Object.entries(SWIFT_NAME_ALIASES)) if (sw[swName] && !sw[tsName]) sw[tsName] = sw[swName];
   const kt = parseKotlinDataClasses(repo.read(P.screensKt));
   let compared = 0;
   for (const [name, fields] of Object.entries(ts).sort()) {
@@ -708,7 +714,8 @@ function checkTestVectors(repo) {
   const consumers = {
     ts: tsTests,
     swift: [...repo.walk("apps/mobile/shared/Tests", [".swift"]), ...repo.walk("apps/mobile/ios/Tests", [".swift"])],
-    kotlin: repo.walk("apps/mobile/android/app/src/test", [".kt"]),
+    // src/testDebug is the debug variant's unit-test source set, run by testDebugUnitTest.
+    kotlin: [...repo.walk("apps/mobile/android/app/src/test", [".kt"]), ...repo.walk("apps/mobile/android/app/src/testDebug", [".kt"])],
     web: webTests,
   };
   const matrix = {};

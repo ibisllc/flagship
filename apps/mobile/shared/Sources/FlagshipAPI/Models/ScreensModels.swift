@@ -1457,6 +1457,8 @@ public struct PeerBackupStatusResponse: Codable, Equatable, Sendable {
     /// `waiting-for-peers` | `filling` | `placing` | `protected` | `at-risk` | `leaving` | `off`
     public var state: String? = nil
     public var reason: String? = nil
+    /// `unset` | `phone` | `peer` | `none`
+    public var policy: String? = nil
     public var totalBricks: Int? = nil
     public var healthyBricks: Int? = nil
     public var lastPlacedAt: Int64? = nil
