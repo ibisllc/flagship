@@ -59,7 +59,7 @@ public struct FSColors {
         text: hex(0x14140F),
         textMuted: hex(0x555149),
         primary: hex(0x0F766E),
-        accent: hex(0x0D9488),
+        accent: hex(0x0E9488),
         primaryHover: hex(0x0B5F58),
         primaryFill: hex(0x14B8A6),
         onPrimary: hex(0x0A0A09),

@@ -45,7 +45,7 @@ final class ThemeTokensTests: XCTestCase {
         XCTAssertEqual(hex(FSColors.dark.textMuted), "#A39D8F")
         XCTAssertEqual(hex(FSColors.dark.primary), "#2DD4BF")
         XCTAssertEqual(hex(FSColors.light.onPrimary), "#0A0A09", "text on the teal fill is dark ink, never white")
-        XCTAssertEqual(hex(FSColors.light.accent), "#0D9488")
+        XCTAssertEqual(hex(FSColors.light.accent), "#0E9488")
         XCTAssertEqual(hex(FSColors.dark.accent), "#2DD4BF")
         XCTAssertEqual(FSRadius.sm, 8)
         XCTAssertEqual(FSRadius.md, 12)
