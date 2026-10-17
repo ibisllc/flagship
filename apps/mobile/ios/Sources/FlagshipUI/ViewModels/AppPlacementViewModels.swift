@@ -15,7 +15,7 @@ public enum AppPlacementCopy {
     public static let runsOnReadOnly = "Only the account owner's phone can copy or remove apps."
     public static let pickerNote = "New apps go to your preferred server unless you pick another."
     public static let pinnedNote = "Made on this server."
-    public static let serverAppsSection = "APPS"
+    public static let serverAppsSection = "Apps"
     public static let noAppsHere = "No apps on this server yet."
     public static let createHere = "Create app here"
     public static let needsUpdate = "This server needs an update to receive copies."

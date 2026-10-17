@@ -66,8 +66,11 @@ public struct AiKeysScreen: View {
                                         vm.delete(id: e.id)
                                     } label: {
                                         Image(systemName: "trash").foregroundColor(c.danger)
+                                            .frame(width: 44, height: 44)
+                                            .contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
+                                    .accessibilityLabel("Delete key")
                                     .accessibilityIdentifier("ai-key-delete")
                                 }
                                 AiKeyRelayRowToggle(

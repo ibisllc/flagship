@@ -780,7 +780,7 @@ final class GymSweepSettingsTests: GymSweepCase {
         open(app, row: "Profiles", screen: "Profiles")
         let me = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "@bright-maple")).firstMatch
         XCTAssertTrue(me.waitForExistence(timeout: 5))
-        XCTAssertTrue(me.label.contains("ACTIVE") || app.staticTexts["ACTIVE"].exists, "This account is the active one.")
+        XCTAssertTrue(me.label.contains("Active") || app.staticTexts["Active"].exists, "This account is the active one.")
         me.tap()
         XCTAssertTrue(app.navigationBars["Profiles"].exists || app.navigationBars["Settings"].exists)
     }

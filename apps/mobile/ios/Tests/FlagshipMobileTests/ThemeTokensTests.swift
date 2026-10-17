@@ -45,6 +45,12 @@ final class ThemeTokensTests: XCTestCase {
         XCTAssertEqual(hex(FSColors.dark.textMuted), "#A39D8F")
         XCTAssertEqual(hex(FSColors.dark.primary), "#2DD4BF")
         XCTAssertEqual(hex(FSColors.light.onPrimary), "#0A0A09", "text on the teal fill is dark ink, never white")
+        XCTAssertEqual(hex(FSColors.light.success), "#166534")
+        XCTAssertEqual(hex(FSColors.light.warning), "#944D05")
+        XCTAssertEqual(hex(FSColors.light.danger), "#B91C1C")
+        XCTAssertEqual(hex(FSColors.dark.success), "#4ADE80")
+        XCTAssertEqual(hex(FSColors.dark.warning), "#FBBF24")
+        XCTAssertEqual(hex(FSColors.dark.danger), "#F87171")
         XCTAssertEqual(hex(FSColors.light.accent), "#0E9488")
         XCTAssertEqual(hex(FSColors.dark.accent), "#2DD4BF")
         XCTAssertEqual(FSRadius.sm, 8)
@@ -65,6 +71,29 @@ final class ThemeTokensTests: XCTestCase {
                 XCTAssertGreaterThanOrEqual(contrast(fg, bg), 4.5, "\(name) \(label)")
             }
             XCTAssertGreaterThanOrEqual(contrast(c.warning, c.bg), 4.5, "\(name) warning/bg")
+        }
+    }
+
+    /// Status text is read at body size, so every status colour clears 4.5:1
+    /// on each surface it can sit on and on its own wash over that surface.
+    func test_statusTextClearsAA_onEverySurfaceAndItsWash() {
+        func over(_ top: Color, _ base: Color) -> Color {
+            var tr: CGFloat = 0, tg: CGFloat = 0, tb: CGFloat = 0, ta: CGFloat = 0
+            var br: CGFloat = 0, bg: CGFloat = 0, bb: CGFloat = 0, ba: CGFloat = 0
+            UIColor(top).getRed(&tr, green: &tg, blue: &tb, alpha: &ta)
+            UIColor(base).getRed(&br, green: &bg, blue: &bb, alpha: &ba)
+            return Color(red: Double(tr * ta + br * (1 - ta)), green: Double(tg * ta + bg * (1 - ta)), blue: Double(tb * ta + bb * (1 - ta)))
+        }
+        for (name, c) in [("light", FSColors.light), ("dark", FSColors.dark)] {
+            let status: [(String, Color, Color)] = [
+                ("ok", c.success, c.successWash), ("warn", c.warning, c.warningWash), ("err", c.danger, c.dangerWash),
+            ]
+            for (label, fg, wash) in status {
+                for (surfaceName, surface) in [("bg", c.bg), ("surface", c.surface), ("sunken", c.surfaceSunken), ("sidebar", c.sidebar)] {
+                    XCTAssertGreaterThanOrEqual(contrast(fg, surface), 4.5, "\(name) \(label)/\(surfaceName)")
+                    XCTAssertGreaterThanOrEqual(contrast(fg, over(wash, surface)), 4.5, "\(name) \(label)/wash on \(surfaceName)")
+                }
+            }
         }
     }
 

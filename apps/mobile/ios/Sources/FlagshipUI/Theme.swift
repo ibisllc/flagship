@@ -41,6 +41,11 @@ public struct FSColors {
     public let success: Color
     public let warning: Color
     public let danger: Color
+    /// Soft washes behind status text (pills, banners): the status colour
+    /// at 6 to 8 percent, composited over the surface it sits on.
+    public let successWash: Color
+    public let warningWash: Color
+    public let dangerWash: Color
     /// Text on a `success` / `danger` fill (white in light, ink in dark).
     public let onSuccess: Color
     public let onDanger: Color
@@ -63,9 +68,12 @@ public struct FSColors {
         primaryHover: hex(0x0B5F58),
         primaryFill: hex(0x14B8A6),
         onPrimary: hex(0x0A0A09),
-        success: hex(0x15803D),
-        warning: hex(0xA15C07),
+        success: hex(0x166534),
+        warning: hex(0x944D05),
         danger: hex(0xB91C1C),
+        successWash: hex(0x166534).opacity(0.08),
+        warningWash: hex(0x944D05).opacity(0.08),
+        dangerWash: hex(0xB91C1C).opacity(0.06),
         onSuccess: hex(0xFFFFFF),
         onDanger: hex(0xFFFFFF)
     )
@@ -86,6 +94,9 @@ public struct FSColors {
         success: hex(0x4ADE80),
         warning: hex(0xFBBF24),
         danger: hex(0xF87171),
+        successWash: hex(0x4ADE80).opacity(0.08),
+        warningWash: hex(0xFBBF24).opacity(0.08),
+        dangerWash: hex(0xF87171).opacity(0.08),
         onSuccess: hex(0x0A0A09),
         onDanger: hex(0x0A0A09)
     )

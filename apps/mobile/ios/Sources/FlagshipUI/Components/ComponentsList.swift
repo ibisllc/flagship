@@ -104,6 +104,73 @@ public struct FSChipRow<Value: Hashable>: View {
     }
 }
 
+// MARK: - Segmented control
+
+/// A segmented choice in the iOS idiom: one sunken track, a raised thumb that
+/// slides to the pick. Each segment stays its own button (identifier, label
+/// and selected trait) so it is addressable and reads right to VoiceOver.
+public struct FSSegmentedControl<Value: Hashable>: View {
+    public struct Segment: Identifiable {
+        public let value: Value
+        public let title: String
+        public let systemImage: String?
+        public let identifier: String
+        public let accessibilityLabel: String?
+        public var id: AnyHashable { AnyHashable(value) }
+        public init(value: Value, title: String, systemImage: String? = nil, identifier: String, accessibilityLabel: String? = nil) {
+            self.value = value; self.title = title; self.systemImage = systemImage
+            self.identifier = identifier; self.accessibilityLabel = accessibilityLabel
+        }
+    }
+
+    @Environment(\.colorScheme) private var scheme
+    @Namespace private var thumb
+    let segments: [Segment]
+    let selection: Value
+    let onSelect: (Value) -> Void
+
+    public init(segments: [Segment], selection: Value, onSelect: @escaping (Value) -> Void) {
+        self.segments = segments; self.selection = selection; self.onSelect = onSelect
+    }
+
+    public var body: some View {
+        let c = FSColors.scheme(scheme)
+        HStack(spacing: 2) {
+            ForEach(segments) { seg in
+                let selected = seg.value == selection
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { onSelect(seg.value) }
+                } label: {
+                    HStack(spacing: 6) {
+                        if let img = seg.systemImage { Image(systemName: img).font(FS.font.scaled(14, weight: .medium)) }
+                        Text(seg.title).font(FS.font.scaled(14, weight: selected ? .semibold : .regular))
+                    }
+                    .foregroundColor(c.text)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 36)
+                    .background {
+                        if selected {
+                            RoundedRectangle(cornerRadius: FS.radius.sm - 1, style: .continuous)
+                                .fill(scheme == .dark ? Color.white.opacity(0.16) : c.surface)
+                                .shadow(color: .black.opacity(scheme == .dark ? 0 : 0.10), radius: 2, y: 1)
+                                .matchedGeometryEffect(id: "thumb", in: thumb)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(seg.accessibilityLabel ?? seg.title)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+                .accessibilityIdentifier(seg.identifier)
+            }
+        }
+        .padding(3)
+        .frame(minHeight: 44)
+        .background(c.surfaceSunken, in: RoundedRectangle(cornerRadius: FS.radius.sm + 3, style: .continuous))
+        .sensoryFeedback(.selection, trigger: selection)
+    }
+}
+
 // MARK: - Search
 
 /// A rounded search field: magnifier glyph + placeholder + a clear ("x")
@@ -244,6 +311,7 @@ public struct FSAnnouncementCard: View {
     /// primary (teal); pass a semantic color for danger/warning variants.
     var tint: Color?
     @ScaledMetric(relativeTo: .body) private var tile: CGFloat = 36
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     public init(
         icon: String,
@@ -267,24 +335,23 @@ public struct FSAnnouncementCard: View {
         let c = FSColors.scheme(scheme)
         let accent = tint ?? c.accent
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            HStack(alignment: .top, spacing: FS.space.s3) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).fill(accent.opacity(0.16))
-                    Image(systemName: icon)
-                        .foregroundColor(accent)
-                        .font(FS.font.scaled(17, weight: .semibold))
-                }
-                .fsTile(tile, base: 36)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(FS.font.scaled(17, weight: .semibold))
-                        .foregroundColor(c.text)
-                    Text(message)
-                        .font(FS.font.bodySm())
-                        .foregroundColor(c.textMuted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
+            let tileView = ZStack {
+                RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).fill(accent.opacity(0.16))
+                Image(systemName: icon)
+                    .foregroundColor(accent)
+                    .font(FS.font.scaled(17, weight: .semibold))
+            }
+            .fsTile(tile, base: 36)
+            let textView = VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(FS.font.scaled(17, weight: .semibold))
+                    .foregroundColor(c.text)
+                Text(message)
+                    .font(FS.font.bodySm())
+                    .foregroundColor(c.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            let dismissView = Group {
                 if let onDismiss {
                     Button(action: onDismiss) {
                         Image(systemName: "xmark")
@@ -297,6 +364,17 @@ public struct FSAnnouncementCard: View {
                     .padding(.top, -FS.space.s3).padding(.trailing, -FS.space.s3)
                     .accessibilityLabel("Dismiss")
                     .accessibilityIdentifier("fs-announcement-dismiss")
+                }
+            }
+            if typeSize.isAccessibilitySize {
+                HStack(alignment: .top) { tileView; Spacer(minLength: 0); dismissView }
+                textView
+            } else {
+                HStack(alignment: .top, spacing: FS.space.s3) {
+                    tileView
+                    textView
+                    Spacer(minLength: 0)
+                    dismissView
                 }
             }
             if let ctaLabel {

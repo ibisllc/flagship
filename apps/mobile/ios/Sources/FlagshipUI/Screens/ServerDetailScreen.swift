@@ -892,7 +892,7 @@ struct MigrateServerButton: View {
     @State private var showSheet = false
 
     var body: some View {
-        FSPrimaryButton("Migrate to new machine / VM", block: true) {
+        FSPrimaryButton("Migrate to a new server", block: true) {
             showSheet = true
         }
         .accessibilityIdentifier("sd-migrate-server")

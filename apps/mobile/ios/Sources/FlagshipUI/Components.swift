@@ -133,10 +133,8 @@ public struct FSDangerButton: View {
                 .frame(minHeight: large ? 52 : 44)
                 .padding(.horizontal, large ? FS.space.s6 : FS.space.s5)
                 .foregroundColor(fg)
-                .overlay(
-                    RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
-                        .stroke(fg, lineWidth: 1)
-                )
+                .background(muted ? c.surfaceSunken : c.danger.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
         }
         .buttonStyle(FSPressStyle())
     }
@@ -248,11 +246,11 @@ public struct FSPill: View {
     }
     private func colors(_ c: FSColors, _ k: FSPillKind) -> (Color, Color) {
         switch k {
-        case .online:       return (c.success, c.success.opacity(0.12))
-        case .renewing:     return (c.warning, c.warning.opacity(0.12))
-        case .offline:      return (c.danger, c.danger.opacity(0.12))
-        case .provisioning: return (c.primary, c.primary.opacity(0.12))
-        case .pending:      return (c.warning, c.warning.opacity(0.12))
+        case .online:       return (c.success, c.successWash)
+        case .renewing:     return (c.warning, c.warningWash)
+        case .offline:      return (c.danger, c.dangerWash)
+        case .provisioning: return (c.primary, c.primary.opacity(0.10))
+        case .pending:      return (c.warning, c.warningWash)
         case .idle:         return (c.textMuted, c.surfaceSunken)
         }
     }

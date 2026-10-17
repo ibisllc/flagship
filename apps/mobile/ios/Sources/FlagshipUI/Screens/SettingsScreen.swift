@@ -883,20 +883,31 @@ public struct SettingsScreen: View {
     /// control), Privacy, and About under one header. Appearance writes
     /// straight to PrivacySettings; RootShell applies it app-wide.
     private func appSection(c: FSColors) -> some View {
-        section("APP", c: c) {
+        section("App", c: c) {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                HStack(spacing: FS.space.s2) {
-                    appearanceOption(.light, systemImage: "sun.max.fill", text: nil, c: c)
-                    appearanceOption(.dark, systemImage: "moon.fill", text: nil, c: c)
-                    appearanceOption(.auto, systemImage: nil, text: "AUTO", c: c)
-                }
+                FSSegmentedControl(
+                    segments: [
+                        .init(value: PrivacySettings.ThemeMode.light, title: "Light", systemImage: "sun.max.fill",
+                              identifier: "appearance-light", accessibilityLabel: "Light appearance"),
+                        .init(value: .dark, title: "Dark", systemImage: "moon.fill",
+                              identifier: "appearance-dark", accessibilityLabel: "Dark appearance"),
+                        .init(value: .auto, title: "Auto", identifier: "appearance-auto",
+                              accessibilityLabel: "Automatic appearance"),
+                    ],
+                    selection: privacy.themeMode,
+                    onSelect: { privacy.themeMode = $0 }
+                )
                 Text("App icon")
                     .font(FS.font.scaled(13, weight: .semibold))
                     .foregroundColor(c.textMuted)
-                HStack(spacing: FS.space.s2) {
-                    appIconOption(name: nil, label: "Classic", c: c)
-                    appIconOption(name: "AppIcon-Legacy", label: "Legacy", c: c)
-                }
+                FSSegmentedControl(
+                    segments: [
+                        .init(value: String?.none, title: "Classic", identifier: "appicon-classic"),
+                        .init(value: "AppIcon-Legacy", title: "Legacy", identifier: "appicon-legacy"),
+                    ],
+                    selection: alternateIconName,
+                    onSelect: { setAppIcon($0) }
+                )
                 FSSettingsGroup(rows: [
                     FSSettingsRow(icon: "lock.shield.fill", title: "Privacy", subtitle: "App lock, push notifications", action: onOpenPrivacy),
                     FSSettingsRow(icon: "info.circle.fill", title: "About Flagship", subtitle: "Version, license, source", action: onOpenAbout),
@@ -906,58 +917,13 @@ public struct SettingsScreen: View {
         .onAppear { alternateIconName = UIApplication.shared.alternateIconName }
     }
 
-    /// One App-icon segment. `name` nil = the primary "classic" icon.
-    @ViewBuilder
-    private func appIconOption(name: String?, label: String, c: FSColors) -> some View {
-        let selected = alternateIconName == name
-        Button {
-            guard UIApplication.shared.alternateIconName != name else { return }
-            UIApplication.shared.setAlternateIconName(name) { error in
-                Task { @MainActor in
-                    alternateIconName = error == nil ? name : UIApplication.shared.alternateIconName
-                }
+    private func setAppIcon(_ name: String?) {
+        guard UIApplication.shared.alternateIconName != name else { return }
+        UIApplication.shared.setAlternateIconName(name) { error in
+            Task { @MainActor in
+                alternateIconName = error == nil ? name : UIApplication.shared.alternateIconName
             }
-        } label: {
-            Text(label).font(FS.font.scaled(13, weight: .semibold))
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: 46)
-                .foregroundColor(selected ? c.onPrimary : c.text)
-                .background(selected ? c.primaryFill : c.surfaceSunken)
-                .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
-        .accessibilityIdentifier("appicon-\(label.lowercased())")
-    }
-
-    @ViewBuilder
-    private func appearanceOption(
-        _ mode: PrivacySettings.ThemeMode,
-        systemImage: String?,
-        text: String?,
-        c: FSColors
-    ) -> some View {
-        let selected = privacy.themeMode == mode
-        Button {
-            privacy.themeMode = mode
-        } label: {
-            Group {
-                if let systemImage {
-                    Image(systemName: systemImage).font(FS.font.scaled(18, weight: .medium))
-                } else if let text {
-                    Text(text).font(FS.font.scaled(11, weight: .bold))
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: 46)
-            .foregroundColor(selected ? c.onPrimary : c.text)
-            .background(selected ? c.primaryFill : c.surfaceSunken)
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(mode == .auto ? "Automatic appearance" : (mode == .light ? "Light appearance" : "Dark appearance"))
-        .accessibilityAddTraits(selected ? .isSelected : [])
-        .accessibilityIdentifier("appearance-\(mode.rawValue)")
     }
 
     private func about(c: FSColors) -> some View {

@@ -66,6 +66,7 @@ public struct ServiceEnvScreen: View {
                 } label: {
                     Image(systemName: "plus.circle.fill")
                 }
+                .accessibilityLabel("Add variable")
                 .accessibilityIdentifier("service-env-add-btn")
             }
         }

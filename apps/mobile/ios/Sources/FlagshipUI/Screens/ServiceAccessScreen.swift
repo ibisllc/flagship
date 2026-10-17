@@ -487,7 +487,10 @@ public struct ServiceAccessScreen: View {
                     photoItem = nil
                 } label: {
                     Image(systemName: "xmark.circle.fill").foregroundColor(c.textMuted)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
+                .accessibilityLabel("Remove photo")
             }
         }
         .onChange(of: photoItem) { _, item in
