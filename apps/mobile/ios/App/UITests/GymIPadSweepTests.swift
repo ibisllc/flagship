@@ -15,7 +15,7 @@ final class GymIPadSweepTests: GymSweepCase {
 
     /// A sidebar destination row (the rows carry the sidebar's identifier).
     private func sidebarRow(_ app: XCUIApplication, _ title: String) -> XCUIElement {
-        app.buttons.matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "ipad-sidebar", title)).firstMatch
+        app.descendants(matching: .any).matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "ipad-sidebar", title)).firstMatch
     }
 
     private func window(_ app: XCUIApplication) -> CGRect { app.windows.firstMatch.frame }

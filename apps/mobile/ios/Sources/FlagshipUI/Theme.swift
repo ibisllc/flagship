@@ -190,6 +190,12 @@ public enum FSFont {
         }
     }
 
+    /// A glyph that keeps its size at every text size (radio dots, check marks
+    /// beside wrapping text), so it never crowds the words at accessibility sizes.
+    public static func glyph(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight)
+    }
+
     /// A drop-in for `.system(size:weight:design:)` that scales with Dynamic Type.
     public static func scaled(_ size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
         guard let style = style(for: size) else { return .system(size: size, weight: weight, design: design) }

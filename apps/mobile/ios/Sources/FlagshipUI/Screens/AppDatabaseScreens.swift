@@ -170,6 +170,7 @@ struct AppDatabaseScreen: View {
 /// Columns (name + type) over rows, scrolling sideways when wide. Each
 /// column is as wide as its longest value, within limits.
 struct AppDbGrid: View {
+    @State private var available: CGFloat = 0
     @Environment(\.colorScheme) private var scheme
     let columns: [AppDbColumn]
     let rows: [[AppDbValue]]
@@ -228,7 +229,15 @@ struct AppDbGrid: View {
                     }
                 }
             }
+            // The header band and the rows run the full width of the card,
+            // however few columns there are.
+            .frame(minWidth: available, alignment: .leading)
         }
+        .background(GeometryReader { g in
+            Color.clear
+                .onAppear { available = g.size.width }
+                .onChange(of: g.size.width) { _, w in available = w }
+        })
         .accessibilityIdentifier("database-grid")
     }
 }

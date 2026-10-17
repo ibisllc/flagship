@@ -141,9 +141,7 @@ struct ApiKeyCreateSheet: View {
         Text("Name").font(FS.font.caption()).foregroundColor(c.textMuted)
         TextField(AppApiKeysCopy.labelPlaceholder, text: $label)
             .textInputAutocapitalization(.sentences)
-            .padding(FS.space.s3)
-            .background(c.surface)
-            .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(c.border, lineWidth: 1))
+            .fsInputBox()
             .accessibilityIdentifier("api-key-label")
         Text("Access").font(FS.font.caption()).foregroundColor(c.textMuted)
         Picker("Access", selection: $scope) {

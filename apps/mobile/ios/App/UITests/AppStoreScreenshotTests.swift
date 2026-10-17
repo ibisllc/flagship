@@ -53,7 +53,7 @@ final class AppStoreScreenshotTests: XCTestCase {
             tab.tap()
             return
         }
-        let row = app.buttons
+        let row = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier == %@ AND label == %@", "ipad-sidebar", destination))
             .firstMatch
         if row.waitForExistence(timeout: 5) {

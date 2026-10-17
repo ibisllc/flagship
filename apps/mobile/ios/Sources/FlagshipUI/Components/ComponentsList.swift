@@ -567,13 +567,16 @@ public struct FSSettingsRow: View {
         let tint = iconTint ?? c.accent
         Button(action: action) {
             HStack(spacing: FS.space.s3) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).fill(tint.opacity(0.14))
-                    Image(systemName: icon)
-                        .foregroundColor(tint)
-                        .font(FS.font.scaled(15, weight: .semibold))
+                if !typeSize.isAccessibilitySize {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).fill(tint.opacity(0.14))
+                        Image(systemName: icon)
+                            .foregroundColor(tint)
+                            .font(FS.font.scaled(15, weight: .semibold))
+                    }
+                    .fsTile(tile, base: 30)
+                    .accessibilityHidden(true)
                 }
-                .fsTile(tile, base: 30)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(FS.font.scaled(17))
@@ -676,7 +679,7 @@ public struct FSListRow<Trailing: View, Below: View>: View {
     public var body: some View {
         let c = FSColors.scheme(scheme)
         HStack(alignment: .center, spacing: FS.space.s3) {
-            leadingView(c: c)
+            if !typeSize.isAccessibilitySize { leadingView(c: c) }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(FS.font.scaled(17, weight: .semibold))

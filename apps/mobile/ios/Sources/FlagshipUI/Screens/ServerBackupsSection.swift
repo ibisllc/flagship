@@ -69,6 +69,7 @@ struct BackupPolicyOptions: View {
         } label: {
             HStack(alignment: .top, spacing: FS.space.s3) {
                 Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                    .font(FS.font.glyph(22))
                     .foregroundColor(selected ? accent : c.textMuted)
                     .padding(.top, 2)
                 VStack(alignment: .leading, spacing: 2) {

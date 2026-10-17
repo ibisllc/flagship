@@ -106,15 +106,13 @@ struct ServerBackupSheet: View {
                     .textContentType(.newPassword)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .padding(FS.space.s3)
-                    .background(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border))
+                    .fsInputBox()
                     .accessibilityIdentifier("backup-own-passcode")
                 SecureField("Type it again", text: $vm.ownPasscodeAgain)
                     .textContentType(.newPassword)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .padding(FS.space.s3)
-                    .background(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border))
+                    .fsInputBox()
                 if let hint = vm.ownPasscodeHint {
                     Text(hint).font(FS.font.caption()).foregroundColor(c.textMuted)
                 }
@@ -324,8 +322,7 @@ struct ImportBackupScreen: View {
                 SecureField("Passcode", text: $vm.passcode)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .padding(FS.space.s3)
-                    .background(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border))
+                    .fsInputBox()
                     .accessibilityIdentifier("import-backup-passcode")
                 FSPrimaryButton("Open the backup", block: true) { Task { await vm.unlock() } }
                     .disabled(vm.passcode.isEmpty)

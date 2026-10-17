@@ -364,6 +364,7 @@ struct ShareServerSheet: View {
                 Button { draft.level = level } label: {
                     HStack(alignment: .top, spacing: FS.space.s3) {
                         Image(systemName: draft.level == level ? "largecircle.fill.circle" : "circle")
+                            .font(FS.font.glyph(22))
                             .foregroundColor(draft.level == level ? c.primary : c.textMuted)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(ServerShareCopy.levelName(level)).font(FS.font.body().weight(.semibold)).foregroundColor(c.text)

@@ -140,7 +140,7 @@ public struct JoinAccountScreen: View {
                     .foregroundColor(c.text)
                     .frame(maxWidth: .infinity)
                 TextField("Name in this account", text: $deviceDisplayName)
-                    .textFieldStyle(.roundedBorder)
+                    .fsInputBox()
                 Text("The suggestion stays on this phone until you confirm it.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
                 if let deviceNameError {

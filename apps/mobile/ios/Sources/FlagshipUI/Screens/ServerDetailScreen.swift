@@ -1266,9 +1266,7 @@ struct UpdateServerSheet: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .font(FS.font.mono())
-                    .padding(FS.space.s3)
-                    .background(c.surface)
-                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
+                    .fsInputBox()
                     .accessibilityIdentifier("update-target-field")
                 if let problem = vm.targetProblem(target) {
                     Text(problem).font(FS.font.caption()).foregroundColor(c.textMuted)

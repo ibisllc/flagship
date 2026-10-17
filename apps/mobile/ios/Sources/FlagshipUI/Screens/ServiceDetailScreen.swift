@@ -608,6 +608,7 @@ public struct ServiceDetailScreen: View {
                 .textContentType(.newPassword)
                 .font(FS.font.bodySm())
                 .disabled(backup.isBusy)
+                .fsInputBox()
             switch backup.phase {
             case .ready(let file, let bytes, let encrypted):
                 Text("Ready: \(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file))\(encrypted ? ", encrypted" : "")")

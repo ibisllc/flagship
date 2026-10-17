@@ -300,6 +300,7 @@ public struct SettingsScreen: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .listSectionSpacing(FS.space.s4)
+        .fsReadingColumn()
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)

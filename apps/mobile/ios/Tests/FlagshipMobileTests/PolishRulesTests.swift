@@ -97,4 +97,11 @@ final class PolishRulesTests: XCTestCase {
             }
         }
     }
+
+    func test_textInputsShareOneLook() throws {
+        for (path, text) in try uiSources() where !path.contains("/Gym/") {
+            XCTAssertFalse(text.contains(".textFieldStyle(.roundedBorder)"),
+                           "\(path) uses the system rounded text field; use FSField or .fsInputBox()")
+        }
+    }
 }

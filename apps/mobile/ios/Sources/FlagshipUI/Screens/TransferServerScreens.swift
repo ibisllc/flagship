@@ -78,9 +78,7 @@ public struct TransferGiverScreen: View {
             TextField(serverDomain, text: $typed)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .padding(FS.space.s3)
-                .background(c.surface)
-                .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
+                .fsInputBox()
                 .accessibilityIdentifier("transfer-confirm-field")
             FSDangerButton(working ? "Working…" : "Transfer this server", block: true) {
                 if confirmed && !working { Task { await vm.start() } }

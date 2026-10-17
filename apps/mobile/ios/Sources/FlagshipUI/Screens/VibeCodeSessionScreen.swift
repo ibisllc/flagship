@@ -341,6 +341,7 @@ public struct VibeCodeSessionScreen: View {
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                             .accessibilityIdentifier("vibecode-envvar-field")
+                            .fsInputBox()
                     }
                     HStack(spacing: FS.space.s3) {
                         FSPrimaryButton(submitting ? "Sending…" : "Send value",

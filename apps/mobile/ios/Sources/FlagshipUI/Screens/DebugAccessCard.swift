@@ -138,8 +138,7 @@ struct DebugAccessCard: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .lineLimit(1...4)
-                .padding(FS.space.s2)
-                .background(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border, lineWidth: 1))
+                .fsInputBox()
                 .accessibilityIdentifier("sd-debug-access-key-field")
             Picker("For", selection: $vm.duration) {
                 ForEach(DebugAccess.Duration.allCases) { d in

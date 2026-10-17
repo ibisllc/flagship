@@ -38,9 +38,7 @@ public struct ProcessUrlScreen: View {
                             .lineLimit(1...4)
                             .font(FS.font.mono())
                             .foregroundColor(c.text)
-                            .padding(FS.space.s3)
-                            .background(c.surfaceSunken)
-                            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
+                            .fsInputBox()
                             .accessibilityIdentifier("process-url-field")
                         if let error {
                             Text(error)

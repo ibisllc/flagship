@@ -210,12 +210,14 @@ public struct ActivityScreen: View {
             withAnimation(.snappy) { open = info.id }
         } label: {
             HStack(spacing: FS.space.s3) {
-                Image(systemName: info.icon)
-                    .font(FS.font.scaled(15, weight: .semibold))
-                    .foregroundColor(c.accent)
-                    .fsTile(tile, base: 32)
-                    .background(c.softTint(), in: RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
-                    .accessibilityHidden(true)
+                if !typeSize.isAccessibilitySize {
+                    Image(systemName: info.icon)
+                        .font(FS.font.scaled(15, weight: .semibold))
+                        .foregroundColor(c.accent)
+                        .fsTile(tile, base: 32)
+                        .background(c.softTint(), in: RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
+                        .accessibilityHidden(true)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(info.title).font(FS.font.scaled(17, weight: .semibold)).foregroundColor(c.text)
                         .multilineTextAlignment(.leading)
@@ -358,12 +360,14 @@ public struct ActivityScreen: View {
                 withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) { open = isOpen ? nil : which }
             } label: {
                 HStack(spacing: FS.space.s3) {
-                    Image(systemName: icon)
-                        .font(FS.font.scaled(15, weight: .semibold))
-                        .foregroundColor(c.accent)
-                        .fsTile(tile, base: 32)
-                        .background(c.softTint(), in: RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
-                        .accessibilityHidden(true)
+                    if !typeSize.isAccessibilitySize {
+                        Image(systemName: icon)
+                            .font(FS.font.scaled(15, weight: .semibold))
+                            .foregroundColor(c.accent)
+                            .fsTile(tile, base: 32)
+                            .background(c.softTint(), in: RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
+                            .accessibilityHidden(true)
+                    }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(title).font(FS.font.scaled(17, weight: .semibold)).foregroundColor(c.text)
                             .multilineTextAlignment(.leading)

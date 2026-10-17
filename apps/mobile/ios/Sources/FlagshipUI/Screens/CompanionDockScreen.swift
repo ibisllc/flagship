@@ -99,7 +99,7 @@ public struct CompanionDockScreen: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .lineLimit(2...4)
-                    .textFieldStyle(.roundedBorder)
+                    .fsInputBox()
                     .accessibilityIdentifier("companion-dock-link")
                 FSSecondaryButton("Use pasted link", block: true) {
                     Task { await vm.begin(link: pastedLink) }

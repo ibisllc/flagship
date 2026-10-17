@@ -29,7 +29,7 @@ final class PolishShotsTests: GymSweepCase {
 
     private func snap(_ name: String) {
         sleep(1)
-        let image = XCUIApplication().screenshot()
+        let image = XCUIScreen.main.screenshot()
         let a = XCTAttachment(screenshot: image)
         a.name = name
         a.lifetime = .deleteOnSuccess
@@ -42,7 +42,7 @@ final class PolishShotsTests: GymSweepCase {
     private func go(_ app: XCUIApplication, _ destination: String) {
         let tab = app.tabBars.buttons[destination]
         if tab.exists { tab.tap(); return }
-        let row = app.buttons
+        let row = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier == %@ AND label == %@", "ipad-sidebar", destination)).firstMatch
         if row.waitForExistence(timeout: 5) { row.tap() } else { app.buttons[destination].firstMatch.tap() }
     }

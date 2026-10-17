@@ -89,9 +89,7 @@ public struct TieredConfirmationSheet: View {
                     TextField(phrase, text: $typed)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        .padding(FS.space.s3)
-                        .background(c.surface)
-                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
+                        .fsInputBox()
                         .accessibilityIdentifier("tiered-confirm-field")
                 }
             }

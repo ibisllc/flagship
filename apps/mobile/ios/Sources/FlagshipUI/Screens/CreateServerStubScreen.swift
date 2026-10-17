@@ -405,6 +405,7 @@ public struct CreateServerStubScreen: View {
         } label: {
             HStack(alignment: .top, spacing: FS.space.s3) {
                 Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                    .font(FS.font.glyph(22))
                     .foregroundColor(selected ? c.accent : c.textMuted)
                     .padding(.top, 2)
                 VStack(alignment: .leading, spacing: 2) {
@@ -501,6 +502,7 @@ public struct CreateServerStubScreen: View {
                         .lineLimit(1...4)
                         .accessibilityIdentifier("cs-debug-ssh-key")
                         .padding(.leading, FS.space.s3)
+                        .fsInputBox()
                 }
                 Text(CreateServerViewModel.debugFriendlyWarning)
                     .font(.caption)

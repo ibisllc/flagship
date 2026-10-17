@@ -290,14 +290,7 @@ public struct AccountSecurityScreen: View {
             SecureField("Recovery passphrase", text: $reEscrowPassphrase)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .padding(.vertical, 10)
-                .padding(.horizontal, 12)
-                .background(c.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
-                        .stroke(c.border, lineWidth: 1)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
+                .fsInputBox()
                 .accessibilityIdentifier("rotate-admin-reescrow-passphrase")
 
             if let err = vm.recoveryUpdateError {

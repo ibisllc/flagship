@@ -167,9 +167,7 @@ public struct RealAccountLoginScreen: View {
                 .textContentType(.password)
                 .autocorrectionDisabled(true)
                 .textInputAutocapitalization(.never)
-                .padding(FS.space.s3)
-                .background(c.surface)
-                .overlay(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border))
+                .fsInputBox()
                 .accessibilityIdentifier("login-recovery-passphrase")
 
             if case .failed(let msg) = vm.phase {
@@ -296,9 +294,7 @@ public struct RealAccountLoginScreen: View {
                     .textContentType(.password)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)
-                    .padding(FS.space.s3)
-                    .background(c.surface)
-                    .overlay(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous).stroke(c.border))
+                    .fsInputBox()
                     .accessibilityIdentifier("login-takeover-passphrase")
                 FSField(
                     value: $vm.secondFactorInput,

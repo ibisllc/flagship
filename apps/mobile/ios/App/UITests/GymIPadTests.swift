@@ -111,7 +111,7 @@ final class GymIPadTests: XCTestCase {
         // The "Services" sidebar row: a Button carrying BOTH the propagated
         // `ipad-sidebar` id (so it's the sidebar row, not a content-pane control)
         // AND the exact destination label.
-        let servicesRow = app.buttons
+        let servicesRow = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier == %@ AND label == %@", "ipad-sidebar", "Services"))
             .firstMatch
         XCTAssertTrue(servicesRow.waitForExistence(timeout: 10), "The sidebar should offer a Services destination row.")

@@ -57,12 +57,7 @@ struct ReplaceServiceStemSheet: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .font(FS.font.scaled(16, design: .monospaced))
-                    .padding(FS.space.s3)
-                    .background(c.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous)
-                            .stroke(c.border, lineWidth: 1)
-                    )
+                    .fsInputBox()
                     .accessibilityIdentifier("replace-stem-field")
                 Text("Lowercase letters, digits, and hyphens. 1–40 characters. No leading or trailing hyphen.")
                     .font(FS.font.caption())

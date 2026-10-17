@@ -265,6 +265,36 @@ public struct FSField: View {
     }
 }
 
+/// One look for every text input: sunken fill, 8pt continuous corners, 44pt
+/// minimum, and the shared focus ring while it has the keyboard.
+public struct FSInputBox: ViewModifier {
+    @Environment(\.colorScheme) private var scheme
+    @FocusState private var focused: Bool
+    public func body(content: Content) -> some View {
+        let c = FSColors.scheme(scheme)
+        let shape = RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous)
+        content
+            .focused($focused)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(minHeight: 44)
+            .background(c.surfaceSunken, in: shape)
+            .overlay(shape.stroke(c.border, lineWidth: 1))
+            .overlay {
+                if focused {
+                    shape.strokeBorder(c.accent, lineWidth: 2)
+                        .overlay(RoundedRectangle(cornerRadius: FS.radius.sm - 2, style: .continuous)
+                            .strokeBorder(c.text, lineWidth: 2).padding(2))
+                        .allowsHitTesting(false)
+                }
+            }
+    }
+}
+
+public extension View {
+    func fsInputBox() -> some View { modifier(FSInputBox()) }
+}
+
 public enum FSPillKind { case online, renewing, offline, provisioning, pending, idle }
 
 public struct FSPill: View {
