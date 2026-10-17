@@ -16,6 +16,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
@@ -268,7 +269,11 @@ class GymHomeTest : GymBase() {
         composeRule.onAllNodes(tagPrefix("pod-switcher-item-demo-office"), useUnmergedTree = true).onFirst().performClick()
         composeRule.waitForIdle()
         eventually(what = "Office current") {
-            com.flagshipserver.app.core.GymProbe.screens?.podContext == "office"
+            composeRule.onAllNodes(
+                androidx.compose.ui.test.hasTestTag("pod-switcher") and
+                    androidx.compose.ui.test.hasAnyDescendant(hasText("Office")),
+                useUnmergedTree = true,
+            ).fetchSemanticsNodes().isNotEmpty()
         }
         gymShot("switched")
     }
