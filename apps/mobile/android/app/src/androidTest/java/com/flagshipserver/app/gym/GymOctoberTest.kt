@@ -674,7 +674,9 @@ class GymOctoberTest : GymBase() {
         waitUntilExists("co-invite-name")
         composeRule.onNodeWithTag("co-invite-name").performTextInput("Alex")
         composeRule.onNodeWithTag("co-invite-create").performScrollTo().performClick()
-        waitUntilExists("co-invite-link", timeoutMs = 15_000)
+        // Creating signs and posts through the shared server: wait for the link or a refusal, and name the refusal.
+        composeRule.waitUntil(30_000) { count("co-invite-link") > 0 || count("co-invite-error") > 0 }
+        assertEquals("the invite was created: " + (if (count("co-invite-error") > 0) textOf("co-invite-error") else ""), 1, count("co-invite-link"))
         val link = textOf("co-invite-link")
         assertTrue(link, link.startsWith("https://garage.jordan-reyes.flagship.services/invite#"))
         assertTrue(link, link.endsWith("&s=bright-maple--plants"))
