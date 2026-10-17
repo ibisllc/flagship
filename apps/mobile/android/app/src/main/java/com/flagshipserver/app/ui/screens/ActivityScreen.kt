@@ -5,6 +5,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -103,7 +104,7 @@ fun ActivityScreen(nav: NavController) {
                     color = FS.colors.text,
                     // Match the Home/Services large-title size (32/40) so the
                     // tab headers are consistent — was 28sp here.
-                    style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium),
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
                     modifier = Modifier.testTag("activity-title"),
                 )
             }
@@ -244,11 +245,11 @@ private fun Accordion(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text(title, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
-                    Text(hint, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
+                    Text(title, color = FS.colors.text, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
+                    Text(hint, color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall)
                 }
                 if (count != null && count > 0) {
-                    Text("$count", color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
+                    Text("$count", color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.width(FS.space.s2))
                 }
                 Icon(
@@ -302,7 +303,7 @@ private fun EventList(
                 modifier = Modifier.testTag(moreTag),
             )
         } else {
-            Text("That's everything.", color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp), modifier = Modifier.testTag("activity-everything"))
+            Text("That's everything.", color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("activity-everything"))
         }
     }
 }
@@ -326,18 +327,18 @@ private fun EventRow(item: ActivityItem) {
                 Text(
                     item.title,
                     color = if (item.warning) FS.colors.warning else FS.colors.text,
-                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                 )
             }
             item.subtitle?.takeIf { it.isNotEmpty() }?.let { sub ->
-                Text(sub, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
+                Text(sub, color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall)
             }
         }
         Spacer(Modifier.width(FS.space.s2))
         Text(
             ActivityDates.format(item.at),
             color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 11.sp),
+            style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.testTag("activity-row-time"),
         )
     }
@@ -349,7 +350,7 @@ private fun PostRecoveryCard(nav: NavController) {
         Text(
             "Membership re-attach snapshot from the most recent account key swap.",
             color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp),
+            style = MaterialTheme.typography.bodySmall,
         )
         FSGhostButton(label = "View report", onClick = { nav.navigate("post-recovery") })
     }
@@ -363,12 +364,12 @@ private fun ApprovalsEntryCard(nav: NavController) {
         Text(
             "Approve a server's boot",
             color = FS.colors.text,
-            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
         )
         Text(
             "Servers set to ask on every boot wait here for you to release their disk key.",
             color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp),
+            style = MaterialTheme.typography.bodySmall,
         )
         FSGhostButton(label = "Open approvals", onClick = { nav.navigate("secret-requests") })
     }

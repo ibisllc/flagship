@@ -93,21 +93,21 @@ private fun Body(s: PeerBackupStatusResponse) {
                 Text(
                     PeerBackup.stateTitle(state),
                     color = FS.colors.text,
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                     modifier = Modifier.semantics { testTag = "peer-backup-state-title" },
                 )
                 Spacer(Modifier.width(FS.space.s2))
                 FSPill(label = state, kind = pillKind(state))
             }
-            Text(PeerBackup.stateNote(state), color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 13.sp))
+            Text(PeerBackup.stateNote(state), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             s.reason?.takeIf { it.isNotEmpty() }?.let {
-                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 13.sp))
+                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
             val total = s.totalBricks ?: 0
             if (total > 0) LabelValueRow("pieces safe", "${s.healthyBricks ?: 0} of $total")
             s.lastPlacedAt?.takeIf { it > 0 }?.let { LabelValueRow("last placed", fmtDate(it)) }
             PeerBackup.restoreByLine(s.keepUntil).takeIf { it.isNotEmpty() }?.let {
-                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 13.sp), modifier = Modifier.semantics { testTag = "peer-backup-restore-by" })
+                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.semantics { testTag = "peer-backup-restore-by" })
             }
         }
     }
@@ -120,8 +120,8 @@ private fun Body(s: PeerBackupStatusResponse) {
         rows.forEach { r ->
             FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.semantics { testTag = "peer-backup-holder" }) {
                 Column {
-                    Text(r.label, color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
-                    Text(r.line, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 13.sp))
+                    Text(r.label, color = FS.colors.text, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
+                    Text(r.line, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -132,9 +132,9 @@ private fun Body(s: PeerBackupStatusResponse) {
         FSSectionHeader("Kept for other servers")
         FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.semantics { testTag = "peer-backup-hosting" }) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-                host.forEach { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 13.sp)) }
+                host.forEach { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                 s.hosting?.reliability?.let {
-                    Text("Reliability score: $it of 100", color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 12.sp))
+                    Text("Reliability score: $it of 100", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -151,16 +151,16 @@ private fun pillKind(state: String): FSPillKind = when (state) {
 @Composable
 private fun PlaceholderCard(text: String) {
     FSCard(padding = PaddingValues(FS.space.s4)) {
-        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 13.sp))
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
     }
 }
 
 @Composable
 private fun LabelValueRow(label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 14.sp))
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.weight(1f))
-        Text(value, color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
+        Text(value, color = FS.colors.text, style = MaterialTheme.typography.bodyMedium)
     }
 }
 

@@ -1,5 +1,6 @@
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -70,17 +71,13 @@ fun WelcomeScreen(nav: NavController) {
             Text(
                 text = "Your stuff,\non your hardware.",
                 color = FS.colors.text,
-                style = TextStyle(
-                    fontSize = 40.sp,
-                    lineHeight = 48.sp,
-                    fontWeight = FontWeight.Medium,
-                ),
+                style = MaterialTheme.typography.displaySmall.copy(fontSize = 40.sp, lineHeight = 48.sp),
             )
             Spacer(Modifier.height(FS.space.s4))
             Text(
                 text = "A personal cloud you actually own. Your phone holds the keys; your server runs the services.",
                 color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 17.sp, lineHeight = 26.sp),
+                style = MaterialTheme.typography.titleMedium,
             )
         }
 

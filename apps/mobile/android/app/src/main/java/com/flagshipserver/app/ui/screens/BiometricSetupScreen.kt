@@ -1,5 +1,6 @@
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -50,24 +51,24 @@ fun BiometricSetupScreen(username: String, onContinue: () -> Unit) {
         Text(
             text = "Lock it to your device.",
             color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
         )
         Text(
             text = "Your master key lives in this phone's secure hardware. Approving a server unlock or installing a service will use your phone's biometrics or screen lock.",
             color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+            style = MaterialTheme.typography.bodyLarge,
         )
 
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Text(
                     text = "Cloud-recovery backup",
-                    style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = FS.colors.text,
                 )
                 Text(
                     text = "Wraps your master key with a Google Block Store key so a fresh phone can recover it. Without this, losing your phone means losing your data.",
-                    style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                    style = MaterialTheme.typography.bodyMedium,
                     color = FS.colors.textMuted,
                 )
                 Spacer(Modifier.height(FS.space.s2))
@@ -79,7 +80,7 @@ fun BiometricSetupScreen(username: String, onContinue: () -> Unit) {
                     Text(
                         text = if (cloudRecovery) "Enabled" else "Disabled — risky",
                         color = if (cloudRecovery) FS.colors.success else FS.colors.warning,
-                        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                     )
                     Switch(
                         checked = cloudRecovery,

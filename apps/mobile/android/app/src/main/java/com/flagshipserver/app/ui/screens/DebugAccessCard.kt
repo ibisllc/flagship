@@ -5,6 +5,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -62,7 +63,7 @@ internal fun DebugAccessBanner(vm: DebugAccessViewModel) {
     Text(
         debugAccessBannerText(v.expiresAt ?: return),
         color = FS.colors.danger,
-        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium),
+        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8))
@@ -87,7 +88,7 @@ internal fun DebugAccessCard(vm: DebugAccessViewModel, onChanged: () -> Unit) {
     Text(
         "Debug access",
         color = FS.colors.text,
-        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
     )
     Spacer(Modifier.height(FS.space.s2))
     FSCard(padding = PaddingValues(FS.space.s4)) {
@@ -96,20 +97,20 @@ internal fun DebugAccessCard(vm: DebugAccessViewModel, onChanged: () -> Unit) {
                 Text(
                     debugAccessBannerText(view.expiresAt ?: 0L),
                     color = FS.colors.text,
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
                 )
                 view.keyFingerprint?.let {
                     Text(
                         "Key $it",
                         color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                     )
                 }
             } else {
                 Text(
                     "Off. Turn it on to let one SSH key in as the debug user for a while.",
                     color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                    style = MaterialTheme.typography.bodySmall,
                 )
             }
 
@@ -117,7 +118,7 @@ internal fun DebugAccessCard(vm: DebugAccessViewModel, onChanged: () -> Unit) {
                 Text(
                     DebugAccess.ADMIN_ONLY,
                     color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
+                    style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.semantics { contentDescription = "sd-debug-access-admin-only" },
                 )
             } else if (editing) {
@@ -137,13 +138,13 @@ internal fun DebugAccessCard(vm: DebugAccessViewModel, onChanged: () -> Unit) {
                             .testTag("sd-debug-access-duration-${d.name.lowercase()}"),
                     ) {
                         RadioButton(selected = duration == d, onClick = { duration = d })
-                        Text(d.label, color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
+                        Text(d.label, color = FS.colors.text, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
                 Text(
                     DebugAccess.WARNING,
                     color = FS.colors.danger,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                    style = MaterialTheme.typography.bodySmall,
                 )
                 FSPrimaryButton(
                     label = if (state.busy) "Signing…" else if (on) "Renew" else "Turn on",
@@ -180,10 +181,10 @@ internal fun DebugAccessCard(vm: DebugAccessViewModel, onChanged: () -> Unit) {
                 }
             }
             state.error?.let {
-                Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp), modifier = Modifier.semantics { contentDescription = "sd-debug-access-error" })
+                Text(it, color = FS.colors.danger, style = MaterialTheme.typography.bodySmall, modifier = Modifier.semantics { contentDescription = "sd-debug-access-error" })
             }
             state.notice?.let {
-                Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                Text(it, color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall)
             }
         }
     }

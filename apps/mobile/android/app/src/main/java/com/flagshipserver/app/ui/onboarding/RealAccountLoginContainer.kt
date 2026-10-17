@@ -20,6 +20,7 @@
 
 package com.flagshipserver.app.ui.onboarding
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -170,12 +171,12 @@ private fun RecoveringView(onCancel: () -> Unit) {
             Text(
                 "Authenticate with your passkey",
                 color = FS.colors.text,
-                style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Medium),
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Medium),
             )
             Text(
                 "We'll unwrap your account key and bring this device into your existing Flagship account.",
                 color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(horizontal = FS.space.s8),
             )
         }
@@ -194,7 +195,7 @@ private fun NoCloudBackupView(single: Boolean, onImport: () -> Unit, onBack: () 
         Text(
             "No cloud backup on this account",
             color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
         )
         // The single/multi-with-no-working-device dead end is a node in
         // the decision tree, NOT a 404. Copy verbatim from
@@ -203,7 +204,7 @@ private fun NoCloudBackupView(single: Boolean, onImport: () -> Unit, onBack: () 
             if (single) "Use a device that still has access."
             else "Use another device, or one of your recovery codes.",
             color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+            style = MaterialTheme.typography.bodyLarge,
         )
         ImportBackupOption(onImport = onImport)
         Box(Modifier.height(FS.space.s4))
@@ -226,7 +227,7 @@ private fun ImportBackupOption(onImport: () -> Unit) {
         ) {
             Icon(Icons.Outlined.Lock, contentDescription = null, tint = FS.colors.primary, modifier = Modifier.size(20.dp))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Import backup file", color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
+                Text("Import backup file", color = FS.colors.text, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
@@ -248,12 +249,12 @@ private fun PassphraseView(
         Text(
             "Enter your recovery passphrase",
             color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
         )
         Text(
             "This is the passphrase you chose when you backed up this account. We use it to unlock your wrapped account key — you'll also confirm your passkey.",
             color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+            style = MaterialTheme.typography.bodyLarge,
         )
         FSField(
             value = passphrase,
@@ -292,13 +293,13 @@ private fun SecondFactorView(
         Text(
             "Enter your recovery code",
             color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
         )
         Text(
             "This account is protected by a second factor. Enter the current 6-digit code from your authenticator, " +
                 "or use one of the recovery codes you saved when you set this up.",
             color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+            style = MaterialTheme.typography.bodyLarge,
         )
         FSField(
             value = code,
@@ -353,22 +354,22 @@ private fun TakeoverExplainerView(
         Text(
             "Take over @$username",
             color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
         )
         Text(
             graceLine,
             color = FS.colors.text,
-            style = TextStyle(fontSize = 18.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold),
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
         )
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Icon(Icons.Outlined.Info, contentDescription = null, tint = FS.colors.primary, modifier = Modifier.size(20.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("This device becomes the admin", color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
+                    Text("This device becomes the admin", color = FS.colors.text, style = MaterialTheme.typography.bodyMedium)
                     Text(
                         detail,
                         color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 12.sp, lineHeight = 18.sp),
+                        style = MaterialTheme.typography.bodySmall,
                     )
                 }
             }
@@ -410,7 +411,7 @@ private fun GraceCountdownView(
         Text(
             "Takeover started",
             color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
         )
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
@@ -419,7 +420,7 @@ private fun GraceCountdownView(
                     if (elapsed) "The grace period has elapsed — you can take over now."
                     else "This device takes over in ${formatRemaining(remaining)}. Your other devices are alerted.",
                     color = FS.colors.text,
-                    style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
         }
@@ -457,7 +458,7 @@ private fun TakingOverView() {
     ) {
         CircularProgressIndicator()
         Spacer(Modifier.height(FS.space.s4))
-        Text("Bringing this device into your account…", color = FS.colors.textMuted, style = TextStyle(fontSize = 16.sp))
+        Text("Bringing this device into your account…", color = FS.colors.textMuted, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
@@ -472,9 +473,9 @@ private fun FailureView(message: String, onBack: () -> Unit) {
         Text(
             "Couldn't take over the account",
             color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
         )
-        Text(message, color = FS.colors.textMuted, style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp))
+        Text(message, color = FS.colors.textMuted, style = MaterialTheme.typography.bodyLarge)
         Box(Modifier.height(FS.space.s4))
         FSSecondaryButton(label = "Back", onClick = onBack, block = true, large = true)
     }

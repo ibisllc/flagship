@@ -10,6 +10,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -78,13 +79,13 @@ fun OpenAccountScreen(
         Text(
             text = "Open your account.",
             color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
         )
         Text(
             text = "Reserving “$username” and bringing this device into your account. " +
                 "Give this device a name so you can recognise it later.",
             color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+            style = MaterialTheme.typography.bodyLarge,
         )
 
         FSField(
@@ -109,7 +110,7 @@ fun OpenAccountScreen(
             Text(
                 text = (phase as OpenAccountPhase.Failed).message,
                 color = FS.colors.danger,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                style = MaterialTheme.typography.bodySmall,
             )
         }
 

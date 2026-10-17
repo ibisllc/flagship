@@ -214,7 +214,7 @@ fun ApiKeysSection(
                         Text(
                             c.key,
                             color = MaterialTheme.colorScheme.onSurface,
-                            style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace),
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                             modifier = Modifier.testTag("api-key-created-value"),
                         )
                     }
@@ -223,7 +223,7 @@ fun ApiKeysSection(
                     Text(
                         AppApiKeysViewModel.usageLine("<key>"),
                         color = MaterialTheme.colorScheme.onSurface,
-                        style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                         modifier = Modifier.testTag("api-key-created-usage"),
                     )
                 }
@@ -325,7 +325,7 @@ private fun CreateApiKeyDialog(
                     modifier = Modifier.fillMaxWidth().testTag("api-key-create-label"),
                 )
                 Spacer(Modifier.height(FS.space.s3))
-                Text("Access", color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold))
+                Text("Access", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
                 AppApiKeysViewModel.SCOPES.forEach { s ->
                     Choice(
                         selected = keyScope == s,

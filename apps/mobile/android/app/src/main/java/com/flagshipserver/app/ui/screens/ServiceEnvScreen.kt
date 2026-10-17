@@ -245,7 +245,7 @@ private fun AddEnvVarDialog(
                     Text(
                         it,
                         color = FS.colors.danger,
-                        style = TextStyle(fontSize = 12.sp),
+                        style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.semantics { testTag = "service-env-name-error" },
                     )
                 }

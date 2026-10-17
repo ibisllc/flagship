@@ -289,7 +289,7 @@ fun SecureAccountScreen(
         }
         if (working && note != null) {
             FSCard(padding = PaddingValues(FS.space.s3)) {
-                Text(note!!, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                Text(note!!, color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall)
             }
         }
 

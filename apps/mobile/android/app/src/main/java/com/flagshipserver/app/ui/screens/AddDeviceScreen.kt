@@ -356,12 +356,12 @@ internal fun DevicePairingUnavailable(title: String, onCancel: () -> Unit) {
         Text(
             title,
             color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.SemiBold),
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
         )
         Text(
             com.flagshipserver.app.core.DEVICE_PAIRING_UNAVAILABLE,
             color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 16.sp),
+            style = MaterialTheme.typography.bodyLarge,
         )
         FSPrimaryButton(label = "Back", onClick = onCancel, block = true)
     }

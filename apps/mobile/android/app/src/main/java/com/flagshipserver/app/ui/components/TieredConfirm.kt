@@ -15,6 +15,7 @@
 
 package com.flagshipserver.app.ui.components
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -71,7 +72,7 @@ fun TieredConfirm(
         Text(
             title,
             color = FS.colors.text,
-            style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.Medium),
+            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Medium),
         )
         // Colored callout — benign teal / severe danger tint.
         Column(
@@ -81,7 +82,7 @@ fun TieredConfirm(
                 .background(accent.copy(alpha = 0.12f))
                 .padding(FS.space.s3),
         ) {
-            Text(body, color = FS.colors.text, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+            Text(body, color = FS.colors.text, style = MaterialTheme.typography.bodyMedium)
         }
         if (needsType) {
             FSField(

@@ -5,6 +5,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
@@ -61,7 +62,7 @@ fun CoInviteSection(vm: CoInviteViewModel) {
     Text(
         "INVITE PEOPLE",
         color = FS.colors.textMuted,
-        style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
+        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
     )
     Spacer(Modifier.height(FS.space.s3))
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.fillMaxWidth().testTag("co-invite-section")) {
@@ -184,7 +185,7 @@ private fun Panel(
                 Text(
                     link,
                     color = FS.colors.text,
-                    style = TextStyle(fontSize = 11.sp, fontFamily = FontFamily.Monospace),
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
                     modifier = Modifier.testTag("co-invite-link"),
                 )
             }
@@ -205,7 +206,7 @@ private fun Panel(
         Muted(state.whyText, "co-invite-why")
     }
     ui.error?.let { Danger(it, "co-invite-error") }
-    Text(ShareCoInviteCopy.YOURS, color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
+    Text(ShareCoInviteCopy.YOURS, color = FS.colors.text, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
     if (state.invites.isEmpty()) {
         Muted(ShareCoInviteCopy.NONE, "co-invite-none")
     } else {
@@ -214,7 +215,7 @@ private fun Panel(
                 Text(
                     "${inv.displayName} · ${ShareCoInviteCopy.statusText(inv)}",
                     color = FS.colors.text,
-                    style = TextStyle(fontSize = 14.sp),
+                    style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f).testTag("co-invite-row-${inv.inviteId}"),
                 )
                 if (state.canInvite) {
@@ -234,14 +235,14 @@ private fun Muted(text: String, tag: String? = null) {
     Text(
         text,
         color = FS.colors.textMuted,
-        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+        style = MaterialTheme.typography.bodyMedium,
         modifier = if (tag != null) Modifier.testTag(tag) else Modifier,
     )
 }
 
 @Composable
 private fun Danger(text: String, tag: String) {
-    Text(text, color = FS.colors.danger, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp), modifier = Modifier.testTag(tag))
+    Text(text, color = FS.colors.danger, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag(tag))
 }
 
 private fun shareInviteLink(ctx: Context, text: String) {

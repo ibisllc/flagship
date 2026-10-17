@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -52,7 +53,7 @@ internal fun BackupPolicyOptions(
                 Text(
                     "$reserveGb GB",
                     color = FS.colors.text,
-                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                     modifier = Modifier.testTag("$tagPrefix-reserve"),
                 )
                 TextButton(
@@ -64,7 +65,7 @@ internal fun BackupPolicyOptions(
             Text(
                 "This phone has ${ServerArchive.formatBytes(phoneFreeBytes)} free",
                 color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 12.sp),
+                style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(start = FS.space.s4),
             )
         }
@@ -91,9 +92,9 @@ private fun PolicyOption(selected: Boolean, title: String, body: String, warn: B
         Row(verticalAlignment = Alignment.CenterVertically) {
             RadioButton(selected = selected, onClick = onClick)
             Spacer(Modifier.width(FS.space.s2))
-            Text(title, color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium))
+            Text(title, color = FS.colors.text, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium))
         }
         Spacer(Modifier.height(FS.space.s1))
-        Text(body, color = if (warn) FS.colors.warning else FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
+        Text(body, color = if (warn) FS.colors.warning else FS.colors.textMuted, style = MaterialTheme.typography.bodySmall)
     }
 }

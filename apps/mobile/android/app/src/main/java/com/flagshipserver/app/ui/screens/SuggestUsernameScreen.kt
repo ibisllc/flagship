@@ -1,5 +1,6 @@
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -61,18 +62,18 @@ fun SuggestUsernameScreen(onContinue: (String) -> Unit) {
         Text(
             text = "Your handle",
             color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp),
+            style = MaterialTheme.typography.headlineMedium,
         )
         Text(
             text = "Here's a free, random username. You can change it later.",
             color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+            style = MaterialTheme.typography.bodyLarge,
         )
 
         Text(
             text = current ?: " ",
             color = FS.colors.text,
-            style = TextStyle(fontSize = 34.sp, lineHeight = 42.sp, textAlign = TextAlign.Center),
+            style = MaterialTheme.typography.headlineLarge.copy(textAlign = TextAlign.Center),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = FS.space.s4),
@@ -86,7 +87,7 @@ fun SuggestUsernameScreen(onContinue: (String) -> Unit) {
         )
 
         error?.let {
-            Text(text = it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+            Text(text = it, color = FS.colors.danger, style = MaterialTheme.typography.bodySmall)
         }
 
         Spacer(Modifier.height(FS.space.s8))

@@ -6,6 +6,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import android.content.Context
 import android.os.StatFs
 import androidx.compose.foundation.layout.Arrangement
@@ -55,8 +56,8 @@ import com.flagshipserver.app.viewmodels.ServerBackupsViewModel
 import kotlinx.coroutines.launch
 import java.io.File
 
-private val caption = TextStyle(fontSize = 13.sp, lineHeight = 18.sp)
-private val body = TextStyle(fontSize = 14.sp, lineHeight = 20.sp)
+private val caption: TextStyle @Composable get() = MaterialTheme.typography.bodySmall
+private val body: TextStyle @Composable get() = MaterialTheme.typography.bodyMedium
 
 internal fun phoneFreeBytes(context: Context): Long = runCatching { StatFs(context.filesDir.path).availableBytes }.getOrDefault(0L)
 
@@ -100,7 +101,7 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
         onResult = { ok -> saveNote = if (ok) "Saved." else "Couldn't save the backup there. Pick another place." },
     )
 
-    Text("Backups", color = FS.colors.text, style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold))
+    Text("Backups", color = FS.colors.text, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
     Spacer(Modifier.height(FS.space.s2))
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("sd-backups")) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
@@ -348,7 +349,7 @@ private fun ScheduleEditor(vm: ServerBackupsViewModel, current: com.flagshipserv
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         TextButton(onClick = { minute = (minute + 1440 - 60) % 1440 }, modifier = Modifier.testTag("sd-backups-hour-down")) { Text("−1 h") }
                         TextButton(onClick = { minute = (minute + 1440 - 15) % 1440 }, modifier = Modifier.testTag("sd-backups-minute-down")) { Text("−15") }
-                        Text(BackupsText.timeText(minute), color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold), modifier = Modifier.testTag("sd-backups-time"))
+                        Text(BackupsText.timeText(minute), color = FS.colors.text, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), modifier = Modifier.testTag("sd-backups-time"))
                         TextButton(onClick = { minute = (minute + 15) % 1440 }, modifier = Modifier.testTag("sd-backups-minute-up")) { Text("+15") }
                         TextButton(onClick = { minute = (minute + 60) % 1440 }, modifier = Modifier.testTag("sd-backups-hour-up")) { Text("+1 h") }
                     }

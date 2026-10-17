@@ -11,6 +11,7 @@
 
 package com.flagshipserver.app.ui.components
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.Icons
@@ -230,7 +231,7 @@ private fun TrustSliverLine(
         Text(
             text = failure.label,
             color = androidx.compose.material3.MaterialTheme.colorScheme.onError,
-            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
@@ -245,7 +246,7 @@ private fun TrustSliverLine(
                 Text(
                     text = "$serverCount servers",
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onError,
-                    style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                 )
             }
             Box(Modifier.padding(start = FS.space.s2))
@@ -260,7 +261,7 @@ private fun TrustSliverLine(
                 Text(
                     text = "continuing",
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onError,
-                    style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                 )
             }
         } else {

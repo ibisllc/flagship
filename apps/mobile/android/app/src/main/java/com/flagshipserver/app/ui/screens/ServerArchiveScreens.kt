@@ -77,8 +77,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
 
-private val captionStyle = TextStyle(fontSize = 13.sp, lineHeight = 18.sp)
-private val bodySmStyle = TextStyle(fontSize = 14.sp, lineHeight = 19.sp)
+private val captionStyle: TextStyle @Composable get() = MaterialTheme.typography.bodySmall
+private val bodySmStyle: TextStyle @Composable get() = MaterialTheme.typography.bodyMedium
 
 /** "Backup/clone server" button in the server page's Backup / Migrate card. */
 @Composable
@@ -234,7 +234,7 @@ internal fun PasscodeStep(vm: ServerBackupViewModel, copied: Boolean, onCopy: ()
         Text(
             "Set the backup's passcode",
             color = FS.colors.text,
-            style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
         )
         Text(BackupsText.PASSCODE_WHY, color = FS.colors.text, style = bodySmStyle, modifier = Modifier.testTag("backup-passcode-why"))
         Text(ServerArchive.PASSCODE_NOTE, color = MaterialTheme.colorScheme.onSurfaceVariant, style = bodySmStyle)
@@ -261,13 +261,13 @@ internal fun PasscodeStep(vm: ServerBackupViewModel, copied: Boolean, onCopy: ()
                     Text(
                         "SUGGESTED PASSCODE",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
                     )
                     SelectionContainer {
                         Text(
                             vm.suggestedPasscode,
                             color = FS.colors.text,
-                            style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace),
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace),
                             modifier = Modifier.testTag("backup-suggested-passcode"),
                         )
                     }
@@ -554,7 +554,7 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
                         fieldTag = "import-backup-name",
                     )
                     if (vm.nameProblem == null && vm.name.isNotEmpty()) {
-                        Text(vm.previewFqdn, color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace))
+                        Text(vm.previewFqdn, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace))
                     }
                     vm.settingsLine?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = bodySmStyle) }
                     FSPrimaryButton(
@@ -599,7 +599,7 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
                     Text(
                         "${serverName(p.fqdn)} is restored.",
                         color = FS.colors.success,
-                        style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     )
                     ImportBackupViewModel.resultLines(p.apps).forEachIndexed { i, line ->
                         Text(
@@ -657,7 +657,7 @@ internal fun BackupDownloadApprovalDialog(serverFqdn: String, archiveId: String,
                 Text(
                     vm.code,
                     color = FS.colors.text,
-                    style = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 6.sp, fontFamily = FontFamily.Monospace),
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 6.sp, fontFamily = FontFamily.Monospace),
                     modifier = Modifier.semantics { contentDescription = "backup-approve-code" },
                 )
                 Text(

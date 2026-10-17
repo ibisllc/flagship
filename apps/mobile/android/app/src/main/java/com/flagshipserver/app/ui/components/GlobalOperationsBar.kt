@@ -15,6 +15,7 @@
 
 package com.flagshipserver.app.ui.components
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.spring
@@ -118,7 +119,7 @@ private fun OperationsSliver(op: ActiveOperation, extra: Int, onTap: () -> Unit)
         Text(
             text = op.label,
             color = FS.colors.onAccent,
-            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
@@ -134,7 +135,7 @@ private fun OperationsSliver(op: ActiveOperation, extra: Int, onTap: () -> Unit)
                 Text(
                     text = "+$extra",
                     color = FS.colors.onAccent,
-                    style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                 )
             }
         }

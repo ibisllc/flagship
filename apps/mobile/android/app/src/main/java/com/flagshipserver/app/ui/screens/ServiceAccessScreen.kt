@@ -836,7 +836,7 @@ private fun PersonRow(
                             Text(
                                 "member ${aid.take(8)}…",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                                 modifier = Modifier.weight(1f),
                             )
                             androidx.compose.material3.TextButton(onClick = { onRemoveMember(aid) }) { Text("Remove") }
@@ -867,7 +867,7 @@ private fun ResultBlock(link: String, onShare: () -> Unit, onCopy: () -> Unit) {
         Text(
             link,
             color = MaterialTheme.colorScheme.onSurface,
-            style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace),
+            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
             modifier = Modifier
                 .fillMaxWidth()
                 .semantics { testTag = "service-access-share-url" },

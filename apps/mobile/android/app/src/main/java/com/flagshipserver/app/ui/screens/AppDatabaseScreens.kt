@@ -447,7 +447,7 @@ private fun LazyListScope.resultRows(
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace),
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace),
                     )
                     Text(
                         c.type,
@@ -471,7 +471,7 @@ private fun LazyListScope.resultRows(
             Text(
                 "${firstRowNumber + i}",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                 modifier = Modifier.width(NUMBER_WIDTH),
             )
             columns.indices.forEach { ci ->
@@ -482,7 +482,7 @@ private fun LazyListScope.resultRows(
                     color = if (cell is kotlinx.serialization.json.JsonNull) FS.colors.textMuted else FS.colors.text,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                     modifier = Modifier.width(CELL_WIDTH).padding(end = FS.space.s2),
                 )
             }

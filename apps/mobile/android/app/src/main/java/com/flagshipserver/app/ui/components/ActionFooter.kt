@@ -1,5 +1,6 @@
 package com.flagshipserver.app.ui.components
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -64,7 +65,7 @@ fun FSActionFooter(
         Text(
             "Patent Pending",
             color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp),
+            style = MaterialTheme.typography.bodySmall,
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
                 .padding(bottom = FS.space.s4)

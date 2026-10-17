@@ -18,6 +18,7 @@
 
 package com.flagshipserver.app.ui.onboarding
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -211,7 +212,7 @@ fun ConnectAccountContent(
             Text(
                 text = "Connect to an existing account",
                 color = FS.colors.text,
-                style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
                 modifier = Modifier.semantics { heading() },
             )
 
@@ -248,7 +249,7 @@ fun ConnectAccountContent(
                 Text(
                     "On a device of that account, open Settings → Trusted devices → Add device.",
                     color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                    style = MaterialTheme.typography.bodyMedium,
                 )
                 FSSecondaryButton(
                     label = "Scan a code",
@@ -293,7 +294,7 @@ private fun SectionTitle(text: String) {
     Text(
         text = text,
         color = FS.colors.text,
-        style = TextStyle(fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold),
+        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
         modifier = Modifier.semantics { heading() },
     )
 }
@@ -309,7 +310,7 @@ private fun OrDivider() {
         horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
     ) {
         Box(Modifier.weight(1f).height(1.dp).background(FS.colors.border))
-        Text("or", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+        Text("or", color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall)
         Box(Modifier.weight(1f).height(1.dp).background(FS.colors.border))
     }
 }
@@ -320,13 +321,13 @@ private fun NoAccountCard(name: String) {
         Text(
             "No Flagship account by that name",
             color = FS.colors.text,
-            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
         )
         Spacer(Modifier.height(4.dp))
         Text(
             "We couldn't find an account called “$name”. Check the spelling, or go back and create a new account.",
             color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            style = MaterialTheme.typography.bodySmall,
         )
     }
 }

@@ -8,6 +8,7 @@
 
 package com.flagshipserver.app.ui.shell
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
@@ -115,18 +116,18 @@ fun BiometricLockScreen() {
             Text(
                 "Flagship is locked",
                 color = FS.colors.text,
-                style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
             )
             Text(
                 "Unlock with biometrics to continue.",
                 color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 14.sp),
+                style = MaterialTheme.typography.bodyMedium,
             )
             if (watchWaiting != null && WatchApprovalPrompt.shared.current() != null) {
                 Text(
                     WatchApprovalPrompt.LOCK_SCREEN_NOTE,
                     color = FS.colors.text,
-                    style = TextStyle(fontSize = 14.sp),
+                    style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.testTag("lock-watch-waiting"),
                 )
@@ -136,7 +137,7 @@ fun BiometricLockScreen() {
                 Text(
                     it.message,
                     color = FS.colors.danger,
-                    style = TextStyle(fontSize = 12.sp),
+                    style = MaterialTheme.typography.bodySmall,
                 )
                 Spacer(Modifier.height(FS.space.s2))
             }

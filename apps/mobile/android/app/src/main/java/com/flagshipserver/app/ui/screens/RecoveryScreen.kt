@@ -133,7 +133,7 @@ fun RecoveryScreen(nav: NavController) {
         }
         if (working && note != null) {
             FSCard(padding = PaddingValues(FS.space.s3), modifier = Modifier.semantics { testTag = "recovery-second-prompt" }) {
-                Text(note!!, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                Text(note!!, color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall)
             }
             Spacer(Modifier.height(FS.space.s2))
         }

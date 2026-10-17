@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.ui.components
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -51,12 +52,12 @@ fun RunsOnRow(modifier: Modifier = Modifier, locked: Boolean = false) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text("Runs on", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
+            Text("Runs on", color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     scope.pod.name,
                     color = FS.colors.text,
-                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                     modifier = Modifier.testTag("runs-on-name"),
                 )
                 if (scope.pod.podId == leaderId) {
@@ -100,12 +101,12 @@ fun RunsOnRow(modifier: Modifier = Modifier, locked: Boolean = false) {
                                 Text(
                                     opt.pod.name + if (opt.pod.podId == leaderId) " (preferred)" else "",
                                     color = if (opt.available) FS.colors.text else FS.colors.textMuted,
-                                    style = TextStyle(fontSize = 15.sp),
+                                    style = MaterialTheme.typography.bodyLarge,
                                 )
                                 Text(
                                     if (opt.available) opt.pod.fqdn else CreationPlacement.UNAVAILABLE,
                                     color = FS.colors.textMuted,
-                                    style = TextStyle(fontSize = 12.sp),
+                                    style = MaterialTheme.typography.bodySmall,
                                 )
                             }
                         }
