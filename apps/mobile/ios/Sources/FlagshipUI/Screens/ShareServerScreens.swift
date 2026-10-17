@@ -525,8 +525,8 @@ struct ShareAcceptScreen: View {
                 let store = SharedWithMeStore.shared
                 let demo = ServerShareDemo.isOn && !ServerShareDemo.flowsOn
                 model = ShareAcceptModel(store: store,
-                                         flow: ServerShareDemo.isOn ? store.flow : ServerShareServices.acceptFlow(username: app.currentUser,
-                                                                                                                 isDemoAccount: app.isDemoAccount),
+                                         flow: ServerShareDemo.isOn && !ServerShareDemo.flowsOn ? store.flow
+                                             : ServerShareServices.acceptFlow(username: app.currentUser, isDemoAccount: app.isDemoAccount),
                                          demo: demo)
                 if let shareId, let secretHex {
                     await model?.open(shareId: shareId, secretHex: secretHex)
@@ -1032,19 +1032,45 @@ struct SharedAppScreen: View {
     @ViewBuilder
     private func tableScreen(_ t: DbTable) -> some View {
         if let client {
-            let ctrl = AppDbTableController(serviceId: serviceId, store: t.store, table: t.table, client: client)
-            AppDbTableScreen(controller: ctrl).task { await ctrl.load() }
+            SharedAppDbTableHost(serviceId: serviceId, store: t.store, table: t.table, client: client)
         }
     }
 
     @ViewBuilder
     private func queryScreen(_ q: DbQuery) -> some View {
         if let client, let server, let entry = server.entry {
-            AppDbQueryScreen(controller: AppDbQueryController(
-                serviceId: serviceId, store: q.store, appName: appName, client: client,
-                serverDomain: entry.serverDomain, signer: server.memberSigner))
+            SharedAppDbQueryHost(serviceId: serviceId, store: q.store, appName: appName, client: client,
+                                 serverDomain: entry.serverDomain, signer: server.memberSigner)
         }
     }
+}
+
+/// A table of a shared app's database. The controller lives in `@State`: the
+/// page's body runs again whenever its own state changes, and a controller
+/// built inside it would be replaced by an empty one that never loads.
+private struct SharedAppDbTableHost: View {
+    @State private var controller: AppDbTableController
+
+    init(serviceId: String, store: String, table: String, client: any ScreensClient) {
+        _controller = State(initialValue: AppDbTableController(serviceId: serviceId, store: store, table: table, client: client))
+    }
+
+    var body: some View {
+        AppDbTableScreen(controller: controller).task { await controller.load() }
+    }
+}
+
+private struct SharedAppDbQueryHost: View {
+    @State private var controller: AppDbQueryController
+
+    init(serviceId: String, store: String, appName: String, client: any ScreensClient,
+         serverDomain: String, signer: AppAccessSigner?) {
+        _controller = State(initialValue: AppDbQueryController(
+            serviceId: serviceId, store: store, appName: appName, client: client,
+            serverDomain: serverDomain, signer: signer))
+    }
+
+    var body: some View { AppDbQueryScreen(controller: controller) }
 }
 
 // MARK: - Demo

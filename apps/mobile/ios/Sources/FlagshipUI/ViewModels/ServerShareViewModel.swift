@@ -193,7 +193,7 @@ public enum ServerShareDemo {
         shareId: String(repeating: "ab", count: 16), secretHex: secretHex,
         offer: ShareOfferPayload(serverDomain: "cabin.jordan-reyes.flagship.services", serverName: "Cabin",
                                  stkPubHex: memberPub, level: .view, unlockAtBoot: false, seeAppData: false,
-                                 expiresAt: Int64.max / 2),
+                                 expiresAt: 4_102_444_800_000),
         state: "offered")
 
     static var startup: VerifiedShareStartup {
