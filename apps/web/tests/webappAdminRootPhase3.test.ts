@@ -24,6 +24,11 @@ function loadWebapp(rel: string) {
 const loadPairing = () => loadWebapp("lib/crossDevicePairing.js");
 const loadKeystore = () => loadWebapp("keystore.js");
 const DEVICE_ID = "10".repeat(16);
+const GRANT = {
+  grantId: "0a0b0c0d-0e0f-4a1b-8c2d-3e4f50617283", username: "harry", deviceId: DEVICE_ID,
+  devicePubHex: "ab".repeat(32), scopes: ["browse", "view-directory"], issuedAt: 1, expiresAt: 2,
+  signerRoot: "membership",
+};
 const loadRotation = () => loadWebapp("lib/adminRootRotation.js");
 const loadRecovery = () => loadWebapp("lib/recovery.js");
 
@@ -63,6 +68,8 @@ describe("Phase 3 — promote-a-device (seal-root, assurance-gated)", () => {
       username: "harry",
       seed: new Uint8Array(32).fill(0x42),
       signWithIrk: (s: Uint8Array, b: Uint8Array) => k.signWithIrk(s, b),
+      signWithAdminRoot: k.signWithAdminRoot,
+      irkPubHex: "dd".repeat(32),
       bytesToHex: k.bytesToHex,
       promoteAdmin,
       adminRootSeed,
@@ -75,6 +82,7 @@ describe("Phase 3 — promote-a-device (seal-root, assurance-gated)", () => {
 
   it("promote OFF → NO wrappedAdminRoot in the bundle; parse yields adminRootSeed null", async () => {
     const { out, bundle } = await seal(false, new Uint8Array(32).fill(7));
+    expect(bundle.grant.signerRoot).toBe("membership");
     expect(bundle).not.toHaveProperty("wrappedAdminRoot");
     expect(out.promotedAdmin).toBe(false);
 
@@ -96,7 +104,7 @@ describe("Phase 3 — promote-a-device (seal-root, assurance-gated)", () => {
   });
 
   it("promote ON with NO/short admin root → hard error (never silently drop the grant)", async () => {
-    await expect(seal(true, null)).rejects.toThrow(/no admin root/);
+    await expect(seal(true, null)).rejects.toThrow(/admin device/);
     await expect(seal(true, new Uint8Array(16))).rejects.toThrow(/no admin root/);
   });
 
@@ -106,6 +114,7 @@ describe("Phase 3 — promote-a-device (seal-root, assurance-gated)", () => {
       umkSeedHex: "55".repeat(32),
       admit: { username: "harry", newDevicePubHex: "ab".repeat(32), issuedAt: 1 },
       admitSig: "cc".repeat(64),
+      grant: GRANT, grantSignature: "ee".repeat(64),
     };
     expect(() => parseSealedBundle(JSON.stringify({ ...base, wrappedAdminRoot: "xyz" })))
       .toThrow(/wrappedAdminRoot/);
@@ -116,6 +125,9 @@ describe("Phase 3 — runIncomingJoin stores the admin root iff present", () => 
   function incomingDeps(overrides: Record<string, unknown> = {}) {
     return {
       deviceIrkPubHex: "ab".repeat(32),
+      deviceId: DEVICE_ID,
+      signWithDevice: vi.fn(async () => new Uint8Array(64)),
+      adminRootPubHexOf: vi.fn(async () => "ee".repeat(32)),
       setActiveKeystoreProfile: vi.fn(),
       persistSeedForProfile: vi.fn(async () => {}),
       localPassphrase: "chosen-passphrase",
@@ -136,8 +148,11 @@ describe("Phase 3 — runIncomingJoin stores the admin root iff present", () => 
   function bundle(withAdmin: boolean) {
     return JSON.stringify({
       umkSeedHex: "55".repeat(32),
-      admit: { username: "harry", newDevicePubHex: "ab".repeat(32), issuedAt: 1 },
+      admit: { username: "harry", deviceId: DEVICE_ID, newDevicePubHex: "ab".repeat(32), issuedAt: 1 },
       admitSig: "cc".repeat(64),
+      irkPubHex: "dd".repeat(32),
+      grant: { ...GRANT, signerRoot: withAdmin ? "admin-root" : "membership" },
+      grantSignature: "ee".repeat(64),
       ...(withAdmin ? { wrappedAdminRoot: "99".repeat(32) } : {}),
     });
   }
