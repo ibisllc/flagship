@@ -18,6 +18,7 @@ final class GymSweepAppTests: GymSweepCase {
         return all.element(boundBy: max(0, all.count - 1))
     }
 
+
     private func openPlantsAccess(_ app: XCUIApplication) {
         openApp(app, named: "Plants")
         let access = app.buttons["service-detail-open-access"]
@@ -78,7 +79,7 @@ final class GymSweepAppTests: GymSweepCase {
         XCTAssertTrue(reveal(app, remove))
         remove.tap()
         XCTAssertTrue(text(app, containing: "This uninstalls the service from").waitForExistence(timeout: 10))
-        dialogButton(app, "Cancel").tap()
+        cancelDialog(app)
         XCTAssertTrue(app.navigationBars["Plants"].exists, "Cancel keeps the app.")
         expectNoProbe(app, "uninstall")
         XCTAssertTrue(reveal(app, remove))
@@ -200,7 +201,7 @@ final class GymSweepAppTests: GymSweepCase {
         XCTAssertTrue(reveal(app, stop), "An allowed host can be stopped.")
         stop.tap()
         XCTAssertTrue(app.staticTexts["Stop this app's internet access?"].waitForExistence(timeout: 10))
-        dialogButton(app, "Cancel").tap()
+        cancelDialog(app)
         XCTAssertTrue(reveal(app, stop))
         stop.tap()
         dialogButton(app, "Stop access").tap()
@@ -267,7 +268,7 @@ final class GymSweepAppTests: GymSweepCase {
         let before = app.buttons.matching(identifier: "service-detail-api-key-revoke").count
         revoke.tap()
         XCTAssertTrue(text(app, containing: "loses access to the app right away").waitForExistence(timeout: 10))
-        dialogButton(app, "Cancel").tap()
+        cancelDialog(app)
         expectNoProbe(app, "revoked api key")
         XCTAssertTrue(reveal(app, revoke))
         revoke.tap()
@@ -378,7 +379,7 @@ final class GymSweepAppTests: GymSweepCase {
         let mode = app.segmentedControls["service-access-restrict-toggle"]
         mode.buttons["Members only"].tap()
         XCTAssertTrue(text(app, containing: "will be able to open it").waitForExistence(timeout: 10))
-        dialogButton(app, "Cancel").tap()
+        cancelDialog(app)
         wait(mode.buttons["Open to all"], "isSelected == true")
         expectNoProbe(app, "access-mode")
 
@@ -485,7 +486,7 @@ final class GymSweepAppTests: GymSweepCase {
         XCTAssertTrue(reveal(app, remove), "This device withdraws the invite it made.")
         remove.tap()
         XCTAssertTrue(text(app, containing: "They lose their rank").waitForExistence(timeout: 10))
-        dialogButton(app, "Cancel").tap()
+        cancelDialog(app)
         expectNoProbe(app, "revoked invite")
         XCTAssertTrue(reveal(app, remove))
         remove.tap()
@@ -504,7 +505,7 @@ final class GymSweepAppTests: GymSweepCase {
         XCTAssertTrue(reveal(app, family))
         family.tap()
         XCTAssertTrue(app.staticTexts["Revoke Family?"].waitForExistence(timeout: 10))
-        dialogButton(app, "Cancel").tap()
+        cancelDialog(app)
         expectNoProbe(app, "revoked invite")
         let priya = app.buttons["service-access-revoke-priya-bright-maple--plants"]
         XCTAssertTrue(reveal(app, priya))
@@ -526,8 +527,8 @@ final class GymSweepAppTests: GymSweepCase {
         XCTAssertTrue(reveal(app, office))
         XCTAssertEqual(office.label, "Runs on Office")
         office.tap()
-        XCTAssertTrue(dialogButton(app, "Cancel").exists)
-        dialogButton(app, "Cancel").tap()
+        XCTAssertTrue(dialogButton(app, "Remove from Office").exists)
+        cancelDialog(app)
         expectNoProbe(app, "uninstall")
         office.tap()
         dialogButton(app, "Remove from Office").tap()

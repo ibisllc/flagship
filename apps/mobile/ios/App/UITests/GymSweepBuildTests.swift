@@ -91,12 +91,7 @@ final class GymSweepBuildTests: GymSweepCase {
 
     /// Close a confirmation dialog without choosing: its Cancel button when
     /// it shows one, else a tap outside it.
-    func dismissDialog(_ app: XCUIApplication) {
-        let cancel = app.buttons.matching(NSPredicate(format: "label == %@", "Cancel")).firstMatch
-        if cancel.exists { cancel.tap(); return }
-        let region = app.otherElements["PopoverDismissRegion"]
-        if region.exists { region.tap() } else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap() }
-    }
+    func dismissDialog(_ app: XCUIApplication) { cancelDialog(app) }
 
     func probeCount(_ app: XCUIApplication, _ line: String) -> Int {
         probe(app).components(separatedBy: line).count - 1

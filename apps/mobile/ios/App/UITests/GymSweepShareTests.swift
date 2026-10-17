@@ -133,8 +133,7 @@ final class GymSweepShareTests: GymSweepCase {
         XCTAssertTrue(reveal(app, remove))
         remove.tap()
         XCTAssertTrue(app.staticTexts["Sam loses access to this server at once."].waitForExistence(timeout: 10))
-        let cancel = app.sheets.buttons["Cancel"].firstMatch
-        if cancel.waitForExistence(timeout: 3), cancel.isHittable { cancel.tap() } else { app.tap() }
+        cancelDialog(app)
         XCTAssertTrue(any(app, "share-row-\(sam)").exists, "Cancel keeps Sam.")
         expectNoProbe(app, "share-revoke")
         remove.tap()
@@ -312,8 +311,7 @@ final class GymSweepShareTests: GymSweepCase {
         XCTAssertTrue(reveal(app, leave))
         leave.tap()
         XCTAssertTrue(app.staticTexts["Leave this server?"].waitForExistence(timeout: 10))
-        let cancel = app.sheets.buttons["Cancel"].firstMatch
-        if cancel.waitForExistence(timeout: 3), cancel.isHittable { cancel.tap() } else { app.tap() }
+        cancelDialog(app)
         XCTAssertTrue(app.navigationBars["Garage"].exists, "Cancel stays on the server.")
         expectNoProbe(app, "share-leave")
         leave.tap()

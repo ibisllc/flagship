@@ -15,6 +15,18 @@ class GymSweepCase: XCTestCase {
         continueAfterFailure = false
     }
 
+    /// Dismiss a confirmation dialog without acting. On iOS 27 an iPhone
+    /// shows it as a popover with no Cancel button: press Cancel when there
+    /// is one, else tap the popover's dismiss region.
+    func cancelDialog(_ app: XCUIApplication) {
+        let sheet = app.sheets.buttons["Cancel"].firstMatch
+        if sheet.waitForExistence(timeout: 2), sheet.isHittable { sheet.tap(); return }
+        let plain = app.buttons.matching(NSPredicate(format: "label == 'Cancel'")).firstMatch
+        if plain.exists, plain.isHittable { plain.tap(); return }
+        let region = app.otherElements["PopoverDismissRegion"]
+        if region.exists { region.tap() } else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap() }
+    }
+
     /// Attach a screenshot for the gym's advisory judge.
     func shot(_ app: XCUIApplication, _ point: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())

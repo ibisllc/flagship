@@ -51,16 +51,6 @@ final class GymSweepSettingsTests: GymSweepCase {
         app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", label, notId)).firstMatch
     }
 
-    /// Dismiss a confirmation dialog without acting: its Cancel when it has
-    /// one, else a tap outside it (iOS 26 dialogs on iPhone drop Cancel).
-    private func cancelDialog(_ app: XCUIApplication) {
-        let cancel = app.buttons["Cancel"]
-        if cancel.waitForExistence(timeout: 2), cancel.isHittable {
-            cancel.tap()
-        } else {
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
-        }
-    }
 
     private func signedOut(_ app: XCUIApplication) -> Bool {
         app.buttons["Create your account"].waitForExistence(timeout: 20)
