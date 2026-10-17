@@ -59,11 +59,11 @@ object MockServerShares {
 
 /** Fixed account keys: an obviously fake UMK, IRK and admin root per account
  *  (every account is admin-pinned, so sensitive orders use the admin root). */
-class MockShareKeys(seed: Byte, val username: String) : ShareKeys {
+class MockShareKeys(seed: Byte, val username: String, adminSeedOverride: ByteArray? = null) : ShareKeys {
     val umkSeed = ByteArray(32) { seed }
     val irk = ByteArray(32) { (seed + 1).toByte() }
     val irkPub: ByteArray = Ed25519Sign.KeyPair.newKeyPairFromSeed(irk).publicKey
-    private val adminSeed = ByteArray(32) { (seed + 2).toByte() }
+    private val adminSeed = adminSeedOverride ?: ByteArray(32) { (seed + 2).toByte() }
     val adminPub: ByteArray = Ed25519Sign.KeyPair.newKeyPairFromSeed(adminSeed).publicKey
     val adminPubHex: String = HexUtil.encode(adminPub)
     override suspend fun umk(reason: String): ByteArray = umkSeed
@@ -79,7 +79,8 @@ class MockShareWorld(
     private val homeDomain: String,
     private val homeStkPubHex: String,
 ) {
-    val phone = MockShareKeys(0x11, username)
+    // The phone's own admin root is the gym device's, so what the app signs with verifies here.
+    val phone = MockShareKeys(0x11, username, GymSeams.GYM_ADMIN_ROOT_SEED)
     private val sam = MockShareKeys(0x21, "sam-lee")
     private val alex = MockShareKeys(0x31, "alex-kim")
     private val jordan = MockShareKeys(0x41, "jordan-reyes")
@@ -149,6 +150,8 @@ class MockShareWorld(
         box = if (seeding) seedTransport else apiTransport,
         keys = keys,
         account = { ShareAccount(keys.username, isDemo = false) },
+        // An emulator has no push registration: a fixed token lets the notices switch work.
+        pushToken = { "fcm" to "gym-push-token-${keys.username}" },
         random = random ?: { n -> ByteArray(n).also(java.security.SecureRandom()::nextBytes) },
     )
 
@@ -313,6 +316,13 @@ class MockShareWorld(
             }
             users != null && users.groupValues[4] == "revoke" -> {
                 val r = rows[users.groupValues[3]] ?: return err(404, "no such share")
+                // Ending a share's link is an admin order of the server's owner.
+                ServerShare.parseServerShareRevoke(b?.get("revoke"))?.let { rv ->
+                    val owner = ownerOf[r.serverDomain]
+                    if (owner != null && !com.flagshipserver.app.api.MockSignatures.checkAdminKey("share-revoke", owner.adminPub, rv.canonicalBytes(), str(b, "signature"))) {
+                        return err(403, "admin-key-required")
+                    }
+                }
                 r.ended = true
                 ok()
             }

@@ -59,6 +59,9 @@ class GymShareTest : GymBase() {
         openOwnerCard()
         val alex = rowTag("Alex accepted")
         composeRule.onNode(hasText("It doesn't") and hasAnyAncestor(hasTestTag(alex))).scrollIfNeeded().performClick()
+        // Stopping a share asks first.
+        waitText("Stop sharing with Alex?", 10_000)
+        tap("share-remove-confirm")
         composeRule.waitUntil(15_000) { tagCount(alex) == 0 }
         gymShot("code-mismatch")
     }
