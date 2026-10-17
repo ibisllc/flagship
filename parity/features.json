@@ -33,7 +33,7 @@
     },
     {
       "id": "server-page",
-      "title": "Server page: monitoring, Make leader, lock/power, dead-man, update, delete/revoke/un-revoke, Backup / Migrate (Backup/clone, Migrate to new machine / VM)",
+      "title": "Server page: monitoring, Make leader, lock/power, dead-man, update, delete/revoke/un-revoke, Backup / Migrate (Backup/clone, Migrate to a new server)",
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift", "DeadMan"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/MonitoringPane.swift", "struct MonitoringPane"], ["apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift", "api/releases"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/MigrateServerScreen.swift", "struct MigrateServerScreen"]] },

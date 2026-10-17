@@ -587,7 +587,7 @@ export async function renderServerDetail() {
         <button id="migrate-start-btn" class="full-width mt-2">${escapeHtml(MIGRATE_LABEL)}</button>
       </div>
 
-      <h2 class="mt-4">Update server</h2>
+      <h2 class="mt-4">Software update</h2>
       <div class="card" id="update-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
         <div class="row mt-2">
           <span class="label">Running</span>

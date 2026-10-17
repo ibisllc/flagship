@@ -318,7 +318,9 @@
 //       Create a server picks its backup policy with nothing preselected.
 //  v141: every focus indicator is the bright teal ring plus a 2px ink (light)
 //       or cream (dark) inner ring, 3:1 on any surface.
-const SHELL_VERSION = "v141";
+//  v142: the server page says "Software update" and "Migrate to a new server",
+//       as the phone apps do.
+const SHELL_VERSION = "v142";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

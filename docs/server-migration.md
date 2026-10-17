@@ -59,7 +59,7 @@ replaces it.
 
 ## Goal + the user's flow
 
-From the **server page → "Migrate to new machine / VM"**:
+From the **server page → "Migrate to a new server"**:
 1. Mint a **replacement** for THIS server (same `<server>.<user>` name + owner, a *new*
    box), on any target (USB-burned box, the desktop **VM appliance**, or native install).
 2. The new box **comes online** and **restores this server's data**.

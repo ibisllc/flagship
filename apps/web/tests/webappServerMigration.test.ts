@@ -1,4 +1,4 @@
-// Webapp client for "Migrate to new machine / VM" (docs/server-migration.md).
+// Webapp client for "Migrate to a new server" (docs/server-migration.md).
 //
 // Four contracts pinned here:
 //   1. MIRROR BYTES — the webapp's canonical order/control builders reproduce
@@ -419,7 +419,7 @@ describe("the server page's Backup / Migrate card", () => {
     const { readFileSync } = await import("node:fs");
     const { resolve } = await import("node:path");
     const src = readFileSync(resolve(__dirname, "../public/webapp/views/server-detail.js"), "utf8");
-    expect(MIGRATE_LABEL).toBe("Migrate to new machine / VM");
+    expect(MIGRATE_LABEL).toBe("Migrate to a new server");
     const card = src.match(/<h2 class="mt-4">Backup \/ Migrate<\/h2>\s*<div class="card" id="backup-migrate-card"[^>]*>([\s\S]*?)<\/div>/);
     expect(card).not.toBeNull();
     const inner = card![1]!;
@@ -429,7 +429,7 @@ describe("the server page's Backup / Migrate card", () => {
     expect(inner).not.toMatch(/<p\b/);
     expect(src).not.toContain('id="backup-card"');
     expect(src).not.toContain('id="migrate-card"');
-    expect(src.indexOf("Backup / Migrate")).toBeLessThan(src.indexOf("Update server"));
+    expect(src.indexOf("Backup / Migrate")).toBeLessThan(src.indexOf("Software update"));
   });
 
   it("Diagnostics opens straight on its controls, with no explainer", async () => {

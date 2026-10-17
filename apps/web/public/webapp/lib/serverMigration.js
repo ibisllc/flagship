@@ -1,4 +1,4 @@
-// "Migrate to new machine / VM" — webapp client for the server-migration
+// "Migrate to a new server" — webapp client for the server-migration
 // orchestration (docs/server-migration.md). Same owner, same
 // `<server>.<user>` name, NEW box: the phone initiates an admin-signed
 // migration session on `.com`, the owner provisions a provisional second pod
@@ -54,7 +54,7 @@ export const TAG_SERVER_MIGRATION_CONTROL = "flagship/server-migration-control/v
  *  match @flagship/protocol MigrationDisposition. */
 export const MIGRATION_DISPOSITIONS = ["keep", "wipe-after-handoff"];
 export const DEFAULT_MIGRATION_DISPOSITION = "wipe-after-handoff";
-export const MIGRATE_LABEL = "Migrate to new machine / VM";
+export const MIGRATE_LABEL = "Migrate to a new server";
 export const MIGRATE_DATA_NOTE =
   "The move pauses this server's apps, backs it up and sends the backup straight to the new server, which restores it and then takes over the name. Until then your apps say they are moving.";
 

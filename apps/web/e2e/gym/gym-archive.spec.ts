@@ -765,7 +765,7 @@ test.describe("gym webapp archive", () => {
     const com = migrationCom(page, m, keys, null);
     await openServer(page, HOME);
     await page.click("#migrate-start-btn");
-    const dlg = page.locator('dialog[aria-label="Migrate to new machine / VM"]');
+    const dlg = page.locator('dialog[aria-label="Migrate to a new server"]');
     const action = dlg.locator("[data-mig-action]");
 
     // No peer-backup gate any more: the move carries the server's own backup.
@@ -857,7 +857,7 @@ test.describe("gym webapp archive", () => {
 
     await openServer(page, HOME);
     await page.click("#migrate-start-btn");
-    const dlg = page.locator('dialog[aria-label="Migrate to new machine / VM"]');
+    const dlg = page.locator('dialog[aria-label="Migrate to a new server"]');
     await expect(dlg.locator("[data-mig-wait]")).toHaveText("New box attached. Move the data when you're ready: this server's apps pause until the new one takes over.", { timeout: 15_000 });
     // The estimate: size, the measured link speed, the downtime.
     await expect(dlg.locator("[data-mig-estimate]")).toContainText("About 2.0 GB to move at 20 MB/s between the servers.", { timeout: 15_000 });
@@ -885,7 +885,7 @@ test.describe("gym webapp archive", () => {
     const com = migrationCom(page, m, keys, session("pre-seeded"));
     await openServer(page, HOME);
     await page.click("#migrate-start-btn");
-    const dlg = page.locator('dialog[aria-label="Migrate to new machine / VM"]');
+    const dlg = page.locator('dialog[aria-label="Migrate to a new server"]');
     const action = dlg.locator("[data-mig-action]");
     await expect(action).toHaveText("Hand off to the new box now", { timeout: 15_000 });
     await expect(dlg.locator("[data-mig-wait]")).toContainText("Data restored. Confirm the hand-off");
@@ -927,7 +927,7 @@ test.describe("gym webapp archive", () => {
     await page.evaluate(async (fqdn) => (await import("/lib/serverMigration.js")).setMigrationHold(fqdn), HOME);
     await openServer(page, HOME);
     await page.click("#migrate-start-btn");
-    const dlg = page.locator('dialog[aria-label="Migrate to new machine / VM"]');
+    const dlg = page.locator('dialog[aria-label="Migrate to a new server"]');
     const abort = dlg.locator("[data-mig-abort]");
     await expect(abort).toHaveText("Abort migration — old server stays active with all data", { timeout: 15_000 });
     await expect(dlg.locator("[data-mig-action]")).toBeHidden();
@@ -956,7 +956,7 @@ test.describe("gym webapp archive", () => {
     const com = migrationCom(page, m, keys, null);
     await openServer(page, HOME);
     await page.click("#migrate-start-btn");
-    const dlg = page.locator('dialog[aria-label="Migrate to new machine / VM"]');
+    const dlg = page.locator('dialog[aria-label="Migrate to a new server"]');
     await dlg.locator("[data-mig-action]").click();
     await sawToast(page, "Migration started — now add the new box");
     const sent = m.last(`/api/server/${HOME}/migration`)!;
