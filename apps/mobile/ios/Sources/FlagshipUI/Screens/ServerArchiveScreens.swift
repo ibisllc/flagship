@@ -155,6 +155,8 @@ struct ServerBackupSheet: View {
 /// the create step to the existing create screen.
 struct ImportBackupContainer: View {
     let targetFqdn: String?
+    /// Restore from other servers (docs/peer-backup.md) instead of picking a file.
+    var fromPeers = false
     /// The create screen made a server (put it on Home like any new server).
     let onServerCreated: (_ serverDomain: String, _ serial: String, _ name: String) -> Void
     let onClose: () -> Void
@@ -224,6 +226,8 @@ struct ImportBackupContainer: View {
                     takenNames: taken,
                     waitingServers: waiting,
                     targetFqdn: targetFqdn,
+                    fromPeers: fromPeers,
+                    helperServers: app.pods.filter { $0.status == .online }.map(\.fqdn),
                     clients: clients,
                     onRestored: { fqdn in app.podsAwaitingBackup[fqdn.lowercased()] = nil }
                 )
@@ -270,6 +274,7 @@ struct ImportBackupScreen: View {
 
     private var title: String {
         switch vm.phase {
+        case .peersPick, .peersFinding: return "Restore from other servers"
         case .waiting, .sending, .restoring, .done: return "Restore a backup"
         default: return "Import a backup"
         }
@@ -298,6 +303,20 @@ struct ImportBackupScreen: View {
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
             }
+        case .peersPick:
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                Text(ServerArchive.peersIntro).font(FS.font.body()).foregroundColor(c.textMuted)
+                FSField(value: $vm.lostServer, label: "The lost server", placeholder: "home.you.flagship.services", error: vm.peerError)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .accessibilityIdentifier("restore-peers-lost")
+                FSPrimaryButton("Find its backup", block: true) { Task { await vm.findPeerBackup() } }
+                    .disabled(vm.lostServer.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .accessibilityIdentifier("restore-peers-find")
+            }
+        case .peersFinding:
+            HStack(spacing: FS.space.s2) { ProgressView(); Text("Looking for the backup…").foregroundColor(c.text) }
+                .accessibilityIdentifier("restore-peers-finding")
         case .passcode:
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 Text("This backup was made on another account. Enter its passcode to open it.")
@@ -360,7 +379,7 @@ struct ImportBackupScreen: View {
             .accessibilityIdentifier("import-backup-waiting")
         case .sending(let fqdn, let fraction):
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("Sending the backup to \(serverName(fqdn))…").foregroundColor(c.text)
+                Text(vm.fromPeers ? "\(serverName(fqdn)) is getting the backup from other servers…" : "Sending the backup to \(serverName(fqdn))…").foregroundColor(c.text)
                 ProgressView(value: fraction)
                 Text("Keep this screen open. If it stops, it picks up where it left off.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
@@ -399,7 +418,12 @@ struct ImportBackupScreen: View {
 
     @ViewBuilder
     private func summary(_ c: FSColors) -> some View {
-        if let s = vm.summary {
+        if vm.fromPeers, !vm.peerSummaryLines().isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(vm.peerSummaryLines(), id: \.self) { Text($0).font(FS.font.bodySm()).foregroundColor(c.textMuted) }
+            }
+            .accessibilityIdentifier("restore-peers-summary")
+        } else if let s = vm.summary {
             Text(s).font(FS.font.bodySm()).foregroundColor(c.textMuted)
         }
     }

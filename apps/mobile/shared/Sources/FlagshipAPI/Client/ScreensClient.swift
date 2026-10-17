@@ -225,6 +225,10 @@ public protocol ScreensClient: Sendable {
 
     func peerBackupStatus() async throws -> PeerBackupStatusResponse
     func peerBackupToggle(participate: Bool) async throws -> PeerBackupStatusResponse
+    /// A lost server's peer backup record, opened by this running server (docs/peer-backup.md).
+    func peerBackupRoot(_ req: PeerRestoreRequest) async throws -> PeerRootSummary
+    /// The waiting server fetches the backup's pieces from other servers.
+    func serverRestoreFromPeers(_ req: PeerRestoreRequest) async throws
 
     // P8 — browser-tab framebuffer stream. Opens a WS to
     // `/api/screens/browser-tabs/:tabId/stream` (with the session token
@@ -541,6 +545,12 @@ public extension ScreensClient {
     func boxActivity(limit: Int, before: Int?) async throws -> [BoxActivityEntry] { [] }
     func serverArchiveBundle(_ route: ServerArchiveRoute, offset: Int64) async throws -> Data {
         throw ScreensClientError.notImplemented("server backup")
+    }
+    func peerBackupRoot(_ req: PeerRestoreRequest) async throws -> PeerRootSummary {
+        throw ScreensClientError.notImplemented("peer backup")
+    }
+    func serverRestoreFromPeers(_ req: PeerRestoreRequest) async throws {
+        throw ScreensClientError.notImplemented("peer backup")
     }
     func savedBackups() async throws -> SavedBackupsView {
         throw ScreensClientError.notImplemented("saved backups")

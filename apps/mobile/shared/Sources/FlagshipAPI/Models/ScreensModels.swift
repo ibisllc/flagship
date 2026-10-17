@@ -1451,6 +1451,20 @@ public struct PeerBackupStatusResponse: Codable, Equatable, Sendable {
     public let shards: [PeerBackupShardSummary]
     public let repair: PeerBackupRepairStatus
     public let stats: PeerBackupStats
+    // The v2 screen (docs/peer-backup.md): the box also sends the v1 fields
+    // above, filled from these, so older readers keep working.
+    public var v: Int? = nil
+    /// `waiting-for-peers` | `filling` | `placing` | `protected` | `at-risk` | `leaving` | `off`
+    public var state: String? = nil
+    public var reason: String? = nil
+    public var totalBricks: Int? = nil
+    public var healthyBricks: Int? = nil
+    public var lastPlacedAt: Int64? = nil
+    public var archiveCreatedAt: Int64? = nil
+    /// When the newest backup's pieces stop being kept.
+    public var keepUntil: Int64? = nil
+    public var holderList: [PeerHolderRow]? = nil
+    public var hosting: PeerHostingView? = nil
 
     public init(
         participating: Bool,

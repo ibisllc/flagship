@@ -49,6 +49,30 @@ const BUILD: readonly Scenario[] = [
 
 const SERVER: readonly Scenario[] = [
   sweep(
+    "ios-sweep-restore-from-peers",
+    "Add/Import a server → Restore from other servers (-smoke-restore-from-peers): the lost server's record opens with the account key, the waiting server gets the backup from other servers and restores; the app that failed is named.",
+    "GymSweepServerTests/test_restoreFromOtherServersGetsTheBackupFromPeers",
+    ["home-add-server", "home-restore-from-peers", "restore-peers-find", "import-backup-send-existing"],
+    ["restore-peers-summary", "import-backup-restored", "import-backup-failed-app"],
+    "D2",
+  ),
+  sweep(
+    "ios-sweep-restore-from-peers-not-found",
+    "Restore from other servers for a server nobody holds pieces of: the box's sentence, 'No peer backup of that server was found.'",
+    "GymSweepServerTests/test_restoreFromOtherServersSaysWhenNothingIsFound",
+    ["home-add-server", "home-restore-from-peers", "restore-peers-find"],
+    ["restore-peers-lost"],
+    "D2",
+  ),
+  sweep(
+    "ios-sweep-peer-backup-v2",
+    "Settings → Peer backup (-smoke-peer-status): the state, the servers holding the pieces as Server 1..n with their last proof, and what this server keeps for others.",
+    "GymSweepServerTests/test_peerBackupPageShowsTheStateAndHolders",
+    [],
+    ["peer-backup-state-protected", "peer-backup-hosting"],
+    "D2",
+  ),
+  sweep(
     "ios-sweep-backups-app-full",
     "An app whose files folder is full (the mock's Wiki) is named on the server's Backups section with the sentence that new data is refused.",
     "GymSweepServerTests/test_aFullAppIsNamedOnTheBackupsSection",

@@ -795,7 +795,7 @@ public struct SettingsScreen: View {
     /// Backup-&-peers group (spec S1 group 4).
     private func backupPeersGroup(c: FSColors) -> some View {
         FSSettingsGroup("BACKUP & PEERS", rows: [
-            FSSettingsRow(icon: "externaldrive.connected.to.line.below.fill", title: "Peer-backup", subtitle: "Shard health across peers", action: onOpenPeerBackup),
+            FSSettingsRow(icon: "externaldrive.connected.to.line.below.fill", title: "Peer backup", subtitle: "Where the pieces of your backup are kept", action: onOpenPeerBackup),
         ])
     }
 

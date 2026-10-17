@@ -72,6 +72,7 @@ public struct HomeScreen: View {
     var onAddServer: () -> Void = {}
     /// "Import a backup" in the Add/Import chooser.
     var onImportBackup: () -> Void = {}
+    var onRestoreFromPeers: () -> Void = {}
     /// "Co-manage a running server": accept a server another account shares
     /// (docs/share-a-server.md), from the Add/Import chooser.
     var onCoManage: () -> Void = {}
@@ -142,6 +143,7 @@ public struct HomeScreen: View {
         onDeleteServer: @escaping (PodInfo) -> Void = { _ in },
         onAddServer: @escaping () -> Void = {},
         onImportBackup: @escaping () -> Void = {},
+        onRestoreFromPeers: @escaping () -> Void = {},
         onCoManage: @escaping () -> Void = {},
         onMakeLeader: @escaping (PodInfo) -> Void = { _ in },
         onReorder: @escaping ([String]) -> Void = { _ in },
@@ -175,6 +177,7 @@ public struct HomeScreen: View {
         self.onOpenPod = onOpenPod
         self.onAddServer = onAddServer
         self.onImportBackup = onImportBackup
+        self.onRestoreFromPeers = onRestoreFromPeers
         self.onCoManage = onCoManage
         self.onMakeLeader = onMakeLeader
         self.onReorder = onReorder
@@ -649,6 +652,8 @@ public struct HomeScreen: View {
                 .accessibilityIdentifier("home-co-manage")
             Button("Import a backup") { onImportBackup() }
                 .accessibilityIdentifier("home-import-backup")
+            Button("Restore from other servers") { onRestoreFromPeers() }
+                .accessibilityIdentifier("home-restore-from-peers")
             Button("Cancel", role: .cancel) {}
         }
     }

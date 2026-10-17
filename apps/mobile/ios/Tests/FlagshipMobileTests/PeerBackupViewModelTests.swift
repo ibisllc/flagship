@@ -7,8 +7,6 @@ import XCTest
 /// Mirrors the canonical webapp `views/peer-backup.js`:
 ///   - `peerBackupStatus()` returns a `PeerBackupStatusResponse` with
 ///     participating + the two peer lists + shards + repair + stats.
-///   - `peerBackupToggle(participate:)` re-returns the same shape with
-///     `participating` flipped.
 ///   - The VM exposes the response through a `LoadingState`; the screen
 ///     pivots on it.
 @MainActor
@@ -117,60 +115,58 @@ final class PeerBackupViewModelTests: XCTestCase {
         }
     }
 
-    // MARK: - toggle()
+    // MARK: - v2 screen
 
-    func test_toggle_fromUnenrolled_flipsToParticipating() async {
-        let client = makeClient()
-        let vm = PeerBackupViewModel(client: client)
-        await vm.load()
-        // default fixture is participating=false → toggle should send `true`
-        await vm.toggle()
-        XCTAssertEqual(client.togglePeerBackupCalls, [true])
-        guard case .loaded(let s) = vm.state else {
-            XCTFail("expected loaded, got \(vm.state)"); return
-        }
-        XCTAssertTrue(s.participating)
+    private func v2(state: String = "protected") -> PeerBackupStatusResponse {
+        let json = """
+        {"v":2,"state":"\(state)","reason":"","lastPlacedAt":1700000000000,"healthyBricks":6,"totalBricks":8,
+         "holders":2,"archiveId":null,"hostingBytes":0,"provenBytes":0,"poolBytes":0,"policy":"peer",
+         "archiveCreatedAt":1700000000000,"keepUntil":4102444800000,
+         "holderList":[{"label":"Server 1","state":"ok","lastProofAt":1700000001000,"bricks":4},
+                       {"label":"Server 2","state":"offline","lastProofAt":null,"bricks":4}],
+         "hosting":{"poolBytes":5368709120,"realBytes":2147483648,"fillerBytes":3221225472,"provenBytes":1073741824,"leases":3,"bricks":9,"reliability":88,"leaving":false},
+         "participating":true,"peersBackingYouUp":[],"peersYouBackUp":[],"shards":[],
+         "repair":{"state":"idle","lastTickMs":null,"queued":2,"completed24h":0},
+         "stats":{"total":8,"durable":6,"atRisk":2,"yourBytesStored":0,"peerBytesHosted":2147483648}}
+        """
+        return try! JSONDecoder().decode(PeerBackupStatusResponse.self, from: Data(json.utf8))
     }
 
-    func test_toggle_fromParticipating_flipsToUnenrolled() async {
+    func test_v2_decodesTheBoxScreenAndKeepsTheV1Fields() {
+        let s = v2()
+        XCTAssertEqual(s.v, 2)
+        XCTAssertEqual(s.state, "protected")
+        XCTAssertEqual(s.healthyBricks, 6)
+        XCTAssertEqual(s.holderList?.count, 2)
+        XCTAssertNil(s.holderList?[1].lastProofAt)
+        XCTAssertEqual(s.hosting?.reliability, 88)
+        XCTAssertTrue(s.participating)
+        XCTAssertEqual(s.stats.atRisk, 2)
+    }
+
+    func test_v2_holdersAreNeverNamedAndShowTheirProof() async {
+        let client = makeClient()
+        client.peerBackupStatusFixture = v2()
+        let vm = PeerBackupViewModel(client: client)
+        await vm.load()
+        XCTAssertFalse(vm.isOlderBox)
+        XCTAssertEqual(vm.holderRows.map(\.label), ["Server 1", "Server 2"])
+        XCTAssertTrue(vm.holderRows[0].line.hasPrefix("Answering · last proof "))
+        XCTAssertTrue(vm.holderRows[0].line.hasSuffix(" · 4 pieces"))
+        XCTAssertEqual(vm.holderRows[1].line, "Offline · no proof yet · 4 pieces")
+        XCTAssertTrue(vm.restoreByLine.hasPrefix("Restore by "))
+        XCTAssertEqual(vm.hostingLines.first, "Pool: 5.0 GB, of which 2.0 GB holds other servers' pieces and 3.0 GB is proof filler.")
+    }
+
+    func test_olderBoxIsNamedAsOlder() async {
         let client = makeClient()
         client.peerBackupStatusFixture = PeerBackupStatusResponse(
-            participating: true,
-            peersBackingYouUp: [], peersYouBackUp: [], shards: [],
-            repair: PeerBackupRepairStatus(state: "idle", lastTickMs: nil,
-                                           queued: 0, completed24h: 0, lastError: nil),
-            stats: PeerBackupStats(total: 0, durable: 0, atRisk: 0,
-                                   yourBytesStored: 0, peerBytesHosted: 0)
-        )
+            participating: false, peersBackingYouUp: [], peersYouBackUp: [], shards: [],
+            repair: PeerBackupRepairStatus(state: "idle", lastTickMs: nil, queued: 0, completed24h: 0, lastError: nil),
+            stats: PeerBackupStats(total: 0, durable: 0, atRisk: 0, yourBytesStored: 0, peerBytesHosted: 0))
         let vm = PeerBackupViewModel(client: client)
         await vm.load()
-        await vm.toggle()
-        XCTAssertEqual(client.togglePeerBackupCalls, [false])
-        guard case .loaded(let s) = vm.state else {
-            XCTFail("expected loaded, got \(vm.state)"); return
-        }
-        XCTAssertFalse(s.participating)
-    }
-
-    func test_toggle_beforeLoad_sendsTrue() async {
-        // No load() call first → state is .idle, so toggle defaults to next=true.
-        let client = makeClient()
-        let vm = PeerBackupViewModel(client: client)
-        await vm.toggle()
-        XCTAssertEqual(client.togglePeerBackupCalls, [true])
-    }
-
-    func test_toggle_failure_surfacesAsFailed() async {
-        let client = makeClient()
-        let vm = PeerBackupViewModel(client: client)
-        await vm.load()
-        client.shouldFail = true
-        await vm.toggle()
-        if case .failed = vm.state {
-            // expected
-        } else {
-            XCTFail("expected .failed, got \(vm.state)")
-        }
+        XCTAssertTrue(vm.isOlderBox)
     }
 
     // MARK: - Wire-shape codable round-trip

@@ -640,7 +640,7 @@
       "ref": "web",
       "surfaces": {
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/peerBackup.js", "flagship/peer-backup-key/v1"], ["apps/web/public/webapp/views/peer-backup.js", "peer-backup/status"], ["apps/web/public/webapp/views/import-backup.js", "openRestoreFromPeers"]] },
-        "ios": { "status": "missing", "reason": "iOS still has the pre-v2 PeerBackupScreen (pool toggle and shard list); the v2 status and Restore from other servers are not ported yet (C2, 2026-10-17)" },
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/PeerBackupKeys.swift", "flagship/peer-backup-key/v1"], ["apps/mobile/shared/Tests/FlagshipSharedTests/PeerBackupVectorTests.swift", "peer-backup/vectors.json"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/PeerBackupScreen.swift", "Servers holding your pieces"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift", "Restore from other servers"], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerArchiveViewModels.swift", "func findPeerBackup"]] },
         "android": { "status": "missing", "reason": "Android still has the pre-v2 PeerBackupScreen (pool toggle and shard list); the v2 status and Restore from other servers are not ported yet (C2, 2026-10-17)" }
       }
     }

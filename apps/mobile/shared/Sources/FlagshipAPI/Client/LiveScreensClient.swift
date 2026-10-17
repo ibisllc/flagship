@@ -445,6 +445,12 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func peerBackupStatus() async throws -> PeerBackupStatusResponse {
         try await request("/api/screens/peer-backup/status")
     }
+    public func peerBackupRoot(_ req: PeerRestoreRequest) async throws -> PeerRootSummary {
+        try await request("/api/screens/peer-backup/root", method: "POST", body: try JSONEncoder().encode(req))
+    }
+    public func serverRestoreFromPeers(_ req: PeerRestoreRequest) async throws {
+        _ = try await requestData("/api/screens/server-restore/from-peers", method: "POST", body: try JSONEncoder().encode(req), timeout: 60)
+    }
     public func peerBackupToggle(participate: Bool) async throws -> PeerBackupStatusResponse {
         let body = try JSONEncoder().encode(PeerBackupToggleRequest(participate: participate))
         return try await request("/api/screens/peer-backup/toggle", method: "POST", body: body)

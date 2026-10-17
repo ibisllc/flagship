@@ -32,6 +32,9 @@ public enum HomeRoute: Hashable, Sendable {
     /// Import a backup onto a new server, or send it to a server waiting for
     /// it (docs/server-backup-and-clone.md).
     case importBackup(targetFqdn: String?)
+    /// Restore a lost server from the pieces other servers keep
+    /// (docs/peer-backup.md): Add/Import a server → Restore from other servers.
+    case restoreFromPeers
 
     public var builderLink: String? {
         if case .provisionServerForBuilder(let link) = self { return link }
@@ -43,7 +46,7 @@ public enum HomeRoute: Hashable, Sendable {
     /// open them.
     public var addsServerToAccount: Bool {
         switch self {
-        case .provisionServer, .provisionServerForBuilder, .transferAcquirer, .acceptShare, .importBackup: return true
+        case .provisionServer, .provisionServerForBuilder, .transferAcquirer, .acceptShare, .importBackup, .restoreFromPeers: return true
         case .serverDetail, .installProgress, .sharedServer, .sharedApp: return false
         }
     }

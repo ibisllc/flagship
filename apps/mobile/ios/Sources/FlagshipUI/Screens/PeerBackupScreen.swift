@@ -2,10 +2,11 @@ import SwiftUI
 import FlagshipAPI
 import FlagshipCore
 
-/// P9 — peer-backup management. Mirrors the canonical webapp
-/// `views/peer-backup.js`: participation toggle + the two peer lists
-/// (peers backing you up / peers you back up) + shard health stats +
-/// repair status.
+/// Peer backup between accounts (docs/peer-backup.md), v2. Mirrors the
+/// webapp's `views/peer-backup.js`: the state and the newest backup's pieces,
+/// the servers holding them as "Server 1..n" (never named) with their last
+/// proof, and what this server keeps for others. Peer backup is a policy,
+/// chosen in the server's Backups section; this page only shows how it goes.
 public struct PeerBackupScreen: View {
     @Environment(\.colorScheme) private var scheme
     @State private var vm: PeerBackupViewModel
@@ -24,12 +25,14 @@ public struct PeerBackupScreen: View {
                 case .failed(let msg):
                     ErrorCard(message: msg)
                 case .loaded(let s):
-                    participationCard(s, c: c)
-                    statsSection(s.stats, c: c)
-                    peersBackingYouUpSection(s.peersBackingYouUp, c: c)
-                    peersYouBackUpSection(s.peersYouBackUp, c: c)
-                    if !s.shards.isEmpty { shardsSection(s.shards, c: c) }
-                    repairSection(s.repair, c: c)
+                    if vm.isOlderBox {
+                        placeholderCard("This server runs an older peer backup. Update the server to see its new status here.", c: c)
+                            .accessibilityIdentifier("peer-backup-older")
+                    } else {
+                        stateCard(s, c: c)
+                        holdersSection(c: c)
+                        hostingSection(s, c: c)
+                    }
                 }
                 Spacer().frame(height: FS.space.s12)
             }
@@ -37,7 +40,7 @@ public struct PeerBackupScreen: View {
             .padding(.top, FS.space.s4)
         }
         .background(c.bg.ignoresSafeArea())
-        .navigationTitle("Peer-backup")
+        .navigationTitle("Peer backup")
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await vm.load() }
         .task {
@@ -45,177 +48,82 @@ public struct PeerBackupScreen: View {
         }
     }
 
-    // MARK: - Sections
+    private func pillKind(_ state: String?) -> FSPillKind {
+        switch state {
+        case "protected": return .online
+        case "at-risk": return .offline
+        case "waiting-for-peers", "filling", "placing", "leaving": return .renewing
+        default: return .idle
+        }
+    }
 
-    private func participationCard(_ s: PeerBackupStatusResponse, c: FSColors) -> some View {
+    private func stateCard(_ s: PeerBackupStatusResponse, c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 8) {
-                            Text("Peer-backup pool")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(c.text)
-                            FSPill(
-                                s.participating ? "participating" : "unenrolled",
-                                kind: s.participating ? .online : .idle
-                            )
-                            .accessibilityIdentifier("peer-backup-participation-pill")
-                        }
-                        Text(s.participating
-                             ? "You host shards for peers and they host yours. Opt out to leave the pool."
-                             : "You're not in the peer-backup pool — enable to get started.")
-                            .font(FS.font.caption())
-                            .foregroundColor(c.textMuted)
-                    }
-                    Spacer()
-                }
-                Toggle(isOn: Binding(
-                    get: { s.participating },
-                    set: { _ in Task { await vm.toggle() } }
-                )) {
-                    Text(s.participating ? "Participating" : "Off")
-                        .font(FS.font.bodySm())
+                HStack(spacing: 8) {
+                    Text(PeerBackupText.stateTitle(s.state))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(c.text)
+                    FSPill(s.state ?? "", kind: pillKind(s.state))
                 }
-                .tint(c.primary)
-                .disabled(vm.togglePending)
-                .accessibilityIdentifier("peer-backup-toggle")
+                Text(PeerBackupText.stateNote(s.state)).font(FS.font.caption()).foregroundColor(c.textMuted)
+                if let r = s.reason, !r.isEmpty {
+                    Text(r).font(FS.font.caption()).foregroundColor(c.textMuted)
+                }
+                if let total = s.totalBricks, total > 0 {
+                    row("pieces safe", "\(s.healthyBricks ?? 0) of \(total)", c: c)
+                }
+                if let placed = s.lastPlacedAt, placed > 0 {
+                    row("last placed", PeerBackupViewModel.formatTime(placed), c: c)
+                }
+                if !vm.restoreByLine.isEmpty {
+                    Text(vm.restoreByLine).font(FS.font.caption()).foregroundColor(c.textMuted)
+                }
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("peer-backup-state-\(s.state ?? "")")
     }
 
     @ViewBuilder
-    private func statsSection(_ stats: PeerBackupStats, c: FSColors) -> some View {
-        sectionHeader("Shard health", c: c)
-        FSCard {
-            VStack(spacing: FS.space.s2) {
-                row("total shards", "\(stats.total)", c: c)
-                row("durable", "\(stats.durable)", c: c)
-                row("at risk", "\(stats.atRisk)", c: c)
-                row("your bytes stored", fmtBytes(stats.yourBytesStored), c: c)
-                row("peer bytes hosted", fmtBytes(stats.peerBytesHosted), c: c)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func peersBackingYouUpSection(_ peers: [PeerBackupPeerHostingYou], c: FSColors) -> some View {
-        sectionHeader("Peers backing you up", c: c)
-        if peers.isEmpty {
-            placeholderCard("No peers backing you up yet — repair daemon will recruit some next tick.", c: c)
+    private func holdersSection(c: FSColors) -> some View {
+        Text("Servers holding your pieces").font(FS.font.h3()).foregroundColor(c.text)
+        if vm.holderRows.isEmpty {
+            placeholderCard("None yet. Pieces are placed once your newest backup is ready and enough other servers can hold it.", c: c)
         } else {
             VStack(spacing: FS.space.s3) {
-                ForEach(peers) { p in
-                    FSCard {
-                        HStack(alignment: .top) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(p.peerFqdn)
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .foregroundColor(c.text)
-                                HStack(spacing: 6) {
-                                    Text("\(p.shardsHosted) shard\(p.shardsHosted == 1 ? "" : "s")")
-                                    Text("·").foregroundColor(c.textMuted)
-                                    Text("last seen \(fmtDate(p.lastSeenMs))")
-                                }
-                                .font(FS.font.caption())
-                                .foregroundColor(c.textMuted)
-                            }
-                            Spacer()
-                            FSPill(p.online ? "online" : "offline",
-                                   kind: p.online ? .online : .offline)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func peersYouBackUpSection(_ peers: [PeerBackupPeerYouHost], c: FSColors) -> some View {
-        sectionHeader("Peers you back up", c: c)
-        if peers.isEmpty {
-            placeholderCard("Not hosting any peer shards yet — matchmaker hasn't paired you with anyone yet.", c: c)
-        } else {
-            VStack(spacing: FS.space.s3) {
-                ForEach(peers) { p in
+                ForEach(Array(vm.holderRows.enumerated()), id: \.offset) { i, h in
                     FSCard {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(p.peerFqdn)
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(c.text)
-                            HStack(spacing: 6) {
-                                Text("hosting \(p.shardsHosted) shard\(p.shardsHosted == 1 ? "" : "s")")
-                                Text("·").foregroundColor(c.textMuted)
-                                Text(fmtBytes(p.bytesHosted))
-                                Text("·").foregroundColor(c.textMuted)
-                                Text("last fetched \(fmtDate(p.lastFetchedMs))")
-                            }
-                            .font(FS.font.caption())
-                            .foregroundColor(c.textMuted)
+                            Text(h.label).font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
+                            Text(h.line).font(FS.font.caption()).foregroundColor(c.textMuted)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("peer-backup-holder-\(i)")
                 }
             }
         }
     }
 
     @ViewBuilder
-    private func shardsSection(_ shards: [PeerBackupShardSummary], c: FSColors) -> some View {
-        sectionHeader("Your shards", c: c)
-        VStack(spacing: FS.space.s3) {
-            ForEach(shards.prefix(20)) { s in
-                FSCard {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(s.shardId)
-                                .font(FS.font.mono())
-                                .foregroundColor(c.text)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            HStack(spacing: 6) {
-                                Text("\(s.replicas)/\(s.minReplicas) replicas")
-                                Text("·").foregroundColor(c.textMuted)
-                                Text(fmtBytes(s.bytes))
-                            }
-                            .font(FS.font.caption())
-                            .foregroundColor(c.textMuted)
-                        }
-                        Spacer()
-                        FSPill(shardPillLabel(s), kind: shardPillKind(s))
+    private func hostingSection(_ s: PeerBackupStatusResponse, c: FSColors) -> some View {
+        if !vm.hostingLines.isEmpty {
+            Text("Kept for other servers").font(FS.font.h3()).foregroundColor(c.text)
+            FSCard {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(vm.hostingLines, id: \.self) { Text($0).font(FS.font.bodySm()).foregroundColor(c.textMuted) }
+                    if let r = s.hosting?.reliability {
+                        Text("Reliability score: \(r == r.rounded() ? String(Int(r)) : String(r)) of 100")
+                            .font(FS.font.caption()).foregroundColor(c.textMuted)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            if shards.count > 20 {
-                placeholderCard("+ \(shards.count - 20) more shards (not rendered)", c: c)
-            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("peer-backup-hosting")
         }
-    }
-
-    @ViewBuilder
-    private func repairSection(_ repair: PeerBackupRepairStatus, c: FSColors) -> some View {
-        sectionHeader("Repair status", c: c)
-        FSCard {
-            VStack(spacing: FS.space.s2) {
-                row("state", repair.state, c: c)
-                row("last tick", repair.lastTickMs.map(fmtDate) ?? "—", c: c)
-                row("repairs queued", "\(repair.queued)", c: c)
-                row("repairs done (24h)", "\(repair.completed24h)", c: c)
-                if let err = repair.lastError, !err.isEmpty {
-                    HStack {
-                        Text("last error").foregroundColor(c.textMuted)
-                        Spacer()
-                        Text(err).foregroundColor(c.danger)
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Bits
-
-    private func sectionHeader(_ title: String, c: FSColors) -> some View {
-        Text(title).font(FS.font.h3()).foregroundColor(c.text)
     }
 
     private func placeholderCard(_ text: String, c: FSColors) -> some View {
@@ -228,36 +136,5 @@ public struct PeerBackupScreen: View {
             Spacer()
             Text(value).foregroundColor(c.text)
         }
-    }
-
-    private func shardPillLabel(_ s: PeerBackupShardSummary) -> String {
-        if s.replicas >= s.minReplicas * 2 { return "redundant" }
-        if s.replicas >= s.minReplicas { return "durable" }
-        if s.replicas > 0 { return "at risk" }
-        return "lost"
-    }
-
-    private func shardPillKind(_ s: PeerBackupShardSummary) -> FSPillKind {
-        if s.replicas >= s.minReplicas { return .online }
-        if s.replicas > 0 { return .renewing }
-        return .offline
-    }
-
-    private func fmtDate(_ ms: Int64) -> String {
-        if ms <= 0 { return "—" }
-        let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
-        let fmt = DateFormatter()
-        fmt.dateStyle = .short
-        fmt.timeStyle = .short
-        return fmt.string(from: date)
-    }
-
-    private func fmtBytes(_ n: Int64) -> String {
-        if n <= 0 { return "0 B" }
-        let d = Double(n)
-        if d < 1024 { return "\(n) B" }
-        if d < 1024 * 1024 { return String(format: "%.1f KiB", d / 1024) }
-        if d < 1024 * 1024 * 1024 { return String(format: "%.1f MiB", d / 1024 / 1024) }
-        return String(format: "%.2f GiB", d / 1024 / 1024 / 1024)
     }
 }

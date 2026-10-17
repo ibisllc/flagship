@@ -1371,8 +1371,33 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         restoreCommits.append(req)
     }
+    /// The lost server's peer record this box opens, and what it was asked.
+    public var peerRootFixture: PeerRootSummary?
+    public private(set) var peerRootRequests: [PeerRestoreRequest] = []
+    public private(set) var peerRestoreRequests: [PeerRestoreRequest] = []
+    /// The next `peer-backup/root` or `from-peers` fails with this sentence (the box's own).
+    public var peerFailure: String?
+    public func peerBackupRoot(_ req: PeerRestoreRequest) async throws -> PeerRootSummary {
+        try await tick()
+        peerRootRequests.append(req)
+        guard let r = peerRootFixture, r.serverId == req.serverId else {
+            throw Self.refusal(404, "no peer backup of that server was found")
+        }
+        return r
+    }
+    public func serverRestoreFromPeers(_ req: PeerRestoreRequest) async throws {
+        try await tick()
+        if let why = peerFailure { throw Self.refusal(409, why) }
+        peerRestoreRequests.append(req)
+        if let r = peerRootFixture { restoreStarts.append(ServerRestoreStartRequest(archiveId: r.archive.archiveId, bytes: r.archive.bytes)) }
+    }
     public func serverRestoreStatus() async throws -> ServerRestoreStatusResponse {
         try await tick()
+        if restoreCommits.isEmpty, !peerRestoreRequests.isEmpty, let s = restoreStarts.last {
+            return ServerRestoreStatusResponse(
+                waiting: restoreWaiting,
+                restore: ServerRestoreStatus(archiveId: s.archiveId, state: "ready", bytes: s.bytes, received: s.bytes, apps: [], reason: nil))
+        }
         guard let id = restoreStarts.last?.archiveId, !restoreCommits.isEmpty else {
             return ServerRestoreStatusResponse(waiting: restoreWaiting, restore: nil)
         }

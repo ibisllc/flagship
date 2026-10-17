@@ -159,6 +159,7 @@ public struct HomeTab: View {
                     },
                     onAddServer: { path.append(.provisionServer) },
                     onImportBackup: { path.append(.importBackup(targetFqdn: nil)) },
+                    onRestoreFromPeers: { path.append(.restoreFromPeers) },
                     onCoManage: { path.append(.acceptShare(shareId: nil, secretHex: nil)) },
                     onMakeLeader: { pod in
                         Task { await saveServerOrder { await $0.makeLeader(podId: pod.podId) } }
@@ -394,6 +395,15 @@ public struct HomeTab: View {
                                onLeft: { path.removeAll() })
         case .sharedApp(let shareId, let serviceId):
             SharedAppScreen(shareId: shareId, serviceId: serviceId)
+        case .restoreFromPeers:
+            ImportBackupContainer(
+                targetFqdn: nil,
+                fromPeers: true,
+                onServerCreated: { serverDomain, serial, name in
+                    addPendingPod(name: name, description: "", fqdn: serverDomain, serial: serial, navigateHome: false)
+                },
+                onClose: { path.removeAll() }
+            )
         case .importBackup(let targetFqdn):
             ImportBackupContainer(
                 targetFqdn: targetFqdn,

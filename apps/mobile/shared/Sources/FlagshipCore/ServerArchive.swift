@@ -15,6 +15,10 @@ public enum ServerArchive {
         "You'll need this passcode to import the backup into an account that isn't yours. Your own account opens it without the passcode."
     public static let passcodeNote =
         "Anyone with the file and this passcode can restore the backup, on any account, so keep it somewhere safe and apart from the file. It can't be reset."
+    public static let peersIntro =
+        "Your lost server's newest backup is kept in pieces on other Flagship servers. Name the lost server "
+        + "and this phone gets the pieces back, with nothing from the lost server itself. You choose a name for the new one; "
+        + "everything else comes from the backup."
     public static let importIntro =
         "Pick the backup's .flagship file from wherever you keep it. "
         + "You choose a name; everything else comes from the backup. Then set up the new server as usual, "

@@ -248,6 +248,65 @@ final class GymSweepServerTests: GymSweepCase {
             .waitForExistence(timeout: 3), "Home shows the server as normal once the restore is done.")
     }
 
+    // Restore from other servers: the lost server's backup comes back from the
+    // pieces other servers keep; every app is tried and the failed one is named.
+    func test_restoreFromOtherServersGetsTheBackupFromPeers() throws {
+        let app = launch(tab: "home", admin: true, ["-smoke-restore-from-peers"])
+        let add = app.buttons["home-add-server"]
+        XCTAssertTrue(add.waitForExistence(timeout: 20))
+        add.tap()
+        let door = app.buttons.matching(identifier: "home-restore-from-peers").firstMatch
+        XCTAssertTrue(door.waitForExistence(timeout: 10), "Add/Import a server offers Restore from other servers.")
+        door.tap()
+        let lost = app.textFields["restore-peers-lost"]
+        XCTAssertTrue(lost.waitForExistence(timeout: 10))
+        lost.tap()
+        lost.typeText("lost.bright-maple.flagship.services")
+        app.buttons["restore-peers-find"].tap()
+        let summary = any(app, "restore-peers-summary")
+        XCTAssertTrue(summary.waitForExistence(timeout: 30), "The lost server's record opens with the account key.")
+        shot(app, "restore-peers-found")
+        let send = app.buttons["import-backup-send-existing"]
+        XCTAssertTrue(send.waitForExistence(timeout: 10))
+        send.tap()
+        let restored = any(app, "import-backup-restored")
+        XCTAssertTrue(restored.waitForExistence(timeout: 60), "The restore ends.")
+        XCTAssertEqual(restored.label, "Restored 1 app")
+        XCTAssertEqual(any(app, "import-backup-failed-app").label, "Couldn't restore: Notes: its image didn't build")
+        shot(app, "restore-peers-done")
+    }
+
+    // A server that holds nothing of the lost one's: the record isn't found, in words.
+    func test_restoreFromOtherServersSaysWhenNothingIsFound() throws {
+        let app = launch(tab: "home", admin: true, ["-smoke-restore-from-peers"])
+        let add = app.buttons["home-add-server"]
+        XCTAssertTrue(add.waitForExistence(timeout: 20))
+        add.tap()
+        app.buttons.matching(identifier: "home-restore-from-peers").firstMatch.tap()
+        let lost = app.textFields["restore-peers-lost"]
+        XCTAssertTrue(lost.waitForExistence(timeout: 10))
+        lost.tap()
+        lost.typeText("nobody.bright-maple.flagship.services")
+        app.buttons["restore-peers-find"].tap()
+        XCTAssertTrue(app.staticTexts["No peer backup of that server was found."].waitForExistence(timeout: 30)
+                      || app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'No peer backup'")).firstMatch.waitForExistence(timeout: 5))
+        shot(app, "restore-peers-not-found")
+    }
+
+    // The v2 peer-backup page: state, the servers holding the pieces (never named), what this one keeps.
+    func test_peerBackupPageShowsTheStateAndHolders() throws {
+        let app = launch(tab: "settings", admin: true, ["-smoke-peer-status"])
+        let row = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Peer backup'")).firstMatch
+        XCTAssertTrue(reveal(app, row), "Settings lists Peer backup.")
+        row.tap()
+        XCTAssertTrue(any(app, "peer-backup-state-protected").waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Server 1"].waitForExistence(timeout: 5), "Holders are Server 1..n, never named.")
+        XCTAssertTrue(app.staticTexts["Server 2"].exists)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Offline · no proof yet'")).firstMatch.exists)
+        XCTAssertTrue(reveal(app, any(app, "peer-backup-hosting")))
+        shot(app, "peer-backup-v2")
+    }
+
     // Import refuses a cut-short .flagship file with the sentence.
     func test_importRefusesACutShortFile() throws {
         let app = launch(tab: "home", admin: true, ["-smoke-restore-damaged"])

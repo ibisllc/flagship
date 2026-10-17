@@ -223,6 +223,10 @@ public final class ImportBackupViewModel {
     public enum Phase: Equatable {
         /// Pick the files (and say which one is still missing).
         case pick
+        /// Restore from other servers: name the lost server.
+        case peersPick
+        /// Looking for the lost server's record and opening it.
+        case peersFinding
         /// The account key didn't open it: ask for the passcode.
         case passcode
         case opening
@@ -258,6 +262,16 @@ public final class ImportBackupViewModel {
     public var name = ""
     public private(set) var createTarget: CreateTarget?
     public let targetFqdn: String?
+    /// Restore from other servers (docs/peer-backup.md): the lost server's
+    /// backup comes back from the pieces other accounts' servers keep.
+    public let fromPeers: Bool
+    public var lostServer = ""
+    public private(set) var peerRoot: PeerRootSummary?
+    public private(set) var peerError: String?
+    private var peerPbkHex: String?
+    private let helperServers: [String]
+    private let umkSeed: @Sendable () async throws -> Data
+    private let sealedRootFromCom: @Sendable (String) async throws -> PeerSealedRoot
 
     private let username: String
     private let takenNames: Set<String>
@@ -284,6 +298,10 @@ public final class ImportBackupViewModel {
         takenNames: Set<String>,
         waitingServers: [String: String] = [:],
         targetFqdn: String? = nil,
+        fromPeers: Bool = false,
+        helperServers: [String] = [],
+        umkSeed: (@Sendable () async throws -> Data)? = nil,
+        sealedRootFromCom: (@Sendable (String) async throws -> PeerSealedRoot)? = nil,
         clients: PodScreensClientFactory,
         accountKek: (@Sendable (String) async throws -> Data)? = nil,
         openWithPasscode: (@Sendable (ServerBackupFormat.File, String) async throws -> ServerBackupFormat.Opened)? = nil,
@@ -294,6 +312,17 @@ public final class ImportBackupViewModel {
         self.takenNames = Set(takenNames.map { $0.lowercased() })
         self.waitingServers = waitingServers
         self.targetFqdn = targetFqdn?.lowercased()
+        self.fromPeers = fromPeers
+        self.helperServers = helperServers.map { $0.lowercased() }
+        self.umkSeed = umkSeed ?? {
+            #if DEBUG
+            if let seed = GymSeams.accountRootSeed { return seed }
+            #endif
+            let umk = try await Keystore.currentUMK(reason: "Find the backup of your lost server")
+            return umk.withUnsafeBytes { Data($0) }
+        }
+        self.sealedRootFromCom = sealedRootFromCom ?? { id in try await PeerRootFromCom.fetch(serverId: id) }
+        self.phase = fromPeers ? .peersPick : .pick
         self.clients = clients
         self.accountKek = accountKek ?? { id in
             try await Keystore.deriveServerArchiveKey(archiveId: id, reason: "Open the backup")
@@ -366,6 +395,71 @@ public final class ImportBackupViewModel {
             }
         }
         await checkData()
+    }
+
+    // MARK: Restore from other servers
+
+    /// Find the lost server's record (a running server of the account opens it,
+    /// else this device reads the sealed record from .com and opens it itself),
+    /// open the backup's account slot, and go on to the name step.
+    public func findPeerBackup() async {
+        guard fromPeers, phase == .peersPick else { return }
+        peerError = nil
+        phase = .peersFinding
+        do {
+            let lost = try PeerBackupKeys.normalized(lostServer)
+            let seed = try await umkSeed()
+            let pbk = try PeerBackupKeys.pbk(umkSeed: seed, serverId: lost)
+            let pbkHex = HexUtil.encode(pbk)
+            var root: PeerRootSummary?
+            for helper in helperServers where helper != lost {
+                let c = await clients.client(forFqdn: helper)
+                if let r = try? await c.peerBackupRoot(PeerRestoreRequest(serverId: lost, pbkHex: pbkHex)) { root = r; break }
+            }
+            if root == nil {
+                root = try PeerBackupKeys.openSealedRoot(try await sealedRootFromCom(lost), pbk: pbk, serverId: lost)
+            }
+            guard let root, !root.archive.backupFile.isEmpty else { throw PeerError.notFound }
+            let file = try ServerBackupFormat.parse(Data(root.archive.backupFile.utf8))
+            guard let key = try? await accountKek(file.archiveId),
+                  let o = try ServerBackupFormat.openWithAccountKey(file, kek: key)
+            else { throw PeerError.cannotOpen }
+            guard file.archiveId == root.archive.archiveId, o.body.data.bytes == root.archive.bytes,
+                  o.body.data.sha256 == root.archive.sha256
+            else { throw PeerError.mismatch }
+            self.file = file
+            opened = o
+            peerRoot = root
+            peerPbkHex = pbkHex
+            if let fqdn = targetFqdn ?? waitingServers[file.archiveId] {
+                phase = .chooseTarget(fqdn: fqdn)
+            } else {
+                showName()
+            }
+        } catch {
+            peerError = Self.message(error)
+            phase = .peersPick
+        }
+    }
+
+    /// The card once the record is found: what it holds and who keeps it.
+    public func peerSummaryLines(formatTime: (Int64) -> String = { Date(timeIntervalSince1970: Double($0) / 1000).formatted(date: .abbreviated, time: .shortened) },
+                                 now: Int64 = Int64(Date().timeIntervalSince1970 * 1000)) -> [String] {
+        guard let r = peerRoot else { return [] }
+        var out = PeerBackupText.rootLines(r, now: now, formatTime: formatTime)
+        if let apps = opened?.body.apps.map(\.name), !apps.isEmpty { out.append("Apps: \(apps.joined(separator: ", "))") }
+        return out
+    }
+
+    enum PeerError: Error, LocalizedError {
+        case notFound, cannotOpen, mismatch
+        var errorDescription: String? {
+            switch self {
+            case .notFound: return "No peer backup of that server was found."
+            case .cannotOpen: return "This backup can't be opened with this account's key."
+            case .mismatch: return "The backup record doesn't match its file. Nothing was restored."
+            }
+        }
     }
 
     /// Open with the passcode the user typed.
@@ -506,7 +600,9 @@ public final class ImportBackupViewModel {
     }
 
     private func run(_ fqdn: String) async {
-        guard let opened, let bundleURL, let layout else { return }
+        guard let opened else { return }
+        let peerLost = fromPeers ? peerRoot?.serverId : nil
+        guard peerLost != nil || (bundleURL != nil && layout != nil) else { return }
         let c = await clients.client(forFqdn: fqdn)
         do {
             // Wait for the server to come online, pair with this device, and say
@@ -516,7 +612,11 @@ public final class ImportBackupViewModel {
                 if let st = try? await c.serverRestoreStatus() {
                     if st.waiting?.archiveId == opened.file.archiveId {
                         if let r = st.restore, ["checking", "restoring"].contains(r.state) { break }
-                        try await upload(c, fqdn: fqdn, url: bundleURL, layout: layout, opened: opened)
+                        if let lost = peerLost, let pbkHex = peerPbkHex {
+                            try await fetchFromPeers(c, fqdn: fqdn, lost: lost, pbkHex: pbkHex, bytes: opened.body.data.bytes)
+                        } else if let bundleURL, let layout {
+                            try await upload(c, fqdn: fqdn, url: bundleURL, layout: layout, opened: opened)
+                        }
                         try await c.serverRestoreCommit(ServerRestoreCommitRequest(key: HexUtil.encode(opened.contentKey)))
                         break
                     }
@@ -546,6 +646,22 @@ public final class ImportBackupViewModel {
             return
         } catch {
             setPhase(.failed(message: Self.message(error), keepsWaiting: true))
+        }
+    }
+
+    /// The waiting server fetches the pieces; wait until it holds the whole data file.
+    private func fetchFromPeers(_ c: any ScreensClient, fqdn: String, lost: String, pbkHex: String, bytes: Int64) async throws {
+        try await c.serverRestoreFromPeers(PeerRestoreRequest(serverId: lost, pbkHex: pbkHex))
+        while true {
+            try Task.checkCancellation()
+            let st = try await c.serverRestoreStatus()
+            guard let r = st.restore else { throw ImportError.vanished }
+            if let why = r.reason, ["uploading", "failed"].contains(r.state) {
+                throw ImportError.failed(why.trimmingCharacters(in: CharacterSet(charactersIn: ". ")))
+            }
+            if ["ready", "checking", "restoring", "done"].contains(r.state) { return }
+            setPhase(.sending(fqdn: fqdn, fraction: Double(r.received) / Double(max(bytes, 1))))
+            try await Task.sleep(nanoseconds: min(pollNs, 2_000_000_000))
         }
     }
 
@@ -616,6 +732,9 @@ public final class ImportBackupViewModel {
 
     static func message(_ error: Error) -> String {
         if let e = error as? ImportError { return e.errorDescription ?? "The restore failed." }
+        if error is PeerError || error is PeerBackupKeys.Failure || error is PeerRootFromCom.PeerComError,
+           let d = (error as? LocalizedError)?.errorDescription { return d }
+        if let e = error as? ServerBackupFormat.FormatError, let d = e.errorDescription { return d }
         return ScreensClientError.userFacing(error)
     }
 }
@@ -672,6 +791,35 @@ public final class BackupDownloadApprovalViewModel {
             phase = .approved
         } catch {
             phase = .failed(ScreensClientError.userFacing(error))
+        }
+    }
+}
+
+/// With no running server of the account to ask, this device reads the lost
+/// server's sealed peer record from `.com` itself (it is public, and sealed
+/// under a key only the account has).
+enum PeerRootFromCom {
+    static func fetch(serverId: String) async throws -> PeerSealedRoot {
+        var comps = URLComponents()
+        comps.scheme = "https"
+        comps.host = Endpoints.controlHost
+        comps.path = "/api/peer-backup/root/\(serverId)"
+        guard let url = comps.url else { throw ImportBackupViewModel.PeerError.notFound }
+        let (data, resp) = try await URLSession.shared.data(from: url)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 404 { throw ImportBackupViewModel.PeerError.notFound }
+        if status == 503 { throw PeerComError.notSetUp }
+        guard (200..<300).contains(status) else { throw PeerComError.unreachable }
+        return try JSONDecoder().decode(PeerSealedRoot.self, from: data)
+    }
+
+    enum PeerComError: Error, LocalizedError {
+        case notSetUp, unreachable
+        var errorDescription: String? {
+            switch self {
+            case .notSetUp: return "Peer backup between accounts isn't set up on this server yet."
+            case .unreachable: return "Couldn't reach the peer backup record. Try again in a moment."
+            }
         }
     }
 }
