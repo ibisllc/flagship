@@ -23,7 +23,6 @@ import {
   mock,
   reachHome,
   freshUnlock,
-  PASSPHRASE,
   sensitive,
   serverDetail,
   shot,
