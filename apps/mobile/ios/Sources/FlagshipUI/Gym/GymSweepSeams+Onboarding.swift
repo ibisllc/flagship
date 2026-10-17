@@ -9,23 +9,23 @@ extension GymSweepSeams {
     public static let gymFriendServer = "home.trent.flagship.services"
     public static let gymFriendApp = "trent--scratchpad"
 
-    nonisolated(unsafe) private static var visitorOwnersCleared = false
-
     /// Deep-link seams for GymSweepOnboardingTests (`-smoke-mode`).
     ///
     /// `-smoke-visitor`: the mock box names the keys a visitor may sign
     /// with (the per-app ids, the account id, this device's account key) and
     /// checks each redeem / acceptance / knock signature, so the probe says
-    /// which key signed. Clears remembered invite owners first, so a knock
+    /// which key signed. Clears remembered invite owners at the start of each scenario (`-smoke-run-id`), so a knock
     /// on the friend's box knows its owner only from this run's redeem.
     /// `-smoke-invite-manual`: the redeem needs the owner's approval.
     static func onboarding(_ args: [String], _ app: AppState, _ mocks: GymMocks) {
         guard args.contains("-smoke-visitor"), let seed = GymSeams.accountRootSeed else { return }
-        // Once per launch: the shell's onAppear runs this again when a cover
-        // closes, which would forget the owner the redeem just remembered.
-        if !visitorOwnersCleared {
+        // Once per scenario: opening a link can start the app again with the
+        // same arguments, which must keep the owner the redeem just remembered.
+        let runKey = "gym.visitorRunId"
+        let runId = value(args, "-smoke-run-id") ?? ""
+        if UserDefaults.standard.string(forKey: runKey) != runId {
             UserDefaults.standard.removeObject(forKey: "flagship.inviteOwners.v1")
-            visitorOwnersCleared = true
+            UserDefaults.standard.set(runId, forKey: runKey)
         }
         var labels: [String: String] = [:]
         for ref in [gymFriendApp, "bright-maple--plants"] {

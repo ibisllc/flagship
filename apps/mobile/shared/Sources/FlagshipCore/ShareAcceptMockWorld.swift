@@ -55,7 +55,7 @@ public final class ShareAcceptMockWorld: ServerShareTransport, @unchecked Sendab
         return (status, ["error": error, "code": code])
     }
 
-    private func attestation() -> [String: Any] {
+    public func attestation() -> [String: Any] {
         let now = ServerShareClock.nowMs()
         return AccountKeyAttestation(keyKind: .adminRoot, keyPubHex: HexUtil.encode(accountAdminPub),
                                      issuedAt: now - 1000, expiresAt: now + 14 * 86_400_000,

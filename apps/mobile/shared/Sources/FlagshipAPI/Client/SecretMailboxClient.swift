@@ -1096,6 +1096,11 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
 public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Sendable {
     public var pending: [PendingSecretRequest] = []
     public var directory: [PodDirectoryEntry] = []
+    /// Servers their owner deleted: `.com` leaves them out of `/pods`.
+    public var deletedDomains: Set<String> = []
+    private var visibleDirectory: [PodDirectoryEntry] {
+        directory.filter { !deletedDomains.contains($0.serverDomain.lowercased()) }
+    }
     /// #56 — active outstanding orders the merged `/pods` fetch returns.
     public var directoryPending: [PendingPodEntry] = []
     /// The `serverOrder` `fetchPods` returns.
@@ -1120,7 +1125,7 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     }
     public func fetchPods(username: String) async throws -> PodsDirectoryResponse {
         GymProbe.note("read pods")
-        return PodsDirectoryResponse(username: username, pods: directory, pending: directoryPending, serverOrder: directoryServerOrder)
+        return PodsDirectoryResponse(username: username, pods: visibleDirectory, pending: directoryPending, serverOrder: directoryServerOrder)
     }
 
     /// Scripted live-sync responses for tests: each `fetchLiveSync` call pops the
@@ -1144,10 +1149,10 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
         }
         // Deterministic fallback snapshot — a content-stable cursor so a steady
         // state holds the same cursor (no churn) and the test loop terminates.
-        let stableCursor = "mock-\(directory.count)-\(directoryPending.count)"
+        let stableCursor = "mock-\(visibleDirectory.count)-\(directoryPending.count)"
         return LiveSyncResponse(
             cursor: stableCursor, username: username,
-            pods: directory, pending: directoryPending
+            pods: visibleDirectory, pending: directoryPending
         )
     }
 

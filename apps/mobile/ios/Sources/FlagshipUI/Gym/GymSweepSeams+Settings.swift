@@ -96,7 +96,8 @@ extension GymSweepSeams {
 
         // A browser this phone signed in to a private app.
         let secured = UserDefaultsSecuredSessionStore()
-        secured.remove(secretId: securedSessionId)
+        // Sessions an earlier launch's knock left in the simulator's defaults.
+        for old in secured.list() { secured.remove(secretId: old.secretId) }
         if args.contains("-smoke-secured-session") {
             let home = app.pods.first?.fqdn ?? "home.\(user).flagship.services"
             secured.put(SecuredSession(secretId: securedSessionId, serverId: home, serviceRef: "\(user)--plants",

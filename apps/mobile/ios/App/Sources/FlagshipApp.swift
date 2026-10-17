@@ -190,6 +190,10 @@ struct FlagshipApp: App {
         privacy.requireBiometricAtLaunch = wantLocked
         app.requireBiometricAtLaunch = wantLocked
         app.isUnlocked = !wantLocked
+        // No automatic unlock attempt: whether the simulator has a face
+        // enrolled is left over from other runs, and the scenarios that land on
+        // the lock screen need it to stay up.
+        app.awaitingManualUnlock = wantLocked
         // `-smoke-no-recovery` seeds an account with NO cloud recovery so the
         // session-tiers grey-out + recovery-required toast (D3-C1) is exercisable.
         // A demo session is normally recovery-exempt, so we also force the

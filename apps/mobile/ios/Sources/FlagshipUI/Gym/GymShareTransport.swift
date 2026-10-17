@@ -121,6 +121,10 @@ public final class GymShareTransport: ServerShareTransport, @unchecked Sendable 
     private func route(_ method: String, _ path: String, host: String, body: [String: Any],
                        request: URLRequest) throws -> (status: Int, body: Data) {
         let parts = path.split(separator: "/").map(String.init)
+        // `.com`: the attestation of the account's admin root, for accepting.
+        if method == "GET", path.hasSuffix("/account-key-attestation") {
+            return Self.json(200, ["attestation": ShareAcceptMockWorld.gym().attestation()])
+        }
         // Box, owner session.
         if path == "/api/screens/shares", method == "GET" {
             let list = lock.withLock { Array(box.values).sorted { $0.issuedAt < $1.issuedAt } }

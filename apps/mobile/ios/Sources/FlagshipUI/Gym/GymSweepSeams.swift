@@ -44,6 +44,10 @@ public struct GymMocks {
 public enum GymSweepSeams {
     public static func apply(args: [String], app: AppState, operations: ActiveOperationsCenter, mocks: GymMocks) {
         resetAiKeys()
+        if let server = mocks.server {
+            let mailbox = mocks.mailbox
+            server.onServerNameReleased = { [weak mailbox] domain in mailbox?.deletedDomains.insert(domain.lowercased()) }
+        }
         home(args, app, operations, mocks)
         server(args, app, mocks)
         apps(args, app, mocks)

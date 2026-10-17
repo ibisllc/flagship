@@ -2330,6 +2330,9 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public private(set) var issuedAdminSignatures: [String: String] = [:]   // serial → admin approval hex
     public private(set) var revokedAuthCodes: Set<String> = []        // serial set
     public private(set) var releasedServerNames: [ReleaseServerNameRequest] = [] // recorded releases
+    /// Told the server domain of each accepted release, so a mock `/pods` can
+    /// leave deleted servers out like `.com` does.
+    public var onServerNameReleased: ((String) -> Void)?
     public private(set) var revokedServers: [ServerRevocationRequest] = [] // recorded P13 kill-switch calls
     public private(set) var unrevokedServers: [ServerUnrevocationRequest] = [] // recorded un-revoke calls
     /// Domains whose recorded revoke hasn't been undone yet. A domain listed
@@ -2420,6 +2423,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         try await tick()
         try MockOrderSigners.shared.require(.sensitive, kind: "release-server-name", signatureHex: req.signature, payload: req)
         releasedServerNames.append(req)
+        onServerNameReleased?(req.request.serverDomain)
     }
 
     public func revokeServer(_ req: ServerRevocationRequest) async throws {
