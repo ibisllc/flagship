@@ -95,10 +95,10 @@ public struct KeyfileExportScreen: View {
                 FSField(
                     value: $vm.passphrase,
                     label: "Passphrase",
-                    helper: "12 characters minimum",
+                    helper: "At least 12 characters.",
                     error: vm.passphrase.isEmpty || vm.passphraseStrong
                         ? nil
-                        : "12 characters minimum",
+                        : "Too short. At least 12 characters.",
                     secure: true
                 )
                 .accessibilityIdentifier("keyfile-export-passphrase")

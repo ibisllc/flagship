@@ -19,6 +19,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -112,6 +113,10 @@ class GymDeviceBugsTest : GymBase() {
         val create = androidx.compose.ui.test.hasContentDescription("keyfile-export-create")
         composeRule.onNode(create).assertIsNotEnabled()
         val fields = composeRule.onAllNodes(hasSetTextAction())
+        fields[0].performTextInput("alllowercase")
+        composeRule.onNodeWithText("Too weak.", substring = true).assertExists()
+        composeRule.onNodeWithText("mixing at least three of", substring = true).assertExists()
+        fields[0].performTextClearance()
         fields[0].performTextInput("Caracal-keyfile-1016x")
         fields[1].performTextInput("Caracal-keyfile-1016x")
         composeRule.onNode(androidx.compose.ui.test.hasContentDescription("keyfile-export-ack-control"))

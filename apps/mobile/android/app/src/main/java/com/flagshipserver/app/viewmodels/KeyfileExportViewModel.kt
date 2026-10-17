@@ -109,6 +109,9 @@ class KeyfileExportViewModel(
     }
 
     companion object {
+        const val RULE = "At least 12 characters, mixing at least three of: lowercase, uppercase, numbers, symbols."
+        const val RULE_ERROR = "Too weak. $RULE"
+
         /** A simple, defensible strength rule. The keyfile floor is 8;
          *  we ask for more in the UI since this file is the keys to the
          *  whole account: >= 12 chars and at least 3 of 4 character

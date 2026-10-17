@@ -153,9 +153,9 @@ fun KeyfileExportScreen(
                     value = passphrase,
                     onValueChange = vm::setPassphrase,
                     label = "Passphrase",
-                    helper = if (passphrase.isEmpty() || vm.passphraseStrong) "12 characters minimum" else null,
+                    helper = if (passphrase.isEmpty() || vm.passphraseStrong) KeyfileExportViewModel.RULE else null,
                     error = if (passphrase.isEmpty() || vm.passphraseStrong) null
-                    else "12 characters minimum",
+                    else KeyfileExportViewModel.RULE_ERROR,
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.semantics { contentDescription = "keyfile-export-passphrase" },
                 )
