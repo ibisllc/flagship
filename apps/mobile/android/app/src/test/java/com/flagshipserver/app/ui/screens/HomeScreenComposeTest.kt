@@ -92,7 +92,7 @@ class HomeScreenComposeTest {
         composeRule.onAllNodesWithText("Online").onFirst().assertIsDisplayed()
     }
 
-    @Test fun failedState_rendersErrorCardWithMessage() {
+    @Test fun failedState_showsNoCouldNotLoadCard() {
         composeRule.setContent {
             FlagshipTheme {
                 HomeScreen(
@@ -106,7 +106,7 @@ class HomeScreenComposeTest {
                 )
             }
         }
-        composeRule.onNodeWithText("backend ate the request").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("backend ate the request").assertDoesNotExist()
     }
 
     @Test fun aRefusedServerList_isLockedNotEmpty() {
