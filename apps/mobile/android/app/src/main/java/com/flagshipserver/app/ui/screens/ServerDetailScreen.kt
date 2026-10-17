@@ -300,6 +300,7 @@ fun ServerDetailScreen(
     androidx.compose.runtime.CompositionLocalProvider(LocalServerReadOnly provides serverReadOnly) {
     FSScreen(
         title = title,
+        titleTag = "server-detail-screen",
         onBack = onBack,
         spacing = FS.space.s6,
         refreshing = refreshing,
