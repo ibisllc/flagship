@@ -28,6 +28,8 @@ object Variant : AppVariant {
     @Volatile private var mockRun = false
 
     override fun applyLaunchOverrides(intent: Intent?) {
+        // A gym scenario's in-memory key slot ends with its launch (the process lives on).
+        com.flagshipserver.app.keystore.Keystore.restorePersistedActiveProfile()
         val host = intent?.getStringExtra(EXTRA_APEX_HOST)?.trim()?.lowercase().orEmpty()
         if (host.isEmpty()) return
         if (host == Endpoints.PROD_CONTROL_HOST) Endpoints.setOverride(null as Endpoints.Override?) else Endpoints.setOverride(host)

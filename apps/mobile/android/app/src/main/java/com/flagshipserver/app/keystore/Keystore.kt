@@ -137,6 +137,18 @@ object Keystore {
         editor.apply()
     }
 
+    /** Switch the profile for this process only, leaving the persisted choice
+     *  alone (a debug gym run uses its own key slot without making the device
+     *  look paired at the next launch). */
+    fun setActiveProfileInMemory(id: String?) {
+        activeProfileId = normalizeProfileId(id)
+    }
+
+    /** Back to the profile the device persisted (what a normal launch uses). */
+    fun restorePersistedActiveProfile() {
+        activeProfileId = prefs?.getString(KEY_ACTIVE_PROFILE, null)?.let { normalizeProfileId(it) }
+    }
+
     /** The active profileId, or null for the default/legacy profile. */
     fun activeProfile(): String? = activeProfileId
 

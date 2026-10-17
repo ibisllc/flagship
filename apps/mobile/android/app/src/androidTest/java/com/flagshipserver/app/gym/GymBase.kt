@@ -27,6 +27,8 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToLog
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onFirst
@@ -213,15 +215,20 @@ abstract class GymBase {
      *  a lazy list to it when it isn't composed yet, then tap the first one. */
     protected fun tapMatching(m: androidx.compose.ui.test.SemanticsMatcher, timeoutMs: Long = 10_000) {
         val enabled = m and !androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.Disabled)
-        composeRule.waitUntil(timeoutMs) {
-            if (composeRule.onAllNodes(enabled).fetchSemanticsNodes().isNotEmpty()) return@waitUntil true
-            // A lazy list composes only what's on screen: ask each to scroll to it.
-            composeRule.onAllNodes(androidx.compose.ui.test.hasScrollToNodeAction()).fetchSemanticsNodes().indices.forEach { i ->
-                runCatching {
-                    composeRule.onAllNodes(androidx.compose.ui.test.hasScrollToNodeAction())[i].performScrollToNode(m)
+        try {
+            composeRule.waitUntil(timeoutMs) {
+                if (composeRule.onAllNodes(enabled).fetchSemanticsNodes().isNotEmpty()) return@waitUntil true
+                // A lazy list composes only what's on screen: ask each to scroll to it.
+                composeRule.onAllNodes(androidx.compose.ui.test.hasScrollToNodeAction()).fetchSemanticsNodes().indices.forEach { i ->
+                    runCatching {
+                        composeRule.onAllNodes(androidx.compose.ui.test.hasScrollToNodeAction())[i].performScrollToNode(m)
+                    }
                 }
+                false
             }
-            false
+        } catch (e: Throwable) {
+            runCatching { composeRule.onRoot(useUnmergedTree = true).printToLog("GYMTREE") }
+            throw e
         }
         composeRule.onAllNodes(enabled).onFirst().scrollIfNeeded().performClick()
         composeRule.waitForIdle()
