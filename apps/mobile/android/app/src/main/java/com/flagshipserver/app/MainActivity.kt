@@ -362,6 +362,10 @@ class MainActivity : FragmentActivity() {
                     },
                     // The alert client reads the current server's session.
                     currentServer = { appState.sessionPod?.fqdn },
+                    notifyStorageFull = { serviceId, server ->
+                        toasts.error(com.flagshipserver.app.core.AppStorageText.ALERT)
+                        FlagshipFcmService.showStorageFullNotification(appContext, serviceId, server)
+                    },
                 )
             }
             LaunchedEffect(useLive, sessionToken != null) {

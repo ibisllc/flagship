@@ -96,8 +96,24 @@ class MockScreensClient(
                 previousCommit = "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b",
             ),
             debugAccess = debugAccessState,
+            storage = ServerStorage(
+                brake = "off",
+                capped = true,
+                apps = appStorageFixture.map { (id, s) -> AppStorageEntry(id, s.files, s.postgres) },
+            ),
         )
     }
+
+    /** Each app's disk use against its limits, as the box sends it (Wiki's files folder is full). */
+    val appStorageFixture: MutableMap<String, AppStorage> = mutableMapOf(
+        "bright-maple--plants" to AppStorage(
+            files = StoreUsage(usedBytes = 2L * 1024 * 1024 * 1024, limitBytes = 5L * 1024 * 1024 * 1024, enforced = true),
+            postgres = StoreUsage(usedBytes = 300L * 1024 * 1024, limitBytes = 1024L * 1024 * 1024),
+        ),
+        "bright-maple--wiki" to AppStorage(
+            files = StoreUsage(usedBytes = 5L * 1024 * 1024 * 1024, limitBytes = 5L * 1024 * 1024 * 1024, full = true, enforced = true),
+        ),
+    )
 
     override suspend fun appsList(): AppsListResponse {
         tick()
@@ -587,6 +603,7 @@ class MockScreensClient(
             recentLogs = listOf("listening on :8080", "GET / → 200", "migration check ok"),
             editable = serviceId in editableServiceIds,
             adaptedFrom = adaptedFromFixture[serviceId]?.let { AppDetailResponse.AdaptedFrom(it) },
+            storage = appStorageFixture[serviceId],
         )
     }
 

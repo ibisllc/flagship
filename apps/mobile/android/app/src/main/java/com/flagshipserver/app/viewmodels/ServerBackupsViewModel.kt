@@ -57,6 +57,9 @@ class ServerBackupsViewModel(
         private set
     var policy by mutableStateOf<BackupPolicyView?>(null)
         private set
+    /** Notes about full apps and the disk brake from the box's server-detail `storage` (docs/app-runtimes.md 5.3). */
+    var storageNotes by mutableStateOf<List<String>>(emptyList())
+        private set
     /** The saved-backups view couldn't load (an older box answers 404). */
     var loadError by mutableStateOf<String?>(null)
         private set
@@ -79,6 +82,12 @@ class ServerBackupsViewModel(
         coroutineScope {
             val p = async { runCatching { client.backupPolicy() } }
             val s = async { runCatching { client.savedBackups() } }
+            val d = async { runCatching { client.serverDetail() } }
+            d.await().onSuccess { detail ->
+                storageNotes = com.flagshipserver.app.core.AppStorageText.serverNotes(detail.storage) { id ->
+                    id.substringAfterLast("--").replaceFirstChar { it.uppercase() }
+                }
+            }
             p.await().onSuccess { policy = it }
             s.await()
                 .onSuccess {

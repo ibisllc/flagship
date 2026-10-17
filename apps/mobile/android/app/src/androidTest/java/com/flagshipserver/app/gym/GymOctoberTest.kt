@@ -152,6 +152,35 @@ class GymOctoberTest : GymBase() {
         gymShot("service-env-removed")
     }
 
+    // ─── Per-app disk limits ─────────────────────────────────────────────────
+
+    /** Plants shows its files folder and database against their limits. */
+    @Test
+    fun appStorageShowsLimits() {
+        openPlants()
+        waitUntilExists("service-detail-storage", timeoutMs = 20_000)
+        composeRule.onNodeWithTag("service-detail-storage").performScrollTo()
+        assertEquals("2.0 GB of 5.0 GB", textOf("service-detail-storage-files"))
+        assertTrue(textOf("service-detail-storage-database").startsWith("300 MB of "))
+        assertEquals(0, count("service-detail-storage-full"))
+        gymShot("app-storage-limits")
+    }
+
+    /** A full app says why new data is refused. */
+    @Test
+    fun aFullAppSaysNewDataIsRefused() {
+        launch(tab = "apps")
+        waitUntilTextExists("Wiki", timeoutMs = 20_000)
+        composeRule.onAllNodesWithText("Wiki", substring = true).onFirst().performClick()
+        waitUntilExists("service-detail-storage", timeoutMs = 20_000)
+        composeRule.onNodeWithTag("service-detail-storage").performScrollTo()
+        assertEquals(
+            "Full: new data is refused until you free space or raise the limit.",
+            textOf("service-detail-storage-full"),
+        )
+        gymShot("app-storage-full")
+    }
+
     // ─── App access list on the service page ─────────────────────────────────
 
     /** Plants asked for a host at install; Allow signs the edited list and the

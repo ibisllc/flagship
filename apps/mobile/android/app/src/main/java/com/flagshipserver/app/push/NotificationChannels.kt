@@ -31,7 +31,7 @@ object NotificationChannels {
     )
     val APPS = Channel(
         "flagship.apps", "App requests",
-        "One of your apps asking to reach the internet.",
+        "One of your apps asking to reach the internet, or running out of disk space.",
         NotificationManager.IMPORTANCE_DEFAULT,
     )
     val BUILDS = Channel(

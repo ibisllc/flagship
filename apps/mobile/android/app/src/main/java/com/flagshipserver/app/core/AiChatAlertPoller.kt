@@ -43,12 +43,15 @@ class AiChatAlertPoller(
     /** The server (fqdn) the alerts are drained from: the current one. The
      *  chat and the notification name it, so they open on that box. */
     private val currentServer: () -> String? = { null },
+    /** An app on [server] reached its disk limit: say so once per app. */
+    private val notifyStorageFull: (serviceId: String, server: String?) -> Unit = { _, _ -> },
 ) {
     /** ACK cursor — the highest alert id we've drained. */
     private var cursor: Int = 0
     /** Dedup set so a re-drain (e.g. after a failed ACK) won't re-notify the
      *  same pending tool. Keyed by "<sessionId>|<toolUseId>". */
     private val notified = mutableSetOf<String>()
+    private val storageNotified = mutableSetOf<String>()
 
     private var job: Job? = null
 
@@ -88,6 +91,10 @@ class AiChatAlertPoller(
         for (env in resp.events) {
             if (env.id > maxId) maxId = env.id
             val alert = env.alert
+            if (alert is PhoneAlert.AppStorageFull) {
+                if (storageNotified.add("${server.orEmpty()}|${alert.serviceId}")) notifyStorageFull(alert.serviceId, server)
+                continue
+            }
             if (alert !is PhoneAlert.AiChatNeedsYou || alert.sessionId.isEmpty()) continue
             // Surface in the operations sliver, deep-linking to the chat. Keyed
             // by the session so the live build feeder + this alert feeder

@@ -261,6 +261,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                     detail = resp,
                     restricted = appState.isRestrictedDevice(),
                 )
+                AppStorageSection(resp.storage)
                 if (resp.editable == true) {
                     Spacer(Modifier.height(FS.space.s4))
                     EditRow(onClick = { nav.navigate("edit-service/$serviceId") })
@@ -874,6 +875,38 @@ private fun relativeTime(ms: Long): String {
         mins < 60 -> "$mins min ago"
         mins < 60 * 24 -> "${mins / 60} hr ago"
         else -> "${mins / (60 * 24)} d ago"
+    }
+}
+
+/** The app's disk use against its limits (docs/app-runtimes.md 5.3), and why new data is refused when it is full. Hidden on a box that sends none. */
+@Composable
+internal fun AppStorageSection(storage: com.flagshipserver.app.api.AppStorage?) {
+    val lines = com.flagshipserver.app.core.AppStorageText.appLines(storage)
+    if (lines.isEmpty()) return
+    Spacer(Modifier.height(FS.space.s4))
+    SectionHeader("Storage")
+    FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.semantics { testTag = "service-detail-storage" }) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            lines.forEach { l ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(l.label, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp), modifier = Modifier.weight(1f))
+                    Text(
+                        l.text,
+                        color = if (l.full) FS.colors.danger else FS.colors.text,
+                        style = TextStyle(fontSize = 14.sp),
+                        modifier = Modifier.semantics { testTag = "service-detail-storage-${l.label.lowercase()}" },
+                    )
+                }
+                if (l.note.isNotEmpty()) {
+                    Text(
+                        l.note,
+                        color = FS.colors.danger,
+                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                        modifier = Modifier.semantics { testTag = "service-detail-storage-full" },
+                    )
+                }
+            }
+        }
     }
 }
 

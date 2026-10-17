@@ -147,6 +147,33 @@ class FlagshipFcmService : FirebaseMessagingService() {
                 server?.takeIf { it.isNotEmpty() }?.let { mapOf("server" to it) } ?: emptyMap(),
             )
 
+        /** The app's page, naming the server it runs on. */
+        fun appDetailDeepLink(serviceId: String, server: String?): String =
+            com.flagshipserver.app.core.Endpoints.appRoute(
+                "app",
+                mapOf("appId" to serviceId) + (server?.takeIf { it.isNotEmpty() }?.let { mapOf("server" to it) } ?: emptyMap()),
+            )
+
+        /** An app on a server ran out of its disk limit: a content-free notice that opens the app's page. */
+        fun showStorageFullNotification(context: Context, serviceId: String, server: String? = null) {
+            ensureChannel(context)
+            val intent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                data = appDetailDeepLink(serviceId, server).toUri()
+            }
+            val pendingFlags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            val pending = PendingIntent.getActivity(context, ("storage|$serviceId").hashCode(), intent, pendingFlags)
+            val notif = NotificationCompat.Builder(context, NotificationChannels.APPS.id)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("Flagship")
+                .setContentText(com.flagshipserver.app.core.AppStorageText.ALERT)
+                .setAutoCancel(true)
+                .setContentIntent(pending)
+                .build()
+            val mgr = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            mgr.notify(NOTIF_ID_BASE + ("storage|$serviceId").hashCode(), notif)
+        }
+
         /**
          * #91 — raise an app-initiated LOCAL notification that an AI build chat
          * is waiting on the owner. Value-free copy (driven only by the pending

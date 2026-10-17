@@ -71,6 +71,18 @@ class GymBackupsTest : GymBase() {
         composeRule.onNodeWithTag("sd-backups-status").performScrollTo()
     }
 
+    // A full app is named on the Backups section.
+    @Test
+    fun aFullAppIsNamedOnTheBackupsSection() {
+        openBackups(adminRoot = false)
+        waitUntilExists("sd-backups-storage-0")
+        assertEquals(
+            "Wiki is full: new data is refused until you free space or raise the limit.",
+            textOf("sd-backups-storage-0"),
+        )
+        gymShot("backups-app-full")
+    }
+
     // 1. No backups yet, an admin device: one approval hands the box its keys.
     @Test
     fun anAdminDeviceApprovesTheKeysOnce() {

@@ -36,6 +36,10 @@ sealed interface PhoneAlert {
         val toolUseId: String,
     ) : PhoneAlert
 
+    /** An app reached its disk limit (docs/app-runtimes.md 5.3): value-free,
+     *  the app's service id and which store ("files" or "postgres"). */
+    data class AppStorageFull(val serviceId: String, val store: String) : PhoneAlert
+
     /** Any other daemon alert kind — surfaced by its own feature, not here. */
     data class Other(val kind: String) : PhoneAlert
 }
@@ -87,6 +91,11 @@ data class PhoneAlertsResponse(
                         else -> AiChatRequest.TALK_TO_USER
                     }
                     PhoneAlert.AiChatNeedsYou(sessionId, request, toolUseId)
+                }
+                "app-storage-full" -> {
+                    val serviceId = obj["serviceId"]?.jsonPrimitive?.contentOrNull ?: ""
+                    if (serviceId.isEmpty()) PhoneAlert.Other(kind)
+                    else PhoneAlert.AppStorageFull(serviceId, obj["store"]?.jsonPrimitive?.contentOrNull ?: "")
                 }
                 else -> PhoneAlert.Other(kind)
             }

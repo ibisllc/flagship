@@ -131,6 +131,9 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
                         )
                     }
                 }
+                vm.storageNotes.forEachIndexed { i, note ->
+                    Text(note, color = FS.colors.danger, style = caption, modifier = Modifier.testTag("sd-backups-storage-$i"))
+                }
                 if (p.cap.overLimit) {
                     p.cap.overReason?.let { Text(it, color = FS.colors.danger, style = caption, modifier = Modifier.testTag("sd-backups-over")) }
                 }
