@@ -224,10 +224,10 @@ class MainActivity : FragmentActivity() {
         // (synchronous) phase runs BEFORE setContent so the first composition
         // sees the paired shell; the remote phase (the add-paired-session POST)
         // runs async and sets the session token on success.
-        if (isDebuggable) {
+        if ((applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             com.flagshipserver.app.core.GymLiveAdoption.parse(intent)?.let { gymArgs ->
                 try {
-                    com.flagshipserver.app.core.GymLiveAdoption.adoptLocal(gymArgs, appState, devSettings)
+                    com.flagshipserver.app.core.GymLiveAdoption.adoptLocal(gymArgs, appState)
                     lifecycleScope.launch {
                         try {
                             com.flagshipserver.app.core.GymLiveAdoption.adoptRemote(

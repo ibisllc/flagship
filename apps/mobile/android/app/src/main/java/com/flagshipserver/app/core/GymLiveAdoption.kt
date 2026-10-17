@@ -63,7 +63,6 @@ object GymLiveAdoption {
     fun adoptLocal(
         args: Args,
         appState: AppState,
-        dev: com.flagshipserver.app.core.DeveloperSettings,
     ) {
         val seed = HexUtil.decode(args.umkSeedHex)
             ?: throw AdoptException("gym-adopt: seed must be valid hex")
@@ -88,7 +87,6 @@ object GymLiveAdoption {
         if (!appState.isPaired.value) {
             appState.completeOnboarding(username = args.username, pods = emptyList())
         }
-        dev.setUseLiveClient(true)
     }
 
     /**
