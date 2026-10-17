@@ -1,0 +1,30 @@
+{
+  "kind": "Mandate",
+  "version": 1,
+  "mandateId": "gym00000-0000-4000-8000-000000000001",
+  "track": "ca",
+  "holder": "2e6585d75f992a0fc097e05ee6e11e8ccc31e229394d3aec238e68a81b7ba930",
+  "issuedAt": "2026-01-01T00:00:00.000Z",
+  "expiresAt": "2125-01-01T00:00:00.000Z",
+  "successors": [
+    "2e6585d75f992a0fc097e05ee6e11e8ccc31e229394d3aec238e68a81b7ba930"
+  ],
+  "approvalRule": {
+    "kind": "threshold",
+    "threshold": 1
+  },
+  "minSuccessors": 1,
+  "maxDurationSeconds": 4102444800,
+  "defaultDurationSeconds": 8640000,
+  "project": {
+    "name": "flagship-gym",
+    "contact": "gym@flagshipserver.com"
+  },
+  "signedBy": "2e6585d75f992a0fc097e05ee6e11e8ccc31e229394d3aec238e68a81b7ba930",
+  "signatures": [
+    {
+      "pubkey": "2e6585d75f992a0fc097e05ee6e11e8ccc31e229394d3aec238e68a81b7ba930",
+      "sig": "4726e40971dbdf57b3ffd5c0006d4afff6437debf529117fd943d9a7e611674622267f605978109b3362cb0191514cdfbd8d9554f802d58c0fdf310e7c6c3502"
+    }
+  ]
+}
