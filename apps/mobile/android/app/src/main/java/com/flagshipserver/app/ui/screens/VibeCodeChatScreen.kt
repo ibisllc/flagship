@@ -459,7 +459,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                     Column {
                         Text(
                             "Conversation",
-                            color = MaterialTheme.colorScheme.primary,
+                            color = FS.colors.accentText,
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Spacer(Modifier.height(FS.space.s3))
@@ -489,7 +489,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                     is VibeCodePendingRequest.TalkToUser -> {
                         FSCard {
                             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-                                Text("The AI asks", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                                Text("The AI asks", color = FS.colors.accentText, style = MaterialTheme.typography.labelLarge)
                                 Text(pending.payload.message, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
                             }
                         }
@@ -521,7 +521,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                             if (deployed != null && deployed.url.isNotEmpty()) {
                                 Text(
                                     deployed.url,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = FS.colors.accentText,
                                     style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                                     modifier = Modifier.semantics { testTag = "vibecode-deployed-url" },
                                 )
@@ -797,7 +797,7 @@ internal fun GroupedChatModelBar(
 internal fun ChatMessage(msg: com.flagshipserver.app.api.VibeCodeSessionMessage) {
     Text(
         if (msg.role == "user") "You" else "AI",
-        color = if (msg.role == "user") MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+        color = if (msg.role == "user") MaterialTheme.colorScheme.onSurfaceVariant else FS.colors.accentText,
         style = MaterialTheme.typography.labelMedium,
     )
     Text(msg.text, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)

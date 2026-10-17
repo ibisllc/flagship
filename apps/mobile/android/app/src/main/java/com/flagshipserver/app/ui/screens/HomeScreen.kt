@@ -875,7 +875,7 @@ fun ServerCardSkeleton() {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             androidx.compose.material3.LinearProgressIndicator(
                 modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.primary,
+                color = FS.colors.accentText,
                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             )
             Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)

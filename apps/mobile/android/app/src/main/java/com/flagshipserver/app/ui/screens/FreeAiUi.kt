@@ -97,7 +97,7 @@ private fun FlagshipInferenceText(
             ),
         )
         if (default != null) {
-            Text(default, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+            Text(default, color = FS.colors.accentText, style = MaterialTheme.typography.labelMedium)
         }
     }
 }

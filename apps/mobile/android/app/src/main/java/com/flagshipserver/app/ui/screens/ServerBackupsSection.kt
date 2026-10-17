@@ -23,7 +23,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.flagshipserver.app.ui.components.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -332,7 +332,7 @@ private fun ScheduleEditor(vm: ServerBackupsViewModel, current: com.flagshipserv
                     listOf("daily" to "Daily", "weekly" to "Weekly", "off" to "Off").forEach { (k, label) ->
                         val on = frequency == k
                         TextButton(onClick = { frequency = k }, modifier = Modifier.testTag("sd-backups-freq-$k")) {
-                            Text(label, color = if (on) FS.colors.primary else FS.colors.textMuted, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                            Text(label, color = if (on) FS.colors.accentText else FS.colors.textMuted, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
                         }
                     }
                 }

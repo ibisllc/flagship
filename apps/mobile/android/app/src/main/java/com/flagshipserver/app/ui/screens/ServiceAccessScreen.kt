@@ -578,7 +578,7 @@ internal fun ServiceAccessContent(
                 )
             },
             confirmButton = {
-                androidx.compose.material3.TextButton(
+                com.flagshipserver.app.ui.components.TextButton(
                     onClick = {
                         val p = person
                         confirmRemove = null
@@ -594,7 +594,7 @@ internal fun ServiceAccessContent(
                 ) { Text(if (person.isGroup) "Revoke" else "Remove") }
             },
             dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { confirmRemove = null }) { Text("Cancel") }
+                com.flagshipserver.app.ui.components.TextButton(onClick = { confirmRemove = null }) { Text("Cancel") }
             },
         )
     }
@@ -606,13 +606,13 @@ internal fun ServiceAccessContent(
             title = { Text("Members only?") },
             text = { Text(if (n == 1) "Only this 1 person will be able to open it." else "Only these $n people will be able to open it.") },
             confirmButton = {
-                androidx.compose.material3.TextButton(
+                com.flagshipserver.app.ui.components.TextButton(
                     onClick = { confirmMembersOnly = false; applyMode(true) },
                     modifier = Modifier.semantics { testTag = "service-access-members-only-confirm" },
                 ) { Text("Members only") }
             },
             dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { confirmMembersOnly = false }) { Text("Cancel") }
+                com.flagshipserver.app.ui.components.TextButton(onClick = { confirmMembersOnly = false }) { Text("Cancel") }
             },
         )
     }
@@ -804,7 +804,7 @@ private fun PersonRow(
                             .semantics { testTag = "service-access-invited-by-${person.inviteId}" },
                     )
                     if (canRemove) {
-                        androidx.compose.material3.TextButton(
+                        com.flagshipserver.app.ui.components.TextButton(
                             onClick = onRemove,
                             enabled = !busyRemove,
                             modifier = Modifier.semantics {
@@ -819,7 +819,7 @@ private fun PersonRow(
                 }
             }
             if (person.isGroup && person.memberAids.isNotEmpty() && canRemoveMembers) {
-                androidx.compose.material3.TextButton(
+                com.flagshipserver.app.ui.components.TextButton(
                     onClick = { expanded = !expanded },
                     modifier = Modifier.semantics { testTag = "service-access-group-members-toggle" },
                 ) {
@@ -839,7 +839,7 @@ private fun PersonRow(
                                 style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                                 modifier = Modifier.weight(1f),
                             )
-                            androidx.compose.material3.TextButton(onClick = { onRemoveMember(aid) }) { Text("Remove") }
+                            com.flagshipserver.app.ui.components.TextButton(onClick = { onRemoveMember(aid) }) { Text("Remove") }
                         }
                     }
                 }
@@ -850,7 +850,7 @@ private fun PersonRow(
 
 @Composable
 private fun TextButtonClear(onClick: () -> Unit) {
-    androidx.compose.material3.TextButton(onClick = onClick) { Text("Remove photo") }
+    com.flagshipserver.app.ui.components.TextButton(onClick = onClick) { Text("Remove photo") }
 }
 
 @Composable

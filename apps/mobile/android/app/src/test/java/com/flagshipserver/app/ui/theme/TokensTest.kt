@@ -38,7 +38,7 @@ class TokensTest {
             for ((surfaceName, surface) in listOf("bg" to c.bg, "surface" to c.surface, "sunken" to c.surfaceSunken)) {
                 assertReadable("$theme text on $surfaceName", c.text, surface)
                 assertReadable("$theme textMuted on $surfaceName", c.textMuted, surface)
-                assertReadable("$theme primary on $surfaceName", c.primary, surface)
+                assertReadable("$theme accentText on $surfaceName", c.accentText, surface)
             }
             // Status text sits on the page and on cards (the webapp's "AA on paper").
             for ((surfaceName, surface) in listOf("bg" to c.bg, "surface" to c.surface)) {
@@ -49,7 +49,7 @@ class TokensTest {
             assertReadable("$theme onAccent on fill", c.onAccent, c.fill)
         }
         // Material's onPrimary sits on primary (filled Material controls).
-        assertReadable("light paper on primary", LightColors.bg, LightColors.primary)
+        assertReadable("light onAccent on primary", LightColors.onAccent, LightColors.primary)
         assertReadable("dark onAccent on primary", DarkColors.onAccent, DarkColors.primary)
     }
 

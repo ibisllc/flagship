@@ -230,13 +230,13 @@ private fun ProgressBlock(state: BuilderOnDeviceViewModel.State) {
             LinearProgressIndicator(
                 progress = { state.progress.toFloat() },
                 modifier = Modifier.fillMaxWidth().height(6.dp),
-                color = FS.colors.primary,
+                color = FS.colors.accentText,
                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             )
         } else {
             LinearProgressIndicator(
                 modifier = Modifier.fillMaxWidth().height(6.dp),
-                color = FS.colors.primary,
+                color = FS.colors.accentText,
                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             )
         }

@@ -32,7 +32,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
-import androidx.compose.material3.TextButton
+import com.flagshipserver.app.ui.components.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.outlined.Apps
@@ -683,7 +683,7 @@ private fun ServerAppsSection(podId: String, client: com.flagshipserver.app.api.
                     com.flagshipserver.app.ui.components.FSListRow(
                         leading = com.flagshipserver.app.ui.components.FSListLeading.Icon(
                             icon = androidx.compose.material.icons.Icons.Outlined.Apps,
-                            color = if (greyed) FS.colors.textMuted else FS.colors.primary,
+                            color = if (greyed) FS.colors.textMuted else FS.colors.accentText,
                         ),
                         title = row.name,
                         subtitle = row.status,
@@ -1492,7 +1492,7 @@ internal fun UpdateServerCard(
                             Icon(Icons.Outlined.Upgrade, contentDescription = null, tint = FS.colors.accent, modifier = Modifier.size(20.dp))
                             Text(
                                 "New release available: $tag",
-                                color = FS.colors.primary,
+                                color = FS.colors.accentText,
                                 style = MaterialTheme.typography.titleSmall,
                                 modifier = Modifier.semantics { contentDescription = "sd-update-available" },
                             )

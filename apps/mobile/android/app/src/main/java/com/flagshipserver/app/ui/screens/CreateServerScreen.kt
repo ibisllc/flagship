@@ -794,7 +794,7 @@ private fun RecipeTtlPicker(
         )
         Text(
             ttlLabel(hours),
-            color = MaterialTheme.colorScheme.primary,
+            color = FS.colors.accentText,
             style = MaterialTheme.typography.titleMedium,
         )
     }

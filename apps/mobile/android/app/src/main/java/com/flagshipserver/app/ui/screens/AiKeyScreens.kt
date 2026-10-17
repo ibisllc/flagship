@@ -23,7 +23,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.flagshipserver.app.ui.components.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -162,7 +162,7 @@ fun AiKeyStepScreen(
                     title = AiKeyStep.ADD_LABEL,
                     icon = Icons.Filled.Add,
                     iconTint = FS.colors.accent,
-                    titleColor = MaterialTheme.colorScheme.primary,
+                    titleColor = FS.colors.accentText,
                     onClick = { showForm = true },
                     modifier = Modifier.testTag("build-key-add"),
                 )
@@ -255,7 +255,7 @@ private fun SavedKeyStepRow(row: SavedKeyRow, lastUsed: Boolean, onUse: () -> Un
                     modifier = Modifier.testTag("build-key-relay-caption"),
                 )
                 if (lastUsed) {
-                    Text("Last used", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+                    Text("Last used", color = FS.colors.accentText, style = MaterialTheme.typography.bodySmall)
                 }
             }
             IconButton(onClick = onDelete, modifier = Modifier.testTag("build-key-delete")) {
@@ -472,7 +472,7 @@ fun AiKeysManagerScreen(
                                 if (isActive) {
                                     Text(
                                         "Default for new builds",
-                                        color = MaterialTheme.colorScheme.primary,
+                                        color = FS.colors.accentText,
                                         style = MaterialTheme.typography.bodySmall,
                                     )
                                 }

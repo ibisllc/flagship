@@ -37,15 +37,19 @@ data class FlagshipColors(
     val border: Color,
     val text: Color,
     val textMuted: Color,
-    /** Small teal TEXT and links (webapp `--accent`): deepened in light so it
-     *  passes 4.5:1. Same value as [accentText]; kept as `primary` for the
-     *  Material roles that draw text (text buttons, links). */
+    /** The brand teal as a GRAPHIC (owner, 2026-10-17: the light #14B8A6 is the
+     *  brand colour): icons beside labels, section markers, switches, progress,
+     *  focus and selected borders, large headings. Same value as [accent]; it is
+     *  the Material `primary`, so every stock component draws in it. Never for
+     *  small text. */
     val primary: Color,
-    /** The teal for GRAPHICS and large bold headers: icons beside labels,
-     *  section markers, switches, progress. Lighter than [accentText]
-     *  (3:1 is enough off text); bright teal in dark. */
+    /** The graphic teal (token name shared with iOS `accent`). Only for
+     *  graphics a label or the shape itself explains (icon-only controls carry
+     *  a contentDescription): about 2.3:1 on paper, 7:1+ in dark. */
     val accent: Color,
-    /** Small teal text and links; token name shared with iOS `accentText`. */
+    /** Small body-size teal TEXT, only inline links and text buttons (token
+     *  name shared with iOS `accentText`): the deep teal in light, the bright
+     *  teal in dark. */
     val accentText: Color,
     /** Pressed / hovered [primary] (`--accent-press`). */
     val primaryHover: Color,
@@ -75,8 +79,8 @@ val LightColors = FlagshipColors(
     border          = Color(0xFFDEDBD3), // --border
     text            = Color(0xFF14140F), // --ink
     textMuted       = Color(0xFF555149), // --ink-muted
-    primary         = Color(0xFF0F766E), // --accent
-    accent          = Color(0xFF0E9488), // graphics, large bold
+    primary         = Color(0xFF14B8A6), // brand teal, graphics
+    accent          = Color(0xFF14B8A6), // brand teal, graphics
     accentText      = Color(0xFF0F766E), // small text, links
     primaryHover    = Color(0xFF0B5F58), // --accent-press
     fill            = Color(0xFF14B8A6), // --teal
@@ -241,16 +245,16 @@ internal fun flagshipColorScheme(dark: Boolean): ColorScheme {
         lightColorScheme(
             primary = c.primary,
             // Paper on the deepened teal (AA); never pure white.
-            onPrimary = c.bg,
+            onPrimary = c.onAccent,
             primaryContainer = c.fill,
             onPrimaryContainer = c.onAccent,
             inversePrimary = Color(0xFF2DD4BF),
             secondary = c.primary,
-            onSecondary = c.bg,
+            onSecondary = c.onAccent,
             secondaryContainer = c.fill,
             onSecondaryContainer = c.onAccent,
             tertiary = c.primary,
-            onTertiary = c.bg,
+            onTertiary = c.onAccent,
             tertiaryContainer = Color(0xFFD3ECE6),
             onTertiaryContainer = c.primaryHover,
             background = c.bg,

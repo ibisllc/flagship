@@ -22,7 +22,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.flagshipserver.app.ui.components.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -218,6 +218,7 @@ fun FSField(
         onValueChange = onValueChange,
         label = { Text(label) },
         placeholder = if (placeholder.isNotEmpty()) ({ Text(placeholder) }) else null,
+        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(focusedLabelColor = FS.colors.accentText),
         supportingText = if (sub != null) ({ Text(sub) }) else null,
         isError = error != null,
         singleLine = true,
@@ -266,7 +267,7 @@ fun FSPill(
         FSPillKind.Online -> FS.colors.success to FS.colors.success.copy(alpha = 0.12f)
         FSPillKind.Renewing -> FS.colors.warning to FS.colors.warning.copy(alpha = 0.12f)
         FSPillKind.Offline -> FS.colors.danger to FS.colors.danger.copy(alpha = 0.12f)
-        FSPillKind.Provisioning -> FS.colors.primary to FS.colors.primary.copy(alpha = 0.12f)
+        FSPillKind.Provisioning -> FS.colors.accentText to FS.colors.accent.copy(alpha = 0.12f)
         FSPillKind.Pending -> FS.colors.warning to FS.colors.warning.copy(alpha = 0.12f)
         FSPillKind.Idle -> FS.colors.textMuted to FS.colors.textMuted.copy(alpha = 0.10f)
     }
@@ -309,3 +310,24 @@ fun FSPill(
 fun FSStackVertical(spacing: Dp = FS.space.s4, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(spacing)) { content() }
 }
+
+
+/** A text button: its label is small teal text, so it draws in [FlagshipColors.accentText]
+ *  (4.5:1), not the bright graphic teal. Same signature as Material's, so the
+ *  app's dialogs, bars and rows read the same. */
+@Composable
+fun TextButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    colors: androidx.compose.material3.ButtonColors = ButtonDefaults.textButtonColors(contentColor = FS.colors.accentText),
+    contentPadding: PaddingValues = ButtonDefaults.TextButtonContentPadding,
+    content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
+) = androidx.compose.material3.TextButton(
+    onClick = onClick,
+    modifier = modifier,
+    enabled = enabled,
+    colors = colors,
+    contentPadding = contentPadding,
+    content = content,
+)

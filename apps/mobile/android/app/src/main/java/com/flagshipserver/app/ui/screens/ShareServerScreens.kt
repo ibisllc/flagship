@@ -41,7 +41,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.flagshipserver.app.ui.components.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -1053,7 +1053,7 @@ private fun Meter(title: String, value: String, fraction: Float) {
         LinearProgressIndicator(
             progress = { fraction.coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth().height(6.dp),
-            color = MaterialTheme.colorScheme.primary,
+            color = FS.colors.accentText,
             trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
         )
     }

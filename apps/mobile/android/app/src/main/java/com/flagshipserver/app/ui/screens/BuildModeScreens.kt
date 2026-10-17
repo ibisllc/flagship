@@ -46,7 +46,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.flagshipserver.app.ui.components.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -425,7 +425,7 @@ private fun DetailAdaptCard(buildId: String, vm: BuildJournalViewModel, nav: Nav
         is BuildJournalViewModel.DetailAdapt.Deployed -> FSCard(padding = PaddingValues(FS.space.s5)) {
             StatusLine("Installed", FS.colors.success, large = true, modifier = Modifier.testTag("build-journal-deployed"))
             Spacer(Modifier.height(FS.space.s2))
-            Text(s.url, color = FS.colors.primary, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
+            Text(s.url, color = FS.colors.accentText, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
         }
     }
     Spacer(Modifier.height(FS.space.s4))
@@ -543,7 +543,7 @@ fun BuildGitScreen(nav: NavController) {
         Text(
             text = buildAnnotatedString {
                 withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) { append("https://") }
-                withStyle(SpanStyle(color = FS.colors.primary, fontWeight = FontWeight.SemiBold)) {
+                withStyle(SpanStyle(color = FS.colors.accentText, fontWeight = FontWeight.SemiBold)) {
                     append(BuildGitViewModel.addressLabel(slug, assignedName))
                 }
                 withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) { append(".$server") }
@@ -850,7 +850,7 @@ private fun DeployedCard(url: String, vm: BuildGitViewModel) {
     FSCard(padding = PaddingValues(FS.space.s5)) {
         StatusLine("Installed", FS.colors.success, large = true)
         Spacer(Modifier.height(FS.space.s2))
-        Text(url, color = FS.colors.primary, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
+        Text(url, color = FS.colors.accentText, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
         Spacer(Modifier.height(FS.space.s4))
         AdapterExport(vm)
     }
@@ -1297,7 +1297,7 @@ private fun SessionTile(session: VibeCodeSessionMeta, title: String, server: Str
         val action = BuildSessions.action(session.status)
         Text(
             action,
-            color = if (action == "Open") FS.colors.primary else FS.colors.success,
+            color = if (action == "Open") FS.colors.accentText else FS.colors.success,
             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
         )
     }

@@ -53,7 +53,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.flagshipserver.app.ui.components.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -236,7 +236,7 @@ fun TrustedDevicesScreen(nav: NavController) {
                     title = "Add a device",
                     icon = Icons.Outlined.QrCode2,
                     iconTint = if (canAddDevice) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    titleColor = if (canAddDevice) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    titleColor = if (canAddDevice) FS.colors.accentText else MaterialTheme.colorScheme.onSurfaceVariant,
                     onClick = { nav.navigate("add-device") },
                     enabled = canAddDevice,
                     modifier = Modifier.semantics { contentDescription = "trusted-devices-add" },

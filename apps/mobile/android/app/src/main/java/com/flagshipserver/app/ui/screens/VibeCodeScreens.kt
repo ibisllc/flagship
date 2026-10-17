@@ -31,7 +31,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.flagshipserver.app.ui.components.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -302,7 +302,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                 placeholder = "plant-tracker",
                 fieldTag = "vibe-describe-name",
             )
-            val primary = MaterialTheme.colorScheme.primary
+            val primary = FS.colors.accentText
             val muted = MaterialTheme.colorScheme.onSurfaceVariant
             Text(
                 text = buildAnnotatedString {
@@ -678,7 +678,7 @@ fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
                 item {
                     Text(
                         text = "Assistant",
-                        color = MaterialTheme.colorScheme.primary,
+                        color = FS.colors.accentText,
                         style = MaterialTheme.typography.labelLarge,
                     )
                     Text(
@@ -692,7 +692,7 @@ fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
                         Spacer(Modifier.height(FS.space.s2))
                         Text(
                             text = "Build logs",
-                            color = MaterialTheme.colorScheme.primary,
+                            color = FS.colors.accentText,
                             style = MaterialTheme.typography.labelLarge,
                         )
                     }
@@ -719,7 +719,7 @@ fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
                         }
                         Text(
                             text = url,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = FS.colors.accentText,
                             style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                         )
                     }

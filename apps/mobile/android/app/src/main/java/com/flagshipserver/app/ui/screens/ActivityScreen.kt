@@ -95,7 +95,7 @@ fun ActivityScreen(nav: NavController) {
         titleTag = "activity-title",
         spacing = 0.dp,
         actions = {
-            androidx.compose.material3.TextButton(onClick = { vm.load() }) { Text("Refresh") }
+            com.flagshipserver.app.ui.components.TextButton(onClick = { vm.load() }) { Text("Refresh") }
         },
     ) {
         // Server filter — shown only when the user owns more than one pod

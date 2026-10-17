@@ -192,7 +192,7 @@ fun FSMonogram(name: String, modifier: Modifier = Modifier, size: Dp = 52.dp) {
     ) {
         Text(
             text = fsInitials(name),
-            color = FS.colors.primary,
+            color = FS.colors.accentText,
             style = MaterialTheme.typography.titleMedium.copy(fontSize = (size.value * 0.38f).sp, fontWeight = FontWeight.Medium),
         )
     }
