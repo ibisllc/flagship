@@ -580,7 +580,7 @@
       "ref": "web",
       "surfaces": {
         "ios": { "status": "missing", "reason": "Box and webapp first (2026-10-16); the iOS port reads server-detail/app-detail `storage` and the `app-storage-full` push next.", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "app-storage-full"]] },
-        "android": { "status": "missing", "reason": "Box and webapp first (2026-10-16); the Android port reads server-detail/app-detail `storage` and the `app-storage-full` push next.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerArchiveScreens.kt", "app-storage-full"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppStorageText.kt", "FULL_SENTENCE"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServiceDetailScreen.kt", "fun AppStorageSection"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerBackupsSection.kt", "storageNotes"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/PhoneAlert.kt", "app-storage-full"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appStorage.js", "export function appStorageLines"], ["apps/web/public/webapp/views/service-detail.js", "renderAppStorage"], ["apps/web/public/webapp/lib/aiChatAlerts.js", "app-storage-full"]] }
       }
     },

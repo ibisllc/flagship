@@ -250,7 +250,7 @@ of the last check here: **not yet checked**.
   and app-detail carry `storage`; a full app is Activity `app.storage.full`
   + `app-storage-full` phone alert + content-free push. Tested on a real
   Postgres 18 and real loop images on a Debian 13 VM (CI runs both). Needs
-  an endorsed box release; the webapp shows `storage` and the alert (shell v132), iOS/Android don't yet;
+  an endorsed box release; the webapp (shell v132) and Android show `storage` and the alert, iOS doesn't yet;
   live gym group `quota` not run yet.
 - **Live gym on UpCloud, all green (2026-10-15).** `bash scripts/gym-refresh.sh`
   (rebases `gym` onto main in `~/.cache/flagship/gym-worktree` and pushes it,
@@ -283,9 +283,11 @@ of the last check here: **not yet checked**.
   file served with Range, Migrate that pauses apps and pulls box to box,
   restore from peers (`from-peers` route). Webapp: Backups section, policy at
   create, download/import, Migrate data move, per-app storage. Needs an
-  endorsed box release and a `.com` deploy. Missing: iOS/Android clients
-  (`wip/backups-ios-2026-10-16`, `wip/backups-android-2026-10-16`), phones'
-  background fetch, live-gym checks (Migrate: two boxes, data moves, old
+  endorsed box release and a `.com` deploy. Android client on `main`
+  (2026-10-17: policy, Backups section, one file, wizard policy, phone copy
+  by WorkManager; unit + 14 emulator mock-gym checks green, the worker not
+  run on a device). Missing: the iOS client (`wip/backups-ios-2026-10-16`),
+  live-gym checks (Migrate: two boxes, data moves, old
   box wiped). Webapp peer backup (2026-10-17, shell v134): Settings →
   Peer-backup is the v2 status (the v1 pool toggle is gone), and Add/Import →
   "Restore from other servers" derives the lost server's PBK from the UMK,

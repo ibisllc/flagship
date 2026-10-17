@@ -621,6 +621,251 @@ const OCTOBER: readonly Scenario[] = [
     },
   ),
   androidTotal(
+    "android-backups-approve",
+    "D1: an admin device with no backups yet approves once and the box has its keys.",
+    `${PKG}.GymBackupsTest#anAdminDeviceApprovesTheKeysOnce`,
+    {
+      steps: [
+        { kind: "tap", describe: "Approve backups for this server.", handle: "sd-backups-approve" },
+      ],
+      assertions: [
+        { describe: "Next backup shown", handle: "sd-backups-next", expect: "present" },
+      ],
+      screenshots: [shot("backups-approve", "Backups approve."), shot("backups-keys-deposited", "Backups keys deposited.")],
+      dimension: "D1",
+    },
+  ),
+  androidTotal(
+    "android-backups-non-admin",
+    "D3: a non-admin device sees the box's reason and every backup order disabled.",
+    `${PKG}.GymBackupsTest#aNonAdminDeviceSeesTheBoxsReason`,
+    {
+      steps: [
+        { kind: "assert", describe: "Why backups wait.", handle: "sd-backups-waiting" },
+      ],
+      assertions: [
+        { describe: "Admin-only line", handle: "sd-backups-admin-only", expect: "present" },
+      ],
+      screenshots: [shot("backups-non-admin", "Backups non admin.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-backups-run",
+    "D1: Back up now shows progress, then the new backup heads the list.",
+    `${PKG}.GymBackupsTest#backUpNowShowsProgressThenLists`,
+    {
+      steps: [
+        { kind: "tap", describe: "Back up now.", handle: "sd-backups-run" },
+      ],
+      assertions: [
+        { describe: "Status line", handle: "sd-backups-status", expect: "present" },
+      ],
+      screenshots: [shot("backups-running", "Backups running."), shot("backups-listed", "Backups listed.")],
+      dimension: "D1",
+    },
+  ),
+  androidTotal(
+    "android-backups-failed",
+    "D5: a failed run says why in the box's words.",
+    `${PKG}.GymBackupsTest#aFailedRunSaysWhyInTheBoxsWords`,
+    {
+      steps: [
+        { kind: "assert", describe: "The red line.", handle: "sd-backups-failed" },
+      ],
+      assertions: [
+        { describe: "Failed line", handle: "sd-backups-failed", expect: "present" },
+      ],
+      screenshots: [shot("backups-failed", "Backups failed.")],
+      dimension: "D5",
+    },
+  ),
+  androidTotal(
+    "android-backups-schedule",
+    "D1: a weekly schedule at a local time is sent in UTC.",
+    `${PKG}.GymBackupsTest#weeklyAtALocalTimeIsSentInUtc`,
+    {
+      steps: [
+        { kind: "tap", describe: "Change the schedule.", handle: "sd-backups-schedule-change" },
+        { kind: "tap", describe: "Weekly, save.", handle: "sd-backups-schedule-save" },
+      ],
+      assertions: [
+        { describe: "Schedule line", handle: "sd-backups-schedule", expect: "present" },
+      ],
+      screenshots: [shot("backups-schedule-editor", "Backups schedule editor."), shot("backups-schedule-weekly", "Backups schedule weekly.")],
+      dimension: "D1",
+    },
+  ),
+  androidTotal(
+    "android-backups-download-delete",
+    "D1: Download saves one file; Delete asks first.",
+    `${PKG}.GymBackupsTest#downloadOneFileAndDeleteOne`,
+    {
+      steps: [
+        { kind: "tap", describe: "Download.", handle: "sd-backups-delete-confirm" },
+      ],
+      assertions: [
+        { describe: "Status line", handle: "sd-backups-status", expect: "present" },
+      ],
+      screenshots: [shot("backups-downloaded", "Backups downloaded."), shot("backups-delete-confirm", "Backups delete confirm.")],
+      dimension: "D1",
+    },
+  ),
+  androidTotal(
+    "android-backups-wizard-policy",
+    "D1: the create wizard offers the three policies with a reserve.",
+    `${PKG}.GymBackupsTest#theWizardOffersTheThreePoliciesWithAReserve`,
+    {
+      steps: [
+        { kind: "tap", describe: "Next.", handle: "cs-next-button" },
+      ],
+      assertions: [
+        { describe: "Phone policy", handle: "cs-backup-policy-phone", expect: "present" },
+      ],
+      screenshots: [shot("wizard-backup-policy", "Wizard backup policy."), shot("wizard-backup-policy-peer", "Wizard backup policy peer.")],
+      dimension: "D1",
+    },
+  ),
+  androidTotal(
+    "android-backups-policy-change",
+    "D5: the policy changes to peer, and a reserve smaller than the apps' data is refused in the box's words.",
+    `${PKG}.GymBackupsTest#thePolicyChangesAndRefusalsAreTheBoxs`,
+    {
+      steps: [
+        { kind: "tap", describe: "Change policy.", handle: "sd-backups-policy-change" },
+        { kind: "tap", describe: "Save.", handle: "sd-backups-policy-save" },
+      ],
+      assertions: [
+        { describe: "Refusal sentence", handle: "sd-backups-policy-error", expect: "present" },
+      ],
+      screenshots: [shot("backups-policy-peer", "Backups policy peer."), shot("backups-policy-refused", "Backups policy refused.")],
+      dimension: "D5",
+    },
+  ),
+  androidTotal(
+    "android-backups-over-limit",
+    "D5: over the limit shows the box's reason in red.",
+    `${PKG}.GymBackupsTest#overTheLimitShowsTheBoxsReasonInRed`,
+    {
+      steps: [
+        { kind: "assert", describe: "The reason.", handle: "sd-backups-over" },
+      ],
+      assertions: [
+        { describe: "Over-limit line", handle: "sd-backups-over", expect: "present" },
+      ],
+      screenshots: [shot("backups-over-limit", "Backups over limit.")],
+      dimension: "D5",
+    },
+  ),
+  androidTotal(
+    "android-backups-policy-unset",
+    "D1: an unchosen policy asks to choose.",
+    `${PKG}.GymBackupsTest#anUnchosenPolicyAsksToChoose`,
+    {
+      steps: [
+        { kind: "tap", describe: "Choose.", handle: "sd-backups-policy-change" },
+        { kind: "tap", describe: "Save.", handle: "sd-backups-policy-save" },
+      ],
+      assertions: [
+        { describe: "Policy line", handle: "sd-backups-policy", expect: "present" },
+      ],
+      screenshots: [shot("backups-policy-chosen", "Backups policy chosen.")],
+      dimension: "D1",
+    },
+  ),
+  androidTotal(
+    "android-backups-app-full",
+    "D5: a full app is named on the Backups section.",
+    `${PKG}.GymBackupsTest#aFullAppIsNamedOnTheBackupsSection`,
+    {
+      steps: [
+        { kind: "assert", describe: "The full app.", handle: "sd-backups-storage-0" },
+      ],
+      assertions: [
+        { describe: "Full-app note", handle: "sd-backups-storage-0", expect: "present" },
+      ],
+      screenshots: [shot("backups-app-full", "Backups app full.")],
+      dimension: "D5",
+    },
+  ),
+  androidTotal(
+    "android-backups-import-one-file",
+    "D1: Import a backup takes one file, asks for the passcode and shows where it is from.",
+    `${PKG}.GymBackupsTest#importOneFile`,
+    {
+      steps: [
+        { kind: "tap", describe: "Choose the backup file.", handle: "import-backup-choose" },
+        { kind: "tap", describe: "Open.", handle: "import-backup-unlock" },
+      ],
+      assertions: [
+        { describe: "Name step", handle: "import-backup-name", expect: "present" },
+      ],
+      screenshots: [shot("import-one-file", "Import one file.")],
+      dimension: "D1",
+    },
+  ),
+  androidTotal(
+    "android-backups-import-damaged",
+    "D5: a cut-short or foreign file is refused with a sentence.",
+    `${PKG}.GymBackupsTest#aDamagedFileIsRefusedWithASentence`,
+    {
+      steps: [
+        { kind: "tap", describe: "Choose the backup file.", handle: "import-backup-choose" },
+      ],
+      assertions: [
+        { describe: "Error sentence", handle: "import-backup-error", expect: "present" },
+      ],
+      screenshots: [shot("import-damaged", "Import damaged.")],
+      dimension: "D5",
+    },
+  ),
+  androidTotal(
+    "android-backups-restore-partial",
+    "D5: a restore that gives up on one app ends and names it.",
+    `${PKG}.GymBackupsTest#aRestoreWithAFailedAppEndsAndNamesIt`,
+    {
+      steps: [
+        { kind: "tap", describe: "Send the backup.", handle: "import-backup-send-existing" },
+      ],
+      assertions: [
+        { describe: "Restored line", handle: "import-backup-restored", expect: "present" },
+        { describe: "Failed app named", handle: "import-backup-failed-app", expect: "present" },
+      ],
+      screenshots: [shot("restore-partial", "Restore partial.")],
+      dimension: "D5",
+    },
+  ),
+  androidTotal(
+    "android-oct-app-storage",
+    "D6: Plants shows its files folder and database against their limits.",
+    O + "appStorageShowsLimits",
+    {
+      steps: [
+        { kind: "assert", describe: "The storage card.", handle: "service-detail-storage" },
+      ],
+      assertions: [
+        { describe: "Files line", handle: "service-detail-storage-files", expect: "present" },
+      ],
+      screenshots: [shot("app-storage-limits", "App storage limits.")],
+      dimension: "D6",
+    },
+  ),
+  androidTotal(
+    "android-oct-app-storage-full",
+    "D5: a full app says new data is refused.",
+    O + "aFullAppSaysNewDataIsRefused",
+    {
+      steps: [
+        { kind: "assert", describe: "The full sentence.", handle: "service-detail-storage-full" },
+      ],
+      assertions: [
+        { describe: "Full sentence", handle: "service-detail-storage-full", expect: "present" },
+      ],
+      screenshots: [shot("app-storage-full", "App storage full.")],
+      dimension: "D5",
+    },
+  ),
+  androidTotal(
     "android-oct-database-browse",
     "D6: Plants' Database opens a table with its row range.",
     O + "databaseBrowsesATable",
