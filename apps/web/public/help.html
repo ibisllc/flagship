@@ -101,7 +101,7 @@
 <body>
 
 <header class="topbar">
-  <a href="/" class="brand" aria-label="Flagship — home">
+  <a href="/" class="brand" aria-label="Flagship home">
     <svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true"><rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"/><circle class="lg-ring" cx="32" cy="32" r="18"/><circle class="lg-core" cx="32" cy="32" r="16"/></svg>
     <span class="name">Flagship</span>
   </a>
@@ -137,9 +137,9 @@
       <span class="label">Stuck on install</span>
       <h3>I'm stuck on the install screen.</h3>
       <ol>
-        <li><strong>"No pairing code accepted"</strong> — reopen Studio to show a fresh QR and short code, then try again.</li>
-        <li><strong>"No network"</strong> — the installer needs DHCP on a wired ethernet port. Wi-Fi is not supported during install. Plug a cable in.</li>
-        <li><strong>"Disk too small"</strong> — minimum is 32 GB. The installer formats whichever disk you point it at; it does not dual-boot.</li>
+        <li><strong>"No pairing code accepted"</strong>: reopen Studio to show a fresh QR and short code, then try again.</li>
+        <li><strong>"No network"</strong>: the installer needs DHCP on a wired ethernet port. Wi-Fi is not supported during install. Plug a cable in.</li>
+        <li><strong>"Disk too small"</strong>: minimum is 32 GB. The installer formats whichever disk you point it at; it does not dual-boot.</li>
       </ol>
       <p class="next">Still stuck? Capture the screen and email it.</p>
     </article>
@@ -149,7 +149,7 @@
       <h3>My phone died.</h3>
       <ol>
         <li>If you enabled iCloud Keychain or Google Block Store at setup, sign in on the new phone and your identity unwraps with biometrics.</li>
-        <li>If you didn't, your account is unrecoverable — that's by design (we have no backdoor) and we tried to be clear about it during setup.</li>
+        <li>If you didn't, your account is unrecoverable; that's by design (we have no backdoor) and we tried to be clear about it during setup.</li>
         <li>The hardware itself is fine. Spinning up a new account against the same box is a clean reinstall.</li>
       </ol>
       <p class="next">Full recovery flow: <a href="/docs/">/docs/recovery</a>.</p>
@@ -159,9 +159,9 @@
       <span class="label">Service not loading</span>
       <h3>A service isn't loading.</h3>
       <ol>
-        <li><strong>Browser shows "DNS error"</strong> — your subdomain is propagating. Wait 60 seconds; check <a href="/status/">/status</a>.</li>
-        <li><strong>"Cert invalid" / no green padlock</strong> — the daemon is renewing. Check the dashboard for "Renewing" pill; usually clears in 90 seconds.</li>
-        <li><strong>"403 not a member"</strong> — the service is identity-gated and your phone hasn't approved your device. Approve from the phone, refresh.</li>
+        <li><strong>Browser shows "DNS error"</strong>: your subdomain is propagating. Wait 60 seconds; check <a href="/status/">/status</a>.</li>
+        <li><strong>"Cert invalid" / no green padlock</strong>: the daemon is renewing. Check the dashboard for "Renewing" pill; usually clears in 90 seconds.</li>
+        <li><strong>"403 not a member"</strong>: the service is identity-gated and your phone hasn't approved your device. Approve from the phone, refresh.</li>
       </ol>
       <p class="next">Logs live on your box at <code>journalctl -u flagshipd</code>.</p>
     </article>
@@ -173,10 +173,10 @@
 
     <div class="symptom">
       <h3>My install is stuck at "installed"</h3>
-      <p>The install finished and the box powered off so you could unplug the USB stick and power it back on — but after you do, it never comes up. This almost always means the box can't reach the network early in boot, so it can't fetch the key that unlocks its encrypted disk. It's the usual symptom on a <strong>Wi-Fi-only</strong> box (the disk-unlock step runs before Wi-Fi is available). Two fixes:</p>
+      <p>The install finished and the box powered off so you could unplug the USB stick and power it back on, but after you do, it never comes up. This almost always means the box can't reach the network early in boot, so it can't fetch the key that unlocks its encrypted disk. It's the usual symptom on a <strong>Wi-Fi-only</strong> box (the disk-unlock step runs before Wi-Fi is available). Two fixes:</p>
       <ol>
         <li><strong>Plug in an Ethernet cable.</strong> A wired connection is up early enough for the box to fetch its unlock key and finish booting. This is the simplest fix and keeps your disk encrypted.</li>
-        <li><strong>Or create a new server with disk encryption turned off.</strong> In the app's "Create a server" screen (or the web app), uncheck <strong>Encrypt disk</strong>, then re-burn. A box with the disk unencrypted boots without needing the network to unlock — so it works on Wi-Fi-only setups. The trade-off: your data is no longer encrypted at rest, which is less safe if the box is stolen. Choose this only when a wired connection isn't an option.</li>
+        <li><strong>Or create a new server with disk encryption turned off.</strong> In the app's "Create a server" screen (or the web app), uncheck <strong>Encrypt disk</strong>, then re-burn. A box with the disk unencrypted boots without needing the network to unlock, so it works on Wi-Fi-only setups. The trade-off: your data is no longer encrypted at rest, which is less safe if the box is stolen. Choose this only when a wired connection isn't an option.</li>
       </ol>
     </div>
 
@@ -202,7 +202,7 @@
 
     <div class="symptom">
       <h3>"403 not a member" or "Service locked"</h3>
-      <p>Services default to identity-gated — only the owner and explicitly invited users can hit them. If you're the owner and seeing 403:</p>
+      <p>Services default to identity-gated: only the owner and explicitly invited users can hit them. If you're the owner and seeing 403:</p>
       <ol>
         <li>Confirm you're signed in on this device. Open the dashboard at <code>https://you.flagship.services/.flagship/</code>; if it asks for pairing, pair.</li>
         <li>If you're a guest someone shared the service with: ask them to re-issue the invite. Invite tokens expire after first use.</li>
@@ -223,7 +223,7 @@
     </div>
     <div>
       <span class="pill pill--online">Live</span>
-      <p style="margin-top: var(--space-3); color: var(--text-muted); font-size: var(--body-sm-size);">If <a href="/status/">/status</a> shows green and you're still broken, that's almost always something local — and that's almost always something we can help with by email.</p>
+      <p style="margin-top: var(--space-3); color: var(--text-muted); font-size: var(--body-sm-size);">If <a href="/status/">/status</a> shows green and you're still broken, that's almost always something local, and that's almost always something we can help with by email.</p>
     </div>
   </div>
 

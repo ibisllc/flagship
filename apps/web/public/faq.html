@@ -92,7 +92,7 @@
 <body>
 
 <header class="topbar">
-  <a href="/" class="brand" aria-label="Flagship — home">
+  <a href="/" class="brand" aria-label="Flagship home">
     <svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true"><rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"/><circle class="lg-ring" cx="32" cy="32" r="18"/><circle class="lg-core" cx="32" cy="32" r="16"/></svg>
     <span class="name">Flagship</span>
   </a>
@@ -126,7 +126,7 @@
       <details class="q">
         <summary>What hardware do I actually need?</summary>
         <div class="answer">
-          <p>Any x86_64 machine with at least 2 GB of RAM, 32 GB of disk, and a working ethernet port. An old laptop, a NUC, an Optiplex from 2014, our pre-built box — all fine. The builder handles the OS for you, so you don't need to know or care what it runs.</p>
+          <p>Any x86_64 machine with at least 2 GB of RAM, 32 GB of disk, and a working ethernet port. An old laptop, a NUC, an Optiplex from 2014, our pre-built box. All fine. The builder handles the OS for you, so you don't need to know or care what it runs.</p>
         </div>
       </details>
       <details class="q">
@@ -150,7 +150,7 @@
       <details class="q">
         <summary>Can I install without a phone?</summary>
         <div class="answer">
-          <p>Not really, but you have options. The phone <em>is</em> the trust root in the strong-security path — there's no email-and-password to fall back to. If you don't want to use a phone, the installable web app at <a href="https://webapp.flagshipserver.com/">webapp.flagshipserver.com</a> works as a peer device (passphrase + WebAuthn instead of Secure Enclave). It's a weaker key-storage trade-off but it's an account you fully control.</p>
+          <p>Not really, but you have options. The phone <em>is</em> the trust root in the strong-security path; there's no email-and-password to fall back to. If you don't want to use a phone, the installable web app at <a href="https://webapp.flagshipserver.com/">webapp.flagshipserver.com</a> works as a peer device (passphrase + WebAuthn instead of Secure Enclave). It's a weaker key-storage trade-off but it's an account you fully control.</p>
         </div>
       </details>
       <details class="q">
@@ -162,7 +162,7 @@
       <details class="q">
         <summary>Can I run it on a Raspberry Pi?</summary>
         <div class="answer">
-          <p>Not yet. Today the builder targets x86_64 machines; we don't ship an ARM build of the base OS as a default. The daemon itself is plain TypeScript, so a Pi 4 with an SSD is technically capable — if you get there by hand, please tell us how it went.</p>
+          <p>Not yet. Today the builder targets x86_64 machines; we don't ship an ARM build of the base OS as a default. The daemon itself is plain TypeScript, so a Pi 4 with an SSD is technically capable; if you get there by hand, please tell us how it went.</p>
         </div>
       </details>
     </div>
@@ -170,7 +170,7 @@
 
   <section class="faq-section" id="privacy" aria-label="Privacy and security">
     <h2>Privacy &amp; security</h2>
-    <p class="section-lede">The structural answer to "can you read my data?" is no — the bytes never leave your box decrypted. Here's what that means in practice.</p>
+    <p class="section-lede">The structural answer to "can you read my data?" is no: the bytes never leave your box decrypted. Here's what that means in practice.</p>
     <div class="qlist">
       <details class="q">
         <summary>Can Flagship read my data?</summary>
@@ -193,7 +193,7 @@
       <details class="q">
         <summary>What encryption do you use?</summary>
         <div class="answer">
-          <p>Standard primitives only — Ed25519 signatures, X25519 + AES-256-GCM for sealed blobs, HKDF-SHA-256 for key derivation, LUKS2/argon2id for the disk. Real Let's Encrypt certs (TLS-ALPN-01 today, DNS-01 wildcard rolling out) for transport. If we ever invent our own crypto, please report it as a bug.</p>
+          <p>Standard primitives only: Ed25519 signatures, X25519 + AES-256-GCM for sealed blobs, HKDF-SHA-256 for key derivation, LUKS2/argon2id for the disk. Real Let's Encrypt certs (TLS-ALPN-01 today, DNS-01 wildcard rolling out) for transport. If we ever invent our own crypto, please report it as a bug.</p>
         </div>
       </details>
       <details class="q">
@@ -205,13 +205,13 @@
       <details class="q">
         <summary>Can a court compel you to hand over my data?</summary>
         <div class="answer">
-          <p>They can compel us to hand over what we have, and what we have is a username, a sealed blob, and routing metadata. We can't decrypt your traffic because we don't terminate it. We can revoke the routing entry for your subdomain (which takes your services offline) — that's a power we have and we'd resist abusing. We'll publish a transparency report annually once we have any requests to report.</p>
+          <p>They can compel us to hand over what we have, and what we have is a username, a sealed blob, and routing metadata. We can't decrypt your traffic because we don't terminate it. We can revoke the routing entry for your subdomain (which takes your services offline); that's a power we have and we'd resist abusing. We'll publish a transparency report annually once we have any requests to report.</p>
         </div>
       </details>
       <details class="q">
         <summary>What do you log?</summary>
         <div class="answer">
-          <p>Cloudflare gets normal request logs (IP, path, status) for <code>flagshipserver.com</code> on a 30-day window — we don't extend them. Fly gets TCP connection metadata for <code>flagship.services</code>. Your daemon logs locally on your box and never ships those logs anywhere. We don't run analytics, ad pixels, or session-replay on the marketing site or the dashboard.</p>
+          <p>Cloudflare gets normal request logs (IP, path, status) for <code>flagshipserver.com</code> on a 30-day window; we don't extend them. Fly gets TCP connection metadata for <code>flagship.services</code>. Your daemon logs locally on your box and never ships those logs anywhere. We don't run analytics, ad pixels, or session-replay on the marketing site or the dashboard.</p>
         </div>
       </details>
     </div>
@@ -236,13 +236,13 @@
       <details class="q">
         <summary>What stops a malicious service from stealing my data?</summary>
         <div class="answer">
-          <p>The data-layer is per-service and per-user-namespaced — a service declares which Postgres tables and which object-storage buckets it wants in its manifest, and the daemon enforces it. A service for "plant watering" can't read your photos. Outbound network access is allowlisted in the manifest; the browser feature has a domain gate. Nothing stops a malicious service from being terrible inside its own scope, which is why you should think before installing one.</p>
+          <p>The data-layer is per-service and per-user-namespaced: a service declares which Postgres tables and which object-storage buckets it wants in its manifest, and the daemon enforces it. A service for "plant watering" can't read your photos. Outbound network access is allowlisted in the manifest; the browser feature has a domain gate. Nothing stops a malicious service from being terrible inside its own scope, which is why you should think before installing one.</p>
         </div>
       </details>
       <details class="q">
         <summary>Which AI providers can services use?</summary>
         <div class="answer">
-          <p>Whichever you've configured. BYOK to Anthropic, OpenAI, Mistral, anyone with an API. Keys live on your daemon, encrypted at rest, scoped per service. Services never see the raw key. We also ship a one-shot promo path that shows a fresh key at first run for the supported providers — useful for "try Flagship without a credit card" but cosmetically rate-limited.</p>
+          <p>Whichever you've configured. BYOK to Anthropic, OpenAI, Mistral, anyone with an API. Keys live on your daemon, encrypted at rest, scoped per service. Services never see the raw key. We also ship a one-shot promo path that shows a fresh key at first run for the supported providers, useful for "try Flagship without a credit card" but cosmetically rate-limited.</p>
         </div>
       </details>
       <details class="q">
@@ -261,7 +261,7 @@
       <details class="q">
         <summary>What does Flagship cost?</summary>
         <div class="answer">
-          <p>Bring-your-own-hardware: $0. We're not selling boxes or subscriptions yet — when we are, we'll publish the details and they'll be opt-in for power-user surfaces only. Most people pay nothing, forever.</p>
+          <p>Bring-your-own-hardware: $0. We're not selling boxes or subscriptions yet; when we are, we'll publish the details and they'll be opt-in for power-user surfaces only. Most people pay nothing, forever.</p>
         </div>
       </details>
       <details class="q">
@@ -285,7 +285,7 @@
       <details class="q">
         <summary>Do you take crypto?</summary>
         <div class="answer">
-          <p>Not yet. Stripe takes cards (USD, EUR, GBP). We're exploring monero / lightning for the privacy-conscious, but it's not on the immediate roadmap. If this matters to you, mail <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a> and tell us — that's how features get prioritized.</p>
+          <p>Not yet. Stripe takes cards (USD, EUR, GBP). We're exploring monero / lightning for the privacy-conscious, but it's not on the immediate roadmap. If this matters to you, mail <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a> and tell us. That's how features get prioritized.</p>
         </div>
       </details>
       <details class="q">
@@ -297,7 +297,7 @@
       <details class="q">
         <summary>How do you make money long-term?</summary>
         <div class="answer">
-          <p>Hardware margin, subscriptions on the optional add-ons. We don't sell ads, telemetry, model-training rights, or your data — partly because it's the right thing, mostly because we structurally can't.</p>
+          <p>Hardware margin, subscriptions on the optional add-ons. We don't sell ads, telemetry, model-training rights, or your data: partly because it's the right thing, mostly because we structurally can't.</p>
         </div>
       </details>
     </div>
@@ -310,7 +310,7 @@
       <details class="q">
         <summary>What happens to my server if you shut down?</summary>
         <div class="answer">
-          <p>It keeps running. Your services keep running. Your TLS cert keeps renewing through Let's Encrypt as long as DNS resolves. The two things that would break: routing through <code>flagship.services</code> (because the tunnel hub is ours) and the build pipeline at <code>flagshipserver.com</code> (because that's our Worker). The fix in both cases is a self-hosting playbook we've already drafted — you'd run your own services-zone or point your subdomain at your own IP via DDNS.</p>
+          <p>It keeps running. Your services keep running. Your TLS cert keeps renewing through Let's Encrypt as long as DNS resolves. The two things that would break: routing through <code>flagship.services</code> (because the tunnel hub is ours) and the build pipeline at <code>flagshipserver.com</code> (because that's our Worker). The fix in both cases is a self-hosting playbook we've already drafted: you'd run your own services-zone or point your subdomain at your own IP via DDNS.</p>
         </div>
       </details>
       <details class="q">
@@ -322,7 +322,7 @@
       <details class="q">
         <summary>Will the source survive you?</summary>
         <div class="answer">
-          <p>Yes. BUSL-1.1 with a Change Date of 2030-05-03 — even if the company evaporates tomorrow, the entire codebase becomes Apache 2.0 in 2030 by license, and the GitHub mirror stays up regardless. We'll publish escrow instructions for the build pipeline before public launch.</p>
+          <p>Yes. BUSL-1.1 with a Change Date of 2030-05-03: even if the company evaporates tomorrow, the entire codebase becomes Apache 2.0 in 2030 by license, and the GitHub mirror stays up regardless. We'll publish escrow instructions for the build pipeline before public launch.</p>
         </div>
       </details>
     </div>
@@ -330,7 +330,7 @@
 
   <div class="help-out">
     <h3>Didn't find it?</h3>
-    <p>Mail <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a> — a real person reads everything. For broken installs, try <a href="/help">/help</a> first; for security questions, <a href="/security">/security</a> goes deeper than this page does.</p>
+    <p>Mail <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a>. A real person reads everything. For broken installs, try <a href="/help">/help</a> first; for security questions, <a href="/security">/security</a> goes deeper than this page does.</p>
     <a href="/help" class="btn btn--secondary">Open the help center</a>
   </div>
 

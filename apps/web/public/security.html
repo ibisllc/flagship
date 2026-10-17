@@ -44,7 +44,7 @@
 </head>
   <body>
     <header class="topbar">
-      <a href="/" class="brand" aria-label="Flagship — home">
+      <a href="/" class="brand" aria-label="Flagship home">
         <svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true"><rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"/><circle class="lg-ring" cx="32" cy="32" r="18"/><circle class="lg-core" cx="32" cy="32" r="16"/></svg>
         <span class="name">Flagship</span>
       </a>
@@ -81,8 +81,8 @@
 
         <div class="callout">
           <strong>Three device families.</strong> The native iOS app and Android app use Secure
-          Enclave / StrongBox — strong key storage. The installable webapp uses software-only
-          IndexedDB-with-passphrase — weaker, suitable for testing or accessibility. We
+          Enclave / StrongBox: strong key storage. The installable webapp uses software-only
+          IndexedDB-with-passphrase: weaker, suitable for testing or accessibility. We
           deliberately don't share keys between families: a webapp identity and an iOS identity
           are independent accounts, the way Apple Pay never crosses to Google Pay.
         </div>
@@ -90,12 +90,12 @@
         <h3>What we promise</h3>
         <ul class="bullets">
           <li>All security-critical code (key derivation, signing, encryption, daemon, boot path, mobile clients) is open source under Apache 2.0.</li>
-          <li>The boot image is built reproducibly — you can verify the bytes match the source.</li>
+          <li>The boot image is built reproducibly: you can verify the bytes match the source.</li>
           <li>Standard primitives only: <code>Ed25519</code>, <code>X25519</code>, <code>AES-256-GCM</code>, <code>HKDF-SHA-256</code>. No homemade crypto.</li>
           <li>Server boot requires a phone-signed approval over the network. A stolen server cannot self-unlock.</li>
           <li>The auth domain (<code>flagshipserver.com</code>) is separate from the user-content domain (<code>*.flagship.services</code>) so user apps cannot reach session cookies via subdomain confusion.</li>
-          <li>flagshipserver.com is physically unable to read user-content TLS — bytes are routed by SNI and decrypted only on your own server.</li>
-          <li id="no-kyc"><strong>No KYC, ever.</strong> We do not collect, store, or expose any real-world identity attribute about any user — no legal name, no email, no phone, no government ID. <a href="https://github.com/ibisllc/flagship/blob/main/docs/policy/no-kyc.md">Read the full policy →</a></li>
+          <li>flagshipserver.com is physically unable to read user-content TLS: bytes are routed by SNI and decrypted only on your own server.</li>
+          <li id="no-kyc"><strong>No KYC, ever.</strong> We do not collect, store, or expose any real-world identity attribute about any user: no legal name, no email, no phone, no government ID. <a href="https://github.com/ibisllc/flagship/blob/main/docs/policy/no-kyc.md">Read the full policy →</a></li>
         </ul>
 
         <h3>Source code</h3>
@@ -110,7 +110,7 @@
         <h2>Coordinated disclosure &amp; bounty</h2>
         <p>
           We pay for serious vulnerabilities in a defined scope and respond to
-          reports under a published SLA. Coordinated disclosure is required —
+          reports under a published SLA. Coordinated disclosure is required:
           exploit details stay private until a fix ships.
         </p>
 
@@ -122,13 +122,13 @@
               <tr>
                 <td>
                   <ul>
-                    <li><code>flagshipserver.com</code> — the Cloudflare Worker, all <code>/api/*</code> routes, the static site, and domain configuration / cookie scoping.</li>
-                    <li><code>webapp.flagshipserver.com</code> — the webapp PWA: WebAuthn / IRK signing / lease deposit / recovery upload paths.</li>
-                    <li><code>remote.flagshipserver.com</code> — the browser-remote surface: the phone-approval ceremony and the keyless session it issues.</li>
-                    <li><code>*.flagship.services</code> — the SNI passthrough plane on Fly, the tunnel hub, and the tunnel transport from each Flagship server.</li>
+                    <li><code>flagshipserver.com</code>: the Cloudflare Worker, all <code>/api/*</code> routes, the static site, and domain configuration / cookie scoping.</li>
+                    <li><code>webapp.flagshipserver.com</code>: the webapp PWA: WebAuthn / IRK signing / lease deposit / recovery upload paths.</li>
+                    <li><code>remote.flagshipserver.com</code>: the browser-remote surface: the phone-approval ceremony and the keyless session it issues.</li>
+                    <li><code>*.flagship.services</code>: the SNI passthrough plane on Fly, the tunnel hub, and the tunnel transport from each Flagship server.</li>
                     <li>The Flagship daemon as shipped by Flagship Studio on the Debian-based boot image. Includes ACME, the local TLS server, the data layer (Postgres / Forgejo / Chromium under <code>/var/flagship/data/</code>, and each app's files volume).</li>
                     <li>The boot image and Flagship Studio, the image-builder.</li>
-                    <li>The canonical-bytes layer in <code>@flagship/protocol</code> — sign/verify routines, key derivations, encryption.</li>
+                    <li>The canonical-bytes layer in <code>@flagship/protocol</code>: sign/verify routines, key derivations, encryption.</li>
                     <li>The Flagship iOS and Android apps.</li>
                   </ul>
                 </td>
@@ -136,7 +136,7 @@
                   <ul>
                     <li>Vulnerabilities in apps installed by individual users (those are the app author's responsibility; report to them directly).</li>
                     <li>Self-hosted forks of Flagship (only the canonical builds are in scope).</li>
-                    <li>Issues in third-party dependencies — please report upstream and copy us.</li>
+                    <li>Issues in third-party dependencies, please report upstream and copy us.</li>
                     <li>Issues requiring physical access to a user's already-unlocked phone or laptop.</li>
                     <li>Theoretical attacks against well-vetted primitives (Ed25519, X25519, AES-256-GCM, SHA-256, HKDF) without a working PoC.</li>
                     <li>Rate-limiting, denial-of-service, or volumetric attacks against public endpoints. (We rely on Cloudflare's edge for these.)</li>
@@ -163,7 +163,7 @@
           <strong>Status: pre-release, not yet fully funded.</strong> Flagship
           has not launched commercially and the bounty programme is not funded
           yet, so <strong>payouts are delayed until it is</strong>. The bands
-          below are what we expect to pay once funding is in place — they are
+          below are what we expect to pay once funding is in place; they are
           not a current offer. Until then we triage, fix, and credit reports
           under this policy, and we record every qualifying report as an
           outstanding obligation to be assessed against these bands at
@@ -180,8 +180,8 @@
             obligation</strong>, with the severity we assess it at, to be
             settled against the bands below at commercial launch.</li>
           <li><strong>We assess severity ourselves and will rate upwards.</strong>
-            If your own write-up is more conservative than the facts support —
-            as the first report we received was — we record the higher
+            If your own write-up is more conservative than the facts support,
+            as the first report we received was, we record the higher
             severity, not the one you claimed.</li>
           <li><strong>Credit is available immediately</strong>, in whatever form
             you ask for, and is not contingent on anything. It is the one thing
@@ -249,7 +249,7 @@
         <h3>Hall of fame</h3>
         <p class="muted">
           Researchers who reported a vulnerability to us, with the commits that
-          closed it. Credited in whatever form each reporter asks for — name,
+          closed it. Credited in whatever form each reporter asks for: name,
           handle, or anonymous, with a link if they want one. Listed without
           attribution until they have told us their preference; we never
           publish a name we have not been given.
@@ -264,7 +264,7 @@
         <p>
           Account recovery schedules a replacement of the account&rsquo;s root
           identity key. The endpoint that starts it verified the request against
-          the <em>incoming</em> key — a self-assertion — and its only other
+          the <em>incoming</em> key, a self-assertion, and its only other
           input, the account&rsquo;s current identity key, is served to anyone by
           the public username lookup. On an account with no second factor
           enrolled, that left nothing a stranger could not supply: knowing a
@@ -305,7 +305,7 @@
         <p>
           The endpoint that issues relay-hub blessings did not authenticate its
           caller, so anyone could obtain a validly signed blessing for a key and
-          host of their choosing — a signing oracle against the trust chain a
+          host of their choosing: a signing oracle against the trust chain a
           box uses to decide whether the hub in front of it is the real one.
         </p>
         <p>
@@ -326,7 +326,7 @@
         </p>
         <p>
           New accounts can only take a handle the server suggested, and choosing
-          your own name is meant to be the paid name change — the fee is what
+          your own name is meant to be the paid name change; the fee is what
           keeps desirable names from being squatted. An old rename endpoint
           from early development was still live and enforced none of that. It
           checked only the account&rsquo;s own signature, so any account holder
@@ -399,10 +399,10 @@
       <section id="report">
         <h2>Report a vulnerability</h2>
         <p>
-          Use the form below (preferred — it asks for the right structured
+          Use the form below (preferred: it asks for the right structured
           fields), or email
           <a href="mailto:security@flagshipserver.com">security@flagshipserver.com</a>.
-          Encrypted reports are encouraged — use our PGP key:
+          Encrypted reports are encouraged. Use our PGP key:
         </p>
         <ul class="bullets">
           <li><a href="/.well-known/pgp-key.txt">Download the public key</a>, or let your mail client find it for <code>security@flagshipserver.com</code> (published via Web Key Directory).</li>
@@ -418,15 +418,15 @@
         </ul>
 
         <form id="report-form">
-          <label for="email">Your email <span class="hint">— so we can reply (optional but recommended)</span></label>
+          <label for="email">Your email <span class="hint">so we can reply (optional but recommended)</span></label>
           <input id="email" name="email" type="email" placeholder="you@example.com" />
 
           <label for="severity">Severity (your guess)</label>
           <select id="severity" name="severity">
-            <option value="critical">Critical — remote unauth, key compromise, data exfil</option>
-            <option value="high" selected>High — privilege escalation, account takeover</option>
-            <option value="medium">Medium — info disclosure, partial bypass</option>
-            <option value="low">Low — minor, requires unusual conditions</option>
+            <option value="critical">Critical: remote unauth, key compromise, data exfil</option>
+            <option value="high" selected>High: privilege escalation, account takeover</option>
+            <option value="medium">Medium: info disclosure, partial bypass</option>
+            <option value="low">Low: minor, requires unusual conditions</option>
           </select>
 
           <label for="component">Component</label>
