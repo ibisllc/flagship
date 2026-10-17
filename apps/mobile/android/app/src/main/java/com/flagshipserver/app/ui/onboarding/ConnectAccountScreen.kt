@@ -5,7 +5,7 @@
 //   call `resolveAccount` (GET /api/account/resolve/<u>, 200 ALWAYS) and
 //   branch on `kind`:
 //     demo            → attach a fresh device + activate the sandbox via
-//                       DemoFixtures.activate(demoServer). The username IS
+//                       DemoAccount.activate(demoServer). The username IS
 //                       the capability.
 //     unknown         → an inline "No Flagship account by that name" state.
 //     single | multi  → the single/multi recovery state machine.
@@ -52,7 +52,7 @@ import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.api.AccountResolution
 import com.flagshipserver.app.api.DemoSessionRecord
 import com.flagshipserver.app.core.ConnectInput
-import com.flagshipserver.app.core.DemoFixtures
+import com.flagshipserver.app.core.DemoAccount
 import com.flagshipserver.app.core.DemoSessionPairer
 import com.flagshipserver.app.core.JoinLink
 import com.flagshipserver.app.core.LocalAppState
@@ -121,7 +121,7 @@ fun ConnectAccountScreen(
                                 sessionStore.setDemoSession(DemoSessionRecord(resolution.username, demo))
                             }
                         }
-                        DemoFixtures.activate(app, resolution.username, demoServer = resolution.demoServer)
+                        DemoAccount.activate(app, resolution.username, demoServer = resolution.demoServer)
                         onDemoOpened()
                     }
                     AccountResolution.AccountKind.Unknown -> unknownName = resolution.username
