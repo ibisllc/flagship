@@ -103,6 +103,9 @@ class AddDeviceViewModel(
     /** Slice D (D-4) — reads the 32-byte admin master-root seed to seal into the
      *  bundle when promote is ON. Null when this device holds no root. */
     private val adminRootSeed: () -> ByteArray? = { Keystore.adminRootSeed() },
+    /** The account key's public key hex, sent in the bundle so the joining
+     *  device can check the admit without asking `.com`. */
+    private val irkPubHex: suspend () -> String? = { runCatching { Keystore.irkPubHex() }.getOrNull() },
 ) : ViewModel() {
 
     private val _phase = MutableStateFlow<AddDevicePhase>(
@@ -232,10 +235,10 @@ class AddDeviceViewModel(
             val scopes = if (promoted) {
                 com.flagshipserver.app.core.DeviceCapabilityGrant.DEVICE_SCOPE_ORDER
             } else {
-                listOf("browse", "install-service", "vibe-code", "view-directory")
+                com.flagshipserver.app.core.PairingGrants.MEMBER_SCOPES
             }
             val grantId = java.util.UUID.randomUUID().toString()
-            val expiresAt = admit.issuedAt + 90L * 24 * 3_600_000
+            val expiresAt = admit.issuedAt + com.flagshipserver.app.core.PairingGrants.GRANT_TTL_MS
             val grantBytes = com.flagshipserver.app.core.DeviceCapabilityGrant.canonicalBytes(
                 grantId, username, deviceId, devicePubHex, scopes, admit.issuedAt, expiresAt,
             )
@@ -259,6 +262,7 @@ class AddDeviceViewModel(
                     signerRoot = if (promoted) "admin-root" else "membership",
                 ),
                 grantSignature = HexUtil.encode(grantSigner.sign(grantBytes)),
+                irkPubHex = irkPubHex(),
                 wrappedAdminRoot = wrappedAdminRoot,
             )
             val sealed = session.seal(bundle.toJsonBytes())

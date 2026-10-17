@@ -87,6 +87,34 @@ const EVERY_MERGE: readonly Scenario[] = [
     },
   ),
   android(
+    "android-add-device-non-admin",
+    "Adding a device is admin-only: on a non-admin device Add device is disabled and the sentence 'Only an admin device of this account can add devices.' shows.",
+    `${PKG}.GymAddDeviceTest#nonAdminDeviceCannotAddADevice`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch smokeTab=settings (non-admin device)." },
+        { kind: "tap", describe: "Trusted devices." },
+      ],
+      assertions: [{ describe: "Add device", handle: "trusted-devices-add", expect: "present" }],
+      screenshots: [shot("add-device-non-admin", "Add device disabled with the sentence.")],
+      dimension: "D1",
+    },
+  ),
+  android(
+    "android-add-device-admin",
+    "An admin device opens the pairing code from Trusted devices > Add device.",
+    `${PKG}.GymAddDeviceTest#adminDeviceOpensThePairingCode`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch smokeTab=settings with the admin root." },
+        { kind: "tap", describe: "Trusted devices, then Add device.", handle: "trusted-devices-add" },
+      ],
+      assertions: [{ describe: "Add a device", handle: "add-device", expect: "present" }],
+      screenshots: [shot("add-device-admin", "The pairing code.")],
+      dimension: "D1",
+    },
+  ),
+  android(
     "android-home-tab",
     "The Home tab renders its large-title landmark in smoke mode.",
     `${PKG}.GymEveryMergeTest#homeTabRenders`,
