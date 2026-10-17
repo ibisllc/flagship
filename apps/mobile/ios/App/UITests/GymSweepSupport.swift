@@ -11,8 +11,22 @@ import XCTest
 /// box, which the per-server cards look pods up by.
 class GymSweepCase: XCTestCase {
 
+    private var launched: XCUIApplication?
+
     override func setUpWithError() throws {
         continueAfterFailure = false
+    }
+
+    /// A failed scenario keeps the screen's accessibility tree, so a red
+    /// assertion can be read without rerunning it.
+    override func tearDownWithError() throws {
+        if let app = launched, let run = testRun, !run.hasSucceeded {
+            let a = XCTAttachment(string: app.debugDescription)
+            a.name = "Screen at failure"
+            a.lifetime = .keepAlways
+            add(a)
+        }
+        launched = nil
     }
 
     /// Dismiss a confirmation dialog without acting. On iOS 27 an iPhone
@@ -44,6 +58,7 @@ class GymSweepCase: XCTestCase {
         app.launchArguments = ["-smoke-mode", "-smoke-tab", tab, "-smoke-username", username]
             + (admin ? ["-smoke-admin-root"] : []) + extra
         app.launch()
+        launched = app
         return app
     }
 
