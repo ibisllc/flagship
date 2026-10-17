@@ -211,7 +211,7 @@ object SmokeMode {
         // signed with it, never the IRK), any other device doesn't, and the
         // mocks verify every admin order under it. The smoke profile's own
         // Keystore slot, so a real account's keys on this device are untouched.
-        com.flagshipserver.app.keystore.Keystore.setActiveProfile(config.username)
+        if (!config.persistSession) com.flagshipserver.app.keystore.Keystore.setActiveProfileInMemory(config.username)
         if (config.seedAdminRoot) {
             com.flagshipserver.app.keystore.Keystore.importAdminRoot(GymSeams.GYM_ADMIN_ROOT_SEED)
         } else {
