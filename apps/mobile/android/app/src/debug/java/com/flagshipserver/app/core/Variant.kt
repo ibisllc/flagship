@@ -148,6 +148,8 @@ object Variant : AppVariant {
     override val usesMockClients: Boolean get() = mockRun
     override val forceAdminRoot: Boolean get() = GymSeams.forceAdminRoot
     override val bypassBiometricGates: Boolean get() = GymSeams.bypassBiometricGates
+    override val allowScreenCapture: Boolean get() = mockRun
+    override val stubCamera: Boolean get() = mockRun
     override val gymImportBackupFile: java.io.File? get() = GymSeams.importBackupFile
 
     override fun defaultScreens(): ScreensClient = MockScreensClient()

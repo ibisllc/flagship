@@ -1465,7 +1465,7 @@ internal fun UpdateServerCard(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
-        FSSectionHeader("Update firmware")
+        FSSectionHeader("Update server")
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 shortCommit(currentCommit)?.let { short ->

@@ -93,7 +93,7 @@ public struct MigrateServerScreen: View {
             }
 
             if vm.backupMissing {
-                Text("This server has no backup yet, so it can't be migrated. Enable backup first, or use Backup/clone server and import the file onto the new server.")
+                Text("This server has no backup yet, so it can't be migrated. Enable backup first, or back up this server and import the file onto the new server.")
                     .font(FS.font.caption()).foregroundColor(c.danger)
             }
 

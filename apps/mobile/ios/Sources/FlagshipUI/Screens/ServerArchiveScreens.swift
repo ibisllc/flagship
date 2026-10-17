@@ -34,7 +34,7 @@ struct ServerBackupSheet: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
-                Text("Backup/clone server")
+                Text("Back up this server")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundColor(c.text)
                 content(c)

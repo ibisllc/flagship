@@ -461,9 +461,7 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export const PEERS_INTRO =
-  "Your lost server's newest backup is kept in pieces on other Flagship servers. Pick the lost server " +
-  "and this page gets the pieces back, with nothing from the lost server itself. You choose a name for the new one; " +
-  "everything else comes from the backup.";
+  "Your lost server's latest backup is kept in pieces on other Flagship servers. Pick the lost server, this page gets the pieces back, and you name the new server.";
 
 /** A running server of the account this browser can talk to (it reads the lost server's record), or null. */
 export function helperServer(pods, lost, hasSession = (fqdn) => boxClient(fqdn).hasSession()) {

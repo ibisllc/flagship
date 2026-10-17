@@ -59,11 +59,7 @@ fun CoInviteSection(vm: CoInviteViewModel) {
     var confirm by remember { mutableStateOf<ShareCoInvite?>(null) }
 
     Spacer(Modifier.height(FS.space.s6))
-    Text(
-        "INVITE PEOPLE",
-        color = FS.colors.textMuted,
-        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
-    )
+    com.flagshipserver.app.ui.components.FSSectionHeader("Invite people")
     Spacer(Modifier.height(FS.space.s3))
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.fillMaxWidth().testTag("co-invite-section")) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {

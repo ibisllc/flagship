@@ -192,7 +192,5 @@ object PeerBackup {
     const val OLDER_ENGINE = "This server runs an older peer backup. Update the server to see its new status here."
 
     const val RESTORE_INTRO =
-        "Your lost server's newest backup is kept in pieces on other Flagship servers. Pick the lost server " +
-            "and this screen gets the pieces back, with nothing from the lost server itself. You choose a name for the new one; " +
-            "everything else comes from the backup."
+        "Your lost server's latest backup is kept in pieces on other Flagship servers. Pick the lost server, this phone gets the pieces back, and you name the new server."
 }

@@ -41,6 +41,12 @@ interface AppVariant {
     val forceAdminRoot: Boolean
 
     /** Gym: the file Import a backup hands over instead of the system picker. */
+    /** Debug/gym only: screens that arm FLAG_SECURE stay capturable so a gym can screenshot them. */
+    val allowScreenCapture: Boolean
+
+    /** Debug/gym only: the QR scanner draws a still frame instead of opening the camera. */
+    val stubCamera: Boolean
+
     val gymImportBackupFile: java.io.File?
 
     /** Gym: pass the biometric prompts (an emulator has no screen lock). */

@@ -13,6 +13,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -169,6 +170,10 @@ fun AddDeviceScreen(
             )
         }
 
+        if (phase is AddDevicePhase.Failed) {
+            FSSecondaryButton(label = "Try again", onClick = { scope.launch { vm.start() } }, block = true, modifier = Modifier.testTag("add-device-retry"))
+            FSSecondaryButton(label = "Close", onClick = { vm.cancel(); onCancel() }, block = true)
+        }
         if (phase is AddDevicePhase.ShowingQr) {
             FSSecondaryButton(label = "Cancel", onClick = { vm.cancel(); onCancel() }, block = true)
         }

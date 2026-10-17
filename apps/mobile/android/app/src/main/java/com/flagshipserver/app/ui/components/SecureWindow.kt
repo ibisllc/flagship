@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 fun SecureWindow() {
     val context = LocalContext.current
     DisposableEffect(Unit) {
+        if (com.flagshipserver.app.core.Variant.allowScreenCapture) return@DisposableEffect onDispose { }
         val activity = context.findActivity()
         activity?.window?.setFlags(
             WindowManager.LayoutParams.FLAG_SECURE,

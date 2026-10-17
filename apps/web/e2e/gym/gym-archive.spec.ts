@@ -1,5 +1,5 @@
 /**
- * Backup/clone server, Import a backup and Migrate
+ * Back up this server, Import a backup and Migrate
  * (docs/server-backup-and-clone.md, docs/server-migration.md) with no backend.
  *
  * Crypto is real: the backup's passcode and account slots are made in the
@@ -311,8 +311,8 @@ test.describe("gym webapp archive", () => {
     await page.locator("#backup-migrate-card").scrollIntoViewIfNeeded();
     await page.click("#backup-start-btn");
 
-    const dlg = page.locator('dialog[aria-label="Backup/clone server"]');
-    await expect(dlg.locator(".modal-title")).toHaveText("Backup/clone server");
+    const dlg = page.locator('dialog[aria-label="Back up this server"]');
+    await expect(dlg.locator(".modal-title")).toHaveText("Back up this server");
     const go = dlg.locator("[data-bk-go]");
     await expect(go).toBeDisabled();
     const suggested = await dlg.locator("#bk-suggested").inputValue();
@@ -383,7 +383,7 @@ test.describe("gym webapp archive", () => {
     const box = archiveBox(page, m, keys, { startRefusal: "this server needs about 12 GB free to make the backup and has 3 GB" });
     await openServer(page, HOME);
     await page.click("#backup-start-btn");
-    const dlg = page.locator('dialog[aria-label="Backup/clone server"]');
+    const dlg = page.locator('dialog[aria-label="Back up this server"]');
     const go = dlg.locator("[data-bk-go]");
     const rule = dlg.locator("[data-bk-pass-rule]");
 
@@ -435,7 +435,7 @@ test.describe("gym webapp archive", () => {
     });
     await openServer(page, HOME);
     await page.click("#backup-start-btn");
-    const dlg = page.locator('dialog[aria-label="Backup/clone server"]');
+    const dlg = page.locator('dialog[aria-label="Back up this server"]');
     // No passcode step: it follows the running backup, then says why it failed.
     await expect(dlg.locator("[data-bk-pass]")).toBeHidden();
     await expect(dlg.locator("[data-bk-error]")).toHaveText("The backup failed: the disk filled up.", { timeout: 20_000 });

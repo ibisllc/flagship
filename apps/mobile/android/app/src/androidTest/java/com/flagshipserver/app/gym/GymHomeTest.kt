@@ -227,6 +227,16 @@ class GymHomeTest : GymBase() {
             .performTouchInput { swipeUp(startY = this.height * 0.7f, endY = this.height * 0.4f) }
         composeRule.waitForIdle()
         val handle = composeRule.onAllNodes(tagPrefix("home-server-handle-")).onFirst()
+        // The rows settle as each server's state arrives (their height animates): drag only once the handle holds still.
+        var last = handle.fetchSemanticsNode().boundsInRoot
+        var stable = 0
+        composeRule.waitUntil(20_000) {
+            composeRule.waitForIdle()
+            val now = handle.fetchSemanticsNode().boundsInRoot
+            stable = if (now == last) stable + 1 else 0
+            last = now
+            stable >= 3
+        }
         val height = handle.fetchSemanticsNode().size.height.toFloat()
         handle.performTouchInput {
             down(center)

@@ -428,7 +428,7 @@ fun SettingsScreen(nav: NavController) {
         // confirmation carries the warning.
         FSCard {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                FSDangerButton(
+                com.flagshipserver.app.ui.components.FSSecondaryButton(
                     label = "Lock the app",
                     onClick = {
                         // Tier 1 — LOCK. Re-gate behind biometrics with zero side

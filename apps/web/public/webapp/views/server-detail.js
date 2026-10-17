@@ -583,11 +583,11 @@ export async function renderServerDetail() {
       ${backupsSectionHtml(body)}
       <h2 class="mt-4">Backup / Migrate</h2>
       <div class="card" id="backup-migrate-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
-        <button id="backup-start-btn" class="full-width">Backup/clone server</button>
+        <button id="backup-start-btn" class="full-width">Back up with a passcode…</button>
         <button id="migrate-start-btn" class="full-width mt-2">${escapeHtml(MIGRATE_LABEL)}</button>
       </div>
 
-      <h2 class="mt-4">Update Firmware</h2>
+      <h2 class="mt-4">Update server</h2>
       <div class="card" id="update-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
         <div class="row mt-2">
           <span class="label">Running</span>

@@ -311,9 +311,9 @@
 //       share grants take one fresh unlock.
 //  v136: teal splits into three roles: lighter --accent-graphic for icons,
 //       rings and focus, --accent for small text, --teal for fills.
-//  v138: light --accent-graphic is #0E9488 (3:1 on every surface); status
+//  v139: light --accent-graphic is #0E9488 (3:1 on every surface); status
 //       text (--ok, --warn, --err) is deepened to 4.5:1 on paper.
-const SHELL_VERSION = "v138";
+const SHELL_VERSION = "v139";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

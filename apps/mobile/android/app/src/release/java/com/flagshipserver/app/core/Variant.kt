@@ -26,6 +26,8 @@ object Variant : AppVariant {
     override val usesMockClients: Boolean get() = false
     override val forceAdminRoot: Boolean get() = false
     override val bypassBiometricGates: Boolean get() = false
+    override val allowScreenCapture: Boolean get() = false
+    override val stubCamera: Boolean get() = false
     override val gymImportBackupFile: java.io.File? get() = null
 
     private fun missing(what: String): Nothing =

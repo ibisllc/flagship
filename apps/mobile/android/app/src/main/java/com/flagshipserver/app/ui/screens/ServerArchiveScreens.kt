@@ -86,7 +86,7 @@ private val bodySmStyle: TextStyle @Composable get() = MaterialTheme.typography.
 internal fun ServerBackupButton(serverDomain: String) {
     var show by remember { mutableStateOf(false) }
     FSSecondaryButton(
-        label = "Backup/clone server",
+        label = "Back up with a passcode…",
         onClick = { show = true },
         block = true,
         enabled = !LocalServerReadOnly.current,
@@ -160,7 +160,7 @@ private fun ServerBackupDialog(serverDomain: String, onDismiss: () -> Unit) {
     AlertDialog(
         // Closing never stops the server: reopening follows the same backup.
         onDismissRequest = { if (!saving) onDismiss() },
-        title = { Text("Backup/clone server") },
+        title = { Text("Back up this server") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 when (val p = phase) {
@@ -260,7 +260,7 @@ internal fun PasscodeStep(vm: ServerBackupViewModel, copied: Boolean, onCopy: ()
             FSCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                     Text(
-                        "SUGGESTED PASSCODE",
+                        "Suggested passcode",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
                     )

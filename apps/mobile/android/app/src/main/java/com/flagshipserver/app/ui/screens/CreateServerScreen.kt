@@ -780,6 +780,7 @@ private fun DesignPhase(
 }
 
 @Composable
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 private fun RecipeTtlPicker(
     recipeTtlMs: Long,
     onRecipeTtlMs: (Long) -> Unit,
@@ -803,6 +804,7 @@ private fun RecipeTtlPicker(
         onValueChange = { onRecipeTtlMs((Math.round(it * 2f) / 2.0 * 3_600_000.0).toLong()) },
         valueRange = 0.5f..24f,
         modifier = Modifier.semantics { stateDescription = ttlLabel(hours) },
+        track = { state -> androidx.compose.material3.SliderDefaults.Track(state, drawStopIndicator = null) },
     )
     Text(
         "After this window, the unused USB can't install — re-mint from this screen.",

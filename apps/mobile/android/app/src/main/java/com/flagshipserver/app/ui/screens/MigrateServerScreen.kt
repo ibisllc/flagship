@@ -40,6 +40,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -119,7 +120,21 @@ fun MigrateServerScreen(vm: MigrationViewModel) {
             }
             is MigrationMode.Initiate -> InitiateMode(vm)
             is MigrationMode.Progress -> ProgressMode(vm)
-            is MigrationMode.Failed -> MigrateCallout(m.message, FS.colors.danger)
+            is MigrationMode.Failed -> {
+                val retryScope = rememberCoroutineScope()
+                MigrateCallout(m.message, FS.colors.danger)
+                Text(
+                    "Check that the server is online, then try again.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                com.flagshipserver.app.ui.components.FSSecondaryButton(
+                    label = "Try again",
+                    onClick = { retryScope.launch { vm.load() } },
+                    block = true,
+                    modifier = Modifier.testTag("migrate-retry"),
+                )
+            }
         }
     }
 }
@@ -151,7 +166,7 @@ private fun InitiateMode(vm: MigrationViewModel) {
 
     if (vm.backupMissing) {
         Text(
-            "This server has no backup yet, so it can't be migrated. Enable backup first, or use Backup/clone server and import the file onto the new server.",
+            "This server has no backup yet, so it can't be migrated. Enable backup first, or back up this server and import the file onto the new server.",
             color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodyMedium,
         )

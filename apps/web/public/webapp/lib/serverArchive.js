@@ -22,7 +22,7 @@ export const RESTORE_PATH = "/api/screens/server-restore";
 export { BACKUP_FILE_EXTENSION, BACKUP_DATA_EXTENSION };
 export const UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
 
-export const BACKUP_TITLE = "Backup/clone server";
+export const BACKUP_TITLE = "Back up this server";
 export const BACKUP_EXCLUDES_NOTE =
   "Holds your apps' source, data and settings, never system images: the new server rebuilds each app, so any Flagship server can restore it. Not included: the server's keys and certificate, peer backups, and the Git host.";
 export const PASSCODE_NOTE =

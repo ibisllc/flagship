@@ -962,7 +962,7 @@ struct UpdateServerCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("UPDATE FIRMWARE")
+            Text("UPDATE SERVER")
                 .font(.system(size: 12, weight: .semibold))
                 .tracking(1)
                 .foregroundColor(c.textMuted)

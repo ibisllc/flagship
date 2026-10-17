@@ -663,7 +663,11 @@ class GymOctoberTest : GymBase() {
     fun coManagerInvitesAPersonAndWithdraws() {
         openSharedApp("Garage", "bright-maple--plants")
         composeRule.onNodeWithTag("co-invite-open").performScrollTo().assertTextContains("Invite people").performClick()
-        waitUntilExists("co-invite-line", timeoutMs = 15_000)
+        // The list loads from the shared server (slow on a busy machine): wait for its answer, and say what a refusal was.
+        composeRule.waitUntil(30_000) {
+            count("co-invite-line") > 0 || count("co-invite-error") > 0
+        }
+        assertEquals("the invite panel opened without an error: " + (if (count("co-invite-error") > 0) textOf("co-invite-error") else ""), 1, count("co-invite-line"))
         assertEquals("People you invite join as Member. You can withdraw your own invites.", textOf("co-invite-line"))
         assertEquals(1, count("co-invite-none"))
         composeRule.onNodeWithTag("co-invite-add-person").performScrollTo().performClick()

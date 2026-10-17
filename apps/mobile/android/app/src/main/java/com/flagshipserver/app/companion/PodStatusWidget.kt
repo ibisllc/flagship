@@ -174,7 +174,7 @@ private fun LeaderBadge() {
             .padding(horizontal = 4.dp, vertical = 1.dp),
     ) {
         Text(
-            "LEADER",
+            "Leader",
             style = TextStyle(color = GlanceTheme.colors.onPrimaryContainer, fontSize = 9.sp, fontWeight = FontWeight.Bold),
         )
     }

@@ -45,6 +45,13 @@ fun QRScanner(onScanned: (String) -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
+    if (com.flagshipserver.app.core.Variant.stubCamera) {
+        Box(Modifier.fillMaxWidth().aspectRatio(1f).background(FS.colors.surfaceSunken), contentAlignment = Alignment.Center) {
+            Text("Viewfinder", color = FS.colors.textMuted)
+        }
+        return
+    }
+
     var hasPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==

@@ -96,7 +96,7 @@ final class GymTotalDetailTests: XCTestCase {
         let app = launch(tab: "home", extra: ["-smoke-admin-root"])
         openPodDetail(app, named: "Home")
         let backup = app.buttons["sd-backup-server"]
-        XCTAssertTrue(revealBySwipe(app, backup), "The server page should offer Backup/clone server.")
+        XCTAssertTrue(revealBySwipe(app, backup), "The server page should offer the one-off backup.")
         backup.tap()
         XCTAssertTrue(app.staticTexts["backup-suggested-passcode"].waitForExistence(timeout: 10), "The backup should suggest a passcode.")
         let start = app.buttons["backup-start"]

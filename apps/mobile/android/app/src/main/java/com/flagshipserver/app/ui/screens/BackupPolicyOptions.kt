@@ -4,6 +4,8 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -45,22 +47,23 @@ internal fun BackupPolicyOptions(
         if (policy == "phone") {
             val maxGb = maxOf(BackupsText.defaultReserveGb(phoneFreeBytes), (phoneFreeBytes / BackupsText.GB).toInt())
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = FS.space.s4)) {
-                TextButton(
+                androidx.compose.material3.FilledTonalIconButton(
                     onClick = { onReserveGb(maxOf(1, reserveGb - 1)) },
                     enabled = reserveGb > 1,
                     modifier = Modifier.testTag("$tagPrefix-reserve-down"),
-                ) { Text("−") }
+                ) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Remove, contentDescription = "Less") }
                 Text(
                     "$reserveGb GB",
                     color = FS.colors.text,
-                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-                    modifier = Modifier.testTag("$tagPrefix-reserve"),
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.width(80.dp).testTag("$tagPrefix-reserve"),
                 )
-                TextButton(
+                androidx.compose.material3.FilledTonalIconButton(
                     onClick = { onReserveGb(minOf(maxGb, reserveGb + 1)) },
                     enabled = reserveGb < maxGb,
                     modifier = Modifier.testTag("$tagPrefix-reserve-up"),
-                ) { Text("+") }
+                ) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Add, contentDescription = "More") }
             }
             Text(
                 "This phone has ${ServerArchive.formatBytes(phoneFreeBytes)} free",
