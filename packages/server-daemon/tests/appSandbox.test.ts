@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { mkdtemp, readFile, writeFile, mkdir, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { GVISOR_RELEASE, GVISOR_SHA512, ensureGvisor, gvisorArch, gvisorUrl, probeFailure } from "../src/appSandbox/gvisor.js";
 import { appSandboxRunArgs, appSandboxStatus, keepAppSandbox, resetAppSandbox, setEgressFence, startAppSandbox } from "../src/appSandbox/state.js";
 import { AppRunner, type CommandRunner } from "../src/serviceRunner.js";
@@ -206,6 +206,23 @@ describe("apps start only in their sandbox", () => {
     expect(tries).toBe(3);
     expect(recovered).toBe(1);
     expect(await appSandboxRunArgs()).toEqual(["--runtime=runsc"]);
+  });
+
+  it("looks again after 30 s, then backs off toward ten minutes", async () => {
+    vi.useFakeTimers();
+    try {
+      const logs: string[] = [];
+      const k = keepAppSandbox({ setup: async () => ({ ok: false, reason: "HTTP 403" }), log: (m) => logs.push(m) });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(logs.at(-1)).toContain("retrying in 30 s");
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(logs.at(-1)).toContain("retrying in 60 s");
+      await vi.advanceTimersByTimeAsync(60_000 + 120_000 + 300_000);
+      expect(logs.at(-1)).toContain("retrying in 600 s");
+      k.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("starts no app while the internet firewall is down, says why, and starts them once it runs", async () => {

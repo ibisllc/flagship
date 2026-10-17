@@ -89,7 +89,10 @@ export function keepAppSandbox(opts: {
   log?: (m: string) => void;
 }): { stop(): void } {
   const log = opts.log ?? (() => {});
-  const retryMs = opts.retryMs ?? 10 * 60_000;
+  // A failure at boot is usually a hiccup (a download refused for a while, a
+  // dpkg lock): look again soon, then settle at ten minutes.
+  const BACKOFF_MS = [30_000, 60_000, 2 * 60_000, 5 * 60_000, 10 * 60_000];
+  let failures = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let stopped = false;
   const attempt = (afterFailure: boolean) => {
@@ -100,7 +103,9 @@ export function keepAppSandbox(opts: {
         if (afterFailure) opts.onRecovered?.();
         return;
       }
-      log(`[app-sandbox] apps can't start until gVisor works: ${r.reason}; retrying in ${Math.round(retryMs / 60_000)} min`);
+      const retryMs = opts.retryMs ?? BACKOFF_MS[Math.min(failures, BACKOFF_MS.length - 1)]!;
+      failures++;
+      log(`[app-sandbox] apps can't start until gVisor works: ${r.reason}; retrying in ${Math.round(retryMs / 1000)} s`);
       timer = setTimeout(() => attempt(true), retryMs);
       timer.unref?.();
     });
