@@ -240,7 +240,7 @@ class GymLiveTest {
         composeRule.onAllNodesWithTag("home-pod-row").onFirst().performClick()
         assertTrue(
             "Tapping the live pod row should push server-detail.",
-            waitForCd("server-detail-screen", 20_000),
+            waitForTag("server-detail-screen", 20_000),
         )
         // The adopt's `add-paired-session` POST is async, so the screens client
         // flips mock→live (sessionToken appears) a beat AFTER the push. The MOCK
