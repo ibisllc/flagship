@@ -353,7 +353,7 @@ final class GymSweepHomeTests: GymSweepCase {
         var app = launch(admin: true, ["-smoke-locked"])
         var signOut = app.buttons["lock-sign-out-btn"]
         XCTAssertTrue(signOut.waitForExistence(timeout: 20))
-        XCTAssertTrue(button(app, "Unlock").exists, "The lock screen offers Unlock.")
+        XCTAssertTrue(app.buttons["lock-unlock-btn"].exists, "The lock screen offers Unlock.")
         signOut.tap()
         let anyway = button(app, "Sign out anyway")
         XCTAssertTrue(anyway.waitForExistence(timeout: 10), "Without recovery it asks to sign out anyway.")

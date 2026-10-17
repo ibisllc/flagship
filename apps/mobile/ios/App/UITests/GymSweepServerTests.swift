@@ -297,16 +297,13 @@ final class GymSweepServerTests: GymSweepCase {
 
     // ─── Import a backup ─────────────────────────────────────────────────────
 
-    /// Home's waiting server → pick the backup (fixture) → it's this account's,
+    /// Home's waiting server → the fixture backup is picked for it → it's this account's,
     /// so it opens at once → send it there → restored → Done.
     func test_importBackupSendsToTheWaitingServer() throws {
         let app = launchServer(["-smoke-awaiting-backup", "-smoke-import-archive"])
         let pill = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Waiting for its backup")).firstMatch
         XCTAssertTrue(pill.waitForExistence(timeout: 15))
         pill.tap()
-        let choose = app.buttons["import-backup-choose"]
-        XCTAssertTrue(choose.waitForExistence(timeout: 10))
-        choose.tap()
         let send = app.buttons["import-backup-send-existing"]
         XCTAssertTrue(send.waitForExistence(timeout: 20), "This account's backup opens without a passcode.")
         XCTAssertTrue(button(app, "Create a new server instead").exists)
@@ -327,7 +324,6 @@ final class GymSweepServerTests: GymSweepCase {
         let importBackup = app.buttons.matching(identifier: "home-import-backup").firstMatch
         XCTAssertTrue(importBackup.waitForExistence(timeout: 10))
         importBackup.tap()
-        app.buttons["import-backup-choose"].tap()
         let name = app.textFields["import-backup-name"]
         XCTAssertTrue(name.waitForExistence(timeout: 20), "A backup no server waits for asks for a name.")
         XCTAssertEqual(value(name), "attic", "It suggests the saved server's name.")
@@ -351,7 +347,6 @@ final class GymSweepServerTests: GymSweepCase {
         let app = launchServer(["-smoke-import-archive", "other"])
         app.buttons["home-add-server"].tap()
         app.buttons.matching(identifier: "home-import-backup").firstMatch.tap()
-        app.buttons["import-backup-choose"].tap()
         let passcode = app.secureTextFields["import-backup-passcode"]
         XCTAssertTrue(passcode.waitForExistence(timeout: 20), "Another account's backup asks for its passcode.")
         let unlock = app.buttons["import-backup-unlock"]
