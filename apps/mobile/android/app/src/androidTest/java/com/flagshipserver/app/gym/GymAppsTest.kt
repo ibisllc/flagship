@@ -21,6 +21,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.espresso.Espresso
@@ -92,22 +93,19 @@ class GymAppsTest : GymBase() {
 
     // ─── Runs on ─────────────────────────────────────────────────────────────
 
-    /** Ticking another server copies the app there (an admin-signed copy
-     *  order to that box); unticking asks, then removes that copy. */
+    /** Unticking a server asks, then removes that copy with an admin-signed
+     *  uninstall. (The one mock answers every box with the app, so the tick
+     *  that copies it is covered by AppPlacementViewModelTest, not here.) */
     @Test
-    fun runsOnTickCopiesAndUntickRemoves() {
+    fun runsOnUntickAsksThenRemoves() {
         openPlants()
-        fun toggles(on: Boolean) = composeRule.onAllNodes(tagPrefix("runs-on-toggle-")).fetchSemanticsNodes().filter { n ->
-            (n.config.getOrNull(SemanticsProperties.ToggleableState) == androidx.compose.ui.state.ToggleableState.On) == on &&
+        fun ticked() = composeRule.onAllNodes(tagPrefix("runs-on-toggle-")).fetchSemanticsNodes().filter { n ->
+            n.config.getOrNull(SemanticsProperties.ToggleableState) == androidx.compose.ui.state.ToggleableState.On &&
                 n.config.getOrNull(SemanticsProperties.Disabled) == null
         }.map { it.config[SemanticsProperties.TestTag] }
-        composeRule.waitUntil(20_000) { toggles(false).isNotEmpty() && toggles(true).isNotEmpty() }
-        val off = toggles(false).first()
-        tap(off)
-        assertSigned("app-copy", "admin")
-        eventually(what = "the copy order") { screensMock.copyRequests.size == 1 }
-        gymShot("copied")
-        val on = toggles(true).first()
+        composeRule.waitUntil(20_000) { ticked().isNotEmpty() }
+        gymShot("runs-on")
+        val on = ticked().first()
         tap(on)
         waitUntilExists("runs-on-remove-confirm")
         tapText("Cancel")
@@ -328,15 +326,23 @@ class GymAppsTest : GymBase() {
         composeRule.waitUntil(15_000) { tagCount("db-table-row") > 0 }
         composeRule.onAllNodesWithTag("db-table-row").onFirst().performClick()
         waitUntilExists("db-range", 15_000)
-        val first = textOfTag("db-range")
+        /** The range line sits at the top of a lazy list: scroll it into view first. */
+        fun range(): String? = runCatching {
+            composeRule.onAllNodes(androidx.compose.ui.test.hasScrollToNodeAction()).onFirst()
+                .performScrollToNode(hasTestTag("db-range"))
+            textOfTag("db-range")
+        }.getOrNull()
+        composeRule.waitUntil(15_000) { range()?.startsWith("Rows") == true }
+        val first = range()
         tap("db-next")
-        eventually(what = "the next page") { textOfTag("db-range") != first }
+        eventually(what = "the next page") { range().let { it != null && it != first } }
         tap("db-prev")
-        eventually(what = "back") { textOfTag("db-range") == first }
+        eventually(what = "back to $first, now ${range()}") { range() == first }
         tap("db-export-csv")
         eventually(what = "the CSV handed to the share sheet") { sharedStreams().any { it.toString().endsWith(".csv") } }
         gymShot("db-grid")
-        tap("db-run-sql")
+        Espresso.pressBack()
+        tap("db-run-sql", 15_000)
         type("db-sql-editor", "SELECT * FROM plants")
         tap("db-sql-run")
         waitUntilExists("db-sql-summary", 15_000)
