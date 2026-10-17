@@ -1,0 +1,18 @@
+{
+  "kind": "CaEndorsement",
+  "version": 1,
+  "endorsementId": "gymca000-0000-4000-8000-000000000010",
+  "track": "ca",
+  "caPubkey": "2e6585d75f992a0fc097e05ee6e11e8ccc31e229394d3aec238e68a81b7ba930",
+  "scope": "flagship/directory-attestation",
+  "notBefore": "2024-01-01T00:00:00.000Z",
+  "notAfter": "2124-01-01T00:00:00.000Z",
+  "issuedAt": "2024-01-01T00:00:00.000Z",
+  "signedBy": "2e6585d75f992a0fc097e05ee6e11e8ccc31e229394d3aec238e68a81b7ba930",
+  "signatures": [
+    {
+      "pubkey": "2e6585d75f992a0fc097e05ee6e11e8ccc31e229394d3aec238e68a81b7ba930",
+      "sig": "7bde114f964ff60554dcbcce4f859a71389a85683d711a10c41159cfd1c50c52d0d5850170e9387eea96740719970425b90d60fca051cebc0f243f118ea16904"
+    }
+  ]
+}
