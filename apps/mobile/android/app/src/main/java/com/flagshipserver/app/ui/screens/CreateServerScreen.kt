@@ -703,7 +703,7 @@ private fun DesignPhase(
                     FSField(
                         value = name,
                         onValueChange = onName,
-                        label = "Subdomain",
+                        label = "Server name",
                         error = ServerLabel.errorMessage(name),
                         modifier = Modifier.testTag("cs-name-field"),
                     )

@@ -1466,7 +1466,7 @@ internal fun UpdateServerCard(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
-        FSSectionHeader("Update server")
+        FSSectionHeader("Software update")
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 shortCommit(currentCommit)?.let { short ->
@@ -1713,7 +1713,7 @@ internal fun UpdateServerSheet(
     }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        SheetTopBar(title = "Update server", onClose = onDone)
+        SheetTopBar(title = "Software update", onClose = onDone)
         Column(
             Modifier
                 .fillMaxWidth()
@@ -1944,7 +1944,7 @@ private fun MigrateServerButton(serverDomain: String) {
     var showSheet by remember { mutableStateOf(false) }
 
     com.flagshipserver.app.ui.components.FSSecondaryButton(
-        label = "Migrate to new machine / VM",
+        label = "Migrate to a new server",
         onClick = { showSheet = true },
         block = true,
         enabled = !LocalServerReadOnly.current,

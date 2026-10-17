@@ -5,6 +5,13 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.ui.theme.softTint
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import com.flagshipserver.app.ui.components.FSNote
 import androidx.compose.runtime.SideEffect
@@ -258,6 +265,7 @@ private fun Accordion(
     val tag = "activity-section-${section.name.lowercase()}"
     val view = androidx.compose.ui.platform.LocalView.current
     val pane = LocalActivityPane.current
+    val chevron by androidx.compose.animation.core.animateFloatAsState(if (isOpen) 180f else 0f, androidx.compose.animation.core.spring(stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow), label = "chevron")
     if (pane != null && isOpen) SideEffect { pane.content = content; pane.title = title }
     FSCard(padding = PaddingValues(0.dp)) {
         Column(Modifier.fillMaxWidth()) {
@@ -273,6 +281,17 @@ private fun Accordion(
                     },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                val tileIcon = when (section) {
+                    ActivitySection.Approvals -> Icons.Outlined.LockOpen
+                    ActivitySection.Recovery -> Icons.Outlined.Restore
+                    ActivitySection.Account -> Icons.Outlined.Person
+                    ActivitySection.Server -> Icons.Outlined.Dns
+                }
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(40.dp).background(FS.colors.softTint(), MaterialTheme.shapes.small),
+                ) { Icon(tileIcon, contentDescription = null, tint = FS.colors.accent) }
+                Spacer(Modifier.width(FS.space.s3))
                 Column(Modifier.weight(1f)) {
                     Text(title, color = FS.colors.text, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
                     Text(hint, color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall)
@@ -288,7 +307,7 @@ private fun Accordion(
                         Icons.Filled.KeyboardArrowDown,
                         contentDescription = null,
                         tint = FS.colors.textMuted,
-                        modifier = Modifier.rotate(if (isOpen) 180f else 0f),
+                        modifier = Modifier.rotate(chevron),
                     )
                 }
             }
@@ -325,9 +344,9 @@ private fun EventList(
             .testTag("activity-event-list"),
         verticalArrangement = Arrangement.spacedBy(FS.space.s3),
     ) {
-        rows.forEach { item ->
+        rows.forEachIndexed { index, item ->
             EventRow(item)
-            Divider(color = FS.colors.border)
+            if (index < rows.lastIndex || more) Divider(color = FS.colors.border)
         }
         if (more) {
             FSGhostButton(
@@ -366,14 +385,14 @@ private fun EventRow(item: ActivityItem) {
             item.subtitle?.takeIf { it.isNotEmpty() }?.let { sub ->
                 Text(sub, color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall)
             }
+            // The time sits under the words, so a long title keeps the full row.
+            Text(
+                ActivityDates.format(item.at),
+                color = FS.colors.textMuted,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.testTag("activity-row-time"),
+            )
         }
-        Spacer(Modifier.width(FS.space.s2))
-        Text(
-            ActivityDates.format(item.at),
-            color = FS.colors.textMuted,
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.testTag("activity-row-time"),
-        )
     }
 }
 
