@@ -602,6 +602,17 @@ class MainActivity : FragmentActivity() {
                 ThemeMode.LIGHT -> false
                 ThemeMode.DARK -> true
             }
+            // Status and navigation bar icons follow the APP's theme, not the
+            // system's: a forced Light theme on a dark phone needs dark icons.
+            LaunchedEffect(useDark) {
+                val clear = android.graphics.Color.TRANSPARENT
+                val style = if (useDark) {
+                    androidx.activity.SystemBarStyle.dark(clear)
+                } else {
+                    androidx.activity.SystemBarStyle.light(clear, clear)
+                }
+                this@MainActivity.enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+            }
 
             // With the app lock on, Recents shows no snapshot of the account
             // (the lock screen only arrives after the app is already gone).

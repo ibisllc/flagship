@@ -13,20 +13,17 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.automirrored.outlined.NoteAdd
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,17 +38,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSField
-import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.KeyfileImportPhase
 import com.flagshipserver.app.viewmodels.KeyfileImportViewModel
@@ -93,29 +89,12 @@ fun KeyfileImportScreen(
         (phase as? KeyfileImportPhase.Opened)?.let { onOpened() }
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = FS.space.s6)
-            .semantics { contentDescription = "keyfile-import" },
+    FSScreen(
+        title = "Import backup file",
+        onBack = onBack,
+        subtitle = "Bring this device into your account using its backup key file. You'll need the file and its passphrase.",
+        modifier = Modifier.semantics { contentDescription = "keyfile-import" },
     ) {
-        Spacer(Modifier.height(FS.space.s8))
-        FSGhostButton(label = "← Back", onClick = onBack)
-        Spacer(Modifier.height(FS.space.s3))
-        Text(
-            "Import backup file",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        Text(
-            "Bring this device into your account using its backup key file. You'll need the file and its passphrase.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-        )
-        Spacer(Modifier.height(FS.space.s4))
-
         when (val p = phase) {
             KeyfileImportPhase.Working ->
                 WorkingView()
@@ -143,7 +122,6 @@ fun KeyfileImportScreen(
                 onImport = { pickedText?.let { t -> scope.launch { vm.importBackup(t) } } },
             )
         }
-        Spacer(Modifier.height(FS.space.s8))
     }
 }
 
@@ -158,26 +136,29 @@ private fun ChooseAndUnlock(
     canImport: Boolean,
     onImport: () -> Unit,
 ) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Icon(Icons.Outlined.Info, contentDescription = null, tint = FS.colors.primary, modifier = Modifier.size(20.dp))
+    FSCard {
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Icon(
+                if (pickedText == null) Icons.AutoMirrored.Outlined.NoteAdd else Icons.Outlined.TaskAlt,
+                contentDescription = null,
+                tint = if (pickedText == null) MaterialTheme.colorScheme.primary else FS.colors.success,
+                modifier = Modifier.size(24.dp),
+            )
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     if (pickedText == null) "Choose your backup file" else "Backup file selected",
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 14.sp),
+                    style = MaterialTheme.typography.titleSmall,
                 )
                 Text(
                     if (pickedText == null) "Pick the .flagshipkey file you saved earlier."
                     else "Now enter the passphrase you set when you created it.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 12.sp, lineHeight = 18.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
         }
     }
-    Spacer(Modifier.height(FS.space.s3))
-    FSGhostButton(
+    FSSecondaryButton(
         label = if (pickedText == null) "Choose file" else "Choose a different file",
         onClick = onChoose,
         block = true,
@@ -185,7 +166,6 @@ private fun ChooseAndUnlock(
     )
 
     if (pickedText != null) {
-        Spacer(Modifier.height(FS.space.s3))
         FSField(
             value = passphrase,
             onValueChange = onPassphrase,
@@ -197,17 +177,14 @@ private fun ChooseAndUnlock(
     }
 
     if (pickError != null) {
-        Spacer(Modifier.height(FS.space.s2))
-        Text(pickError, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp),
+        Text(pickError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.semantics { contentDescription = "keyfile-import-pick-error" })
     }
     if (failure != null) {
-        Spacer(Modifier.height(FS.space.s2))
-        Text(failure, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp),
+        Text(failure, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.semantics { contentDescription = "keyfile-import-error" })
     }
 
-    Spacer(Modifier.height(FS.space.s4))
     FSPrimaryButton(
         label = "Import",
         onClick = onImport,
@@ -221,18 +198,18 @@ private fun ChooseAndUnlock(
 @Composable
 private fun WorkingView() {
     Column(
-        modifier = Modifier.fillMaxSize().padding(vertical = FS.space.s8)
+        modifier = Modifier.fillMaxWidth().padding(vertical = FS.space.s8)
             .semantics { contentDescription = "keyfile-import-working" },
         verticalArrangement = Arrangement.spacedBy(FS.space.s4),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         CircularProgressIndicator()
-        Text("Unlocking your account key…", color = FS.colors.text,
-            style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Medium))
+        Text("Unlocking your account key…", style = MaterialTheme.typography.titleMedium)
         Text(
             "Decrypting the backup and bringing this device into your Flagship account.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp, lineHeight = 19.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
         )
     }
 }
@@ -250,16 +227,14 @@ private fun GraceView(completesAt: Long, onFinish: () -> Unit) {
     val elapsed = remaining == 0L
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s4),
         modifier = Modifier.semantics { contentDescription = "keyfile-import-grace" }) {
-        Text("Bringing this device in", color = FS.colors.text,
-            style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Medium))
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = FS.colors.primary, modifier = Modifier.size(20.dp))
+        Text("Bringing this device in", style = MaterialTheme.typography.titleLarge)
+        FSCard {
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                Icon(Icons.Outlined.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                 Text(
                     if (elapsed) "The grace period has elapsed — you can finish now."
                     else "This device takes over in ${formatRemaining(remaining)}. Your other devices are being alerted.",
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
         }

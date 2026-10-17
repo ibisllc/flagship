@@ -27,6 +27,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Fingerprint
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.TableChart
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,6 +48,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
@@ -54,7 +63,14 @@ import com.flagshipserver.app.api.AppDbColumn
 import com.flagshipserver.app.api.AppDetailResponse
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalScreensClient
+import com.flagshipserver.app.ui.components.FSBarAction
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSDivider
+import com.flagshipserver.app.ui.components.FSEmptyState
+import com.flagshipserver.app.ui.components.FSGroup
+import com.flagshipserver.app.ui.components.FSNote
+import com.flagshipserver.app.ui.components.FSRow
+import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
@@ -89,57 +105,40 @@ fun DatabaseEntrySection(nav: NavController, serviceId: String, detail: AppDetai
     LaunchedEffect(vm) { vm.load() }
     val phase by vm.phase.collectAsState()
     if (phase is AppDatabaseViewModel.Phase.Hidden) return
-    Spacer(Modifier.height(FS.space.s4))
-    FSCard(
-        padding = PaddingValues(FS.space.s4),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { nav.navigate(appDbRoute(serviceId)) }
-            .testTag("service-detail-database"),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    AppDatabaseViewModel.TITLE,
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-                )
-                Text(
-                    when (val p = phase) {
-                        is AppDatabaseViewModel.Phase.Loaded -> AppDatabaseViewModel.summaryText(p.stores)
-                        is AppDatabaseViewModel.Phase.Failed -> p.message
-                        else -> "Loading…"
-                    },
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                )
-            }
-            Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 24.sp))
-        }
+    FSGroup(header = AppDatabaseViewModel.TITLE) {
+        FSRow(
+            title = AppDatabaseViewModel.TITLE,
+            subtitle = when (val p = phase) {
+                is AppDatabaseViewModel.Phase.Loaded -> AppDatabaseViewModel.summaryText(p.stores)
+                is AppDatabaseViewModel.Phase.Failed -> p.message
+                else -> "Loading…"
+            },
+            icon = Icons.Outlined.Storage,
+            iconTint = MaterialTheme.colorScheme.primary,
+            onClick = { nav.navigate(appDbRoute(serviceId)) },
+            modifier = Modifier.testTag("service-detail-database"),
+        )
     }
 }
 
 @Composable
-private fun DbHeader(nav: NavController, title: String, subtitle: String?) {
-    Spacer(Modifier.height(FS.space.s8))
-    FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
-    Spacer(Modifier.height(FS.space.s3))
+private fun DbSubtitle(text: String) {
     Text(
-        title,
-        color = FS.colors.text,
-        style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        modifier = Modifier.testTag("db-title"),
+        text,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodyLarge,
+        modifier = Modifier.padding(horizontal = FS.space.s1),
     )
-    subtitle?.let {
-        Spacer(Modifier.height(FS.space.s1))
-        Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
-    }
 }
 
-private fun Modifier.readingColumn() = this
-    .widthIn(max = FSLayout.readingMaxWidth)
-    .fillMaxWidth()
-    .padding(horizontal = FS.space.s6)
+/** One LazyColumn item's block, spaced like FSScreen's blocks. */
+@Composable
+private fun DbBlock(content: @Composable () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().padding(bottom = FS.space.s4),
+        verticalArrangement = Arrangement.spacedBy(FS.space.s2),
+    ) { content() }
+}
 
 /** Each store's tables: name, approximate rows, size. */
 @Composable
@@ -152,69 +151,50 @@ fun AppDatabaseScreen(nav: NavController, serviceId: String) {
     val phase by vm.phase.collectAsState()
     val appName = displayName(serviceId)
 
-    LazyColumn(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-        item {
-            Column(Modifier.readingColumn()) {
-                DbHeader(nav, AppDatabaseViewModel.TITLE, "$appName · ${AppDatabaseViewModel.NOTE}")
-                Spacer(Modifier.height(FS.space.s4))
-            }
-        }
+    FSScreen(
+        title = AppDatabaseViewModel.TITLE,
+        onBack = { nav.popBackStack() },
+        titleTag = "db-title",
+        scrollable = false,
+    ) {
+    LazyColumn(Modifier.fillMaxSize()) {
+        item { DbBlock { DbSubtitle("$appName · ${AppDatabaseViewModel.NOTE}") } }
         when (val p = phase) {
             is AppDatabaseViewModel.Phase.Loading -> item { MutedLine("Loading…") }
             is AppDatabaseViewModel.Phase.Hidden -> item {
                 MutedLine(if (restricted) "Only your owner device can open the database." else "This server can't show the database.")
             }
             is AppDatabaseViewModel.Phase.Failed -> item {
-                Column(Modifier.readingColumn()) {
-                    Text(p.message, color = FS.colors.danger, style = TextStyle(fontSize = 14.sp))
-                    Spacer(Modifier.height(FS.space.s2))
-                    FSSecondaryButton("Try again", onClick = { scope.launch { vm.load() } })
+                DbBlock {
+                    FSEmptyState(
+                        title = "Couldn't load the database",
+                        message = p.message,
+                        icon = Icons.Outlined.ErrorOutline,
+                        iconTint = MaterialTheme.colorScheme.error,
+                        action = { FSSecondaryButton("Try again", onClick = { scope.launch { vm.load() } }) },
+                    )
                 }
             }
             is AppDatabaseViewModel.Phase.Loaded -> {
                 if (p.stores.isEmpty()) item { MutedLine(AppDatabaseViewModel.NO_TABLES) }
                 p.stores.forEach { store ->
                     item(key = "store-${store.store}") {
-                        Column(Modifier.readingColumn()) {
-                            if (p.stores.size > 1) {
-                                Spacer(Modifier.height(FS.space.s3))
-                                Text(
-                                    store.store,
-                                    color = FS.colors.textMuted,
-                                    style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
-                                )
-                            }
-                            Spacer(Modifier.height(FS.space.s2))
-                            if (store.tables.isEmpty()) {
-                                Text(AppDatabaseViewModel.NO_TABLES, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
-                            }
-                            store.tables.forEach { t ->
-                                FSCard(
-                                    padding = PaddingValues(FS.space.s3),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(bottom = FS.space.s2)
-                                        .clickable { nav.navigate(appDbTableRoute(serviceId, store.store, t.name)) }
-                                        .testTag("db-table-row"),
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Column(Modifier.weight(1f)) {
-                                            Text(
-                                                t.name,
-                                                color = FS.colors.text,
-                                                style = TextStyle(fontSize = 15.sp, fontFamily = FontFamily.Monospace),
-                                            )
-                                            Text(
-                                                "${AppDatabaseViewModel.rowsText(t)} · ${AppDatabaseViewModel.sizeText(t.bytes)}",
-                                                color = FS.colors.textMuted,
-                                                style = TextStyle(fontSize = 12.sp),
-                                            )
-                                        }
-                                        Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 20.sp))
-                                    }
+                        DbBlock {
+                            FSGroup(header = if (p.stores.size > 1) store.store else null) {
+                                if (store.tables.isEmpty()) {
+                                    FSRow(title = AppDatabaseViewModel.NO_TABLES, titleColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                store.tables.forEachIndexed { idx, t ->
+                                    if (idx > 0) FSDivider()
+                                    FSRow(
+                                        title = t.name,
+                                        subtitle = "${AppDatabaseViewModel.rowsText(t)} · ${AppDatabaseViewModel.sizeText(t.bytes)}",
+                                        icon = Icons.Outlined.TableChart,
+                                        onClick = { nav.navigate(appDbTableRoute(serviceId, store.store, t.name)) },
+                                        modifier = Modifier.testTag("db-table-row"),
+                                    )
                                 }
                             }
-                            Spacer(Modifier.height(FS.space.s2))
                             FSSecondaryButton(
                                 label = if (p.stores.size > 1) "${AppDatabaseViewModel.RUN_SQL} on ${store.store}" else AppDatabaseViewModel.RUN_SQL,
                                 block = true,
@@ -226,15 +206,14 @@ fun AppDatabaseScreen(nav: NavController, serviceId: String) {
                 }
             }
         }
-        item { Spacer(Modifier.height(FS.space.s10)) }
+        item { Spacer(Modifier.height(FS.space.s6)) }
+    }
     }
 }
 
 @Composable
 private fun MutedLine(text: String) {
-    Column(Modifier.readingColumn()) {
-        Text(text, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
-    }
+    DbBlock { FSNote(text) }
 }
 
 /** One table, 100 rows a page, with Export CSV. */
@@ -252,59 +231,62 @@ fun AppDbTableScreen(nav: NavController, serviceId: String, store: String, table
     val offset by vm.offset.collectAsState()
     val hScroll = rememberScrollState()
 
-    LazyColumn(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+    FSScreen(
+        title = table,
+        onBack = { nav.popBackStack() },
+        titleTag = "db-title",
+        scrollable = false,
+        actions = {
+            FSBarAction(
+                icon = Icons.Outlined.Share,
+                label = if (exporting) "Exporting…" else AppDatabaseViewModel.EXPORT_CSV,
+                enabled = !exporting,
+                modifier = Modifier.testTag("db-export-csv"),
+                onClick = {
+                    scope.launch {
+                        val csv = vm.exportCsv() ?: return@launch
+                        shareCsv(ctx, AppDbTableViewModel.csvFileName(table), csv)
+                    }
+                },
+            )
+        },
+    ) {
+    LazyColumn(Modifier.fillMaxSize()) {
         item {
-            Column(Modifier.readingColumn()) {
-                DbHeader(nav, table, "${displayName(serviceId)} · $store")
-                Spacer(Modifier.height(FS.space.s3))
-                Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), verticalAlignment = Alignment.CenterVertically) {
-                    FSSecondaryButton(
-                        label = if (exporting) "Exporting…" else AppDatabaseViewModel.EXPORT_CSV,
-                        enabled = !exporting,
-                        modifier = Modifier.testTag("db-export-csv"),
-                        onClick = {
-                            scope.launch {
-                                val csv = vm.exportCsv() ?: return@launch
-                                shareCsv(ctx, AppDbTableViewModel.csvFileName(table), csv)
-                            }
-                        },
-                    )
-                }
-                Spacer(Modifier.height(FS.space.s3))
+            DbBlock {
+                DbSubtitle("${displayName(serviceId)} · $store")
                 Text(
                     if (page == null) (if (loading) "Loading…" else "") else vm.rangeText(),
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
-                    modifier = Modifier.testTag("db-range"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = FS.space.s1).testTag("db-range"),
                 )
                 error?.let {
-                    Spacer(Modifier.height(FS.space.s2))
-                    Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                 }
-                Spacer(Modifier.height(FS.space.s2))
             }
         }
         page?.let { p -> resultRows(p.columns, p.rows, hScroll, firstRowNumber = offset + 1) }
         item {
-            Column(Modifier.readingColumn()) {
-                Spacer(Modifier.height(FS.space.s3))
-                Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                    FSSecondaryButton(
-                        "← Previous",
-                        enabled = !loading && vm.hasPrevious,
-                        modifier = Modifier.testTag("db-prev"),
-                        onClick = { scope.launch { vm.previous() } },
-                    )
-                    FSSecondaryButton(
-                        "Next →",
-                        enabled = !loading && vm.hasNext,
-                        modifier = Modifier.testTag("db-next"),
-                        onClick = { scope.launch { vm.next() } },
-                    )
-                }
-                Spacer(Modifier.height(FS.space.s10))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+                modifier = Modifier.padding(top = FS.space.s4, bottom = FS.space.s6),
+            ) {
+                FSSecondaryButton(
+                    "Previous",
+                    enabled = !loading && vm.hasPrevious,
+                    modifier = Modifier.weight(1f).testTag("db-prev"),
+                    onClick = { scope.launch { vm.previous() } },
+                )
+                FSSecondaryButton(
+                    "Next",
+                    enabled = !loading && vm.hasNext,
+                    modifier = Modifier.weight(1f).testTag("db-next"),
+                    onClick = { scope.launch { vm.next() } },
+                )
             }
         }
+    }
     }
 }
 
@@ -330,13 +312,26 @@ fun AppDbQueryScreen(nav: NavController, serviceId: String, store: String) {
     val hScroll = rememberScrollState()
     val running = phase is AppDbQueryViewModel.Phase.Running
 
-    LazyColumn(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+    FSScreen(
+        title = AppDatabaseViewModel.RUN_SQL,
+        onBack = { nav.popBackStack() },
+        titleTag = "db-title",
+        scrollable = false,
+    ) {
+    LazyColumn(Modifier.fillMaxSize()) {
         item {
-            Column(Modifier.readingColumn()) {
-                DbHeader(nav, AppDatabaseViewModel.RUN_SQL, "$appName · $store")
-                Spacer(Modifier.height(FS.space.s3))
-                Text(AppDbQueryViewModel.HELP, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
-                Spacer(Modifier.height(FS.space.s3))
+            DbBlock {
+                DbSubtitle("$appName · $store")
+                Text(
+                    AppDbQueryViewModel.HELP,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = FS.space.s1),
+                )
+            }
+        }
+        item {
+            DbBlock {
                 OutlinedTextField(
                     value = sql,
                     onValueChange = {
@@ -344,10 +339,10 @@ fun AppDbQueryScreen(nav: NavController, serviceId: String, store: String) {
                         vm.cancelWrite()
                     },
                     placeholder = { Text("SELECT * FROM …", fontFamily = FontFamily.Monospace) },
-                    textStyle = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontFamily = FontFamily.Monospace, color = FS.colors.text),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface),
+                    shape = MaterialTheme.shapes.small,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp).testTag("db-sql-editor"),
                 )
-                Spacer(Modifier.height(FS.space.s3))
                 FSPrimaryButton(
                     label = if (running) "Running…" else AppDbQueryViewModel.RUN,
                     enabled = !running && sql.isNotBlank(),
@@ -355,67 +350,71 @@ fun AppDbQueryScreen(nav: NavController, serviceId: String, store: String) {
                     modifier = Modifier.testTag("db-sql-run"),
                     onClick = { val s = sql; scope.launch { vm.run(s) } },
                 )
-                when (val p = phase) {
-                    is AppDbQueryViewModel.Phase.NeedsGrant -> {
-                        Spacer(Modifier.height(FS.space.s3))
-                        FSCard(padding = PaddingValues(FS.space.s3), modifier = Modifier.fillMaxWidth().testTag("db-needs-grant")) {
-                            Column {
+            }
+        }
+        when (val p = phase) {
+            is AppDbQueryViewModel.Phase.NeedsGrant -> item {
+                DbBlock {
+                    FSCard(modifier = Modifier.testTag("db-needs-grant")) {
+                        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                                Icon(Icons.Outlined.Fingerprint, contentDescription = null, tint = FS.colors.warning)
                                 Text(
                                     AppDbQueryViewModel.NEEDS_GRANT,
-                                    color = FS.colors.text,
-                                    style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.titleSmall,
                                 )
-                                Spacer(Modifier.height(FS.space.s2))
-                                if (!adminDevice) {
-                                    Text(
-                                        com.flagshipserver.app.core.AdminOrderGate.DATABASE_WRITE,
-                                        color = FS.colors.textMuted,
-                                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                                        modifier = Modifier.testTag("db-write-admin-only"),
-                                    )
-                                    Spacer(Modifier.height(FS.space.s2))
-                                    FSGhostButton(AppDbQueryViewModel.CANCEL, onClick = { vm.cancelWrite() })
-                                } else Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                                    FSPrimaryButton(
-                                        AppDbQueryViewModel.CONFIRM,
-                                        onClick = { scope.launch { vm.confirmWrite() } },
-                                        modifier = Modifier.testTag("db-confirm-write"),
-                                    )
-                                    FSGhostButton(AppDbQueryViewModel.CANCEL, onClick = { vm.cancelWrite() })
-                                }
+                            }
+                            if (!adminDevice) {
+                                Text(
+                                    com.flagshipserver.app.core.AdminOrderGate.DATABASE_WRITE,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.testTag("db-write-admin-only"),
+                                )
+                                FSSecondaryButton(AppDbQueryViewModel.CANCEL, onClick = { vm.cancelWrite() })
+                            } else Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                                FSPrimaryButton(
+                                    AppDbQueryViewModel.CONFIRM,
+                                    onClick = { scope.launch { vm.confirmWrite() } },
+                                    modifier = Modifier.testTag("db-confirm-write"),
+                                )
+                                FSSecondaryButton(AppDbQueryViewModel.CANCEL, onClick = { vm.cancelWrite() })
                             }
                         }
                     }
-                    is AppDbQueryViewModel.Phase.Failed -> {
-                        Spacer(Modifier.height(FS.space.s3))
-                        Text(
-                            p.message,
-                            color = FS.colors.danger,
-                            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                            modifier = Modifier.testTag("db-sql-error"),
-                        )
-                    }
-                    is AppDbQueryViewModel.Phase.Done -> {
-                        Spacer(Modifier.height(FS.space.s3))
-                        Text(
-                            AppDbQueryViewModel.summaryText(p.result),
-                            color = FS.colors.text,
-                            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-                            modifier = Modifier.testTag("db-sql-summary"),
-                        )
-                        AppDbQueryViewModel.truncatedText(p.result)?.let {
-                            Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp))
-                        }
-                        Spacer(Modifier.height(FS.space.s2))
-                    }
-                    else -> Unit
                 }
             }
+            is AppDbQueryViewModel.Phase.Failed -> item {
+                DbBlock {
+                    Text(
+                        p.message,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.testTag("db-sql-error"),
+                    )
+                }
+            }
+            is AppDbQueryViewModel.Phase.Done -> item {
+                DbBlock {
+                    Text(
+                        AppDbQueryViewModel.summaryText(p.result),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.testTag("db-sql-summary"),
+                    )
+                    AppDbQueryViewModel.truncatedText(p.result)?.let {
+                        Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+            else -> Unit
         }
         (phase as? AppDbQueryViewModel.Phase.Done)?.result?.let { r ->
             if (r.columns.isNotEmpty()) resultRows(r.columns, r.rows, hScroll, firstRowNumber = 1)
         }
-        item { Spacer(Modifier.height(FS.space.s10)) }
+        item { Spacer(Modifier.height(FS.space.s6)) }
+    }
     }
 }
 
@@ -434,9 +433,10 @@ private fun LazyListScope.resultRows(
         Row(
             Modifier
                 .fillMaxWidth()
-                .background(FS.colors.surfaceSunken)
+                .clip(MaterialTheme.shapes.small)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 .horizontalScroll(hScroll)
-                .padding(horizontal = FS.space.s4, vertical = FS.space.s2)
+                .padding(horizontal = FS.space.s2, vertical = FS.space.s2)
                 .testTag("db-columns"),
         ) {
             Spacer(Modifier.width(NUMBER_WIDTH))
@@ -444,17 +444,17 @@ private fun LazyListScope.resultRows(
                 Column(Modifier.width(CELL_WIDTH).padding(end = FS.space.s2)) {
                     Text(
                         c.name,
-                        color = FS.colors.text,
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace),
                     )
                     Text(
                         c.type,
-                        color = FS.colors.textMuted,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        style = TextStyle(fontSize = 11.sp),
+                        style = MaterialTheme.typography.bodySmall,
                     )
                 }
             }
@@ -465,12 +465,12 @@ private fun LazyListScope.resultRows(
             Modifier
                 .fillMaxWidth()
                 .horizontalScroll(hScroll)
-                .padding(horizontal = FS.space.s4, vertical = FS.space.s1)
+                .padding(horizontal = FS.space.s2, vertical = FS.space.s1)
                 .testTag("db-row"),
         ) {
             Text(
                 "${firstRowNumber + i}",
-                color = FS.colors.textMuted,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
                 modifier = Modifier.width(NUMBER_WIDTH),
             )

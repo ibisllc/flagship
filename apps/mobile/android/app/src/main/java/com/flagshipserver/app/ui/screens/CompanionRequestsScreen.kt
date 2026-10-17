@@ -24,7 +24,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,7 +56,10 @@ import com.flagshipserver.app.api.CompanionPendingWrite
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalScreensClient
+import com.flagshipserver.app.ui.components.FSBarAction
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSEmptyState
+import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.theme.FS
@@ -90,39 +98,20 @@ fun CompanionRequestsScreen(nav: NavController) {
         onDispose { vm.stopPolling() }
     }
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6),
+    FSScreen(
+        title = "Companion requests",
+        onBack = { nav.popBackStack() },
+        subtitle = "Review writes from remote browsers. Your phone signs approved requests; browsers never receive your account key.",
+        actions = { FSBarAction(Icons.Outlined.Refresh, "Refresh", onClick = { vm.load() }) },
     ) {
-        Spacer(Modifier.height(FS.space.s8))
-        FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
-        Spacer(Modifier.height(FS.space.s3))
-        Text(
-            "COMPANION REQUESTS",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
-        )
-        Text(
-            "Review writes from remote browsers. Your phone signs approved requests; browsers never receive your account key.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp),
-        )
-        Spacer(Modifier.height(FS.space.s4))
-
         when (val s = state) {
             is LoadingState.Loaded -> {
                 if (s.value.isEmpty()) {
-                    FSCard {
-                        Text("No pending requests", color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
-                        Text(
-                            "A remote browser can forward writes here once you've connected one.",
-                            color = FS.colors.textMuted,
-                            style = TextStyle(fontSize = 12.sp),
-                        )
-                    }
+                    FSEmptyState(
+                        title = "No pending requests",
+                        message = "A remote browser can forward writes here once you've connected one.",
+                        icon = Icons.Outlined.Inbox,
+                    )
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                         for (row in s.value) {
@@ -139,13 +128,14 @@ fun CompanionRequestsScreen(nav: NavController) {
             }
             is LoadingState.Failed -> {
                 FSCard {
-                    Text("Couldn't load companion requests", color = FS.colors.danger)
-                    Text(s.message, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
+                    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                        Text("Couldn't load companion requests", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.titleSmall)
+                        Text(s.message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
-            else -> FSCard { Text("Loading…", color = FS.colors.textMuted) }
+            else -> ServerCardSkeleton()
         }
-        Spacer(Modifier.height(FS.space.s12))
     }
 }
 
@@ -162,34 +152,36 @@ private fun RequestCard(
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Text(
                 title(row),
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.semantics { contentDescription = "companion-req-title-${row.requestId}" },
             )
             Text(
                 subtitle(row),
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 12.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
             )
             Text(
                 queuedLabel(row),
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 12.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
             )
             if (!supported) {
                 Text(
                     "Unsupported request kind — open your browser to handle",
-                    color = FS.colors.danger,
-                    style = TextStyle(fontSize = 12.sp),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.semantics {
                         contentDescription = "companion-req-unsupported-${row.requestId}"
                     },
                 )
             }
             if (!error.isNullOrEmpty()) {
-                Text(error, color = FS.colors.danger, style = TextStyle(fontSize = 12.sp))
+                Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
+                modifier = Modifier.padding(top = FS.space.s2),
+            ) {
                 Box(modifier = Modifier.weight(1f)) {
                     HoldToApproveButton(
                         enabled = supported && !pending,
@@ -263,8 +255,8 @@ private fun HoldToApproveButton(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 40.dp)
-            .clip(RoundedCornerShape(FS.radius.md))
+            .heightIn(min = 48.dp)
+            .clip(CircleShape)
             .pointerInput(enabled) {
                 detectTapGestures(
                     onPress = {
@@ -294,16 +286,19 @@ private fun HoldToApproveButton(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 44.dp)
-                .clip(RoundedCornerShape(FS.radius.md))
-                .background(if (enabled) FS.colors.fill else FS.colors.textMuted)
+                .heightIn(min = 48.dp)
+                .clip(CircleShape)
+                .background(
+                    if (enabled) FS.colors.fill
+                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                )
                 .padding(horizontal = FS.space.s5, vertical = FS.space.s2),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = label,
-                color = FS.colors.onAccent,
-                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+                color = if (enabled) FS.colors.onAccent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                style = MaterialTheme.typography.labelLarge,
             )
         }
     }

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -70,7 +71,9 @@ import com.flagshipserver.app.api.ServerMetricsResponse
 import com.flagshipserver.app.core.FlagshipDateFormat
 import com.flagshipserver.app.core.ServerHealthVerdict
 import com.flagshipserver.app.ui.components.FSCard
-import com.flagshipserver.app.ui.components.FSGhostButton
+import com.flagshipserver.app.ui.components.FSDivider
+import com.flagshipserver.app.ui.components.FSSecondaryButton
+import com.flagshipserver.app.ui.components.FSSectionHeader
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.LoadingState
 
@@ -202,28 +205,25 @@ internal fun MonitoringSection(
     // standalone health card did.
     val healthProblemAtStart = remember { ServerHealthVerdict.evaluate(health, now)?.ok == false }
 
-    Text(
-        "Monitoring",
-        color = FS.colors.text,
-        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-        modifier = Modifier.semantics { heading() },
-    )
-    Spacer(Modifier.height(FS.space.s2))
-    FSCard(padding = PaddingValues(vertical = FS.space.s1), modifier = Modifier.testTag("monitoring-pane")) {
-        rows.forEach { row ->
-            MonitorRow(row, startExpanded = row.key == MonitoringKey.HEALTH && healthProblemAtStart) {
-                when (row.key) {
-                    MonitoringKey.HEALTH -> ServerHealthVerdict.evaluate(health, now)?.lines?.forEach { line ->
-                        Text(line, color = FS.colors.text, style = noteStyle)
-                    }
-                    MonitoringKey.CERTIFICATE -> CertDetail(cert, now)
-                    else -> when (metrics) {
-                        is LoadingState.Loaded -> MetricDetail(row.key, metrics.value)
-                        is LoadingState.Failed -> {
-                            Text(metrics.message, color = FS.colors.textMuted, style = noteStyle)
-                            onRetryMetrics?.let { FSGhostButton(label = "Retry", onClick = it) }
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
+        FSSectionHeader("Monitoring", modifier = Modifier.semantics { heading() })
+        FSCard(padding = PaddingValues(vertical = FS.space.s1), modifier = Modifier.testTag("monitoring-pane")) {
+            rows.forEachIndexed { i, row ->
+                if (i > 0) FSDivider(inset = FS.space.s4 + 22.dp + FS.space.s3)
+                MonitorRow(row, startExpanded = row.key == MonitoringKey.HEALTH && healthProblemAtStart) {
+                    when (row.key) {
+                        MonitoringKey.HEALTH -> ServerHealthVerdict.evaluate(health, now)?.lines?.forEach { line ->
+                            Text(line, color = MaterialTheme.colorScheme.onSurface, style = noteStyle)
                         }
-                        else -> Text("Loading…", color = FS.colors.textMuted, style = noteStyle)
+                        MonitoringKey.CERTIFICATE -> CertDetail(cert, now)
+                        else -> when (metrics) {
+                            is LoadingState.Loaded -> MetricDetail(row.key, metrics.value)
+                            is LoadingState.Failed -> {
+                                Text(metrics.message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = noteStyle)
+                                onRetryMetrics?.let { FSSecondaryButton(label = "Retry", onClick = it) }
+                            }
+                            else -> Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = noteStyle)
+                        }
                     }
                 }
             }
@@ -231,12 +231,14 @@ internal fun MonitoringSection(
     }
 }
 
-private val noteStyle = TextStyle(fontSize = 13.sp, lineHeight = 18.sp)
-private val captionStyle = TextStyle(fontSize = 12.sp, lineHeight = 16.sp)
+private val noteStyle: TextStyle
+    @Composable get() = MaterialTheme.typography.bodyMedium
+private val captionStyle: TextStyle
+    @Composable get() = MaterialTheme.typography.bodySmall
 
 @Composable
 private fun toneColor(tone: MonitoringTone): Color = when (tone) {
-    MonitoringTone.NORMAL -> FS.colors.textMuted
+    MonitoringTone.NORMAL -> MaterialTheme.colorScheme.onSurfaceVariant
     MonitoringTone.WARNING -> FS.colors.warning
     MonitoringTone.DANGER -> FS.colors.danger
 }
@@ -280,15 +282,15 @@ private fun MonitorRow(row: MonitoringRow, startExpanded: Boolean, detail: @Comp
             )
             Text(
                 row.key.title,
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 15.sp),
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.weight(1f),
             )
             if (row.value != null) {
                 Text(
                     row.value,
                     color = color,
-                    style = TextStyle(fontSize = 15.sp, textAlign = TextAlign.End, fontFeatureSettings = "tnum"),
+                    style = MaterialTheme.typography.bodyMedium.copy(textAlign = TextAlign.End, fontFeatureSettings = "tnum"),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -301,8 +303,8 @@ private fun MonitorRow(row: MonitoringRow, startExpanded: Boolean, detail: @Comp
             Icon(
                 if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
                 contentDescription = null,
-                tint = FS.colors.textMuted,
-                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
             )
         }
         AnimatedVisibility(visible = expanded) {
@@ -322,13 +324,13 @@ private fun MetricDetail(key: MonitoringKey, m: ServerMetricsResponse) {
     when (key) {
         MonitoringKey.CPU -> {
             MetricLineChart(m.cpuHistory.map { it.value })
-            Text("Load %.2f · %.2f · %.2f".format(m.loadAvg1, m.loadAvg5, m.loadAvg15), color = FS.colors.textMuted, style = captionStyle)
+            Text("Load %.2f · %.2f · %.2f".format(m.loadAvg1, m.loadAvg5, m.loadAvg15), color = MaterialTheme.colorScheme.onSurfaceVariant, style = captionStyle)
         }
         MonitoringKey.MEMORY -> {
             MetricLineChart(m.memHistory.map { it.value })
             Text(
                 "%.0f%% in use".format(MonitoringRows.percent(m.memUsedBytes, m.memTotalBytes) * 100),
-                color = FS.colors.textMuted,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = captionStyle,
             )
         }
@@ -362,16 +364,16 @@ private fun MetricDetail(key: MonitoringKey, m: ServerMetricsResponse) {
 private fun CertDetail(cert: MonitoringCert?, now: Long) {
     val after = cert?.notAfter
     if (after == null) {
-        Text("No certificate yet. The server is getting one.", color = FS.colors.textMuted, style = noteStyle)
+        Text("No certificate yet. The server is getting one.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = noteStyle)
         return
     }
     Labeled("Renews", FlagshipDateFormat.format(after, nowMs = now))
     cert.notBefore?.let { Labeled("Issued", FlagshipDateFormat.format(it, nowMs = now)) }
     cert.issuer?.takeIf { it.isNotEmpty() }?.let { Labeled("Issuer", it) }
     if (cert.sans.isNotEmpty()) {
-        Text("Names covered", color = FS.colors.textMuted, style = captionStyle, modifier = Modifier.padding(top = FS.space.s1))
+        Text("Names covered", color = MaterialTheme.colorScheme.onSurfaceVariant, style = captionStyle, modifier = Modifier.padding(top = FS.space.s1))
         cert.sans.forEach { san ->
-            Text(san, color = FS.colors.text, style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace))
+            Text(san, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace))
         }
     }
 }
@@ -379,16 +381,16 @@ private fun CertDetail(cert: MonitoringCert?, now: Long) {
 @Composable
 private fun Labeled(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = FS.colors.textMuted, style = captionStyle, modifier = Modifier.weight(1f))
-        Text(value, color = FS.colors.text, style = noteStyle, textAlign = TextAlign.End)
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = captionStyle, modifier = Modifier.weight(1f))
+        Text(value, color = MaterialTheme.colorScheme.onSurface, style = noteStyle, textAlign = TextAlign.End)
     }
 }
 
 @Composable
 private fun InlinePair(label: String, value: String) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = FS.colors.textMuted, style = captionStyle)
-        Text(value, color = FS.colors.text, style = noteStyle)
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = captionStyle)
+        Text(value, color = MaterialTheme.colorScheme.onSurface, style = noteStyle)
     }
 }
 
@@ -397,12 +399,12 @@ private fun Rate(label: String, bytesPerSec: Double, color: Color, modifier: Mod
     Column(modifier.semantics(mergeDescendants = true) {}) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Box(Modifier.size(6.dp).clip(CircleShape).background(color))
-            Text(label, color = FS.colors.textMuted, style = captionStyle)
+            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = captionStyle)
         }
         Text(
             MonitoringRows.formatRate(bytesPerSec),
             color = FS.colors.text,
-            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+            style = MaterialTheme.typography.titleSmall,
         )
     }
 }
@@ -423,7 +425,7 @@ private fun DiskRing(pct: Double) {
             drawArc(track, 0f, 360f, false, Offset(inset, inset), arcSize, style = Stroke(stroke))
             drawArc(fill, -90f, (pct * 360).toFloat(), false, Offset(inset, inset), arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
         }
-        Text("%.0f%%".format(pct * 100), color = FS.colors.text, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold))
+        Text("%.0f%%".format(pct * 100), color = FS.colors.text, style = MaterialTheme.typography.labelLarge)
     }
 }
 

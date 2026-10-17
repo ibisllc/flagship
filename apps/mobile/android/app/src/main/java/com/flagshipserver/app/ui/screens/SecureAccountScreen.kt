@@ -43,7 +43,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,6 +63,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -79,7 +86,11 @@ import com.flagshipserver.app.keystore.PasskeyRecoveryManager
 import com.flagshipserver.app.keystore.WrappedUmk
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSField
-import com.flagshipserver.app.ui.components.FSGhostButton
+import com.flagshipserver.app.ui.components.FSDivider
+import com.flagshipserver.app.ui.components.FSGroup
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSecondaryButton
+import com.flagshipserver.app.ui.components.FSSectionHeader
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.SecureAccountOption
@@ -226,70 +237,54 @@ fun SecureAccountScreen(
         }
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = FS.space.s6, vertical = FS.space.s12)
-            .semantics { contentDescription = "secure-account" },
-        verticalArrangement = Arrangement.spacedBy(FS.space.s4),
+    FSScreen(
+        title = SecureAccountViewModel.TITLE,
+        modifier = Modifier.semantics { contentDescription = "secure-account" },
+        subtitle = SecureAccountViewModel.BODY,
     ) {
-        Text(
-            text = SecureAccountViewModel.TITLE,
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Text(
-            text = SecureAccountViewModel.BODY,
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
-        )
-
-        Spacer(Modifier.height(FS.space.s2))
-
-        OptionRow(
-            title = SecureAccountViewModel.CLOUD_LABEL,
-            subtitle = if (passkeyAvailable)
-                SecureAccountViewModel.CLOUD_SUBLABEL
-            else
-                SecureAccountViewModel.CLOUD_UNAVAILABLE_HINT,
-            selected = selected == SecureAccountOption.Cloud,
-            enabled = passkeyAvailable && !working,
-            cd = "secure-account-option-cloud",
-            onClick = { vm.select(SecureAccountOption.Cloud) },
-        )
-        OptionRow(
-            title = SecureAccountViewModel.FILE_LABEL,
-            subtitle = SecureAccountViewModel.FILE_SUBLABEL,
-            selected = selected == SecureAccountOption.File,
-            enabled = !working,
-            cd = "secure-account-option-file",
-            onClick = { vm.select(SecureAccountOption.File) },
-        )
+        FSGroup {
+            OptionRow(
+                title = SecureAccountViewModel.CLOUD_LABEL,
+                subtitle = if (passkeyAvailable)
+                    SecureAccountViewModel.CLOUD_SUBLABEL
+                else
+                    SecureAccountViewModel.CLOUD_UNAVAILABLE_HINT,
+                selected = selected == SecureAccountOption.Cloud,
+                enabled = passkeyAvailable && !working,
+                cd = "secure-account-option-cloud",
+                onClick = { vm.select(SecureAccountOption.Cloud) },
+            )
+            FSDivider()
+            OptionRow(
+                title = SecureAccountViewModel.FILE_LABEL,
+                subtitle = SecureAccountViewModel.FILE_SUBLABEL,
+                selected = selected == SecureAccountOption.File,
+                enabled = !working,
+                cd = "secure-account-option-file",
+                onClick = { vm.select(SecureAccountOption.File) },
+            )
+        }
 
         // Cloud backup is gated on a recovery passphrase that hardens the
         // cloud blob (mirrors recovery.js #enroll). Surfaced only when the
         // cloud option is selected so the file / skip flows stay one-tap.
         if (selected == SecureAccountOption.Cloud) {
-            FSField(
-                value = passphrase,
-                onValueChange = { passphrase = it },
-                label = "Recovery passphrase (8+ characters)",
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.semantics { contentDescription = "secure-account-passphrase" },
-            )
-            FSField(
-                value = passphraseConfirm,
-                onValueChange = { passphraseConfirm = it },
-                label = "Confirm passphrase",
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.semantics { contentDescription = "secure-account-passphrase-confirm" },
-            )
-        }
-
-        if (error != null) {
-            FSCard(padding = PaddingValues(FS.space.s3)) {
-                Text(error!!, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                FSSectionHeader("Recovery passphrase")
+                FSField(
+                    value = passphrase,
+                    onValueChange = { passphrase = it },
+                    label = "Recovery passphrase (8+ characters)",
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.semantics { contentDescription = "secure-account-passphrase" },
+                )
+                FSField(
+                    value = passphraseConfirm,
+                    onValueChange = { passphraseConfirm = it },
+                    label = "Confirm passphrase",
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.semantics { contentDescription = "secure-account-passphrase-confirm" },
+                )
             }
         }
         if (working && note != null) {
@@ -298,7 +293,11 @@ fun SecureAccountScreen(
             }
         }
 
-        Spacer(Modifier.height(FS.space.s2))
+        if (error != null) {
+            FSCard {
+                Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
 
         val cloudReady = passphrase.length >= CloudRecoveryEnrollment.MIN_PASSPHRASE &&
             passphrase == passphraseConfirm
@@ -307,27 +306,31 @@ fun SecureAccountScreen(
             SecureAccountOption.File -> true
             null -> false
         }
-        FSPrimaryButton(
-            label = if (working) "Setting up…" else SecureAccountViewModel.CONTINUE,
-            onClick = {
-                when (selected) {
-                    SecureAccountOption.Cloud -> configureCloudThenContinue()
-                    SecureAccountOption.File -> onSaveFile()
-                    null -> {}
-                }
-            },
-            block = true,
-            large = true,
-            enabled = canContinue && !working,
-            modifier = Modifier.semantics { contentDescription = "secure-account-continue" },
-        )
-        FSGhostButton(
-            label = SecureAccountViewModel.SKIP,
-            onClick = { vm.requestSkip() },
-            block = true,
-            enabled = !working,
-            modifier = Modifier.semantics { contentDescription = "secure-account-skip" },
-        )
+        Column(
+            verticalArrangement = Arrangement.spacedBy(FS.space.s3),
+            modifier = Modifier.padding(top = FS.space.s2),
+        ) {
+            FSPrimaryButton(
+                label = if (working) "Setting up…" else SecureAccountViewModel.CONTINUE,
+                onClick = {
+                    when (selected) {
+                        SecureAccountOption.Cloud -> configureCloudThenContinue()
+                        SecureAccountOption.File -> onSaveFile()
+                        null -> {}
+                    }
+                },
+                block = true,
+                enabled = canContinue && !working,
+                modifier = Modifier.semantics { contentDescription = "secure-account-continue" },
+            )
+            FSSecondaryButton(
+                label = SecureAccountViewModel.SKIP,
+                onClick = { vm.requestSkip() },
+                block = true,
+                enabled = !working,
+                modifier = Modifier.semantics { contentDescription = "secure-account-skip" },
+            )
+        }
     }
 
     if (showSkipConfirm) {
@@ -338,7 +341,7 @@ fun SecureAccountScreen(
                     vm.cancelSkip()
                     onDone()
                 }) {
-                    Text(SecureAccountViewModel.SKIP_CONFIRM, color = FS.colors.danger)
+                    Text(SecureAccountViewModel.SKIP_CONFIRM, color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
@@ -361,37 +364,21 @@ private fun OptionRow(
     cd: String,
     onClick: () -> Unit,
 ) {
-    val border = if (selected) FS.colors.primary else FS.colors.border
-    Row(
+    val alpha = if (enabled) 1f else 0.5f
+    ListItem(
+        headlineContent = {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
+        },
+        supportingContent = {
+            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha))
+        },
+        leadingContent = {
+            RadioButton(selected = selected, onClick = null, enabled = enabled)
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(FS.radius.md))
-            .background(FS.colors.surface)
-            .border(BorderStroke(if (selected) 2.dp else 1.dp, border), RoundedCornerShape(FS.radius.md))
-            .let { if (enabled) it.clickable { onClick() } else it }
-            .alpha(if (enabled) 1f else 0.5f)
-            .padding(FS.space.s4)
+            .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
             .semantics { contentDescription = cd },
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
-    ) {
-        Icon(
-            if (selected) Icons.Filled.RadioButtonChecked else Icons.Filled.RadioButtonUnchecked,
-            contentDescription = null,
-            tint = if (selected) FS.colors.primary else FS.colors.textMuted,
-            modifier = Modifier.size(22.dp),
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-            Text(
-                title,
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-            )
-            Text(
-                subtitle,
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 19.sp),
-            )
-        }
-    }
+    )
 }

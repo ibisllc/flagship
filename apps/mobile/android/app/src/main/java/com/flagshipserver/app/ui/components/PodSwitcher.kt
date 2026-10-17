@@ -17,6 +17,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -147,25 +150,35 @@ fun PodSwitcher(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier
-                .clip(CircleShape)
-                .background(c.surface)
-                .border(1.dp, c.border, CircleShape)
+                .clip(androidx.compose.material3.MaterialTheme.shapes.small)
+                .border(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.outline, androidx.compose.material3.MaterialTheme.shapes.small)
                 .clickable { open = true }
                 .testTag("pod-switcher")
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .heightIn(min = 36.dp)
+                .padding(start = 10.dp, end = 6.dp),
         ) {
-            Text("🖥", style = TextStyle(fontSize = 12.sp)) // 🖥 server
+            androidx.compose.material3.Icon(
+                androidx.compose.material.icons.Icons.Outlined.Dns,
+                contentDescription = null,
+                tint = c.textMuted,
+                modifier = Modifier.size(16.dp),
+            )
             Text(
                 text = PodSwitcherModel.currentName(pods, currentPodId, allLabel),
                 color = c.text,
-                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
+                style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
             )
             val currentPod = pods.firstOrNull { it.podId == currentPodId }
             if (PodSwitcherModel.showsLeaderFlag(currentPodId, leaderPodId) &&
                 currentPod?.cameOnline == true && currentPod.status != PodInfo.Status.PENDING) {
                 LeaderFlag(tint = c.primary, size = 12.dp)
             }
-            Text("▾", color = c.textMuted, style = TextStyle(fontSize = 11.sp)) // ▾
+            androidx.compose.material3.Icon(
+                androidx.compose.material.icons.Icons.Outlined.ArrowDropDown,
+                contentDescription = "Choose a server",
+                tint = c.textMuted,
+                modifier = Modifier.size(20.dp),
+            )
         }
 
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {

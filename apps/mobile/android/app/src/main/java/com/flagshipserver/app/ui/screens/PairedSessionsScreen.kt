@@ -12,7 +12,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Laptop
+import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -33,7 +37,13 @@ import com.flagshipserver.app.api.PairedSessionSummary
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.core.FlagshipDateFormat
 import com.flagshipserver.app.ui.components.FSDangerButton
+import com.flagshipserver.app.ui.components.FSDivider
+import com.flagshipserver.app.ui.components.FSEmptyState
+import com.flagshipserver.app.ui.components.FSGroup
+import com.flagshipserver.app.ui.components.FSRow
+import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
@@ -66,72 +76,45 @@ fun PairedSessionsScreen(nav: NavController) {
         }
     }
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6),
-    ) {
-        Spacer(Modifier.height(FS.space.s8))
-        FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
-        Spacer(Modifier.height(FS.space.s3))
-        Text(
-            "Browser sessions",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Spacer(Modifier.height(FS.space.s4))
-
-        if (error != null) {
-            ErrorCard(message = error!!)
-            return@Column
-        }
-        if (!loaded) {
-            ServerCardSkeleton()
-            return@Column
-        }
-        if (sessions.isEmpty()) {
-            FSCard(padding = PaddingValues(FS.space.s4)) {
-                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-                    Text(
-                        "No browser sessions",
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
-                    )
-                    Text(
-                        "Connect a remote browser to manage this account from a computer.",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 12.sp, lineHeight = 18.sp),
-                    )
-                }
-            }
-            return@Column
-        }
-        sessions.forEach { session ->
-            FSCard(padding = PaddingValues(FS.space.s4)) {
-                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-                    Text(
-                        "Session ${session.tokenPrefix}",
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
-                    )
-                    Text(
-                        "token: ${session.tokenPrefix}…",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 12.sp),
-                    )
-                    if (session.current) FSPill("This device", kind = FSPillKind.Online)
-                    if (!session.current) {
-                        FSDangerButton(
-                            label = "Revoke",
-                            onClick = { revokeTarget = session },
-                            modifier = Modifier.testTag("revoke-session-${session.tokenPrefix}"),
+    FSScreen(title = "Browser sessions", onBack = { nav.popBackStack() }) {
+        when {
+            error != null -> ErrorCard(message = error!!)
+            !loaded -> ServerCardSkeleton()
+            sessions.isEmpty() -> FSEmptyState(
+                title = "No browser sessions",
+                message = "Connect a remote browser to manage this account from a computer.",
+                icon = Icons.Outlined.Laptop,
+            )
+            else -> Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                Text(
+                    "Computers you've docked a browser from. They can manage this account for a few hours, then expire.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = FS.space.s1),
+                )
+                FSGroup {
+                    sessions.forEachIndexed { idx, session ->
+                        FSRow(
+                            title = "Session ${session.tokenPrefix}",
+                            subtitle = "Paired ${FlagshipDateFormat.format(session.addedAt)}",
+                            icon = if (session.current) Icons.Outlined.PhoneAndroid else Icons.Outlined.Laptop,
+                            iconTint = if (session.current) FS.colors.success else null,
+                            trailing = {
+                                if (session.current) {
+                                    FSPill("This device", kind = FSPillKind.Online)
+                                } else {
+                                    FSDangerButton(
+                                        label = "Revoke",
+                                        onClick = { revokeTarget = session },
+                                        modifier = Modifier.testTag("revoke-session-${session.tokenPrefix}"),
+                                    )
+                                }
+                            },
                         )
+                        if (idx < sessions.size - 1) FSDivider()
                     }
                 }
             }
-            Spacer(Modifier.height(FS.space.s2))
         }
     }
 
@@ -151,7 +134,7 @@ fun PairedSessionsScreen(nav: NavController) {
                         }
                     }
                 }) {
-                    Text("Revoke", color = FS.colors.danger)
+                    Text("Revoke", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {

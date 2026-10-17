@@ -1,7 +1,10 @@
 package com.flagshipserver.app.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -9,14 +12,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.googlefonts.Font
-import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.flagshipserver.app.R
 
 /**
  * Flagship design tokens for Compose. Mirrors `tokens.css`.
@@ -130,39 +128,135 @@ object FSLayout {
 }
 
 // ── Typography ─────────────────────────────────────────────────
+//
+// The platform's own type (Roboto on Pixel, the maker's system face
+// elsewhere) at Material 3's scale, like every native app; the site's mono
+// voice survives only where a value is shown (addresses, keys, codes),
+// through [FSType.mono]. docs/design-system.md §3: "the phone apps use their
+// platform's system font with the same roles".
 
-private val provider = GoogleFont.Provider(
-    providerAuthority = "com.google.android.gms.fonts",
-    providerPackage = "com.google.android.gms",
-    certificates = R.array.com_google_android_gms_fonts_certs,
+object FSType {
+    val mono: FontFamily = FontFamily.Monospace
+}
+
+val FlagshipTypography = Typography().let { t ->
+    t.copy(
+        // Titles a touch firmer than Material's regular weight: the site's
+        // headings are weight 500.
+        displaySmall = t.displaySmall.copy(fontWeight = FontWeight.Medium),
+        headlineLarge = t.headlineLarge.copy(fontWeight = FontWeight.Medium),
+        headlineMedium = t.headlineMedium.copy(fontWeight = FontWeight.Medium),
+        headlineSmall = t.headlineSmall.copy(fontWeight = FontWeight.Medium),
+        titleLarge = t.titleLarge.copy(fontWeight = FontWeight.Medium),
+    )
+}
+
+// ── Shapes ─────────────────────────────────────────────────────
+//
+// Squarer than Material's defaults (the site's corners are 4–6 px), still
+// soft enough to read as Android: chips and fields 8, cards and groups 12,
+// sheets 16, dialogs 24.
+
+val FlagshipShapes = Shapes(
+    extraSmall = RoundedCornerShape(4.dp),
+    small = RoundedCornerShape(8.dp),
+    medium = RoundedCornerShape(12.dp),
+    large = RoundedCornerShape(16.dp),
+    extraLarge = RoundedCornerShape(24.dp),
 )
 
-private val SpaceGrotesk = FontFamily(
-    Font(googleFont = GoogleFont("Space Grotesk"), fontProvider = provider, weight = FontWeight.Medium),
-    Font(googleFont = GoogleFont("Space Grotesk"), fontProvider = provider, weight = FontWeight.SemiBold),
-)
-private val Inter = FontFamily(
-    Font(googleFont = GoogleFont("Inter"), fontProvider = provider, weight = FontWeight.Normal),
-    Font(googleFont = GoogleFont("Inter"), fontProvider = provider, weight = FontWeight.Medium),
-    Font(googleFont = GoogleFont("Inter"), fontProvider = provider, weight = FontWeight.SemiBold),
-)
-private val JetBrainsMono = FontFamily(
-    Font(googleFont = GoogleFont("JetBrains Mono"), fontProvider = provider, weight = FontWeight.Normal),
-    Font(googleFont = GoogleFont("JetBrains Mono"), fontProvider = provider, weight = FontWeight.Medium),
-)
+// ── Material colour schemes ────────────────────────────────────
+//
+// Every Material role filled from the site's palette, so stock components
+// (top app bars, navigation bar, dialogs, menus, sheets, switches, chips,
+// text fields) draw in Flagship's colours with no per-screen overrides. No
+// dynamic colour: the brand stays. Surfaces step on the warm-neutral axis;
+// cards sit on surfaceContainerLowest (white on paper, a lifted near-black
+// in dark).
 
-val FlagshipTypography = Typography(
-    displayLarge = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.Medium, fontSize = 56.sp, lineHeight = 60.sp, letterSpacing = (-0.5).sp),
-    headlineLarge = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.Medium, fontSize = 40.sp, lineHeight = 48.sp, letterSpacing = (-0.3).sp),
-    headlineMedium = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.Medium, fontSize = 28.sp, lineHeight = 36.sp),
-    headlineSmall = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, lineHeight = 30.sp),
-    titleLarge = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, lineHeight = 24.sp),
-    bodyLarge = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 26.sp),
-    bodyMedium = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 22.sp),
-    bodySmall = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 13.sp, lineHeight = 18.sp),
-    labelLarge = TextStyle(fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 16.sp),
-    labelMedium = TextStyle(fontFamily = JetBrainsMono, fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 22.sp),
-)
+internal fun flagshipColorScheme(dark: Boolean): ColorScheme {
+    val c = if (dark) DarkColors else LightColors
+    return if (dark) {
+        darkColorScheme(
+            primary = c.primary,
+            onPrimary = c.onAccent,
+            primaryContainer = c.fill,
+            onPrimaryContainer = c.onAccent,
+            inversePrimary = Color(0xFF0F766E),
+            secondary = c.primary,
+            onSecondary = c.onAccent,
+            secondaryContainer = Color(0xFF103A34),
+            onSecondaryContainer = Color(0xFF99F6E4),
+            tertiary = c.primary,
+            onTertiary = c.onAccent,
+            tertiaryContainer = Color(0xFF103A34),
+            onTertiaryContainer = Color(0xFF99F6E4),
+            background = c.bg,
+            onBackground = c.text,
+            surface = c.bg,
+            onSurface = c.text,
+            surfaceVariant = Color(0xFF1D1C18),
+            onSurfaceVariant = c.textMuted,
+            surfaceTint = Color.Transparent,
+            inverseSurface = c.text,
+            inverseOnSurface = Color(0xFF14130F),
+            error = c.danger,
+            onError = c.onAccent,
+            errorContainer = Color(0xFF3B1513),
+            onErrorContainer = Color(0xFFFECACA),
+            outline = Color(0xFF4A473E),
+            outlineVariant = c.border,
+            scrim = Color.Black,
+            surfaceBright = Color(0xFF25231C),
+            surfaceDim = c.bg,
+            surfaceContainerLowest = c.surface,
+            surfaceContainerLow = c.surface,
+            surfaceContainer = Color(0xFF14130F),
+            surfaceContainerHigh = Color(0xFF1D1C18),
+            surfaceContainerHighest = Color(0xFF25231C),
+        )
+    } else {
+        lightColorScheme(
+            primary = c.primary,
+            // Paper on the deepened teal (AA); never pure white.
+            onPrimary = c.bg,
+            primaryContainer = c.fill,
+            onPrimaryContainer = c.onAccent,
+            inversePrimary = Color(0xFF2DD4BF),
+            secondary = c.primary,
+            onSecondary = c.bg,
+            secondaryContainer = Color(0xFFD3ECE6),
+            onSecondaryContainer = c.primaryHover,
+            tertiary = c.primary,
+            onTertiary = c.bg,
+            tertiaryContainer = Color(0xFFD3ECE6),
+            onTertiaryContainer = c.primaryHover,
+            background = c.bg,
+            onBackground = c.text,
+            surface = c.bg,
+            onSurface = c.text,
+            surfaceVariant = c.surfaceSunken,
+            onSurfaceVariant = c.textMuted,
+            surfaceTint = Color.Transparent,
+            inverseSurface = Color(0xFF2A2925),
+            inverseOnSurface = Color(0xFFF0EEE8),
+            error = c.danger,
+            onError = c.bg,
+            errorContainer = Color(0xFFF7E1DD),
+            onErrorContainer = Color(0xFF7F1D1D),
+            outline = Color(0xFFC8C5BB),
+            outlineVariant = c.border,
+            scrim = Color.Black,
+            surfaceBright = c.surface,
+            surfaceDim = Color(0xFFE4E1D9),
+            surfaceContainerLowest = c.surface,
+            surfaceContainerLow = c.surface,
+            surfaceContainer = Color(0xFFF0EEE8),
+            surfaceContainerHigh = Color(0xFFFBFAF7),
+            surfaceContainerHighest = Color(0xFFE9E7E0),
+        )
+    }
+}
 
 // ── Theme wrapper ──────────────────────────────────────────────
 
@@ -172,47 +266,11 @@ fun FlagshipTheme(
     content: @Composable () -> Unit,
 ) {
     val colors = if (darkTheme) DarkColors else LightColors
-    // Bottom NavigationBar / NavigationRail read MaterialTheme's
-    // secondaryContainer (the selected-item pill) + onSecondaryContainer
-    // (the selected icon/label). Pin both to the teal axis so the selected
-    // tab reads brand-teal instead of the Material default purple. The soft
-    // teal pill matches the §8.6 status-pill background weight.
-    val materialColors = if (darkTheme) {
-        darkColorScheme(
-            background = colors.bg,
-            surface = colors.surface,
-            surfaceVariant = colors.surfaceSunken,
-            primary = colors.primary,
-            onPrimary = colors.onAccent,
-            secondaryContainer = colors.primary.copy(alpha = 0.20f),
-            onSecondaryContainer = colors.primary,
-            onBackground = colors.text,
-            onSurface = colors.text,
-            onSurfaceVariant = colors.textMuted,
-            outline = colors.border,
-            error = colors.danger,
-        )
-    } else {
-        lightColorScheme(
-            background = colors.bg,
-            surface = colors.surface,
-            surfaceVariant = colors.surfaceSunken,
-            primary = colors.primary,
-            // Paper on the deepened light-theme teal (AA); never pure white.
-            onPrimary = colors.bg,
-            secondaryContainer = colors.primary.copy(alpha = 0.14f),
-            onSecondaryContainer = colors.primaryHover,
-            onBackground = colors.text,
-            onSurface = colors.text,
-            onSurfaceVariant = colors.textMuted,
-            outline = colors.border,
-            error = colors.danger,
-        )
-    }
     CompositionLocalProvider(LocalFlagshipColors provides colors) {
         MaterialTheme(
-            colorScheme = materialColors,
+            colorScheme = flagshipColorScheme(darkTheme),
             typography = FlagshipTypography,
+            shapes = FlagshipShapes,
             content = content,
         )
     }

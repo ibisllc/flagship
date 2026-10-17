@@ -14,15 +14,12 @@ package com.flagshipserver.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,11 +31,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.DeviceInfoHint
 import com.flagshipserver.app.core.LocalAppState
@@ -50,8 +44,9 @@ import com.flagshipserver.app.core.ServerSettingsStore
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.KeystoreIrkAccess
 import com.flagshipserver.app.ui.components.FSCard
-import com.flagshipserver.app.ui.components.FSGhostButton
+import com.flagshipserver.app.ui.components.FSNote
 import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.LoadingState
 import kotlinx.coroutines.launch
@@ -102,41 +97,22 @@ fun SecretRequestsScreen(nav: NavController) {
 
     LaunchedEffect(coordinator) { reload() }
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6),
+    FSScreen(
+        title = "Approve server",
+        onBack = { nav.popBackStack() },
+        subtitle = "Your server is finishing setup. Confirm it's yours to release its boot secret — only your phone can.",
+        onRefresh = { scope.launch { reload() } },
+        refreshing = state is LoadingState.Loading,
     ) {
-        Spacer(Modifier.height(FS.space.s8))
-        FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
-        Spacer(Modifier.height(FS.space.s3))
-        Text(
-            "Approve box",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        Text(
-            "Your box is finishing setup. Confirm it's yours to release its boot secret — only your phone can.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-        )
-        Spacer(Modifier.height(FS.space.s6))
-
         when (val s = state) {
-            LoadingState.Idle, LoadingState.Loading -> ServerCardSkeleton()
+            LoadingState.Idle, LoadingState.Loading -> {
+                ServerCardSkeleton()
+                ServerCardSkeleton()
+            }
             is LoadingState.Failed -> ErrorCard(s.message, onRetry = { scope.launch { reload() } })
             is LoadingState.Loaded -> {
                 if (s.value.isEmpty()) {
-                    FSCard(padding = PaddingValues(FS.space.s4)) {
-                        Text(
-                            "No box is waiting for approval right now.",
-                            color = FS.colors.textMuted,
-                            style = TextStyle(fontSize = 14.sp),
-                        )
-                    }
+                    FSNote("No server is waiting for approval right now.")
                 } else {
                     s.value.forEach { req ->
                         // First boot vs established reboot: a box that has never
@@ -164,7 +140,7 @@ fun SecretRequestsScreen(nav: NavController) {
                                             ServerSettingsStore.Mode.AUTO
                                         val leaseId = coord.confirmAndRespond(req, depositAutoLease = deposit)
                                         if (leaseId != null) store.setLeaseId(req.serverDomain, leaseId)
-                                        toasts.success("Approved ${req.serverDomain}. Your box will pick it up.")
+                                        toasts.success("Approved ${req.serverDomain}. Your server will pick it up.")
                                         reload()
                                     } catch (t: Throwable) {
                                         toasts.error("Approval failed: ${t.message}")
@@ -174,12 +150,10 @@ fun SecretRequestsScreen(nav: NavController) {
                                 }
                             },
                         )
-                        Spacer(Modifier.height(FS.space.s3))
                     }
                 }
             }
         }
-        Spacer(Modifier.height(FS.space.s12))
     }
 }
 
@@ -204,29 +178,28 @@ private fun SecretRequestCard(
         SecretPurpose.ENTITLEMENT -> "Authorize device to join your cloud"
         null -> "Boot secret"
     }
-    FSCard(padding = PaddingValues(FS.space.s4)) {
+    FSCard {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Text(
                 req.serverDomain,
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 16.sp, fontFamily = FontFamily.Monospace),
+                style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
             )
             Text(
                 purposeLabel,
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
             )
             req.deviceInfo?.let { info ->
                 DeviceInfoRows(info)
             }
             Text(
                 "Is this the machine in front of you? Only approve if you recognise it.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.height(FS.space.s1))
             FSPrimaryButton(
-                label = if (inFlight) "Signing…" else "Yes, this is my box",
+                label = if (inFlight) "Signing…" else "Yes, this is my server",
                 onClick = onApprove,
                 enabled = !inFlight,
                 block = true,
@@ -238,7 +211,7 @@ private fun SecretRequestCard(
 
 @Composable
 private fun DeviceInfoRows(info: DeviceInfoHint) {
-    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1), modifier = Modifier.padding(top = FS.space.s1)) {
         info.ip?.let { InfoRow("IP", it) }
         info.region?.let { InfoRow("Region", it) }
         info.os?.let { InfoRow("OS", it) }
@@ -251,14 +224,13 @@ private fun InfoRow(label: String, value: String) {
     Row {
         Text(
             label,
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.width(56.dp),
         )
         Text(
             value,
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
         )
     }
 }

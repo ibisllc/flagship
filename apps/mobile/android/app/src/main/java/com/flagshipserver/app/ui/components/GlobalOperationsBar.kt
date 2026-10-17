@@ -15,6 +15,7 @@
 
 package com.flagshipserver.app.ui.components
 
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
@@ -138,12 +139,10 @@ private fun OperationsSliver(op: ActiveOperation, extra: Int, onTap: () -> Unit)
             }
         }
         Box(Modifier.size(FS.space.s2))
-        // A literal chevron glyph — no Material arrow icon is otherwise used
-        // in this module, so we avoid pulling that dependency in for one mark.
-        Text(
-            text = "›",
-            color = FS.colors.onAccent.copy(alpha = 0.85f),
-            style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+        androidx.compose.material3.Icon(
+            androidx.compose.material.icons.Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = FS.colors.onAccent,
         )
     }
 }

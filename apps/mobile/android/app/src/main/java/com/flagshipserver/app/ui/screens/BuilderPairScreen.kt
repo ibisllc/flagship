@@ -15,6 +15,12 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSecondaryButton
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -42,6 +48,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.dp
 import com.flagshipserver.app.core.BuilderPairController
 import com.flagshipserver.app.core.BuilderPairing
 import com.flagshipserver.app.core.QrRelay
@@ -84,21 +91,20 @@ fun BuilderPairScreen(
         }
     }
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    val title = when (phase) {
+        is BuilderPairController.Phase.Scan -> "Pair with the builder"
+        is BuilderPairController.Phase.EnterCode -> "Enter the builder code"
+        is BuilderPairController.Phase.Connecting -> "Connecting"
+        is BuilderPairController.Phase.Matching -> "Confirm the security code"
+        is BuilderPairController.Phase.Delivering -> "Sending"
+        is BuilderPairController.Phase.Delivered -> "Sent"
+        is BuilderPairController.Phase.Failed -> "Pairing failed"
+    }
+    FSScreen(
+        title = title,
+        onBack = { controller.cancel(); onCancel() },
+        spacing = 0.dp,
     ) {
-      // Reading column — clamp + center on expanded panes; a no-op on phones.
-      Column(
-        modifier = Modifier
-            .widthIn(max = FSLayout.readingMaxWidth)
-            .fillMaxWidth()
-            .padding(horizontal = FS.space.s6),
-      ) {
-        Spacer(Modifier.height(FS.space.s8))
         when (val p = phase) {
             is BuilderPairController.Phase.Scan -> ScanStep(
                 onScanned = { code -> scope.launch { controller.begin(code) } },
@@ -133,8 +139,6 @@ fun BuilderPairScreen(
                 onCancel = { controller.cancel(); onCancel() },
             )
         }
-        Spacer(Modifier.height(FS.space.s12))
-      }
     }
 }
 
@@ -147,7 +151,7 @@ private fun ScanStep(onScanned: (String) -> Unit, onEnterCode: () -> Unit) {
     Spacer(Modifier.height(FS.space.s4))
     QRScanner(onScanned = onScanned)
     Spacer(Modifier.height(FS.space.s3))
-    FSGhostButton(label = "Enter the code instead", onClick = onEnterCode, block = true)
+    FSSecondaryButton(label = "Enter the code instead", onClick = onEnterCode, block = true)
     Spacer(Modifier.height(FS.space.s4))
     WhereToGetBuilder()
 }
@@ -174,7 +178,8 @@ private fun EnterCodeStep(
         enabled = BuilderPairing.looksLikeBuilderCode(code),
         block = true,
     )
-    FSGhostButton(label = "Scan the QR instead", onClick = onScan, block = true)
+    Spacer(Modifier.height(FS.space.s2))
+    FSSecondaryButton(label = "Scan the QR instead", onClick = onScan, block = true)
     Spacer(Modifier.height(FS.space.s4))
     WhereToGetBuilder()
 }
@@ -193,25 +198,31 @@ private fun MatchStep(matchCode: String, onConfirm: () -> Unit, onCancel: () -> 
         ) {
             Text(
                 QrRelay.formatMatchCode(matchCode),
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 40.sp, lineHeight = 48.sp, fontWeight = FontWeight.Bold),
+                style = MaterialTheme.typography.displayMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
             )
         }
     }
     Spacer(Modifier.height(FS.space.s6))
     FSPrimaryButton(label = "They match — pair & send", onClick = onConfirm, block = true)
-    FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+    Spacer(Modifier.height(FS.space.s2))
+    FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
 }
 
 @Composable
 private fun DeliveredStep(domain: String, onDone: () -> Unit) {
     Header(
-        "Sent ✓ — you can put your phone away",
+        "Sent",
         "Your computer's builder has the recipe. Pick the USB drive and any Advanced options on the computer; nothing more is needed from your phone.",
     )
     Spacer(Modifier.height(FS.space.s4))
     FSCard {
-        Text(domain, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(FS.space.s3)) {
+            Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = FS.colors.success)
+            Column {
+                Text("You can put your phone away", style = MaterialTheme.typography.titleMedium)
+                Text(domain, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
     }
     Spacer(Modifier.height(FS.space.s6))
     FSPrimaryButton(label = "Done", onClick = onDone, block = true)
@@ -222,37 +233,29 @@ private fun FailedStep(message: String, onRetry: () -> Unit, onCancel: () -> Uni
     Header("Pairing failed", message)
     Spacer(Modifier.height(FS.space.s6))
     FSPrimaryButton(label = "Try again", onClick = onRetry, block = true)
-    FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+    Spacer(Modifier.height(FS.space.s2))
+    FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
 }
 
 @Composable
 private fun WhereToGetBuilder() {
     FSCard {
         Column {
-            Text(
-                "Don't have the builder?",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-            )
+            Text("Don't have the builder?", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(FS.space.s1))
             Text(
                 "The Flagship Studio is a small desktop app that writes your server to a USB stick. On your computer, go to flagshipserver.com/studio, install it, and open it to see the code to scan here.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
             )
         }
     }
 }
 
 @Composable
-private fun Header(title: String, subtitle: String) {
-    Text(
-        title,
-        color = FS.colors.text,
-        style = TextStyle(fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.SemiBold),
-    )
-    Spacer(Modifier.height(FS.space.s2))
-    Text(subtitle, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+private fun Header(@Suppress("UNUSED_PARAMETER") title: String, subtitle: String) {
+    // The app bar carries the step's title; this is its explanation.
+    Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
 }
 
 @Composable

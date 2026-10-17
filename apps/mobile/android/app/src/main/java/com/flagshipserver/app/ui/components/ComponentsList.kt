@@ -1,9 +1,7 @@
 package com.flagshipserver.app.ui.components
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -11,66 +9,70 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.Badge
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.ui.theme.FS
+import com.flagshipserver.app.ui.theme.FSType
 import com.flagshipserver.app.ui.theme.fsInitials
 import com.flagshipserver.app.ui.theme.softTint
 
 /**
- * WhatsApp-inspired list / settings / chip primitives, built on FS tokens
- * (`/docs/design-system.md`). These compose Home / Services / Settings into one
- * calm grouped-card language. Byte-for-semantics mirror of iOS
- * `FlagshipUI/Components/ComponentsList.swift`.
+ * List / settings / chip primitives on Material 3 components, in the
+ * organisation iOS uses (`FlagshipUI/Components/ComponentsList.swift`):
  *
- *   - FSChipRow / FSChip          — horizontal scrollable filter pills
- *   - FSSearchField               — rounded sunken search field
+ *   - FSChipRow / FSChip          — horizontal scrollable filter chips
+ *   - FSSearchField               — a rounded search field
  *   - FSMonogram                  — circular teal initials avatar (fsInitials)
- *   - FSProfileCard               — account hero (monogram + title + chevron)
- *   - FSAnnouncementCard          — dismissible tinted nudge card
- *   - FSSettingsGroup / FSSettingsRow — grouped rounded settings sections
- *   - FSListRow                   — clean list row (status icon/monogram + meta)
+ *   - FSProfileCard               — account hero (monogram + title)
+ *   - FSAnnouncementCard          — a dismissible tinted callout
+ *   - FSSettingsGroup / FSSettingsRow — a titled group of list items
+ *   - FSListRow                   — a card row (status icon/monogram + meta)
  *
  * All are presentation-only: they take data + callbacks, never app state.
- * Selected = teal-filled; everything else sits on the warm-neutral axis.
  */
 
 // ── Chips ──────────────────────────────────────────────────────
 
-/** Item descriptor for an [FSChipRow] pill. */
+/** Item descriptor for an [FSChipRow] chip. */
 data class FSChipItem<T>(val value: T, val label: String, val count: Int? = null)
 
-/**
- * A single filter pill. Selected → teal-filled with white text; unselected →
- * subtle surface with a hairline border. Optional muted count badge. Tap selects.
- */
+/** A Material filter chip with an optional count after the label. */
 @Composable
 fun FSChip(
     label: String,
@@ -79,41 +81,24 @@ fun FSChip(
     modifier: Modifier = Modifier,
     count: Int? = null,
 ) {
-    val bg by animateColorAsState(
-        if (selected) FS.colors.fill else FS.colors.surface,
-        tween(durationMillis = 200), label = "chip-bg",
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        modifier = modifier,
+        label = {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(label)
+                if (count != null) Text(count.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        leadingIcon = if (selected) {
+            { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+        } else null,
+        shape = MaterialTheme.shapes.small,
     )
-    val border = if (selected) Color.Transparent else FS.colors.border
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = modifier
-            .clip(RoundedCornerShape(FS.radius.pill))
-            .background(bg)
-            .border(1.dp, border, RoundedCornerShape(FS.radius.pill))
-            .clickable(onClick = onClick)
-            .padding(horizontal = FS.space.s4)
-            .heightIn(min = 34.dp),
-    ) {
-        Text(
-            text = label,
-            color = if (selected) FS.colors.onAccent else FS.colors.text,
-            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
-        )
-        if (count != null) {
-            Text(
-                text = count.toString(),
-                color = if (selected) FS.colors.onAccent.copy(alpha = 0.9f) else FS.colors.textMuted,
-                style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
-            )
-        }
-    }
 }
 
-/**
- * A horizontal, scrollable row of [FSChip] filter pills. `selection` is the
- * currently-selected value; tapping a chip invokes [onSelect] with its value.
- */
+/** A horizontal, scrollable row of [FSChip]s. */
 @Composable
 fun <T> FSChipRow(
     items: List<FSChipItem<T>>,
@@ -124,8 +109,8 @@ fun <T> FSChipRow(
     Row(
         horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
         modifier = modifier
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 1.dp, vertical = 2.dp),
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
     ) {
         for (item in items) {
             FSChip(
@@ -140,10 +125,8 @@ fun <T> FSChipRow(
 
 // ── Search ─────────────────────────────────────────────────────
 
-/**
- * A rounded sunken search field: a leading magnifier glyph, a placeholder, and
- * a trailing clear ("×") affordance that appears once there's text.
- */
+/** A rounded search field: a search icon, a placeholder, and a clear button
+ *  once there's text. */
 @Composable
 fun FSSearchField(
     value: String,
@@ -151,52 +134,33 @@ fun FSSearchField(
     modifier: Modifier = Modifier,
     placeholder: String = "Search",
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
-        modifier = modifier
-            .fillMaxWidth()
-            .height(40.dp)
-            .clip(RoundedCornerShape(FS.radius.md))
-            .background(FS.colors.surfaceSunken)
-            .padding(horizontal = 14.dp),
-    ) {
-        Text("🔍", color = FS.colors.textMuted, style = TextStyle(fontSize = 15.sp))
-        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                singleLine = true,
-                cursorBrush = SolidColor(FS.colors.primary),
-                textStyle = TextStyle(color = FS.colors.text, fontSize = 16.sp),
-                modifier = Modifier.fillMaxWidth(),
-            ) { inner ->
-                if (value.isEmpty()) {
-                    Text(placeholder, color = FS.colors.textMuted, style = TextStyle(fontSize = 16.sp))
+    TextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        placeholder = { Text(placeholder) },
+        leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+        trailingIcon = if (value.isNotEmpty()) {
+            {
+                IconButton(onClick = { onValueChange("") }) {
+                    Icon(Icons.Outlined.Close, contentDescription = "Clear search")
                 }
-                inner()
             }
-        }
-        if (value.isNotEmpty()) {
-            Box(
-                modifier = Modifier
-                    .size(18.dp)
-                    .clip(CircleShape)
-                    .clickable { onValueChange("") },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("✕", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
-            }
-        }
-    }
+        } else null,
+        shape = CircleShape,
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+        ),
+        modifier = modifier.fillMaxWidth().heightIn(min = 52.dp),
+    )
 }
 
 // ── Monogram ───────────────────────────────────────────────────
 
-/**
- * A circular teal monogram avatar — [fsInitials] of a name on a soft-teal fill.
- * Used by [FSProfileCard] and any row wanting an account glyph.
- */
+/** A circular teal monogram avatar — [fsInitials] of a name on a soft-teal fill. */
 @Composable
 fun FSMonogram(name: String, modifier: Modifier = Modifier, size: Dp = 52.dp) {
     Box(
@@ -209,17 +173,14 @@ fun FSMonogram(name: String, modifier: Modifier = Modifier, size: Dp = 52.dp) {
         Text(
             text = fsInitials(name),
             color = FS.colors.primary,
-            style = TextStyle(fontSize = (size.value * 0.40f).sp, fontWeight = FontWeight.SemiBold),
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = (size.value * 0.38f).sp, fontWeight = FontWeight.Medium),
         )
     }
 }
 
 // ── Profile hero ───────────────────────────────────────────────
 
-/**
- * A prominent account hero card: a teal monogram, the username (bold), a
- * subtitle (tier / status), and a trailing chevron. Tappable; radius-lg card.
- */
+/** The account hero: a teal monogram, the account name and a subtitle. Tappable. */
 @Composable
 fun FSProfileCard(
     name: String,
@@ -227,44 +188,44 @@ fun FSProfileCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(FS.space.s4),
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(FS.radius.lg))
-            .background(FS.colors.surface)
-            .border(1.dp, FS.colors.border, RoundedCornerShape(FS.radius.lg))
-            .clickable(onClick = onClick)
-            .padding(FS.space.s4),
+    Surface(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        FSMonogram(name = name)
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                text = name.ifEmpty { "Your account" },
-                color = FS.colors.text,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
-            )
-            Text(
-                text = subtitle,
-                color = FS.colors.textMuted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = TextStyle(fontSize = 13.sp),
-            )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(FS.space.s4),
+            modifier = Modifier.padding(FS.space.s4),
+        ) {
+            FSMonogram(name = name)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = name.ifEmpty { "Your account" },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Text(
+                    text = subtitle,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
         }
-        Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 20.sp))
     }
 }
 
 // ── Announcement ───────────────────────────────────────────────
 
 /**
- * A dismissible, tinted rounded card: a leading tinted icon square, a title, a
- * body, an optional CTA button, and an optional "×" to dismiss. [tint] lets a
- * danger-class announcement reuse the same shape; null = brand teal.
+ * A dismissible callout: the tone's soft tint and hairline, a bare icon, a
+ * title, a body, an optional filled action, and an optional close button
+ * (docs/design-system.md §8.4). [tint] null = brand teal.
  */
 @Composable
 fun FSAnnouncementCard(
@@ -277,52 +238,37 @@ fun FSAnnouncementCard(
     onCta: () -> Unit = {},
     onDismiss: (() -> Unit)? = null,
 ) {
-    val accent = tint ?: FS.colors.fill
-    Column(
-        verticalArrangement = Arrangement.spacedBy(FS.space.s3),
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(FS.radius.lg))
-            .background(accent.copy(alpha = 0.06f))
-            .border(1.dp, accent.copy(alpha = 0.22f), RoundedCornerShape(FS.radius.lg))
-            .padding(FS.space.s4),
+    val accent = tint ?: FS.colors.primary
+    val fill = tint ?: FS.colors.fill
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = accent.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.24f)),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(FS.radius.sm))
-                    .background(accent.copy(alpha = 0.16f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
-            }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
+            modifier = Modifier.padding(start = FS.space.s4, top = FS.space.s4, bottom = FS.space.s4, end = if (onDismiss != null) FS.space.s1 else FS.space.s4),
+        ) {
+            Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.padding(top = 2.dp).size(24.dp))
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, color = FS.colors.text, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
-                Text(message, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
-            }
-            if (onDismiss != null) {
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .clickable(onClick = onDismiss)
-                        .padding(6.dp),
-                ) {
-                    Text("✕", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold))
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                if (ctaLabel != null) {
+                    Spacer(Modifier.height(FS.space.s2))
+                    Button(
+                        onClick = onCta,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = fill,
+                            contentColor = if (tint == null) FS.colors.onAccent else MaterialTheme.colorScheme.onError,
+                        ),
+                    ) { Text(ctaLabel, style = MaterialTheme.typography.labelLarge) }
                 }
             }
-        }
-        if (ctaLabel != null) {
-            Box(
-                modifier = Modifier
-                    .heightIn(min = 44.dp)
-                    .clip(RoundedCornerShape(FS.radius.md))
-                    .background(accent)
-                    .clickable(onClick = onCta)
-                    .padding(horizontal = FS.space.s5),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(ctaLabel, color = FS.colors.onAccent, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold))
+            if (onDismiss != null) {
+                IconButton(onClick = onDismiss, modifier = Modifier.padding(top = 0.dp).size(40.dp)) {
+                    Icon(Icons.Outlined.Close, contentDescription = "Dismiss", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
     }
@@ -338,121 +284,146 @@ data class FSSettingsRowData(
     val subtitle: String? = null,
     val value: String? = null,
     val badge: Int? = null,
+    /** Kept for call-site parity with iOS; Android rows carry no chevron. */
     val showsChevron: Boolean = true,
     val onClick: () -> Unit = {},
-    /** Optional stable element handle for the UI gym (§10 Phase-5). When set,
-     *  the rendered row carries `Modifier.testTag(testTag)` so an instrumentation
-     *  test can tap/assert this row deterministically. Null ⇒ untagged. */
+    /** Optional stable element handle for the UI gym. */
     val testTag: String? = null,
 )
 
-/**
- * A grouped, rounded settings section: an optional small-caps header, then the
- * [rows] stitched into one rounded card with inset hairline dividers between
- * them (inset clears the leading icon so dividers align under the text).
- */
+/** A section header above a group: Material's list subheader, in the accent
+ *  colour, sentence case. */
+@Composable
+fun FSSectionHeader(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        color = MaterialTheme.colorScheme.primary,
+        style = MaterialTheme.typography.titleSmall,
+        modifier = modifier.padding(start = FS.space.s4, top = FS.space.s2),
+    )
+}
+
+/** A titled group of rows in one card, with hairlines between rows. */
 @Composable
 fun FSSettingsGroup(
     rows: List<FSSettingsRowData>,
     modifier: Modifier = Modifier,
     header: String? = null,
 ) {
+    FSGroup(modifier = modifier, header = header) {
+        rows.forEachIndexed { idx, row ->
+            FSSettingsRow(
+                row,
+                modifier = if (row.testTag != null) Modifier.testTag(row.testTag) else Modifier,
+            )
+            if (idx < rows.size - 1) FSDivider()
+        }
+    }
+}
+
+/** A titled card holding list rows; the generic form of [FSSettingsGroup]. */
+@Composable
+fun FSGroup(
+    modifier: Modifier = Modifier,
+    header: String? = null,
+    content: @Composable () -> Unit,
+) {
     Column(
         verticalArrangement = Arrangement.spacedBy(FS.space.s2),
         modifier = modifier.fillMaxWidth(),
     ) {
-        if (header != null) {
-            Text(
-                text = header,
-                color = FS.colors.textMuted,
-                modifier = Modifier.padding(start = FS.space.s1),
-                style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
-            )
-        }
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(FS.radius.lg))
-                .background(FS.colors.surface)
-                .border(1.dp, FS.colors.border, RoundedCornerShape(FS.radius.lg)),
+        if (header != null) FSSectionHeader(header)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
-            rows.forEachIndexed { idx, row ->
-                FSSettingsRow(
-                    row,
-                    modifier = if (row.testTag != null) Modifier.testTag(row.testTag) else Modifier,
-                )
-                if (idx < rows.size - 1) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(1.dp)
-                            .padding(start = 60.dp)
-                            .background(FS.colors.border),
-                    )
-                }
-            }
+            Column { content() }
         }
     }
 }
 
-/**
- * One settings row: a leading icon in a soft-tinted rounded square, a label, an
- * optional subtitle / trailing value / numeric badge, and a chevron. Full-width
- * tappable. Lives inside an [FSSettingsGroup].
- */
+/** A hairline between rows of a group, inset to the text. */
+@Composable
+fun FSDivider(inset: Dp = 56.dp) {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = inset),
+        thickness = 1.dp,
+        color = MaterialTheme.colorScheme.outlineVariant,
+    )
+}
+
+/** One settings row: a Material list item with a bare leading icon, a title,
+ *  an optional subtitle, and a trailing value or badge. */
 @Composable
 fun FSSettingsRow(data: FSSettingsRowData, modifier: Modifier = Modifier) {
-    val tint = data.iconTint ?: FS.colors.primary
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 52.dp)
-            .clickable(onClick = data.onClick)
-            .padding(horizontal = FS.space.s4, vertical = FS.space.s2),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(30.dp)
-                .clip(RoundedCornerShape(FS.radius.sm))
-                .background(tint.copy(alpha = 0.14f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(data.icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
-        }
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(data.title, color = FS.colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis, style = TextStyle(fontSize = 16.sp))
-            if (data.subtitle != null) {
-                Text(data.subtitle, color = FS.colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, style = TextStyle(fontSize = 13.sp))
+    FSRow(
+        title = data.title,
+        subtitle = data.subtitle,
+        icon = data.icon,
+        iconTint = data.iconTint,
+        onClick = data.onClick,
+        modifier = modifier,
+        trailing = if (data.value != null || (data.badge != null && data.badge > 0)) {
+            {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                    if (data.value != null) {
+                        Text(
+                            data.value,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    if (data.badge != null && data.badge > 0) {
+                        Badge(containerColor = MaterialTheme.colorScheme.error) { Text(data.badge.toString()) }
+                    }
+                }
             }
-        }
-        if (data.value != null) {
-            Text(
-                data.value,
-                color = FS.colors.textMuted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = TextStyle(fontSize = 13.sp),
-            )
-        }
-        if (data.badge != null && data.badge > 0) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(FS.radius.pill))
-                    .background(FS.colors.danger)
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-            ) {
-                Text(data.badge.toString(), color = Color.White, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold))
-            }
-        }
-        if (data.showsChevron) {
-            Text("›", color = FS.colors.textMuted.copy(alpha = 0.7f), style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
-        }
-    }
+        } else null,
+    )
 }
 
-// ── Clean list row ─────────────────────────────────────────────
+/** A Material list item inside a group: optional bare leading icon, title,
+ *  subtitle, trailing slot. Clickable when [onClick] is set. */
+@Composable
+fun FSRow(
+    title: String,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    icon: ImageVector? = null,
+    iconTint: Color? = null,
+    titleColor: Color? = null,
+    onClick: (() -> Unit)? = null,
+    enabled: Boolean = true,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    val alpha = if (enabled) 1f else 0.5f
+    ListItem(
+        headlineContent = {
+            Text(
+                title,
+                color = (titleColor ?: MaterialTheme.colorScheme.onSurface).copy(alpha = alpha),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        },
+        supportingContent = if (!subtitle.isNullOrEmpty()) ({
+            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha), style = MaterialTheme.typography.bodyMedium)
+        }) else null,
+        leadingContent = if (icon != null) ({
+            Icon(icon, contentDescription = null, tint = (iconTint ?: MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = alpha))
+        }) else null,
+        trailingContent = trailing,
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick) else Modifier),
+    )
+}
+
+// ── Card list row ──────────────────────────────────────────────
 
 /** Leading slot for an [FSListRow]: a tinted status icon, or a monogram. */
 sealed interface FSListLeading {
@@ -461,10 +432,10 @@ sealed interface FSListLeading {
 }
 
 /**
- * A clean, full-width tappable list row: a leading status-tinted rounded-square
- * icon (or a monogram), a bold title, a muted subtitle, an optional monospaced
- * detail line, and a trailing composable slot. Used for servers (Home) and apps
- * (Services).
+ * A full-width card row: a leading status icon (or a monogram), a title, a
+ * muted subtitle, an optional monospaced detail line, an optional line under
+ * the text (status tags), and a trailing slot. The title always gets the room
+ * first: tags go [below], never beside it.
  */
 @Composable
 fun FSListRow(
@@ -474,56 +445,55 @@ fun FSListRow(
     subtitle: String? = null,
     detail: String? = null,
     onClick: (() -> Unit)? = null,
-    // Optional content stacked UNDER the text lines, left-aligned, on its own
-    // row — for a status pill whose label ("Never came online") would be
-    // crushed in the right-floated `trailing` slot. The chevron / navigation
-    // accessory stays in `trailing`; the pill goes here. Null ⇒ no extra row.
     below: (@Composable () -> Unit)? = null,
     trailing: @Composable () -> Unit = {},
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(FS.radius.md))
-            .background(FS.colors.surface)
-            .border(1.dp, FS.colors.border, RoundedCornerShape(FS.radius.md))
-            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
-            .padding(FS.space.s4),
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        when (leading) {
-            is FSListLeading.Icon -> Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(FS.radius.sm))
-                    .background(leading.color.copy(alpha = 0.14f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(leading.icon, contentDescription = null, tint = leading.color, modifier = Modifier.size(22.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(FS.space.s4),
+            modifier = Modifier
+                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+                .padding(horizontal = FS.space.s4, vertical = FS.space.s3)
+                .heightIn(min = 48.dp),
+        ) {
+            when (leading) {
+                is FSListLeading.Icon -> Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(leading.color.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(leading.icon, contentDescription = null, tint = leading.color, modifier = Modifier.size(22.dp))
+                }
+                is FSListLeading.Monogram -> FSMonogram(name = leading.name, size = 40.dp)
             }
-            is FSListLeading.Monogram -> FSMonogram(name = leading.name, size = 42.dp)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+                if (!subtitle.isNullOrEmpty()) {
+                    Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                }
+                if (!detail.isNullOrEmpty()) {
+                    Text(
+                        detail,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FSType.mono),
+                    )
+                }
+                if (below != null) {
+                    Spacer(Modifier.height(FS.space.s1))
+                    below()
+                }
+            }
+            trailing()
         }
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(title, color = FS.colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
-            if (!subtitle.isNullOrEmpty()) {
-                Text(subtitle, color = FS.colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, style = TextStyle(fontSize = 13.sp))
-            }
-            if (!detail.isNullOrEmpty()) {
-                Text(
-                    detail,
-                    color = FS.colors.textMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
-                )
-            }
-            if (below != null) {
-                Spacer(Modifier.height(FS.space.s1))
-                below()
-            }
-        }
-        Spacer(Modifier.width(FS.space.s2))
-        trailing()
     }
 }

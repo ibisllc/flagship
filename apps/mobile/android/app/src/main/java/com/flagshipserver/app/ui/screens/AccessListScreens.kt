@@ -18,7 +18,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Assignment
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,6 +59,10 @@ import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSCardDivider
+import com.flagshipserver.app.ui.components.FSEmptyState
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSectionHeader
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
@@ -121,26 +131,14 @@ fun InternetAccessSection(
     val rules = state?.let { AppAccessList.parse(it.list).rules.size } ?: summary.rules
     val pending = state?.pending.orEmpty()
 
-    Spacer(Modifier.height(FS.space.s4))
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+    FSSectionHeader(AppAccessViewModel.TITLE)
     FSCard(
         padding = PaddingValues(FS.space.s4),
         modifier = Modifier.fillMaxWidth().testTag("service-detail-access"),
     ) {
-        Column {
-            Text(
-                AppAccessViewModel.TITLE,
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-            )
-            Spacer(Modifier.height(FS.space.s1))
-            Text(
-                AppAccessViewModel.ruleCountText(rules),
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                modifier = Modifier.testTag("service-detail-access-rules"),
-            )
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             state?.draft?.let { d ->
-                Spacer(Modifier.height(FS.space.s3))
                 DraftCard(
                     draft = d,
                     canSign = !restricted,
@@ -149,8 +147,21 @@ fun InternetAccessSection(
                     onDismiss = { scope.launch { vm.dismissDraft() } },
                 )
             }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                Icon(
+                    Icons.Outlined.Public,
+                    contentDescription = null,
+                    tint = if (pending.isEmpty()) MaterialTheme.colorScheme.primary else FS.colors.warning,
+                )
+                Text(
+                    AppAccessViewModel.ruleCountText(rules),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.testTag("service-detail-access-rules"),
+                )
+            }
             pending.forEach { p ->
-                Spacer(Modifier.height(FS.space.s3))
+                FSCardDivider()
                 PendingRequestRow(
                     pending = p,
                     appName = appName,
@@ -170,26 +181,24 @@ fun InternetAccessSection(
                 )
             }
             if (restricted) {
-                Spacer(Modifier.height(FS.space.s2))
                 Text(
                     readOnlyNote,
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.testTag("service-detail-access-read-only"),
                 )
             }
-            Spacer(Modifier.height(FS.space.s3))
+            error?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+            }
             FSSecondaryButton(
                 label = AppAccessViewModel.VIEW_LIST,
                 block = true,
                 modifier = Modifier.testTag("service-detail-access-view"),
                 onClick = { nav.navigate(accessListRoute(serviceId)) },
             )
-            error?.let {
-                Spacer(Modifier.height(FS.space.s2))
-                Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
-            }
         }
+    }
     }
 }
 
@@ -203,44 +212,45 @@ private fun DraftCard(
     onReview: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    FSCard(
-        padding = PaddingValues(FS.space.s3),
+    Column(
+        verticalArrangement = Arrangement.spacedBy(FS.space.s2),
         modifier = Modifier.fillMaxWidth().testTag("service-detail-access-draft"),
     ) {
-        Column {
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Icon(Icons.Outlined.Assignment, contentDescription = null, tint = FS.colors.warning)
             Text(
                 AppAccessViewModel.DRAFT_TITLE,
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.titleSmall,
             )
-            draft.hosts.forEach { h ->
-                Spacer(Modifier.height(FS.space.s1))
+        }
+        draft.hosts.forEach { h ->
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     h.host,
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 14.sp, fontFamily = FontFamily.Monospace),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                     modifier = Modifier.testTag("service-detail-access-draft-host"),
                 )
                 h.why?.takeIf { it.isNotBlank() }?.let {
-                    Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp))
-                }
-            }
-            Spacer(Modifier.height(FS.space.s1))
-            Text(AppAccessViewModel.DRAFT_NOTE, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp))
-            if (canSign) {
-                Spacer(Modifier.height(FS.space.s2))
-                Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                    FSPrimaryButton(
-                        AppAccessViewModel.REVIEW, onReview, enabled = !busy,
-                        modifier = Modifier.testTag("service-detail-access-draft-review"),
-                    )
-                    FSGhostButton(
-                        AppAccessViewModel.DISMISS, onDismiss, enabled = !busy,
-                        modifier = Modifier.testTag("service-detail-access-draft-dismiss"),
-                    )
+                    Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
+        Text(AppAccessViewModel.DRAFT_NOTE, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        if (canSign) {
+            Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                FSPrimaryButton(
+                    AppAccessViewModel.REVIEW, onReview, enabled = !busy,
+                    modifier = Modifier.testTag("service-detail-access-draft-review"),
+                )
+                FSSecondaryButton(
+                    AppAccessViewModel.DISMISS, onDismiss, enabled = !busy,
+                    modifier = Modifier.testTag("service-detail-access-draft-dismiss"),
+                )
+            }
+        }
+        FSCardDivider()
     }
 }
 
@@ -254,20 +264,26 @@ private fun PendingRequestRow(
     onDeny: () -> Unit,
     onIgnore: () -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().testTag("service-detail-access-pending")) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(FS.space.s1),
+        modifier = Modifier.fillMaxWidth().testTag("service-detail-access-pending"),
+    ) {
         Text(
             AppAccessViewModel.asksText(appName, pending.host),
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.titleSmall,
         )
         Text(
             AppAccessViewModel.sourceText(pending.source, pending.attempts),
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
         )
         if (canSign) {
-            Spacer(Modifier.height(FS.space.s2))
-            Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = FS.space.s1),
+            ) {
                 FSPrimaryButton(
                     AppAccessViewModel.ALLOW, onAllow, enabled = !busy,
                     modifier = Modifier.testTag("service-detail-access-allow"),
@@ -327,108 +343,86 @@ fun AccessListScreen(nav: NavController, serviceId: String, fromDraft: Boolean =
     }
     val unchanged = state?.let { AppAccessList.normalize(it.list) == AppAccessList.normalize(text) } ?: true
 
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    FSScreen(
+        title = "Access list",
+        onBack = { nav.popBackStack() },
+        titleTag = "access-list-title",
+        subtitle = "$appName · ${AppAccessViewModel.ruleCountText(parsed.rules.size)}",
     ) {
-        Column(
-            Modifier
-                .widthIn(max = FSLayout.readingMaxWidth)
-                .fillMaxWidth()
-                .padding(horizontal = FS.space.s6),
-        ) {
-            Spacer(Modifier.height(FS.space.s8))
-            FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
-            Spacer(Modifier.height(FS.space.s3))
+        Text(
+            AppAccessViewModel.EDITOR_HELP,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        if (reviewing) {
             Text(
-                "Access list",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-                modifier = Modifier.testTag("access-list-title"),
+                AppAccessViewModel.DRAFT_EDITOR_NOTE,
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.testTag("access-list-draft-note"),
             )
-            Spacer(Modifier.height(FS.space.s1))
-            Text(
-                "$appName · ${AppAccessViewModel.ruleCountText(parsed.rules.size)}",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
-            )
-            Spacer(Modifier.height(FS.space.s3))
-            Text(
-                AppAccessViewModel.EDITOR_HELP,
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-            )
-            if (reviewing) {
-                Spacer(Modifier.height(FS.space.s2))
-                Text(
-                    AppAccessViewModel.DRAFT_EDITOR_NOTE,
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                    modifier = Modifier.testTag("access-list-draft-note"),
+        }
+        if (draft == null) {
+            if (loadError != null) {
+                FSEmptyState(
+                    title = "Couldn't load the access list",
+                    message = loadError,
+                    icon = Icons.Outlined.ErrorOutline,
+                    iconTint = MaterialTheme.colorScheme.error,
+                    action = { FSSecondaryButton("Try again", onClick = { scope.launch { vm.load() } }) },
                 )
-            }
-            Spacer(Modifier.height(FS.space.s4))
-            if (draft == null) {
-                Text(
-                    loadError ?: "Loading…",
-                    color = if (loadError != null) FS.colors.danger else FS.colors.textMuted,
-                    style = TextStyle(fontSize = 14.sp),
-                )
-                if (loadError != null) {
-                    Spacer(Modifier.height(FS.space.s2))
-                    FSSecondaryButton("Try again", onClick = { scope.launch { vm.load() } })
-                }
             } else {
+                Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
                 OutlinedTextField(
                     value = text,
                     onValueChange = { draft = it },
                     readOnly = restricted,
-                    textStyle = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontFamily = FontFamily.Monospace, color = FS.colors.text),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface),
                     isError = errors.isNotEmpty(),
+                    shape = MaterialTheme.shapes.small,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 220.dp).testTag("access-list-editor"),
                 )
                 errors.forEach { e ->
-                    Spacer(Modifier.height(FS.space.s1))
                     Text(
                         "Line ${e.line}: ${e.message}",
-                        color = FS.colors.danger,
-                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.testTag("access-list-error"),
                     )
                 }
-                Spacer(Modifier.height(FS.space.s4))
-                if (restricted) {
-                    Text(
-                        readOnlyNote,
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 13.sp),
-                        modifier = Modifier.testTag("access-list-read-only"),
-                    )
-                } else {
-                    FSPrimaryButton(
-                        label = if (busy) "Saving…" else "Save",
-                        enabled = !busy && parsed.ok && !unchanged,
-                        block = true,
-                        modifier = Modifier.testTag("access-list-save"),
-                        onClick = {
-                            val toSave = text
-                            scope.launch {
-                                savedDraft = toSave
-                                val ok = if (reviewing) vm.save(toSave, vm.approveDraftReason) else vm.save(toSave)
-                                if (ok) {
-                                    draft = vm.state.value?.list ?: AppAccessList.normalize(toSave)
-                                    toasts.success("Saved. $appName follows the new list now.")
-                                }
-                            }
-                        },
-                    )
-                }
-                error?.let {
-                    Spacer(Modifier.height(FS.space.s2))
-                    Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
-                }
             }
-            Spacer(Modifier.height(FS.space.s10))
+            if (restricted) {
+                Text(
+                    readOnlyNote,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.testTag("access-list-read-only"),
+                )
+            } else {
+                FSPrimaryButton(
+                    label = if (busy) "Saving…" else "Save",
+                    enabled = !busy && parsed.ok && !unchanged,
+                    block = true,
+                    modifier = Modifier.testTag("access-list-save"),
+                    onClick = {
+                        val toSave = text
+                        scope.launch {
+                            savedDraft = toSave
+                            val ok = if (reviewing) vm.save(toSave, vm.approveDraftReason) else vm.save(toSave)
+                            if (ok) {
+                                draft = vm.state.value?.list ?: AppAccessList.normalize(toSave)
+                                toasts.success("Saved. $appName follows the new list now.")
+                            }
+                        }
+                    },
+                )
+            }
+            error?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+            }
         }
     }
 }
@@ -449,13 +443,13 @@ fun AccessRequestDialogHost(center: AccessRequestCenter, onViewList: (AccessAler
             text = {
                 Column {
                     alert.request.hosts.forEach { h ->
-                        Text(AppAccessViewModel.suggestionText(h), style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+                        Text(AppAccessViewModel.suggestionText(h), style = MaterialTheme.typography.bodyMedium)
                     }
                     Spacer(Modifier.height(FS.space.s2))
                     Text(
                         "On ${alert.box.fqdn}. ${AppAccessViewModel.DRAFT_NOTE}",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
             },
@@ -508,12 +502,12 @@ fun AccessRequestDialogHost(center: AccessRequestCenter, onViewList: (AccessAler
                         Text(alert.detail)
                         Text(
                             "On ${alert.box.fqdn}. Only allow hosts you expect this app to need.",
-                            color = FS.colors.textMuted,
-                            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
                         )
                         (phase as? AccessRequestCenter.Phase.Failed)?.let {
                             Spacer(Modifier.height(FS.space.s2))
-                            Text(it.message, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
+                            Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 },

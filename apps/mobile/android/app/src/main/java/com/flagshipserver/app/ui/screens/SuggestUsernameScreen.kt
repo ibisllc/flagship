@@ -79,7 +79,7 @@ fun SuggestUsernameScreen(onContinue: (String) -> Unit) {
         )
 
         FSSecondaryButton(
-            label = if (cooldown > 0) "Try again in ${cooldown}s" else "↻ Try another",
+            label = if (cooldown > 0) "Try again in ${cooldown}s" else "Try another",
             onClick = { scope.launch { vm.regenerate() } },
             block = true,
             enabled = vm.canRegenerate(),

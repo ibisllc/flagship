@@ -27,7 +27,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,11 +48,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -52,6 +67,8 @@ import com.flagshipserver.app.core.PairingQr
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.components.SecureWindow
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.AddDevicePhase
@@ -95,35 +112,24 @@ fun AddDeviceScreen(
 
     LaunchedEffect(Unit) { vm.start() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = FS.space.s6, vertical = FS.space.s8)
-            .semantics { contentDescription = "add-device" },
-        verticalArrangement = Arrangement.spacedBy(FS.space.s4),
+    FSScreen(
+        title = "Add a device",
+        onBack = { vm.cancel(); onCancel() },
+        modifier = Modifier.semantics { contentDescription = "add-device" },
+        subtitle = "Have your new phone or tablet scan this code to join your account.",
     ) {
-        Text(
-            "Add a device",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Text(
-            "This is for your own phones and tablets. Have your new device scan this code to join your account.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 15.sp, lineHeight = 22.sp),
+        RiskWarning(
+            "Anyone who scans this code holds your whole account, so add only " +
+                "your own phones and tablets. Don't screenshot or share this code.",
+            title = "Only for your own devices",
         )
         Text(
             "To give another person access, use Share this server on the server's page instead.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 15.sp, lineHeight = 22.sp),
-            modifier = Modifier.semantics { contentDescription = "add-device-share-hint" },
-        )
-
-        RiskWarning(
-            "This shares your account keys with the scanning device. Anyone " +
-                "who scans this code can join your account, so only scan it " +
-                "with a device of your own. Don't screenshot or share this code.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier
+                .padding(horizontal = FS.space.s1)
+                .semantics { contentDescription = "add-device-share-hint" },
         )
 
         when (val p = phase) {
@@ -148,13 +154,23 @@ fun AddDeviceScreen(
                     onCancel = { vm.cancel(); onCancel() },
                 )
             }
-            AddDevicePhase.Delivering -> StatusPanel("Sharing keys securely…", spinner = true)
+            AddDevicePhase.Delivering -> StatusPanel(
+                title = "Sharing your account key…",
+                message = "Hold on — sending the keys securely to the new device.",
+                icon = Icons.Outlined.Lock,
+                spinner = true,
+            )
             AddDevicePhase.Delivered -> DeliveredPanel(onDone = onDone)
-            is AddDevicePhase.Failed -> StatusPanel(p.message, danger = true)
+            is AddDevicePhase.Failed -> StatusPanel(
+                title = "Couldn't add the device",
+                message = p.message,
+                icon = Icons.Outlined.ErrorOutline,
+                danger = true,
+            )
         }
 
         if (phase is AddDevicePhase.ShowingQr) {
-            FSGhostButton(label = "Cancel", onClick = { vm.cancel(); onCancel() }, block = true)
+            FSSecondaryButton(label = "Cancel", onClick = { vm.cancel(); onCancel() }, block = true)
         }
     }
 }
@@ -162,27 +178,28 @@ fun AddDeviceScreen(
 @Composable
 private fun QrPanel(joinUrl: String) {
     val bitmap = remember(joinUrl) { PairingQr.encode(joinUrl) }
-    FSCard(padding = PaddingValues(FS.space.s4)) {
+    FSCard(padding = PaddingValues(FS.space.s6)) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(FS.space.s3),
+            verticalArrangement = Arrangement.spacedBy(FS.space.s4),
             modifier = Modifier.fillMaxWidth(),
         ) {
             Image(
                 bitmap = bitmap.asImageBitmap(),
                 contentDescription = "device-pairing-qr",
                 modifier = Modifier
+                    .widthIn(max = 280.dp)
                     .fillMaxWidth()
-                    .aspectRatio(1f)
-                    .padding(FS.space.s4),
+                    .aspectRatio(1f),
             )
-            Box(Modifier.height(FS.space.s1))
-            CircularProgressIndicator()
-            Text(
-                "Waiting for the other device to scan…",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                Text(
+                    "Waiting for the other device to scan…",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
         }
     }
 }
@@ -194,72 +211,74 @@ private fun ConfirmPanel(
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    FSCard(padding = PaddingValues(FS.space.s5)) {
+    FSCard {
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(FS.space.s3),
             modifier = Modifier.fillMaxWidth(),
         ) {
+            Text("Check the codes match", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Check the code matches",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+                "Both screens should show the same six digits. If they don't, stop — someone may be in the middle.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
             )
             Text(
                 formatSas(matchCode),
-                color = FS.colors.primary,
-                style = TextStyle(fontSize = 40.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp),
-                modifier = Modifier.semantics { contentDescription = "add-device-sas" },
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.displaySmall.copy(fontFamily = FontFamily.Monospace, letterSpacing = 6.sp),
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = "add-device-sas" },
             )
-            Text(
-                "Confirm this matches the code on the other device before continuing.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
+            FSPrimaryButton(
+                label = "Codes match — add device",
+                onClick = onConfirm,
+                enabled = confirmEnabled,
+                block = true,
             )
         }
     }
-    Spacer(Modifier.height(FS.space.s2))
-    FSPrimaryButton(
-        label = "Codes match — add device",
-        onClick = onConfirm,
-        enabled = confirmEnabled,
-        block = true,
-        large = true,
-    )
-    FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+    FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
 }
 
 @Composable
 private fun DeliveredPanel(onDone: () -> Unit) {
-    FSCard(padding = PaddingValues(FS.space.s5)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                "Device added",
-                color = FS.colors.success,
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-            )
-            Text(
-                "The new device is finishing setup. It joins as a non-admin " +
-                    "device for the first 14 days — you'll get reminders to " +
-                    "review your trusted devices.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
-            )
-        }
-    }
-    Spacer(Modifier.height(FS.space.s2))
-    FSPrimaryButton(label = "Done", onClick = onDone, block = true, large = true)
+    StatusPanel(
+        title = "Device added",
+        message = "The new device is finishing setup. It joins as a non-admin " +
+            "device for the first 14 days — you'll get reminders to " +
+            "review your trusted devices.",
+        icon = Icons.Outlined.CheckCircle,
+        tint = FS.colors.success,
+    )
+    FSPrimaryButton(label = "Done", onClick = onDone, block = true)
 }
 
 @Composable
-private fun StatusPanel(message: String, spinner: Boolean = false, danger: Boolean = false) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
+private fun StatusPanel(
+    title: String,
+    message: String,
+    icon: ImageVector,
+    spinner: Boolean = false,
+    danger: Boolean = false,
+    tint: Color? = null,
+) {
+    val accent = tint ?: if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    FSCard {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            if (spinner) CircularProgressIndicator()
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                if (spinner) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                } else {
+                    Icon(icon, contentDescription = null, tint = accent)
+                }
+                Text(title, style = MaterialTheme.typography.titleMedium)
+            }
             Text(
                 message,
-                color = if (danger) FS.colors.danger else FS.colors.textMuted,
-                style = TextStyle(fontSize = 14.sp),
+                color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
             )
         }
     }
@@ -273,50 +292,48 @@ private fun AdminPromoteToggle(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .semantics { contentDescription = "add-device-promote-admin-toggle" },
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Also make this device an admin",
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                    )
-                    Text(
-                        "This device will be able to wipe, transfer, or decommission " +
-                            "your cloud. Only turn this on for a device you fully trust. " +
-                            "Off by default — leave it off to add a normal, non-admin " +
-                            "device.",
-                        color = FS.colors.warning,
-                        style = TextStyle(fontSize = 13.sp, lineHeight = 19.sp),
-                    )
-                }
-                Switch(checked = checked, onCheckedChange = onCheckedChange)
+    FSCard {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = "add-device-promote-admin-toggle" },
+        ) {
+            Icon(
+                Icons.Outlined.Key,
+                contentDescription = null,
+                tint = if (checked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+            )
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                Text("Also make this device an admin", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Off by default. If on, this device will be able to wipe, transfer, " +
+                        "or decommission your cloud. Only turn this on for a device " +
+                        "you fully trust.",
+                    color = if (checked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
+            Switch(checked = checked, onCheckedChange = onCheckedChange)
         }
     }
 }
 
+/** The always-on safeguard card: a warning icon, a title and the risk. */
 @Composable
-internal fun RiskWarning(text: String) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-            Text(
-                "Heads up",
-                color = FS.colors.warning,
-                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold),
-            )
-            Text(
-                text,
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 19.sp),
-            )
+internal fun RiskWarning(text: String, title: String = "Heads up") {
+    FSCard {
+        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = FS.colors.warning)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    text,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
         }
     }
 }

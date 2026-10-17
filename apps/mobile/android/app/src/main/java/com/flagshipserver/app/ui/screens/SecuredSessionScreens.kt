@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Laptop
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,7 +43,10 @@ import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDangerButton
+import com.flagshipserver.app.ui.components.FSEmptyState
 import com.flagshipserver.app.ui.components.FSField
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
@@ -61,35 +67,20 @@ fun SecuredSessionsScreen(
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { vm.reload() }
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(FS.space.s4),
-        verticalArrangement = Arrangement.spacedBy(FS.space.s3),
+    FSScreen(
+        title = "Secured sessions",
+        onBack = { nav.popBackStack() },
+        titleTag = "secured-sessions-title",
+        subtitle = "Browsers you signed in to private apps. Stop one to sign that browser out.",
+        onRefresh = { vm.reload() },
     ) {
-        Text(
-            "Secured sessions",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
-            modifier = Modifier.testTag("secured-sessions-title"),
-        )
-        Text(
-            "Browsers you signed in to private apps. Stop one to sign that browser out.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp, lineHeight = 19.sp),
-        )
-
         if (rows.isEmpty()) {
-            FSCard(padding = PaddingValues(FS.space.s4)) {
-                Text(
-                    "No secured sessions yet. Scan a private app's sign-in QR with this app to sign a browser in.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 14.sp),
-                    modifier = Modifier.testTag("secured-sessions-empty"),
-                )
-            }
+            FSEmptyState(
+                title = "No open sessions",
+                message = "Scan a private app's sign-in QR with this app to sign a browser in.",
+                icon = Icons.Outlined.Laptop,
+                modifier = Modifier.testTag("secured-sessions-empty"),
+            )
         } else {
             rows.forEach { row ->
                 SecuredSessionCard(
@@ -99,9 +90,6 @@ fun SecuredSessionsScreen(
                 )
             }
         }
-        Spacer(Modifier.height(FS.space.s3))
-        FSGhostButton(label = "Back", onClick = { nav.popBackStack() })
-        Spacer(Modifier.height(FS.space.s12))
     }
 }
 
@@ -111,37 +99,37 @@ private fun SecuredSessionCard(
     onRefresh: () -> Unit,
     onStop: () -> Unit,
 ) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
+    FSCard {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Text(
                 row.session.serviceUrl,
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.testTag("secured-session-url"),
             )
             row.session.browserAgent.takeIf { it.isNotBlank() }?.let {
-                Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, lineHeight = 17.sp))
+                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     livenessLabel(row.liveness, row.refreshing),
                     color = livenessColor(row.liveness),
-                    style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
+                    style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.testTag("secured-session-status"),
                 )
                 Text(
                     "· started ${formatTs(row.session.startedAt)}",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
                 )
             }
-            Spacer(Modifier.height(FS.space.s1))
             Row(
-                Modifier.fillMaxWidth(),
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = FS.space.s2),
                 horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                FSGhostButton(
+                FSSecondaryButton(
                     label = if (row.refreshing) "Checking…" else "Refresh",
                     enabled = !row.refreshing,
                     onClick = onRefresh,
@@ -166,9 +154,9 @@ private fun livenessLabel(l: SessionLiveness, refreshing: Boolean): String = whe
 
 @Composable
 private fun livenessColor(l: SessionLiveness) = when (l) {
-    SessionLiveness.ONLINE -> FS.colors.primary
-    SessionLiveness.OFFLINE -> FS.colors.textMuted
-    SessionLiveness.UNKNOWN -> FS.colors.textMuted
+    SessionLiveness.ONLINE -> FS.colors.success
+    SessionLiveness.OFFLINE -> MaterialTheme.colorScheme.onSurfaceVariant
+    SessionLiveness.UNKNOWN -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
 private fun formatTs(ms: Long): String =
@@ -188,26 +176,13 @@ fun ProcessUrlScreen(nav: NavController) {
     // same path the universal link / QR uses.
     val deepLinker = LocalDeepLinker.current
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(FS.space.s4),
-        verticalArrangement = Arrangement.spacedBy(FS.space.s3),
+    FSScreen(
+        title = "Process a link",
+        onBack = { nav.popBackStack() },
+        titleTag = "process-url-title",
+        subtitle = "Paste a Flagship link: a private app's \"Get link\" string, or a " +
+            "\"take over this server\" transfer link someone shared with you.",
     ) {
-        Text(
-            "Process a link",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
-            modifier = Modifier.testTag("process-url-title"),
-        )
-        Text(
-            "Paste a Flagship link: a private app's \"Get link\" string, or a " +
-                "\"take over this box\" transfer link someone shared with you.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp, lineHeight = 19.sp),
-        )
         FSField(
             value = text,
             onValueChange = { text = it; error = null },
@@ -216,12 +191,16 @@ fun ProcessUrlScreen(nav: NavController) {
             fieldTag = "process-url-input",
         )
         error?.let {
-            Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp), modifier = Modifier.testTag("process-url-error"))
+            Text(
+                it,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.testTag("process-url-error"),
+            )
         }
         FSPrimaryButton(
             label = "Open",
             block = true,
-            large = true,
             enabled = text.isNotBlank(),
             onClick = {
                 when (val link = runCatching { DeepLink.parse(Uri.parse(text.trim())) }.getOrNull()) {
@@ -248,9 +227,6 @@ fun ProcessUrlScreen(nav: NavController) {
             },
             modifier = Modifier.testTag("process-url-submit"),
         )
-        Spacer(Modifier.height(FS.space.s3))
-        FSGhostButton(label = "Back", onClick = { nav.popBackStack() })
-        Spacer(Modifier.height(FS.space.s12))
     }
 }
 

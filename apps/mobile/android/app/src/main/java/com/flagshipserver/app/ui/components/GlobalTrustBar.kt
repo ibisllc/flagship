@@ -11,6 +11,9 @@
 
 package com.flagshipserver.app.ui.components
 
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.Icons
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
@@ -24,6 +27,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
@@ -216,15 +220,16 @@ private fun TrustSliverLine(
             }
             .padding(horizontal = FS.space.s4, vertical = FS.space.s2),
     ) {
-        Text(
-            text = "⚠",
-            color = Color.White,
-            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold),
+        androidx.compose.material3.Icon(
+            androidx.compose.material.icons.Icons.Filled.Warning,
+            contentDescription = null,
+            tint = androidx.compose.material3.MaterialTheme.colorScheme.onError,
+            modifier = Modifier.size(18.dp),
         )
         Box(Modifier.padding(start = FS.space.s2))
         Text(
             text = failure.label,
-            color = Color.White,
+            color = androidx.compose.material3.MaterialTheme.colorScheme.onError,
             style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -234,12 +239,12 @@ private fun TrustSliverLine(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(FS.radius.pill))
-                    .background(Color.White.copy(alpha = 0.18f))
+                    .background(androidx.compose.material3.MaterialTheme.colorScheme.onError.copy(alpha = 0.18f))
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             ) {
                 Text(
                     text = "$serverCount servers",
-                    color = Color.White,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onError,
                     style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold),
                 )
             }
@@ -249,20 +254,20 @@ private fun TrustSliverLine(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(FS.radius.pill))
-                    .background(Color.White.copy(alpha = 0.22f))
+                    .background(androidx.compose.material3.MaterialTheme.colorScheme.onError.copy(alpha = 0.22f))
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             ) {
                 Text(
                     text = "continuing",
-                    color = Color.White,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onError,
                     style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold),
                 )
             }
         } else {
-            Text(
-                text = "›",
-                color = Color.White.copy(alpha = 0.85f),
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+            androidx.compose.material3.Icon(
+                androidx.compose.material.icons.Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = androidx.compose.material3.MaterialTheme.colorScheme.onError,
             )
         }
     }

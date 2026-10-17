@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRail
@@ -84,6 +86,7 @@ fun RootShell(
             is com.flagshipserver.app.core.DeepLink.ServerDetail -> RootDestination.HOME
             is com.flagshipserver.app.core.DeepLink.AppDetail -> RootDestination.APPS
             is com.flagshipserver.app.core.DeepLink.CreateApp -> RootDestination.APPS
+            com.flagshipserver.app.core.DeepLink.StartBuild -> RootDestination.APPS
             is com.flagshipserver.app.core.DeepLink.AccessList -> RootDestination.APPS
             is com.flagshipserver.app.core.DeepLink.VibeCodeChat -> RootDestination.APPS
             is com.flagshipserver.app.core.DeepLink.BuildJournal -> RootDestination.APPS
@@ -141,9 +144,13 @@ private fun CompactShell(
     selected: RootDestination,
     onSelect: (RootDestination) -> Unit,
 ) {
+    // The shell's own padding is just the bottom bar (AppRoot already pads
+    // the status bar); TabContent consumes it so a screen's own Scaffold
+    // doesn't pad the navigation bar twice.
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            NavigationBar(containerColor = FS.colors.surface) {
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                 RootDestination.entries.forEach { dest ->
                     NavigationBarItem(
                         selected = dest == selected,
@@ -166,7 +173,7 @@ private fun ExpandedShell(
     onSelect: (RootDestination) -> Unit,
 ) {
     Row(Modifier.fillMaxSize()) {
-        NavigationRail(containerColor = FS.colors.surface) {
+        NavigationRail(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
             RootDestination.entries.forEach { dest ->
                 NavigationRailItem(
                     selected = dest == selected,
@@ -189,7 +196,12 @@ private fun ExpandedShell(
 
 @Composable
 private fun TabContent(selected: RootDestination, padding: PaddingValues) {
-    Box(Modifier.fillMaxSize().padding(padding)) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .padding(padding)
+            .consumeWindowInsets(padding),
+    ) {
         when (selected) {
             RootDestination.HOME -> HomeTab()
             RootDestination.APPS -> ServicesTab()

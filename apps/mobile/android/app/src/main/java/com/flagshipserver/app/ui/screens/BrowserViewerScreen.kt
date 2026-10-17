@@ -21,7 +21,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Keyboard
+import androidx.compose.material.icons.outlined.KeyboardHide
+import androidx.compose.material.icons.outlined.Sensors
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,6 +43,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
@@ -52,13 +60,15 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavController
 import com.flagshipserver.app.core.LocalScreensClient
+import com.flagshipserver.app.ui.components.FSBarAction
+import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.BrowserViewerViewModel
 import kotlinx.coroutines.launch
 
 @Composable
 fun BrowserViewerScreen(
-    @Suppress("UNUSED_PARAMETER") nav: NavController,
+    nav: NavController,
     serviceId: String,
     tabId: String,
 ) {
@@ -81,39 +91,42 @@ fun BrowserViewerScreen(
 
     var keyboardVisible by remember { mutableStateOf(false) }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(FS.colors.bg),
+    FSScreen(
+        title = "Browser",
+        onBack = { nav.popBackStack() },
+        scrollable = false,
+        spacing = FS.space.s2,
+        actions = {
+            FSBarAction(
+                icon = if (keyboardVisible) Icons.Outlined.KeyboardHide else Icons.Outlined.Keyboard,
+                label = if (keyboardVisible) "Hide keyboard" else "Show keyboard",
+                onClick = { keyboardVisible = !keyboardVisible },
+            )
+        },
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = FS.space.s4, vertical = FS.space.s2),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = FS.space.s1),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
         ) {
             when (val s = status) {
                 is BrowserViewerViewModel.Status.Idle ->
-                    Text("Idle", color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp))
+                    Text("Idle", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                 is BrowserViewerViewModel.Status.Connecting -> {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(FS.space.s2))
-                    Text("Connecting…", color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp))
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Text("Connecting…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                 }
-                is BrowserViewerViewModel.Status.Streaming ->
-                    Text("Streaming tab $tabId", color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
+                is BrowserViewerViewModel.Status.Streaming -> {
+                    Icon(Icons.Outlined.Sensors, contentDescription = null, tint = FS.colors.success, modifier = Modifier.size(18.dp))
+                    Text("Streaming tab $tabId", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
+                }
                 is BrowserViewerViewModel.Status.Closed ->
-                    Text("Stream closed", color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp))
-                is BrowserViewerViewModel.Status.Failed ->
-                    Text(s.message, color = FS.colors.danger, style = TextStyle(fontSize = 14.sp), maxLines = 1)
+                    Text("Stream closed", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                is BrowserViewerViewModel.Status.Failed -> {
+                    Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                    Text(s.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                }
             }
-            Spacer(Modifier.weight(1f))
-            var showKeyboardToggle by remember { mutableStateOf(false) }
-            TextButton(onClick = { showKeyboardToggle = !showKeyboardToggle }) {
-                Text(if (showKeyboardToggle) "Hide keyboard" else "Show keyboard")
-            }
-            // Hoist the toggle so the TextField row below can read it.
-            keyboardVisible = showKeyboardToggle
         }
 
         // Soft-keyboard input row — visible only when toggled on. Each
@@ -137,9 +150,9 @@ fun BrowserViewerScreen(
                 },
                 placeholder = { Text("Type to send keys to the page") },
                 singleLine = true,
+                shape = MaterialTheme.shapes.small,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = FS.space.s4, vertical = FS.space.s2)
                     .focusRequester(focusRequester),
             )
             LaunchedEffect(keyboardVisible) {
@@ -153,7 +166,9 @@ fun BrowserViewerScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .background(FS.colors.surfaceSunken)
+                .padding(bottom = FS.space.s4)
+                .clip(MaterialTheme.shapes.medium)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 .onSizeChanged { viewportSize = it }
                 .pointerInput(tabId) {
                     detectDragGestures(
@@ -216,8 +231,8 @@ fun BrowserViewerScreen(
                     CircularProgressIndicator()
                     Text(
                         "Waiting for first frame…",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 14.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
             }

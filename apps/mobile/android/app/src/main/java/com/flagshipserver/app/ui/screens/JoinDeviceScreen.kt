@@ -24,7 +24,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Sensors
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
@@ -40,14 +49,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.core.JoinLink
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
+import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.components.SecureWindow
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.JoinDevicePhase
@@ -115,20 +131,11 @@ fun JoinDeviceScreen(
 
     LaunchedEffect(vm) { vm.start() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = FS.space.s6, vertical = FS.space.s8)
-            .semantics { contentDescription = "join-device" },
-        verticalArrangement = Arrangement.spacedBy(FS.space.s4),
+    FSScreen(
+        title = "Join an account",
+        onBack = { vm.cancel(); onCancel() },
+        modifier = Modifier.semantics { contentDescription = "join-device" },
     ) {
-        Text(
-            "Join an account",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-
         RiskWarning(
             "You're about to bring this device into someone else's Flagship " +
                 "account. It will hold that account's keys. Only continue if " +
@@ -136,7 +143,12 @@ fun JoinDeviceScreen(
         )
 
         when (val p = phase) {
-            JoinDevicePhase.Connecting -> StatusPanel("Connecting…", spinner = true)
+            JoinDevicePhase.Connecting -> StatusPanel(
+                title = "Connecting…",
+                message = "Setting up a secure channel with the admin's device.",
+                icon = Icons.Outlined.Sensors,
+                spinner = true,
+            )
             is JoinDevicePhase.VerifySas -> VerifyPanel(
                 matchCode = p.matchCode,
                 deviceName = deviceName,
@@ -147,11 +159,21 @@ fun JoinDeviceScreen(
                 },
                 onCancel = { vm.cancel(); onCancel() },
             )
-            JoinDevicePhase.Joining -> StatusPanel("Joining the account…", spinner = true)
+            JoinDevicePhase.Joining -> StatusPanel(
+                title = "Joining the account…",
+                message = "Verifying the admin's authorization and installing your account key.",
+                icon = Icons.Outlined.Lock,
+                spinner = true,
+            )
             is JoinDevicePhase.Joined -> JoinedPanel(quarantineUntil = p.quarantineUntil, onDone = onJoined)
             is JoinDevicePhase.Failed -> {
-                StatusPanel(p.message, danger = true)
-                FSGhostButton(label = "Back", onClick = onCancel, block = true)
+                StatusPanel(
+                    title = "Couldn't join",
+                    message = p.message,
+                    icon = Icons.Outlined.ErrorOutline,
+                    danger = true,
+                )
+                FSSecondaryButton(label = "Back", onClick = onCancel, block = true)
             }
         }
     }
@@ -159,23 +181,12 @@ fun JoinDeviceScreen(
 
 @Composable
 private fun ScannerEntry(error: String?, onScanned: (String) -> Unit, onCancel: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = FS.space.s6, vertical = FS.space.s8)
-            .semantics { contentDescription = "join-device-scan" },
-        verticalArrangement = Arrangement.spacedBy(FS.space.s4),
+    FSScreen(
+        title = "Scan the pairing code",
+        onBack = onCancel,
+        modifier = Modifier.semantics { contentDescription = "join-device-scan" },
+        subtitle = "Point your camera at the “Add a device” code on the account owner's phone.",
     ) {
-        Text(
-            "Scan the pairing code",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Text(
-            "Point your camera at the “Add a device” code on the account owner's phone.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 15.sp, lineHeight = 22.sp),
-        )
         RiskWarning(
             "Scanning brings this device into the owner's account and shares " +
                 "their account keys with it. Only scan a code the owner is " +
@@ -183,9 +194,9 @@ private fun ScannerEntry(error: String?, onScanned: (String) -> Unit, onCancel: 
         )
         QRScanner(onScanned = onScanned)
         error?.let {
-            Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
         }
-        FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+        FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
     }
 }
 
@@ -197,79 +208,88 @@ private fun VerifyPanel(
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    FSCard(padding = PaddingValues(FS.space.s5)) {
+    FSCard {
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(FS.space.s3),
             modifier = Modifier.fillMaxWidth(),
         ) {
+            Text("Confirm this code", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Confirm this code",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+                "It must match the code on the account owner's phone.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
             )
             Text(
                 formatSas(matchCode),
-                color = FS.colors.primary,
-                style = TextStyle(fontSize = 40.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp),
-                modifier = Modifier.semantics { contentDescription = "join-device-sas" },
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.displaySmall.copy(fontFamily = FontFamily.Monospace, letterSpacing = 6.sp),
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = "join-device-sas" },
             )
-            Text(
-                "It must match the code on the account owner's phone.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
+            FSField(
+                value = deviceName,
+                onValueChange = onDeviceNameChange,
+                label = "Name in this account",
+                helper = "This encrypted name applies only inside the account you are joining.",
+            )
+            FSPrimaryButton(
+                label = "Confirm name and join",
+                onClick = onConfirm,
+                enabled = deviceName.isNotBlank(),
+                block = true,
             )
         }
     }
-    Spacer(Modifier.height(FS.space.s2))
-    OutlinedTextField(
-        value = deviceName,
-        onValueChange = onDeviceNameChange,
-        label = { Text("Name in this account") },
-        supportingText = { Text("This encrypted name applies only inside the account you are joining.") },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
-    )
-    FSPrimaryButton(
-        label = "Confirm name and join",
-        onClick = onConfirm,
-        enabled = deviceName.isNotBlank(),
-        block = true,
-        large = true,
-    )
-    FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+    FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
 }
 
 @Composable
 private fun JoinedPanel(quarantineUntil: Long?, onDone: () -> Unit) {
-    FSCard(padding = PaddingValues(FS.space.s5)) {
+    FSCard {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                "You're in",
-                color = FS.colors.success,
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = FS.colors.success)
+                Text("You're in", style = MaterialTheme.typography.titleMedium)
+            }
             Text(
                 quarantineCopy(quarantineUntil),
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 19.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.semantics { contentDescription = "join-device-quarantine" },
             )
         }
     }
-    Spacer(Modifier.height(FS.space.s2))
-    FSPrimaryButton(label = "Continue", onClick = onDone, block = true, large = true)
+    FSPrimaryButton(label = "Continue", onClick = onDone, block = true)
 }
 
 @Composable
-private fun StatusPanel(message: String, spinner: Boolean = false, danger: Boolean = false) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
+private fun StatusPanel(
+    title: String,
+    message: String,
+    icon: ImageVector,
+    spinner: Boolean = false,
+    danger: Boolean = false,
+) {
+    FSCard {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            if (spinner) CircularProgressIndicator()
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                if (spinner) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                } else {
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        tint = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Text(title, style = MaterialTheme.typography.titleMedium)
+            }
             Text(
                 message,
-                color = if (danger) FS.colors.danger else FS.colors.textMuted,
-                style = TextStyle(fontSize = 14.sp),
+                color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
             )
         }
     }

@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,12 +25,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSField
+import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.AppBackupViewModel
@@ -49,16 +50,24 @@ fun AppBackupCard(serviceId: String, client: ScreensClient, lastBackup: String?)
     var password by remember { mutableStateOf("") }
     val busy = phase is AppBackupViewModel.Phase.Creating || phase is AppBackupViewModel.Phase.Downloading
 
+    val ready = phase as? AppBackupViewModel.Phase.Ready
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.fillMaxWidth().testTag("service-detail-backup")) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            lastBackup?.let { Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp)) }
+            lastBackup?.let {
+                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
             Text(
                 "The app's code, and its data if you include it. It comes straight from your server to this phone.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Include the app's data", color = FS.colors.text, style = TextStyle(fontSize = 14.sp), modifier = Modifier.weight(1f))
+                Text(
+                    "Include the app's data",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
                 Switch(
                     checked = includeData,
                     onCheckedChange = { includeData = it },
@@ -66,23 +75,22 @@ fun AppBackupCard(serviceId: String, client: ScreensClient, lastBackup: String?)
                     modifier = Modifier.testTag("service-detail-backup-data"),
                 )
             }
-            OutlinedTextField(
+            FSField(
                 value = password,
                 onValueChange = { password = it },
-                label = { Text("Password to encrypt it (optional)") },
+                label = "Password to encrypt it (optional)",
                 visualTransformation = PasswordVisualTransformation(),
+                keyboardType = KeyboardType.Password,
                 enabled = !busy,
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
             )
             when (val p = phase) {
                 is AppBackupViewModel.Phase.Ready -> {
                     Text(
                         "Ready: ${p.bytes.size / 1024} KB${if (p.encrypted) ", encrypted" else ""}",
                         color = FS.colors.success,
-                        style = TextStyle(fontSize = 13.sp),
+                        style = MaterialTheme.typography.bodyMedium,
                     )
-                    FSSecondaryButton(
+                    FSPrimaryButton(
                         label = "Save backup",
                         block = true,
                         modifier = Modifier.testTag("service-detail-backup-save"),
@@ -90,25 +98,39 @@ fun AppBackupCard(serviceId: String, client: ScreensClient, lastBackup: String?)
                     )
                 }
                 is AppBackupViewModel.Phase.Failed ->
-                    Text(p.message, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+                    Text(p.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                 else -> Unit
             }
-            FSSecondaryButton(
-                label = when (phase) {
-                    is AppBackupViewModel.Phase.Creating -> "Packing…"
-                    is AppBackupViewModel.Phase.Downloading -> "Downloading…"
-                    else -> "Back up now"
-                },
-                enabled = !busy,
-                block = true,
-                modifier = Modifier.testTag("service-detail-backup-now"),
-                onClick = {
-                    scope.launch {
-                        vm.backUp(includeData, password)
-                        if (vm.phase.value is AppBackupViewModel.Phase.Ready) password = ""
-                    }
-                },
-            )
+            val backUpLabel = when (phase) {
+                is AppBackupViewModel.Phase.Creating -> "Packing…"
+                is AppBackupViewModel.Phase.Downloading -> "Downloading…"
+                else -> "Back up now"
+            }
+            val backUp = {
+                scope.launch {
+                    vm.backUp(includeData, password)
+                    if (vm.phase.value is AppBackupViewModel.Phase.Ready) password = ""
+                }
+                Unit
+            }
+            // Save backup is the main action once an archive is ready.
+            if (ready != null) {
+                FSSecondaryButton(
+                    label = backUpLabel,
+                    enabled = !busy,
+                    block = true,
+                    modifier = Modifier.testTag("service-detail-backup-now"),
+                    onClick = backUp,
+                )
+            } else {
+                FSPrimaryButton(
+                    label = backUpLabel,
+                    enabled = !busy,
+                    block = true,
+                    modifier = Modifier.testTag("service-detail-backup-now"),
+                    onClick = backUp,
+                )
+            }
         }
     }
 }

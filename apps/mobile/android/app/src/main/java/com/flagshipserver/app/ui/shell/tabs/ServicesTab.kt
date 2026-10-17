@@ -70,6 +70,11 @@ fun ServicesTab() {
                 deepLinker.consume()
                 nav.navigateOnPod(BUILD_CHOOSER_ROUTE, link.podId, pinned = true)
             }
+            // Home's "Build a service" quick action.
+            DeepLink.StartBuild -> {
+                deepLinker.consume()
+                nav.navigate(BUILD_CHOOSER_ROUTE)
+            }
             // W10 — the `vibecode-needs-you` push deep-links here so the AI's
             // mid-build question (talkToUser / requestEnvVar) opens the chat.
             // Mirror iOS's guard: don't re-push if we're already on it.

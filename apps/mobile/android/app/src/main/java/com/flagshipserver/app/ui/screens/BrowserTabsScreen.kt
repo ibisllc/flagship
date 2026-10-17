@@ -17,6 +17,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.GppMaybe
+import androidx.compose.material.icons.outlined.PlayCircle
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Tab
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,7 +41,14 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.BrowserTab
 import com.flagshipserver.app.core.LocalScreensClient
+import com.flagshipserver.app.ui.components.FSBarAction
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSDivider
+import com.flagshipserver.app.ui.components.FSGroup
+import com.flagshipserver.app.ui.components.FSNote
+import com.flagshipserver.app.ui.components.FSRow
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.BrowserTabsViewModel
@@ -53,26 +67,12 @@ fun BrowserTabsScreen(nav: NavController, serviceId: String) {
 
     LaunchedEffect(serviceId) { vm.load() }
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6),
+    FSScreen(
+        title = "Open tabs",
+        onBack = { nav.popBackStack() },
+        subtitle = "Pick a tab to stream. Your touches go to the browser running on your server.",
+        actions = { FSBarAction(Icons.Outlined.Refresh, "Refresh", onClick = { vm.load() }) },
     ) {
-        Spacer(Modifier.height(FS.space.s8))
-        Text(
-            "Open tabs",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Text(
-            "Pick a tab to stream. Touches are forwarded to the headless browser.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp),
-        )
-        Spacer(Modifier.height(FS.space.s4))
-
         when (val s = state) {
             is LoadingState.Loaded -> TabsBody(s.value) { tab ->
                 nav.navigate("browser-viewer/$serviceId/${tab.tabId}")
@@ -91,40 +91,21 @@ fun BrowserTabsScreen(nav: NavController, serviceId: String) {
 @Composable
 private fun TabsBody(tabs: List<BrowserTab>, onPick: (BrowserTab) -> Unit) {
     if (tabs.isEmpty()) {
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Text(
-                "No tabs open for this app.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 14.sp),
-            )
-        }
+        FSNote("No tabs open for this app.")
         return
     }
-    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-        for (tab in tabs) {
-            FSCard(
-                padding = PaddingValues(FS.space.s4),
-                modifier = Modifier.fillMaxWidth().clickable { onPick(tab) },
-            ) {
-                Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            tab.title ?: tab.tabId,
-                            color = FS.colors.text,
-                            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-                        )
-                        tab.currentUrl?.let { url ->
-                            Text(
-                                url,
-                                color = FS.colors.textMuted,
-                                style = TextStyle(fontSize = 12.sp),
-                                maxLines = 1,
-                            )
-                        }
-                    }
-                    Text("▶", color = FS.colors.primary, style = TextStyle(fontSize = 18.sp))
-                }
-            }
+    FSGroup {
+        tabs.forEachIndexed { idx, tab ->
+            if (idx > 0) FSDivider()
+            FSRow(
+                title = tab.title ?: tab.tabId,
+                subtitle = tab.currentUrl,
+                icon = Icons.Outlined.Tab,
+                onClick = { onPick(tab) },
+                trailing = {
+                    Icon(Icons.Outlined.PlayCircle, contentDescription = "Stream", tint = MaterialTheme.colorScheme.primary)
+                },
+            )
         }
     }
 }
@@ -136,17 +117,20 @@ private fun TabsBody(tabs: List<BrowserTab>, onPick: (BrowserTab) -> Unit) {
 private fun CertMismatchWarningCard(message: String, onRetry: () -> Unit) {
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                "Connection couldn't be verified",
-                color = FS.colors.danger,
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                Icon(Icons.Outlined.GppMaybe, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                Text(
+                    "Connection couldn't be verified",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
             Text(
                 message,
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 19.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
             )
-            FSGhostButton(label = "Try again", onClick = onRetry)
+            FSSecondaryButton(label = "Try again", onClick = onRetry)
         }
     }
 }
