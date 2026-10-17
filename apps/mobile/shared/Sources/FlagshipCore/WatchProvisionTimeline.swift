@@ -108,7 +108,7 @@ public extension WatchProtocol {
 
         /// Mirrors `FlagshipCore.ProvisionTimelineLadder.installedUnplugDetail`.
         public static let installedUnplugDetail =
-            "Install complete. If it ran from a USB stick, unplug it and power the box back on."
+            "Install complete. If it ran from a USB stick, unplug it and power the server back on."
 
         public static func rows(for ctx: ProvisionTimelineContext?) -> [TimelineRow] {
             let ladder = phases

@@ -43,7 +43,7 @@ public enum ProvisionProgress {
     /// `installed` (action-needed: install finished, box powered off). The
     /// long form (spells out BOTH actions) — byte-identical across surfaces.
     public static let installedUnplugDetail =
-        "Install complete. If it ran from a USB stick, unplug it and power the box back on."
+        "Install complete. If it ran from a USB stick, unplug it and power the server back on."
 
     /// The canonical UI groups, in order (design §1.2 projection table).
     public static let stepGroups: [StepGroup] = [

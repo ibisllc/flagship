@@ -70,7 +70,7 @@ final class ProvisionProgressTests: XCTestCase {
         XCTAssertEqual(v.map { $0.state }, [.done, .done, .done, .done, .active, .pending])
         let installed = v.first { $0.key == .installed }!
         XCTAssertEqual(installed.state, .active)
-        XCTAssertEqual(installed.detail, "Install complete. If it ran from a USB stick, unplug it and power the box back on.")
+        XCTAssertEqual(installed.detail, "Install complete. If it ran from a USB stick, unplug it and power the server back on.")
         XCTAssertEqual(installed.detail, ProvisionProgress.installedUnplugDetail)
     }
 

@@ -66,7 +66,7 @@ export const PROVISION_STEP_GROUPS = Object.freeze([
  *  awaiting the user. Longer than PROVISION_PHASE_TITLES.installed (the push
  *  banner's short form) because the in-ladder row spells out BOTH actions. */
 export const INSTALLED_DONE_DETAIL =
-  "Install complete. If it ran from a USB stick, unplug it and power the box back on.";
+  "Install complete. If it ran from a USB stick, unplug it and power the server back on.";
 
 /** @param {string} phase */
 function isLadderPhase(phase) {

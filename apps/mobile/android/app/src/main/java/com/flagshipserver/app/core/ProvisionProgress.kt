@@ -65,7 +65,7 @@ object ProvisionProgress {
     /** Detail shown on the Installed row when the current phase is
      *  `installed` (action-needed: install finished, box powered off). */
     const val INSTALLED_UNPLUG_DETAIL =
-        "Install complete. If it ran from a USB stick, unplug it and power the box back on."
+        "Install complete. If it ran from a USB stick, unplug it and power the server back on."
 
     /** The user-facing groups, in order. `installed` is its own rung after
      *  Securing (see above). */

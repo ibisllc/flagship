@@ -111,7 +111,7 @@ class ProvisionProgressTest {
         val installed = v.first { it.key == ProvisionProgress.StepKey.INSTALLED }
         assertEquals(ProvisionProgress.StepState.ACTIVE, installed.state)
         assertEquals(
-            "Install complete. If it ran from a USB stick, unplug it and power the box back on.",
+            "Install complete. If it ran from a USB stick, unplug it and power the server back on.",
             installed.detail,
         )
         assertEquals(ProvisionProgress.INSTALLED_UNPLUG_DETAIL, installed.detail)

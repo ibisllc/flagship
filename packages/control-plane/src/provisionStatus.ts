@@ -210,7 +210,7 @@ const PHASE_BODIES: Record<ProvisionStatusPhase, string> = {
   downloading: "Downloading the server software.",
   partitioning: "Preparing the disk.",
   installing: "Installing the server software.",
-  installed: "The install finished. If it ran from a USB stick, unplug it and power the box back on.",
+  installed: "The install finished. If it ran from a USB stick, unplug it and power the server back on.",
   registering: "Your server is checking in with Flagship.",
   sealing: "Sealing your encrypted disk key.",
   pairing: "Your server is pairing with your phone.",

@@ -188,7 +188,7 @@ final class ProvisionTimelineLadderTests: XCTestCase {
         XCTAssertEqual(rows[6].detail, ProvisionTimelineLadder.installedUnplugDetail)
         XCTAssertEqual(
             ProvisionTimelineLadder.installedUnplugDetail,
-            "Install complete. If it ran from a USB stick, unplug it and power the box back on."
+            "Install complete. If it ran from a USB stick, unplug it and power the server back on."
         )
     }
 

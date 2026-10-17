@@ -1091,7 +1091,7 @@ public enum ProvisionStatusPhase: String, Codable, Equatable, Sendable, CaseIter
         case .downloading:  return "Downloading the server software."
         case .partitioning: return "Preparing the disk."
         case .installing:   return "Installing the server software."
-        case .installed:    return "The install finished. If it ran from a USB stick, unplug it and power the box back on."
+        case .installed:    return "The install finished. If it ran from a USB stick, unplug it and power the server back on."
         case .registering:  return "Your server is checking in with Flagship."
         case .sealing:      return "Sealing your encrypted disk key."
         case .pairing:      return "Your server is pairing with your phone."
