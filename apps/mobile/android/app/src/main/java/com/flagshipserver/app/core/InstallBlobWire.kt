@@ -7,6 +7,8 @@
 
 package com.flagshipserver.app.core
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -38,17 +40,21 @@ data class InstallBlobBundle(
     val debugGrant: String? = null,
 )
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class WireBlob(
-    val version: Int = 2,
+    // The recipe is encoded with the default Json (encodeDefaults=false), which
+    // would drop these defaults; the preseed engine and Studio reject a blob
+    // without `version`, and the webapp's onWireBlob always sends all four.
+    @EncodeDefault val version: Int = 2,
     val serverDomain: String,
     val username: String,
     val serverName: String,
     val phoneDelegatedPubKey: String,    // hex
-    val registrationUrl: String = Endpoints.registrationUrl,
+    @EncodeDefault val registrationUrl: String = Endpoints.registrationUrl,
     val authCode: WireAuthCode,
     val authCodeUserSignature: String,   // hex
-    val installerGitRef: String = "main",
+    @EncodeDefault val installerGitRef: String = "main",
     val rckPubKey: String,               // hex
     // Only present for "approve" servers — null (omitted, since the default
     // Json has encodeDefaults=false) for the "auto" default, mirroring the
@@ -62,9 +68,10 @@ data class WireBlob(
     val diskEncryption: String? = null,
 )
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class WireAuthCode(
-    val version: Int = 1,
+    @EncodeDefault val version: Int = 1,
     val serial: String,
     val username: String,
     val serverName: String,
