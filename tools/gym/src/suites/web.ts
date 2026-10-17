@@ -1750,6 +1750,19 @@ const TOTAL: readonly Scenario[] = [
       dimension: "D6",
     },
   ),
+  webTotal(
+    "web-total-apps-storage",
+    "App storage (docs/app-runtimes.md 5.3): the app page lists Files and Database use against their limits; a full files folder says new data is refused until space is freed or the limit raised.",
+    "gym apps storage shows an app's use against its limits and why a full app refuses data",
+    {
+      steps: [{ kind: "launch", describe: "Reach the app page for a full app." }],
+      assertions: [
+        { describe: "Full note", handle: "[data-sd-storage-full]", expect: "text", text: "new data is refused" },
+      ],
+      screenshots: [shot("app-storage-full", "The app page with a full files folder.")],
+      dimension: "D6",
+    },
+  ),
 
   // ── Flagship Inference in Settings + the build chat (gym-inference.spec.ts) ──
   webTotal(

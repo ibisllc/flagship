@@ -133,7 +133,6 @@ function formatStoreBytes(n) {
   return `${u === 0 ? v : v.toFixed(v < 10 ? 1 : 0)} ${units[u]}`;
 }
 
-/** One data-layer store: a Postgres database (by store name) or the app's files folder (with its size). */
 /** The app's use against its limits (docs/app-runtimes.md §5.3), and why new data is refused when full. */
 export function renderAppStorage(storage) {
   const lines = appStorageLines(storage);
@@ -150,6 +149,7 @@ export function renderAppStorage(storage) {
           </div>`;
 }
 
+/** One data-layer store: a Postgres database (by store name) or the app's files folder (with its size). */
 function renderStoreRow(i) {
   const label = i.store === "postgres" ? "Postgres" : i.store === "files" ? "Files" : String(i.store ?? "");
   const value =

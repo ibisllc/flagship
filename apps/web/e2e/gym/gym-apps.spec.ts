@@ -1221,4 +1221,22 @@ test.describe("gym webapp apps", () => {
     await card.scrollIntoViewIfNeeded();
     await shot(page, testInfo, "app-backup-gone");
   });
+  test("gym apps storage shows an app's use against its limits and why a full app refuses data", async ({ page }, testInfo) => {
+    await reachHome(page);
+    const GB = 1024 ** 3;
+    const detail = appDetail() as Record<string, unknown>;
+    detail.storage = {
+      files: { usedBytes: 5 * GB, limitBytes: 5 * GB, full: true },
+      postgres: { usedBytes: 200 * 1024 ** 2, limitBytes: GB },
+    };
+    await stub(page, baseRules(detail));
+    await openApp(page);
+    const card = page.locator("#sd-storage");
+    await expect(card).toContainText("Files");
+    await expect(card).toContainText("5.0 GB of 5.0 GB");
+    await expect(card.locator("[data-sd-storage-full]")).toHaveText("Full: new data is refused until you free space or raise the limit.");
+    await expect(card).toContainText("200 MB of 1.0 GB");
+    await card.scrollIntoViewIfNeeded();
+    await shot(page, testInfo, "app-storage-full");
+  });
 });

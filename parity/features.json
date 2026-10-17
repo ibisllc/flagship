@@ -565,6 +565,16 @@
       }
     },
     {
+      "id": "app-storage-limits",
+      "title": "Per-app disk limits: files and database use against their limits on the app page, full-app notes on the server's Backups section, and the app-storage-full alert (docs/app-runtimes.md 5.3)",
+      "ref": "web",
+      "surfaces": {
+        "ios": { "status": "missing", "reason": "Box and webapp first (2026-10-16); the iOS port reads server-detail/app-detail `storage` and the `app-storage-full` push next.", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "struct "]] },
+        "android": { "status": "missing", "reason": "Box and webapp first (2026-10-16); the Android port reads server-detail/app-detail `storage` and the `app-storage-full` push next.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerArchiveScreens.kt", "fun "]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appStorage.js", "export function appStorageLines"], ["apps/web/public/webapp/views/service-detail.js", "renderAppStorage"], ["apps/web/public/webapp/lib/aiChatAlerts.js", "app-storage-full"]] }
+      }
+    },
+    {
       "id": "activity-feed",
       "title": "Activity: the server's own events merged with account events",
       "ref": "ios",

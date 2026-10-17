@@ -250,7 +250,7 @@ of the last check here: **not yet checked**.
   and app-detail carry `storage`; a full app is Activity `app.storage.full`
   + `app-storage-full` phone alert + content-free push. Tested on a real
   Postgres 18 and real loop images on a Debian 13 VM (CI runs both). Needs
-  an endorsed box release; clients don't show `storage` or the alert yet;
+  an endorsed box release; the webapp shows `storage` and the alert (shell v132), iOS/Android don't yet;
   live gym group `quota` not run yet.
 - **Live gym on UpCloud, all green (2026-10-15).** `bash scripts/gym-refresh.sh`
   (rebases `gym` onto main in `~/.cache/flagship/gym-worktree` and pushes it,
@@ -275,6 +275,18 @@ of the last check here: **not yet checked**.
   an older endorsed release; `/api/dev/sample-user/<u>/order-update` assumes
   the prod apex.
 
+- **Scheduled backups, backup policy, one `.flagship` file, Migrate on the
+  archive path (2026-10-16/17, `docs/server-backup-and-clone.md`).** Box:
+  scheduled backups with retention and a KEK-pool deposit
+  (`flagship/server-archive-keys/v1`), a signed `flagship/backup-policy/v1`
+  (phone reserve / peer 1/3 / none) with the size limit, one `FLGSHBK1`
+  file served with Range, Migrate that pauses apps and pulls box to box,
+  restore from peers (`from-peers` route). Webapp: Backups section, policy at
+  create, download/import, Migrate data move, per-app storage. Needs an
+  endorsed box release and a `.com` deploy. Missing: iOS/Android clients
+  (`wip/backups-ios-2026-10-16`, `wip/backups-android-2026-10-16`), phones'
+  background fetch, webapp "restore from peers" in Import, live-gym checks
+  (Migrate: two boxes, data moves, old box wiped).
 - **Backup/clone server, Add/Import a server, Migrate wipes, Activity
   (2026-10-15):** `docs/server-backup-and-clone.md`. A backup is two files:
   a small `.flagship-backup` (key slots + the saved server's settings, apps,
