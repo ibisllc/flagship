@@ -589,7 +589,7 @@
       "title": "Activity: the server's own events merged with account events",
       "ref": "ios",
       "surfaces": {
-        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift", "enum BoxEventLabels"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift", "ON THIS SERVER"]] },
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift", "enum BoxEventLabels"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift", "That's everything"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/BoxEventLabels.kt", "server.backup.policy"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/ActivityViewModel.kt", "object ActivityDates"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ActivityScreen.kt", "activity-section-"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ActivityScreen.kt", "That's everything"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/activityFeed.js", "BOX_EVENT_LABELS"], ["apps/web/public/webapp/views/activity.js", "mergeFeed"]] }
       }
