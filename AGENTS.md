@@ -285,8 +285,14 @@ of the last check here: **not yet checked**.
   create, download/import, Migrate data move, per-app storage. Needs an
   endorsed box release and a `.com` deploy. Missing: iOS/Android clients
   (`wip/backups-ios-2026-10-16`, `wip/backups-android-2026-10-16`), phones'
-  background fetch, webapp "restore from peers" in Import, live-gym checks
-  (Migrate: two boxes, data moves, old box wiped).
+  background fetch, live-gym checks (Migrate: two boxes, data moves, old
+  box wiped). Webapp peer backup (2026-10-17, shell v134): Settings →
+  Peer-backup is the v2 status (the v1 pool toggle is gone), and Add/Import →
+  "Restore from other servers" derives the lost server's PBK from the UMK,
+  has a running server (or the browser, from the sealed `.com` record) read
+  the record, opens its backup, creates the server and calls `from-peers`
+  (`lib/peerBackup.js`, parity `peer-backup-v2`; iOS/Android still show the
+  v1 screen).
 - **Backup/clone server, Add/Import a server, Migrate wipes, Activity
   (2026-10-15):** `docs/server-backup-and-clone.md`. A backup is two files:
   a small `.flagship-backup` (key slots + the saved server's settings, apps,
