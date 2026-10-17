@@ -419,8 +419,9 @@ final class GymSweepBuildTests: GymSweepCase {
         let relays = app.switches.matching(identifier: "build-key-relay")
         XCTAssertEqual(relays.count, 2)
         // Gym went in Direct; the saved Work key still goes through the relay.
-        let workRelay = relays.matching(NSPredicate(format: "value == %@", AiRelay.on)).firstMatch
-        XCTAssertTrue(workRelay.exists, "Work still goes through the relay.")
+        let workIndex = (0..<relays.count).first { relays.element(boundBy: $0).value as? String == AiRelay.on }
+        XCTAssertNotNil(workIndex, "Work still goes through the relay.")
+        let workRelay = relays.element(boundBy: workIndex ?? 0)
         flip(workRelay)
         wait(workRelay, "value == '\(AiRelay.off)'")
 
@@ -737,7 +738,7 @@ final class GymSweepBuildTests: GymSweepCase {
         XCTAssertTrue(reveal(app, deploy))
         deploy.tap()
         expectProbe(app, "deployed build")
-        let live = app.links.matching(NSPredicate(format: "label CONTAINS 'imported-app.'")).firstMatch
+        let live = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'imported-app.'")).firstMatch
         XCTAssertTrue(live.waitForExistence(timeout: 10) || reveal(app, live), "Deploy shows the live address.")
         let refresh = app.buttons["Refresh"]
         if reveal(app, refresh) {
