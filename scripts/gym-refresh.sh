@@ -23,7 +23,9 @@
 #      GYM_SECRETS_FILE  (default <main checkout>/.gym-secrets.env)
 #      GYM_UPCLOUD_TOKEN_FILE (default ~/.config/flagship/upcloud-token)
 #      GYM_BASE_REF      rebase the gym branch onto this ref instead of origin/main (never pushed)
-#      GYM_INSTALLER_GIT_REF  the ref new gym boxes clone (a pushed branch; default main)
+#      GYM_INSTALLER_GIT_REF  the ref new gym boxes clone (a pushed branch; default gym: only that branch
+#                         carries the gym trust pin, so a box on main can't check
+#                         anything the gym CA signed, e.g. a share's account-key attestation)
 #      GYM_REFRESH_DRY_RUN=1  same as --dry-run
 #
 # Never touches prod: prod is only READ (its secret names, to compare).
@@ -32,6 +34,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 export PATH="$HOME/.fly/bin:$PATH"
 
+GYM_INSTALLER_GIT_REF="${GYM_INSTALLER_GIT_REF:-gym}"
 DRY="${GYM_REFRESH_DRY_RUN:-0}"
 push=1 fly_deploy=1 deploy=1
 for arg in "$@"; do

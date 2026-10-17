@@ -252,7 +252,7 @@ export async function addBox(acct: Account, serverName: string, opts: AddBoxOpti
     registrationUrl: `https://${CONTROL}/api/server/register`,
     authCode,
     authCodeUserSignature: signAuthCode(authCode, irk),
-    installerGitRef: process.env.GYM_INSTALLER_GIT_REF || "main",
+    installerGitRef: process.env.GYM_INSTALLER_GIT_REF || "gym",
     rckPubKey: rck.publicKey,
   };
   const blobSignature = signInstallBlob(blob, irk);
