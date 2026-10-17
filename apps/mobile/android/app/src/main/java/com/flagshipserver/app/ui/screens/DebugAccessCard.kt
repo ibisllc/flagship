@@ -194,10 +194,13 @@ internal fun DebugAccessCard(vm: DebugAccessViewModel, onChanged: () -> Unit) {
             title = { Text("Turn off debug access?") },
             text = { Text("The key stops working now and anyone signed in with it is disconnected.") },
             confirmButton = {
-                TextButton(onClick = {
-                    confirmOff = false
-                    scope.launch { if (vm.turnOff()) onChanged() }
-                }) { Text("Turn off") }
+                TextButton(
+                    onClick = {
+                        confirmOff = false
+                        scope.launch { if (vm.turnOff()) onChanged() }
+                    },
+                    modifier = Modifier.testTag("sd-debug-access-confirm-off"),
+                ) { Text("Turn off") }
             },
             dismissButton = { TextButton(onClick = { confirmOff = false }) { Text("Cancel") } },
         )

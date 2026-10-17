@@ -577,6 +577,33 @@ const OCTOBER: readonly Scenario[] = [
     },
   ),
   androidTotal(
+    "android-oct-debug-access",
+    "D1: an admin device turns debug access on with a pasted SSH key (warning shown, a biometric per grant), the banner shows until when, then turns it off.",
+    O + "debugAccessOnBannerOff",
+    {
+      steps: [
+        { kind: "tap", describe: "Turn on.", handle: "sd-debug-access-open" },
+        { kind: "tap", describe: "Paste a key, Turn on.", handle: "sd-debug-access-submit" },
+        { kind: "assert", describe: "The banner.", handle: "sd-debug-access-banner" },
+        { kind: "tap", describe: "Turn off.", handle: "sd-debug-access-off" },
+      ],
+      assertions: [{ describe: "Banner gone", handle: "sd-debug-access-banner", expect: "absent" }],
+      screenshots: [shot("debug-access-form", "The form."), shot("debug-access-on", "On."), shot("debug-access-off", "Off.")],
+      dimension: "D1",
+    },
+  ),
+  androidTotal(
+    "android-oct-debug-access-read-only",
+    "D3: a device without the admin root sees debug access read-only.",
+    O + "debugAccessReadOnlyOnANonAdminDevice",
+    {
+      steps: [{ kind: "assert", describe: "Admin-only line.", handle: "sd-debug-access-admin-only" }],
+      assertions: [{ describe: "No Turn on", handle: "sd-debug-access-open", expect: "absent" }],
+      screenshots: [shot("debug-access-read-only", "Read-only.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
     "android-oct-database-browse",
     "D6: Plants' Database opens a table with its row range.",
     O + "databaseBrowsesATable",

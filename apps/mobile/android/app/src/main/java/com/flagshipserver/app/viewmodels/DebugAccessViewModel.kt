@@ -9,6 +9,7 @@ package com.flagshipserver.app.viewmodels
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.DebugAccessView
 import com.flagshipserver.app.api.ScreensClient
+import com.flagshipserver.app.core.Variant
 import com.flagshipserver.app.api.boxError
 import com.flagshipserver.app.api.userFacing
 import com.flagshipserver.app.core.DebugAccess
@@ -25,13 +26,13 @@ class DebugAccessViewModel(
     private val client: ScreensClient,
     initial: DebugAccessView?,
     /** Only a device holding the admin root may sign (owner rule: admin-only). */
-    private val isAdminDevice: () -> Boolean = { Keystore.hasAdminRoot() },
+    private val isAdminDevice: () -> Boolean = { Variant.forceAdminRoot || Keystore.hasAdminRoot() },
     /** A biometric that runs for EVERY grant, even in an unlocked session (one per grant, like an admin invite). */
     private val confirmGrant: suspend (reason: String) -> Unit = { r -> BiometricAuthority.confirmNow(r) },
-    /** The admin root, read after [confirmGrant] (no second prompt). */
-    private val adminKey: () -> Ed25519Sign = { Ed25519Sign(Keystore.adminRootSeed() ?: error("no admin root on this device")) },
+    /** The admin root (the IRK on an account that pins none), read after [confirmGrant]: the session is fresh, so no second prompt. */
+    private val adminKey: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.adminRootSeed()?.let { Ed25519Sign(it) } ?: Keystore.adminSigningKey(r) },
     /** Turning off may ride the unlocked session. */
-    private val revokeSigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.adminRootKey(r) },
+    private val revokeSigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.adminSigningKey(r) },
     private val now: () -> Long = { System.currentTimeMillis() },
 ) : ViewModel() {
 
@@ -70,7 +71,7 @@ class DebugAccessViewModel(
         _state.value = _state.value.copy(busy = true, error = null, notice = null)
         return try {
             confirmGrant(if (wasOn) "Renew debug access on $serverDomain" else "Turn on debug access on $serverDomain")
-            val sig = DebugAccess.sign(grant, adminKey())
+            val sig = DebugAccess.sign(grant, adminKey("Turn on debug access on $serverDomain"))
             val r = client.debugAccessGrant(DebugAccess.envelopeJson(grant, sig))
             _state.value = State(
                 view = r.debugAccess ?: DebugAccessView(true, grant.expiresAt, DebugAccess.fingerprint(key), "admin"),

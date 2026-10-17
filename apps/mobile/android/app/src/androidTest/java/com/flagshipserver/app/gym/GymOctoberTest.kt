@@ -50,6 +50,9 @@ class GymOctoberTest : GymBase() {
     private fun count(tag: String, unmerged: Boolean = false) =
         composeRule.onAllNodesWithTag(tag, useUnmergedTree = unmerged).fetchSemanticsNodes().size
 
+    private fun countDesc(desc: String) =
+        composeRule.onAllNodesWithContentDescription(desc).fetchSemanticsNodes().size
+
     private fun countPrefix(prefix: String) = composeRule.onAllNodes(tagStartsWith(prefix)).fetchSemanticsNodes().size
 
     private fun textOf(tag: String): String =
@@ -69,6 +72,45 @@ class GymOctoberTest : GymBase() {
         waitUntilTextExists("Living-room mini-PC", timeoutMs = 20_000)
         composeRule.onNodeWithText("Living-room mini-PC").performScrollTo().performClick()
         composeRule.waitForIdle()
+    }
+
+    // ─── Debug access ────────────────────────────────────────────────────────
+
+    /** An admin device turns debug access on with a pasted SSH key, the page
+     *  shows the banner, then turns it off and the banner goes. */
+    @Test
+    fun debugAccessOnBannerOff() {
+        launch(tab = "home", adminRoot = true)
+        waitUntilTextExists("Living-room mini-PC", timeoutMs = 20_000)
+        composeRule.onNodeWithText("Living-room mini-PC").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        waitUntilExists("sd-debug-access-open", timeoutMs = 20_000)
+        composeRule.onNodeWithTag("sd-debug-access-open").performScrollTo().performClick()
+        waitUntilExists("sd-debug-access-key")
+        composeRule.onNodeWithTag("sd-debug-access-key").performScrollTo()
+            .performTextInput("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINBKsjJ0K7SrOhNovUYV5ObQIkq3GgFrr4UgozLJd4c3 gym@laptop")
+        waitUntilTextExists("Anyone with this key can read everything on this server while it's on.")
+        gymShot("debug-access-form")
+        composeRule.onNodeWithTag("sd-debug-access-submit").performScrollTo().performClick()
+        waitUntilExists("sd-debug-access-off", timeoutMs = 15_000)
+        waitUntilTextExists("Debug access is on until ")
+        gymShot("debug-access-on")
+        composeRule.onNodeWithTag("sd-debug-access-off").performScrollTo().performClick()
+        composeRule.onNodeWithTag("sd-debug-access-confirm-off").performClick()
+        composeRule.waitUntil(15_000) { count("sd-debug-access-off") == 0 }
+        assertEquals(0, countDesc("sd-debug-access-banner"))
+        gymShot("debug-access-off")
+    }
+
+    /** A device without the admin root sees the state but can't change it. */
+    @Test
+    fun debugAccessReadOnlyOnANonAdminDevice() {
+        openHomeServerPage()
+        composeRule.waitUntil(20_000) {
+            composeRule.onAllNodesWithContentDescription("sd-debug-access-admin-only").fetchSemanticsNodes().isNotEmpty()
+        }
+        assertEquals(0, count("sd-debug-access-open"))
+        gymShot("debug-access-read-only")
     }
 
     // ─── App access list on the service page ─────────────────────────────────
