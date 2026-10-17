@@ -40,7 +40,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.flagshipserver.app.api.ServiceEnvSetEnvelope
+import com.flagshipserver.app.api.ServiceEnvChange
 import com.flagshipserver.app.api.ServiceEnvSetRequest
 import com.flagshipserver.app.api.ServiceEnvUnsetRequest
 import com.flagshipserver.app.core.LocalAppState
@@ -157,20 +157,16 @@ fun ServiceEnvScreen(
                         )
                         FSDangerButton(
                             label = "Remove",
+                            modifier = Modifier.semantics { testTag = "service-env-remove-$name" },
                             onClick = {
                                 scope.launch {
-                                    val issuedAt = System.currentTimeMillis()
-                                    val envelope = ServiceEnvSetEnvelope(
-                                        serverId = serverFqdn,
-                                        creator = creator, slug = slug,
-                                        env = emptyMap(),
-                                        issuedAt = issuedAt,
-                                    )
+                                    // The signed change names this one variable, so the others stay.
+                                    val change = ServiceEnvChange.unset(serverFqdn, appId, name)
                                     try {
-                                        val signature = signer(envelope)
+                                        val signature = signer(change)
                                         client.serviceEnvUnset(
                                             appId,
-                                            ServiceEnvUnsetRequest(name = name, request = envelope, signature = signature),
+                                            ServiceEnvUnsetRequest(change = change, signature = signature),
                                         )
                                         reload()
                                     } catch (t: Throwable) {
@@ -199,18 +195,18 @@ fun ServiceEnvScreen(
             onDismiss = { showAddDialog = false },
             onSubmit = { name, value ->
                 scope.launch {
-                    val issuedAt = System.currentTimeMillis()
-                    val envelope = ServiceEnvSetEnvelope(
-                        serverId = serverFqdn,
-                        creator = creator, slug = slug,
-                        env = mapOf(name to value),
-                        issuedAt = issuedAt,
-                    )
+                    ServiceEnvChange.nameError(name)?.let {
+                        errorMessage = it
+                        return@launch
+                    }
+                    // One signed change naming this variable and its value's
+                    // SHA-256; the box keeps every other variable as it is.
+                    val change = ServiceEnvChange.set(serverFqdn, appId, name, value)
                     try {
-                        val signature = signer(envelope)
+                        val signature = signer(change)
                         client.serviceEnvSet(
                             appId,
-                            ServiceEnvSetRequest(name = name, value = value, request = envelope, signature = signature),
+                            ServiceEnvSetRequest(change = change, value = value, signature = signature),
                         )
                         showAddDialog = false
                         reload()
@@ -230,6 +226,8 @@ private fun AddEnvVarDialog(
 ) {
     var name by remember { mutableStateOf("") }
     var value by remember { mutableStateOf("") }
+    // A name the box can't take is refused here, before anything is signed.
+    var nameError by remember { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("New environment variable") },
@@ -237,7 +235,7 @@ private fun AddEnvVarDialog(
             Column {
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it },
+                    onValueChange = { name = it; nameError = null },
                     label = { Text("Name (e.g. OPENAI_API_KEY)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                     modifier = Modifier
@@ -255,6 +253,15 @@ private fun AddEnvVarDialog(
                         .fillMaxWidth()
                         .semantics { testTag = "service-env-value-field" },
                 )
+                nameError?.let {
+                    Spacer(Modifier.height(FS.space.s1))
+                    Text(
+                        it,
+                        color = FS.colors.danger,
+                        style = TextStyle(fontSize = 12.sp),
+                        modifier = Modifier.semantics { testTag = "service-env-name-error" },
+                    )
+                }
                 Spacer(Modifier.height(FS.space.s2))
                 Text(
                     "The value is sent once to your server. The Flagship phone app does not save it.",
@@ -265,7 +272,11 @@ private fun AddEnvVarDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onSubmit(name, value) },
+                onClick = {
+                    val trimmed = name.trim()
+                    nameError = ServiceEnvChange.nameError(trimmed)
+                    if (nameError == null) onSubmit(trimmed, value)
+                },
                 enabled = name.isNotEmpty() && value.isNotEmpty(),
                 modifier = Modifier.semantics { testTag = "service-env-save-btn" },
             ) { Text("Save") }

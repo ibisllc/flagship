@@ -934,6 +934,23 @@ const OCTOBER: readonly Scenario[] = [
     },
   ),
   iosTotal(
+    "ios-oct-service-env",
+    "D6: Configure environment on Plants: a name the box can't take is refused on the phone; saving PLANT_TOKEN keeps WEATHER_API_KEY; removing WEATHER_API_KEY leaves PLANT_TOKEN. Each is one signed service-env-change the mock box checks (app, op, value hash, nonce spent once).",
+    O + "test_serviceEnvSetsAndRemovesOneVariable",
+    {
+      steps: [
+        { kind: "tap", describe: "Plants → More → Configure environment.", handle: "service-detail-env-menu-item" },
+        { kind: "tap", describe: "Save a bad name, then PLANT_TOKEN; remove WEATHER_API_KEY.", handle: "service-env-save-btn" },
+      ],
+      assertions: [
+        { describe: "New variable listed", handle: "service-env-row-PLANT_TOKEN", expect: "present" },
+        { describe: "Removed variable gone", handle: "service-env-row-WEATHER_API_KEY", expect: "absent" },
+      ],
+      screenshots: [shot("service-env-saved", "Both variables."), shot("service-env-removed", "Only the new one.")],
+      dimension: "D6",
+    },
+  ),
+  iosTotal(
     "ios-oct-access-alert-not-now",
     "D5: 'Not now' closes the access sheet and leaves the request on the box.",
     O + "test_appAccessAlertNotNowCloses",

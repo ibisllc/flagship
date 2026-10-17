@@ -134,36 +134,60 @@ final class MockScreensClientTests: XCTestCase {
 
     func test_serviceEnvSet_then_list_includesNewName() async throws {
         let c = makeClient()
-        let envelope = ServiceEnvSetEnvelope(
-            serverId: "home.bright-maple.flagship.services",
-            creator: "bright-maple", slug: "plants",
-            env: ["FOO": "bar-NEVER-LEAKED"],
-            issuedAt: 1
-        )
+        let change = ServiceEnvChange.make(serverId: "home.bright-maple.flagship.services",
+                                           serviceId: "bright-maple--plants", set: "FOO", value: "bar-NEVER-LEAKED")
         let _ = try await c.serviceEnvSet(
             appId: "bright-maple--plants",
-            ServiceEnvSetRequest(
-                name: "FOO", value: "bar-NEVER-LEAKED",
-                request: envelope, signature: "00"
-            )
+            ServiceEnvSetRequest(change: change, value: "bar-NEVER-LEAKED", signature: "00")
         )
         let r = try await c.serviceEnvList(appId: "bright-maple--plants")
         XCTAssertTrue(r.names.contains("FOO"))
+        // The other variable stays.
+        XCTAssertTrue(r.names.contains("WEATHER_API_KEY"))
     }
 
-    func test_serviceEnvUnset_dropsName() async throws {
+    func test_serviceEnvUnset_dropsOnlyItsName() async throws {
         let c = makeClient()
-        let envelope = ServiceEnvSetEnvelope(
-            serverId: "home.bright-maple.flagship.services",
-            creator: "bright-maple", slug: "plants",
-            env: [:], issuedAt: 1
-        )
+        let set = ServiceEnvChange.make(serverId: "home.bright-maple.flagship.services",
+                                        serviceId: "bright-maple--plants", set: "FOO", value: "x")
+        _ = try await c.serviceEnvSet(appId: "bright-maple--plants", ServiceEnvSetRequest(change: set, value: "x", signature: "00"))
+        let change = ServiceEnvChange.make(serverId: "home.bright-maple.flagship.services",
+                                           serviceId: "bright-maple--plants", unset: "WEATHER_API_KEY")
         let _ = try await c.serviceEnvUnset(
             appId: "bright-maple--plants",
-            ServiceEnvUnsetRequest(name: "WEATHER_API_KEY", request: envelope, signature: "00")
+            ServiceEnvUnsetRequest(change: change, signature: "00")
         )
         let r = try await c.serviceEnvList(appId: "bright-maple--plants")
         XCTAssertFalse(r.names.contains("WEATHER_API_KEY"))
+        XCTAssertTrue(r.names.contains("FOO"))
+    }
+
+    func test_serviceEnv_refusesAReplayAValueMismatchAndAnotherApp() async throws {
+        let c = makeClient()
+        let unset = ServiceEnvChange.make(serverId: "home.bright-maple.flagship.services",
+                                          serviceId: "bright-maple--plants", unset: "WEATHER_API_KEY")
+        _ = try await c.serviceEnvUnset(appId: "bright-maple--plants", ServiceEnvUnsetRequest(change: unset, signature: "00"))
+        do {
+            _ = try await c.serviceEnvUnset(appId: "bright-maple--plants", ServiceEnvUnsetRequest(change: unset, signature: "00"))
+            XCTFail("a replayed change must be refused")
+        } catch let ScreensClientError.http(status, message) {
+            XCTAssertEqual(status, 400)
+            XCTAssertTrue(message.contains("already applied"))
+        }
+        let set = ServiceEnvChange.make(serverId: "home.bright-maple.flagship.services",
+                                        serviceId: "bright-maple--plants", set: "FOO", value: "real")
+        do {
+            _ = try await c.serviceEnvSet(appId: "bright-maple--plants", ServiceEnvSetRequest(change: set, value: "swapped", signature: "00"))
+            XCTFail("a swapped value must be refused")
+        } catch let ScreensClientError.http(_, message) {
+            XCTAssertTrue(message.contains("doesn't match"))
+        }
+        do {
+            _ = try await c.serviceEnvSet(appId: "bright-maple--wiki", ServiceEnvSetRequest(change: set, value: "real", signature: "00"))
+            XCTFail("a change for another app must be refused")
+        } catch let ScreensClientError.http(_, message) {
+            XCTAssertTrue(message.contains("another app"))
+        }
     }
 
     func test_vibeCodeSessionState_surfacesPendingRequestEnvVar() async throws {

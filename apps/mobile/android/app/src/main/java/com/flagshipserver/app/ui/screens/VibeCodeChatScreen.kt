@@ -48,7 +48,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Image
 import androidx.navigation.NavController
-import com.flagshipserver.app.api.ServiceEnvSetEnvelope
+import com.flagshipserver.app.api.ServiceEnvChange
 import com.flagshipserver.app.api.ServiceEnvSetRequest
 import com.flagshipserver.app.api.boxError
 import com.flagshipserver.app.api.userFacing
@@ -521,30 +521,18 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                     val appId = s.appId ?: return@FSPrimaryButton
                                     // serviceId = "<creator>--<slug>"; split on `--`
                                     // (docs/service-addressing-double-dash.md).
-                                    val delimIdx = appId.indexOf("--")
-                                    if (delimIdx <= 0) {
+                                    if (appId.indexOf("--") <= 0) {
                                         errorMessage = "Invalid app id shape"
                                         return@FSPrimaryButton
                                     }
-                                    val creator = appId.substring(0, delimIdx)
-                                    val slug = appId.substring(delimIdx + 2)
                                     scope.launch(Dispatchers.Main) {
                                         submitting = true
                                         try {
-                                            val issuedAt = System.currentTimeMillis()
-                                            val envelope = ServiceEnvSetEnvelope(
-                                                serverId = serverFqdn,
-                                                creator = creator, slug = slug,
-                                                env = mapOf(p.name to envValueDraft),
-                                                issuedAt = issuedAt,
-                                            )
-                                            val signature = signer(envelope)
+                                            val change = ServiceEnvChange.set(serverFqdn, appId, p.name, envValueDraft)
+                                            val signature = signer(change)
                                             client.serviceEnvSet(
                                                 appId,
-                                                ServiceEnvSetRequest(
-                                                    name = p.name, value = envValueDraft,
-                                                    request = envelope, signature = signature,
-                                                ),
+                                                ServiceEnvSetRequest(change = change, value = envValueDraft, signature = signature),
                                             )
                                             reply(VibeCodeReplyRequest(envVarStatus = "set"))
                                             envValueDraft = ""

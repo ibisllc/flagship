@@ -46,7 +46,7 @@ public struct VibeCodeSessionScreen: View {
 
     public let serverFqdn: String
     public let client: any ScreensClient
-    public let signEnvelope: @MainActor (ServiceEnvSetEnvelope) async throws -> String
+    public let signEnvelope: @MainActor (ServiceEnvChange) async throws -> String
     /// The owner's default saved AI key, which an older box's chat (one that
     /// doesn't name its provider) is assumed to use.
     public let savedCredential: () -> LlmProviderCredential?
@@ -63,7 +63,7 @@ public struct VibeCodeSessionScreen: View {
         stream: VibeCodeStreamViewModel,
         serverFqdn: String,
         client: any ScreensClient,
-        signEnvelope: @escaping @MainActor (ServiceEnvSetEnvelope) async throws -> String,
+        signEnvelope: @escaping @MainActor (ServiceEnvChange) async throws -> String,
         savedCredential: @escaping () -> LlmProviderCredential? = { nil },
         savedKeys: @escaping () -> [SavedKeyStore.Entry] = { [] },
         freeAiCredential: (@MainActor () async throws -> LlmProviderCredential)? = nil,
@@ -608,24 +608,19 @@ public struct VibeCodeSessionScreen: View {
     private func submitEnvVar(name: String) async {
         // appId = "<creator>--<slug>"; both halves may carry single dashes
         // (docs/service-addressing-double-dash.md).
-        guard let appId = state?.appId, let delim = appId.range(of: "--") else {
+        guard let appId = state?.appId, appId.contains("--") else {
             errorMessage = "The app has no id yet. Wait for the AI to name it."
             return
         }
         submitting = true
         defer { submitting = false }
-        let envelope = ServiceEnvSetEnvelope(
-            serverId: serverFqdn,
-            creator: String(appId[..<delim.lowerBound]),
-            slug: String(appId[delim.upperBound...]),
-            env: [name: envValueDraft],
-            issuedAt: Int64(Date().timeIntervalSince1970 * 1000))
+        let change = ServiceEnvChange.make(serverId: serverFqdn, serviceId: appId, set: name, value: envValueDraft)
         do {
             // The value travels only through /env/set; /reply just acknowledges.
-            let signature = try await signEnvelope(envelope)
+            let signature = try await signEnvelope(change)
             _ = try await client.serviceEnvSet(
                 appId: appId,
-                ServiceEnvSetRequest(name: name, value: envValueDraft, request: envelope, signature: signature))
+                ServiceEnvSetRequest(change: change, value: envValueDraft, signature: signature))
             _ = try await client.vibeCodeSessionReply(sessionId: sessionId, try await envVarAck("set"))
             noteSent()
             envValueDraft = ""

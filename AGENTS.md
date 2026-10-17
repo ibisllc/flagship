@@ -744,6 +744,15 @@ allowances (1M / 5M / 20M a month) are placeholders.
   recovery lookup of one name in 15 min is refused with the sentence). The
   gym Worker gets it at the next `scripts/gym-refresh.sh`; the apps' side
   needs iOS/Android store builds.
+- **Env changes sign one variable (2026-10-17).** `flagship/service-env-change/v1`
+  names exactly one variable, its op, the value's hash and a single-use nonce
+  (box `app-env-used-nonces.json`), replacing the replayable `/env/unset` and
+  the old set form; variable names are `^[A-Za-z_][A-Za-z0-9_]{0,127}$`. Webapp
+  (shell v134), iOS and Android sign it; opening an account never wraps the key
+  under a random passphrase. Breaking for old boxes and builds: needs an
+  endorsed box release and store builds together. Not run on a real box
+  (live-e2e core.ts has the set/unset/replay check); the iOS UI gym twin was
+  not re-run after its last fix.
 - **Clickjacking report (2026-10-15, Low):** every `.com` Worker response
   now refuses framing (`frame-ancestors 'none'` + `X-Frame-Options: DENY`)
   and carries nosniff, HSTS and a referrer policy (`withSecurityHeaders` in

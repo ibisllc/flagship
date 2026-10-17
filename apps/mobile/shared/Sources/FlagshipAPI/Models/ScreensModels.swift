@@ -6,6 +6,7 @@
 // `Codable` round-tripping with the daemon's `JSON.stringify(...)` output.
 
 import Foundation
+import CryptoKit
 
 // MARK: - Shared
 
@@ -1021,40 +1022,106 @@ public struct ServiceEnvListResponse: Codable, Equatable, Sendable {
     public init(names: [String]) { self.names = names }
 }
 
-/// SetServiceEnvRequest mirror — canonical bytes per
-/// @flagship/protocol auth.ts signSetServiceEnv. The phone composes,
-/// signs (IRK from the Keychain), and POSTs this. `value` is SECRET —
-/// the phone holds it transiently, sends it once over the daemon's
-/// TLS, and forgets.
-public struct ServiceEnvSetEnvelope: Codable, Equatable, Sendable {
+/// One change to an app's environment variables, signed by the owner's IRK:
+/// `flagship/service-env-change/v1|serverId|serviceId|op|name|valueSha256|issuedAt|nonce`
+/// (@flagship/protocol serviceEnvChange.ts; vectors in
+/// packages/protocol/test-vectors/service-env-change). The signed bytes name
+/// the one variable that changes and a nonce the box spends once, so a
+/// captured order can't be replayed or pointed at another variable. A set
+/// signs the SHA-256 of its value, never the value, which rides beside it
+/// once over the daemon's TLS. The phone never keeps it.
+public struct ServiceEnvChange: Codable, Equatable, Sendable {
+    public static let tag = "flagship/service-env-change/v1"
+
     public let serverId: String
-    public let creator: String
-    public let slug: String
-    public let env: [String: String]
+    /// `<creator>--<slug>`.
+    public let serviceId: String
+    /// "set" or "unset".
+    public let op: String
+    public let name: String
+    /// Lowercase hex SHA-256 of the value (set); "" (unset).
+    public let valueSha256: String
     public let issuedAt: Int64
-    public init(serverId: String, creator: String, slug: String, env: [String: String], issuedAt: Int64) {
-        self.serverId = serverId; self.creator = creator; self.slug = slug
-        self.env = env; self.issuedAt = issuedAt
+    /// 32 lowercase hex, used once.
+    public let nonce: String
+
+    public init(serverId: String, serviceId: String, op: String, name: String, valueSha256: String, issuedAt: Int64, nonce: String) {
+        self.serverId = serverId; self.serviceId = serviceId; self.op = op; self.name = name
+        self.valueSha256 = valueSha256; self.issuedAt = issuedAt; self.nonce = nonce
     }
+
+    /// A fresh change: the value's hash for a set, a random nonce, now.
+    public static func make(serverId: String, serviceId: String, set name: String, value: String,
+                            issuedAt: Int64 = Int64(Date().timeIntervalSince1970 * 1000)) -> ServiceEnvChange {
+        ServiceEnvChange(serverId: serverId, serviceId: serviceId, op: "set", name: name,
+                         valueSha256: valueSha256(value), issuedAt: issuedAt, nonce: freshNonce())
+    }
+
+    public static func make(serverId: String, serviceId: String, unset name: String,
+                            issuedAt: Int64 = Int64(Date().timeIntervalSince1970 * 1000)) -> ServiceEnvChange {
+        ServiceEnvChange(serverId: serverId, serviceId: serviceId, op: "unset", name: name,
+                         valueSha256: "", issuedAt: issuedAt, nonce: freshNonce())
+    }
+
+    /// Lowercase hex SHA-256 of the value's UTF-8.
+    public static func valueSha256(_ value: String) -> String {
+        hex(Data(SHA256.hash(data: Data(value.utf8))))
+    }
+
+    /// Why a variable name can't be used, or nil.
+    public static func nameError(_ name: String) -> String? {
+        if name.range(of: #"^[A-Za-z_][A-Za-z0-9_]{0,127}$"#, options: .regularExpression) == nil {
+            return "Use letters, digits and _ only, not starting with a digit (like API_KEY)."
+        }
+        if name.hasPrefix("FLAGSHIP_") { return "Names starting with FLAGSHIP_ are set by your server." }
+        return nil
+    }
+
+    public enum Invalid: Error, Equatable { case field(String) }
+
+    /// The canonical bytes; throws on a change no box would accept.
+    public func canonicalBytes() throws -> Data {
+        func clean(_ v: String) -> Bool {
+            !v.isEmpty && !v.unicodeScalars.contains { $0 == "|" || $0.value <= 0x1f || $0.value == 0x7f }
+        }
+        guard clean(serverId) else { throw Invalid.field("serverId") }
+        let halves = serviceId.components(separatedBy: "--")
+        guard clean(serviceId), halves.count == 2, !halves[0].isEmpty, !halves[1].isEmpty else { throw Invalid.field("serviceId") }
+        guard op == "set" || op == "unset" else { throw Invalid.field("op") }
+        guard Self.nameError(name) == nil else { throw Invalid.field("name") }
+        let hashOk = op == "set"
+            ? valueSha256.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil
+            : valueSha256.isEmpty
+        guard hashOk else { throw Invalid.field("valueSha256") }
+        guard issuedAt >= 0 else { throw Invalid.field("issuedAt") }
+        guard nonce.range(of: "^[0-9a-f]{32}$", options: .regularExpression) != nil else { throw Invalid.field("nonce") }
+        return Data([Self.tag, serverId, serviceId, op, name, valueSha256, String(issuedAt), nonce].joined(separator: "|").utf8)
+    }
+
+    private static func freshNonce() -> String {
+        var g = SystemRandomNumberGenerator()
+        return hex(Data((0..<16).map { _ in UInt8.random(in: 0...255, using: &g) }))
+    }
+
+    private static func hex(_ d: Data) -> String { d.map { String(format: "%02x", $0) }.joined() }
 }
 
 public struct ServiceEnvSetRequest: Codable, Equatable, Sendable {
-    public let name: String
+    public let change: ServiceEnvChange
+    /// SECRET: sent once, never kept.
     public let value: String
-    public let request: ServiceEnvSetEnvelope
-    /// Hex Ed25519 signature over canonicalSetServiceEnv(request).
+    /// Hex Ed25519 signature over `change.canonicalBytes()`.
     public let signature: String
-    public init(name: String, value: String, request: ServiceEnvSetEnvelope, signature: String) {
-        self.name = name; self.value = value; self.request = request; self.signature = signature
+    public init(change: ServiceEnvChange, value: String, signature: String) {
+        self.change = change; self.value = value; self.signature = signature
     }
 }
 
 public struct ServiceEnvUnsetRequest: Codable, Equatable, Sendable {
-    public let name: String
-    public let request: ServiceEnvSetEnvelope
+    public let change: ServiceEnvChange
     public let signature: String
-    public init(name: String, request: ServiceEnvSetEnvelope, signature: String) {
-        self.name = name; self.request = request; self.signature = signature
+    public init(change: ServiceEnvChange, signature: String) {
+        self.change = change; self.signature = signature
     }
 }
 

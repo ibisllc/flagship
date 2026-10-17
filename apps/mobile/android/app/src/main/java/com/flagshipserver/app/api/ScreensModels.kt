@@ -991,29 +991,85 @@ data class AppReissuanceSummary(
 @Serializable
 data class ServiceEnvListResponse(val names: List<String>)
 
-/** Mirror of @flagship/protocol SetServiceEnvRequest. */
+/**
+ * One change to an app's environment variables, signed by the owner's IRK:
+ * `flagship/service-env-change/v1|serverId|serviceId|op|name|valueSha256|issuedAt|nonce`
+ * (@flagship/protocol serviceEnvChange.ts; vectors in
+ * packages/protocol/test-vectors/service-env-change). The signed bytes name the
+ * one variable that changes and a nonce the box spends once, so a captured
+ * order can't be replayed or pointed at another variable. A set signs the
+ * SHA-256 of its value, never the value.
+ */
 @Serializable
-data class ServiceEnvSetEnvelope(
+data class ServiceEnvChange(
     val serverId: String,
-    val creator: String,
-    val slug: String,
-    val env: Map<String, String>,
+    /** `<creator>--<slug>`. */
+    val serviceId: String,
+    /** "set" or "unset". */
+    val op: String,
+    val name: String,
+    /** Lowercase hex SHA-256 of the value (set); "" (unset). */
+    val valueSha256: String,
     val issuedAt: Long,
-)
+    /** 32 lowercase hex, used once. */
+    val nonce: String,
+) {
+    /** The canonical bytes; throws on a change no box would accept. */
+    fun canonicalBytes(): ByteArray {
+        fun clean(v: String) = v.isNotEmpty() && v.none { it == '|' || it.code <= 0x1f || it.code == 0x7f }
+        require(clean(serverId)) { "service-env-change: bad serverId" }
+        val halves = serviceId.split("--")
+        require(clean(serviceId) && halves.size == 2 && halves.all { it.isNotEmpty() }) { "service-env-change: bad serviceId" }
+        require(op == "set" || op == "unset") { "service-env-change: bad op" }
+        require(nameError(name) == null) { "service-env-change: bad name" }
+        require(if (op == "set") Regex("^[0-9a-f]{64}$").matches(valueSha256) else valueSha256.isEmpty()) {
+            "service-env-change: valueSha256 is a SHA-256 for set and empty for unset"
+        }
+        require(issuedAt >= 0) { "service-env-change: bad issuedAt" }
+        require(Regex("^[0-9a-f]{32}$").matches(nonce)) { "service-env-change: bad nonce" }
+        return listOf(TAG, serverId, serviceId, op, name, valueSha256, issuedAt.toString(), nonce)
+            .joinToString("|").toByteArray(Charsets.UTF_8)
+    }
+
+    companion object {
+        const val TAG = "flagship/service-env-change/v1"
+        private val NAME_RE = Regex("^[A-Za-z_][A-Za-z0-9_]{0,127}$")
+
+        /** Why a variable name can't be used, or null. */
+        fun nameError(name: String): String? = when {
+            !NAME_RE.matches(name) -> "Use letters, digits and _ only, not starting with a digit (like API_KEY)."
+            name.startsWith("FLAGSHIP_") -> "Names starting with FLAGSHIP_ are set by your server."
+            else -> null
+        }
+
+        /** Lowercase hex SHA-256 of the value's UTF-8. */
+        fun valueSha256(value: String): String =
+            java.security.MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8)).toHex()
+
+        fun set(serverId: String, serviceId: String, name: String, value: String, issuedAt: Long = System.currentTimeMillis()) =
+            ServiceEnvChange(serverId, serviceId, "set", name, valueSha256(value), issuedAt, freshNonce())
+
+        fun unset(serverId: String, serviceId: String, name: String, issuedAt: Long = System.currentTimeMillis()) =
+            ServiceEnvChange(serverId, serviceId, "unset", name, "", issuedAt, freshNonce())
+
+        private fun freshNonce(): String = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }.toHex()
+
+        private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+    }
+}
 
 @Serializable
 data class ServiceEnvSetRequest(
-    val name: String,
+    val change: ServiceEnvChange,
+    /** SECRET: sent once, never kept. */
     val value: String,
-    val request: ServiceEnvSetEnvelope,
-    /** Hex Ed25519 signature over canonicalSetServiceEnv(request). */
+    /** Hex Ed25519 signature over `change.canonicalBytes()`. */
     val signature: String,
 )
 
 @Serializable
 data class ServiceEnvUnsetRequest(
-    val name: String,
-    val request: ServiceEnvSetEnvelope,
+    val change: ServiceEnvChange,
     val signature: String,
 )
 

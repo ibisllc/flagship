@@ -567,6 +567,7 @@ struct ServiceDetailContainer: View {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+                .accessibilityIdentifier("service-detail-more-menu")
             }
         }
         .task {

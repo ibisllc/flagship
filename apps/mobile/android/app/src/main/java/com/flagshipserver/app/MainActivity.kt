@@ -54,7 +54,6 @@ import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.LocalPrivacySettings
 import com.flagshipserver.app.core.LocalVibeCodeEnvelopeSigner
-import com.flagshipserver.app.core.canonicalSetServiceEnv
 import com.flagshipserver.app.core.LocalBuildClient
 import com.flagshipserver.app.core.LocalQrRelayClient
 import com.flagshipserver.app.core.LocalScreensClient
@@ -584,12 +583,12 @@ class MainActivity : FragmentActivity() {
                         (if (useLive) accessCenter else smokeAccessCenter),
                     LocalPrivacySettings provides privacy,
                     com.flagshipserver.app.core.LocalPushNotificationsSwitch provides pushSwitch,
-                    // Real IRK signer for SetServiceEnv envelopes (was the
-                    // 128-zero placeholder, which the daemon always rejected).
-                    LocalVibeCodeEnvelopeSigner provides { envelope ->
+                    // Real IRK signer for env changes (was the 128-zero
+                    // placeholder, which the daemon always rejected).
+                    LocalVibeCodeEnvelopeSigner provides { change ->
+                        val bytes = change.canonicalBytes()
                         HexUtil.encode(
-                            Keystore.deriveIRK("Sign service configuration")
-                                .sign(canonicalSetServiceEnv(envelope)),
+                            Keystore.deriveIRK("Sign service configuration").sign(bytes),
                         )
                     },
                 ) {

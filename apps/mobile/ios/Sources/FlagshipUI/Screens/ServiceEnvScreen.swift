@@ -21,10 +21,9 @@ public struct ServiceEnvScreen: View {
     public let serverFqdn: String
     public let creator: String
     public let slug: String
-    /// Async hook that signs the SetServiceEnvRequest envelope under the
-    /// owner's IRK. The view never holds the IRK private bytes; it
+    /// Async hook that signs one `ServiceEnvChange` under the owner's IRK. The view never holds the IRK private bytes; it
     /// delegates signing to the platform Keystore (via this closure).
-    public let signEnvelope: @MainActor (ServiceEnvSetEnvelope) async throws -> String
+    public let signEnvelope: @MainActor (ServiceEnvChange) async throws -> String
     public let client: any ScreensClient
 
     public init(
@@ -33,7 +32,7 @@ public struct ServiceEnvScreen: View {
         creator: String,
         slug: String,
         client: any ScreensClient,
-        signEnvelope: @escaping @MainActor (ServiceEnvSetEnvelope) async throws -> String
+        signEnvelope: @escaping @MainActor (ServiceEnvChange) async throws -> String
     ) {
         self.appId = appId
         self.serverFqdn = serverFqdn
@@ -148,6 +147,7 @@ public struct ServiceEnvScreen: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Remove \(name)")
+            .accessibilityIdentifier("service-env-remove-\(name)")
         }
         .padding(.vertical, FS.space.s3)
         .padding(.horizontal, FS.space.s2)
@@ -166,35 +166,13 @@ public struct ServiceEnvScreen: View {
     }
 
     private func unset(name: String) async {
-        // Build a NEW envelope with the dropped name removed. The
-        // envelope is FULL-REPLACE — the daemon stores exactly what's
-        // signed, so we must enumerate the surviving names. We don't
-        // have values for the surviving names (by design), so we can't
-        // round-trip them on /unset alone — the daemon's full-replace
-        // semantics force us to either (a) restore values via a paired
-        // op, or (b) tolerate values being preserved server-side
-        // because they're already on disk and the new request only
-        // signs the SET WITHOUT-the-removed-name.
-        //
-        // We post an envelope with an empty `env` for the unset name
-        // and let the daemon's setEnv replace the on-disk map; the
-        // owner gets exactly what they signed. If the user wants to
-        // KEEP other vars, they must re-add them through the editor.
-        // This is honest about the cryptographic boundary — values
-        // can't be retained by the phone without leaking them.
-        let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
-        let envelope = ServiceEnvSetEnvelope(
-            serverId: serverFqdn,
-            creator: creator,
-            slug: slug,
-            env: [:],
-            issuedAt: issuedAt
-        )
+        // The signed change names this one variable, so the others stay.
+        let change = ServiceEnvChange.make(serverId: serverFqdn, serviceId: appId, unset: name)
         do {
-            let signature = try await signEnvelope(envelope)
+            let signature = try await signEnvelope(change)
             let _ = try await client.serviceEnvUnset(
                 appId: appId,
-                ServiceEnvUnsetRequest(name: name, request: envelope, signature: signature)
+                ServiceEnvUnsetRequest(change: change, signature: signature)
             )
             await reload()
         } catch {
@@ -221,7 +199,7 @@ private struct AddEnvVarSheet: View {
     let slug: String
     let existingNames: [String]
     let client: any ScreensClient
-    let signEnvelope: @MainActor (ServiceEnvSetEnvelope) async throws -> String
+    let signEnvelope: @MainActor (ServiceEnvChange) async throws -> String
     let onCommitted: () -> Void
     let onCancel: () -> Void
 
@@ -292,34 +270,18 @@ private struct AddEnvVarSheet: View {
         submitting = true
         errorMessage = nil
         defer { submitting = false }
-        // Replacement set = existing names (preserved on the daemon
-        // because we re-emit them in the signed envelope) plus the
-        // new key/value. Existing values are unknown to the phone, so
-        // we only sign the FULL desired map for the entries the phone
-        // actually has plaintext for — the new one. The daemon's
-        // setEnv() is full-replace, but the daemon's CURRENT impl
-        // accepts ONLY the entries in this signed envelope.
-        //
-        // Practical consequence: setting a NEW name in a session that
-        // already had others wipes the others unless the user re-types
-        // them. That's an honest reflection of the security boundary:
-        // values can't be retained on the phone without leaking them.
-        // The sheet's helper text spells this out for the user.
-        var env: [String: String] = [:]
-        env[name] = value
-        let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
-        let envelope = ServiceEnvSetEnvelope(
-            serverId: serverFqdn,
-            creator: creator,
-            slug: slug,
-            env: env,
-            issuedAt: issuedAt
-        )
+        // One signed change naming this variable and its value's SHA-256; the
+        // box keeps every other variable as it is.
+        if let why = ServiceEnvChange.nameError(name) {
+            errorMessage = why
+            return
+        }
+        let change = ServiceEnvChange.make(serverId: serverFqdn, serviceId: appId, set: name, value: value)
         do {
-            let signature = try await signEnvelope(envelope)
+            let signature = try await signEnvelope(change)
             let _ = try await client.serviceEnvSet(
                 appId: appId,
-                ServiceEnvSetRequest(name: name, value: value, request: envelope, signature: signature)
+                ServiceEnvSetRequest(change: change, value: value, signature: signature)
             )
             // Drop the in-memory value so a screenshot/snapshot of the
             // dismissed sheet doesn't expose it.

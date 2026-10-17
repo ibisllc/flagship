@@ -79,39 +79,16 @@ val LocalPrivacySettings = staticCompositionLocalOf<PrivacySettings?> { null }
  * string (the daemon rejects it on signature verify — correct
  * behavior for an offline preview surface).
  *
- * Canonical-bytes shape mirrors `@flagship/protocol/auth.ts`
- * `signSetServiceEnv`:
- *
- *     "flagship/set-service-env/v1"
- *         | serverId | creator | slug | <pairCount>
- *         | <sortedKey>=<value>... | issuedAt
+ * It signs one `ServiceEnvChange` (flagship/service-env-change/v1): its
+ * canonical bytes name the one variable set or unset and a nonce the box
+ * spends once (`ServiceEnvChange.canonicalBytes()`).
  */
-typealias VibeCodeEnvelopeSigner = suspend (com.flagshipserver.app.api.ServiceEnvSetEnvelope) -> String
+typealias VibeCodeEnvelopeSigner = suspend (com.flagshipserver.app.api.ServiceEnvChange) -> String
 
 val LocalVibeCodeEnvelopeSigner = staticCompositionLocalOf<VibeCodeEnvelopeSigner> {
     { _ -> "0".repeat(128) }
 }
 
-/**
- * Canonical bytes for a `SetServiceEnvRequest`, byte-identical to the
- * webapp's `canonicalSetServiceEnv` and `@flagship/protocol/auth.ts`
- * `signSetServiceEnv`. Keys are sorted; pairs are `key=value`; the field
- * separator is `|`. The daemon re-derives these bytes and verifies the
- * Ed25519 signature against the owner IRK, so the layout must match exactly.
- */
-fun canonicalSetServiceEnv(req: com.flagshipserver.app.api.ServiceEnvSetEnvelope): ByteArray {
-    val pairs = req.env.keys.sorted().map { "$it=${req.env[it]}" }
-    val parts = buildList {
-        add("flagship/set-service-env/v1")
-        add(req.serverId)
-        add(req.creator)
-        add(req.slug)
-        add(pairs.size.toString())
-        addAll(pairs)
-        add(req.issuedAt.toString())
-    }
-    return parts.joinToString("|").toByteArray(Charsets.UTF_8)
-}
 
 
 /** The one server-order saver for this composition (docs/server-order.md):

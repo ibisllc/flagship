@@ -132,34 +132,39 @@ class MockScreensClientTest {
 
     @Test fun serviceEnvSet_thenList_includesNewName() = runTest {
         val c = makeClient()
-        val envelope = ServiceEnvSetEnvelope(
-            serverId = "home.bright-maple.flagship.services",
-            creator = "bright-maple", slug = "plants",
-            env = mapOf("FOO" to "bar-NEVER-LEAKED"),
-            issuedAt = 1L,
-        )
+        val change = ServiceEnvChange.set("home.bright-maple.flagship.services", "bright-maple--plants", "FOO", "bar-NEVER-LEAKED")
         c.serviceEnvSet(
             "bright-maple--plants",
-            ServiceEnvSetRequest(name = "FOO", value = "bar-NEVER-LEAKED", request = envelope, signature = "00"),
+            ServiceEnvSetRequest(change = change, value = "bar-NEVER-LEAKED", signature = "00"),
         )
         val r = c.serviceEnvList("bright-maple--plants")
         assertTrue(r.names.contains("FOO"))
+        // The other variable stays.
+        assertTrue(r.names.contains("WEATHER_API_KEY"))
     }
 
-    @Test fun serviceEnvUnset_dropsName() = runTest {
+    @Test fun serviceEnvUnset_dropsOnlyItsName() = runTest {
         val c = makeClient()
-        val envelope = ServiceEnvSetEnvelope(
-            serverId = "home.bright-maple.flagship.services",
-            creator = "bright-maple", slug = "plants",
-            env = emptyMap(),
-            issuedAt = 1L,
-        )
-        c.serviceEnvUnset(
-            "bright-maple--plants",
-            ServiceEnvUnsetRequest(name = "WEATHER_API_KEY", request = envelope, signature = "00"),
-        )
+        val set = ServiceEnvChange.set("home.bright-maple.flagship.services", "bright-maple--plants", "FOO", "x")
+        c.serviceEnvSet("bright-maple--plants", ServiceEnvSetRequest(change = set, value = "x", signature = "00"))
+        val change = ServiceEnvChange.unset("home.bright-maple.flagship.services", "bright-maple--plants", "WEATHER_API_KEY")
+        c.serviceEnvUnset("bright-maple--plants", ServiceEnvUnsetRequest(change = change, signature = "00"))
         val r = c.serviceEnvList("bright-maple--plants")
         assertTrue(!r.names.contains("WEATHER_API_KEY"))
+        assertTrue(r.names.contains("FOO"))
+    }
+
+    @Test fun serviceEnv_refusesAReplayAValueMismatchAndAnotherApp() = runTest {
+        val c = makeClient()
+        val unset = ServiceEnvChange.unset("home.bright-maple.flagship.services", "bright-maple--plants", "WEATHER_API_KEY")
+        c.serviceEnvUnset("bright-maple--plants", ServiceEnvUnsetRequest(change = unset, signature = "00"))
+        val replay = runCatching { c.serviceEnvUnset("bright-maple--plants", ServiceEnvUnsetRequest(change = unset, signature = "00")) }
+        assertTrue(replay.exceptionOrNull()?.message.orEmpty().contains("already applied"))
+        val set = ServiceEnvChange.set("home.bright-maple.flagship.services", "bright-maple--plants", "FOO", "real")
+        val swapped = runCatching { c.serviceEnvSet("bright-maple--plants", ServiceEnvSetRequest(change = set, value = "swapped", signature = "00")) }
+        assertTrue(swapped.exceptionOrNull()?.message.orEmpty().contains("doesn't match"))
+        val other = runCatching { c.serviceEnvSet("bright-maple--wiki", ServiceEnvSetRequest(change = set, value = "real", signature = "00")) }
+        assertTrue(other.exceptionOrNull()?.message.orEmpty().contains("another app"))
     }
 
     @Test fun vibeCodeSessionState_surfacesPendingRequestEnvVar() = runTest {
