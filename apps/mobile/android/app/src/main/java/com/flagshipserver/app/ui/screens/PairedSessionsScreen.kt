@@ -63,7 +63,10 @@ fun PairedSessionsScreen(nav: NavController) {
     // like every other destructive action (spec S3).
     var revokeTarget by remember { mutableStateOf<PairedSessionSummary?>(null) }
 
-    LaunchedEffect(Unit) {
+    var attempt by remember { mutableStateOf(0) }
+    LaunchedEffect(attempt) {
+        error = null
+        loaded = false
         try {
             sessions.clear()
             // The box also lists the session this phone (and every other device of
@@ -78,7 +81,7 @@ fun PairedSessionsScreen(nav: NavController) {
 
     FSScreen(title = "Browser sessions", onBack = { nav.popBackStack() }) {
         when {
-            error != null -> ErrorCard(message = error!!)
+            error != null -> ErrorCard(message = error!!, onRetry = { attempt++ })
             !loaded -> ServerCardSkeleton()
             sessions.isEmpty() -> FSEmptyState(
                 title = "No browser sessions",

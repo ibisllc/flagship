@@ -8,6 +8,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.ui.components.fsFocusRing
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.selection.selectable
@@ -41,9 +42,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Row
-import androidx.compose.material3.RadioButton
+import com.flagshipserver.app.ui.components.RadioButton
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
+import com.flagshipserver.app.ui.components.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -1009,7 +1010,7 @@ private fun BootUnlockOption(
                 color = border,
                 shape = MaterialTheme.shapes.small,
             )
-            .selectable(selected = selected, onClick = onClick, role = androidx.compose.ui.semantics.Role.RadioButton)
+            .fsFocusRing(8.dp).selectable(selected = selected, onClick = onClick, role = androidx.compose.ui.semantics.Role.RadioButton)
             .padding(end = FS.space.s3, top = FS.space.s1, bottom = FS.space.s3),
     ) {
         RadioButton(selected = selected, onClick = null, modifier = Modifier.padding(FS.space.s3))

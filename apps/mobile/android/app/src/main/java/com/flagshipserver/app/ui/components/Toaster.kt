@@ -27,6 +27,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.flagshipserver.app.core.Toast
 import com.flagshipserver.app.ui.theme.DarkColors
@@ -67,12 +69,20 @@ private fun ToastRow(toast: Toast, onTap: () -> Unit) {
         Toast.Kind.WARNING -> Icons.Outlined.WarningAmber to inverse.warning
         Toast.Kind.ERROR -> Icons.Outlined.ErrorOutline to inverse.danger
     }
+    val view = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.LaunchedEffect(toast.id) {
+        when (toast.kind) {
+            Toast.Kind.SUCCESS -> view.fsConfirm()
+            Toast.Kind.ERROR -> view.fsReject()
+            else -> Unit
+        }
+    }
     Surface(
         shape = MaterialTheme.shapes.small,
         color = MaterialTheme.colorScheme.inverseSurface,
         contentColor = MaterialTheme.colorScheme.inverseOnSurface,
         shadowElevation = 6.dp,
-        modifier = Modifier.fillMaxWidth().testTag("toast-row").clickable(onClick = onTap),
+        modifier = Modifier.fillMaxWidth().testTag("toast-row").semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite }.clickable(onClick = onTap),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

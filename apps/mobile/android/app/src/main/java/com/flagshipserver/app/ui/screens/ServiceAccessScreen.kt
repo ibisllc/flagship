@@ -53,7 +53,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Switch
+import com.flagshipserver.app.ui.components.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -86,6 +86,7 @@ import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.QrImage
+import com.flagshipserver.app.ui.components.fsTick
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSCardDivider
 import com.flagshipserver.app.ui.components.FSMonogram
@@ -251,6 +252,7 @@ internal fun ServiceAccessContent(
         // Open to all | Members only. The members list never changes with it.
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                val view = androidx.compose.ui.platform.LocalView.current
                 SingleChoiceSegmentedButtonRow(
                     Modifier
                         .fillMaxWidth()
@@ -260,7 +262,7 @@ internal fun ServiceAccessContent(
                     val colors = SegmentedButtonDefaults.colors()
                     SegmentedButton(
                         selected = !restricted,
-                        onClick = { if (restricted) applyMode(false) },
+                        onClick = { if (restricted) { view.fsTick(); applyMode(false) } },
                         enabled = enabled,
                         colors = colors,
                         shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
@@ -268,7 +270,7 @@ internal fun ServiceAccessContent(
                     ) { Text("Open to all") }
                     SegmentedButton(
                         selected = restricted,
-                        onClick = { if (!restricted) confirmMembersOnly = true },
+                        onClick = { if (!restricted) { view.fsTick(); confirmMembersOnly = true } },
                         enabled = enabled,
                         colors = colors,
                         shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),

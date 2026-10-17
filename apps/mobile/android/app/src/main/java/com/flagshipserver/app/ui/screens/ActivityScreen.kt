@@ -47,6 +47,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.fsTick
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.core.LocalScreensClient
@@ -215,12 +216,13 @@ private fun Accordion(
     content: @Composable () -> Unit,
 ) {
     val tag = "activity-section-${section.name.lowercase()}"
+    val view = androidx.compose.ui.platform.LocalView.current
     FSCard(padding = PaddingValues(0.dp)) {
         Column(Modifier.fillMaxWidth()) {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .clickable(onClickLabel = if (isOpen) "Collapse" else "Expand", onClick = onToggle)
+                    .clickable(onClickLabel = if (isOpen) "Collapse" else "Expand", onClick = { view.fsTick(); onToggle() })
                     .padding(FS.space.s4)
                     .testTag(tag)
                     .semantics(mergeDescendants = true) {

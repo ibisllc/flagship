@@ -46,7 +46,9 @@ fun PostRecoveryScreen(nav: NavController) {
     var snapshot by remember { mutableStateOf<PostRecoverySnapshot?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
+    var attempt by remember { mutableStateOf(0) }
+    LaunchedEffect(attempt) {
+        error = null
         try {
             snapshot = client.postRecoveryStatus().report
         } catch (t: Throwable) {
@@ -62,7 +64,7 @@ fun PostRecoveryScreen(nav: NavController) {
         val snap = snapshot
         val report = snap?.lastReissue
         when {
-            error != null -> ErrorCard(message = error!!)
+            error != null -> ErrorCard(message = error!!, onRetry = { attempt++ })
             snap == null -> ServerCardSkeleton()
             report == null -> FSEmptyState(
                 title = "No recovery in progress.",

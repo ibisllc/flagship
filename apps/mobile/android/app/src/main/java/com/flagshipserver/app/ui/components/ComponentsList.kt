@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Column
@@ -86,9 +87,10 @@ fun FSChip(
     modifier: Modifier = Modifier,
     count: Int? = null,
 ) {
+    val view = androidx.compose.ui.platform.LocalView.current
     FilterChip(
         selected = selected,
-        onClick = onClick,
+        onClick = { view.fsTick(); onClick() },
         modifier = modifier.fsFocusRing(8.dp),
         label = {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -174,7 +176,7 @@ fun FSSearchField(
             focusedIndicatorColor = Color.Transparent,
             unfocusedIndicatorColor = Color.Transparent,
         ),
-        modifier = modifier.fillMaxWidth().heightIn(min = 52.dp),
+        modifier = modifier.fillMaxWidth().heightIn(min = 52.dp).fsFocusRing(26.dp),
     )
 }
 
@@ -265,28 +267,39 @@ fun FSAnnouncementCard(
         color = accent.copy(alpha = 0.08f),
         border = BorderStroke(1.dp, accent.copy(alpha = 0.24f)),
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
-            modifier = Modifier.padding(start = FS.space.s4, top = FS.space.s4, bottom = FS.space.s4, end = if (onDismiss != null) FS.space.s1 else FS.space.s4),
-        ) {
-            Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.padding(top = 2.dp).size(24.dp))
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-                if (ctaLabel != null) {
-                    Spacer(Modifier.height(FS.space.s2))
-                    Button(
-                        onClick = onCta,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = fill,
-                            contentColor = if (tint == null) FS.colors.onAccent else MaterialTheme.colorScheme.onError,
-                        ),
-                    ) { Text(ctaLabel, style = MaterialTheme.typography.labelLarge) }
-                }
+        // At large text sizes the icon moves above the text so the words keep the width.
+        val stacked = androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.5f
+        val texts: @Composable ColumnScope.() -> Unit = {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            if (ctaLabel != null) {
+                Spacer(Modifier.height(FS.space.s2))
+                Button(
+                    onClick = onCta,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = fill,
+                        contentColor = if (tint == null) FS.colors.onAccent else MaterialTheme.colorScheme.onError,
+                    ),
+                ) { Text(ctaLabel, style = MaterialTheme.typography.labelLarge) }
             }
-            if (onDismiss != null) {
-                IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Outlined.Close, contentDescription = "Dismiss", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (stacked) {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.padding(FS.space.s4)) {
+                Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(24.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp), content = texts)
+                if (onDismiss != null) TextButton(onClick = onDismiss) { Text("Dismiss") }
+            }
+        } else {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
+                modifier = Modifier.padding(start = FS.space.s4, top = FS.space.s4, bottom = FS.space.s4, end = if (onDismiss != null) FS.space.s1 else FS.space.s4),
+            ) {
+                Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.padding(top = 2.dp).size(24.dp))
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp), content = texts)
+                if (onDismiss != null) {
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Outlined.Close, contentDescription = "Dismiss", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }

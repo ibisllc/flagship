@@ -16,6 +16,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.ui.components.fsFocusRing
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
@@ -48,7 +49,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
+import com.flagshipserver.app.ui.components.RadioButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import com.flagshipserver.app.ui.components.TextButton
@@ -383,7 +384,7 @@ private fun OptionRow(
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         modifier = Modifier
             .fillMaxWidth()
-            .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+            .fsFocusRing(8.dp).selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
             .semantics { contentDescription = cd },
     )
 }

@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.ui.components.fsFocusRing
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.MaterialTheme
@@ -17,7 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.RadioButton
+import com.flagshipserver.app.ui.components.RadioButton
 import androidx.compose.material3.Text
 import com.flagshipserver.app.ui.components.TextButton
 import androidx.compose.runtime.Composable
@@ -98,6 +99,7 @@ private fun PolicyOption(selected: Boolean, title: String, body: String, warn: B
         Modifier
             .fillMaxWidth()
             .border(if (selected) 2.dp else 1.dp, border, androidx.compose.foundation.shape.RoundedCornerShape(FS.radius.md))
+            .fsFocusRing(FS.radius.md)
             .clickable(onClick = onClick)
             .padding(FS.space.s3)
             .testTag(tag),

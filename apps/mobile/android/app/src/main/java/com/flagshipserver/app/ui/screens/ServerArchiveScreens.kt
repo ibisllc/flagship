@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.ui.components.fsFocusRing
 import androidx.compose.foundation.selection.selectable
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -29,7 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.Switch
+import com.flagshipserver.app.ui.components.Switch
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import com.flagshipserver.app.ui.components.TextButton
@@ -484,7 +485,7 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .testTag("restore-peers-choice-$choice")
-                                        .selectable(selected = vm.lost == choice, role = androidx.compose.ui.semantics.Role.RadioButton) { vm.lost = choice }
+                                        .fsFocusRing(8.dp).selectable(selected = vm.lost == choice, role = androidx.compose.ui.semantics.Role.RadioButton) { vm.lost = choice }
                                         .padding(horizontal = FS.space.s2, vertical = FS.space.s1),
                                 ) {
                                     androidx.compose.material3.RadioButton(selected = vm.lost == choice, onClick = null, modifier = Modifier.padding(FS.space.s2))

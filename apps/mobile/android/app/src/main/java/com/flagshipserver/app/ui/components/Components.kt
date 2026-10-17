@@ -157,13 +157,20 @@ fun FSDangerButton(
     large: Boolean = false,
 ) {
     val fg = if (muted) FS.colors.textMuted else MaterialTheme.colorScheme.error
-    OutlinedButton(
+    // A soft wash with error-coloured text and no outline: a destructive action is
+    // marked without the weight of a filled red button.
+    Button(
         onClick = withHaptic(true, onClick),
         enabled = enabled,
         modifier = modifier.buttonSize(block, large).fsFocusRing(20.dp),
         contentPadding = ButtonPadding,
-        border = BorderStroke(1.dp, fg.copy(alpha = if (enabled) 1f else 0.4f)),
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = fg),
+        elevation = null,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = (if (muted) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error).copy(alpha = 0.10f),
+            contentColor = fg,
+            disabledContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+            disabledContentColor = fg.copy(alpha = 0.4f),
+        ),
     ) { ButtonLabel(label) }
 }
 
@@ -327,4 +334,38 @@ fun TextButton(
     colors = colors,
     contentPadding = contentPadding,
     content = content,
+)
+
+/** Material's switch with the keyboard focus ring; same parameters. */
+@Composable
+fun Switch(
+    checked: Boolean,
+    onCheckedChange: ((Boolean) -> Unit)?,
+    modifier: Modifier = Modifier,
+    thumbContent: (@Composable () -> Unit)? = null,
+    enabled: Boolean = true,
+    colors: androidx.compose.material3.SwitchColors = androidx.compose.material3.SwitchDefaults.colors(),
+) = androidx.compose.material3.Switch(
+    checked = checked,
+    onCheckedChange = onCheckedChange,
+    modifier = modifier.fsFocusRing(16.dp),
+    thumbContent = thumbContent,
+    enabled = enabled,
+    colors = colors,
+)
+
+/** Material's radio button with the keyboard focus ring; same parameters. */
+@Composable
+fun RadioButton(
+    selected: Boolean,
+    onClick: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    colors: androidx.compose.material3.RadioButtonColors = androidx.compose.material3.RadioButtonDefaults.colors(),
+) = androidx.compose.material3.RadioButton(
+    selected = selected,
+    onClick = onClick,
+    modifier = modifier.fsFocusRing(20.dp),
+    enabled = enabled,
+    colors = colors,
 )

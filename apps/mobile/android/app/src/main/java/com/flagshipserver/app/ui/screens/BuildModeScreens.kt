@@ -43,7 +43,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Switch
+import com.flagshipserver.app.ui.components.Switch
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import com.flagshipserver.app.ui.components.TextButton
@@ -1153,7 +1153,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
             DetailAdaptCard(buildId, vm, nav)
             when (val d = detail) {
                 is LoadingState.Loaded -> TimelineCard(buildId, d.value)
-                is LoadingState.Failed -> ErrorCardSimple(d.message)
+                is LoadingState.Failed -> ErrorCardSimple(d.message, onRetry = { buildId?.let { vm.loadDetail(it) } })
                 else -> InfoCard("Loading…", "Fetching the build timeline.")
             }
         } else {
@@ -1222,7 +1222,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                         }
                     }
                 }
-                is LoadingState.Failed -> ErrorCardSimple(l.message)
+                is LoadingState.Failed -> ErrorCardSimple(l.message, onRetry = { vm.loadList() })
                 else -> InfoCard("Loading…", "Fetching your builds.")
             }
         }
@@ -1389,10 +1389,14 @@ private fun InfoCard(title: String, body: String) {
 }
 
 @Composable
-private fun ErrorCardSimple(message: String) {
+private fun ErrorCardSimple(message: String, onRetry: (() -> Unit)? = null) {
     FSCard(padding = PaddingValues(FS.space.s5)) {
         Text("Something went wrong", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
         Spacer(Modifier.height(FS.space.s1))
         Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        if (onRetry != null) {
+            Spacer(Modifier.height(FS.space.s3))
+            FSSecondaryButton(label = "Try again", onClick = onRetry, block = true)
+        }
     }
 }

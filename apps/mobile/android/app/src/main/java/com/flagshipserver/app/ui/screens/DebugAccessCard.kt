@@ -5,6 +5,8 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.ui.components.fsFocusRing
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -18,7 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.RadioButton
+import com.flagshipserver.app.ui.components.RadioButton
 import androidx.compose.material3.Text
 import com.flagshipserver.app.ui.components.TextButton
 import androidx.compose.runtime.Composable
@@ -129,7 +131,7 @@ internal fun DebugAccessCard(vm: DebugAccessViewModel, onChanged: () -> Unit) {
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .selectable(selected = duration == d, onClick = { duration = d })
+                            .fsFocusRing(8.dp).selectable(selected = duration == d, onClick = { duration = d })
                             .testTag("sd-debug-access-duration-${d.name.lowercase()}"),
                     ) {
                         RadioButton(selected = duration == d, onClick = { duration = d })

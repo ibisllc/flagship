@@ -11,6 +11,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import com.flagshipserver.app.ui.components.fsTick
 import com.flagshipserver.app.ui.components.FSDivider
 import com.flagshipserver.app.ui.components.FSGroup
 import com.flagshipserver.app.ui.components.FSRow
@@ -64,7 +65,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Switch
+import com.flagshipserver.app.ui.components.Switch
 import androidx.compose.material3.Text
 import com.flagshipserver.app.ui.components.TextButton
 import androidx.compose.runtime.Composable
@@ -355,6 +356,7 @@ fun SettingsScreen(nav: NavController) {
                     verticalArrangement = Arrangement.spacedBy(FS.space.s3),
                     modifier = Modifier.padding(FS.space.s4),
                 ) {
+                    val view = androidx.compose.ui.platform.LocalView.current
                     Text("Appearance", style = MaterialTheme.typography.bodyLarge)
                     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                         val modes = listOf(
@@ -365,7 +367,7 @@ fun SettingsScreen(nav: NavController) {
                         modes.forEachIndexed { i, (mode, label, icon) ->
                             SegmentedButton(
                                 selected = themeMode == mode,
-                                onClick = { privacy?.setThemeMode(mode) },
+                                onClick = { view.fsTick(); privacy?.setThemeMode(mode) },
                                 shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size),
                                 icon = { SegmentedButtonDefaults.Icon(active = themeMode == mode) { androidx.compose.material3.Icon(icon, contentDescription = null, modifier = Modifier.size(SegmentedButtonDefaults.IconSize)) } },
                                 modifier = Modifier.testTag("settings-theme-${mode.name.lowercase()}"),
@@ -379,6 +381,7 @@ fun SettingsScreen(nav: NavController) {
                             SegmentedButton(
                                 selected = iconVariant == variant,
                                 onClick = {
+                                    view.fsTick()
                                     AppIconSwitcher.set(ctx, variant)
                                     iconVariant = variant
                                 },

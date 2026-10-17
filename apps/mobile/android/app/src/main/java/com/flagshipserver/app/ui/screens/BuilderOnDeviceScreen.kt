@@ -9,6 +9,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.ui.components.fsFocusRing
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -17,7 +18,7 @@ import androidx.compose.material.icons.outlined.Usb
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
+import com.flagshipserver.app.ui.components.RadioButton
 import androidx.compose.foundation.layout.width
 import com.flagshipserver.app.ui.components.FSScreen
 import android.app.Application
@@ -176,7 +177,7 @@ private fun DrivePicker(
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .selectable(selected = selected, onClick = { onSelect(d) }, role = androidx.compose.ui.semantics.Role.RadioButton)
+                    .fsFocusRing(8.dp).selectable(selected = selected, onClick = { onSelect(d) }, role = androidx.compose.ui.semantics.Role.RadioButton)
                     .padding(horizontal = FS.space.s2, vertical = FS.space.s1),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

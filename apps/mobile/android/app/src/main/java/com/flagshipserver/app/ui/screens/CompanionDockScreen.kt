@@ -11,6 +11,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.ui.components.fsFocusRing
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -33,7 +34,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
+import com.flagshipserver.app.ui.components.RadioButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import com.flagshipserver.app.ui.components.TextButton
@@ -216,7 +217,7 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .heightIn(min = 48.dp)
-                                        .selectable(
+                                        .fsFocusRing(8.dp).selectable(
                                             selected = picked,
                                             enabled = !approving,
                                             role = Role.RadioButton,

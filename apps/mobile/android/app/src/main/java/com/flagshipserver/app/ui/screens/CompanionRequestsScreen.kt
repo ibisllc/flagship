@@ -127,12 +127,7 @@ fun CompanionRequestsScreen(nav: NavController) {
                 }
             }
             is LoadingState.Failed -> {
-                FSCard {
-                    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-                        Text("Couldn't load companion requests", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.titleSmall)
-                        Text(s.message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
+                ErrorCard(s.message, onRetry = { vm.load() })
             }
             else -> ServerCardSkeleton()
         }

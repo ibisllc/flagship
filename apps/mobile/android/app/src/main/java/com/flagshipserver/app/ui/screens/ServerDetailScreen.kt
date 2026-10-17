@@ -6,6 +6,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.ui.components.fsFocusRing
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -29,9 +30,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.RadioButton
+import com.flagshipserver.app.ui.components.RadioButton
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Switch
+import com.flagshipserver.app.ui.components.Switch
 import com.flagshipserver.app.ui.components.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.Alignment
@@ -881,7 +882,7 @@ private fun FrontPageCard(serverDomain: String) {
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("sd-front-page-option-${value.ifEmpty { "default" }}")
-                                    .selectable(selected = selection == value, enabled = !busy) {
+                                    .fsFocusRing(8.dp).selectable(selected = selection == value, enabled = !busy) {
                                         selection = value
                                     },
                             ) {
@@ -1144,7 +1145,7 @@ private fun JournalCard(serverDomain: String) {
                             Row(
                                 Modifier
                                     .fillMaxWidth()
-                                    .selectable(selected = unit == u, enabled = !busy, onClick = { unit = u })
+                                    .fsFocusRing(8.dp).selectable(selected = unit == u, enabled = !busy, onClick = { unit = u })
                                     .semantics { contentDescription = "sd-journal-unit-$u" },
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -1308,7 +1309,7 @@ private fun DeadManCard(serverDomain: String) {
                             Row(
                                 Modifier
                                     .fillMaxWidth()
-                                    .selectable(selected = window == w, enabled = !busy && !LocalServerReadOnly.current, onClick = { applyPolicy(true, w, lockout) })
+                                    .fsFocusRing(8.dp).selectable(selected = window == w, enabled = !busy && !LocalServerReadOnly.current, onClick = { applyPolicy(true, w, lockout) })
                                     .semantics { contentDescription = "deadman-window-${w.windowMs}" },
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -1323,7 +1324,7 @@ private fun DeadManCard(serverDomain: String) {
                         for (m in listOf(PowerMode.OFF to "Turn off", PowerMode.RESTART to "Restart")) {
                             Row(
                                 Modifier
-                                    .selectable(selected = lockout == m.first, enabled = !busy && !LocalServerReadOnly.current, onClick = { applyPolicy(true, window, m.first) })
+                                    .fsFocusRing(8.dp).selectable(selected = lockout == m.first, enabled = !busy && !LocalServerReadOnly.current, onClick = { applyPolicy(true, window, m.first) })
                                     .semantics { contentDescription = "deadman-lockout-${m.first.wire}" },
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -2172,7 +2173,7 @@ private fun RevokeServerSheetBody(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .selectable(
+                        .fsFocusRing(8.dp).selectable(
                             selected = reason == r,
                             onClick = { reason = r },
                             enabled = !isBusy(phase),
