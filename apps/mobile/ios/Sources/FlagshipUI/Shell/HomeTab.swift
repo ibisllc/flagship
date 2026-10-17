@@ -695,6 +695,9 @@ struct CreateServerContainer: View {
                     sessionStore: sessionStore,
                     isDemoAccount: app.isDemoAccount
                 )
+                vm?.prefillName(takenLabels: app.pods.map {
+                    $0.fqdn.split(separator: ".").first.map(String.init) ?? $0.name
+                })
             }
         }
     }

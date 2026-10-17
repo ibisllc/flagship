@@ -229,6 +229,13 @@ public final class CreateServerViewModel {
         if let r = draftStore.phoneReserveBytes() { self.phoneReserveBytes = r }
     }
 
+    /// Starts the subdomain field at the address the preview shows ("home",
+    /// or the next free homeN), unless the user already typed one.
+    public func prefillName(takenLabels: [String]) {
+        guard name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        name = ServerLabel.firstFree(taken: takenLabels)
+    }
+
     /// The subdomain must be a valid, non-reserved DNS label — what the user
     /// types IS the subdomain (no slugify), so an invalid entry blocks Next
     /// rather than being silently rewritten.

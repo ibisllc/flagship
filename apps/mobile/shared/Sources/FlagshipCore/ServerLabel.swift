@@ -43,6 +43,18 @@ public enum ServerLabel {
         return .ok(norm)
     }
 
+    /// The label a new server starts with: "home", else "home2", "home3"...,
+    /// the first one none of `taken` uses (Android's `ServerLabel.firstFree`).
+    public static func firstFree(taken: some Sequence<String>) -> String {
+        let used = Set(taken.map { $0.lowercased() })
+        var n = 1
+        while true {
+            let label = n == 1 ? "home" : "home\(n)"
+            if !used.contains(label) { return label }
+            n += 1
+        }
+    }
+
     /// True iff `input` is a syntactically valid, non-reserved subdomain.
     public static func isValid(_ input: String) -> Bool {
         if case .ok = validate(input) { return true }

@@ -102,6 +102,8 @@ final class ServerArchiveViewModelTests: XCTestCase {
         let contentKey: Data
         let dataBytes: Int64
         let sha256: String
+        /// The small metadata file's JSON text (what a peer record carries).
+        let meta: String
     }
 
     private func makeBackup(name: String = "home", corruptData: Bool = false) throws -> Backup {
@@ -127,7 +129,7 @@ final class ServerArchiveViewModelTests: XCTestCase {
         let url = dir.appendingPathComponent("\(name)-2026-10-14.flagship")
         if corruptData { data[data.count - 1] ^= 1 }
         try ServerBackupBundle.make(meta: Data(text.utf8), data: data).write(to: url)
-        return Backup(url: url, archiveId: id, contentKey: key, dataBytes: Int64(data.count), sha256: sha)
+        return Backup(url: url, archiveId: id, contentKey: key, dataBytes: Int64(data.count), sha256: sha, meta: text)
     }
 
     private func importVM(_ c: MockScreensClient, taken: Set<String> = [], waiting: [String: String] = [:],
@@ -268,6 +270,92 @@ final class ServerArchiveViewModelTests: XCTestCase {
         XCTAssertEqual(ImportBackupViewModel.restoredLine(apps), "Restored 1 app")
         XCTAssertEqual(ImportBackupViewModel.failedLines(apps), ["Couldn't restore: Notes: its image didn't build"])
         XCTAssertEqual(restored, ["clone.alice.flagship.services"], "Home stops showing it waiting")
+    }
+
+    // MARK: Restore from other servers
+
+    private let lostServer = "lost.alice.flagship.services"
+    private let peerSeed = Data(repeating: 0x07, count: 32)
+
+    private func peerRoot(_ b: Backup, sha: String? = nil) -> PeerRootSummary {
+        PeerRootSummary(
+            serverId: lostServer, generation: 1, revision: 2, createdAt: 1_792_000_000_000,
+            archive: .init(archiveId: b.archiveId, createdAt: 1_792_000_000_000, bytes: b.dataBytes, sha256: sha ?? b.sha256, backupFile: b.meta),
+            holders: 3, needed: 2, keepUntil: 1_800_000_000_000)
+    }
+
+    private func peersVM(_ c: MockScreensClient, helpers: [String] = ["helper.alice.flagship.services"],
+                         fromCom: @escaping @Sendable (String) async throws -> PeerSealedRoot = { _ in throw ImportBackupViewModel.PeerError.notFound },
+                         onRestored: @escaping (String) -> Void = { _ in }) -> ImportBackupViewModel {
+        let k = accountKek
+        let seed = peerSeed
+        let vm = ImportBackupViewModel(
+            username: "alice", takenNames: [], fromPeers: true, helperServers: helpers,
+            umkSeed: { seed }, sealedRootFromCom: fromCom, clients: .shared(c),
+            accountKek: { _ in k },
+            openWithPasscode: { _, _ in throw ServerBackupFormat.FormatError.wrongPasscode },
+            onRestored: onRestored, pollNs: 1_000)
+        vm.lostServer = lostServer
+        return vm
+    }
+
+    func testPeersModeStartsOnTheLostServerPage() {
+        let vm = peersVM(client())
+        XCTAssertTrue(vm.fromPeers)
+        XCTAssertEqual(vm.phase, .peersPick)
+    }
+
+    func testPeersFindsTheRecordThroughARunningServerAndRestoresFromThePieces() async throws {
+        let b = try makeBackup()
+        let c = client()
+        c.peerRootFixture = peerRoot(b)
+        var restored: [String] = []
+        let vm = peersVM(c, onRestored: { restored.append($0) })
+        await vm.findPeerBackup()
+        XCTAssertEqual(vm.phase, .name)
+        XCTAssertNil(vm.peerError)
+        let pbk = HexUtil.encode(try PeerBackupKeys.pbk(umkSeed: peerSeed, serverId: lostServer))
+        XCTAssertEqual(c.peerRootRequests, [PeerRestoreRequest(serverId: lostServer, pbkHex: pbk)], "the PBK derives from the account key and the lost server")
+        XCTAssertTrue(vm.peerSummaryLines().contains("Apps: Wiki"), "\(vm.peerSummaryLines())")
+
+        vm.create()
+        XCTAssertEqual(vm.phase, .creating)
+        XCTAssertEqual(vm.createTarget?.restore, .init(archiveId: b.archiveId, bytes: b.dataBytes, sha256: b.sha256))
+        c.restoreWaiting = ServerRestoreWaiting(archiveId: b.archiveId, bytes: b.dataBytes, sha256: b.sha256)
+        vm.send(to: "home.alice.flagship.services")
+        vm.leaveCreate(fqdn: "home.alice.flagship.services")
+        try await waitFor { if case .done = vm.phase { return true }; return false }
+        XCTAssertEqual(c.peerRestoreRequests, [PeerRestoreRequest(serverId: lostServer, pbkHex: pbk)])
+        XCTAssertTrue(c.restoreChunks.isEmpty, "nothing is uploaded from the phone")
+        XCTAssertEqual(c.restoreCommits, [ServerRestoreCommitRequest(key: HexUtil.encode(b.contentKey))])
+        XCTAssertEqual(restored, ["home.alice.flagship.services"])
+    }
+
+    func testPeersWithNoRecordShowsTheSentenceAndStaysOnThePage() async {
+        let c = client()
+        let vm = peersVM(c)
+        await vm.findPeerBackup()
+        XCTAssertEqual(vm.phase, .peersPick)
+        XCTAssertEqual(vm.peerError, "No peer backup of that server was found.")
+    }
+
+    func testPeersRefusesARecordThatDoesNotMatchItsFile() async throws {
+        let b = try makeBackup()
+        let c = client()
+        c.peerRootFixture = peerRoot(b, sha: String(repeating: "0", count: 64))
+        let vm = peersVM(c)
+        await vm.findPeerBackup()
+        XCTAssertEqual(vm.phase, .peersPick)
+        XCTAssertEqual(vm.peerError, "The backup record doesn't match its file. Nothing was restored.")
+        XCTAssertTrue(c.peerRestoreRequests.isEmpty)
+    }
+
+    func testPeersRefusesAnotherServersName() async {
+        let vm = peersVM(client())
+        vm.lostServer = "not a server!"
+        await vm.findPeerBackup()
+        XCTAssertEqual(vm.phase, .peersPick)
+        XCTAssertNotNil(vm.peerError)
     }
 
     func testPickingSomethingElseExplainsWhy() async throws {
