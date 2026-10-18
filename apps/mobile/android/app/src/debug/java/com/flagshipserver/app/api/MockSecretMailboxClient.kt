@@ -47,8 +47,17 @@ class MockSecretMailboxClient : SecretMailboxClient {
         return SealedLuksKeyResponse(serverDomain, hex, 1L)
     }
 
-    override suspend fun fetchPods(username: String): PodsDirectoryResponse =
-        PodsDirectoryResponse(username, directory, pendingOrders, directoryServerOrder)
+    /** Make every [fetchPods] throw (tests of a service that is down). */
+    var podsError: Throwable? = null
+    /** How many times [fetchPods] was called. */
+    var podsFetchCount = 0
+        private set
+
+    override suspend fun fetchPods(username: String): PodsDirectoryResponse {
+        podsFetchCount++
+        podsError?.let { throw it }
+        return PodsDirectoryResponse(username, directory, pendingOrders, directoryServerOrder)
+    }
 
     /** Scripted live-sync responses for tests: each [fetchLiveSync] call pops the
      *  next entry; once exhausted it returns a DETERMINISTIC snapshot built from

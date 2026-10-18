@@ -156,4 +156,46 @@ class LiveSyncCoordinatorTest {
         // Fallback waits the longer cadence (not an immediate reconnect).
         assertTrue(delay >= LiveSyncCoordinator.FALLBACK_MS)
     }
+
+    // The retry gap doubles from the fallback cadence and stops at the cap.
+    @Test fun backoffDoublesAndCaps() {
+        val s = LiveSyncCoordinator.FALLBACK_MS
+        assertEquals(
+            listOf(s, 2 * s, 4 * s, 8 * s, 16 * s, LiveSyncCoordinator.MAX_BACKOFF_MS),
+            (1..6).map { LiveSyncCoordinator.backoffMs(it) },
+        )
+        assertEquals(LiveSyncCoordinator.MAX_BACKOFF_MS, LiveSyncCoordinator.backoffMs(400))
+    }
+
+    // While only /stream fails, /pods keeps the screen fresh at a growing,
+    // capped gap (5s, 10s, 20s, then 30s), and a recovered stream resets it.
+    @Test fun podsOnlyFallbackGrowsThenCaps() = runTest {
+        val app = signedInApp()
+        val mailbox = MockSecretMailboxClient().apply { directory = listOf(pod("home.harry.flagship.services")) }
+        val coord = coordinator(app, mailbox)
+        val delays = (1..5).map {
+            mailbox.liveSyncError = HttpException(503, "error code: 1102")
+            coord.tickOnce()
+        }
+        val s = LiveSyncCoordinator.FALLBACK_MS
+        assertEquals(listOf(s, 2 * s, 4 * s, 6 * s, 6 * s), delays)
+        assertEquals(5, mailbox.podsFetchCount)
+        assertEquals(0L, coord.tickOnce())
+        assertTrue(!coord.degraded)
+    }
+
+    // When /pods fails too (a 503 / 1102 on the whole service), the gap keeps
+    // doubling and /pods is asked only on the first failure and every fourth.
+    @Test fun wholeServiceDownBacksOffAndStopsDoubleHitting() = runTest {
+        val app = signedInApp()
+        val mailbox = MockSecretMailboxClient().apply { podsError = HttpException(503, "error code: 1102") }
+        val coord = coordinator(app, mailbox)
+        val delays = (1..6).map {
+            mailbox.liveSyncError = HttpException(503, "error code: 1102")
+            coord.tickOnce()
+        }
+        val s = LiveSyncCoordinator.FALLBACK_MS
+        assertEquals(listOf(s, 2 * s, 4 * s, 8 * s, 16 * s, LiveSyncCoordinator.MAX_BACKOFF_MS), delays)
+        assertEquals("tried on the first failure and the fourth, not every round", 2, mailbox.podsFetchCount)
+    }
 }
