@@ -145,11 +145,12 @@ if [ $((DISK_BYTES - PART_BYTES)) -gt 1073741824 ]; then
 fi
 
 stage "Setting up this server's identity and disk key"
-set +e
-FLAGSHIP_APPLIANCE_PREINSTALLED=1 /usr/local/sbin/flagship-bootstrap.sh
-BOOTSTRAP_RC=$?
-set -e
+# "|| rc=$?" keeps the ERR trap from firing, so the failure below is reported
+# with the bootstrap's own line instead of just "line 78".
+BOOTSTRAP_RC=0
+FLAGSHIP_APPLIANCE_PREINSTALLED=1 /usr/local/sbin/flagship-bootstrap.sh || BOOTSTRAP_RC=$?
 if [ "$BOOTSTRAP_RC" -ne 0 ]; then
+    tail -n 25 /var/log/flagship-bootstrap.log 2>/dev/null | sed "s/^/[appliance] bootstrap log: /" || true
     SAFE_BOOTSTRAP_ERROR="$(grep -E '^\\[flagship-bootstrap\\] (FATAL|ERROR|WARN(ING)?):' /var/log/flagship-bootstrap.log 2>/dev/null | tail -n1 | tr -cd '[:print:]' | cut -c1-240 || true)"
     echo "[appliance] canonical bootstrap failed rc=$BOOTSTRAP_RC"
     [ -z "$SAFE_BOOTSTRAP_ERROR" ] || echo "$SAFE_BOOTSTRAP_ERROR"
