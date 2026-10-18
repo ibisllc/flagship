@@ -64,7 +64,7 @@ describe("generalized VM appliance", () => {
     expect(script).toContain(`'${APPLIANCE_SEED_MAGIC}' | xxd -p`);
     expect(script).toContain("sha256sum -c -");
     expect(script).toContain("growpart \"/dev/$ROOT_PARENT\"");
-    expect(script).toContain("cryptsetup resize \"$ROOT_MAPPER\"");
+    expect(script).toContain("cryptsetup resize --key-file /etc/flagship/appliance-build.key \"$ROOT_MAPPER\"");
     expect(script).toContain("resize2fs \"$ROOT_SOURCE\"");
     expect(script).toContain("FLAGSHIP_APPLIANCE_PREINSTALLED=1");
     expect(script).toContain("canonical bootstrap failed rc=$BOOTSTRAP_RC");
@@ -178,6 +178,12 @@ describe("appliance specializer progress", () => {
     expect(script).toMatch(/trap '.*report error "Setup stopped while \$STEP/);
     expect(script).toContain('report error "Setup failed: ${SAFE_BOOTSTRAP_ERROR:-bootstrap exited $BOOTSTRAP_RC}"');
     expect(script).toContain('[ "$(jq -r \'.serverDomain // empty\' /var/flagship/install-blob.json)" != "" ]');
+  });
+
+  it("resizes the encrypted root with the build key and tolerates a partition already grown", () => {
+    expect(script).toContain('cryptsetup resize --key-file /etc/flagship/appliance-build.key "$ROOT_MAPPER"');
+    expect(script).toContain('growpart "/dev/$ROOT_PARENT" "$ROOT_PARTITION" || GROWPART_RC=$?');
+    expect(script).toContain('[ "$GROWPART_RC" -le 1 ] || exit "$GROWPART_RC"');
   });
 
   it("only reports to a well-formed serial and registration URL", () => {
