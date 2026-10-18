@@ -19,8 +19,10 @@
 # pre-GA demo sample users CAN be wiped: they are NOT kept unless named. Only
 # the keep list survives, and nothing here can wipe "everything": the keep
 # list is never empty.
-#   * Default keep: playstore-test-0725, the shared App Store / Google Play
-#     review login (never tear it down while a review is open).
+#   * Default keep, and the ONLY one unless you name more: playstore-test-0725,
+#     the shared App Store / Google Play review login (never tear it down while
+#     a review is open). Everyone else goes, the owner's own accounts and demo
+#     sample users included.
 #     WIPE_KEEP_DEFAULT=0 drops it from the list (only once the reviews are
 #     over, and only if at least one other name is kept).
 #   * Add names with WIPE_KEEP=a,b,c  and/or  --keep a,b,c  and/or a file with
@@ -249,13 +251,24 @@ done
 # the tables are processed in does not matter.
 KSERV="SELECT lower(server_domain) FROM servers WHERE lower(username) IN ($K) UNION SELECT lower(server_domain) FROM auth_codes WHERE lower(username) IN ($K) UNION SELECT lower(subdomain) FROM routing WHERE lower(username) IN ($K) UNION SELECT lower(active_server_fqdn) FROM demo_users WHERE lower(username) IN ($K) AND active_server_fqdn IS NOT NULL"
 KSERIAL="SELECT lower(serial) FROM auth_codes WHERE lower(username) IN ($K)"
-KKEYS="SELECT lower(irk_pub_hex) FROM usernames WHERE lower(username) IN ($K) UNION SELECT lower(aid_pub_hex) FROM usernames WHERE lower(username) IN ($K) AND aid_pub_hex IS NOT NULL UNION SELECT lower(admin_root_pub_hex) FROM usernames WHERE lower(username) IN ($K) AND admin_root_pub_hex IS NOT NULL UNION SELECT lower(device_pub_hex) FROM device_identities WHERE lower(account_id) IN ($K) UNION SELECT lower(old_admin_root_pub_hex) FROM admin_root_rotations WHERE lower(username) IN ($K) UNION SELECT lower(new_admin_root_pub_hex) FROM admin_root_rotations WHERE lower(username) IN ($K)"
-KINV="SELECT invite_id FROM service_invites WHERE lower(author_aid) IN ($KKEYS) OR lower(creator_pub_hex) IN ($KKEYS)"
 KSHARE="SELECT share_id FROM server_shares WHERE lower(owner_username) IN ($K) OR lower(server_domain) IN ($KSERV)"
 KPIK="SELECT pik_pub_hex FROM pb_holders WHERE lower(username) IN ($K) OR lower(server_domain) IN ($KSERV)"
 
 u()   { printf 'lower(%s) IN (%s)' "$1" "$K"; }
 srv() { printf 'lower(%s) IN (%s)' "$1" "$KSERV"; }
+# True when <col> holds a public key of a kept account: its account keys, its
+# devices' keys, or an admin root it rotated through. One IN per source, joined
+# by OR: D1 refuses a compound SELECT of more than 5 terms (KSERV has 4).
+keyed() {
+  printf "(lower(%s) IN (SELECT lower(irk_pub_hex) FROM usernames WHERE lower(username) IN (%s))" "$1" "$K"
+  printf " OR lower(%s) IN (SELECT lower(aid_pub_hex) FROM usernames WHERE lower(username) IN (%s))" "$1" "$K"
+  printf " OR lower(%s) IN (SELECT lower(admin_root_pub_hex) FROM usernames WHERE lower(username) IN (%s))" "$1" "$K"
+  printf " OR lower(%s) IN (SELECT lower(device_pub_hex) FROM device_identities WHERE lower(account_id) IN (%s))" "$1" "$K"
+  printf " OR lower(%s) IN (SELECT lower(old_admin_root_pub_hex) FROM admin_root_rotations WHERE lower(username) IN (%s))" "$1" "$K"
+  printf " OR lower(%s) IN (SELECT lower(new_admin_root_pub_hex) FROM admin_root_rotations WHERE lower(username) IN (%s)))" "$1" "$K"
+}
+
+KINV="SELECT invite_id FROM service_invites WHERE $(keyed author_aid) OR $(keyed creator_pub_hex)"
 
 pred_of() {
   case "$1" in
@@ -277,7 +290,7 @@ pred_of() {
     install_policy_fanout)      printf '%s OR %s' "$(u username)" "$(srv server_domain)" ;;
     custom_domain_orders)       printf '%s OR %s' "$(u user_id)" "$(srv pod_canonical)" ;;
     nfc_rendezvous)             echo "@W" ;;
-    service_invites)            printf 'lower(author_aid) IN (%s) OR lower(creator_pub_hex) IN (%s)' "$KKEYS" "$KKEYS" ;;
+    service_invites)            printf '%s OR %s' "$(keyed author_aid)" "$(keyed creator_pub_hex)" ;;
     service_invite_bindings)    printf 'invite_id IN (%s)' "$KINV" ;;
     server_shares)              printf '%s OR %s' "$(u owner_username)" "$(srv server_domain)" ;;
     server_share_unlocks|server_share_push)
@@ -310,7 +323,7 @@ pred_of() {
     # Demo sandbox
     demo_users|demo_llm_ledger) u username ;;
     # Marketplace installs
-    marketplace_installs)       printf '%s OR lower(puller_irk_pub_hex) IN (%s)' "$(u creator)" "$KKEYS" ;;
+    marketplace_installs)       printf '%s OR %s' "$(u creator)" "$(keyed puller_irk_pub_hex)" ;;
     # Billing / tiers / promos
     tier_subscriptions|hardware_orders|llm_promo_issues|llm_promo_lifetime|llm_promo_usage|usage_counters|app_purchases)
                                 u username ;;
@@ -464,7 +477,7 @@ fi
 if [ "$proceed" -ne 1 ]; then
   echo
   echo "DRY RUN — nothing deleted, nothing written. To really wipe:"
-  echo "  WIPE_ENV=$target_env WIPE_D1=$d1 WIPE_CONFIRM=$target_env bash scripts/wipe-all-users.sh --yes"
+  echo "  WIPE_ENV=$target_env WIPE_D1=$d1 WIPE_CONFIRM=$target_env${wr_config:+ WIPE_WRANGLER_CONFIG=$wr_config}${WIPE_LOCAL:+ WIPE_LOCAL=$WIPE_LOCAL}${WIPE_KEEP+ WIPE_KEEP=$WIPE_KEEP}${keep_file:+ --keep-file $keep_file} bash scripts/wipe-all-users.sh --yes"
   exit 0
 fi
 total="$preview_deleted"
