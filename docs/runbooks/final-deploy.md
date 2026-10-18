@@ -46,10 +46,10 @@ Known state at the time of writing (re-check, do not trust):
 
 - The five feature branches that conflict with `main` (`feat/marketplace`,
   `feat/retail`, `feat/phone-usb-burn`, `alpine`, `gym`) are not part of GA.
-  `gym` is rebased by `scripts/gym-refresh.sh` (step 12).
+  `gym` is rebased by `scripts/gym-refresh.sh` (step 6).
 - The arm64 VM appliance does not build on `main` yet (the factory failed at
   `tar` while copying the live root; the fix is on `fix/appliance-factory-tar`,
-  not on `main` when this was written). See step 8.
+  not on `main` when this was written). See step 9.
 
 ## 1. Cloudflare plan and DNS limits (do this first)
 
@@ -65,8 +65,8 @@ and a 10-minute cron.
 2. The `flagship.services` zone's record cap (AGENTS.md "Urgent": 200 records,
    ~154 used, ~70 are leftovers). Two things reduce it, neither needs the plan
    change: the wildcard-DNS change (new accounts take 4 records instead of
-   12+; `docs/wildcard-dns.md`, deploys with `.com`, step 6) and the reap (step
-   10). If you want headroom beyond that, look at the zone's plan in the
+   12+; `docs/wildcard-dns.md`, deploys with `.com` and `.services`, steps 7 and 8, after the step 6 gate) and the reap (step
+   12). If you want headroom beyond that, look at the zone's plan in the
    dashboard (DNS -> Records shows "N of M"); a higher cap is a zone-plan
    decision, not a Workers one.
 
@@ -77,7 +77,7 @@ curl -s https://flagshipserver.com/api/health          # still 200
 ```
 
 Dashboard: Workers & Pages -> flagship-com -> Settings -> shows the Paid plan;
-the CPU-time chart no longer has 1102 spikes after step 6.
+the CPU-time chart no longer has 1102 spikes after step 7.
 
 Rollback: a plan change is reversible in the dashboard (downgrading puts the
 10 ms limit back, so don't, unless billing forces it).
@@ -113,14 +113,14 @@ cd ~/flagship-deploy
 node scripts/rotate-ca.mjs status          # the new lease lists as LIVE / SERVED
 git add .maintainers/ca-endorsements
 git commit -m "Renew the production CA lease"
-git push origin HEAD:main                  # or open a PR; it must be on main before step 6
+git push origin HEAD:main                  # or open a PR; it must be on main before step 7
 ```
 
-The `.com` deploy (step 6) is what serves it to the apps; boxes read it from
+The `.com` deploy (step 7) is what serves it to the apps; boxes read it from
 the endorsed checkout (step 3).
 
 Check: `curl -s https://flagshipserver.com/api/maintainer-blessing | head -c 300`
-shows a lease whose `notAfter` is the new date after step 6.
+shows a lease whose `notAfter` is the new date after step 7.
 
 Rollback: a lease is additive (overlapping leases are fine). Nothing to undo;
 a wrong one is superseded by signing another.
@@ -129,7 +129,7 @@ a wrong one is superseded by signing another.
 
 Boxes only run signed code (`docs/maintainer-ca-endorsement.md`). A new box
 installs the newest endorsed release; an existing box updates to it on the
-owner's order. The VM appliances (step 8) bake the newest endorsed release too,
+owner's order. The VM appliances (step 9) bake the newest endorsed release too,
 so **endorse before you build the appliances**.
 
 Is a new endorsement needed? Compare the newest endorsed commit with the box's
@@ -164,7 +164,7 @@ node scripts/latest-endorsed-release.mjs          # now prints the new commit
 `--from` is informational (the commit the oldest box you care about runs).
 
 Check: the printed commit is the one you signed; `curl -s https://flagshipserver.com/api/releases?current=<old>`
-(after step 6) lists it.
+(after step 7) lists it.
 
 Rollback: an endorsement cannot be un-signed; a bad one is handled by not
 ordering the update and by endorsing a newer fix. A box whose update fails its
@@ -201,10 +201,10 @@ npx wrangler d1 execute flagship-state --remote \
 Read the file's header first: a bare `ALTER TABLE ... ADD COLUMN` is
 apply-once (`packages/storage/migrations/README.md`); running it twice aborts.
 
-Check (after step 6): `curl -s -H "x-admin-secret: $FLAGSHIP_ADMIN_SECRET" https://flagshipserver.com/api/admin/schema-status | jq`
+Check (after step 7): `curl -s -H "x-admin-secret: $FLAGSHIP_ADMIN_SECRET" https://flagshipserver.com/api/admin/schema-status | jq`
 returns empty `missing` and `unknown`.
 
-Rollback: there are no down-migrations. Roll the code back (step 6), leave
+Rollback: there are no down-migrations. Roll the code back (step 7), leave
 additive tables in place, forward-fix. Data damage: `docs/runbooks/d1-restore.md`.
 
 ## 5. Secrets and settings the new code reads
@@ -226,7 +226,48 @@ Flagship Inference `FLAGSHIP_INFERENCE_TOKEN_SECRET` + `FLAGSHIP_INFERENCE_ENDPO
 (`infra/inference/README.md`; also the shim's own `UPSTREAM_*` secrets, which the
 owner still has to choose).
 
-## 6. Deploy `.com`
+## 6. Gym refresh and live verification of wildcard DNS (GATE: nothing deploys to prod until this passes)
+
+The wildcard-DNS change (`docs/wildcard-dns.md`, `545b7bd1b`) rewrites how every
+account's names resolve and how every certificate is issued. It is verified live
+on the **gym first**, because two of its assumptions were never proven (section 4
+of that doc, "Verification status"): that Cloudflare answers NODATA for a name
+that only has a descendant (the challenge TXT's empty non-terminal), and that
+the challenge shield is seen in the right order on every anycast node. The gym
+issues real certificates, so it exercises both.
+
+```sh
+cd ~/flagship-deploy
+bash scripts/gym-refresh.sh               # rebases `gym` onto main, gym D1 migrations, secret parity, deploys the gym Worker and gym Fly app, health
+npx tsx tools/live-e2e/shared-run.ts      # the live fleet run (about 11 minutes, 3 boxes); its core group checks the account's four-record DNS set and the unregistered-name behaviour
+```
+
+Run it only when no other live run is in progress. The gym refuses to start if
+its fleet will not fit the zone. Teardown goes through `/api/gym/teardown`.
+The gym agent also runs a 200 ms probe (every 200 ms through 1.1.1.1) of a box
+name during a first certificate issuance, which is the proof of the unverified
+NODATA/shield behaviour.
+
+Go / no-go:
+
+- **Go:** the core group is all green (the four-record set, the unregistered
+  name closes after the fixed wait, the box gets its Let's Encrypt certificate
+  and serves HTTPS 200) and the probe never sees the box name go NXDOMAIN or
+  NODATA while the challenge TXT exists.
+- **No-go (blocks the prod `.com` and `.services` deploys, steps 7 and 8):** any
+  failed core check; a certificate not issued (CAA at `<user>` found by tree
+  climbing is exactly what is being proven); or the probe seeing a gap in the box
+  name's answers. Do not deploy; the old per-box DNS keeps working on prod until
+  you do. Fix on `main`, `gym-refresh.sh`, run again.
+- The gym and prod share the `flagship.services` zone and the Let's Encrypt
+  budget (50 certificates a week): do not burn the budget on repeated runs right
+  before the prod deploy.
+
+Check: `curl -s https://gym.flagshipserver.com/api/health` and
+`curl -s https://flagship-services-gym.fly.dev:8443/api/health` are 200.
+Rollback: the gym is disposable; refresh it again, or leave it.
+
+## 7. Deploy `.com`
 
 ```sh
 cd ~/flagship-deploy
@@ -235,7 +276,10 @@ cd apps/com
 npm run deploy        # predeploy: clean rebuild of the bundled packages, route-safety, dist freshness, orphaned output, prod-migration drift
 ```
 
-Do not use `--force` or set `FLAGSHIP_SKIP_*`. If the migration check says it
+This deploy carries the wildcard-DNS logic (the account's four-record set, the
+challenge shield, the reap rules): it needs the step 6 gate green, **no D1
+migration** and **no endorsed box release** (boxes only publish and delete their
+own `_acme-challenge` TXT through `.com`). Do not use `--force` or set `FLAGSHIP_SKIP_*`. If the migration check says it
 cannot read the ledger, log in (`npx wrangler login`) and rerun.
 
 Check:
@@ -245,7 +289,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://flagshipserver.com/api/health  
 curl -s https://flagshipserver.com/api/health | head -c 300
 curl -s https://webapp.flagshipserver.com/service-worker.js | grep -m1 SHELL_VERSION        # = main's SHELL_VERSION (v150 at the RC pass)
 curl -s -o /dev/null -w "%{http_code}\n" https://flagshipserver.com/status/
-curl -s https://flagshipserver.com/api/notices -o /dev/null -w "%{http_code}\n"             # 204 until a notice is signed (step 11)
+curl -s https://flagshipserver.com/api/notices -o /dev/null -w "%{http_code}\n"             # 204 until a notice is signed (step 12)
 curl -sI https://flagshipserver.com/ | grep -i "x-frame-options\|strict-transport"
 curl -s -H "x-admin-secret: $FLAGSHIP_ADMIN_SECRET" https://flagshipserver.com/api/admin/schema-status | jq
 ```
@@ -257,7 +301,10 @@ server list.
 Rollback: `cd apps/com && npx wrangler deployments list && npx wrangler rollback <version-id>`
 (code only; custom domains and D1 are untouched).
 
-## 7. Deploy `.services` (Fly): needed, one image
+## 8. Deploy `.services` (Fly): needed, one image
+
+The wildcard change needs this deploy too (the relay's uniform drop timing for an
+unregistered first-party name); deploy it right after `.com`, not before.
 
 Needed if the last Fly release is older than the relay changes on `main`.
 Known: `0ea6e7a5e` (peer-backup mailboxes over the tunnel, 2026-10-16) is relay
@@ -289,7 +336,32 @@ then watch `https://flagshipserver.com/status/` until every box is back online
 
 Rollback: `flyctl releases rollback -a flagship-services` (stateless; clean).
 
-## 8. Publish the VM appliances
+### After both are deployed: finish the wildcard rollout
+
+Per-account records fall to **4** (`*.<user>` A + AAAA to the relay, two CAA at
+`<user>`), so the 200-record zone holds about 45 accounts whatever their server
+count (it held 15 with one server each), plus about 20 records of headroom for
+concurrent challenges (each issuance briefly adds 2 TXT + 4 shield records).
+Accounts that predate the change keep their old per-box records until you do
+these two things, in this order:
+
+1. The reap dry run (needs `FLAGSHIP_ADMIN_SECRET`; deletes nothing):
+   `node scripts/reap-orphans.mjs --show --out ~/pre-ga-reap-plan.json`. It now
+   prints a **trim** table next to the orphans: per-box A/AAAA records the
+   account wildcard replaces, the `*.<user>` CAA copy and `iodef`, and the
+   records of an account with no live server. Read it. Applying it is part of
+   step 12 (do it after the scrub so the two plans are not mixed).
+2. `POST /api/admin/republish-server-dns` (header `x-admin-secret`) re-creates
+   the account set for every live account and fills the wildcard in for accounts
+   that predate it. Do this **before** applying the trim, so no account loses its
+   per-box records without having the wildcard.
+
+   ```sh
+   curl -s -X POST -H "x-admin-secret: $FLAGSHIP_ADMIN_SECRET" https://flagshipserver.com/api/admin/republish-server-dns
+   dig +short anyname.<an-existing-account>.flagship.services @1.1.1.1      # now the relay address
+   ```
+
+## 9. Publish the VM appliances
 
 Studio's "Host on this PC / Mac" boots a prebuilt appliance that bakes the
 newest endorsed release and the first-boot specializer. Rebuild when step 3
@@ -326,7 +398,7 @@ bash scripts/publish-vm-appliance.sh 39153553427 <the green arm64 run id>
 git add apps/web/public/downloads/FlagshipVMAppliance-*.json
 git commit -m "Publish the rebuilt VM appliances"
 git push origin HEAD:main
-# then redeploy .com (step 6) so /downloads/ serves the new manifests
+# then redeploy .com (step 7) so /downloads/ serves the new manifests
 ```
 
 Check: `curl -s https://flagshipserver.com/downloads/FlagshipVMAppliance-amd64.json | jq .sha256` (the file names are in `apps/web/public/downloads/`)
@@ -337,7 +409,7 @@ Rollback: re-point the manifests at the previous commit and redeploy `.com`;
 the old R2 parts stay (the script does not delete). Servers already made from a
 bad image are deleted and recreated.
 
-## 9. Studio releases (Mac, Windows, Linux)
+## 10. Studio releases (Mac, Windows, Linux)
 
 **Windows and Linux** (`studio-release.yml`, on demand):
 
@@ -349,7 +421,7 @@ Next version is 0.1.4 (0.1.3 is the latest GitHub release, 2026-10-16). The
 workflow stamps the version into both apps and fails if the built exe or
 AppImage reports a different one. Then update the two URLs in
 `apps/com/src/route.ts` (`INSTALLER_DOWNLOADS.windows` / `.linux`, they pin
-`studio-v0.1.3`), land, and redeploy `.com` (step 6). They ship marked
+`studio-v0.1.3`), land, and redeploy `.com` (step 7). They ship marked
 "preview"; neither has been run on a real Windows PC or Linux desktop beyond the
 2026-10-18 Windows run recorded in AGENTS.md.
 
@@ -368,7 +440,7 @@ Version-stamping caveat, **not fixed**: `apps/builder-mac/Info.plist` still says
 Windows and Linux are 0.1.3. Edit those two values to match the release by hand
 before running the script. Also note `--publish` pushes straight to `main` and
 deploys from whatever checkout you ran it in: run it from `~/flagship-deploy`
-after step 6 so the deploy is the same commit.
+after step 7 so the deploy is the same commit.
 
 Check: `curl -sI https://flagshipserver.com/download/mac | head -3` redirects
 to `/downloads/FlagshipStudio.dmg`; open the DMG on a second Mac and
@@ -377,7 +449,7 @@ Gatekeeper accepts it (`spctl -a -vv /Applications/Flagship\ Studio.app`).
 Rollback: `git revert` the DMG commit and redeploy `.com`; for Windows/Linux
 point `INSTALLER_DOWNLOADS` back at `studio-v0.1.3` and redeploy.
 
-## 10. iOS and Android store builds
+## 11. iOS and Android store builds
 
 Build these from `main` after steps 3 and 6 (the clients talk to the deployed
 `.com`). The store builds carry fixes the earlier builds lack; **the Android
@@ -428,9 +500,9 @@ Check: after review, install from the store on a clean phone, sign in as the
 review login, and unlock an auto-unlock server.
 
 Rollback: a store build cannot be recalled; halt the rollout in the console and
-ship a higher version. The notice mechanism (step 11) can ask people to update.
+ship a higher version. The notice mechanism (step 12) can ask people to update.
 
-## 11. The pre-GA scrub, the reap and the maintenance notice
+## 12. The pre-GA scrub, the reap and the maintenance notice
 
 Order matters; read `docs/runbooks/pre-ga-scrub.md` end to end first. Summary,
 with the go/no-go points:
@@ -462,7 +534,7 @@ with the go/no-go points:
 4. Verify with the runbook's step 4 (the four orphan counts are 0; the review
    login signs in).
 5. **Reap** DNS and demo servers of removed accounts (needs the `.com` deploy of
-   step 6, which contains the reap rules): gym leftovers
+   step 7, which contains the reap rules): gym leftovers
    (`npx tsx tools/live-e2e/sweep-cli.ts`, then `--destroy`), then prod:
 
    ```sh
@@ -470,6 +542,7 @@ with the go/no-go points:
    node scripts/reap-orphans.mjs --apply --plan ~/pre-ga-reap-plan.json  # types "delete N records and M servers"
    ```
 
+   Run `POST /api/admin/republish-server-dns` first (step 8, "finish the wildcard rollout"), so no account loses per-box records before it has the wildcard.
    Re-run the dry run: 0 orphaned records and servers, zone count under the cap.
    If the wildcard-DNS change is deployed, the same pass also lists the
    superseded per-box records (`docs/wildcard-dns.md` section 7).
@@ -496,20 +569,6 @@ The reap deletes DNS records and demo servers that can be recreated by
 `POST /api/admin/republish-server-dns`; the plan file and its `.log.jsonl`
 list exactly what went.
 
-## 12. Gym refresh and a last live pass
-
-Bring the gym to the same commit and run the live gym once against it:
-
-```sh
-bash scripts/gym-refresh.sh               # rebases `gym` onto main, applies gym D1 migrations, secret parity, deploys the gym Worker and Fly app
-npx tsx tools/live-e2e/shared-run.ts      # the live fleet run (about 11 minutes, 3 boxes), torn down through /api/gym/teardown
-```
-
-Run it only when no other live run is in progress. The gym refuses to start if
-its fleet will not fit the DNS zone. Check: `curl -s https://gym.flagshipserver.com/api/health`
-and `curl -s https://flagship-services-gym.fly.dev:8443/api/health` are 200.
-Rollback: the gym is disposable; `scripts/gym-refresh.sh` again, or leave it.
-
 ## 13. What should block GA
 
 (From the release-candidate pass; the owner decides.)
@@ -519,11 +578,11 @@ Rollback: the gym is disposable; `scripts/gym-refresh.sh` again, or leave it.
   `main` (including the Android lease fix); the current Play build does not
   create servers on a real account (`add-server-admin-only`) until new builds
   and `.com` are in step.
-- The arm64 appliance has no green build on `main` (step 8): Apple Silicon Mac
+- The arm64 appliance has no green build on `main` (step 9): Apple Silicon Mac
   hosting and arm64 Linux/Windows users would get an out-of-date image.
 - Windows and Linux Studio have not run end to end on real hardware; ship them
   as preview (already the plan).
-- Mac Studio reports version 0.1.0 (step 9).
+- Mac Studio reports version 0.1.0 (step 10).
 - Not run by anyone yet, per AGENTS.md: the whole server restore, docker
   save/load and pg_dump/restore against a real box and the live gym groups
   `quota`, `share` (account-key accept) and the group list newer than the last
