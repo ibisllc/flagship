@@ -290,6 +290,22 @@ of the last check here: **not yet checked**.
   Postgres 18 and real loop images on a Debian 13 VM (CI runs both). Needs
   an endorsed box release; the webapp (shell v132) and Android show `storage` and the alert, iOS doesn't yet;
   live gym group `quota` not run yet.
+- **Data sovereignty, phase 1 (2026-10-18, `docs/data-sovereignty.md`).**
+  Owner promise: users keep their data even if `.com` is forced to kill their
+  account. Built on `main`: a "rescue session" (`/api/rescue/*`, hello signed
+  by the box STK and bound to its certificate hash, session order signed by
+  the pinned admin root, an admin device's own grant, or the IRK where none
+  is pinned; no call to `.com`, works with an expired certificate); direct
+  intake of root-signed device revocations and admin-root rotations on the box;
+  an mDNS announcement under an opaque id; the box now serves its owner on the
+  LAN after a reboot with no relay or a stale certificate; every export raises
+  an Activity line plus a `backup-exported` alert and a content-free wake;
+  `.flagshipkey` v2 carries the admin root and server list. Findings that need
+  owner decisions: the box cannot unlock after a reboot without `.com` (and the
+  GA burn-passphrase removal deletes the last offline path), restoring another
+  account's apps keeps the old creator (cross-creator pull state), and the
+  re-pair watcher trusts unsigned `.com` JSON. Needs an endorsed box release;
+  phone screens, gym scenarios and the live-gym lane are phase 2.
 - **Live gym on UpCloud, all green (2026-10-17).** `bash scripts/gym-refresh.sh`
   (rebases `gym` onto main, gym D1 migrations, secret parity, deploys the gym
   Worker and Fly app) is gym:weekly's phase 0; the live half is
