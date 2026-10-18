@@ -4,13 +4,12 @@
 // sheets, menus and dialogs behind it are closed first (LocalAppLocked) and the
 // app under it is hidden from TalkBack.
 //
-// The first button saves the person's servers' data (the rescue, which needs
-// nothing from `.com` and so works with the account gone); it is disabled with
-// "Coming soon" until Android has the rescue, and "Save my data first" opens the
-// account-key backup meanwhile. The two ways out remove this device's copy of
-// the account, and both show a warning in place of the buttons first while the
-// device holds an admin key or a server session, because removing them ends the
-// rescue. Only "Remove anyway" removes.
+// A line says a saved backup of the servers can be restored into a new
+// account. The two ways out remove this device's copy of the account, and both
+// show a warning in place of the buttons first while the device holds an admin
+// key or a server session, because removing them removes the key that signs in
+// to the servers. "Save my account key first" opens the account-key export;
+// only "Remove anyway" removes.
 
 package com.flagshipserver.app.ui.shell
 
@@ -66,7 +65,6 @@ import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
-import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.screens.KeyfileExportScreen
 import com.flagshipserver.app.ui.theme.FS
 
@@ -98,7 +96,7 @@ fun AccountGoneScreen(name: String) {
         val nav = rememberNavController()
         NavHost(navController = nav, startDestination = "gone") {
             composable("gone") { GoneCard(name, nav) }
-            // Until the rescue lands here, "Save my data first" opens the account-key backup.
+            // "Save my account key first" opens the account-key export.
             composable("keyfile-export") { KeyfileExportScreen(nav) }
         }
     }
@@ -151,22 +149,13 @@ private fun GoneCard(name: String, nav: NavController) {
             )
             val thenCreate = warning
             if (thenCreate == null) {
-                // The rescue is not built on Android yet: the button leads, disabled, and says so.
-                FSPrimaryButton(
-                    label = AccountGoneCopy.SAVE,
-                    onClick = { },
-                    enabled = false,
-                    block = true,
-                    large = true,
-                    modifier = Modifier.testTag("account-gone-save"),
-                )
                 Text(
-                    AccountGoneCopy.COMING_SOON,
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
-                    modifier = Modifier.testTag("account-gone-coming-soon"),
+                    AccountGoneCopy.RESTORE_HINT,
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
+                    modifier = Modifier.testTag("account-gone-restore-hint"),
                 )
-                FSSecondaryButton(
+                FSPrimaryButton(
                     label = AccountGoneCopy.CREATE,
                     onClick = { if (needsWarning) warning = true else leave(true) },
                     block = true,

@@ -1,6 +1,6 @@
 // GYM Android: the "This account was removed" screen (docs/account-gone.md) and
-// the admin-key confirmations (owner, 2026-10-18): the rescue must stay possible
-// while the device holds its keys, so removing them asks first. The mock `.com`
+// the admin-key confirmations (owner, 2026-10-18): the admin key signs this
+// device in to the servers, so removing it asks first. The mock `.com`
 // has no OkHttp in the way, so a scenario flips the state the interceptor sets
 // (AccountGone.markGone); the interceptor itself is covered by AccountGoneTest.
 // NO BACKEND.
@@ -11,7 +11,6 @@ import com.flagshipserver.app.core.AccountGone
 import com.flagshipserver.app.core.AdminKeyWarning
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithTag
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -35,10 +34,9 @@ class GymAccountGoneTest : GymBase() {
         assertEquals("This account was removed", textOfTag("account-gone-title"))
         assertEquals("This account no longer exists on Flagship. This can happen after a reset.", textOfTag("account-gone-body"))
         assertEquals("Account: smoketest", textOfTag("account-gone-name"))
-        // Save my servers' data leads (disabled until the rescue exists), then Create, then the quiet Remove.
-        assertEquals("Save my servers' data", textOfTag("account-gone-save"))
-        composeRule.onNodeWithTag("account-gone-save").assertIsNotEnabled()
-        assertEquals("Coming soon", textOfTag("account-gone-coming-soon"))
+        // The restore hint, then Create, then the quiet Remove; no rescue button.
+        assertEquals("If you saved a backup of your servers, you can restore it into a new account.", textOfTag("account-gone-restore-hint"))
+        assertEquals("no rescue button", 0, tagCount("account-gone-save"))
         assertEquals("Create a new account", textOfTag("account-gone-create"))
         assertEquals("Remove it from this device", textOfTag("account-gone-remove"))
         // The error toasts stay quiet while the screen is up.
@@ -88,7 +86,7 @@ class GymAccountGoneTest : GymBase() {
         waitUntilExists("account-gone-warning-text")
         assertEquals("Remove this account from this device?", textOfTag("account-gone-warning-title"))
         assertEquals(AdminKeyWarning.REMOVE_MESSAGE, textOfTag("account-gone-warning-text"))
-        assertEquals("Save my data first", textOfTag("account-gone-save-first"))
+        assertEquals("Save my account key first", textOfTag("account-gone-save-first"))
         assertEquals("Remove anyway", textOfTag("account-gone-remove-anyway"))
         assertEquals("the warning stands in place of the buttons", 0, tagCount("account-gone-remove"))
         gymShot("remove-asks-first")
@@ -131,10 +129,10 @@ class GymAccountGoneTest : GymBase() {
         tap("settings-sign-out-btn")
         waitUntilExists("settings-sign-out-admin-warning")
         assertEquals(AdminKeyWarning.SIGN_OUT_NOT_BACKED_UP, textOfTag("settings-sign-out-admin-warning"))
-        assertEquals("Save my data first", textOfTag("settings-sign-out-save-first"))
+        assertEquals("Save my account key first", textOfTag("settings-sign-out-save-first"))
         assertEquals("Sign out anyway", textOfTag("settings-sign-out-confirm"))
         gymShot("sign-out-admin-warning")
-        // Save my data first opens the account-key backup and removes nothing.
+        // Save my account key first opens the account-key backup and removes nothing.
         tap("settings-sign-out-save-first")
         waitUntilExistsDesc("keyfile-export", 15_000)
         androidx.test.espresso.Espresso.pressBack()
@@ -160,7 +158,7 @@ class GymAccountGoneTest : GymBase() {
         waitText(AdminKeyWarning.REMOVE_TITLE)
         waitText(AdminKeyWarning.REMOVE_MESSAGE)
         assertEquals("Remove anyway", textOfTag("settings-remove-confirm", unmerged = true))
-        assertEquals("Save my data first", textOfTag("settings-remove-save-first"))
+        assertEquals("Save my account key first", textOfTag("settings-remove-save-first"))
         gymShot("remove-device-admin-warning")
         tap("settings-remove-save-first")
         waitUntilExistsDesc("keyfile-export", 15_000)

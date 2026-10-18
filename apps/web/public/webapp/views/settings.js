@@ -50,7 +50,7 @@ import { enterAccountDelete, removeDemoFromBrowser } from "./account-delete.js";
 import { getActiveProfile } from "../lib/profiles.js";
 import { isDemoProfile } from "../lib/demoAccount.js";
 import { get as profileGet } from "../lib/profilesStore.js";
-import { holdsRescueKey, removeWarning, saveDataFirst, signOutWarning } from "../lib/adminKeyWarning.js";
+import { holdsAdminKey, removeWarning, saveKeyFirst, signOutWarning } from "../lib/adminKeyWarning.js";
 
 registerView("view-settings");
 
@@ -404,14 +404,14 @@ async function runEnablePush() {
  *  into recovery enrollment instead, and signOutTier itself re-refuses
  *  the wipe (fail-closed) even if this UI gate is bypassed. */
 /** This device holds the account's admin key (in memory or sealed on disk). */
-function holdsAdminKey() {
-  return holdsRescueKey({ session: getSession(), hasAdminRootRecord: () => hasAdminRoot() });
+function deviceHoldsAdminKey() {
+  return holdsAdminKey({ session: getSession(), hasAdminRootRecord: () => hasAdminRoot() });
 }
 
 /**
- * On an admin device, say in plain words that this removes the admin key that
- * can still save the servers' data, and offer to save first (docs/account-
- * gone.md). Resolves true only when the person chose to go on.
+ * On an admin device, say in plain words that this removes the admin key you
+ * sign in to your servers with, and offer to save a backup first (docs/
+ * account-gone.md). Resolves true only when the person chose to go on.
  * @param {"sign-out" | "remove"} kind
  */
 async function confirmAdminKeyLoss(kind) {
@@ -419,7 +419,7 @@ async function confirmAdminKeyLoss(kind) {
   const { inlineChoice } = await import("../lib/modal.js");
   const picked = await inlineChoice(warning);
   if (picked === "save") {
-    await saveDataFirst({
+    await saveKeyFirst({
       session: getSession(),
       backupKey: async () => {
         const { runKeyfileExportCeremony } = await import("./recovery.js");
@@ -444,7 +444,7 @@ async function handleSignOut() {
     enrolled = false;
   }
   const copy = signOutConfirmCopy(enrolled);
-  if (!copy.blocked && (await holdsAdminKey())) {
+  if (!copy.blocked && (await deviceHoldsAdminKey())) {
     // The admin key is the way out if .com ever stops recognising the account.
     if (!(await confirmAdminKeyLoss("sign-out"))) return;
   } else {
@@ -571,7 +571,7 @@ export function initSettingsView() {
       return;
     }
     void (async () => {
-      if ((await holdsAdminKey()) && !(await confirmAdminKeyLoss("remove"))) return;
+      if ((await deviceHoldsAdminKey()) && !(await confirmAdminKeyLoss("remove"))) return;
       handleReset();
     })().catch((e) => {
       console.error("remove this device failed", e);

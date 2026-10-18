@@ -22,8 +22,8 @@ export const WEB_GONE: readonly Scenario[] = [
       assertions: [
         { describe: "Title", handle: "#account-gone-title", expect: "text", text: "This account was removed" },
         { describe: "Body", handle: "[data-testid=account-gone-body]", expect: "text", text: "This account no longer exists on Flagship. This can happen after a reset." },
-        { describe: "Save leads", handle: "[data-testid=account-gone-save]", expect: "text", text: "Save my servers' data" },
-        { describe: "Coming soon until the rescue flow lands", handle: "[data-testid=account-gone-save-soon]", expect: "text", text: "Coming soon" },
+        { describe: "Restore hint", handle: "[data-testid=account-gone-restore-hint]", expect: "text", text: "If you saved a backup of your servers, you can restore it into a new account." },
+        { describe: "No rescue button", handle: "[data-testid=account-gone-save]", expect: "absent" },
         { describe: "Create", handle: "[data-testid=account-gone-create]", expect: "text", text: "Create a new account" },
         { describe: "Remove", handle: "[data-testid=account-gone-remove]", expect: "text", text: "Remove it from this browser" },
       ],
@@ -47,7 +47,7 @@ export const WEB_GONE: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-account-gone-remove",
-    "Remove it from this browser, on a device that holds an admin key, first asks (Save my data first / Remove anyway); Save my data first opens the key backup and removes nothing; Remove anyway forgets the stored account (keys, profile, caches), returns to the welcome view, and a reload no longer asks to unlock it.",
+    "Remove it from this browser, on a device that holds an admin key, first asks (Save my account key first / Remove anyway); Save my account key first opens the key backup and removes nothing; Remove anyway forgets the stored account (keys, profile, caches), returns to the welcome view, and a reload no longer asks to unlock it.",
     "gym account-gone Remove it from this browser forgets the account and returns to the welcome view",
     {
       steps: [

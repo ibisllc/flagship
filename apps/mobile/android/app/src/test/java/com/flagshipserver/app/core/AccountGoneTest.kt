@@ -120,25 +120,24 @@ class AccountGoneTest {
     @Test fun theWordsAreTheOwnersAndMirrorTheDoc() {
         assertEquals("This account was removed", AccountGoneCopy.TITLE)
         assertEquals("This account no longer exists on Flagship. This can happen after a reset.", AccountGoneCopy.BODY)
-        assertEquals("Save my servers' data", AccountGoneCopy.SAVE)
-        assertEquals("Coming soon", AccountGoneCopy.COMING_SOON)
+        assertEquals("If you saved a backup of your servers, you can restore it into a new account.", AccountGoneCopy.RESTORE_HINT)
         assertEquals("Create a new account", AccountGoneCopy.CREATE)
         assertEquals("Remove it from this device", AccountGoneCopy.REMOVE)
         assertEquals("Account: alice", AccountGoneCopy.account("alice"))
         assertEquals("Remove this account from this device?", AdminKeyWarning.REMOVE_TITLE)
         assertEquals(
-            "This also removes this device's admin key. Without it you can no longer save your servers' data. Save it first, or remove anyway.",
+            "This also removes this device's admin key, which you need to sign in to your servers. Save a backup of your account key first, or remove anyway.",
             AdminKeyWarning.REMOVE_MESSAGE,
         )
-        assertEquals("Save my data first", AdminKeyWarning.SAVE_FIRST)
+        assertEquals("Save my account key first", AdminKeyWarning.SAVE_FIRST)
         assertEquals("Remove anyway", AdminKeyWarning.REMOVE_ANYWAY)
         assertEquals("Sign out?", AdminKeyWarning.SIGN_OUT_TITLE)
         assertEquals(
-            "Signing out removes this device's admin key. Without it you can no longer save your servers' data. Save it first, or sign out anyway.",
+            "Signing out removes this device's admin key. Save a backup of your account key first, or sign out anyway.",
             AdminKeyWarning.SIGN_OUT_NOT_BACKED_UP,
         )
         assertEquals(
-            "Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe: with them you can still save your servers' data.",
+            "Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe.",
             AdminKeyWarning.SIGN_OUT_BACKED_UP,
         )
         assertEquals("Sign out anyway", AdminKeyWarning.SIGN_OUT_ANYWAY)

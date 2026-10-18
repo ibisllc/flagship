@@ -121,7 +121,7 @@ export const WEB_ACCOUNT: readonly Scenario[] = [
   ),
   row(
     "web-total-settings-sign-out-enrolled",
-    "With cloud recovery set up, Sign out isn't greyed; on an admin device it warns that the admin key goes too (Save my data first / Sign out anyway; dismissing keeps the key), and Sign out anyway erases this device's key, lands on Welcome and toasts 'Signed out', sending nothing.",
+    "With cloud recovery set up, Sign out isn't greyed; on an admin device it warns that the admin key goes too (Save my account key first / Sign out anyway; dismissing keeps the key), and Sign out anyway erases this device's key, lands on Welcome and toasts 'Signed out', sending nothing.",
     "gym account sign out with cloud recovery asks first, then erases this device's key",
     [["Sign out → dismiss → Sign out → Sign out anyway.", "#settings-signout"]],
     [{ describe: "Welcome", handle: "#view-bootstrap", expect: "present" }],
@@ -133,9 +133,9 @@ export const WEB_ACCOUNT: readonly Scenario[] = [
   ),
   row(
     "web-total-settings-sign-out-backed-up",
-    "Save my data first in the Sign out warning opens the account-key backup and signs nothing out; once this device has written a key file the warning says to keep that file and its passphrase, with Cancel and Sign out.",
-    "gym account sign out after a key backup says what to keep, and Save my data first signs nothing out",
-    [["Sign out → Save my data first → back up opens → Sign out again.", "#settings-signout"]],
+    "Save my account key first in the Sign out warning opens the account-key backup and signs nothing out; once this device has written a key file the warning says to keep that file and its passphrase, with Cancel and Sign out.",
+    "gym account sign out after a key backup says what to keep, and Save my account key first signs nothing out",
+    [["Sign out → Save my account key first → back up opens → Sign out again.", "#settings-signout"]],
     [{ describe: "Key kept", handle: "#view-settings-tab", expect: "present" }],
     [["signout-confirm-backed-up", "The warning after a key backup."]],
     "D4",

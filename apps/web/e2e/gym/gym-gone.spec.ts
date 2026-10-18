@@ -3,10 +3,10 @@
  * parity/features.json: account-gone): `.com` answers `404 account-not-found`
  * for the signed-in browser's own account, so a full-screen state takes over
  * (every menu and dialog closed, the page behind it inert), nothing keeps
- * asking, no error toast repeats. It leads with Save my servers' data (coming
- * soon until the rescue flow lands), then Create a new account, then a quiet
- * Remove it from this browser; on a device that holds an admin key both of the
- * last two ask first, in plain words (docs/account-gone.md).
+ * asking, no error toast repeats. It says a saved backup can be restored into
+ * a new account, then offers Create a new account and a quiet Remove it from
+ * this browser; on a device that holds an admin key both ask first, in plain
+ * words (docs/account-gone.md).
  */
 
 import { test, expect, type Page } from "@playwright/test";
@@ -51,14 +51,17 @@ test.describe("gym webapp account gone", () => {
     await expect(screen.locator("[data-testid=account-gone-body]")).toHaveText(
       "This account no longer exists on Flagship. This can happen after a reset.",
     );
-    await expect(screen.locator("[data-testid=account-gone-save]")).toHaveText("Save my servers' data");
-    await expect(screen.locator("[data-testid=account-gone-save]")).toBeDisabled();
-    await expect(screen.locator("[data-testid=account-gone-save-soon]")).toHaveText("Coming soon");
+    await expect(screen.locator("[data-testid=account-gone-save]")).toHaveCount(0);
+    await expect(screen.locator("[data-testid=account-gone-save-soon]")).toHaveCount(0);
+    await expect(screen.locator("[data-testid=account-gone-restore-hint]")).toHaveText(
+      "If you saved a backup of your servers, you can restore it into a new account.",
+    );
     await expect(screen.locator("[data-testid=account-gone-create]")).toHaveText("Create a new account");
     await expect(screen.locator("[data-testid=account-gone-remove]")).toHaveText("Remove it from this browser");
     await expect(screen.locator("[data-testid=account-gone-remove]")).toHaveClass(/ghost/);
     const y = async (id: string) => (await screen.locator(`[data-testid=${id}]`).boundingBox())!.y;
-    expect(await y("account-gone-save")).toBeLessThan(await y("account-gone-create"));
+    expect(await y("account-gone-name")).toBeLessThan(await y("account-gone-restore-hint"));
+    expect(await y("account-gone-restore-hint")).toBeLessThan(await y("account-gone-create"));
     expect(await y("account-gone-create")).toBeLessThan(await y("account-gone-remove"));
     await expect(screen.locator("[data-testid=account-gone-name]")).toHaveText("Account: smoketest");
     await shot(page, testInfo, "account-gone");
@@ -109,13 +112,13 @@ test.describe("gym webapp account gone", () => {
     const confirm = page.locator("[data-testid=account-gone-confirm]");
     await expect(confirm).toBeVisible();
     await expect(confirm.locator("[data-testid=account-gone-confirm-text]")).toHaveText(
-      "This also removes this browser's admin key. Without it you can no longer save your servers' data. Save it first, or remove anyway.",
+      "This also removes this device's admin key, which you need to sign in to your servers. Save a backup of your account key first, or remove anyway.",
     );
-    await expect(confirm.locator("[data-testid=account-gone-confirm-save]")).toHaveText("Save my data first");
+    await expect(confirm.locator("[data-testid=account-gone-confirm-save]")).toHaveText("Save my account key first");
     await expect(confirm.locator("[data-testid=account-gone-confirm-anyway]")).toHaveText("Remove anyway");
     await shot(page, testInfo, "account-gone-confirm");
 
-    // Save my data first opens the key backup and removes nothing.
+    // Save my account key first opens the key backup and removes nothing.
     await confirm.locator("[data-testid=account-gone-confirm-save]").click();
     await expect(page.locator(".modal-overlay")).toContainText("ACCOUNT BACKUP");
     await page.locator("[data-cancel]").click();

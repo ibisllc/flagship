@@ -8,9 +8,6 @@
 // (ui/shell/AccountGoneScreen.kt) takes over, and from then on every call that
 // names that account is answered here with the same 404 without touching the
 // network, so no poller keeps asking and no error toast repeats.
-//
-// The rescue ("Save my servers' data") never reads `.com`: this state must
-// neither stop it nor be waited for (docs/data-sovereignty.md section 4.1).
 
 package com.flagshipserver.app.core
 
@@ -123,35 +120,31 @@ class AccountGoneInterceptor : Interceptor {
 object AccountGoneCopy {
     const val TITLE = "This account was removed"
     const val BODY = "This account no longer exists on Flagship. This can happen after a reset."
-    const val SAVE = "Save my servers' data"
-    /** Under the disabled primary button until a build has the rescue (docs/data-sovereignty.md section 4). */
-    const val COMING_SOON = "Coming soon"
+    const val RESTORE_HINT = "If you saved a backup of your servers, you can restore it into a new account."
     const val CREATE = "Create a new account"
     const val REMOVE = "Remove it from this device"
     fun account(name: String) = "Account: $name"
 }
 
 /**
- * The warnings that keep a person from throwing away the admin key: the key on
- * the device is what can still save a server's data after `.com` stopped
- * recognising the account, so removing it (or signing out, which removes it)
- * says so first.
+ * The warnings that keep a person from throwing away the admin key: it is what
+ * signs this device in to their servers, so removing it (or signing out, which
+ * removes it) says so first and offers to save a backup of the account key.
  */
 object AdminKeyWarning {
     const val REMOVE_TITLE = "Remove this account from this device?"
     const val REMOVE_MESSAGE =
-        "This also removes this device's admin key. Without it you can no longer save your servers' data. " +
-            "Save it first, or remove anyway."
-    const val SAVE_FIRST = "Save my data first"
+        "This also removes this device's admin key, which you need to sign in to your servers. " +
+            "Save a backup of your account key first, or remove anyway."
+    const val SAVE_FIRST = "Save my account key first"
     const val REMOVE_ANYWAY = "Remove anyway"
 
     const val SIGN_OUT_TITLE = "Sign out?"
     const val SIGN_OUT_NOT_BACKED_UP =
-        "Signing out removes this device's admin key. Without it you can no longer save your servers' data. " +
-            "Save it first, or sign out anyway."
+        "Signing out removes this device's admin key. Save a backup of your account key first, or sign out anyway."
     const val SIGN_OUT_BACKED_UP =
         "Signing out removes this device's admin key. You backed up your account key, so keep that file and " +
-            "its passphrase safe: with them you can still save your servers' data."
+            "its passphrase safe."
     const val SIGN_OUT_ANYWAY = "Sign out anyway"
 
     /** Who is warned before a removal: a device that holds the admin root or a session for any server. */
@@ -159,7 +152,7 @@ object AdminKeyWarning {
 
     /** What Sign out says on an admin device; null on any other. */
     sealed interface SignOutWarning {
-        /** No account-key file was written: Save my data first / Sign out anyway. */
+        /** No account-key file was written: Save my account key first / Sign out anyway. */
         data object NotBackedUp : SignOutWarning
 
         /** A key file was written on this device: Cancel / Sign out, with the reminder to keep it. */

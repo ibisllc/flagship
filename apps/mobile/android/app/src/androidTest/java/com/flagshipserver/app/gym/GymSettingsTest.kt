@@ -84,7 +84,7 @@ class GymSettingsTest : GymBase() {
     fun removeDeviceAndDeleteAccountStopAtCancel() {
         settings(admin = true)
         // An admin device holds the key that can still save its servers' data: the dialog says so and
-        // has no Cancel (Save my data first opens the key backup; only Remove anyway removes).
+        // has no Cancel (Save my account key first opens the key backup; only Remove anyway removes).
         tap("settings-remove-device-btn")
         waitText(com.flagshipserver.app.core.AdminKeyWarning.REMOVE_TITLE)
         tap("settings-remove-save-first")

@@ -7,7 +7,7 @@ plain words, that its account is gone. Typed-name sign-in already says "No
 Flagship account by that name" (`account/resolve`, `kind: "unknown"`); this is
 the other half, for a device that never types a name.
 
-Web is done (webapp shell v145). iOS and Android implement it from this
+Web is done (webapp shell v145; copy revised in v147). iOS and Android implement it from this
 document (parity row `account-gone`).
 
 ## What `.com` answers
@@ -96,18 +96,15 @@ account read token is required"), so a client could only show "status paused";
    call that names that account is answered locally with the same 404 and sends
    nothing. No retry, no backoff storm. Error toasts and alerts for failed
    calls stay quiet while the screen is up.
-4. The screen leads with saving the data, because the admin key on the
-   device can still save a server's data after `.com` stopped recognising the
-   account (a hostile `.com` can cut the passkey recovery route and can say the
-   account does not exist; it cannot take the key from the device). In order:
+4. The screen tells the person what happened and what they can do. The launch
+   promise is only that data can move to another account through the existing
+   backup options (a phone copy, one `.flagship` file with its passcode, Add or
+   restore a server); there is no separate rescue flow. In order:
    - Title: `This account was removed`
    - Body: `This account no longer exists on Flagship. This can happen after a reset.`
    - Small line with the account name: `Account: <name>`
-   - Primary button `Save my servers' data`: runs the rescue flow
-     (`docs/data-sovereignty.md`, "Rescue my data") once a build has it. Until
-     then it is disabled with the line `Coming soon` under it (web: a build
-     registers its flow with `registerRescueFlow` and the button enables).
-   - Secondary button `Create a new account`: removes this device's copy
+   - Line: `If you saved a backup of your servers, you can restore it into a new account.`
+   - Primary button `Create a new account`: removes this device's copy
      (below), then opens the create flow.
    - Quiet text action `Remove it from this browser` (phones: `Remove it from
      this device`): removes this device's copy, then the welcome view. If
@@ -145,13 +142,13 @@ listed). One warning copy for removing the account's keys, one for Sign out.
 
 | Where | Text |
 |---|---|
-| Account gone, primary button | `Save my servers' data` (disabled, with the line `Coming soon`, until the rescue flow ships) |
-| Account gone, secondary button | `Create a new account` |
+| Account gone, line under the account name | `If you saved a backup of your servers, you can restore it into a new account.` |
+| Account gone, primary button | `Create a new account` |
 | Account gone, quiet text action | `Remove it from this browser` (phones: `Remove it from this device`) |
-| Removal warning (Create a new account, Remove it from this browser, Settings Remove this device) | title `Remove this account from this browser?` (phones: `from this device?`), message `This also removes this browser's admin key. Without it you can no longer save your servers' data. Save it first, or remove anyway.` (phones: `this device's admin key`) |
-| Removal warning buttons | `Save my data first`, `Remove anyway` |
-| Settings Sign out on an admin device, key not yet backed up | title `Sign out?`, message `Signing out removes this device's admin key. Without it you can no longer save your servers' data. Save it first, or sign out anyway.`, buttons `Save my data first`, `Sign out anyway` |
-| Settings Sign out, once an account-key file was written | title `Sign out?`, message `Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe: with them you can still save your servers' data.`, buttons `Cancel`, `Sign out` |
+| Removal warning (Create a new account, Remove it from this browser, Settings Remove this device) | title `Remove this account from this browser?` (phones: `from this device?`), message `This also removes this device's admin key, which you need to sign in to your servers. Save a backup of your account key first, or remove anyway.` (same words on every platform) |
+| Removal warning buttons | `Save my account key first` (opens the existing account-key export), `Remove anyway` |
+| Settings Sign out on an admin device, key not yet backed up | title `Sign out?`, message `Signing out removes this device's admin key. Save a backup of your account key first, or sign out anyway.`, buttons `Save my account key first`, `Sign out anyway` |
+| Settings Sign out, once an account-key file was written | title `Sign out?`, message `Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe.`, buttons `Cancel`, `Sign out` |
 | Unlock needed to save | `Unlock first to save your key.` |
 
 Rules:
@@ -162,9 +159,8 @@ Rules:
   themselves as before.
 - Dismissing the dialog (Escape, a tap outside, system back) does nothing: it
   is never a choice. Only the named buttons act.
-- `Save my data first` runs the rescue flow when the build has one; until then
-  it opens the account-key backup (web: the `.flagshipkey` export ceremony), or
-  says `Unlock first to save your key.` when the key is locked. It never
+- `Save my account key first` opens the account-key backup (web: the
+  `.flagshipkey` export ceremony), or says `Unlock first to save your key.` when the key is locked. It never
   removes anything, and the warning asks again afterwards.
 - Backed-up state: web stores `keyBackupAt` (per profile) when the key file is
   written (`views/recovery.js`). Native uses its existing backup-key state; if
@@ -181,7 +177,7 @@ Rules:
   put the check there, publish the state on the app model, and stop the
   `liveSync`/status tasks from it. The Release build has no mock clients, so
   the mock-gym scenario goes behind the same `#if DEBUG` seam as the others.
-- Android (built 2026-10-18): `core/AccountGone.kt` (state, an OkHttp interceptor installed second on the shared client after the update lock's gate, the words), `ui/shell/AccountGoneScreen.kt` (the overlay; the warning stands in place of the buttons), the warning in Settings Remove this device and Sign out, and `KeyBackupStore` for the key-file state. `Save my servers' data` is disabled (`Coming soon`) until the rescue exists on Android; `Save my data first` opens the account-key export meanwhile. Gym `GymAccountGoneTest`, unit `AccountGoneTest`.
+- Android (built 2026-10-18): `core/AccountGone.kt` (state, an OkHttp interceptor installed second on the shared client after the update lock's gate, the words), `ui/shell/AccountGoneScreen.kt` (the overlay; the warning stands in place of the buttons), the warning in Settings Remove this device and Sign out, and `KeyBackupStore` for the key-file state. `Save my account key first` opens the account-key export. Gym `GymAccountGoneTest`, unit `AccountGoneTest`.
 - Android: the same in the shared HTTP client; the state lives in the app
   scope; stop the polling coroutines; also clear the Keystore alias and the
   encrypted prefs.

@@ -14,7 +14,7 @@ const PKG = "com.flagshipserver.app.gym";
 export const ANDROID_GONE: readonly Scenario[] = [
   androidTotal(
     "android-total-account-gone-screen",
-    "When .com answers 404 account-not-found for the signed-in phone's own account, a full-screen This account was removed takes over: every menu closed, the app behind it inaccessible, Save my servers' data first (disabled, Coming soon, until the rescue exists), then Create a new account, then a quiet Remove it from this device.",
+    "When .com answers 404 account-not-found for the signed-in phone's own account, a full-screen This account was removed takes over: every menu closed, the app behind it inaccessible, a line saying a saved backup can be restored into a new account, then Create a new account, then a quiet Remove it from this device.",
     `${PKG}.GymAccountGoneTest#theScreenTakesOverAndTheAppBehindItGoesQuiet`,
     {
       steps: [
@@ -23,7 +23,8 @@ export const ANDROID_GONE: readonly Scenario[] = [
       ],
       assertions: [
         { describe: "Title", handle: "account-gone-title", expect: "text", text: "This account was removed" },
-        { describe: "Coming soon", handle: "account-gone-coming-soon", expect: "text", text: "Coming soon" },
+        { describe: "Restore hint", handle: "account-gone-restore-hint", expect: "text", text: "If you saved a backup of your servers, you can restore it into a new account." },
+        { describe: "No rescue button", handle: "account-gone-save", expect: "absent" },
         { describe: "Create", handle: "account-gone-create", expect: "text", text: "Create a new account" },
         { describe: "Remove", handle: "account-gone-remove", expect: "text", text: "Remove it from this device" },
         { describe: "Home is inaccessible", handle: "home-title", expect: "absent" },
@@ -63,7 +64,7 @@ export const ANDROID_GONE: readonly Scenario[] = [
   ),
   androidTotal(
     "android-total-account-gone-remove-admin-asks",
-    "On an admin device, Remove it from this device shows, in place of the buttons, a warning that it also removes the admin key, with Save my data first (the key backup) and Remove anyway.",
+    "On an admin device, Remove it from this device shows, in place of the buttons, a warning that it also removes the admin key, with Save my account key first (the key backup) and Remove anyway.",
     `${PKG}.GymAccountGoneTest#removingFromAnAdminDeviceWarnsInPlaceOfTheButtonsAndSaveMyDataFirstOpensTheKeyBackup`,
     {
       steps: [
@@ -113,7 +114,7 @@ export const ANDROID_GONE: readonly Scenario[] = [
   ),
   androidTotal(
     "android-total-remove-device-admin-warning",
-    "Remove this device in Settings on an admin device shows the same warning, with Save my data first and Remove anyway.",
+    "Remove this device in Settings on an admin device shows the same warning, with Save my account key first and Remove anyway.",
     `${PKG}.GymAccountGoneTest#removeThisDeviceOnAnAdminDeviceWarnsFirst`,
     {
       steps: [

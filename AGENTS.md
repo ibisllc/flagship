@@ -264,10 +264,10 @@ of the last check here: **not yet checked**.
   directory/profile, server-order, orders, lists); a real or demo account is
   unchanged. The webapp (shell v145) shows a full-screen "This account was
   removed" (Create a new account / Remove it from this browser), stops polling
-  and toasts, and forgets the stored account. It leads with "Save my servers'
-  data" (coming soon until the rescue flow lands) and warns before anything
-  removes the device's admin key (also Settings Sign out and Remove this
-  device); the 404 is metered on the `account-resolve` budget and the
+  and toasts, and forgets the stored account. It says a saved backup can be
+  restored into a new account, and warns before anything removes the device's
+  admin key (also Settings Sign out and Remove this device; "Save my account
+  key first" opens the key export); the 404 is metered on the `account-resolve` budget and the
   read-token mint has its own. Gym `gym-gone.spec.ts`, parity row
   `account-gone`. Needs a `.com` deploy (and the shell with it); iOS and
   Android implement the same contract next (docs "Native notes").

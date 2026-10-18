@@ -163,7 +163,7 @@ export function inlineConfirm({
  * Inline choice: title/message and several named buttons. Resolves to the
  * chosen button's `id`, or `null` when dismissed (Escape, a tap outside), so
  * dismissing never counts as picking one. `choices` run left to right, e.g.
- * `[{ id: "save", label: "Save my data first", secondary: true },
+ * `[{ id: "save", label: "Save my account key first", secondary: true },
  *   { id: "go", label: "Remove anyway", danger: true }]`.
  */
 export function inlineChoice({ title, message, choices = [] } = {}) {

@@ -185,9 +185,9 @@ test.describe("gym webapp account", () => {
     await signOut.click();
     await expect(page.locator(".modal-title")).toHaveText("Sign out?");
     await expect(page.locator(".modal-message")).toHaveText(
-      "Signing out removes this device's admin key. Without it you can no longer save your servers' data. Save it first, or sign out anyway.",
+      "Signing out removes this device's admin key. Save a backup of your account key first, or sign out anyway.",
     );
-    await expect(page.locator("[data-modal-choice=save]")).toHaveText("Save my data first");
+    await expect(page.locator("[data-modal-choice=save]")).toHaveText("Save my account key first");
     await expect(page.locator("[data-modal-choice=go]")).toHaveText("Sign out anyway");
     await shot(page, testInfo, "signout-confirm");
     await page.keyboard.press("Escape");
@@ -205,7 +205,7 @@ test.describe("gym webapp account", () => {
     await shot(page, testInfo, "signed-out");
   });
 
-  test("gym account sign out after a key backup says what to keep, and Save my data first signs nothing out", async ({ page }, testInfo) => {
+  test("gym account sign out after a key backup says what to keep, and Save my account key first signs nothing out", async ({ page }, testInfo) => {
     await reachHome(page, { kind: "admin", servers: [HOME] });
     const m = await mock(page);
     baseAccount(m);
@@ -214,7 +214,7 @@ test.describe("gym webapp account", () => {
     const signOut = page.locator("#settings-signout");
     await expect(signOut).not.toHaveClass(/gated/, { timeout: 10_000 });
 
-    // Save my data first opens the account-key backup; nothing is signed out.
+    // Save my account key first opens the account-key backup; nothing is signed out.
     await signOut.click();
     await page.click("[data-modal-choice=save]");
     await expect(page.locator(".modal-overlay")).toContainText("ACCOUNT BACKUP");
@@ -225,7 +225,7 @@ test.describe("gym webapp account", () => {
     await page.evaluate(async () => (await import("/lib/profilesStore.js")).set("keyBackupAt", Date.now()));
     await signOut.click();
     await expect(page.locator(".modal-message")).toHaveText(
-      "Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe: with them you can still save your servers' data.",
+      "Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe.",
     );
     await expect(page.locator("[data-modal-choice=cancel]")).toHaveText("Cancel");
     await expect(page.locator("[data-modal-choice=go]")).toHaveText("Sign out");
@@ -246,7 +246,7 @@ test.describe("gym webapp account", () => {
     // The admin key goes too: asked first, in plain words.
     await expect(page.locator(".modal-title")).toHaveText("Remove this account from this browser?");
     await expect(page.locator(".modal-message")).toHaveText(
-      "This also removes this browser's admin key. Without it you can no longer save your servers' data. Save it first, or remove anyway.",
+      "This also removes this device's admin key, which you need to sign in to your servers. Save a backup of your account key first, or remove anyway.",
     );
     await page.click("[data-modal-choice=go]");
     await expect(page.locator(".modal-title")).toHaveText("Reset this device?");
