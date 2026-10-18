@@ -1,137 +1,160 @@
-# D1 restore from R2 backup
+# D1 backup and restore
 
-The Worker dumps D1 → R2 every 6h (see `apps/com/src/scheduled.ts`). This
-runbook turns one of those dumps back into a live D1 database.
+The production database is `flagship-state` (D1). Two things protect it:
 
-## What's on disk
+1. **D1 Time Travel**, Cloudflare's own point-in-time restore: on the Workers Free
+   plan 7 days back, on Paid 30 (Cloudflare docs, "D1 Time Travel": available on
+   Free, nothing to enable, production backend only). Use it first for "we ran a bad
+   statement an hour ago".
+2. **The encrypted daily export** in R2, for everything Time Travel cannot do:
+   older than 7 days, a lost or deleted database, a different account.
+
+## What the backup is
+
+`.github/workflows/d1-backup.yml` runs `scripts/d1-backup.sh` every day at 03:17 UTC
+(and on demand: Actions > D1 backup > Run workflow):
 
 ```
-r2://flagship-backups/
-   d1/hourly/YYYY-MM-DD-HH.jsonl.gz   pruned after 30 days
-   d1/monthly/YYYY-MM.jsonl.gz        kept indefinitely
+wrangler d1 export flagship-state --remote      (the platform dumps; no Worker CPU)
+  -> refuse a dump with fewer than 60 CREATE TABLEs or no rows
+  -> gpg --encrypt to security@flagshipserver.com (fingerprint pinned in the script)
+  -> r2://flagship-d1-backups/d1/daily/flagship-state-<UTC stamp>.sql.gpg
+  -> read it back and compare SHA-256
+  -> r2://flagship-d1-backups/latest.json    {takenAt, key, bytes, sha256, tables, recipient}
 ```
 
-Each file is gzipped JSON Lines. One line per record. Three record
-shapes:
+The first run of each month also copies the file to `d1/monthly/YYYY-MM.sql.gpg`.
+A second schedule (every 6 hours) fetches `latest.json` and **fails the workflow when
+`takenAt` is more than 36 hours old** or the file is missing; GitHub emails the owner a
+failed scheduled run. That check also catches the workflow being disabled (GitHub
+turns off scheduled workflows in a repo with no activity for 60 days).
 
-```jsonl
-{"type":"meta","tookAt":"2026-05-11T06:00:00.000Z","cron":"0 */6 * * *"}
-{"type":"table","name":"usernames"}
-{"type":"row","table":"usernames","data":{"username":"harry","irk_pub_hex":"...","claimed_at":1747000000000}}
-{"type":"table","name":"servers"}
-{"type":"row","table":"servers","data":{...}}
-...
-```
+Why it is not a Worker cron any more: the old one made one D1 call per table (89) and
+spent about 45 ms of CPU. The Workers Free plan allows 50 subrequests and 10 ms, so it
+never finished (`docs/runbooks/workers-cpu-budget.md` "Crons").
 
-A `meta` row opens the file. Then for every dumped table, one `table`
-header row followed by zero-or-more `row` rows.
+Why gpg to the security@ key and not age: the public key is already in the repo
+(`apps/web/public/.well-known/pgp-key.txt`, fingerprint
+`D96D 675D B03E 3F3B BC88 7030 2308 936D 2154 96D0`) and its private half exists only
+on the owner's two YubiKeys, so there is no new key to generate, store or lose, and
+nothing in GitHub or R2 can read a backup. The cost is that a restore needs a YubiKey
+and `gpg` (the encryption subkey, `93E72BB8872A57D9`, is on the cards). The key expires
+2028-10-07; renew it before then and update `D1_BACKUP_FPR` if the fingerprint changes.
 
-## Step 1 — pull the dump
+The plaintext SQL exists only in the runner's temp directory for the length of the
+run.
+
+### One-time setup (the owner; steps are in `final-deploy.md` step 1b)
 
 ```sh
-# List available backups
-npx wrangler r2 object list flagship-backups --prefix d1/hourly/ | tail
-
-# Pick one and download (uses the R2 binding's API token from your
-# wrangler login):
-mkdir -p /tmp/d1-restore
-npx wrangler r2 object get \
-    flagship-backups/d1/hourly/2026-05-11-06.jsonl.gz \
-    --file=/tmp/d1-restore/dump.jsonl.gz
-
-gunzip /tmp/d1-restore/dump.jsonl.gz   # produces dump.jsonl
+npx wrangler r2 bucket create flagship-d1-backups        # private: no dev-url, no public domain
+# keep d1/daily/ for 30 days, d1/monthly/ forever (the rule only names d1/daily/):
+npx wrangler r2 bucket lifecycle add flagship-d1-backups expire-daily d1/daily/ --expire-days 30
+npx wrangler r2 bucket lifecycle list flagship-d1-backups
 ```
 
-## Step 2 — turn JSONL into SQL
+Then, in the GitHub repo settings (Secrets and variables > Actions), add
+`CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`. Make the token with
+dashboard > My Profile > API Tokens > Create Custom Token, restricted to this one
+account, with `Account > D1 > Edit` and `Account > Workers R2 Storage > Edit`, and
+nothing else. It is a separate token from any deploy token, because a leak of it lets
+someone edit D1; rotate it when someone leaves. The same two secrets run
+`model-capabilities.yml`.
 
-D1 doesn't have a native bulk-load endpoint other than `wrangler d1
-execute --file=<sql>`. Convert the dump to INSERTs with this one-liner
-(needs `jq`):
+Then run the workflow once by hand and check the object:
 
 ```sh
-jq -r '
-  select(.type == "row")
-  | "INSERT OR REPLACE INTO [\(.table)] (\(
-      .data | keys_unsorted | map("[\(.)]") | join(",")
-    )) VALUES (\(
-      .data | [.[] | (
-        if . == null then "NULL"
-        elif type == "string" then "'" + gsub("'"; "''") + "'"
-        elif type == "boolean" then (if . then "1" else "0" end)
-        else (.|tostring) end
-      )] | join(",")
-    ));"
-' /tmp/d1-restore/dump.jsonl > /tmp/d1-restore/restore.sql
+npx wrangler r2 object get flagship-d1-backups/latest.json --file - --remote
 ```
 
-Sanity-check the output:
+## Restore
+
+Pick the situation:
+
+### A. Something was damaged in the last 7 days: Time Travel
 
 ```sh
-head -3 /tmp/d1-restore/restore.sql
-wc -l /tmp/d1-restore/restore.sql
+cd apps/com
+npx wrangler d1 time-travel info flagship-state                       # note the current bookmark
+npx wrangler d1 time-travel info flagship-state --timestamp=<unix>    # the bookmark just before the damage
+npx wrangler d1 time-travel restore flagship-state --timestamp=<unix>
 ```
 
-## Step 3 — restore
+It rewrites the database in place and cancels in-flight queries; it prints the bookmark
+from just before the restore, so a mistake can be undone with `restore --bookmark=`.
+The `.com` Worker keeps serving throughout (it sees the restored rows when the restore
+lands). Nothing to redeploy.
 
-DRY-RUN against a scratch database first. Don't touch production until
-you've verified the file applies cleanly:
+### B. Time Travel cannot help: restore the encrypted export into a NEW database
 
-```sh
-# Spin up a throwaway D1, run schema migrations, then load.
-npx wrangler d1 create flagship-restore-scratch
-# Capture the new database_id from the output, then in apps/com/wrangler.toml
-# temporarily swap the binding pointing at it, or pass --database explicitly.
+The export carries the schema and the data, so the target is an empty database that
+has had no migrations run. Restoring into the live database would fail on the first
+`CREATE TABLE`; make a new one and switch the Worker to it.
 
-# Apply schema first
-for f in packages/storage/migrations/*.sql; do
-  npx wrangler d1 execute flagship-restore-scratch --remote --file="$f"
-done
+1. Get the file (any machine with `wrangler` logged in):
 
-# Load the data
-npx wrangler d1 execute flagship-restore-scratch \
-    --remote --file=/tmp/d1-restore/restore.sql
+   ```sh
+   mkdir -p ~/d1-restore && cd ~/d1-restore
+   npx wrangler r2 object get flagship-d1-backups/latest.json --file latest.json --remote
+   cat latest.json                       # {"takenAt": ..., "key": "d1/daily/....sql.gpg", "sha256": ...}
+   npx wrangler r2 object get "flagship-d1-backups/$(jq -r .key latest.json)" --file dump.sql.gpg --remote
+   shasum -a 256 dump.sql.gpg            # must equal latest.json's sha256
+   ```
 
-# Spot-check
-npx wrangler d1 execute flagship-restore-scratch \
-    --remote --command="SELECT COUNT(*) FROM usernames;"
-```
+   An older day: `npx wrangler r2 object list` does not exist in wrangler 4; list the
+   bucket in the dashboard (R2 > flagship-d1-backups > `d1/daily/` or `d1/monthly/`) and
+   fetch that key.
 
-If the scratch restore looks right, repeat against the real database
-(`flagship-state`). Take a quick last-resort backup first by running
-the scheduled handler manually:
+2. Decrypt with a YubiKey (touch it when it blinks):
 
-```sh
-# Force one extra hourly snapshot before clobbering anything:
-npx wrangler dev --test-scheduled
-# In another terminal:
-curl 'http://localhost:8787/cdn-cgi/handler/scheduled?cron=0+*%2F6+*+*+*'
-```
+   ```sh
+   gpg --decrypt dump.sql.gpg > dump.sql
+   grep -c '^CREATE TABLE' dump.sql      # about 89
+   ```
 
-Then apply:
+3. Load a new database and check it:
 
-```sh
-npx wrangler d1 execute flagship-state \
-    --remote --file=/tmp/d1-restore/restore.sql
-```
+   ```sh
+   npx wrangler d1 create flagship-state-restored
+   npx wrangler d1 execute flagship-state-restored --remote --file dump.sql
+   npx wrangler d1 execute flagship-state-restored --remote \
+       --command "SELECT (SELECT COUNT(*) FROM usernames) AS accounts, (SELECT COUNT(*) FROM servers) AS servers"
+   ```
 
-## Step 4 — verify
+4. Point the Worker at it: in `apps/com/wrangler.toml` change `database_id` of the `DB`
+   binding to the new id (keep `database_name = "flagship-state"` so scripts and the
+   migration-drift check still find it by name, or update them too), then
+   `npx tsc -b && (cd apps/com && npm run deploy)`.
 
-- /api/health on prod still returns 200.
-- /api/username/<a-real-claimed-name> returns the expected record.
-- /api/server/by-domain/<some.domain> resolves.
-- /api/marketplace/search returns rows.
+5. Verify (below). Keep the damaged database until the restored one has served real
+   traffic for a day, then delete it.
 
-## Notes
+The data only goes back to the backup's `takenAt`: boxes re-send their heartbeats
+within five minutes, but anything signed or claimed since (an account created, a
+device paired, a rank order) is gone and must be redone.
 
-- The dump skips `sqlite_*` and `_cf_*` internal tables. Schema is
-  rebuilt from `packages/storage/migrations/*.sql`, not the dump.
-- `INSERT OR REPLACE` is used so re-running the same dump is
-  idempotent. If you need a strict "wipe and reload," `DELETE FROM
-  <table>` each table first.
-- Monthly snapshots (`d1/monthly/YYYY-MM.jsonl.gz`) are kept
-  indefinitely. Set up a quarterly review to confirm bucket size
-  isn't drifting unexpectedly.
-- The scheduled handler can be invoked locally for testing with
-  `npx wrangler dev --test-scheduled` plus the cdn-cgi handler URL
-  above. The cron expression in `apps/com/wrangler.toml` is the
-  source of truth for production frequency.
+### Verify
+
+- `curl -s https://flagshipserver.com/api/health` returns 200.
+- `GET /api/username/<a-real-claimed-name>` returns its record.
+- `GET /api/admin/schema-status` (with `x-admin-secret`) lists every migration applied.
+- Open the webapp, sign in with the review login and open the server list.
+
+## Rehearse it
+
+`bash scripts/d1-restore-drill.sh` runs the whole procedure on local databases with a
+throwaway gpg key standing in for the YubiKey: migrate database A, seed rows
+(including a name with a quote), `d1-backup.sh --local` (export + sanity checks +
+encrypt), decrypt, import into an empty database B, then compare A and B row for row
+and table for table. Last run: 89 tables, 92 rows, identical. Run it after changing
+`d1-backup.sh` or upgrading wrangler. `scripts/d1-backup.test.ts` pins the rest
+(the freshness rule, the fingerprint, the secrets the workflow may name).
+
+## The old Worker-era dumps
+
+Before 2026-10-18 a Worker cron wrote `d1/hourly/*.jsonl.gz` and `d1/monthly/*.jsonl.gz`
+to `r2://flagship-backups/`. On Free it never completed, so the bucket probably holds
+little; it is no longer written to or bound to the Worker. If an old JSONL dump is ever
+needed: each line is `{"type":"row","table":...,"data":{...}}`; turn the rows into
+`INSERT OR REPLACE` statements with `jq` and load them into a database that already has
+the migrations applied. Delete the bucket once the new backup has run a month.
