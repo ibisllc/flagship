@@ -263,6 +263,12 @@ atomicity.
 
 ### 9.4 The full gym run with the shield off (2026-10-18, relay v18, gym Worker with `2963833d7`)
 
+Note: this run is on the per-account layout. `2963833d7` is an ancestor of the
+root-wildcard commit `272ce0c7d`, so `.com` still wrote 4 records per account
+and the gym's zero-records check did not exist yet. The final layout has not
+been run on the live gym; run `tools/live-e2e/shared-run.ts` on the commit to
+deploy.
+
 All 23 groups plus the fleet: **248 checks, 0 failed**, 57 min, 4 boxes at peak,
 torn down through `/api/gym/teardown`. The zone went from 166 records to 178 at
 peak and back to **166**, with 0 gym records and servers left; releasing a box

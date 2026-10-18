@@ -60,7 +60,7 @@ fly.toml                   :443 raw-TCP (SNI passthrough) + :8443 TLS-term (API 
 
 ```sh
 # Tests
-npx vitest run                                  # everything (~30s)
+npx vitest run                                  # everything (~3 min)
 npx tsc -b                                      # typecheck the whole tree
 
 # Deploy
@@ -206,7 +206,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > when done. History up to 2026-10-10 is frozen verbatim in
 > `docs/archive/status-log-through-2026-10-10.md`; read it for the why behind
 > anything below. Keep this section short: it loads into every agent session.
-> Last updated **2026-10-16**.
+> Last updated **2026-10-18**.
 
 ### Launch
 
@@ -215,7 +215,7 @@ no payments; free AI credits on by default; free tier slowed, not cut, past
 25 GB; custom domains, name change + dibs, marketplace and payments come
 after. Windows/Linux Studio ship as "preview". **Share this server** (another
 account can view or co-manage a server, never destroy it) is in the MVP
-(`docs/share-a-server.md`, branch `feat/share-server`).
+(`docs/share-a-server.md`; on `main`).
 
 **One product version, 0.2 Beta (owner, 2026-10-18).** The homepage badge, the
 webapp, iOS, Android and every Studio show the same product version, `0.2`
@@ -364,7 +364,7 @@ of the last check here: **not yet checked**.
   lifecycle). It tears everything down through the gym-only
   `/api/gym/teardown`; never pass `--keep` for a full run (it turns off the
   staged release of boxes, and the shared `flagship.services` zone, 154 of 200
-  records without the gym, then fills). Latest runs: 244 checks, 22 groups, ~67
+  records without the gym, then fills). Latest runs: 10-18 248 checks, 23 groups, 57 min (gym Worker at `2963833d7`, before the root-wildcard commit; the final DNS layout has not run live); 10-17 244 checks, 22 groups, ~67
   min, peak 4 boxes. Rules learnt: gym boxes clone the **`gym` branch**, not
   main (only it carries the gym trust pin, and the gym CA chain in
   `.maintainers/`, which a box reads from its checkout; without them a share's
@@ -878,11 +878,12 @@ allowances (1M / 5M / 20M a month) are placeholders.
   current store builds show their generic refusal line for the new body until
   the next iOS/Android builds. Admin reclaim still counts any grant as an
   active device (a real account never looks dormant to it).
-- **`.com` Worker:** current with `main` as of 2026-10-15 (`3e8fef1de`,
-  version `f8c619da`, webapp shell **v113**, D1 through migration 0103).
-  Measured live on 2026-10-16 evening: shell **v114** (a later deploy was not
-  recorded here); `main` is at **v131** with D1 0104 (peer backup) pending, so
-  a `.com` deploy is due. Always `npx tsc -b` first and apply pending D1 migrations before deploying.
+- **`.com` Worker:** last recorded deploy 2026-10-15 (`3e8fef1de`, version
+  `f8c619da`, webapp shell **v113**); measured live on 2026-10-16 evening: shell
+  **v114**. `main` is at shell **v153**, so a `.com` deploy is due. Prod's D1 ledger
+  reads 0105 as newest (read-only query, 2026-10-18): nothing is pending (0104 was
+  applied; the peer-backup secrets are not shown by the ledger). Always
+  `npx tsc -b` first and apply pending D1 migrations before deploying.
 - **Rate limits count in Durable Objects (2026-10-15):** every budget in
   `apps/com/src/rateLimit.ts` is applied as written (any window, counted once
   worldwide) by `RateLimitCounter` objects, one per endpoint, axis and id;
@@ -1192,22 +1193,14 @@ sealed-guest copy no longer says "Nothing to approve". W-1: a start with too
 little free RAM now says "Not enough free memory: this server needs 4 GiB.
 Close other apps and try again." and a dying QEMU shows its last real stderr
 line only (vectors `qemuFailure`).
-**Still open from that run:** Restart asked the phone although Studio said
-"Nothing to approve": the lease the phone leaves for self-unlock was never
-there (first boot logs `no box-sealed lease (HTTP 404)`). Cause found in code,
-not yet fixed (Android, outside the Studio stream): Android's
-`SecretRequestCoordinator.depositAutoUnlockLease` signs the lease body with the
-admin root when the device holds one (`orderKey ?: material.signer`), but the
-boot worker verifies it against the owner IRK in the Authorization header
-(`packages/boot-core/src/routes.ts` `handleDepositLease`; iOS signs with the
-IRK, "the boot worker gates the lease on the owner IRK"), so the PUT answers
-403 `invalid lease signature` after the unlock reply was already posted: the
-approval card stays and a second tap gets `HTTP 409 already answered` (A-11).
-Fix: sign the lease with `material.signer` on Android, and add a gym check
-that a second boot after an approval self-unlocks. Android Apps card "Couldn't
-reach the server" (A-12) is the phone's own negative DNS cache for the box
-name; the apps should fall back to the relay path when the name does not
-resolve. Not yet run on Windows: installer-ISO fallback, USB burn + metal
+**Fixed after that run:** Restart asked the phone because Android signed the
+auto-unlock lease with the admin root, which the boot worker refuses (it verifies the
+owner IRK); `64df9098c` signs with the IRK (shared vector `auto-unlock-lease`; needs
+a new Android store build, Play `versionCode 8` has the bug). The Apps card "Couldn't
+reach the server" (A-12) is the phone's own negative DNS cache for the box name:
+Android `638bce32f` and iOS `668281523` retry; Android's relay fallback uses the
+apex's addresses, which are Cloudflare's edge, not the relay, so it needs a
+different target. Not yet run on Windows: installer-ISO fallback, USB burn + metal
 boot, webapp + Remote walks, backup import, Restart as administrator, the
 published (not CI) appliance, the Android fixes landed after `eb08dcdc4`.
 
@@ -1318,7 +1311,7 @@ how far each branch is behind its parent and the conflicts a rebase would hit;
 `--apply` rebases and pushes the clean ones and lists the rest. A branch that
 changes the webapp runs its own shell version above its parent's
 (marketplace v117, custom-domains v118, custom-names v119, outbound-proxy
-v120 over `main`'s v116 at that rebase; `main` is at v131 now, so the next
+v120 over `main`'s v116 at that rebase; `main` is well past that now (v153 on 10-18), so the next
 rebase renumbers them again):
 when `main` passes it, take the next unused number and move the tests' pins.
 Not compiled since the rebase: the iOS and Android code on any branch.

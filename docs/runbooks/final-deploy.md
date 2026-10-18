@@ -97,8 +97,13 @@ killed by it, and prod runs the same code, so any heavy handler can 1102 for
 real people. `.com` also uses Durable Objects (rate limits, relay sessions)
 and a 10-minute cron.
 
-1. Cloudflare dashboard, account that owns `flagship-com`: **Workers & Pages
-   -> Plans -> Workers Paid ($5/month)**. Nothing in the repo changes
+1. **Free for launch** (owner decision 2026-10-18; the CPU work that makes the
+   hot routes fit is in `docs/runbooks/workers-cpu-budget.md`). There is nothing
+   to change in the dashboard. The upgrade signals (`exceededCpu` / error 1102,
+   more than 70,000 requests in a day, the 6-hourly D1 backup that cannot run on
+   Free) are in section 14. **Fallback, if a signal fires:** Cloudflare
+   dashboard, account that owns `flagship-com`: **Workers & Pages -> Plans ->
+   Workers Paid ($5/month)**. Nothing in the repo changes
    (`apps/com/wrangler.toml` has no `[limits]`; the default paid CPU limit is
    what we want).
 2. The `flagship.services` zone's record cap (AGENTS.md "Urgent": 200 records,
@@ -114,8 +119,9 @@ Check:
 curl -s https://flagshipserver.com/api/health          # still 200
 ```
 
-Dashboard: Workers & Pages -> flagship-com -> Settings -> shows the Paid plan;
-the CPU-time chart no longer has 1102 spikes after step 7.
+Dashboard: Workers & Pages -> flagship-com -> Metrics: no `exceededCpu` / 1102
+after step 7 (on Free). If you took the Paid fallback, Settings shows the Paid
+plan.
 
 Rollback: a plan change is reversible in the dashboard (downgrading puts the
 10 ms limit back, so don't, unless billing forces it).
@@ -182,11 +188,18 @@ git log --oneline $E..origin/main -- packages/server-daemon packages/protocol \
 ```
 
 - Empty (or only `tests/` and `test-vectors/` files): no new endorsement is
-  needed for the daemon. At the time of writing the newest endorsement was
-  `e07f6ba7` (2026-10-18) and the only later box-path change was
-  `64df9098c` (a test vector); the wildcard-DNS change needs nothing on boxes
-  (`docs/wildcard-dns.md` section 8).
-- Anything else: endorse the new tip.
+  needed for the daemon.
+- Anything else: endorse the new tip. **For this release it is required.** The
+  newest endorsement is `e07f6ba7` (2026-10-18). Box-path commits after it include
+  the doorbell, `bc59534d4` and `fbff4df7e` (`packages/server-daemon/src/doorbell.ts`,
+  `daemonStatusHeartbeat.ts`, `index.ts`), plus native Ed25519 in
+  `packages/protocol/src/edSync.ts` and `packages/boot-core/src/nonceStore.ts`
+  (`git diff --stat e07f6ba7..origin/main -- packages/server-daemon installer
+  packages/boot-core packages/protocol packages/tunnel-protocol
+  packages/llm-providers package.json package-lock.json`, checked 2026-10-18).
+  `scripts/release.sh` computes the same diff and says "BOX CODE CHANGED". The
+  wildcard-DNS change by itself needs nothing on boxes (`docs/wildcard-dns.md`
+  section 10); the doorbell does, and an old box simply keeps polling.
 
 ```sh
 # 1. Preview (no signature, no write): prints target, lineage, merkle root, signer.
@@ -218,11 +231,14 @@ cd ~/flagship-deploy
 ls packages/storage/migrations | tail -3                 # newest file in the repo
 cd apps/com
 npx wrangler d1 execute flagship-state --remote \
-  --command "SELECT version FROM schema_version ORDER BY version DESC LIMIT 5"
+  --command "SELECT version FROM schema_version ORDER BY version DESC LIMIT 6"
 ```
 
-State at the time of writing: the repo's newest migration is **0105**
-(`0105_re_pair_proof.sql`) and prod has 0105 applied, so **nothing is pending**.
+State, read from prod's ledger (read-only query) on 2026-10-18: the newest
+versions applied are 0105, 0104, 0103, 0102, 0101, 0100, and the repo's newest
+migration is **0105** (`0105_re_pair_proof.sql`), so **nothing is pending**.
+(AGENTS.md used to say 0104 was pending; that was stale. Whether the three
+peer-backup secrets of section 5 exist is not shown by the ledger.)
 `main` skips 0088-0094 and 0099 on purpose (they live on feature branches).
 `npm run deploy` runs `scripts/check-prod-migrations.mjs` and refuses to deploy
 if a repo migration is missing from the ledger, so a forgotten one cannot ship.
@@ -375,10 +391,16 @@ Rollback of the whole step: delete the wildcard pair. Accounts that still hold
 their own records keep resolving; ones already trimmed go dark until it is back,
 so do not roll back after the trim.
 
-**Gate result (2026-10-18, gym Worker with `2963833d7`, relay v18):** full run
+**Earlier gym result (2026-10-18, gym Worker with `2963833d7`, relay v18):** full run
 248 checks, 0 failed; the first box's issuance, polled 1,700 times per target and
 resolver, never answered NODATA or NXDOMAIN for the box name or a label under it
-(`docs/wildcard-dns.md` section 11.6); zone back to its base.
+(`docs/wildcard-dns.md` section 9.4); zone back to its base. **This is not the
+gate for the final layout.** `2963833d7` is an ancestor of the root-wildcard
+commit `272ce0c7d`, so that run exercised the per-account wildcard layout (the
+zone peaked at 12 records above base, the shape of 4 per account); `.com` did
+not yet stop writing per-account records, and the core group's "the account holds
+ZERO records" check (`257755719`) did not exist. Run the gym again on the commit
+you deploy (step 6) and treat that run as the gate.
 
 **What the prod deploy must verify live (read-only on prod; nothing below writes
 to the prod zone):**
@@ -740,9 +762,11 @@ account. The plan file and its `.log.jsonl` list exactly what went.
   as preview (already the plan).
 - Mac Studio reports version 0.2.0 (step 10; stamped from `release/version.json`).
 - Not run by anyone yet, per AGENTS.md: the whole server restore, docker
-  save/load and pg_dump/restore against a real box and the live gym groups
-  `quota`, `share` (account-key accept) and the group list newer than the last
-  live run on 2026-10-15/16.
+  save/load and pg_dump/restore against a real box, and the final root-wildcard
+  DNS layout and the Free-plan group (`freePlan`, `a365def74`) on the live gym.
+  The groups `quota` and `share` (account-key accept) did run green on
+  2026-10-17 (22 groups, 244 checks), and 23 groups, 248 checks on 2026-10-18
+  (before the root-wildcard commit).
 
 ## 14. Free vs Paid (Workers plan)
 
