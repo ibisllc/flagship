@@ -182,6 +182,8 @@ public final class JoinAccountViewModel {
                 devicePubHex: devicePubHex,
                 deviceId: deviceId
             )
+        } catch PairingRelayError.unavailable {
+            phase = .failed(PairingRelayError.joinAccountUnavailable)
         } catch is PairingRelayError {
             if ttlInvalidated { return }
             phase = .failed("Pairing didn't complete. Ask the admin to show a new code.")

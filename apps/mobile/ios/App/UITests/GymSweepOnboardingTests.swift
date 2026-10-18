@@ -274,6 +274,19 @@ final class GymSweepOnboardingTests: GymSweepCase {
         XCTAssertTrue(app.buttons["Create your account"].waitForExistence(timeout: 10), "Try again returns to Welcome.")
     }
 
+    /// Without a live pairing transport (every release build) Join says so and
+    /// points at the web app instead of waiting for a peer that can never come.
+    func test_joinByPairingLinkWithoutATransportSaysSo() throws {
+        let app = launchOnboarding(["-smoke-pairing-unavailable"])
+        openLink(app, "flagship://join?sid=gym&pk=ERERERERERERERERERERERERERERERERERERERERERE")
+        XCTAssertTrue(app.navigationBars["Join an account"].waitForExistence(timeout: 15))
+        let failed = app.staticTexts["Couldn't join"].waitForExistence(timeout: 15)
+        if !failed { print("DEBUGTREE", app.debugDescription) }
+        XCTAssertTrue(failed)
+        XCTAssertTrue(text(app, containing: "Joining an account from this phone isn't available yet. Use the web app.").exists)
+        shot(app, "join-unavailable")
+    }
+
     // MARK: - Deep links: invite, approval, knock
 
     /// An app invite (`/invite`, here its flagship:// form): Accept signs the

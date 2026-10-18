@@ -167,6 +167,8 @@ public final class AddDeviceViewModel {
                     self.phase = .confirmMatch(qrUrl: q, matchCode: m, gateExpired: true)
                 }
             }
+        } catch PairingRelayError.unavailable {
+            phase = .failed(PairingRelayError.addDeviceUnavailable)
         } catch is PairingRelayError {
             if case .invalidated = phase { return }
             phase = .failed("Pairing didn't complete. Show a new code and try again.")

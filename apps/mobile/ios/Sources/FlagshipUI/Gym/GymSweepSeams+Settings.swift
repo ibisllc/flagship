@@ -105,6 +105,11 @@ extension GymSweepSeams {
                                        startedAt: now - 600_000))
         }
 
+        // `-smoke-pairing-unavailable`: no live pairing transport, as in a release build.
+        if args.contains("-smoke-pairing-unavailable") {
+            mocks.pairingRelay?.behavior = .unavailable
+        }
+
         // Add a device: the new phone has already scanned and sent its key.
         if args.contains("-smoke-pairing-peer") {
             // X25519 key | device signing key | 16-byte device id, as the joiner sends it.
