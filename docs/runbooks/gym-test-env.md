@@ -40,6 +40,7 @@ npm run gym:weekly                   # refresh → mock matrix → live run → 
 set -a; . ./.gym-secrets.env; set +a
 npx tsx tools/live-e2e/shared-run.ts                          # every group
 npx tsx tools/live-e2e/shared-run.ts --groups core,gating     # a subset (--list shows them)
+npx tsx tools/live-e2e/shared-run.ts --dns-probe --groups core   # + gym-results/<run>/dns-probe.jsonl: what DNS says about the first box's names while its certificate is issued (docs/wildcard-dns.md)
 npx tsx tools/live-e2e/shared-run.ts --all-boxes --keep       # leave the fleet up…
 npx tsx tools/live-e2e/shared-run.ts --reuse gym-results/<run>/fleet.json --groups runtimes   # …and reuse it
 npx tsx tools/live-e2e/fleet-cli.ts sweep [--destroy]         # list / destroy every gym server + gym DNS left

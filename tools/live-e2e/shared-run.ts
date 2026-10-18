@@ -19,6 +19,7 @@
  *   npx tsx tools/live-e2e/shared-run.ts --keep                # leave the fleet up (prints --reuse)
  *   npx tsx tools/live-e2e/shared-run.ts --reuse gym-results/<run>/fleet.json
  *   npx tsx tools/live-e2e/shared-run.ts --teardown --reuse gym-results/<run>/fleet.json   # tear a kept fleet down
+ *   npx tsx tools/live-e2e/shared-run.ts --dns-probe --groups core   # also write the DNS timeline of the first box's issuance (docs/wildcard-dns.md)
  *   npx tsx tools/live-e2e/shared-run.ts --list
  *   npx tsx tools/live-e2e/shared-run.ts --all-boxes --keep    # provision the whole fleet whatever the groups need
  *
@@ -34,6 +35,7 @@ import { deriveSWK, ed } from "@flagship/protocol";
 import { join } from "node:path";
 import { ADMIN, CONTROL, KEK, Recorder, SERVICES, runDir, tryHttp, writeJson } from "./lib/harness.js";
 import { dnsRecordsNeeded } from "./lib/dnsBudget.js";
+import { startDnsProbe, type DnsProbe } from "./lib/dnsProbe.js";
 
 /** The shared flagship.services DNS zone's record cap (gym and prod together). */
 const DNS_ZONE_CAP = Number(process.env.GYM_DNS_ZONE_CAP || 200);
@@ -205,6 +207,7 @@ async function main(): Promise<number> {
     }
   }
 
+  let dnsProbe: DnsProbe | undefined;
   let A: Account | undefined;
   let B: Account | undefined;
   let R: Account | undefined;
@@ -221,7 +224,16 @@ async function main(): Promise<number> {
           acct = await createRealAccount();
           R = acct;
         } else {
-          acct = await createDemoAccount(freshUsername(letter === "A" ? "ga" : "gb"));
+          const username = freshUsername(letter === "A" ? "ga" : "gb");
+          // Before the account exists, so the probe sees the box name from its first answer.
+          if (letter === "A" && flag("--dns-probe")) {
+            dnsProbe = await startDnsProbe({ box: `home.${username}.${SERVICES}`, account: `${username}.${SERVICES}`, apex: SERVICES }, dir).catch((e) => {
+              log(`dns probe not started: ${e instanceof Error ? e.message : String(e)}`);
+              return undefined;
+            });
+            if (dnsProbe) log(`dns probe on home.${username}.${SERVICES} (${dir}/dns-probe.jsonl)`);
+          }
+          acct = await createDemoAccount(username);
           if (letter === "A") A = acct;
           else B = acct;
         }
@@ -255,6 +267,7 @@ async function main(): Promise<number> {
         await fleetRec.check(`${b.serverName}.${b.account} online + serving (≤20 min)`, async () => {
           try {
             const r = await waitOnline(b, 20, (m) => fleetRec.log(m));
+            if (dnsProbe && s === "A1") setTimeout(() => dnsProbe?.stopIssuance(), 120_000);
             if (!b.serverId) b.serverId = await demoServerId(b.account).catch(() => null);
             saveFleet(dir, accounts);
             return r;
@@ -350,6 +363,11 @@ async function main(): Promise<number> {
     writeJson(dir, "fleet-checks.json", fleetRec.results);
     summary.fleet = { pass: fleetRec.passed, fail: fleetRec.failed, skip: fleetRec.skipped };
     await doTeardown("end of run");
+    if (dnsProbe) {
+      await new Promise((r) => setTimeout(r, 15_000));
+      dnsProbe.stop();
+      writeJson(dir, "dns-probe-summary.json", dnsProbe.summary());
+    }
     if (keep && !reusePath) log(`--keep: fleet left up. Reuse: --reuse ${join(dir, "fleet.json")}`);
   }
 
