@@ -1,4 +1,4 @@
-// GYM Android button sweep — Home: Add/Import a server and each of its
+// GYM Android button sweep — Home: Add/Restore server and each of its
 // choices, the server rows' touch-and-hold menu (Make leader, Send the backup,
 // Delete), the server order (Move up/down, the drag handle), search and the
 // status chips, the pod switcher, the trust and operations slivers. Each
@@ -62,16 +62,18 @@ class GymHomeTest : GymBase() {
             listOf(home, office, music).firstOrNull { it in texts } ?: texts.joinToString("|")
         }
 
-    // ─── Add/Import a server ─────────────────────────────────────────────────
+    // ─── Add/Restore server ─────────────────────────────────────────────────
 
-    /** Each choice of the admin device's Add/Import menu lands on its flow,
+    /** Each choice of the admin device's Add/Restore menu lands on its flow,
      *  and Cancel closes the menu. */
     @Test
     fun addImportMenuEachChoiceLandsOnItsFlow() {
         launch(tab = "home", adminRoot = true, shares = true)
         tap("home-add-server")
         waitUntilExists("home-co-manage")
-        assertEquals(1, tagCount("home-import-backup"))
+        assertEquals(1, tagCount("home-restore-backup"))
+        assertEquals(0, tagCount("home-import-backup"))
+        assertEquals(0, tagCount("home-restore-peers"))
         gymShot("add-import-menu")
         Espresso.pressBack()
         waitGone("home-co-manage")
@@ -84,10 +86,40 @@ class GymHomeTest : GymBase() {
         Espresso.pressBack()
 
         tap("home-add-server")
-        tap("home-import-backup")
+        tap("home-restore-backup")
+        waitUntilExists("restore-source-file")
+        assertEquals(1, tagCount("restore-source-peers"))
+        assertEquals(1, tagCount("restore-source-phone"))
+        gymShot("restore-chooser")
+        tap("restore-source-file")
         waitUntilExists("import-backup-choose")
         waitText("Import a backup")
         gymShot("import-backup")
+        Espresso.pressBack()
+        waitUntilExists("restore-source-phone")
+        tap("restore-source-peers")
+        waitUntilExists("restore-peers-lost", 15_000)
+        Espresso.pressBack()
+        waitUntilExists("restore-source-phone")
+        tap("restore-source-phone")
+        waitUntilExists("restore-phone")
+        gymShot("restore-phone-empty")
+    }
+
+    /** Locking the app takes every sheet, dialog and menu with it: they are windows above
+     *  the lock screen, so the menu must not stay on top of it. */
+    @Test
+    fun lockingTheAppDismissesTheAddRestoreMenu() {
+        launch(tab = "home", adminRoot = true)
+        tap("home-add-server")
+        waitUntilExists("home-restore-backup")
+        composeRule.runOnUiThread { com.flagshipserver.app.core.GymProbe.appState!!.lock() }
+        waitUntilExists("biometric-unlock-btn", 15_000)
+        composeRule.waitUntil(10_000) { tagCount("home-add-sheet") == 0 }
+        assertEquals(0, tagCount("home-restore-backup"))
+        assertEquals(0, tagCount("home-add-new-server"))
+        assertEquals(0, tagCount("home-co-manage"))
+        gymShot("locked-with-menu-open")
     }
 
     /** "Co-manage a running server": a pasted link opens the shared server's

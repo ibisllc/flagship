@@ -801,6 +801,10 @@ private fun AppRoot(
                 WindowInsets.systemBars.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
             ),
     ) {
+        // Sheets, dialogs and menus (their own windows) draw nothing while locked.
+        androidx.compose.runtime.CompositionLocalProvider(
+            com.flagshipserver.app.ui.components.LocalAppLocked provides (isPaired && !isUnlocked),
+        ) {
         if (isPaired) {
             // The teal sliver sits ABOVE the shell in a Column so revealing it
             // physically pushes the whole shell down (it animates its own
@@ -823,6 +827,7 @@ private fun AppRoot(
             com.flagshipserver.app.ui.screens.SecureAccountOverlay(
                 onDismiss = { app.clearSecureAccountNudge() },
             )
+        }
         }
         // C12 — lock overlay above EVERYTHING whenever the in-memory
         // unlock latch is false. Conditional on isPaired so the Welcome

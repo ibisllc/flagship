@@ -58,7 +58,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.VpnKey
-import androidx.compose.material3.DropdownMenu
+import com.flagshipserver.app.ui.components.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -123,15 +123,13 @@ fun HomeScreen(
     serverOrderAcks: Map<String, Long> = emptyMap(),
     onOpenPod: (PodInfo) -> Unit,
     onAddServer: () -> Unit,
-    /** "Import a backup" in the Add/Import chooser. */
-    onImportBackup: () -> Unit = {},
-    /** "Restore from other servers": a lost server's backup comes back from
-     *  the pieces other accounts' servers keep (docs/peer-backup.md). */
-    onRestoreFromPeers: () -> Unit = {},
+    /** "Restore from backup" in the Add/Restore menu: the chooser of where the backup is
+     *  (a file, other servers' pieces (docs/peer-backup.md), or this phone's copies). */
+    onRestoreBackup: () -> Unit = {},
     /** "Co-manage a running server": accept a server another account
-     *  shares (docs/share-a-server.md), from the Add/Import chooser. */
+     *  shares (docs/share-a-server.md), from the Add/Restore menu. */
     onCoManage: () -> Unit = {},
-    /** Only an admin device of the account sees "Add/Import a server", in
+    /** Only an admin device of the account sees "Add/Restore server", in
      *  the list and on the empty state ([showsAddServer]). */
     canAddServers: Boolean = true,
     /** Reorder, Make leader and Delete are admin orders `.com` checks under
@@ -206,8 +204,7 @@ fun HomeScreen(
             onDismiss = { showAddOrImport = false },
             onCreate = { showAddOrImport = false; onAddServer() },
             onCoManage = { showAddOrImport = false; onCoManage() },
-            onImport = { showAddOrImport = false; onImportBackup() },
-            onRestoreFromPeers = { showAddOrImport = false; onRestoreFromPeers() },
+            onRestore = { showAddOrImport = false; onRestoreBackup() },
         )
     }
     // Search text over the server list (name / fqdn / description). Pure
@@ -384,27 +381,27 @@ fun HomeScreen(
     }
 }
 
-/** "Create / Co-manage / Import": the Android sheet for iOS's action sheet. */
+/** "Create / Co-manage / Restore": the Android sheet for iOS's action sheet. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun AddOrImportSheet(
     onDismiss: () -> Unit,
     onCreate: () -> Unit,
     onCoManage: () -> Unit,
-    onImport: () -> Unit,
-    onRestoreFromPeers: () -> Unit,
+    onRestore: () -> Unit,
 ) {
-    androidx.compose.material3.ModalBottomSheet(
+    com.flagshipserver.app.ui.components.ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.testTag("home-add-sheet"),
     ) {
         Text(
-            "Add/Import a server",
+            "Add/Restore server",
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(horizontal = FS.space.s6, vertical = FS.space.s2),
         )
         FSRow(
-            title = "Create a new server",
+            title = "Create a server",
             subtitle = "Set up a server on your hardware or in the cloud.",
             icon = Icons.Outlined.AddCircleOutline,
             iconTint = FS.colors.accent,
@@ -420,20 +417,12 @@ private fun AddOrImportSheet(
             modifier = Modifier.testTag("home-co-manage"),
         )
         FSRow(
-            title = "Import a backup",
-            subtitle = "Restore a server's apps from a backup file.",
+            title = "Restore from backup",
+            subtitle = "Bring a server back from a file, other servers or this phone.",
             icon = Icons.Outlined.Restore,
             iconTint = FS.colors.accent,
-            onClick = onImport,
-            modifier = Modifier.testTag("home-import-backup"),
-        )
-        FSRow(
-            title = "Restore from other servers",
-            subtitle = "Bring a lost server's apps back from the pieces other servers keep.",
-            icon = Icons.Outlined.Restore,
-            iconTint = FS.colors.accent,
-            onClick = onRestoreFromPeers,
-            modifier = Modifier.testTag("home-restore-peers"),
+            onClick = onRestore,
+            modifier = Modifier.testTag("home-restore-backup"),
         )
         Spacer(Modifier.height(FS.space.s6))
     }
@@ -548,7 +537,7 @@ fun showsAddServer(holdsAdminRoot: Boolean, isDemoAccount: Boolean): Boolean =
 
 internal const val ADD_SERVERS_ADMIN_ONLY = com.flagshipserver.app.core.AddServerGate.ADMIN_ONLY
 
-/** "Add/Import a server": the one way to bring a server in (Create /
+/** "Add/Restore server": the one way to bring a server in (Create /
  *  Co-manage / Import), above the list or on the empty state. A tonal
  *  button with a plus, the Android form of iOS's tinted add row. */
 @Composable
@@ -565,7 +554,7 @@ private fun AddOrImportServerButton(onClick: () -> Unit, primary: Boolean = fals
     ) {
         Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(FS.space.s2))
-        Text("Add/Import a server", style = MaterialTheme.typography.labelLarge)
+        Text("Add/Restore server", style = MaterialTheme.typography.labelLarge)
     }
 }
 

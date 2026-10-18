@@ -1,4 +1,4 @@
-// Home's "Add/Import a server" is the one way to bring a server into the
+// Home's "Add/Restore server" is the one way to bring a server into the
 // account: Create a new server, Co-manage a running server (docs/
 // share-a-server.md) or Import a backup, with or without servers. Only an
 // admin device of the account sees it (docs/service-access-gating.md
@@ -36,7 +36,7 @@ class HomeAddServerTest {
         canAddServers: Boolean = true,
         onAdd: () -> Unit = {},
         onCoManage: () -> Unit = {},
-        onImport: () -> Unit = {},
+        onRestore: () -> Unit = {},
     ) {
         composeRule.setContent {
             FlagshipTheme {
@@ -46,7 +46,7 @@ class HomeAddServerTest {
                     pods = pods,
                     onOpenPod = {},
                     onAddServer = onAdd,
-                    onImportBackup = onImport,
+                    onRestoreBackup = onRestore,
                     onCoManage = onCoManage,
                     canAddServers = canAddServers,
                     onMakeLeader = {},
@@ -71,10 +71,10 @@ class HomeAddServerTest {
         setHome(onePod, onAdd = { created++ })
         composeRule.onNodeWithTag("home-add-server").performScrollTo().performClick()
         composeRule.onNodeWithText("Co-manage a running server").assertExists()
-        composeRule.onNodeWithText("Import a backup").assertExists()
+        composeRule.onNodeWithText("Restore from backup").assertExists()
         composeRule.onNodeWithText("Add a new server").assertDoesNotExist()
         composeRule.onNodeWithText("To clone", substring = true).assertDoesNotExist()
-        composeRule.onNodeWithText("Create a new server").assertExists().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        composeRule.onNodeWithText("Create a server").assertExists().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         assertEquals(1, created)
     }
 
@@ -88,15 +88,15 @@ class HomeAddServerTest {
 
     @Test fun theEmptyStateOpensTheSameMenuOnAnAdminDevice() {
         var opened = 0
-        setHome(emptyList(), onImport = { opened++ })
+        setHome(emptyList(), onRestore = { opened++ })
         composeRule.onNodeWithText("Your account is ready").assertIsDisplayed()
-        // No separate co-manage or create button: just Add/Import a server.
+        // No separate co-manage or create button: just Add/Restore server.
         composeRule.onNodeWithText("Co-manage a running server").assertDoesNotExist()
         composeRule.onNodeWithText("Add your first server").assertDoesNotExist()
         composeRule.onNodeWithTag("home-add-server").performScrollTo().assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("home-add-new-server").assertExists()
         composeRule.onNodeWithTag("home-co-manage").assertExists()
-        composeRule.onNodeWithTag("home-import-backup").assertExists().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        composeRule.onNodeWithTag("home-restore-backup").assertExists().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         assertEquals(1, opened)
     }
 

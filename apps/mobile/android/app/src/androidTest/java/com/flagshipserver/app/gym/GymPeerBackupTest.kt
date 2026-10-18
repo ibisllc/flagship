@@ -1,6 +1,6 @@
 // GYM Android: peer backup v2 (docs/peer-backup.md). Settings -> Peer-backup
 // shows the status (state, Server 1..n, restore-by, what the server keeps for
-// others) and Add/Import a server -> Restore from other servers finds a lost
+// others) and Add/Restore server -> Restore from backup -> From other servers finds a lost
 // server's backup, opens it with this account's key and has the waiting server
 // fetch the pieces. Mirror of the webapp's gym-archive peer scenarios.
 
@@ -67,8 +67,10 @@ class GymPeerBackupTest : GymBase() {
     private fun openRestoreFromPeers(vararg launchArgs: Pair<String, String>, podsVariant: String? = null, backups: String? = null) {
         launch(tab = "home", adminRoot = true, podsVariant = podsVariant, backups = backups)
         composeRule.onNodeWithTag("home-add-server").performScrollTo().performClick()
-        waitUntilExists("home-restore-peers")
-        composeRule.onNodeWithTag("home-restore-peers").performClick()
+        waitUntilExists("home-restore-backup")
+        composeRule.onNodeWithTag("home-restore-backup").performClick()
+        waitUntilExists("restore-source-peers")
+        composeRule.onNodeWithTag("restore-source-peers").performClick()
         waitUntilExists("restore-peers-lost", timeoutMs = 15_000)
     }
 

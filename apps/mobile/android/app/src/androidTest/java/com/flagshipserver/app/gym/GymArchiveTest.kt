@@ -11,6 +11,7 @@ package com.flagshipserver.app.gym
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
@@ -120,6 +121,39 @@ class GymArchiveTest : GymBase() {
         tap("import-backup-done")
     }
 
+    /** Restore from backup -> From this phone lists the copies the phone kept (by server and
+     *  date; a server with none says so on its row) and opens the picked one in the import flow. */
+    @Test
+    fun restoreFromThisPhoneListsTheKeptCopiesAndOpensOne() {
+        launch(tab = "home", adminRoot = true, username = "bright-maple")
+        val made = makeBackup("ef".repeat(16), "gym passcode 1234")
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val fqdn = "home.bright-maple.flagship.services"
+        val dir = File(File(ctx.filesDir, "backups/$fqdn"), made.archiveId).apply { deleteRecursively(); mkdirs() }
+        made.file.copyTo(File(dir, made.file.name), overwrite = true)
+        val meta = com.flagshipserver.app.api.SavedBackup(
+            archiveId = made.archiveId, createdAt = 1_792_000_000_000, bytes = made.bytes, sha256 = made.sha,
+            backupFileName = "home-2026-10-14.flagship-backup", dataFileName = "home-2026-10-14.flagship-data",
+        )
+        File(dir, "backup.json").writeText(kotlinx.serialization.json.Json.encodeToString(com.flagshipserver.app.api.SavedBackup.serializer(), meta))
+        try {
+            tap("home-add-server", 20_000)
+            tap("home-restore-backup")
+            tap("restore-source-phone")
+            waitUntilExists("restore-phone-copy-${made.archiveId}", 15_000)
+            // The other servers hold no copy: their rows say so.
+            assertTrue(composeRule.onAllNodesWithTag("restore-phone-missing-office.bright-maple.flagship.services").fetchSemanticsNodes().isNotEmpty())
+            waitText("No copy on this phone yet")
+            gymShot("restore-phone-copies")
+            tap("restore-phone-copy-${made.archiveId}")
+            // The picked copy is a backup made with a passcode: the import flow asks for it.
+            waitUntilExists("import-backup-passcode", 30_000)
+            gymShot("restore-phone-opened")
+        } finally {
+            File(ctx.filesDir, "backups/$fqdn").deleteRecursively()
+        }
+    }
+
     /** A wrong passcode is refused before anything is sent. */
     @Test
     fun importRefusesAWrongPasscode() {
@@ -127,7 +161,8 @@ class GymArchiveTest : GymBase() {
         val made = makeBackup("cd".repeat(16), "the right one")
         com.flagshipserver.app.core.GymSeams.importBackupFile = made.file
         tap("home-add-server", 20_000)
-        tap("home-import-backup")
+        tap("home-restore-backup")
+        tap("restore-source-file")
         tap("import-backup-choose", 15_000)
         type("import-backup-passcode", "the wrong one")
         tap("import-backup-unlock")

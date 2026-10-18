@@ -324,13 +324,12 @@ fun HomeTab() {
                 onOpenPod = { pod ->
                     nav.navigate("server-detail/${pod.podId}")
                 },
-                // "Create a new server" in the Add/Import menu provisions a new
+                // "Create a new server" in the Add/Restore menu provisions a new
                 // box. Pairing an existing box is automatic (Slice B); taking
                 // over a transferred box is a link/QR ingestion (Slice C).
                 onAddServer = { nav.navigate("create-server") },
-                onImportBackup = { nav.navigate("import-backup") },
                 onBuildService = { deepLinker.enqueue(DeepLink.StartBuild) },
-                onRestoreFromPeers = { nav.navigate("restore-peers") },
+                onRestoreBackup = { nav.navigate("restore-backup") },
                 onCoManage = { nav.navigate("share-accept") },
                 onMakeLeader = { pod -> saveOrder { orderSaver.makeLeader(pod.podId) } },
                 onReorder = { ids -> saveOrder { orderSaver.reorder(ids) } },
@@ -390,9 +389,34 @@ fun HomeTab() {
                 onSendBackup = { pod -> nav.navigate("import-backup?target=${URLEncoder.encode(pod.fqdn, "UTF-8")}") },
             )
         }
+        composable("restore-backup") {
+            if (!AddServerGate.allows(app)) {
+                AddServerAdminOnlyScreen(onBack = { nav.popBackStack() })
+                return@composable
+            }
+            com.flagshipserver.app.ui.screens.RestoreFromBackupScreen(
+                onFile = { nav.navigate("import-backup") },
+                onPeers = { nav.navigate("restore-peers") },
+                onPhone = { nav.navigate("restore-phone") },
+                onBack = { nav.popBackStack() },
+            )
+        }
+        composable("restore-phone") {
+            if (!AddServerGate.allows(app)) {
+                AddServerAdminOnlyScreen(onBack = { nav.popBackStack() })
+                return@composable
+            }
+            com.flagshipserver.app.ui.screens.RestoreFromPhoneScreen(
+                onPick = { copy -> nav.navigate("import-backup?copy=${URLEncoder.encode(copy.file.absolutePath, "UTF-8")}") },
+                onBack = { nav.popBackStack() },
+            )
+        }
         composable(
-            "import-backup?target={target}",
-            arguments = listOf(navArgument("target") { type = NavType.StringType; nullable = true; defaultValue = null }),
+            "import-backup?target={target}&copy={copy}",
+            arguments = listOf(
+                navArgument("target") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("copy") { type = NavType.StringType; nullable = true; defaultValue = null },
+            ),
         ) { entry ->
             if (!AddServerGate.allows(app)) {
                 AddServerAdminOnlyScreen(onBack = { nav.popBackStack() })
@@ -401,8 +425,10 @@ fun HomeTab() {
             // Import a backup onto a new server, or send it to a server waiting
             // for it (docs/server-backup-and-clone.md).
             val target = entry.arguments?.getString("target")?.let { URLDecoder.decode(it, "UTF-8") }
+            val copy = entry.arguments?.getString("copy")?.let { URLDecoder.decode(it, "UTF-8") }
             com.flagshipserver.app.ui.screens.ImportBackupRoute(
                 targetFqdn = target,
+                phoneCopyPath = copy,
                 onServerCreated = { serverDomain, serial, name ->
                     // Like any new server: on Home at once, cancellable.
                     app.upsertPendingPod(name = name, fqdn = serverDomain, serial = serial)

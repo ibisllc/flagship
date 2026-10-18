@@ -6,6 +6,7 @@
 package com.flagshipserver.app.core
 
 object GymProbe {
+    @Volatile var appState: AppState? = null
     @Volatile var screens: com.flagshipserver.app.api.MockScreensClient? = null
     @Volatile var build: com.flagshipserver.app.api.MockBuildClient? = null
     @Volatile var flagship: com.flagshipserver.app.api.MockFlagshipServerClient? = null

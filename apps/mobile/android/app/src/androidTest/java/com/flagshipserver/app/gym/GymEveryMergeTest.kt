@@ -99,12 +99,12 @@ class GymEveryMergeTest : GymBase() {
      *  a single-step form, so the name + encrypt control are on one screen). */
     @Test
     fun createServerFormReachable() {
-        // Only an admin device sees Add/Import a server: play one.
+        // Only an admin device sees Add/Restore server: play one.
         launch(tab = "home", adminRoot = true)
         composeRule.onNodeWithTag("home-add-server").assertIsDisplayed()
         gymShot("home-ready")
         addNewServer()
-        // "Create a new server" opens the create-server form (a NavHost push).
+        // "Create a server" opens the create-server form (a NavHost push).
         waitUntilExists("cs-name-field")
         composeRule.onNodeWithTag("cs-name-field").assertExists()
         gymShot("create-server-name")
@@ -116,7 +116,7 @@ class GymEveryMergeTest : GymBase() {
     }
 
     /** A device without the account's admin root is not an admin device:
-     *  Home lists the servers but offers no Add/Import a server (and so no
+     *  Home lists the servers but offers no Add/Restore server (and so no
      *  menu). Mirror of iOS test_nonAdminHomeHasNoAddServer. */
     @Test
     fun nonAdminHomeHasNoAddServer() {

@@ -44,7 +44,7 @@ import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.DropdownMenu
+import com.flagshipserver.app.ui.components.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -566,7 +566,7 @@ internal fun ServiceAccessContent(
     }
 
     confirmRemove?.let { person ->
-        androidx.compose.material3.AlertDialog(
+        com.flagshipserver.app.ui.components.AlertDialog(
             onDismissRequest = { confirmRemove = null },
             title = { Text(if (person.isGroup) "Revoke the group \"${person.name}\"?" else "Remove ${person.name}?") },
             text = {
@@ -603,7 +603,7 @@ internal fun ServiceAccessContent(
 
     if (confirmMembersOnly) {
         val n = vm.memberPeopleCount
-        androidx.compose.material3.AlertDialog(
+        com.flagshipserver.app.ui.components.AlertDialog(
             onDismissRequest = { confirmMembersOnly = false },
             title = { Text("Members only?") },
             text = { Text(if (n == 1) "Only this 1 person will be able to open it." else "Only these $n people will be able to open it.") },

@@ -29,7 +29,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material3.AlertDialog
+import com.flagshipserver.app.ui.components.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import com.flagshipserver.app.ui.components.TextButton

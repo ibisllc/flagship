@@ -15,12 +15,12 @@ import org.junit.Test
 class GymSmokeTest : GymBase() {
 
     /** Cold launch in smoke mode lands on Home with sample pods seeded; the
-     *  "Add/Import a server" affordance (`home-add-server`) renders once pods exist
+     *  "Add/Restore server" affordance (`home-add-server`) renders once pods exist
      *  (DemoFixtures seeds three), so its presence proves the seeded paired
      *  shell drew + fixtures applied — the same handle iOS asserts. */
     @Test
     fun gymColdLaunchRendersHome() {
-        // Only an admin device sees Add/Import a server: play one.
+        // Only an admin device sees Add/Restore server: play one.
         launch(tab = "home", adminRoot = true)
         gymShot("cold-launch")
         composeRule.onNodeWithTag("home-add-server").assertIsDisplayed()

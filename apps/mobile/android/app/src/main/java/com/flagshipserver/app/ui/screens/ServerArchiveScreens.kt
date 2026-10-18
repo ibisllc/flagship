@@ -27,7 +27,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import com.flagshipserver.app.ui.components.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import com.flagshipserver.app.ui.components.Switch
@@ -331,7 +331,7 @@ private class SafPickedFile(private val context: Context, private val uri: Uri) 
     }
 }
 
-/** Home → Add/Import a server → Import a backup (or a waiting server's "Send
+/** Home → Add/Restore server → Restore from backup (or a waiting server's "Send
  *  the backup"): builds the view model from the account's servers and hands
  *  the create step to the existing create screen. */
 @Composable
@@ -339,6 +339,8 @@ internal fun ImportBackupRoute(
     targetFqdn: String?,
     /** Restore from other servers (peer backup) instead of importing a file. */
     fromPeers: Boolean = false,
+    /** A copy this phone kept (the phone backup policy): opened at once, no file picking. */
+    phoneCopyPath: String? = null,
     /** The create screen made a server (put it on Home like any new server). */
     onServerCreated: (serverDomain: String, serial: String, name: String) -> Unit,
     onClose: () -> Unit,
@@ -375,6 +377,9 @@ internal fun ImportBackupRoute(
         )
     }
     DisposableEffect(vm) { onDispose { vm.stop() } }
+    androidx.compose.runtime.LaunchedEffect(vm, phoneCopyPath) {
+        if (phoneCopyPath != null) vm.choose(com.flagshipserver.app.viewmodels.LocalPickedFile(java.io.File(phoneCopyPath)))
+    }
     val phase by vm.phase.collectAsState()
     val target = vm.createTarget
     if (phase == ImportBackupViewModel.Phase.Creating && target != null) {

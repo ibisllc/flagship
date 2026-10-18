@@ -472,7 +472,7 @@ abstract class GymBase {
         }
     }
 
-    /** Home's "Add/Import a server" asks which; pick "Create a new server". */
+    /** Home's "Add/Restore server" asks which; pick "Create a server". */
     protected fun addNewServer() {
         composeRule.onNodeWithTag("home-add-server").performScrollTo().performClick()
         waitUntilExists("home-add-new-server")

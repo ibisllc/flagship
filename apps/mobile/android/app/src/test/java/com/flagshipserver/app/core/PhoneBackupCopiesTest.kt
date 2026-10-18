@@ -83,6 +83,17 @@ class PhoneBackupCopiesTest {
         assertEquals(0, chunks)
     }
 
+    @Test fun listsEveryServerThatHoldsACopyForTheRestorePicker() = runBlocking {
+        val c = MockScreensClient(simulatedLatencyMs = 0)
+        val store = copies()
+        assertTrue("nothing kept yet", store.servers().isEmpty())
+        PhoneBackupFetcher(store, { c }, freeBytes = { 100 * gb }).run(listOf(server))
+        assertEquals(listOf(server), store.servers())
+        // A server whose only folder is empty holds no copy and is not listed.
+        File(root, "office.bright-maple.flagship.services").mkdirs()
+        assertEquals(listOf(server), store.servers())
+    }
+
     @Test fun notEnoughFreeSpaceSkipsWithASentence() = runBlocking {
         val c = MockScreensClient(simulatedLatencyMs = 0)
         val store = copies()

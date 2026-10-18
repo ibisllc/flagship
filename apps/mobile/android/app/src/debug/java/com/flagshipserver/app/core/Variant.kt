@@ -117,6 +117,7 @@ object Variant : AppVariant {
         val transfer = MockServerTransferClient()
         val mailbox = MockSecretMailboxClient()
         // The instrumented scenario (same process) checks what a button sent.
+        GymProbe.appState = appState
         GymProbe.screens = screens
         GymProbe.build = build
         GymProbe.flagship = flagshipServer

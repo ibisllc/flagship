@@ -45,7 +45,7 @@ class HomeScreenComposeTest {
                 )
             }
         }
-        composeRule.onNodeWithText("Add/Import a server").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Add/Restore server").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Harry's cloud > Pixel").assertIsDisplayed()
         composeRule.onNodeWithText("Build a service").assertDoesNotExist()
         composeRule.onNodeWithText("Your servers").assertDoesNotExist()
@@ -129,7 +129,7 @@ class HomeScreenComposeTest {
             }
         }
         composeRule.onNodeWithText("Your server list is locked").assertIsDisplayed()
-        composeRule.onNodeWithText("Add/Import a server").assertDoesNotExist()
+        composeRule.onNodeWithText("Add/Restore server").assertDoesNotExist()
         composeRule.onNodeWithText("Show my servers").performClick()
         org.junit.Assert.assertEquals(1, asked)
     }
@@ -173,7 +173,7 @@ class HomeScreenComposeTest {
         composeRule.onNodeWithText("Touch and hold a server", substring = true).assertDoesNotExist()
         composeRule.onNodeWithTag("home-server-handle-a").assertExists()
         composeRule.onNodeWithTag("home-server-handle-b").assertExists()
-        composeRule.onNodeWithText("Add/Import a server").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Add/Restore server").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun theLeaderBadge_isGrayUntilTheLeaderHoldsTheOrder() {

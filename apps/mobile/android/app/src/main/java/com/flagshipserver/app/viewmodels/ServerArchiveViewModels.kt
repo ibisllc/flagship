@@ -337,7 +337,7 @@ interface PeerRestoreSource {
     suspend fun pbkHex(lost: String): String
 }
 
-/** Home → Add/Import a server → Import a backup, or a waiting server's "Send
+/** Home → Add/Restore server → Restore from backup, or a waiting server's "Send
  *  the backup" (docs/server-backup-and-clone.md, "Restore a backup"): pick the
  *  one `.flagship` file, open its metadata part (this account's key, else its
  *  passcode), stream its data part for the check, pick a name, make the server

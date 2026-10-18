@@ -51,6 +51,10 @@ class PhoneBackupCopies(
             Copy(server.lowercase(), meta, dir).takeIf { it.file.isFile }
         }.sortedByDescending { it.meta.createdAt }
 
+    /** Every server this phone holds copies for (folder names, lowercase). */
+    fun servers(): List<String> =
+        (root.listFiles() ?: emptyArray()).filter { it.isDirectory && copies(it.name).isNotEmpty() }.map { it.name }.sorted()
+
     fun has(server: String, archiveId: String): Boolean = copies(server).any { it.meta.archiveId == archiveId }
 
     /** Keep the newest always, the previous one only while both fit [reserveBytes]

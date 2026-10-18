@@ -159,6 +159,18 @@ class GymServerPageTest : GymBase() {
         assertTrue(comMock.revokedServers.isEmpty())
     }
 
+    /** Locking the app dismisses an open sheet or dialog (their own windows sit above the lock screen). */
+    @Test
+    fun lockingTheAppDismissesAnOpenSheet() {
+        openServer(office)
+        tapDesc("sd-revoke-server", 20_000)
+        waitUntilExistsDesc("revoke-reason-lost", 20_000)
+        composeRule.runOnUiThread { com.flagshipserver.app.core.GymProbe.appState!!.lock() }
+        waitUntilExists("biometric-unlock-btn", 15_000)
+        eventually(what = "the sheet gone") { descCount("revoke-reason-lost") == 0 }
+        gymShot("locked-with-sheet-open")
+    }
+
     /** Delete from the page: typed name, admin-signed release, back to Home
      *  without the server. */
     @Test

@@ -27,11 +27,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
+import com.flagshipserver.app.ui.components.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import com.flagshipserver.app.ui.components.RadioButton
-import androidx.compose.material3.ModalBottomSheet
+import com.flagshipserver.app.ui.components.ModalBottomSheet
 import com.flagshipserver.app.ui.components.Switch
 import com.flagshipserver.app.ui.components.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -97,7 +97,7 @@ import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.api.userFacing
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.window.Dialog
+import com.flagshipserver.app.ui.components.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalScreensClient
