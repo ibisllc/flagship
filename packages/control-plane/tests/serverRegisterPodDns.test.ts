@@ -14,7 +14,6 @@ import {
   InMemoryServerStorage,
   InMemoryUsernameStorage,
 } from "@flagship/storage";
-import type { CloudflareDnsClient, CloudflareDnsRecord } from "../src/cloudflareDns.js";
 
 function makeKey(): Keypair {
   const priv = new Uint8Array(32);
@@ -28,38 +27,41 @@ function bytesToHex(b: Uint8Array): string {
   return s;
 }
 
-class FakeDns implements Pick<CloudflareDnsClient, "upsert"> {
-  upserted: Array<{ name: string; type: string; content: string }> = [];
-  async upsert(args: { name: string; type: string; content: string }): Promise<CloudflareDnsRecord> {
-    this.upserted.push({ name: args.name, type: args.type, content: args.content });
-    return {
-      id: `rec-${this.upserted.length}`,
-      name: args.name,
-      type: args.type as "A" | "AAAA" | "TXT" | "CNAME",
-      content: args.content,
-    };
-  }
+interface ZoneRow {
+  id: string;
+  type: string;
+  name: string;
+  content: string;
 }
 
-/** CAA-capable client that dedupes by (name, rdata) like the real CF client. */
-class FakeCaaDns {
-  caa = new Map<string, { id: string; name: string; content: string }>();
-  calls = 0;
-  created = 0;
-  async upsert(opts: {
-    name: string;
-    type: "CAA";
-    content: string;
-    data?: { flags: number; tag: string; value: string };
-  }): Promise<{ id: string; name: string; content: string }> {
-    this.calls += 1;
-    const key = `${opts.name}|${opts.content}`;
-    const hit = this.caa.get(key);
-    if (hit) return hit;
-    this.created += 1;
-    const rec = { id: `caa-${this.created}`, name: opts.name, content: opts.content };
-    this.caa.set(key, rec);
-    return rec;
+/** A tiny zone: lists everything, deletes by id, and records every call. */
+class FakeZone {
+  rows: ZoneRow[] = [];
+  deleted: string[] = [];
+  failList = false;
+  private n = 0;
+  add(type: string, name: string, content: string): void {
+    this.rows.push({ id: `r${++this.n}`, type, name, content });
+  }
+  async listAll(): Promise<ZoneRow[]> {
+    if (this.failList) throw new Error("zone unreachable");
+    return [...this.rows];
+  }
+  async deleteById(id: string): Promise<boolean> {
+    const i = this.rows.findIndex((r) => r.id === id);
+    if (i < 0) return false;
+    this.deleted.push(this.rows[i]!.name);
+    this.rows.splice(i, 1);
+    return true;
+  }
+  seedRoot(): void {
+    this.add("A", "*.flagship.services", "203.0.113.42");
+    this.add("CAA", "flagship.services", '0 issue "letsencrypt.org"');
+  }
+  seedLegacy(user: string): void {
+    this.add("A", `*.${user}.flagship.services`, "203.0.113.42");
+    this.add("CAA", `${user}.flagship.services`, '0 issue "letsencrypt.org"');
+    this.add("A", `home.${user}.flagship.services`, "203.0.113.42");
   }
 }
 
@@ -127,189 +129,78 @@ async function buildRegister(username: string, serverName: string) {
   };
 }
 
-describe("serverRegister — one wildcard per account (docs/wildcard-dns.md)", () => {
-  it("publishes ONLY the account wildcard A record, nothing per box", async () => {
-    const usernames = new InMemoryUsernameStorage();
-    const irk = makeKey();
-    await usernames.put({
-      username: "alice",
-      irkPubHex: bytesToHex(irk.publicKey),
-      claimedAt: 1_000,
-    });
+describe("serverRegister — root wildcard (docs/wildcard-dns.md)", () => {
+  const relay = { servicesIpv4: "203.0.113.42" };
 
-    const authCodes = new InMemoryAuthCodeStorage();
-    const issued: AuthCode = {
-      version: 1,
-      serial: "abcd1234",
-      username: "alice",
-      serverName: "home",
-      serverDomain: "home.alice.flagship.services",
-      delegatedPubKey: makeKey().publicKey,
-      userPubKey: irk.publicKey,
-      issuedAt: 1_000,
-      // 1h after issue — within the 24h server-side cap.
-      expiresAt: 1_000 + 60 * 60_000,
-    };
-    const acSig = signAuthCode(issued, irk);
-    await authCodes.put({
-      serial: issued.serial,
-      username: issued.username,
-      serverName: issued.serverName,
-      serverDomain: issued.serverDomain,
-      delegatedPubKeyHex: bytesToHex(issued.delegatedPubKey),
-      userPubKeyHex: bytesToHex(issued.userPubKey),
-      userSignatureHex: bytesToHex(acSig),
-      issuedAt: issued.issuedAt,
-      expiresAt: issued.expiresAt,
-      status: "active",
-      recordedAt: issued.issuedAt,
-    });
-
-    const identity = makeKey();
-    const nonce = new Uint8Array(16);
-    crypto.getRandomValues(nonce);
-    const issuedAt = 2_000;
-    const reg: ServerRegisterRequest = {
-      authCode: issued,
-      authCodeUserSignature: acSig,
-      serverIdentityPubKey: identity.publicKey,
-      issuedAt,
-      nonce,
-    };
-    const sig = signServerRegister(reg, identity);
-
-    const fakeDns = new FakeDns();
-    const r = await handleServerRegister(
-      {
-        authCodes,
-        servers: new InMemoryServerStorage(),
-        routing: new InMemoryRoutingStorage(),
-        dns: {
-          client: fakeDns as unknown as CloudflareDnsClient,
-          servicesIpv4: "203.0.113.42",
-        },
-        now: () => issuedAt,
-      },
-      {
-        request: {
-          authCode: {
-            ...issued,
-            delegatedPubKey: bytesToHex(issued.delegatedPubKey),
-            userPubKey: bytesToHex(issued.userPubKey),
-          },
-          authCodeUserSignature: bytesToHex(acSig),
-          serverIdentityPubKey: bytesToHex(identity.publicKey),
-          issuedAt,
-          nonce: bytesToHex(nonce),
-        },
-        signature: bytesToHex(sig),
-      },
-    );
-    expect(r.status).toBe(200);
-    // One wildcard per ACCOUNT: `*.alice` answers the box (`home.alice`),
-    // everything under it (`<service>.home.alice`, by closest-encloser
-    // synthesis) and the tier-2 `<svc>.alice` names. No per-box record, and
-    // no non-wildcard A at the user-zone apex either.
-    const names = fakeDns.upserted.map((u) => u.name).sort();
-    expect(names).toEqual(["*.alice.flagship.services"]);
-    for (const u of fakeDns.upserted) {
-      expect(u.type).toBe("A");
-      expect(u.content).toBe("203.0.113.42");
-    }
-  });
-
-  it("publishes the CA-restriction CAA record set when a caa client is wired", async () => {
+  it("publishes nothing: the box's names resolve through the zone's root wildcard", async () => {
     const { authCodes, issuedAt, body } = await buildRegister("alice", "home");
-    const fakeDns = new FakeDns();
-    const caaDns = new FakeCaaDns();
+    const zone = new FakeZone();
+    zone.seedRoot();
+    const before = JSON.stringify(zone.rows);
     const r = await handleServerRegister(
-      {
-        authCodes,
-        servers: new InMemoryServerStorage(),
-        dns: {
-          client: fakeDns as unknown as CloudflareDnsClient,
-          servicesIpv4: "203.0.113.42",
-          caa: { client: caaDns },
-        },
-        now: () => issuedAt,
-      },
+      { authCodes, servers: new InMemoryServerStorage(), routing: new InMemoryRoutingStorage(), dns: { client: zone, ...relay }, now: () => issuedAt },
       body,
     );
     expect(r.status).toBe(200);
-    // CAA stays at the USER zone even though certs are per-box (A′): RFC 8659
-    // tree-climbing makes the two user-zone records cover every box and
-    // service name below them, so there is no copy at `*.alice` and no iodef.
-    const caaSet = [...caaDns.caa.values()].map((v) => `${v.name} :: ${v.content}`).sort();
-    expect(caaSet).toEqual(
-      [
-        'alice.flagship.services :: 0 issue "letsencrypt.org"',
-        'alice.flagship.services :: 0 issuewild "letsencrypt.org"',
-      ].sort(),
-    );
-    expect((r.body as { caaPublished: unknown[] }).caaPublished).toHaveLength(2);
+    expect(JSON.stringify(zone.rows)).toBe(before);
+    const out = r.body as Record<string, unknown>;
+    expect(out.legacyDnsRemoved).toBe(0);
+    expect(out).not.toHaveProperty("dnsPublished");
+    expect(out).not.toHaveProperty("caaPublished");
   });
 
-  it("does NOT duplicate CAA across a re-register of a second pod under the same user", async () => {
-    const caaDns = new FakeCaaDns();
+  it("removes the account's legacy records (they would stop the wildcard), and only that account's", async () => {
+    const { authCodes, issuedAt, body } = await buildRegister("alice", "home");
+    const zone = new FakeZone();
+    zone.seedRoot();
+    zone.seedLegacy("alice");
+    zone.seedLegacy("bob");
+    const r = await handleServerRegister(
+      { authCodes, servers: new InMemoryServerStorage(), dns: { client: zone, ...relay }, now: () => issuedAt },
+      body,
+    );
+    expect(r.status).toBe(200);
+    expect((r.body as { legacyDnsRemoved: number }).legacyDnsRemoved).toBe(3);
+    expect(zone.rows.filter((x) => x.name.includes("alice"))).toEqual([]);
+    expect(zone.rows.filter((x) => x.name.includes("bob"))).toHaveLength(3);
+  });
+
+  it("leaves them alone until the root wildcard exists", async () => {
+    const { authCodes, issuedAt, body } = await buildRegister("alice", "home");
+    const zone = new FakeZone();
+    zone.seedLegacy("alice");
+    const r = await handleServerRegister(
+      { authCodes, servers: new InMemoryServerStorage(), dns: { client: zone, ...relay }, now: () => issuedAt },
+      body,
+    );
+    expect(r.status).toBe(200);
+    expect(zone.deleted).toEqual([]);
+  });
+
+  it("a zone failure does NOT fail registration (best-effort) and is reported", async () => {
+    const { authCodes, issuedAt, body } = await buildRegister("alice", "home");
+    const zone = new FakeZone();
+    zone.failList = true;
+    const r = await handleServerRegister(
+      { authCodes, servers: new InMemoryServerStorage(), dns: { client: zone, ...relay }, now: () => issuedAt },
+      body,
+    );
+    expect(r.status).toBe(200);
+    expect((r.body as { dnsError?: string }).dnsError).toMatch(/zone unreachable/);
+  });
+
+  it("registers a second box of the account without touching the zone", async () => {
+    const zone = new FakeZone();
+    zone.seedRoot();
+    const before = JSON.stringify(zone.rows);
     for (const server of ["home", "media"]) {
       const { authCodes, issuedAt, body } = await buildRegister("alice", server);
       const r = await handleServerRegister(
-        {
-          authCodes,
-          servers: new InMemoryServerStorage(),
-          dns: {
-            client: new FakeDns() as unknown as CloudflareDnsClient,
-            servicesIpv4: "203.0.113.42",
-            caa: { client: caaDns },
-          },
-          now: () => issuedAt,
-        },
+        { authCodes, servers: new InMemoryServerStorage(), dns: { client: zone, ...relay }, now: () => issuedAt },
         body,
       );
       expect(r.status).toBe(200);
     }
-    // Two registrations, but only ONE user zone → 2 distinct CAA records, no dupes.
-    expect(caaDns.created).toBe(2);
-    expect(caaDns.caa.size).toBe(2);
-    expect(caaDns.calls).toBe(4); // 2 per register × 2, half no-ops
-  });
-
-  it("skips CAA (no throw) when no caa client is configured", async () => {
-    const { authCodes, issuedAt, body } = await buildRegister("alice", "home");
-    const r = await handleServerRegister(
-      {
-        authCodes,
-        servers: new InMemoryServerStorage(),
-        dns: { client: new FakeDns() as unknown as CloudflareDnsClient, servicesIpv4: "203.0.113.42" },
-        now: () => issuedAt,
-      },
-      body,
-    );
-    expect(r.status).toBe(200);
-    expect((r.body as { caaPublished: unknown[] }).caaPublished).toEqual([]);
-  });
-
-  it("a CAA failure does NOT fail registration (best-effort)", async () => {
-    const { authCodes, issuedAt, body } = await buildRegister("alice", "home");
-    const throwingCaa = {
-      async upsert(): Promise<never> {
-        throw new Error("CAA write refused");
-      },
-    };
-    const r = await handleServerRegister(
-      {
-        authCodes,
-        servers: new InMemoryServerStorage(),
-        dns: {
-          client: new FakeDns() as unknown as CloudflareDnsClient,
-          servicesIpv4: "203.0.113.42",
-          caa: { client: throwingCaa },
-        },
-        now: () => issuedAt,
-      },
-      body,
-    );
-    expect(r.status).toBe(200);
-    expect((r.body as { caaError?: string }).caaError).toMatch(/CAA write refused/);
+    expect(JSON.stringify(zone.rows)).toBe(before);
   });
 });

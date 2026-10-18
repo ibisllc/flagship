@@ -1,18 +1,22 @@
-import { challengeHostOf } from "@flagship/services-zone";
+import {
+  challengeHostOf,
+  classifyZoneName,
+  legacyAccountRecords,
+  rootWildcardStatus,
+} from "@flagship/services-zone";
 import { releaseChallengeShield, type RelayAddress } from "./accountDns.js";
-import { validateServerLabel, validateUserLabel } from "./labels.js";
 
 /**
  * Cloudflare DNS API client for `.com` (Worker-resident).
  *
  * Two responsibilities, both Cloudflare-internal HTTP calls:
  *
- *   1. Publish A/AAAA records for `<server>.<user>.flagship.services`
- *      → Fly anycast IP, gray-cloud (DNS only — TLS terminates on the
- *      user's daemon, not at Cloudflare's edge).
- *   2. Publish/delete TXT records for ACME DNS-01 challenges (used for
+ *   1. Publish/delete TXT records for ACME DNS-01 challenges (used for
  *      wildcards; non-wildcards use TLS-ALPN-01 which doesn't need DNS
- *      publishing).
+ *      publishing). No address record is written for anybody: the zone's
+ *      root wildcard answers every name (docs/wildcard-dns.md).
+ *   2. Sweep what the older layouts left behind (`deleteLegacyAccountRecords`,
+ *      `deleteByName`).
  *
  * Auth: an API Token with Zone:DNS:Edit scope on the flagship.services
  * zone. Set as a Worker secret via `wrangler secret put
@@ -44,13 +48,15 @@ export interface StaleAcmeTxtCleanupResult {
   shieldsReleased: number;
 }
 
-export interface OrphanedServerRouteCleanupResult {
+export interface LegacyDnsSweepResult {
   scanned: number;
   eligible: number;
   deleted: number;
   remaining: number;
   names: string[];
   dryRun: boolean;
+  /** Set when legacy records exist but nothing was deleted because the root wildcard is not in the zone yet. */
+  skipped?: "root-wildcard-not-ready";
 }
 
 /**
@@ -321,40 +327,49 @@ export class CloudflareDnsClient {
   }
 
   /**
-   * Reconcile generated per-server A/AAAA routes against active D1 servers.
-   * The two-label server/user shape, shared validators, age floor, and apex
-   * fence keep unrelated zone records outside this cleanup surface.
+   * Sweep the records earlier DNS layouts left at account and box names (A,
+   * AAAA, CAA at `<user>`, `*.<user>`, `<box>.<user>`, `*.<box>.<user>`):
+   * each one stops the zone's root wildcard for the names below it
+   * (docs/wildcard-dns.md). Does nothing until the root wildcard is in the
+   * zone and points at the relay (`skipped`), since an account's own records
+   * may be all that resolve its names before that. Records modified after
+   * `cutoffMs` are left for the next pass; deletion follows
+   * {@link legacyDeletionRank}, so no name goes dark in between. The apex, the
+   * gym subtree, reserved labels, `_acme-challenge` TXT and `skipUsers`
+   * accounts are never touched.
    */
-  async deleteOrphanedServerRoutes(opts: {
+  async deleteLegacyAccountRecords(opts: {
     apex: string;
-    activeServerDomains: string[];
+    relay: RelayAddress;
     cutoffMs: number;
     dryRun?: boolean;
     maxDeletes?: number;
-  }): Promise<OrphanedServerRouteCleanupResult> {
+    skipUsers?: readonly string[];
+  }): Promise<LegacyDnsSweepResult> {
     const apex = opts.apex.toLowerCase().replace(/\.$/, "");
-    const keep = new Set<string>();
-    for (const domain of opts.activeServerDomains) {
-      const normalized = domain.toLowerCase().replace(/\.$/, "");
-      keep.add(normalized);
-      keep.add(`*.${normalized}`);
-    }
-    const records = [...await this.listAll("A"), ...await this.listAll("AAAA")];
-    const eligible = records.filter((record) => {
-      if (record.type !== "A" && record.type !== "AAAA") return false;
-      const name = record.name.toLowerCase().replace(/\.$/, "");
-      if (keep.has(name)) return false;
-      const baseName = name.startsWith("*.") ? name.slice(2) : name;
-      const suffix = `.${apex}`;
-      if (!baseName.endsWith(suffix)) return false;
-      const labels = baseName.slice(0, -suffix.length).split(".");
-      if (labels.length !== 2) return false;
-      const [serverLabel, userLabel] = labels;
-      if (!validateServerLabel(serverLabel!).ok || !validateUserLabel(userLabel!).ok) return false;
+    const records = await this.listAll();
+    const base: LegacyDnsSweepResult = {
+      scanned: records.length,
+      eligible: 0,
+      deleted: 0,
+      remaining: 0,
+      names: [],
+      dryRun: opts.dryRun ?? false,
+    };
+    const skip = new Set((opts.skipUsers ?? []).map((u) => u.toLowerCase()));
+    const legacy = legacyAccountRecords(records, apex).filter((record) => {
+      const k = classifyZoneName(record.name, apex);
+      if (k.kind === "account" && skip.has(k.user)) return false;
       const timestamp = Date.parse(record.modified_on ?? record.created_on ?? "");
       return Number.isFinite(timestamp) && timestamp < opts.cutoffMs;
     });
-    const selected = opts.dryRun ? eligible : eligible.slice(0, opts.maxDeletes ?? 20);
+    base.eligible = legacy.length;
+    base.remaining = legacy.length;
+    if (legacy.length === 0) return base;
+    if (!rootWildcardStatus(records, apex, opts.relay).ready) {
+      return { ...base, skipped: "root-wildcard-not-ready" };
+    }
+    const selected = opts.dryRun ? legacy : legacy.slice(0, opts.maxDeletes ?? 20);
     let deleted = 0;
     if (!opts.dryRun) {
       for (const record of selected) {
@@ -362,12 +377,10 @@ export class CloudflareDnsClient {
       }
     }
     return {
-      scanned: records.length,
-      eligible: eligible.length,
+      ...base,
       deleted,
-      remaining: Math.max(0, eligible.length - deleted),
-      names: [...new Set(selected.map((record) => record.name))].sort(),
-      dryRun: opts.dryRun ?? false,
+      remaining: Math.max(0, legacy.length - deleted),
+      names: [...new Set(selected.map((record) => record.name))],
     };
   }
 

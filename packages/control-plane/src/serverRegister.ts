@@ -17,23 +17,8 @@ import type {
 import { HEX64, HEX128, equalBytes, hexToBytes, bytesToHex } from "./hex.js";
 import { addServerRefused } from "./adminAuthorityGate.js";
 import { SERIAL_RE, validateAndUseAuthCode } from "./authCode.js";
-import { ensureAccountDns, type AccountDnsDeps } from "./accountDns.js";
+import { clearLegacyAccountDns, type AccountDnsDeps } from "./accountDns.js";
 import { userZoneOf } from "@flagship/services-zone";
-/**
- * Minimum DNS-client surface `handleServerRegister` needs. Both
- * `CloudflareDnsClient` (direct CF token, dev/legacy) and
- * `BrokerDnsClient` (RPCs to the dns-broker Worker, production) satisfy
- * this; the difference is invisible to the registration handler.
- */
-export interface DnsUpsertClient {
-  upsert(opts: {
-    name: string;
-    type: "A" | "AAAA" | "TXT" | "CNAME";
-    content: string;
-    ttl?: number;
-    proxied?: boolean;
-  }): Promise<{ id: string; type: string; name: string; content: string; proxied: boolean; ttl: number }>;
-}
 import { setRoutingTargetFromRegistration } from "./routing.js";
 import {
   conflict, forbidden, malformed, notFound, ok,
@@ -49,10 +34,11 @@ export interface ServerRegisterDeps {
   usernames?: UsernameStorage;
   /** Optional. When provided, server registration also: (a) sets the
    *  routing target if the user has registered an RCK for this subdomain,
-   *  (b) makes sure the account's wildcard A/AAAA (and CAA) exist. */
+   *  (b) removes the account's legacy DNS records. */
   routing?: RoutingStorage;
-  /** The account-wildcard DNS (A/AAAA + CAA) published at registration; see
-   *  `accountDns.ts` for what it writes and `AccountDnsDeps.caa` for CAA. */
+  /** The zone client. Registration publishes no address or CAA record (the
+   *  root wildcard answers every name, docs/wildcard-dns.md); it only removes
+   *  the account's legacy records, see `clearLegacyAccountDns`. */
   dns?: AccountDnsDeps;
   /** N0d-2: when all three are provided, a successful new-server
    *  registration fans a category-only ("server-registered"),
@@ -303,38 +289,20 @@ export async function handleServerRegister(
     );
   }
 
-  // DNS: one wildcard per ACCOUNT (docs/wildcard-dns.md). `*.<user>` A/AAAA
-  // makes every name under the account resolve to the .services SNI
-  // passthrough: this box (`<server>.<user>`), everything under it
-  // (`<service>.<server>.<user>`, which closest-encloser synthesis answers
-  // from the same record) and the tier-2 leader-routed `<svc>.<user>` names.
-  // Nothing is published per box any more. The records are idempotent (a
-  // second box of the account, or a registration that follows the auth-code
-  // issue which already created them, is a no-op) and are removed with the
-  // account's last server. CAA stays at the user zone: RFC 8659 tree-climbing
-  // makes the one pair at `<user>` cover every name below it. PHASE-1 only —
-  // no accounturi pinning yet (see caaPublish.ts / caaPin.ts TODO).
-  // Best-effort: a DNS or CAA failure must never fail registration.
-  //
-  // CAA needs a CAA-capable client. The production `BrokerDnsClient` exposes
-  // A/AAAA + ACME-TXT only and does NOT carry CAA — so the Worker wires its
-  // CAA-capable `CloudflareDnsClient` here explicitly. When no `caa.client`
-  // is configured we skip (no silent broker-throw).
-  // TODO(broker-caa): teach the dns-broker a `publishCaa` RPC so production
-  // can publish CAA through the broker's pinned credentials too, then default
-  // `caa.client` to `deps.dns.client`.
-  let dnsPublished: { type: string; name: string; content: string }[] = [];
+  // DNS: nothing is published. The zone's root wildcard `*.<apex>` answers
+  // this box (`<server>.<user>`), everything under it and the tier-2
+  // `<svc>.<user>` names (docs/wildcard-dns.md). A record an older layout left
+  // at the account or box name WOULD stop that wildcard, so it is removed
+  // here (idempotent, and skipped until the root wildcard is in the zone).
+  // Best-effort: a DNS failure must never fail registration.
+  let legacyDnsRemoved = 0;
   let dnsError: string | undefined;
-  let caaPublished: { name: string; rdata: string }[] = [];
-  let caaError: string | undefined;
   if (deps.dns) {
     const userZone = userZoneOf(authCode.serverDomain, deps.apex ?? "flagship.services");
     if (userZone) {
-      const r2 = await ensureAccountDns(deps.dns, userZone);
-      dnsPublished = r2.dnsPublished;
-      dnsError = r2.dnsError;
-      caaPublished = r2.caaPublished;
-      caaError = r2.caaError;
+      const r2 = await clearLegacyAccountDns(deps.dns, userZone);
+      legacyDnsRemoved = r2.removed;
+      dnsError = r2.error;
     }
   }
 
@@ -342,10 +310,8 @@ export async function handleServerRegister(
     ok: true,
     serverDomain: authCode.serverDomain,
     registeredAt: now,
-    dnsPublished,
+    legacyDnsRemoved,
     dnsError,
-    caaPublished,
-    caaError,
   });
 }
 

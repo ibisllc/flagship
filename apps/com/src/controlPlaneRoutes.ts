@@ -13,7 +13,6 @@ import {
   handleSchemaStatus,
   handleStampSchemaVersion,
   handleCaLeaseStatus,
-  BrokerDnsClient,
   removeAccountDns,
   removeBoxDns,
   type AccountDnsDeps,
@@ -127,7 +126,6 @@ import {
   handlePostProvisionStatus,
   handleGetProvisionStatus,
   handleRegisterRck,
-  handleRepublishServerDns,
   handleRoutingLookup,
   handleServerLookup,
   handleServerRegister,
@@ -244,6 +242,7 @@ import { createUpCloudClient, parseUpCloudLabels } from "./upcloud.js";
 import { handleGymTeardown, type GymTeardownBody } from "./gymCloud.js";
 import { loadInferenceSettings } from "./inferenceModelRoutes.js";
 import { challengeShieldFor } from "./challengeShield.js";
+import { protectedAccountsFrom } from "./prodReap.js";
 
 export interface ControlPlaneEnv {
   DB?: D1Database;
@@ -513,29 +512,28 @@ function relayAddressOf(env: { SERVICES_PASSTHROUGH_IPV4?: string; SERVICES_PASS
 }
 
 /**
- * The account-wildcard DNS dependency (docs/wildcard-dns.md) for a handler:
- * the broker when configured, else the direct client; CAA goes through the
- * direct client only (the broker has no CAA RPC). Undefined when there is no
- * relay address or no way to write.
+ * The zone dependency (docs/wildcard-dns.md) for a handler that cleans up
+ * after the older DNS layouts: the direct Cloudflare client (the broker has no
+ * list/delete RPC) and the relay address the root wildcard must point at. Nothing
+ * here writes an address or CAA record. Undefined when there is no relay
+ * address or no token.
  */
 function accountDnsDepsOf(
   env: {
     SERVICES_PASSTHROUGH_IPV4?: string;
     SERVICES_PASSTHROUGH_IPV6?: string;
-    DNS_BROKER_URL?: string;
     CLOUDFLARE_DNS_API_TOKEN?: string;
     CLOUDFLARE_SERVICES_ZONE_ID?: string;
   },
 ): AccountDnsDeps | undefined {
   const relay = relayAddressOf(env);
   if (!relay) return undefined;
-  const direct =
-    env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
-      ? new CloudflareDnsClient({ apiToken: env.CLOUDFLARE_DNS_API_TOKEN, zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID })
-      : null;
-  const client = env.DNS_BROKER_URL ? new BrokerDnsClient({ brokerUrl: env.DNS_BROKER_URL }) : direct;
-  if (!client) return undefined;
-  return { client, ...relay, ...(direct ? { caa: { client: direct } } : {}) };
+  if (!env.CLOUDFLARE_DNS_API_TOKEN || !env.CLOUDFLARE_SERVICES_ZONE_ID) return undefined;
+  const client = new CloudflareDnsClient({
+    apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
+    zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
+  });
+  return { client, ...relay };
 }
 
 const ROUTE_RE = {
@@ -744,7 +742,6 @@ const ROUTE_RE = {
   CUSTOM_DOMAIN: /^\/api\/users\/([^/]+)\/apps\/([^/]+)\/custom-domain$/,
   APP_ALIASES: /^\/api\/users\/([^/]+)\/apps\/aliases$/,
   VOICI_SHORTEN: /^\/api\/voici\/shorten$/,
-  ADMIN_REPUBLISH: /^\/api\/admin\/republish-server-dns$/,
   ADMIN_CLEANUP_APEX: /^\/api\/admin\/cleanup-apex$/,
   ADMIN_DNS_CHALLENGE_GC: /^\/api\/admin\/dns-challenge-gc$/,
   ADMIN_DNS_ROUTE_GC: /^\/api\/admin\/dns-route-gc$/,
@@ -1077,7 +1074,8 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           grants: storage.deviceCapabilityGrants,
           apex: env.SERVICES_APEX,
-          // The account's wildcard DNS exists before its box registers.
+          // The zone's root wildcard answers the new box's name; this only
+          // clears the account's legacy records, which would stop it.
           ...(() => {
             const dns = accountDnsDepsOf(env);
             return dns ? { dns } : {};
@@ -1111,31 +1109,10 @@ export async function tryControlPlane(
   // desktop reads from it; .com no longer stores the blob at rest.
 
   if (method === "POST" && ROUTE_RE.SERVER_REGISTER.test(path)) {
-    // Prefer the broker (production posture). Fall back to direct
-    // CloudflareDnsClient only when no broker URL is configured —
-    // typically the local-dev path.
-    // The direct CloudflareDnsClient also speaks CAA (type:"CAA" with a
-    // structured `data` field); the broker has no CAA RPC yet, so CAA is
-    // published only on the direct path.
-    const cfDnsClient =
-      !env.DNS_BROKER_URL && env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
-        ? new CloudflareDnsClient({
-            apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
-            zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
-          })
-        : null;
-    const dnsClient = env.DNS_BROKER_URL
-      ? new BrokerDnsClient({ brokerUrl: env.DNS_BROKER_URL })
-      : cfDnsClient;
-    const dns =
-      dnsClient && env.SERVICES_PASSTHROUGH_IPV4
-        ? {
-            client: dnsClient,
-            servicesIpv4: env.SERVICES_PASSTHROUGH_IPV4,
-            servicesIpv6: env.SERVICES_PASSTHROUGH_IPV6,
-            ...(cfDnsClient ? { caa: { client: cfDnsClient } } : {}),
-          }
-        : undefined;
+    // Registration publishes no DNS (the zone's root wildcard answers the
+    // box's names, docs/wildcard-dns.md); it only clears the account's legacy
+    // records through the direct Cloudflare client.
+    const dns = accountDnsDepsOf(env);
     const srForwarder = buildOptionalPushForwarder(env);
     return finish(
       await handleServerRegister(
@@ -1231,9 +1208,9 @@ export async function tryControlPlane(
             identities: storage.deviceIdentities,
             usernames: storage.usernames,
           },
-          ...(revokeDns ? { dns: revokeDns, authCodes: storage.authCodes } : {}),
+          ...(revokeDns ? { dns: revokeDns } : {}),
           ...(revokeDns && relayAddressOf(env)
-            ? { accountDns: { client: revokeDns, ...relayAddressOf(env)!, caa: { client: revokeDns } } }
+            ? { accountDns: { client: revokeDns, ...relayAddressOf(env)! } }
             : {}),
         },
         await readJson(request),
@@ -1242,8 +1219,8 @@ export async function tryControlPlane(
   }
 
   if (method === "POST" && ROUTE_RE.SERVER_REGISTRY_UNREVOKE.test(path)) {
-    // Owner-signed undo of a lost/stolen/decommissioned revoke. Puts back the
-    // account's wildcard DNS the revoke may have removed with its last server.
+    // Owner-signed undo of a lost/stolen/decommissioned revoke. Nothing to put
+    // back in DNS (the root wildcard answers the box's names).
     return finish(
       await handleUnrevokeServer(
         {
@@ -2117,9 +2094,9 @@ export async function tryControlPlane(
       );
     }
     // Transfer-a-box broker — the cross-account ownership handoff. The claim
-    // handler does the .com-side NAMESPACE MIGRATION (servers + routing + DNS).
-    // DNS uses the same per-box upsert posture as registration (direct
-    // CloudflareDnsClient when no broker is configured).
+    // handler does the .com-side NAMESPACE MIGRATION (servers + routing); its
+    // DNS step only removes the legacy records of both accounts (the root
+    // wildcard answers the moved box, docs/wildcard-dns.md).
     if (
       method &&
       (path.match(ROUTE_RE.TRANSFER_OFFER) ||
@@ -2132,16 +2109,11 @@ export async function tryControlPlane(
         path.match(ROUTE_RE.TRANSFER_CLAIM_POLL);
       const isOffer = ROUTE_RE.TRANSFER_OFFER.test(path);
       const isPoll = ROUTE_RE.TRANSFER_CLAIM_POLL.test(path);
-      const xferCfDns =
-        !env.DNS_BROKER_URL && env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
-          ? new CloudflareDnsClient({
-              apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
-              zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
-            })
-          : null;
-      const xferDnsClient = env.DNS_BROKER_URL
-        ? new BrokerDnsClient({ brokerUrl: env.DNS_BROKER_URL })
-        : xferCfDns;
+      const xferDns = accountDnsDepsOf(env);
+      const xferCf =
+        env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
+          ? new CloudflareDnsClient({ apiToken: env.CLOUDFLARE_DNS_API_TOKEN, zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID })
+          : undefined;
       const buildTransferDeps = () => ({
         servers: storage.servers,
         usernames: storage.usernames,
@@ -2149,17 +2121,8 @@ export async function tryControlPlane(
         serverTransfers: storage.serverTransfers,
         auditEvents: storage.auditEvents,
         grants: storage.deviceCapabilityGrants,
-        ...(xferDnsClient && env.SERVICES_PASSTHROUGH_IPV4
-          ? {
-              dns: {
-                client: xferDnsClient,
-                servicesIpv4: env.SERVICES_PASSTHROUGH_IPV4,
-                servicesIpv6: env.SERVICES_PASSTHROUGH_IPV6,
-                ...(xferCfDns ? { caa: { client: xferCfDns } } : {}),
-              },
-            }
-          : {}),
-        ...(xferCfDns ? { dnsCleanup: xferCfDns, authCodes: storage.authCodes } : {}),
+        ...(xferDns ? { dns: xferDns } : {}),
+        ...(xferCf ? { dnsCleanup: xferCf } : {}),
         apex: env.SERVICES_APEX,
       });
       const domain = decodeURIComponent(xferM![1]!);
@@ -3004,8 +2967,7 @@ export async function tryControlPlane(
 
   if (
     method === "POST" &&
-    (ROUTE_RE.ADMIN_REPUBLISH.test(path) ||
-      ROUTE_RE.ADMIN_CLEANUP_APEX.test(path) ||
+    (ROUTE_RE.ADMIN_CLEANUP_APEX.test(path) ||
       ROUTE_RE.ADMIN_DNS_CHALLENGE_GC.test(path) ||
       ROUTE_RE.ADMIN_DNS_ROUTE_GC.test(path))
   ) {
@@ -3033,28 +2995,22 @@ export async function tryControlPlane(
       return jsonResponse({ ok: true, ...result });
     }
     if (ROUTE_RE.ADMIN_DNS_ROUTE_GC.test(path)) {
-      const servers = await storage.servers.listAll();
-      const result = await dns.deleteOrphanedServerRoutes({
+      // The legacy-record sweep: removes every A/AAAA/CAA an earlier layout
+      // left at an account or box name (docs/wildcard-dns.md). `?dryRun=true`
+      // lists them, `?max=<n>` (default 20, at most 100) bounds one pass. It
+      // does nothing until the root wildcard is in the zone.
+      const relay = relayAddressOf(env);
+      if (!relay) return jsonResponse({ error: "SERVICES_PASSTHROUGH_IPV4 not set" }, 503);
+      const max = Math.min(100, Math.max(1, Number(url.searchParams.get("max")) || 20));
+      const result = await dns.deleteLegacyAccountRecords({
         apex: env.SERVICES_APEX ?? "flagship.services",
-        activeServerDomains: servers.filter((server) => !server.revokedAt).map((server) => server.serverDomain),
+        relay,
         cutoffMs: Date.now() - 60 * 60 * 1000,
         dryRun: url.searchParams.get("dryRun") === "true",
-        maxDeletes: 20,
+        maxDeletes: max,
+        skipUsers: protectedAccountsFrom(env),
       });
       return jsonResponse({ ok: true, ...result });
-    }
-    if (ROUTE_RE.ADMIN_REPUBLISH.test(path)) {
-      if (!env.SERVICES_PASSTHROUGH_IPV4) {
-        return jsonResponse({ error: "SERVICES_PASSTHROUGH_IPV4 not set" }, 503);
-      }
-      return finishPlain(
-        await handleRepublishServerDns({
-          servers: storage.servers,
-          dns,
-          servicesIpv4: env.SERVICES_PASSTHROUGH_IPV4,
-          servicesIpv6: env.SERVICES_PASSTHROUGH_IPV6,
-        }),
-      );
     }
     return finishPlain(
       await handleCleanupApex({ dns, apex: env.SERVICES_APEX ?? "flagship.services" }),

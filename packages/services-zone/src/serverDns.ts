@@ -1,31 +1,29 @@
-import { accountWildcardName, userZoneOf } from "./accountDns.js";
 import type { ZoneApi } from "./types.js";
 
 /**
- * Publishes the DNS that makes `<server>.<user>.flagship.services` — and every
- * canonical service name `<service>.<server>.<user>` under it — resolvable.
+ * The Fly app's `/api/services-zone/publish-server` backend.
  *
- *   mode = "tunnel": the box resolves through the ACCOUNT wildcard
- *                    `*.<user>` -> tunnel ingress anycast IP (one record per
- *                    account, shared by all its boxes; docs/wildcard-dns.md).
- *                    No per-box record is written, and any older per-box one
- *                    is removed. The SNI router peeks the ClientHello and
- *                    forwards over the user's outbound WebSocket.
+ * Under the ROOT-WILDCARD layout (docs/wildcard-dns.md) the zone holds one
+ * `*.<apex>` A/AAAA pair and nothing per account or box, so a server needs no
+ * DNS of its own:
  *
- *   mode = "direct": the apex points at the user-supplied A record (their
- *                    VPS / port-forwarded home box). Wildcard points the same.
- *                    `.services` is not in the traffic path. This is the one
- *                    case that still needs per-box records, because the
- *                    address differs from the account's.
+ *   mode = "tunnel": publishes nothing. `<server>.<user>.<apex>` and every
+ *                    name below it resolve through the root wildcard to the
+ *                    relay, whose SNI router forwards over the user's outbound
+ *                    WebSocket. Any per-box record an older build wrote for
+ *                    this box is removed, because a record at the box name
+ *                    would stop the wildcard for every service name below it.
  *
- * Each call is idempotent — existing records for the same name are removed
- * before the new set is written, so a tunnel→direct flip leaves a clean zone.
+ *   mode = "direct": UNSUPPORTED. A box on its own IP would need a record at
+ *                    `<server>.<user>`, which blocks the wildcard for all of
+ *                    its children, so it would need an explicit record for
+ *                    every service name too, and `.com` would have to write
+ *                    one on each app install. Nothing calls it (no client, no
+ *                    box) and the relay is the only supported path, so the
+ *                    publisher refuses it with {@link DirectModeUnsupportedError}.
  *
- * NOTE: the LIVE register-time DNS path is control-plane
- * `handleServerRegister`; this publisher backs the Fly app's
- * `/server-dns` route. Account records go away with the account's last
- * server in `.com` (it knows the other servers); `unpublish` here only removes
- * the box's own records.
+ * Each call is idempotent. The LIVE register-time cleanup is in control-plane
+ * `accountDns.ts`; this publisher only backs the Fly app's route.
  */
 
 export type ServerDnsMode = "tunnel" | "direct";
@@ -71,17 +69,28 @@ export class InMemoryServerDnsRegistry implements ServerDnsRegistry {
 export interface ServerDnsPublisherOptions {
   zone: ZoneApi;
   registry: ServerDnsRegistry;
-  /** A record of the tunnel ingress anycast IP for `mode = tunnel`. */
-  tunnelIngressIp: string;
+  /** Kept for the route's wiring; nothing is published at it any more. */
+  tunnelIngressIp?: string;
   apex?: string;
+}
+
+/** Thrown for `mode = "direct"`, which the root-wildcard layout cannot serve. */
+export class DirectModeUnsupportedError extends Error {
+  readonly code = "direct-mode-unsupported";
+  constructor() {
+    super(
+      "direct-IP servers are not supported: a record at the server's name would stop the zone wildcard for every service name below it. Use the relay (mode=tunnel).",
+    );
+  }
 }
 
 export class ServerDnsPublisher {
   constructor(private readonly opts: ServerDnsPublisherOptions) {}
 
   /**
-   * Publish (or re-publish) the DNS record set for one server. Returns the
-   * record set that's now active.
+   * Make the box's names resolvable: with the root wildcard that means
+   * publishing nothing and clearing any per-box record an older build left.
+   * Returns the names that now resolve through the wildcard.
    */
   async publish(args: {
     username: string;
@@ -93,65 +102,17 @@ export class ServerDnsPublisher {
     if (!isLabel(args.username) || !isLabel(args.serverName)) {
       throw new Error("username and serverName must be RFC 1035 labels");
     }
+    if (args.mode === "direct") throw new DirectModeUnsupportedError();
     const apexFqdn = `${args.serverName}.${args.username}.${apex}`;
     const wildcardFqdn = `*.${args.serverName}.${args.username}.${apex}`;
-    const target = args.mode === "direct" ? requireIp(args.directIp) : this.opts.tunnelIngressIp;
 
-    // Delete any prior per-box records for this exact name so a flip (or an
-    // older per-box publish) leaves a clean zone.
     await this.purge(apexFqdn);
     await this.purge(wildcardFqdn);
-
-    if (args.mode === "tunnel") {
-      // The account wildcard answers for this box. Write it only when absent
-      // or pointing elsewhere, so a second box under the user is a no-op.
-      const zone = userZoneOf(apexFqdn, apex);
-      const wild = accountWildcardName(zone ?? `${args.username}.${apex}`);
-      const existing = await this.listA(wild);
-      if (!existing.some((r) => r.value === target)) {
-        await this.purge(wild);
-        await this.writeA(wild, target);
-      }
-      this.opts.registry.put(apexFqdn, { apex: apexFqdn, wildcard: wildcardFqdn });
-      return { apex: apexFqdn, wildcard: wildcardFqdn, mode: args.mode, target };
-    }
-
-    // mode = "direct": the box's own address differs from the account's, so
-    // it keeps its own pair (box apex + box wildcard).
-    const apexRec = await this.writeA(apexFqdn, target);
-    const wildRec = await this.writeA(wildcardFqdn, target);
-
-    this.opts.registry.put(apexFqdn, {
-      apex: apexFqdn,
-      wildcard: wildcardFqdn,
-      apexId: apexRec.id,
-      wildcardId: wildRec.id,
-    });
-
-    return { apex: apexFqdn, wildcard: wildcardFqdn, mode: args.mode, target };
+    this.opts.registry.put(apexFqdn, { apex: apexFqdn, wildcard: wildcardFqdn });
+    return { apex: apexFqdn, wildcard: wildcardFqdn, mode: args.mode, target: this.opts.tunnelIngressIp ?? "" };
   }
 
-  private async listA(name: string): Promise<{ id?: string; value: string }[]> {
-    const z = this.opts.zone as ZoneApiWithA;
-    return (await (z.listAByName?.(name) ?? Promise.resolve([]))) ?? [];
-  }
-
-  /**
-   * Write an A record. The ZoneApi contract was originally TXT-only (for
-   * ACME DNS-01); A-record providers slot in via the optional createA hook.
-   * If none is configured, fall back to a TXT marker — useful for tests
-   * and for offline / dry-run zone provisioning.
-   */
-  private async writeA(name: string, value: string): Promise<{ id?: string }> {
-    const z = this.opts.zone as ZoneApiWithA;
-    if (z.createA) return z.createA({ name, value, ttl: 60 });
-    return this.opts.zone.createTxt({ name, value: `flagship-server-a:${value}`, ttl: 60 });
-  }
-
-  /**
-   * Remove a server's own per-box records (e.g. after revocation). The account
-   * wildcard stays: other boxes of the account may still use it.
-   */
+  /** Remove a server's per-box records (e.g. after revocation). */
   async unpublish(args: { username: string; serverName: string }): Promise<void> {
     const apex = this.opts.apex ?? "flagship.services";
     const apexFqdn = `${args.serverName}.${args.username}.${apex}`;
@@ -166,15 +127,15 @@ export class ServerDnsPublisher {
     for (const r of existing) {
       if (r.id) await this.opts.zone.deleteTxt(r.id).catch(() => {});
     }
-    const a = await ((this.opts.zone as ZoneApiWithA).listAByName?.(name) ?? Promise.resolve([]));
+    const z = this.opts.zone as ZoneApiWithA;
+    const a = await (z.listAByName?.(name) ?? Promise.resolve([]));
     for (const r of a) {
-      if (r.id) await ((this.opts.zone as ZoneApiWithA).deleteA?.(r.id) ?? Promise.resolve());
+      if (r.id) await (z.deleteA?.(r.id) ?? Promise.resolve());
     }
   }
 }
 
 interface ZoneApiWithA {
-  createA?(record: { name: string; value: string; ttl?: number }): Promise<{ id?: string }>;
   deleteA?(id: string): Promise<void>;
   listAByName?(name: string): Promise<{ id?: string; value: string }[]>;
 }
@@ -182,14 +143,4 @@ interface ZoneApiWithA {
 const LABEL_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 function isLabel(s: string): boolean {
   return LABEL_RE.test(s);
-}
-
-const IPV4_RE = /^(25[0-5]|2[0-4]\d|[01]?\d\d?)(\.(25[0-5]|2[0-4]\d|[01]?\d\d?)){3}$/;
-const IPV6_RE = /^[0-9a-fA-F:]+$/; // permissive; full validation isn't worth the bytes
-function requireIp(ip: string | undefined): string {
-  if (!ip) throw new Error("directIp required for mode=direct");
-  if (!IPV4_RE.test(ip) && !IPV6_RE.test(ip)) {
-    throw new Error(`directIp ${JSON.stringify(ip)} is not IPv4 or IPv6`);
-  }
-  return ip;
 }

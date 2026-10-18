@@ -7,7 +7,7 @@ import {
 } from "@flagship/protocol";
 import type { AuthCodeStorage, DeviceCapabilityGrantStorage, UsernameStorage } from "@flagship/storage";
 import { userZoneOf } from "@flagship/services-zone";
-import { ensureAccountDns, type AccountDnsDeps } from "./accountDns.js";
+import { clearLegacyAccountDns, type AccountDnsDeps } from "./accountDns.js";
 import { addServerRefused, authorizeAddServer } from "./adminAuthorityGate.js";
 import { HEX64, HEX128, equalHex, hexToBytes, bytesToHex } from "./hex.js";
 import { validateServerLabel, validateUserLabel } from "./labels.js";
@@ -29,10 +29,11 @@ export interface AuthCodeDeps {
    */
   apex?: string;
   /**
-   * The account-wildcard DNS (docs/wildcard-dns.md). When wired, an admitted
-   * issue makes sure `*.<user>` A/AAAA (and CAA) exist, so the new box's name
-   * resolves before it registers and no resolver caches "no such name" for it
-   * (the zone's SOA says 30 minutes). Best-effort and idempotent.
+   * The zone client (docs/wildcard-dns.md). The new box's name resolves
+   * through the zone's root wildcard before it registers, so nothing is
+   * published; when wired, an admitted issue only removes the records an older
+   * layout left for the account, which would stop that wildcard. Best-effort
+   * and idempotent.
    */
   dns?: AccountDnsDeps;
   freshnessMs?: number;
@@ -187,7 +188,7 @@ export async function handleAuthCodeIssue(
   if (!out.ok) return conflict(out.reason);
   if (deps.dns) {
     const userZone = userZoneOf(expectedDomain, apex);
-    if (userZone) await ensureAccountDns(deps.dns, userZone);
+    if (userZone) await clearLegacyAccountDns(deps.dns, userZone);
   }
   return ok({ ok: true, serial: code.serial, expiresAt: code.expiresAt });
 }

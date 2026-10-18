@@ -42,7 +42,6 @@ import {
 } from "@flagship/protocol";
 import type {
   AuditEventStorage,
-  AuthCodeStorage,
   AutoUnlockLeaseStorage,
   BoxSealedLeaseStorage,
   DeviceCapabilityGrantStorage,
@@ -59,8 +58,7 @@ import {
 import { HEX64, hexToBytes } from "./hex.js";
 import {
   accountZoneOfServerDomain,
-  ensureAccountDns,
-  reconcileAccountDns,
+  clearLegacyAccountDns,
   removeBoxDns,
   type AccountDnsDeps,
 } from "./accountDns.js";
@@ -88,22 +86,18 @@ export interface ServerRevocationDeps {
   autoUnlockLeases?: AutoUnlockLeaseStorage;
   boxSealedLeases?: BoxSealedLeaseStorage;
   /**
-   * Optional. When wired, the revoked server's DNS is cleaned so the
-   * `flagship.services` zone doesn't accumulate orphan records and exhaust
-   * its record quota (docs/wildcard-dns.md): any per-box A/AAAA older builds
-   * published for it is deleted, and when it was the account's LAST live
-   * server (and no install is in flight) the account's own records —
-   * `*.<user>` A/AAAA and the CAA at `<user>` — go too. Best-effort — a DNS
-   * failure never undoes the revocation that already landed.
+   * Optional. When wired, any per-box A/AAAA/CAA an older layout published
+   * for the revoked server is deleted: a record at the box name would stop the
+   * zone's root wildcard for the names below it (docs/wildcard-dns.md). Best
+   * effort: a DNS failure never undoes the revocation that already landed.
    */
   dns?: DnsDeleteClient;
   /**
-   * Optional with `dns`. Lets the account clean-up put the account's records
-   * back when a registration slipped in while it was deleting them.
+   * Optional with `dns`. Also removes the account's own legacy records (they
+   * would stop the wildcard for its other boxes), once the root wildcard is
+   * in the zone.
    */
   accountDns?: AccountDnsDeps;
-  /** Optional with `dns`. An install in flight keeps the account's DNS. */
-  authCodes?: Pick<AuthCodeStorage, "listOutstandingByUsername">;
   /**
    * Optional. When wired, the revocation request body may carry an explicit
    * `signerPubHex` to authorize the action under a per-device
@@ -365,19 +359,8 @@ export async function handleRevokeServer(
   if (deps.dns) {
     dnsRecordsDeleted += await removeBoxDns(deps.dns, target.serverDomain);
     const userZone = accountZoneOfServerDomain(target.serverDomain);
-    if (userZone) {
-      try {
-        const rec = await reconcileAccountDns({
-          use: { servers: deps.servers, authCodes: deps.authCodes, now: () => now },
-          username: target.username,
-          userZone,
-          remover: deps.dns,
-          publish: deps.accountDns,
-        });
-        dnsRecordsDeleted += rec.deleted;
-      } catch {
-        // swallow — see comment above.
-      }
+    if (userZone && deps.accountDns) {
+      dnsRecordsDeleted += (await clearLegacyAccountDns(deps.accountDns, userZone)).removed;
     }
   }
 
@@ -407,9 +390,9 @@ export interface ServerUnrevocationDeps {
   /** Slice D — device-grant store for the master-admin authority gate. */
   grants?: DeviceCapabilityGrantStorage;
   /**
-   * Optional. Re-publishes the per-box A/AAAA records the revoke deleted, so
-   * the box's names resolve again. Best-effort: a DNS failure never undoes the
-   * un-revoke.
+   * Optional. Publishes nothing (the root wildcard answers the box's names
+   * again at once); only removes the account's legacy records, which would
+   * stop it. Best-effort: a DNS failure never undoes the un-revoke.
    */
   dns?: AccountDnsDeps;
   maxAgeMs?: number;
@@ -480,15 +463,10 @@ export async function handleUnrevokeServer(
     return { status: 500, body: { error: "unrevoke failed (server vanished?)" } };
   }
 
-  let dnsRepublished = 0;
+  let legacyDnsRemoved = 0;
   if (deps.dns) {
     const userZone = accountZoneOfServerDomain(target.serverDomain);
-    if (userZone) {
-      // The revoke may have removed the account's records with its last
-      // server; put them back (a no-op when they are still there).
-      const r2 = await ensureAccountDns(deps.dns, userZone);
-      dnsRepublished = r2.dnsPublished.length;
-    }
+    if (userZone) legacyDnsRemoved = (await clearLegacyAccountDns(deps.dns, userZone)).removed;
   }
 
   try {
@@ -506,5 +484,5 @@ export async function handleUnrevokeServer(
     // swallow.
   }
 
-  return ok({ ok: true, unrevokedAt: now, dnsRepublished });
+  return ok({ ok: true, unrevokedAt: now, legacyDnsRemoved });
 }

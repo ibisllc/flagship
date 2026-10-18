@@ -7,3 +7,4 @@ export * from "./serverDns.js";
 export * from "./caaPin.js";
 export * from "./ctMonitor.js";
 export * from "./accountDns.js";
+export * from "./rootWildcard.js";

@@ -332,7 +332,35 @@ describe("POST /api/server-registry/revoke (IRK-signed user-initiated)", () => {
     ).toBe(false);
   });
 
-  it("DNS cleanup of the account's LAST server: its per-box records and the account's own set", async () => {
+  /** A zone the account clean-up can list and delete from. */
+  function makeZone(rows: Array<[string, string, string]>) {
+    const records = rows.map(([type, name, content], i) => ({ id: `r${i}`, type, name, content }));
+    return {
+      records,
+      async listAll() {
+        return [...records];
+      },
+      async deleteById(id: string) {
+        const i = records.findIndex((r) => r.id === id);
+        if (i < 0) return false;
+        records.splice(i, 1);
+        return true;
+      },
+    };
+  }
+  const ROOT_ROWS: Array<[string, string, string]> = [
+    ["A", "*.flagship.services", "1.2.3.4"],
+    ["AAAA", "*.flagship.services", "::1"],
+  ];
+  const LEGACY_HARRY: Array<[string, string, string]> = [
+    ["A", "*.harry.flagship.services", "1.2.3.4"],
+    ["AAAA", "*.harry.flagship.services", "::1"],
+    ["CAA", "harry.flagship.services", '0 issue "letsencrypt.org"'],
+    ["CAA", "harry.flagship.services", '0 issuewild "letsencrypt.org"'],
+  ];
+  const relay = { servicesIpv4: "1.2.3.4", servicesIpv6: "::1" };
+
+  it("DNS cleanup removes the revoked box's old per-box records (A, AAAA, CAA at the box and *.box)", async () => {
     const storage = await setUpClaimedHarry();
     await seedServer(storage);
     const dns = makeFakeDns();
@@ -340,93 +368,52 @@ describe("POST /api/server-registry/revoke (IRK-signed user-initiated)", () => {
     const { body } = revokeBody();
     const r = await handleRevokeServer({ ...deps(storage), dns }, body);
     expect(r.status).toBe(200);
-
-    // The box's old per-box pair (A + AAAA at <serverDomain> and *.<serverDomain>)
-    // and, since nothing else of harry's is live, the account set: *.harry A,
-    // AAAA and CAA, and the CAA at harry.
     expect(dns.calls.sort()).toEqual(
       [
         [DOMAIN, "A"],
         [DOMAIN, "AAAA"],
+        [DOMAIN, "CAA"],
         [`*.${DOMAIN}`, "A"],
         [`*.${DOMAIN}`, "AAAA"],
-        ["*.harry.flagship.services", "A"],
-        ["*.harry.flagship.services", "AAAA"],
-        ["*.harry.flagship.services", "CAA"],
-        ["harry.flagship.services", "CAA"],
+        [`*.${DOMAIN}`, "CAA"],
       ].sort(),
     );
-    expect((r.body as { dnsRecordsDeleted: number }).dnsRecordsDeleted).toBe(8);
+    expect((r.body as { dnsRecordsDeleted: number }).dnsRecordsDeleted).toBe(6);
   });
 
-  it("DNS cleanup keeps the account's set while another server of the account is live", async () => {
+  it("also clears the account's legacy records, even while another server of it is live (they would stop the wildcard)", async () => {
     const storage = await setUpClaimedHarry();
     await seedServer(storage);
     await seedServer(storage, "media.harry.flagship.services");
     const dns = makeFakeDns();
+    const zone = makeZone([...ROOT_ROWS, ...LEGACY_HARRY, ["A", "*.bob.flagship.services", "1.2.3.4"]]);
 
-    const r = await handleRevokeServer({ ...deps(storage), dns }, revokeBody().body);
+    const r = await handleRevokeServer({ ...deps(storage), dns, accountDns: { client: zone, ...relay } }, revokeBody().body);
     expect(r.status).toBe(200);
-    expect(dns.calls.every(([name]) => name === DOMAIN || name === `*.${DOMAIN}`)).toBe(true);
-    expect((r.body as { dnsRecordsDeleted: number }).dnsRecordsDeleted).toBe(4);
+    expect(zone.records.map((x) => `${x.type} ${x.name}`).sort()).toEqual(
+      ["A *.flagship.services", "AAAA *.flagship.services", "A *.bob.flagship.services"].sort(),
+    );
+    expect((r.body as { dnsRecordsDeleted: number }).dnsRecordsDeleted).toBe(6 + 4);
   });
 
-  it("DNS cleanup keeps the account's set while an install is in flight", async () => {
+  it("leaves the account's legacy records until the root wildcard is in the zone", async () => {
     const storage = await setUpClaimedHarry();
     await seedServer(storage);
-    await storage.authCodes.put({
-      serial: "inflight1",
-      username: USERNAME,
-      serverName: "media",
-      serverDomain: "media.harry.flagship.services",
-      delegatedPubKeyHex: "aa".repeat(32),
-      userPubKeyHex: "bb".repeat(32),
-      userSignatureHex: "cc".repeat(64),
-      issuedAt: Date.now(),
-      expiresAt: Date.now() + 3_600_000,
-      status: "active",
-      recordedAt: Date.now(),
-    });
-    const dns = makeFakeDns();
-
-    const r = await handleRevokeServer({ ...deps(storage), dns, authCodes: storage.authCodes }, revokeBody().body);
-    expect(r.status).toBe(200);
-    expect(dns.calls.some(([name]) => name === "*.harry.flagship.services")).toBe(false);
-  });
-
-  it("a registration that races the account clean-up gets its records back", async () => {
-    const storage = await setUpClaimedHarry();
-    await seedServer(storage);
-    const dns = makeFakeDns();
-    const upserts: Array<[string, string]> = [];
-    const realDelete = dns.deleteByName.bind(dns);
-    dns.deleteByName = async (name: string, type: string) => {
-      // A second box registers while the first one's records are being deleted.
-      if (name === "*.harry.flagship.services" && type === "A") await seedServer(storage, "media.harry.flagship.services");
-      return realDelete(name, type);
-    };
+    const zone = makeZone(LEGACY_HARRY);
     const r = await handleRevokeServer(
-      {
-        ...deps(storage),
-        dns,
-        accountDns: {
-          client: {
-            async upsert(o: { name: string; type: string; content: string }) {
-              upserts.push([o.name, o.type]);
-              return { id: "x", type: o.type, name: o.name, content: o.content, proxied: false, ttl: 60 };
-            },
-          },
-          servicesIpv4: "1.2.3.4",
-          servicesIpv6: "::1",
-        },
-      },
+      { ...deps(storage), dns: makeFakeDns(), accountDns: { client: zone, ...relay } },
       revokeBody().body,
     );
     expect(r.status).toBe(200);
-    expect(upserts).toEqual([
-      ["*.harry.flagship.services", "A"],
-      ["*.harry.flagship.services", "AAAA"],
-    ]);
+    expect(zone.records).toHaveLength(4);
+  });
+
+  it("never publishes anything", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    const zone = makeZone([...ROOT_ROWS]);
+    await handleRevokeServer({ ...deps(storage), dns: makeFakeDns(), accountDns: { client: zone, ...relay } }, revokeBody().body);
+    expect(zone.records).toHaveLength(2);
   });
 
   it("DNS cleanup is best-effort: a CF failure does NOT undo the revocation", async () => {
@@ -808,13 +795,18 @@ describe("POST /api/server-registry/unrevoke (owner-signed undo)", () => {
     const claim = { username: USERNAME, serverDomain: DOMAIN, issuedAt };
     return { request: claim, signature: bytesToHex(sign(claim, irk)) };
   }
-  function makeFakeUpsert() {
-    const calls: Array<[string, string]> = [];
+  function makeZone(rows: Array<[string, string, string]>) {
+    const records = rows.map(([type, name, content], i) => ({ id: `r${i}`, type, name, content }));
     return {
-      calls,
-      async upsert(r: { name: string; type: string; content: string }) {
-        calls.push([r.name, r.type]);
-        return { id: "x", ...r };
+      records,
+      async listAll() {
+        return [...records];
+      },
+      async deleteById(id: string) {
+        const i = records.findIndex((r) => r.id === id);
+        if (i < 0) return false;
+        records.splice(i, 1);
+        return true;
       },
     };
   }
@@ -826,22 +818,23 @@ describe("POST /api/server-registry/unrevoke (owner-signed undo)", () => {
     return storage;
   }
 
-  it("restores a revoked server, re-publishes its DNS and logs it", async () => {
+  it("restores a revoked server, publishes no DNS (the root wildcard answers it), clears legacy records and logs it", async () => {
     const storage = await revoked();
-    const dns = makeFakeUpsert();
+    const zone = makeZone([
+      ["A", "*.flagship.services", "1.2.3.4"],
+      ["AAAA", "*.flagship.services", "::1"],
+      ["A", "*.harry.flagship.services", "1.2.3.4"],
+    ]);
     const r = await handleUnrevokeServer(
-      { ...deps(storage), dns: { client: dns, servicesIpv4: "1.2.3.4", servicesIpv6: "::1" } },
+      { ...deps(storage), dns: { client: zone, servicesIpv4: "1.2.3.4", servicesIpv6: "::1" } },
       unrevokeBody(),
     );
     expect(r.status).toBe(200);
     const rec = await storage.servers.get(DOMAIN);
     expect(rec?.revokedAt).toBeUndefined();
     expect(rec?.identityPubKeyHex).toBe("11".repeat(32));
-    // The account's wildcard, not a per-box pair.
-    expect(dns.calls).toEqual([
-      ["*.harry.flagship.services", "A"],
-      ["*.harry.flagship.services", "AAAA"],
-    ]);
+    expect(zone.records.map((x) => `${x.type} ${x.name}`)).toEqual(["A *.flagship.services", "AAAA *.flagship.services"]);
+    expect((r.body as { legacyDnsRemoved: number }).legacyDnsRemoved).toBe(1);
     const events = await storage.auditEvents.list(USERNAME, 0, 10);
     expect(events.map((e) => e.eventKind)).toContain("server-unrevoked");
   });

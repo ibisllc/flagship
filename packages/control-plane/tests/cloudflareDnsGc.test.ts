@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CloudflareDnsClient, type CloudflareDnsRecord } from "../src/cloudflareDns.js";
+import { FakeCloudflare } from "./fakeCloudflare.js";
 
 describe("CloudflareDnsClient stale ACME TXT cleanup", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -119,120 +120,117 @@ describe("CloudflareDnsClient stale ACME TXT cleanup", () => {
   });
 });
 
-describe("CloudflareDnsClient orphaned server route cleanup", () => {
+describe("CloudflareDnsClient legacy account-record sweep", () => {
+  const APEX = "flagship.services";
+  const RELAY = { servicesIpv4: "203.0.113.7", servicesIpv6: "2001:db8::7" };
+  const OLD = "2026-07-20T10:00:00.000Z";
+  const FRESH = "2026-07-20T11:45:00.000Z";
+  const CUTOFF = Date.parse("2026-07-20T11:00:00.000Z");
+  let cf: FakeCloudflare;
+  let dns: CloudflareDnsClient;
+
+  beforeEach(() => {
+    cf = new FakeCloudflare();
+    cf.install();
+    dns = new CloudflareDnsClient({ apiToken: "token", zoneId: "zone" });
+  });
   afterEach(() => vi.unstubAllGlobals());
 
-  it("preserves active and unrelated routes while deleting old generated orphans", async () => {
-    const old = "2026-07-20T10:00:00.000Z";
-    const fresh = "2026-07-20T11:45:00.000Z";
-    const records: CloudflareDnsRecord[] = [
-      ["active-a", "A", "home.openai-build.flagship.services", old],
-      ["active-wild", "AAAA", "*.home.openai-build.flagship.services", old],
-      ["orphan-a", "A", "box.old-user.flagship.services", old],
-      ["orphan-wild", "AAAA", "*.box.old-user.flagship.services", old],
-      ["fresh-orphan", "A", "box.fresh-user.flagship.services", fresh],
-      ["static", "A", "api.flagship.services", old],
-      ["reserved-shape", "A", "home.gym.flagship.services", old],
-      ["other-zone", "A", "box.old-user.example.com", old],
-    ].map(([id, type, name, timestamp]) => ({
-      id: id!,
-      type: type!,
-      name: name!,
-      content: "203.0.113.1",
-      proxied: false,
-      ttl: 60,
-      created_on: timestamp,
-    }));
-    const deleted: string[] = [];
-    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
-      if (init?.method === "DELETE") {
-        deleted.push(url.split("/").at(-1)!);
-        return new Response(JSON.stringify({ success: true }));
-      }
-      const type = new URL(url).searchParams.get("type");
-      return new Response(JSON.stringify({
-        success: true,
-        result: records.filter((record) => record.type === type),
-        result_info: { total_pages: 1 },
-      }));
-    });
+  const seedRoot = () => {
+    cf.seed("A", `*.${APEX}`, RELAY.servicesIpv4, { modified_on: OLD, created_on: OLD });
+    cf.seed("AAAA", `*.${APEX}`, RELAY.servicesIpv6, { modified_on: OLD, created_on: OLD });
+  };
+  const old = (type: string, name: string, content = RELAY.servicesIpv4) =>
+    cf.seed(type, name, content, { modified_on: OLD, created_on: OLD });
+  const sweep = (over = {}) => dns.deleteLegacyAccountRecords({ apex: APEX, relay: RELAY, cutoffMs: CUTOFF, ...over });
 
-    const dns = new CloudflareDnsClient({ apiToken: "token", zoneId: "zone" });
-    const result = await dns.deleteOrphanedServerRoutes({
-      apex: "flagship.services",
-      activeServerDomains: ["home.openai-build.flagship.services"],
-      cutoffMs: Date.parse("2026-07-20T11:00:00.000Z"),
-    });
+  it("deletes old A/AAAA/CAA at account and box names and nothing else", async () => {
+    seedRoot();
+    old("A", `home.old-user.${APEX}`);
+    old("AAAA", `*.home.old-user.${APEX}`, RELAY.servicesIpv6);
+    old("A", `*.openai-build.${APEX}`);
+    old("CAA", `openai-build.${APEX}`, '0 issue "letsencrypt.org"');
+    cf.seed("A", `box.fresh-user.${APEX}`, RELAY.servicesIpv4, { modified_on: FRESH, created_on: FRESH });
+    old("A", `api.${APEX}`, "198.51.100.1");
+    old("A", `home.gym.${APEX}`);
+    old("TXT", `_acme-challenge.home.old-user.${APEX}`, "token");
+    old("TXT", `old-user.${APEX}`, "stray");
+    old("A", "box.old-user.example.com");
+    const r = await sweep();
+    expect(r).toMatchObject({ scanned: 12, eligible: 4, deleted: 4, remaining: 0, dryRun: false });
+    expect(r.names.sort()).toEqual(
+      [`home.old-user.${APEX}`, `*.home.old-user.${APEX}`, `*.openai-build.${APEX}`, `openai-build.${APEX}`].sort(),
+    );
+    expect(cf.dump().filter((l) => !l.includes(`*.${APEX}`))).toEqual(
+      [
+        `A box.fresh-user.${APEX} ${RELAY.servicesIpv4}`,
+        `A api.${APEX} 198.51.100.1`,
+        `A home.gym.${APEX} ${RELAY.servicesIpv4}`,
+        `TXT _acme-challenge.home.old-user.${APEX} token`,
+        `TXT old-user.${APEX} stray`,
+        "A box.old-user.example.com 203.0.113.7",
+      ].sort(),
+    );
+  });
 
-    expect(result).toEqual({
-      scanned: 8,
-      eligible: 2,
-      deleted: 2,
-      remaining: 0,
-      names: ["*.box.old-user.flagship.services", "box.old-user.flagship.services"],
-      dryRun: false,
-    });
-    expect(deleted).toEqual(["orphan-a", "orphan-wild"]);
+  it("deletes records of accounts that still serve too, since they block the wildcard", async () => {
+    seedRoot();
+    old("A", `home.live-user.${APEX}`);
+    old("A", `*.live-user.${APEX}`);
+    const r = await sweep();
+    expect(r.deleted).toBe(2);
+  });
+
+  it("does nothing, and says so, until the root wildcard is in the zone", async () => {
+    old("A", `home.old-user.${APEX}`);
+    old("A", `*.old-user.${APEX}`);
+    const r = await sweep();
+    expect(r).toMatchObject({ eligible: 2, deleted: 0, remaining: 2, skipped: "root-wildcard-not-ready" });
+    expect(cf.records).toHaveLength(2);
+    // The wildcard at the wrong address is not ready either.
+    cf.seed("A", `*.${APEX}`, "198.51.100.9", { modified_on: OLD });
+    expect((await sweep()).skipped).toBe("root-wildcard-not-ready");
+    expect(cf.records).toHaveLength(3);
   });
 
   it("reports candidates without deleting in dry-run mode", async () => {
-    vi.stubGlobal("fetch", async (url: string) => {
-      const type = new URL(url).searchParams.get("type");
-      return new Response(JSON.stringify({
-        success: true,
-        result: type === "A" ? [{
-          id: "orphan",
-          type: "A",
-          name: "box.old-user.flagship.services",
-          content: "203.0.113.1",
-          proxied: false,
-          ttl: 60,
-          created_on: "2026-07-20T10:00:00.000Z",
-        }] : [],
-        result_info: { total_pages: 1 },
-      }));
-    });
-    const dns = new CloudflareDnsClient({ apiToken: "token", zoneId: "zone" });
-    const result = await dns.deleteOrphanedServerRoutes({
-      apex: "flagship.services",
-      activeServerDomains: [],
-      cutoffMs: Date.parse("2026-07-20T11:00:00.000Z"),
-      dryRun: true,
-    });
-    expect(result).toMatchObject({ eligible: 1, deleted: 0, remaining: 1, dryRun: true });
+    seedRoot();
+    old("A", `box.old-user.${APEX}`);
+    const r = await sweep({ dryRun: true });
+    expect(r).toMatchObject({ eligible: 1, deleted: 0, remaining: 1, dryRun: true, names: [`box.old-user.${APEX}`] });
+    expect(cf.records).toHaveLength(3);
   });
 
-  it("caps one pass below the Worker subrequest limit", async () => {
-    const records = Array.from({ length: 25 }, (_, index) => ({
-      id: `orphan-${index}`,
-      type: "A",
-      name: `box.user-${index}.flagship.services`,
-      content: "203.0.113.1",
-      proxied: false,
-      ttl: 60,
-      created_on: "2026-07-20T10:00:00.000Z",
-    }));
-    const deleted: string[] = [];
-    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
-      if (init?.method === "DELETE") {
-        deleted.push(url.split("/").at(-1)!);
-        return new Response(JSON.stringify({ success: true }));
-      }
-      const type = new URL(url).searchParams.get("type");
-      return new Response(JSON.stringify({
-        success: true,
-        result: type === "A" ? records : [],
-        result_info: { total_pages: 1 },
-      }));
-    });
-    const dns = new CloudflareDnsClient({ apiToken: "token", zoneId: "zone" });
-    const result = await dns.deleteOrphanedServerRoutes({
-      apex: "flagship.services",
-      activeServerDomains: [],
-      cutoffMs: Date.parse("2026-07-20T11:00:00.000Z"),
-      maxDeletes: 20,
-    });
-    expect(result).toMatchObject({ eligible: 25, deleted: 20, remaining: 5 });
-    expect(deleted).toHaveLength(20);
+  it("caps one pass below the Worker subrequest limit and drains over repeated passes", async () => {
+    seedRoot();
+    for (let i = 0; i < 25; i++) old("A", `box.user-${i}.${APEX}`);
+    const first = await sweep({ maxDeletes: 20 });
+    expect(first).toMatchObject({ eligible: 25, deleted: 20, remaining: 5 });
+    const second = await sweep({ maxDeletes: 20 });
+    expect(second).toMatchObject({ eligible: 5, deleted: 5, remaining: 0 });
+  });
+
+  it("deletes the account's CAA first and the account wildcard last", async () => {
+    seedRoot();
+    old("A", `*.alice.${APEX}`);
+    old("A", `home.alice.${APEX}`);
+    old("CAA", `alice.${APEX}`, '0 issue "letsencrypt.org"');
+    old("A", `*.home.alice.${APEX}`);
+    const order: string[] = [];
+    cf.afterRequest = (method, name) => {
+      if (method === "DELETE" && name) order.push(name);
+    };
+    await sweep();
+    expect(order).toEqual([`alice.${APEX}`, `home.alice.${APEX}`, `*.home.alice.${APEX}`, `*.alice.${APEX}`]);
+  });
+
+  it("leaves the protected accounts alone", async () => {
+    seedRoot();
+    old("A", `*.review.${APEX}`);
+    old("CAA", `review.${APEX}`, '0 issue "letsencrypt.org"');
+    old("A", `*.other.${APEX}`);
+    const r = await sweep({ skipUsers: ["review"] });
+    expect(r.deleted).toBe(1);
+    expect(cf.dump().filter((l) => l.includes("review"))).toHaveLength(2);
   });
 });

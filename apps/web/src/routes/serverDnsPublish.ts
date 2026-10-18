@@ -3,14 +3,16 @@ import {
   verifyPublishServerDns,
   type PublishServerDns,
 } from "@flagship/protocol";
-import type { ServerDnsPublisher } from "@flagship/services-zone";
+import { DirectModeUnsupportedError, type ServerDnsPublisher } from "@flagship/services-zone";
 import { hexToBytes } from "../lib/hex.js";
 
 /**
  * .services route: phone tells us how to publish DNS for a server.
- * Pure-control-plane; no traffic touches this. The DNS records that get
- * written either point at the tunnel ingress (default for NATed servers)
- * or at the user's own A record (for users with dedicated IPs).
+ * Pure-control-plane; no traffic touches this. Under the root-wildcard layout
+ * (docs/wildcard-dns.md) a server needs no record of its own: `tunnel` clears
+ * any per-box record an older build wrote, and `direct` (a server on its own
+ * IP) is refused, because a record at the server's name would stop the zone
+ * wildcard for every service name below it.
  */
 export interface PublishServerDnsOptions {
   publisher: ServerDnsPublisher;
@@ -50,8 +52,11 @@ export function registerServerDnsPublish(
     ) {
       return reply.status(400).send({ error: "malformed body" });
     }
-    if (r.mode === "direct" && (typeof r.directIp !== "string" || r.directIp.length === 0)) {
-      return reply.status(400).send({ error: "directIp required when mode=direct" });
+    if (r.mode === "direct") {
+      return reply.status(400).send({
+        error: "direct-mode-unsupported",
+        message: new DirectModeUnsupportedError().message,
+      });
     }
 
     const irkPub = await opts.resolveUserIrk(r.userId);
@@ -82,10 +87,12 @@ export function registerServerDnsPublish(
         username: r.userId,
         serverName: r.serverId,
         mode: r.mode,
-        directIp: r.mode === "direct" ? r.directIp : undefined,
       });
       return out;
     } catch (e) {
+      if (e instanceof DirectModeUnsupportedError) {
+        return reply.status(400).send({ error: e.code, message: e.message });
+      }
       return reply.status(500).send({ error: "publish failed", message: errMsg(e) });
     }
   });

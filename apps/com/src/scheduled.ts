@@ -62,6 +62,7 @@ import { runAdapterPublish } from "./adapterPublish.js";
 import { runAdapterInsights } from "./adapterInsights.js";
 import { runModelCapabilityRefresh } from "./inferenceModelRoutes.js";
 import { pruneRateLimitLog } from "./rateLimitLog.js";
+import { protectedAccountsFrom } from "./prodReap.js";
 import type { AdapterBucketLike } from "./adapterIndex.js";
 import { pruneLateLogs, type LateLogBucket } from "./legacyLateLogs.js";
 
@@ -89,9 +90,11 @@ export interface ScheduledEnv {
   CLOUDFLARE_DNS_API_TOKEN?: string;
   CLOUDFLARE_SERVICES_ZONE_ID?: string;
   SERVICES_APEX?: string;
-  /** The relay's address: lets the stale-challenge sweep release challenge shields. */
+  /** The relay's address: the root wildcard the legacy sweep waits for, and the challenge shields. */
   SERVICES_PASSTHROUGH_IPV4?: string;
   SERVICES_PASSTHROUGH_IPV6?: string;
+  /** Accounts the legacy sweep leaves alone (the reap tool's protected list). */
+  REAP_PROTECTED_ACCOUNTS?: string;
   /** Plan A — numeric Hetzner SSH key id (set in [vars]). Unused by
    *  the cron itself but plumbed for symmetry with the request path. */
   DEMO_PUBLIC_SSH_KEY_ID?: string;
@@ -463,8 +466,8 @@ export async function scheduled(
       }),
     );
     ctx.waitUntil(
-      runDnsRouteGcCron(env, now).catch((e) => {
-        console.error("[dns] orphaned server-route GC pass failed", e);
+      runLegacyDnsSweepCron(env, now).catch((e) => {
+        console.error("[dns] legacy account-record sweep failed", e);
       }),
     );
     return;
@@ -497,23 +500,30 @@ export async function runDnsChallengeGcCron(
   });
 }
 
-/** Reconcile old generated A/AAAA records against active D1 server rows. */
-export async function runDnsRouteGcCron(
+/**
+ * Hourly: remove the A/AAAA/CAA records earlier DNS layouts left at account and
+ * box names. Each one stops the zone's root wildcard for the names below it
+ * (docs/wildcard-dns.md). It waits for the root wildcard to be in the zone and
+ * deletes at most 20 a pass, so a zone with a backlog drains over a day.
+ */
+export async function runLegacyDnsSweepCron(
   env: ScheduledEnv,
   now: Date,
-): Promise<import("@flagship/control-plane").OrphanedServerRouteCleanupResult | null> {
-  if (!env.DB || !env.CLOUDFLARE_DNS_API_TOKEN || !env.CLOUDFLARE_SERVICES_ZONE_ID) return null;
-  const storage = new D1Storage(env.DB);
-  const servers = await storage.servers.listAll();
+): Promise<import("@flagship/control-plane").LegacyDnsSweepResult | null> {
+  if (!env.CLOUDFLARE_DNS_API_TOKEN || !env.CLOUDFLARE_SERVICES_ZONE_ID || !env.SERVICES_PASSTHROUGH_IPV4) return null;
   const dns = new CloudflareDnsClient({
     apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
     zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
   });
-  return dns.deleteOrphanedServerRoutes({
+  return dns.deleteLegacyAccountRecords({
     apex: env.SERVICES_APEX ?? "flagship.services",
-    activeServerDomains: servers.filter((server) => !server.revokedAt).map((server) => server.serverDomain),
+    relay: {
+      servicesIpv4: env.SERVICES_PASSTHROUGH_IPV4,
+      ...(env.SERVICES_PASSTHROUGH_IPV6 ? { servicesIpv6: env.SERVICES_PASSTHROUGH_IPV6 } : {}),
+    },
     cutoffMs: now.getTime() - 60 * 60 * 1000,
     maxDeletes: 20,
+    skipUsers: protectedAccountsFrom(env),
   });
 }
 

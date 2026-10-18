@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  ACCOUNT_RECORD_COUNT,
-  accountWildcardName,
   challengeHostOf,
   shieldNames,
   userZoneOf,
@@ -42,10 +40,5 @@ describe("challenge and shield names", () => {
       "*.home.alice.flagship.services",
     ]);
     expect(shieldNames("blog.alice.flagship.services", false)).toEqual(["blog.alice.flagship.services"]);
-  });
-
-  it("names the account wildcard and counts four steady-state records", () => {
-    expect(accountWildcardName("alice.flagship.services")).toBe("*.alice.flagship.services");
-    expect(ACCOUNT_RECORD_COUNT).toBe(4);
   });
 });

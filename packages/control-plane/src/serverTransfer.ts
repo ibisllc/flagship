@@ -53,7 +53,6 @@ import {
 } from "@flagship/protocol";
 import type {
   AuditEventStorage,
-  AuthCodeStorage,
   DeviceCapabilityGrantStorage,
   RoutingStorage,
   ServerStorage,
@@ -62,8 +61,7 @@ import type {
 } from "@flagship/storage";
 import {
   accountZoneOfServerDomain,
-  ensureAccountDns,
-  reconcileAccountDns,
+  clearLegacyAccountDns,
   removeBoxDns,
   type AccountDnsDeps,
 } from "./accountDns.js";
@@ -85,15 +83,14 @@ export interface ServerTransferDeps {
    *  28 [giver] + 29 [acquirer's admin root]). Optional: absent ⇒ only the bare
    *  admin root satisfies the open gate. */
   grants?: DeviceCapabilityGrantStorage;
-  /** The acquirer's account DNS (`*.<acquirer>` A/AAAA + CAA, same as
-   *  registration; no per-box record). Absent ⇒ the migration completes without
-   *  re-publishing DNS (best-effort, mirroring registration's dnsError path). */
+  /** The zone client. Nothing is published for the moved box (the root
+   *  wildcard answers it); the claim removes the legacy records of both
+   *  accounts, which would stop that wildcard. Absent ⇒ the migration completes
+   *  without touching DNS (best-effort, mirroring registration's dnsError path). */
   dns?: AccountDnsDeps;
-  /** Cleans the giver's side once the box has moved: its old per-box records
-   *  and, when that was the giver's last server, the giver's account records.
+  /** Cleans the giver's side once the box has moved: its old per-box records.
    *  Absent ⇒ nothing is deleted (the reap tool picks the leftovers up). */
   dnsCleanup?: DnsDeleteClient;
-  authCodes?: Pick<AuthCodeStorage, "listOutstandingByUsername">;
   /** Data-plane apex (`flagship.services` prod, `gym.flagship.services` test).
    *  Used to re-home the FQDN. Defaults to the prod literal. */
   apex?: string;
@@ -520,28 +517,19 @@ export async function handlePostTransferClaim(
         String((e as Error).message ?? e);
     }
 
-    // 3) The acquirer's account DNS (the wildcard answers for the moved box;
-    //    no per-box record), then the giver's clean-up. Best-effort.
+    // 3) DNS: nothing to publish (the root wildcard answers the moved box).
+    //    Both accounts' legacy records would stop it, so they go; the giver's
+    //    old per-box records too. Best-effort.
     if (deps.dns) {
-      const zone = accountZoneOfServerDomain(newDomain);
-      if (zone) {
-        const r3 = await ensureAccountDns(deps.dns, zone);
-        if (r3.dnsError) migration.dnsError = r3.dnsError;
+      for (const zone of [accountZoneOfServerDomain(newDomain), accountZoneOfServerDomain(host)]) {
+        if (!zone) continue;
+        const r3 = await clearLegacyAccountDns(deps.dns, zone);
+        if (r3.error) migration.dnsError = r3.error;
       }
     }
     if (deps.dnsCleanup) {
       try {
         await removeBoxDns(deps.dnsCleanup, host);
-        const giverZone = accountZoneOfServerDomain(host);
-        if (giverZone) {
-          await reconcileAccountDns({
-            use: { servers: deps.servers, authCodes: deps.authCodes, now },
-            username: offerRow.giverUsername,
-            userZone: giverZone,
-            remover: deps.dnsCleanup,
-            publish: deps.dns,
-          });
-        }
       } catch (e) {
         migration.dnsError = String((e as Error).message ?? e);
       }

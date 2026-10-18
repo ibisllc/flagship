@@ -24,7 +24,6 @@ import {
   handlePostTransferRehomeAuth,
   type ServerTransferDeps,
 } from "../src/serverTransfer.js";
-import { ensureAccountDns } from "../src/accountDns.js";
 import { CloudflareDnsClient } from "../src/cloudflareDns.js";
 import { FakeCloudflare } from "./fakeCloudflare.js";
 
@@ -207,39 +206,37 @@ describe("transfer-a-box broker", () => {
     expect(bobFeed.some((e) => e.eventKind === "server-transfer-claimed")).toBe(true);
   });
 
-  it("DNS: the acquirer gets the account wildcard, the giver's old records go with its last box", async () => {
+  it("DNS: nothing is published; both accounts' legacy records and the box's old pair are cleared", async () => {
     const cf = new FakeCloudflare();
     cf.install();
     try {
       const dns = new CloudflareDnsClient({ apiToken: "t", zoneId: "z" });
       const relay = { servicesIpv4: "203.0.113.7", servicesIpv6: "2001:db8::7" };
-      // alice's account set and the per-box pair an older build published for the box.
-      await ensureAccountDns({ client: dns, ...relay, caa: { client: dns } }, "alice.flagship.services");
+      // The root set, alice's 4-record account set and bob's, plus the per-box
+      // pair an older build published for the box.
+      cf.seed("A", "*.flagship.services", relay.servicesIpv4);
+      cf.seed("AAAA", "*.flagship.services", relay.servicesIpv6);
+      for (const u of ["alice", "bob"]) {
+        cf.seed("A", `*.${u}.flagship.services`, relay.servicesIpv4);
+        cf.seed("AAAA", `*.${u}.flagship.services`, relay.servicesIpv6);
+        cf.seed("CAA", `${u}.flagship.services`, '0 issue "letsencrypt.org"');
+        cf.seed("CAA", `${u}.flagship.services`, '0 issuewild "letsencrypt.org"');
+      }
       cf.seed("A", HOST, relay.servicesIpv4);
       cf.seed("A", `*.${HOST}`, relay.servicesIpv4);
       const s = await setup();
       const nonce = hex(rand(32));
       await handlePostTransferOffer(deps(s), HOST, offerBody(aliceIrk, { nonce }));
       const res = await handlePostTransferClaim(
-        {
-          ...deps(s),
-          dns: { client: dns, ...relay, caa: { client: dns } },
-          dnsCleanup: dns,
-          authCodes: s.authCodes,
-        },
+        { ...deps(s), dns: { client: dns, ...relay }, dnsCleanup: dns },
         HOST,
         claimBody(bobIrk, "bob", nonce),
       );
       expect(res.status).toBe(200);
-      // bob: his four; alice: none (no per-box leftovers, no account set).
       expect(cf.dump()).toEqual(
-        [
-          `A *.bob.flagship.services ${relay.servicesIpv4}`,
-          `AAAA *.bob.flagship.services ${relay.servicesIpv6}`,
-          'CAA bob.flagship.services 0 issue "letsencrypt.org"',
-          'CAA bob.flagship.services 0 issuewild "letsencrypt.org"',
-        ].sort(),
+        [`A *.flagship.services ${relay.servicesIpv4}`, `AAAA *.flagship.services ${relay.servicesIpv6}`].sort(),
       );
+      expect(cf.requests.filter((r) => r.startsWith("POST") || r.startsWith("PATCH"))).toEqual([]);
     } finally {
       vi.unstubAllGlobals();
     }

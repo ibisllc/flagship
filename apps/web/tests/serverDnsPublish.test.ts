@@ -91,7 +91,7 @@ function buildSignedPublish(
 }
 
 describe("/api/services-zone/publish-server", () => {
-  it("publishes the account's tunnel-ingress wildcard on a valid IRK-signed claim", async () => {
+  it("accepts a valid IRK-signed tunnel claim and writes no record (the zone wildcard answers the box)", async () => {
     const { app, zone } = makeApp();
     const r = await app.inject({
       method: "POST",
@@ -101,30 +101,32 @@ describe("/api/services-zone/publish-server", () => {
     expect(r.statusCode).toBe(200);
     const body = JSON.parse(r.body);
     expect(body.target).toBe("203.0.113.1");
-    // One wildcard per account (docs/wildcard-dns.md): `*.harry` answers the
-    // box, its services and every tier-2 name; no per-box record.
-    expect(zone.a.map((x) => x.name)).toEqual(["*.harry.flagship.services"]);
+    expect(zone.a).toEqual([]);
   });
 
-  it("publishes user-supplied A records for mode=direct", async () => {
+  it("clears the per-box records an older build left for the box", async () => {
+    const { app, zone } = makeApp();
+    await zone.createA({ name: "home-box.harry.flagship.services", value: "203.0.113.1" });
+    await zone.createA({ name: "*.home-box.harry.flagship.services", value: "203.0.113.1" });
+    const r = await app.inject({
+      method: "POST",
+      url: "/api/services-zone/publish-server",
+      payload: buildSignedPublish({ mode: "tunnel" }),
+    });
+    expect(r.statusCode).toBe(200);
+    expect(zone.a).toEqual([]);
+  });
+
+  it("refuses mode=direct with direct-mode-unsupported and writes nothing", async () => {
     const { app, zone } = makeApp();
     const r = await app.inject({
       method: "POST",
       url: "/api/services-zone/publish-server",
       payload: buildSignedPublish({ mode: "direct", directIp: "192.0.2.10" }),
     });
-    expect(r.statusCode).toBe(200);
-    expect(zone.a.every((x) => x.value === "192.0.2.10")).toBe(true);
-  });
-
-  it("rejects mode=direct without a directIp", async () => {
-    const { app } = makeApp();
-    const r = await app.inject({
-      method: "POST",
-      url: "/api/services-zone/publish-server",
-      payload: buildSignedPublish({ mode: "direct", directIp: "" }),
-    });
     expect(r.statusCode).toBe(400);
+    expect(JSON.parse(r.body).error).toBe("direct-mode-unsupported");
+    expect(zone.a).toEqual([]);
   });
 
   it("rejects forged signatures (Sarah signing for Harry)", async () => {
@@ -148,35 +150,9 @@ describe("/api/services-zone/publish-server", () => {
     expect(r.statusCode).toBe(403);
   });
 
-  it("flipping tunnel → direct purges the old records (clean zone)", async () => {
+  it("DELETE removes the box's leftover records", async () => {
     const { app, zone } = makeApp();
-    await app.inject({
-      method: "POST",
-      url: "/api/services-zone/publish-server",
-      payload: buildSignedPublish({ mode: "tunnel" }),
-    });
-    expect(zone.a.every((r) => r.value === "203.0.113.1")).toBe(true);
-    await app.inject({
-      method: "POST",
-      url: "/api/services-zone/publish-server",
-      payload: buildSignedPublish({ mode: "direct", directIp: "192.0.2.10" }),
-    });
-    // The account wildcard stays for the account's other boxes; the box gets its own pair.
-    expect(zone.a.map((r) => `${r.name}=${r.value}`).sort()).toEqual([
-      "*.harry.flagship.services=203.0.113.1",
-      "*.home-box.harry.flagship.services=192.0.2.10",
-      "home-box.harry.flagship.services=192.0.2.10",
-    ]);
-  });
-
-  it("DELETE removes the published records for the named server", async () => {
-    const { app, zone } = makeApp();
-    await app.inject({
-      method: "POST",
-      url: "/api/services-zone/publish-server",
-      payload: buildSignedPublish({ mode: "direct", directIp: "192.0.2.10" }),
-    });
-    expect(zone.a).toHaveLength(2);
+    await zone.createA({ name: "home-box.harry.flagship.services", value: "203.0.113.1" });
     const del = await app.inject({
       method: "DELETE",
       url: "/api/services-zone/server/harry/home-box",
