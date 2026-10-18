@@ -105,7 +105,7 @@ struct ServerAppsSection: View {
             case .idle, .loading:
                 ServerCardSkeleton()
             case .failed(let msg):
-                ErrorCard(message: msg)
+                ErrorCard(message: msg, retry: { await controller.load() })
             case .loaded(let rows):
                 if rows.isEmpty {
                     Text(AppPlacementCopy.noAppsHere).font(FS.font.bodySm()).foregroundColor(c.textMuted)

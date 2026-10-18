@@ -114,4 +114,23 @@ final class GymDeviceBugsTests: GymSweepCase {
         XCTAssertTrue(app.buttons.matching(identifier: "home-add-new-server").firstMatch.waitForExistence(timeout: 10),
                       "Once Home holds still, Add/Restore opens.")
     }
+
+    // MARK: A server's name that won't resolve yet
+
+    /// The router cached "no such name" for an Online server, so the Apps card's
+    /// first request can't find the address. It never says "Couldn't reach the
+    /// server": it says the address isn't found yet, and Try again works.
+    func test_appsCardWithANameThatWontResolveDoesNotBlameTheConnection() throws {
+        let app = launch(tab: "home", admin: true, ["-smoke-server-fresh", "-smoke-apps-name-lookup-miss"], username: "bright-maple")
+        openServerPage(app, named: "Home")
+        let why = text(app, containing: "can't find this server's address yet")
+        XCTAssertTrue(reveal(app, why), "The Apps card says what is wrong.")
+        // The Apps card's one message is the name sentence, not "can't reach the server".
+        XCTAssertFalse(why.label.contains("Couldn't reach the server"), why.label)
+        shot(app, "apps-name-lookup")
+        let retry = app.buttons["error-card-retry"]
+        XCTAssertTrue(reveal(app, retry))
+        retry.tap()
+        XCTAssertTrue(app.buttons["server-app-bright-maple--plants"].waitForExistence(timeout: 15), "Try again lists the apps.")
+    }
 }

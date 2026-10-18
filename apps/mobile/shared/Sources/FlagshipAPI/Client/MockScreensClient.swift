@@ -208,10 +208,15 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public var appsListFixture: AppsListResponse?
     /// Thrown by `appsList` (an unreachable box), every call while set.
     public var appsListError: Error?
+    /// `appsListError` applies to the next call only (a retry then works).
+    public var appsListErrorOnce = false
 
     public func appsList() async throws -> AppsListResponse {
         try await tick()
-        if let appsListError { throw appsListError }
+        if let appsListError {
+            if appsListErrorOnce { self.appsListError = nil }
+            throw appsListError
+        }
         if let appsListFixture { return appsListFixture }
         let all = try await defaultAppsList()
         return AppsListResponse(apps: all.apps.filter { !hiddenApps.contains($0.serviceId) }.map { app in
