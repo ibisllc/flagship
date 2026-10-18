@@ -3423,6 +3423,17 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func selfDeleteAccount(_ req: AccountSelfDeleteBundleRequest) async throws -> AccountSelfDeleteResponse {
         try await tick()
         if let err = selfDeleteError { throw err }
+        // Mirrors `.com`'s last-device check (accountDeletion.ts): the caller is
+        // one live device of the account's directory, any further one blocks the
+        // delete with the same 403 body. No directory seeded = a single device.
+        let owner = req.accountSelfDelete.request.username.lowercased()
+        let others = (accountDirectories[owner]?.devices.filter { $0.revokedAt == nil }.count ?? 1) - 1
+        if others > 0 {
+            throw ScreensClientError.http(
+                status: 403,
+                message: #"{"error":"Another device is still on this account. Remove it in Settings, Trusted devices, then delete the account.","code":"other-devices-remain","otherDevices":\#(others)}"#
+            )
+        }
         selfDeleteBundles.append(req)
         GymProbe.note("deleted account \(req.accountSelfDelete.request.username.lowercased())")
         let u = req.accountSelfDelete.request.username.lowercased()

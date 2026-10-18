@@ -98,6 +98,49 @@ class GymSettingsTest : GymBase() {
         waitUntilExists("settings-title", 15_000)
     }
 
+    private fun seedDevices(count: Int) {
+        val account = "smoketest"
+        comMock.accountDirectories = mapOf(account to com.flagshipserver.app.api.AccountDirectoryResponse(
+            accountId = account,
+            devices = (0 until count).map { i ->
+                com.flagshipserver.app.api.AccountDirectoryDevice(
+                    accountId = account, deviceId = "a$i".repeat(16).take(32), devicePubHex = "0$i".repeat(32),
+                    platformClass = "android", createdAt = 1_790_000_000_000L, lastSeenAt = 1_790_000_100_000L + i,
+                    supportCode = "SC-$i",
+                )
+            },
+        ))
+    }
+
+    /** A second device on the account blocks the delete with `.com`'s own sentence, which names the next
+     *  action (remove it in Trusted devices); nothing is wiped and the typed name stays. */
+    @Test
+    fun deleteAccountWithAnotherDeviceShowsTheNextAction() {
+        settings(admin = true)
+        seedDevices(2)
+        tap("settings-delete-account-btn")
+        type("account-delete-confirm", "smoketest")
+        tap("account-delete-go")
+        waitUntilExists("account-delete-error", 15_000)
+        assertTrue(textOfTag("account-delete-error").contains("Trusted devices"))
+        assertTrue(textOfTag("account-delete-error").startsWith("Another device is still on this account"))
+        gymShot("delete-account-other-device")
+        tapText("Cancel")
+        waitUntilExists("settings-title", 15_000)
+    }
+
+    /** A fresh single-device account deletes itself and drops to Welcome (the founding device is not "another device"). */
+    @Test
+    fun deleteAccountOnASingleDeviceAccountSignsOut() {
+        settings(admin = true)
+        seedDevices(1)
+        tap("settings-delete-account-btn")
+        type("account-delete-confirm", "smoketest")
+        tap("account-delete-go")
+        waitText("Create your account", 30_000)
+        gymShot("delete-account-single-device")
+    }
+
     /** A device that is not an admin holds no admin key: Remove this device is the ordinary question, with Cancel. */
     @Test
     fun removeDeviceStopsAtCancelOnADeviceThatIsNotAnAdmin() {

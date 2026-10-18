@@ -104,6 +104,25 @@ final class AccountDeletionViewModelTests: XCTestCase {
         XCTAssertFalse(didLeave)
     }
 
+    func test_403OtherDevicesRemain_namesTheNextActionAndNeverWipes() async throws {
+        let server = MockFlagshipServerClient(); server.simulatedLatency = 0
+        server.selfDeleteError = ScreensClientError.http(
+            status: 403,
+            message: "Another device is still on this account. Remove it in Settings, Trusted devices, then delete the account."
+        )
+        let irk = Curve25519.Signing.PrivateKey()
+        var didWipe = false
+        let vm = makeVM(server: server, irk: irk, wiped: { didWipe = true }, onWiped: {})
+
+        await vm.run(alsoDeleteServerContent: false)
+
+        guard case .failed(let msg) = vm.phase else {
+            return XCTFail("expected .failed, got \(vm.phase)")
+        }
+        XCTAssertTrue(msg.contains("Trusted devices"), "got: \(msg)")
+        XCTAssertFalse(didWipe)
+    }
+
     func test_403Generic_failsWithoutWiping() async throws {
         let server = MockFlagshipServerClient(); server.simulatedLatency = 0
         server.selfDeleteError = ScreensClientError.http(status: 403, message: "invalid accountSelfDelete signature")

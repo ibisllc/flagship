@@ -256,6 +256,29 @@ final class GymSweepSettingsTests: GymSweepCase {
         XCTAssertTrue(signedOut(app), "A deleted account leaves this device on Welcome.")
     }
 
+    /// A second device on the account blocks the delete with `.com`'s sentence,
+    /// which names the next action; nothing is wiped.
+    func test_deleteAccountWithAnotherDeviceShowsTheNextAction() throws {
+        let app = launch(tab: "settings", ["-smoke-trusted-devices"])
+        settings(app)
+        let delete = app.buttons["settings-delete-account-btn"]
+        XCTAssertTrue(find(app, delete))
+        delete.tap()
+        XCTAssertTrue(app.navigationBars["Delete account"].waitForExistence(timeout: 10))
+        let field = app.textFields["account-delete-confirm-field"]
+        XCTAssertTrue(reveal(app, field))
+        field.tap()
+        field.typeText("bright-maple")
+        let go = app.buttons["account-delete-confirm-btn"]
+        XCTAssertTrue(reveal(app, go))
+        go.tap()
+        XCTAssertTrue(text(app, containing: "Remove it in Settings, Trusted devices").waitForExistence(timeout: 10),
+                      "The refusal names the next action.")
+        shot(app, "delete-account-other-device")
+        expectNoProbe(app, "deleted account")
+        XCTAssertFalse(signedOut(app), "A refused delete keeps the account on this device.")
+    }
+
     /// A non-admin device can't delete the account: it says so instead.
     func test_deleteAccountOnANonAdminDeviceSaysWhy() throws {
         let app = launch(tab: "settings", admin: false)

@@ -127,6 +127,17 @@ class MockFlagshipServerClient(
 
     override suspend fun selfDeleteAccount(req: AccountSelfDeleteBundleRequest) {
         tick()
+        // Mirrors `.com`'s last-device check (accountDeletion.ts): the caller is
+        // one live device of the account's directory; any further one blocks the
+        // delete with the same 403 body. No directory seeded = a single device.
+        val user = req.accountSelfDelete.request.username.lowercase()
+        val others = (accountDirectories[user]?.devices?.count { it.revokedAt == null } ?: 1) - 1
+        if (others > 0) {
+            throw HttpException(
+                403,
+                """{"error":"Another device is still on this account. Remove it in Settings, Trusted devices, then delete the account.","code":"other-devices-remain","otherDevices":$others}""",
+            )
+        }
         // Mock: hard-delete frees the name (mirrors .com dropping the row).
         _claimedUsernames.remove(req.accountSelfDelete.request.username.lowercase())
     }

@@ -346,12 +346,12 @@
 //  v149: an offline server's page says "This server has gone offline." with a
 //       Check again button and hides its Monitoring section until a re-check
 //       finds it online (views/server-detail.js).
-//  v150: Activity's "Server approvals" section holds the approvals list itself
+//  v151: Activity's "Server approvals" section holds the approvals list itself
 //       (count badge, Nothing waiting for you, Try again, a bounded scroll
 //       area); the separate Approve page is gone and ?view=boot-approval opens
 //       Activity at the section. An approval another device already answered
 //       (409) counts as done (views/boot-approval.js).
-const SHELL_VERSION = "v150";
+const SHELL_VERSION = "v151";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
