@@ -36,7 +36,7 @@ final class VMServerHealthTests: XCTestCase {
     }
 
     func testOrderHealthURLRefusesOddSerials() {
-        XCTAssertEqual(VMServerHealth.orderHealthURL(serial: "AB12_cd-34")?.absoluteString,
+        XCTAssertEqual(VMServerHealth.orderHealthURL(serial: "AB12_cd-34", environment: [:])?.absoluteString,
                        "https://flagshipserver.com/api/order/AB12_cd-34/health")
         XCTAssertNil(VMServerHealth.orderHealthURL(serial: "../x/../y"))
         XCTAssertNil(VMServerHealth.orderHealthURL(serial: "short"))

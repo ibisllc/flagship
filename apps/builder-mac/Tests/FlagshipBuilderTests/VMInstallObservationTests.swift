@@ -20,7 +20,7 @@ final class VMInstallObservationTests: XCTestCase {
     }
 
     func testSerialIsConstrainedBeforeBuildingStatusURL() {
-        XCTAssertNotNil(VMInstallObservation.statusURL(serial: "01VMTEST"))
+        XCTAssertNotNil(VMInstallObservation.statusURL(serial: "01VMTEST", environment: [:]))
         XCTAssertNil(VMInstallObservation.statusURL(serial: "../../secret"))
         XCTAssertNil(VMInstallObservation.statusURL(serial: "short"))
     }

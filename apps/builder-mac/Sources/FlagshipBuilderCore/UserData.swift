@@ -14,8 +14,9 @@ import Foundation
 public enum UserData {
     public static let defaultRepoURL = "https://github.com/ibisllc/flagship.git"
 
-    /// The dedicated boot worker (boot.flagshipserver.com). Identical to the
-    /// engine's DEFAULT_BOOT_HOST.
+    /// The production boot worker (boot.flagshipserver.com). Identical to the
+    /// engine's DEFAULT_BOOT_HOST. Callers default to `ControlPlane.bootHost()`,
+    /// which is this unless FLAGSHIP_CONTROL_HOST names another control plane.
     public static let defaultBootHost = "https://boot.flagshipserver.com"
 
     /// Debian d-i preseed.cfg for the verified recipe.
@@ -24,7 +25,7 @@ public enum UserData {
                                      repoURL: String = defaultRepoURL,
                                      encryptRoot: Bool = true,
                                      bootUnlockMode: String = "auto",
-                                     bootHost: String = defaultBootHost,
+                                     bootHost: String = ControlPlane.bootHost(),
                                      wifiSSID: String? = nil,
                                      wifiPassword: String? = nil,
                                      debugMode: Bool = false) throws -> String {
@@ -42,7 +43,7 @@ public enum UserData {
                                           installerGitRef: String,
                                           repoURL: String = defaultRepoURL,
                                           encryptRoot: Bool = true,
-                                          bootHost: String = defaultBootHost) throws -> String {
+                                          bootHost: String = ControlPlane.bootHost()) throws -> String {
         try PreseedEngine.shared.buildApplianceBootstrap(
             recipeJSON: recipeJSON,
             burnOpts: burnOptions(installerGitRef: installerGitRef,

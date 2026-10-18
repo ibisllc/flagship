@@ -57,10 +57,11 @@ public struct VMInstallObservation: Sendable, Equatable {
             updatedAt: Date(timeIntervalSince1970: Double(status.updatedAt) / 1000))
     }
 
-    public static func statusURL(serial: String) -> URL? {
+    public static func statusURL(serial: String,
+                                 environment: [String: String] = ProcessInfo.processInfo.environment) -> URL? {
         let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
         guard (8...64).contains(serial.count),
               serial.unicodeScalars.allSatisfy({ allowed.contains($0) }) else { return nil }
-        return URL(string: "https://flagshipserver.com/api/order/\(serial)/status")
+        return ControlPlane.orderURL(serial: serial, leaf: "status", environment: environment)
     }
 }

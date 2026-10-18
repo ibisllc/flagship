@@ -33,7 +33,7 @@ final class BuilderSessionClient: NSObject {
     var humanCodeDisplay: String { engine.humanCodeDisplay }
 
     init(engine: BuilderPairingEngine = BuilderPairingEngine(),
-         host: String = "flagshipserver.com") {
+         host: String = ControlPlane.host()) {
         self.engine = engine
         self.host = host
         super.init()

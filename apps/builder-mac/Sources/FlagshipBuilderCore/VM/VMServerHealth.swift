@@ -58,11 +58,12 @@ public struct VMServerHealth: Codable, Sendable, Equatable {
         return "\(m)m"
     }
 
-    public static func orderHealthURL(serial: String) -> URL? {
+    public static func orderHealthURL(serial: String,
+                                      environment: [String: String] = ProcessInfo.processInfo.environment) -> URL? {
         guard (8...64).contains(serial.count),
               serial.allSatisfy({ ($0.isLetter || $0.isNumber) && $0.isASCII || $0 == "-" || $0 == "_" })
         else { return nil }
-        return URL(string: "https://flagshipserver.com/api/order/\(serial)/health")
+        return ControlPlane.orderURL(serial: serial, leaf: "health", environment: environment)
     }
 
     /// The report out of an order-health response; nil when the response
