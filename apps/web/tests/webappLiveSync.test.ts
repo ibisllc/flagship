@@ -7,6 +7,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   fetchLiveSync,
   createLiveSync,
+  liveSyncBackoffMs,
+  LIVE_SYNC_MAX_BACKOFF_MS,
 } from "../public/webapp/lib/liveSync.js";
 import { createBoxInbox } from "../public/webapp/lib/boxInbox.js";
 
@@ -137,5 +139,109 @@ describe("LiveSync feeds the Box Request Inbox (one canal, no extra fetch)", () 
     expect(inbox.get()).toHaveLength(1);
     expect(inbox.get()[0]?.type).toBe("unlock-key");
     inbox.stop();
+  });
+});
+
+describe("LiveSync — backs off while .com keeps failing (the Free plan counts every retry)", () => {
+  const refused = (status: number, headers: Record<string, string> = {}) =>
+    ({ ok: false, status, headers: { get: (k: string) => headers[k.toLowerCase()] ?? null }, json: async () => ({}) }) as unknown as Response;
+
+  it("the retry gap doubles from the fallback cadence and stops at the cap", () => {
+    expect([1, 2, 3, 4, 5, 6].map((n) => liveSyncBackoffMs(n))).toEqual([5000, 10000, 20000, 40000, 80000, 120000]);
+    expect(liveSyncBackoffMs(40)).toBe(LIVE_SYNC_MAX_BACKOFF_MS);
+  });
+
+  it("a 503 (Cloudflare 1102) on /stream and /pods waits longer each round and asks /pods only now and then", async () => {
+    const calls: string[] = [];
+    const fetchMock = vi.fn(async (url: string) => {
+      calls.push(String(url).includes("/stream") ? "stream" : "pods");
+      return refused(503);
+    });
+    const sync = createLiveSync({ getSession: SESSION, fetch: fetchMock, comBase: "https://com", random: () => 0.5, jitterMs: 0 });
+    const delays: number[] = [];
+    const timers: { fn: () => void; ms: number }[] = [];
+    const sync2 = createLiveSync({
+      getSession: SESSION,
+      fetch: fetchMock,
+      comBase: "https://com",
+      random: () => 0.5,
+      jitterMs: 0,
+      setTimeout: ((fn: () => void, ms: number) => {
+        timers.push({ fn, ms });
+        delays.push(ms);
+        return timers.length;
+      }) as unknown as typeof setTimeout,
+      clearTimeout: (() => {}) as unknown as typeof clearTimeout,
+    });
+    void sync;
+    sync2.start();
+    for (let i = 0; i < 6; i++) {
+      await vi.waitFor(() => expect(timers.length).toBeGreaterThan(i));
+      timers[i]!.fn();
+    }
+    await vi.waitFor(() => expect(timers.length).toBe(7));
+    // First failure also tried /pods (stream, pods); then stream only, until the fourth.
+    expect(calls.slice(0, 8)).toEqual(["stream", "pods", "stream", "stream", "stream", "pods", "stream", "stream"]);
+    expect(delays.slice(0, 6)).toEqual([5000, 10000, 20000, 40000, 80000, 120000]);
+  });
+
+  it("honours a Retry-After longer than its own backoff, and a recovered stream resets it", async () => {
+    let fail = true;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("/stream")) {
+        return fail ? refused(429, { "retry-after": "90" }) : streamResponse({ cursor: "c1", username: "harry", pods: [], pending: [] });
+      }
+      return refused(429, { "retry-after": "90" });
+    });
+    const delays: number[] = [];
+    const timers: (() => void)[] = [];
+    const sync = createLiveSync({
+      getSession: SESSION,
+      fetch: fetchMock,
+      comBase: "https://com",
+      random: () => 0.5,
+      jitterMs: 0,
+      setTimeout: ((fn: () => void, ms: number) => {
+        timers.push(fn);
+        delays.push(ms);
+        return timers.length;
+      }) as unknown as typeof setTimeout,
+      clearTimeout: (() => {}) as unknown as typeof clearTimeout,
+    });
+    sync.start();
+    await vi.waitFor(() => expect(timers.length).toBe(1));
+    expect(delays[0]).toBe(90_000);
+    fail = false;
+    timers[0]!();
+    await vi.waitFor(() => expect(timers.length).toBe(2));
+    expect(delays[1]).toBe(0); // streaming again: reconnect at once
+  });
+
+  it("when only /stream fails, /pods keeps the screen fresh at a growing, capped gap", async () => {
+    const fetchMock = vi.fn(async (url: string) =>
+      String(url).includes("/stream") ? refused(500) : streamResponse({ pods: [], pending: [] }),
+    );
+    const delays: number[] = [];
+    const timers: (() => void)[] = [];
+    const sync = createLiveSync({
+      getSession: SESSION,
+      fetch: fetchMock,
+      comBase: "https://com",
+      random: () => 0.5,
+      jitterMs: 0,
+      setTimeout: ((fn: () => void, ms: number) => {
+        timers.push(fn);
+        delays.push(ms);
+        return timers.length;
+      }) as unknown as typeof setTimeout,
+      clearTimeout: (() => {}) as unknown as typeof clearTimeout,
+    });
+    sync.start();
+    for (let i = 0; i < 5; i++) {
+      await vi.waitFor(() => expect(timers.length).toBeGreaterThan(i));
+      timers[i]!();
+    }
+    await vi.waitFor(() => expect(timers.length).toBe(6));
+    expect(delays.slice(0, 6)).toEqual([5000, 10000, 20000, 30000, 30000, 30000]);
   });
 });

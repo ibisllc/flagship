@@ -34,6 +34,19 @@ export const LIVE_SYNC_JITTER_MS = 500;
 /** Fallback cadence when /stream is unavailable — matches the prior home
  *  `/pods` re-poll feel (the safety net, not the happy path). */
 export const LIVE_SYNC_FALLBACK_MS = 5_000;
+/** The longest gap between retries while `.com` keeps failing. Each retry is a
+ *  request the Free plan counts (and a 1102 means the Worker is already
+ *  struggling), so a failing loop backs off instead of repeating every 5 s. */
+export const LIVE_SYNC_MAX_BACKOFF_MS = 120_000;
+/** While /pods still answers but /stream does not, the screen refreshes at most this slowly. */
+export const LIVE_SYNC_PODS_ONLY_MAX_MS = 30_000;
+
+/** The wait before retry number `streak` (1 = the first failure): the
+ *  fallback cadence doubled each time, capped. */
+export function liveSyncBackoffMs(streak, fallbackMs = LIVE_SYNC_FALLBACK_MS, maxMs = LIVE_SYNC_MAX_BACKOFF_MS) {
+  const doublings = Math.max(0, Math.min(streak - 1, 16));
+  return Math.min(maxMs, fallbackMs * 2 ** doublings);
+}
 
 /**
  * Fetch ONE live-sync snapshot. The client method (with its injectable fetch):
@@ -59,7 +72,7 @@ export async function fetchLiveSync(cursor, deps = {}) {
     { cache: "no-store", signal: deps.signal },
     { fetch: f, getSession: deps.getSession, baseUrl: comBase },
   );
-  if (!r || !r.ok) throw new Error(`live-sync: status ${r ? r.status : "none"}`);
+  if (!r || !r.ok) throw liveSyncError(`live-sync: status ${r ? r.status : "none"}`, r);
   const body = await r.json();
   return {
     cursor: String(body?.cursor ?? ""),
@@ -69,6 +82,16 @@ export async function fetchLiveSync(cursor, deps = {}) {
     serverOrder: body?.serverOrder ?? null,
     fetchedAt: body?.fetchedAt,
   };
+}
+
+/** An error that carries the refusing status and any `Retry-After` the server
+ *  sent, so the loop can wait as long as it was told to. */
+function liveSyncError(message, r) {
+  const e = new Error(message);
+  e.status = r ? r.status : 0;
+  const ra = Number(r?.headers?.get?.("retry-after"));
+  if (Number.isFinite(ra) && ra > 0) e.retryAfterMs = ra * 1000;
+  return e;
 }
 
 /** The fallback read when /stream is down: a plain /pods GET shaped like a
@@ -85,7 +108,7 @@ async function fetchPodsFallback(deps = {}) {
     { cache: "no-store" },
     { fetch: f, getSession: deps.getSession, baseUrl: comBase },
   );
-  if (!r || !r.ok) throw new Error(`live-sync: pods status ${r ? r.status : "none"}`);
+  if (!r || !r.ok) throw liveSyncError(`live-sync: pods status ${r ? r.status : "none"}`, r);
   const body = await r.json();
   return {
     cursor: "", // /pods has no cursor — every fallback read is "fresh"
@@ -135,6 +158,10 @@ export function createLiveSync(deps = {}) {
   let stopped = false;
   /** Whether we are currently in /pods fallback mode (a prior /stream error). */
   let degraded = false;
+  /** Consecutive failed rounds; the retry gap doubles with it. */
+  let streak = 0;
+  /** Whether the last /pods fallback answered, so a failing stream can lean on it. */
+  let podsAnswered = true;
 
   function emit() {
     for (const fn of listeners) {
@@ -159,6 +186,8 @@ export function createLiveSync(deps = {}) {
       const snap = await fetchLiveSync(cursor, deps);
       // Recovered from a prior degraded state (or first success).
       degraded = false;
+      streak = 0;
+      podsAnswered = true;
       // Only re-emit + re-render on a genuine change. A timeout response
       // carries the SAME cursor, so a steady hold never churns the UI.
       const changed = snap.cursor !== cursor;
@@ -171,24 +200,35 @@ export function createLiveSync(deps = {}) {
       // Long-poll: the server already held; reconnect right away (+ jitter so a
       // herd that timed out together doesn't reconnect in lockstep).
       return Math.max(0, jitter());
-    } catch {
+    } catch (err) {
       // /stream unreachable / non-200 → fall back to the plain /pods poll so
       // behavior never degrades below today's. Feed the shared state from it,
-      // then wait the fallback cadence before trying again (which re-attempts
-      // /stream first).
+      // then wait before trying again (which re-attempts /stream first).
       degraded = true;
-      try {
-        const snap = await fetchPodsFallback(deps);
-        snapshot = { pods: snap.pods, pending: snap.pending };
-        rememberServerOrder(snap.username, snap.serverOrder);
-        // /pods has no cursor; clear ours so the next /stream attempt connects
-        // fresh and returns immediately with the current state.
-        cursor = null;
-        emit();
-      } catch {
-        /* keep last-good snapshot — never blank the UI on a transient blip */
+      streak += 1;
+      // When /pods failed too (the service itself is failing: a 5xx such as
+      // Cloudflare's 1102, or a 429), ask it only every fourth round, so an
+      // outage is not hit twice a round.
+      if (podsAnswered || streak === 1 || streak % 4 === 0) {
+        try {
+          const snap = await fetchPodsFallback(deps);
+          snapshot = { pods: snap.pods, pending: snap.pending };
+          rememberServerOrder(snap.username, snap.serverOrder);
+          // /pods has no cursor; clear ours so the next /stream attempt connects
+          // fresh and returns immediately with the current state.
+          cursor = null;
+          podsAnswered = true;
+          emit();
+          // /pods answered, so only /stream is failing: keep the screen fresh,
+          // but not every 5 s for as long as the stream stays down.
+          return Math.min(liveSyncBackoffMs(streak, fallbackMs), LIVE_SYNC_PODS_ONLY_MAX_MS) + Math.max(0, jitter());
+        } catch {
+          /* keep last-good snapshot — never blank the UI on a transient blip */
+          podsAnswered = false;
+        }
       }
-      return fallbackMs + Math.max(0, jitter());
+      const told = typeof err?.retryAfterMs === "number" ? err.retryAfterMs : 0;
+      return Math.max(told, liveSyncBackoffMs(streak, fallbackMs)) + Math.max(0, jitter());
     }
   }
 
