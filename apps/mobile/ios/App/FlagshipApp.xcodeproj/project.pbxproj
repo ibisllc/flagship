@@ -19,6 +19,7 @@
 		A1C0C0A11CE5500000000005 /* GymOctoberTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0A11CE5500000000006 /* GymOctoberTests.swift */; };
 		A1C0C0A11CE55A0000000001 /* GymNoticeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0A11CE55A0000000002 /* GymNoticeTests.swift */; };
 		A1C0C0A11CE55A0000000003 /* GymAccountGoneTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0A11CE55A0000000004 /* GymAccountGoneTests.swift */; };
+		A1C0C0A11CE55A00000000B1 /* GymDeviceBugsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0A11CE55A00000000B2 /* GymDeviceBugsTests.swift */; };
 		A1C0C0A11CE5500000000100 /* GymSweepSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0A11CE5500000000101 /* GymSweepSupport.swift */; };
 		A1C0C0A11CE5500000000102 /* GymSweepHomeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0A11CE5500000000103 /* GymSweepHomeTests.swift */; };
 		A1C0C0A11CE5500000000104 /* GymSweepServerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0A11CE5500000000105 /* GymSweepServerTests.swift */; };
@@ -176,6 +177,7 @@
 		A1C0C0A11CE5500000000006 /* GymOctoberTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymOctoberTests.swift; sourceTree = "<group>"; };
 		A1C0C0A11CE55A0000000002 /* GymNoticeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymNoticeTests.swift; sourceTree = "<group>"; };
 		A1C0C0A11CE55A0000000004 /* GymAccountGoneTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymAccountGoneTests.swift; sourceTree = "<group>"; };
+		A1C0C0A11CE55A00000000B2 /* GymDeviceBugsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymDeviceBugsTests.swift; sourceTree = "<group>"; };
 		A1C0C0A11CE5500000000101 /* GymSweepSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymSweepSupport.swift; sourceTree = "<group>"; };
 		A1C0C0A11CE5500000000103 /* GymSweepHomeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymSweepHomeTests.swift; sourceTree = "<group>"; };
 		A1C0C0A11CE5500000000105 /* GymSweepServerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymSweepServerTests.swift; sourceTree = "<group>"; };
@@ -356,6 +358,7 @@
 				A1C0C0A11CE5500000000006 /* GymOctoberTests.swift */,
 				A1C0C0A11CE55A0000000002 /* GymNoticeTests.swift */,
 				A1C0C0A11CE55A0000000004 /* GymAccountGoneTests.swift */,
+				A1C0C0A11CE55A00000000B2 /* GymDeviceBugsTests.swift */,
 				A1C0C0A11CE5500000000101 /* GymSweepSupport.swift */,
 				A1C0C0A11CE5500000000103 /* GymSweepHomeTests.swift */,
 				A1C0C0A11CE5500000000105 /* GymSweepServerTests.swift */,
@@ -618,6 +621,7 @@
 				A1C0C0A11CE5500000000005 /* GymOctoberTests.swift in Sources */,
 				A1C0C0A11CE55A0000000001 /* GymNoticeTests.swift in Sources */,
 				A1C0C0A11CE55A0000000003 /* GymAccountGoneTests.swift in Sources */,
+				A1C0C0A11CE55A00000000B1 /* GymDeviceBugsTests.swift in Sources */,
 				A1C0C0A11CE5500000000100 /* GymSweepSupport.swift in Sources */,
 				A1C0C0A11CE5500000000102 /* GymSweepHomeTests.swift in Sources */,
 				A1C0C0A11CE5500000000104 /* GymSweepServerTests.swift in Sources */,

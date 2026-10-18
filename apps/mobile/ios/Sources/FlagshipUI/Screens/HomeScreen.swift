@@ -80,6 +80,8 @@ public struct HomeScreen: View {
     /// (docs/share-a-server.md), from the Add/Import chooser.
     var onCoManage: () -> Void = {}
     @State private var showAddOrImport = false
+    /// Add/Restore takes no tap just after Home's layout moves (see TapSettle).
+    @State private var addSettle = TapSettle()
     /// Servers created to restore a backup that still wait for it (lowercased
     /// fqdn → state), and the action that sends it (docs/server-backup-and-clone.md).
     var awaitingBackup: [String: AwaitingBackupWire] = [:]
@@ -292,6 +294,16 @@ public struct HomeScreen: View {
         .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
         .modifier(HomeSearch(text: $search, regular: sizeClass == .regular))
         .refreshable { await onRefresh() }
+        // What sits above or around Add/Restore changed, so it is about to
+        // move: it takes no tap until it has settled.
+        .onChange(of: layoutShape) { _, _ in addSettle.layoutChanged() }
+        .onAppear { addSettle.layoutChanged() }
+    }
+
+    /// Everything that adds, removes or moves a block above the server list.
+    private var layoutShape: [Bool] {
+        [accountWasReset, showRecoveryBackupBanner, showRecoveryNudge, statusPaused, serverListLocked,
+         pods.isEmpty, canAddServers, canChangeServers]
     }
 
     /// The single highest-priority announcement card. Folds the three stacked
@@ -646,7 +658,7 @@ public struct HomeScreen: View {
     /// Co-manage / Import), above the list or on the empty state.
     @ViewBuilder
     private func addServerButton(c: FSColors) -> some View {
-        Button(action: { showAddOrImport = true }) {
+        Button(action: { if addSettle.accepts() { showAddOrImport = true } }) {
             HStack(spacing: 8) {
                 Image(systemName: "plus.circle.fill").foregroundColor(c.accent)
                 Text("Add/Restore server").font(FS.font.scaled(15, weight: .semibold)).foregroundColor(c.text)

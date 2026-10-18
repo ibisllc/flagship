@@ -51,6 +51,17 @@ final class BootUnlockApprovalViewModelTests: XCTestCase {
         BootUnlockApprovalViewModel(serverDomain: domain, makeCoordinator: { source }, store: store)
     }
 
+    /// A second tap (or another device answering first) gets `.com`'s 409
+    /// "already answered": the approval stands, so the card settles as approved.
+    func test_alreadyAnswered409_settlesAsApproved() async {
+        let source = FakeSource()
+        source.approveError = ScreensClientError.http(status: 409, message: "already answered")
+        let vm = makeVM(source: source)
+        vm.setAwaitingUnlock(true)
+        await vm.approve()
+        XCTAssertEqual(vm.state, .approved)
+    }
+
     /// Regression: a box already waiting when the card is constructed must show
     /// the request prompt on the FIRST render — the seed, not a deferred
     /// `.onAppear` flip (a zero-size EmptyView's onAppear can miss in a

@@ -166,7 +166,9 @@ final class ScreensClientErrorPlainLanguageTests: XCTestCase {
         let shown = ScreensClientError.userFacing(Raw())
         XCTAssertEqual(shown, UserErrorText.generic)
         // A dropped network is still said as such.
-        XCTAssertTrue(ScreensClientError.userFacing(URLError(.cannotFindHost)).lowercased().contains("couldn't reach"))
+        XCTAssertEqual(ScreensClientError.userFacing(URLError(.cannotConnectToHost)), UserErrorText.offline)
+        // A name that won't resolve is not "can't reach the server".
+        XCTAssertEqual(ScreensClientError.userFacing(URLError(.cannotFindHost)), UserErrorText.nameLookup)
         // A ScreensClientError routes through its plain-language description.
         let pinShown = ScreensClientError.userFacing(
             ScreensClientError.certPinMismatch(host: "x.y.flagship.services")

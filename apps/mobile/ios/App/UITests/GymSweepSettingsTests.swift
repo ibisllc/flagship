@@ -818,6 +818,22 @@ final class GymSweepSettingsTests: GymSweepCase {
         settings(app)
     }
 
+    /// A build with no live pairing transport (every release build) says so in
+    /// plain words and points at the web app, not "Pairing didn't complete".
+    func test_addDeviceWithoutAPairingTransportSaysSo() throws {
+        let app = launch(tab: "settings", ["-smoke-pairing-unavailable"])
+        settings(app)
+        let add = app.buttons["settings-add-device"]
+        XCTAssertTrue(find(app, add))
+        add.tap()
+        XCTAssertTrue(app.navigationBars["Add a device"].waitForExistence(timeout: 10))
+        let sentence = text(app, containing: "Adding a device from this phone isn't available yet. Use the web app.")
+        XCTAssertTrue(sentence.waitForExistence(timeout: 15), "It says why, and where to go.")
+        XCTAssertFalse(text(app, containing: "Pairing didn't complete").exists)
+        XCTAssertFalse(text(app, containing: "iOS").exists, "It doesn't name another phone.")
+        shot(app, "add-device-unavailable")
+    }
+
     /// Scan a pairing code opens the join flow (the camera is a placeholder
     /// on the Simulator).
     func test_scanPairingCodeOpensJoin() throws {

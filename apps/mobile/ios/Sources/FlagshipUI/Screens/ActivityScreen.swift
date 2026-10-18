@@ -14,7 +14,10 @@ public struct ActivityScreen: View {
     var onPickPod: (PodInfo) -> Void = { _ in }
     /// "All servers" filter selection — clears the per-server scoping.
     var onPickAll: () -> Void = {}
-    var onOpenApprovals: () -> Void = {}
+    /// The pending approvals, listed and answered inside their section.
+    var approvals: SecretRequestsModel?
+    /// Bumped to expand the approvals section (a boot-approval push or link).
+    var openApprovals: Int = 0
     var onOpenPostRecovery: () -> Void = {}
     /// P5 — push the dedicated full-page audit-log viewer.
     var onOpenAuditLog: () -> Void = {}
@@ -37,7 +40,8 @@ public struct ActivityScreen: View {
         leaderPodId: String? = nil,
         onPickPod: @escaping (PodInfo) -> Void = { _ in },
         onPickAll: @escaping () -> Void = {},
-        onOpenApprovals: @escaping () -> Void = {},
+        approvals: SecretRequestsModel? = nil,
+        openApprovals: Int = 0,
         onOpenPostRecovery: @escaping () -> Void = {},
         onOpenAuditLog: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {},
@@ -50,7 +54,8 @@ public struct ActivityScreen: View {
         self.leaderPodId = leaderPodId
         self.onPickPod = onPickPod
         self.onPickAll = onPickAll
-        self.onOpenApprovals = onOpenApprovals
+        self.approvals = approvals
+        self.openApprovals = openApprovals
         self.onOpenPostRecovery = onOpenPostRecovery
         self.onOpenAuditLog = onOpenAuditLog
         self.onRefresh = onRefresh
@@ -85,7 +90,8 @@ public struct ActivityScreen: View {
     /// thus this feed) can't load, so gating the approvals entry behind
     /// `.loaded` hid it precisely when needed.
     private var sectionInfos: [SectionInfo] {
-        var out = [SectionInfo(id: .approvals, icon: "lock.open", title: "Server approvals", hint: "Servers waiting for you to start them")]
+        var out = [SectionInfo(id: .approvals, icon: "lock.open", title: "Server approvals",
+                               hint: "Servers waiting for you to start them", count: approvals?.pendingCount)]
         guard case .loaded(let feed) = state else { return out }
         if let snap = feed.postRecovery, snap.lastReissue != nil || snap.state.lastSeen != nil {
             out.append(SectionInfo(id: .recovery, icon: "arrow.triangle.2.circlepath", title: "Post-recovery", hint: postRecoveryHeadline(snap)))
@@ -102,7 +108,7 @@ public struct ActivityScreen: View {
     private func sectionContent(_ which: Open, bounded: Bool, c: FSColors) -> some View {
         switch which {
         case .approvals:
-            approvalsEntryCard(c: c)
+            if let approvals { SecretRequestsPanel(model: approvals, bounded: bounded) }
         case .recovery:
             if case .loaded(let feed) = state, let snap = feed.postRecovery { postRecoveryCard(snap, c: c) }
         case .account:
@@ -136,6 +142,10 @@ public struct ActivityScreen: View {
             if sizeClass == .regular { splitBody(c: c) } else { compactBody(c: c) }
         }
         .background(c.bg.ignoresSafeArea())
+        // A boot-approval push or link: the section opens with the request in it.
+        .onChange(of: openApprovals, initial: true) { _, n in
+            if n > 0 { open = .approvals }
+        }
         .navigationTitle("Activity")
         .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
         // Top-right, above the large title. The PodSwitcher now presents its
@@ -240,20 +250,6 @@ public struct ActivityScreen: View {
         .sensoryFeedback(.selection, trigger: selected) { _, now in now }
         .accessibilityIdentifier("activity-section-\(String(describing: info.id))")
         .accessibilityAddTraits(selected ? [.isHeader, .isSelected] : .isHeader)
-    }
-
-    /// Entry into the relay approval list. A box set to "authorize each
-    /// boot" posts a sealed-key request and pushes the phone; this is the
-    /// always-available in-app way to reach the same screen.
-    private func approvalsEntryCard(c: FSColors) -> some View {
-        FSCard {
-            VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("Approve a server's boot").foregroundColor(c.text)
-                Text("Servers set to ask on every boot wait here for you to release their disk key.")
-                    .font(FS.font.caption()).foregroundColor(c.textMuted)
-                FSPrimaryButton("Open approvals", block: true, action: onOpenApprovals)
-            }
-        }
     }
 
     private func postRecoveryCard(_ snap: PostRecoverySnapshot, c: FSColors) -> some View {

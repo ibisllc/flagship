@@ -1116,6 +1116,10 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     }
     public func postResponse(response: SecretResponseBody, bootAuth: String) async throws {
         postedResponses.append((response, bootAuth))
+        // `.com` drops a request once it has an answer.
+        pending.removeAll {
+            $0.serverDomain.lowercased() == response.serverDomain.lowercased() && $0.requestNonceHex == response.requestNonceHex
+        }
     }
     public func fetchSealedLuksKey(serverDomain: String) async throws -> SealedLuksKeyResponse {
         guard let hex = sealedLuksKeyHex else {

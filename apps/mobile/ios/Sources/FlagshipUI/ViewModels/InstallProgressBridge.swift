@@ -1,5 +1,6 @@
 import Foundation
 import FlagshipAPI
+import FlagshipCore
 
 /// Bridge between the provisioning timeline (FlagshipUI) and any host
 /// observer that wants to surface install-progress as a system-level
@@ -72,7 +73,7 @@ public final class InstallProgressBridge {
             onComplete?(key, serverDomain ?? "")
             names[key] = nil
         case .error:
-            onFailed?(key, (detail?.isEmpty == false ? detail : nil) ?? Self.defaultFailure)
+            onFailed?(key, (detail?.isEmpty == false ? ProvisionProgress.failureDetail(detail) : nil) ?? Self.defaultFailure)
         default:
             onStep?(key, phase)
         }

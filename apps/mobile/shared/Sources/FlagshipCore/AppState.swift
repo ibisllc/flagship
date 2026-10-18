@@ -248,6 +248,9 @@ public final class AppState {
     /// fields reflect the ACTIVE profile (the one the rest of the UI
     /// currently renders). Empty in the unpaired state.
     public var profiles: [Profile]
+    /// Where the names Home's header shows are kept across launches. Set by the
+    /// app at start; tests leave it nil so they never touch the real defaults.
+    public var presentationNames: PresentationNameStore?
     /// W3 — `cloudName` of the entry in `profiles` whose session state
     /// is mirrored into `currentUser` / `pods` / `deviceCapability`.
     /// Nil ⇒ no active profile (unpaired, or every profile was wiped).
@@ -546,8 +549,8 @@ public final class AppState {
             cloudRootPubHex: "",
             accountId: username,
             deviceId: deviceCapability?.deviceId ?? existing?.deviceId ?? generatedDeviceId,
-            accountDisplayName: existing?.accountDisplayName,
-            deviceDisplayName: existing?.deviceDisplayName,
+            accountDisplayName: existing?.accountDisplayName ?? presentationNames?.get(username)?.account,
+            deviceDisplayName: existing?.deviceDisplayName ?? presentationNames?.get(username)?.device,
             deviceCapability: deviceCapability,
             demoServer: demoServer,
             createdAt: Date()
@@ -610,6 +613,7 @@ public final class AppState {
     }
 
     private func upsertProfile(_ profile: Profile) {
+        presentationNames?.put(profile.cloudName, account: profile.accountDisplayName, device: profile.deviceDisplayName)
         if let idx = profiles.firstIndex(where: { $0.cloudName == profile.cloudName }) {
             profiles[idx] = profile
         } else {
@@ -868,6 +872,7 @@ public final class AppState {
     }
 
     public func signOut() {
+        if let name = currentUser { presentationNames?.clear(name) }
         self.isPaired = false
         self.currentUser = nil
         self.pods = []

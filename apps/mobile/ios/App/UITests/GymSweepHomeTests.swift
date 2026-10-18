@@ -473,6 +473,37 @@ final class GymSweepHomeTests: GymSweepCase {
         XCTAssertEqual(XCTWaiter().wait(for: [open], timeout: 10), .completed, "The \(which) section rolls down.")
     }
 
+    /// A server waiting to be started is listed, with its Approve button, right
+    /// inside the Server approvals section; the header counts it; approving
+    /// clears the card at once.
+    func test_pendingApprovalIsAnsweredInsideTheSection() throws {
+        let app = launch(tab: "activity", admin: true, ["-smoke-approval-pending"])
+        let header = app.buttons["activity-section-approvals"]
+        XCTAssertTrue(reveal(app, header))
+        wait(header, "label CONTAINS '1'", timeout: 20)
+        openActivitySection(app, "approvals")
+        let approve = button(app, "Yes, this is my server")
+        XCTAssertTrue(approve.waitForExistence(timeout: 15), "The request is in the section.")
+        XCTAssertTrue(text(app, containing: "203.0.113.7").exists, "…with the box's own details.")
+        XCTAssertFalse(app.navigationBars["Approve server"].exists, "…not on a page of its own.")
+        shot(app, "approvals-in-section")
+        approve.tap()
+        waitGone(approve, timeout: 20)
+        XCTAssertTrue(text(app, containing: "Nothing waiting for you").waitForExistence(timeout: 15), "The card went at once.")
+    }
+
+    /// A boot-approval link opens Activity with the Server approvals section
+    /// expanded and the request in it.
+    func test_approvalLinkOpensTheSectionWithTheRequest() throws {
+        let app = launch(tab: "home", admin: true, ["-smoke-approval-pending"])
+        XCTAssertTrue(app.buttons["home-add-server"].waitForExistence(timeout: 20))
+        app.open(URL(string: "flagship://secret-requests")!)
+        let header = app.buttons["activity-section-approvals"]
+        XCTAssertTrue(header.waitForExistence(timeout: 20), "The link lands on Activity.")
+        wait(header, "value == 'expanded'", timeout: 10)
+        XCTAssertTrue(button(app, "Yes, this is my server").waitForExistence(timeout: 15), "…with the request visible.")
+    }
+
     func test_activityMergesBoxAndAccountEvents() throws {
         let app = launch(tab: "activity", admin: true, ["-smoke-activity"])
         openActivitySection(app, "server")
@@ -504,12 +535,9 @@ final class GymSweepHomeTests: GymSweepCase {
         app.navBackButton(in: "Re-attach progress").tap()
 
         openActivitySection(app, "approvals")
-        let approvals = button(app, "Open approvals")
-        XCTAssertTrue(reveal(app, approvals))
-        approvals.tap()
-        XCTAssertTrue(app.navigationBars["Approve server"].waitForExistence(timeout: 10))
-        XCTAssertTrue(text(app, containing: "No server is waiting for approval right now.").waitForExistence(timeout: 10))
-        app.navBackButton(in: "Approve server").tap()
+        XCTAssertTrue(text(app, containing: "Nothing waiting for you").waitForExistence(timeout: 10),
+                      "Approvals are listed right inside the section.")
+        XCTAssertFalse(button(app, "Open approvals").exists, "No separate page to open.")
 
         openActivitySection(app, "account")
         let more = app.buttons["activity-load-more"]

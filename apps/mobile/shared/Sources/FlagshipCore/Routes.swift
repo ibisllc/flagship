@@ -131,8 +131,6 @@ public enum BuildKeyPurpose: Hashable, Sendable {
 }
 
 public enum ActivityRoute: Hashable, Sendable {
-    /// The sealed-key RELAY approval surface (SecretRequestsContainer).
-    case secretRequests
     case installProgress(serial: String)
     /// Activity-feed shortcut into Settings → Recovery → Re-attach
     /// progress. Separate path-stack entry so back-nav lands the user

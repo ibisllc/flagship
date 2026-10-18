@@ -62,9 +62,16 @@ public enum PairingRelayError: Error, LocalizedError, Sendable {
         case .peerMissing:        return "The other device isn't connected. Try scanning again."
         case .transport(let m):   return "Pairing transport error: \(m)"
         case .sessionInvalidated: return "The pairing session was cancelled for your security."
-        case .unavailable:        return "Adding a device by scanning a code isn't available yet."
+        case .unavailable:        return Self.addDeviceUnavailable
         }
     }
+
+    /// Said when this phone has no live pairing transport (every release
+    /// build): the web app has the real pairing, so that is where to go.
+    public static let addDeviceUnavailable =
+        "Adding a device from this phone isn't available yet. Use the web app."
+    public static let joinAccountUnavailable =
+        "Joining an account from this phone isn't available yet. Use the web app."
 }
 
 /// The pairing relay has no network transport yet (the `/qr-pipe` leg is a
@@ -103,6 +110,8 @@ public final class MockPairingRelayClient: PairingRelayClient, @unchecked Sendab
         case happy
         case peerMissing
         case sessionExpired
+        /// No live pairing transport, as in a release build.
+        case unavailable
     }
     public var behavior: Behavior = .happy
     public var simulatedLatency: TimeInterval = 0
@@ -136,6 +145,7 @@ public final class MockPairingRelayClient: PairingRelayClient, @unchecked Sendab
         case .happy:         return nil
         case .peerMissing:   return .peerMissing
         case .sessionExpired: return .sessionExpired
+        case .unavailable:   return .unavailable
         }
     }
 

@@ -175,7 +175,7 @@ public extension WatchProtocol {
 
         private static func errorDetail(in ctx: ProvisionTimelineContext?) -> String? {
             let d = ctx?.detail ?? ctx?.history.last(where: { $0.phase == "error" })?.detail
-            return (d?.isEmpty ?? true) ? nil : d
+            return (d?.isEmpty ?? true) ? nil : ProvisionProgress.failureDetail(d)
         }
     }
 

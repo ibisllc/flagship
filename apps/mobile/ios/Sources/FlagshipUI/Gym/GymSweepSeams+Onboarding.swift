@@ -100,6 +100,11 @@ extension GymSweepSeams {
         server.accountTypeByUser[gymMultiDeviceAccount] = "multi"
         server.cloudRecoveryByUser[gymMultiDeviceAccount] = true
         server.seedClaimedUsername(gymNoBackupAccount, irkPubHex: irk)
+        // `-smoke-pairing-unavailable`: no live pairing transport, as in a release build
+        // (Add a device and Join an account both).
+        if args.contains("-smoke-pairing-unavailable") {
+            mocks.pairingRelay?.behavior = .unavailable
+        }
         if args.contains("-smoke-join-bundle"), let relay = mocks.pairingRelay {
             Task {
                 try? await relay.adminDeliverBundle(sid: "gym", ciphertextBase64Url: "AAAAAAAAAAAAAAAAAAAAAA",

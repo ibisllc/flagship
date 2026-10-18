@@ -18,6 +18,10 @@ public enum UserErrorText {
     public static let dropped = "The connection dropped. Try again."
     public static let timeout = "That took too long. Check your connection and try again."
     public static let serverProblem = "Service temporarily unavailable. Try again in a few minutes."
+    /// The phone could not look up the server's address. It is not "can't reach
+    /// the server": the connection is fine, a router has just cached the miss.
+    public static let nameLookup =
+        "Your phone can't find this server's address yet. This usually clears within a few minutes. Try again."
     public static let refused = "We couldn't complete that. Try again."
     public static let generic = "Something went wrong. Try again."
 
@@ -123,6 +127,12 @@ public enum UserErrorText {
         return s
     }
 
+    /// True when `text` carries a runtime artefact (an HTTP status line, a
+    /// Cloudflare code, a JSON or HTML body, a Foundation domain line).
+    public static func isRawArtefact(_ text: String) -> Bool {
+        text.range(of: rawMarkers, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
     /// True when `text` reads as a sentence written for people.
     public static func looksAuthored(_ text: String) -> Bool {
         text.count >= 4 && text.contains(" ")
@@ -152,6 +162,8 @@ public enum UserErrorText {
             return "The server had a temporary problem. Please try again in a moment."
         case .notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff:
             return "You're offline. Check your connection and try again."
+        case .cannotFindHost, .dnsLookupFailed:
+            return nameLookup
         default: return offline
         }
     }

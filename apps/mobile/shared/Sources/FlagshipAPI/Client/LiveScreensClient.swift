@@ -10,10 +10,44 @@ import Foundation
 public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     private let urlSession: URLSession
     private let store: any SessionStoring
+    private let dnsRetryDelays: [TimeInterval]
+    private let sleep: @Sendable (TimeInterval) async -> Void
 
-    public init(urlSession: URLSession = .shared, store: any SessionStoring) {
+    /// `dnsRetryDelays`: when the box's name doesn't resolve (a home router that
+    /// cached "no such name" from a lookup made before the box registered),
+    /// the request is tried again after each delay before it fails.
+    public init(
+        urlSession: URLSession = .shared,
+        store: any SessionStoring,
+        dnsRetryDelays: [TimeInterval] = [0.5, 1.5, 3],
+        sleep: @escaping @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) }
+    ) {
         self.urlSession = urlSession
         self.store = store
+        self.dnsRetryDelays = dnsRetryDelays
+        self.sleep = sleep
+    }
+
+    /// True when the box's name could not be looked up at all: the request
+    /// never left the phone, so asking again can't repeat a change.
+    public static func isNameLookupFailure(_ error: Error) -> Bool {
+        guard let u = error as? URLError else { return false }
+        return u.code == .cannotFindHost || u.code == .dnsLookupFailed
+    }
+
+    /// `sendPreferringLan`, trying again with a short backoff while the name
+    /// won't resolve; other failures pass straight through.
+    private func sendWithNameRetry(_ req: URLRequest, host: String?) async throws -> (Data, URLResponse) {
+        var attempt = 0
+        while true {
+            do {
+                return try await sendPreferringLan(req, host: host)
+            } catch {
+                guard Self.isNameLookupFailure(error), attempt < dnsRetryDelays.count, !Task.isCancelled else { throw error }
+                await sleep(dnsRetryDelays[attempt])
+                attempt += 1
+            }
+        }
     }
 
     /// LAN-direct (docs/lan-direct.md): use the box's local listener when a
@@ -83,7 +117,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         let data: Data
         let resp: URLResponse
         do {
-            (data, resp) = try await sendPreferringLan(req, host: url.host)
+            (data, resp) = try await sendWithNameRetry(req, host: url.host)
         } catch {
             // UX-A — a hard-fail pin mismatch surfaces here as a generic
             // transport error (the delegate cancelled the auth challenge).

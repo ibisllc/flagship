@@ -96,6 +96,6 @@ public enum ProvisionTimelineLadder {
 
     private static func errorDetail(in status: ProvisionStatus?) -> String? {
         let d = status?.detail ?? status?.history.last(where: { $0.phase == .error })?.detail
-        return (d?.isEmpty ?? true) ? nil : d
+        return (d?.isEmpty ?? true) ? nil : ProvisionProgress.failureDetail(d)
     }
 }

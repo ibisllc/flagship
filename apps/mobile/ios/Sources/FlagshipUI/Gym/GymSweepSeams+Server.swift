@@ -32,6 +32,20 @@ extension GymSweepSeams {
         mocks.lockPower.journalLines = ["gym: flagship-daemon started", "gym: serving 2 apps"]
         mocks.migration.scripted = true
 
+        // `-smoke-apps-name-lookup-miss`: the phone's router cached "no such name" for
+        // the box, so its first Apps request can't look the address up (a retry works).
+        if args.contains("-smoke-apps-name-lookup-miss") {
+            mocks.screens.appsListError = URLError(.cannotFindHost)
+            mocks.screens.appsListErrorOnce = true
+        }
+
+        // `-smoke-release-fails-once`: `.com` fails the first release of a name
+        // (Cancel order / Delete), then works, so the retry path is exercised.
+        if args.contains("-smoke-release-fails-once") {
+            mocks.server?.releaseError = ScreensClientError.http(status: 502, message: "error code: 1102")
+            mocks.server?.releaseErrorOnce = true
+        }
+
         // `-smoke-server-fresh`: forget what earlier runs left in this
         // simulator's defaults (lock-down policies, pending updates).
         if args.contains("-smoke-server-fresh") {

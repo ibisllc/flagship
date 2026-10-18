@@ -38,14 +38,22 @@ public struct CreateServerStubScreen: View {
     var onDeliveredVisible: (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in }
     var onDelivered: (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in }
     var onCancel: () -> Void = {}
+    /// Why Cancel order didn't go through, and whether one is running: the
+    /// order stays and the button reads "Try cancelling again".
+    var cancelError: String?
+    var cancelling: Bool = false
 
     public init(
         vm: CreateServerViewModel,
         builderLink: String? = nil,
         onDeliveredVisible: @escaping (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in },
         onDelivered: @escaping (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in },
-        onCancel: @escaping () -> Void = {}
+        onCancel: @escaping () -> Void = {},
+        cancelError: String? = nil,
+        cancelling: Bool = false
     ) {
+        self.cancelError = cancelError
+        self.cancelling = cancelling
         self.vm = vm
         self._builderLink = State(initialValue: builderLink)
         self.onDeliveredVisible = onDeliveredVisible
@@ -685,14 +693,35 @@ public struct CreateServerStubScreen: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, FS.space.s3)
             }
+            if deliveredTimeline?.status?.phase == .error {
+                SetupStoppedCard(
+                    serial: serial,
+                    step: ProvisionProgress.failureDetail(deliveredTimeline?.status?.detail),
+                    cancelError: cancelError,
+                    working: cancelling,
+                    onCancelOrder: onCancel
+                )
+            }
             FSPrimaryButton("Done", block: true, large: true) {
                 onDelivered(serverDomain, vm.name, vm.description)
             }
             .accessibilityIdentifier("cs-done-button")
-            FSDangerButton("Cancel order", block: true) {
-                onCancel()
+            if let cancelError, deliveredTimeline?.status?.phase != .error {
+                Text(cancelError)
+                    .font(FS.font.bodySm())
+                    .foregroundColor(c.danger)
+                    .accessibilityIdentifier("cs-cancel-error")
             }
-            .accessibilityIdentifier("cs-cancel-order-button")
+            if deliveredTimeline?.status?.phase != .error {
+                FSDangerButton(
+                    cancelling ? "Cancelling…" : (cancelError == nil ? "Cancel order" : CancelPendingOrder.retryLabel),
+                    block: true
+                ) {
+                    onCancel()
+                }
+                .disabled(cancelling)
+                .accessibilityIdentifier("cs-cancel-order-button")
+            }
         }
     }
 

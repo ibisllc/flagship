@@ -138,9 +138,10 @@ public enum HumanError {
             return (.offline, "You're offline. Check your connection and try again.")
         case .timedOut:
             return (.offline, "The request timed out. Check your connection and try again.")
-        case .cannotFindHost,
-             .cannotConnectToHost,
-             .dnsLookupFailed,
+        case .cannotFindHost, .dnsLookupFailed:
+            // The connection is fine; the server's name just won't resolve yet.
+            return (.offline, UserErrorText.nameLookup)
+        case .cannotConnectToHost,
              .cannotLoadFromNetwork:
             return (.offline, offlineCopy)
         case .badServerResponse,

@@ -64,10 +64,13 @@ final class UserErrorTextTests: XCTestCase {
     func test_urlErrorsBecomeSentences() {
         XCTAssertEqual(UserErrorText.of(URLError(.timedOut)), UserErrorText.timeout)
         XCTAssertEqual(UserErrorText.of(URLError(.networkConnectionLost)), UserErrorText.dropped)
-        XCTAssertEqual(UserErrorText.of(URLError(.cannotFindHost)), UserErrorText.offline)
+        XCTAssertEqual(UserErrorText.of(URLError(.cannotConnectToHost)), UserErrorText.offline)
+        XCTAssertEqual(UserErrorText.of(URLError(.cannotFindHost)), UserErrorText.nameLookup)
+        XCTAssertEqual(UserErrorText.of(URLError(.dnsLookupFailed)), UserErrorText.nameLookup)
+        XCTAssertFalse(UserErrorText.nameLookup.contains("Couldn't reach the server"))
         XCTAssertEqual(UserErrorText.of(URLError(.notConnectedToInternet)), "You're offline. Check your connection and try again.")
         let ns = NSError(domain: NSURLErrorDomain, code: NSURLErrorDNSLookupFailed)
-        XCTAssertEqual(UserErrorText.of(ns), UserErrorText.offline)
+        XCTAssertEqual(UserErrorText.of(ns), UserErrorText.nameLookup)
         let posix = NSError(domain: NSPOSIXErrorDomain, code: Int(ECONNRESET))
         XCTAssertEqual(UserErrorText.of(posix), UserErrorText.dropped)
     }

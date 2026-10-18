@@ -118,6 +118,17 @@ public enum Endpoints {
         "\(server).\(user).\(dataApex)"
     }
 
+    /// True for `<server>.<user>.<apex>`: at least two labels in front of the
+    /// data apex. A row without them (an old "server.<apex>" guess) names no
+    /// order `.com` knows, so there is nothing to release for it.
+    public static func isWellFormedServerFqdn(_ fqdn: String, apex: String? = nil) -> Bool {
+        let suffix = "." + (apex ?? dataApex).lowercased()
+        let lower = fqdn.lowercased()
+        guard lower.hasSuffix(suffix) else { return false }
+        let front = lower.dropLast(suffix.count).split(separator: ".", omittingEmptySubsequences: false)
+        return front.count >= 2 && front.allSatisfy { !$0.isEmpty }
+    }
+
     /// A user's data-plane zone host: `<user>.flagship.services`.
     public static func userZoneHost(_ user: String) -> String {
         "\(user).\(dataApex)"
