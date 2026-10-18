@@ -49,7 +49,7 @@ fun RestoreFromBackupScreen(
             FSDivider()
             FSRow(
                 title = "From other servers",
-                subtitle = "Get a lost server's backup back from the pieces other servers keep.",
+                subtitle = "Rebuild a lost server from pieces other servers keep.",
                 icon = Icons.Outlined.Dns,
                 iconTint = FS.colors.accent,
                 onClick = onPeers,
