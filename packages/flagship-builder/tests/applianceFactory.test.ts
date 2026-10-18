@@ -37,6 +37,8 @@ describe("generalized appliance factory preseed", () => {
     expect(script).toContain("GRUB_DISABLE_LINUX_PARTUUID=true");
     expect(script).toContain("cryptsetup luksFormat --type luks2");
     expect(script).toContain("tar --one-file-system --numeric-owner --acls --xattrs");
+    expect(script).toContain("-C / -cpf - . || [ $? -eq 1 ]; } |");
+    expect(script).toContain("-C /boot -cpf - . || [ $? -eq 1 ]; } |");
     expect(script).toContain("flagship-appliance-prepare.sh");
     expect(script).toContain("grub-install --target=\"$GRUB_TARGET\"");
     expect(script).toContain("GRUB_FALLBACK=BOOTAA64.EFI");
