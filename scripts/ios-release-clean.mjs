@@ -38,18 +38,18 @@ export const RELEASE_SOURCE_DIRS = [
 export const FORBIDDEN = [
   { id: "mock type", re: /\b\w*Mock[A-Z]\w*/ },
   { id: "gym fixtures", re: /\b(DemoFixtures|ServiceAccessFixture|samplePods\w*|ServerShareDemo\.(ownerRows|activity|link|sessions|entries|invitation|startup|secretHex|memberPub))\b/ },
-  { id: "gym seam", re: /\b(GymSeams|GymLaunch|GymSweepSeams|GymOrderCanonical|GymMocks|GymProbe\w*|gymIRK|gymAdminRoot|gymForce\w*)\b/ },
+  { id: "gym seam", re: /\b(GymSeams|GymLaunch|GymSweepSeams|GymOrderCanonical|GymMocks|GymProbe\w*|SecurityNoticeGym|gymIRK|gymAdminRoot|gymForce\w*)\b/ },
   { id: "developer mode", re: /\b(DeveloperSettings|DeveloperScreen|useLiveClient|mockLatency\w*)\b|Developer menu|flagship\.dev\./ },
-  { id: "smoke launch argument", re: /"-smoke-|"-apex-host"/ },
+  { id: "smoke launch argument", re: /"-smoke-|"-apex-host"|"-gym-notice/ },
 ];
 
 /** Strings a Release binary must not contain (checked with `strings`). */
 export const FORBIDDEN_IN_BINARY = [
   /Mock(Screens|FlagshipServer|QrRelay|PairingRelay|SecretMailbox|LockPower|FrontPage|Leads|ServiceAccess|ServiceUninstall|ServerTransfer|ServerMigration|BuilderPair|DemoConnect|Browser|WebAuthn|OrderSigners|SuggestWords|DbTable|Box)/,
   /DemoFixtures|ServiceAccessFixture|samplePods/,
-  /GymSeams|GymLaunch|GymSweepSeams|GymOrderCanonical|GymMocks|GymProbe/,
+  /GymSeams|GymLaunch|GymSweepSeams|GymOrderCanonical|GymMocks|GymProbe|SecurityNoticeGym/,
   /DeveloperSettings|DeveloperScreen|useLiveClient|mockLatency|Developer menu|flagship\.dev\./,
-  /-smoke-mode|-smoke-onboarding|-apex-host/,
+  /-smoke-mode|-smoke-onboarding|-apex-host|-gym-notice/,
   /sign in as .demo.|MOCK mode/,
 ];
 

@@ -836,7 +836,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         req.httpMethod = "GET"
         req.cachePolicy = .reloadIgnoringLocalCacheData
         let (data, status) = try await sendAccountRead(req, username: username, tokens: readTokens) {
-            try await urlSession.data(for: $0)
+            try await urlSession.gatedData(for: $0)
         }
         guard (200..<300).contains(status) else {
             throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
@@ -865,7 +865,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         req.timeoutInterval = 40
         req.cachePolicy = .reloadIgnoringLocalCacheData
         let (data, status) = try await sendAccountRead(req, username: username, tokens: readTokens) {
-            try await urlSession.data(for: $0)
+            try await urlSession.gatedData(for: $0)
         }
         guard (200..<300).contains(status) else {
             throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
@@ -901,7 +901,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = try JSONEncoder().encode(body)
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if (200..<300).contains(status) { return }
         throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
@@ -916,7 +916,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = try JSONEncoder().encode(body)
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if (200..<300).contains(status) { return }
         throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
@@ -931,7 +931,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = try JSONEncoder().encode(body)
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if (200..<300).contains(status) { return }
         throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
@@ -946,7 +946,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = try JSONEncoder().encode(body)
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if (200..<300).contains(status) { return }
         throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
@@ -961,7 +961,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = try JSONEncoder().encode(body)
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if (200..<300).contains(status) { return }
         throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
@@ -976,7 +976,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = try JSONEncoder().encode(body)
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if (200..<300).contains(status) { return }
         throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
@@ -990,7 +990,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
         req.cachePolicy = .reloadIgnoringLocalCacheData
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
@@ -1011,7 +1011,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = try JSONEncoder().encode(body)
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if (200..<300).contains(status) { return }
         throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
@@ -1033,7 +1033,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.setValue(bootAuth, forHTTPHeaderField: "Authorization")
         if !body.isEmpty { req.httpBody = body }
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if acceptStatuses.contains(status) { return }
         throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
@@ -1045,7 +1045,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = body
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if acceptStatuses.contains(status) { return }
         throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
@@ -1056,7 +1056,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = body
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if acceptStatuses.contains(status) { return }
         throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
@@ -1067,7 +1067,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = body
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
@@ -1078,7 +1078,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
     private func getReturning<Resp: Decodable>(_ path: String) async throws -> Resp {
         var req = URLRequest(url: baseUrl.appendingPathComponent(path))
         req.httpMethod = "GET"
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")

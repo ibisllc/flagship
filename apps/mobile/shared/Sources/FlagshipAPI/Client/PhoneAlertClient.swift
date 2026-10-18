@@ -60,7 +60,7 @@ public final class LivePhoneAlertClient: PhoneAlertClient, @unchecked Sendable {
             req.setValue("application/json", forHTTPHeaderField: "content-type")
         }
 
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         guard let http = resp as? HTTPURLResponse else {
             throw ScreensClientError.http(status: 0, message: "no response")
         }

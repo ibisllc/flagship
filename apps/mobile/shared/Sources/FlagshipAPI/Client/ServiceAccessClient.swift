@@ -228,7 +228,7 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
         let data: Data
         let resp: URLResponse
         do {
-            (data, resp) = try await session.data(for: req)
+            (data, resp) = try await session.gatedData(for: req)
         } catch {
             if let host = req.url?.host, CertPinMismatchSink.shared.consumeRecentMismatch(host: host) {
                 throw ScreensClientError.certPinMismatch(host: host)

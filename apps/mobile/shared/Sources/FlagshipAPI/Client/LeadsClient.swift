@@ -78,7 +78,7 @@ public final class LiveLeadsClient: LeadsClient, @unchecked Sendable {
         let data: Data
         let resp: URLResponse
         do {
-            (data, resp) = try await urlSession.data(for: URLRequest(url: url))
+            (data, resp) = try await urlSession.gatedData(for: URLRequest(url: url))
         } catch {
             // Cert-pin mismatch / network error / DNS — best-effort, no throw.
             return nil

@@ -87,7 +87,7 @@ public final class LiveBuilderPairClient: BuilderPairClient, @unchecked Sendable
         guard let url = URL(string: "\(scheme)://\(host)/builder-pipe/\(encodedSid)?role=phone") else {
             throw BuilderPairError.connectionFailed("bad URL")
         }
-        let t = urlSession.webSocketTask(with: url)
+        let t = try urlSession.gatedWebSocketTask(with: url)
         var streamContinuation: AsyncStream<BuilderInbound>.Continuation!
         let stream = AsyncStream<BuilderInbound> { cont in
             streamContinuation = cont

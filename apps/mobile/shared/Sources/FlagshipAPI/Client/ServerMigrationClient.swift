@@ -177,7 +177,7 @@ public final class LiveServerMigrationClient: ServerMigrationClient, @unchecked 
         var req = URLRequest(url: try urlFor(serverDomain, "migration"))
         req.httpMethod = "GET"
         req.cachePolicy = .reloadIgnoringLocalCacheData
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if status == 404 { return nil }
         guard (200..<300).contains(status) else {
@@ -211,7 +211,7 @@ public final class LiveServerMigrationClient: ServerMigrationClient, @unchecked 
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = body
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")

@@ -78,7 +78,7 @@ public final class LiveDemoConnectClient: DemoConnectClient, @unchecked Sendable
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = Data("{}".utf8)
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         // 200 is the standard happy path. 409 ("not yet provisioned")
         // is surfaced so the caller can show a precise error; 429 is
@@ -119,7 +119,7 @@ public final class LiveDemoConnectClient: DemoConnectClient, @unchecked Sendable
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = Data("{}".utf8)
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""

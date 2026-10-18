@@ -106,6 +106,7 @@ public struct RootShell: View {
                 // maintainer-trust state is higher priority than any running
                 // operation, and both push the shell down from the top.
                 VStack(spacing: 0) {
+                    NoticeBannerView()
                     GlobalTrustBar()
                     GlobalOperationsBar()
                 }

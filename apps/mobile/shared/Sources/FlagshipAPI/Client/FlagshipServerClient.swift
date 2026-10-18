@@ -3480,7 +3480,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         if let trustGate, await trustGate() == false {
             throw ScreensClientError.controlServerUntrusted
         }
-        return try await urlSession.data(for: req)
+        return try await urlSession.gatedData(for: req)
     }
 
     private func postJson(_ path: String, body: Data, acceptStatuses: Set<Int> = [200, 201, 204]) async throws {

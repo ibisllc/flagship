@@ -122,7 +122,7 @@ public extension LiveFlagshipServerClient {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = try JSONEncoder().encode(body)
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""

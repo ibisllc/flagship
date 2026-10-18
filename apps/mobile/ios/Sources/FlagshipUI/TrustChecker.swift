@@ -92,7 +92,7 @@ public struct TrustChecker: Sendable {
         do {
             var req = URLRequest(url: baseUrl.appendingPathComponent("/api/maintainer-blessing"))
             req.httpMethod = "GET"
-            let (data, resp) = try await urlSession.data(for: req)
+            let (data, resp) = try await urlSession.gatedData(for: req)
             guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 return .noVerdict // not a clean response → no verdict
             }

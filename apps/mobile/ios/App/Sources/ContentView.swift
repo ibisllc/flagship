@@ -33,6 +33,9 @@ struct ContentView: View {
     @State private var pushPrefs: PushPreferenceSync?
     @Environment(PrivacySettings.self) private var privacy
     @Environment(\.screensClient) private var screensClient
+    /// The security notice's state: while a required update locks the app,
+    /// the background workers below stand down (nothing leaves the phone).
+    @Environment(SecurityNoticeCenter.self) private var notices: SecurityNoticeCenter?
 
     var body: some View {
         ZStack {
@@ -102,6 +105,10 @@ struct ContentView: View {
             syncAccessAlerts()
             let prefs = pushPrefs
             Task { await prefs?.changed() }
+        }
+        .onChange(of: notices?.isLocked ?? false) { _, _ in
+            syncLiveSync()
+            syncAccessAlerts()
         }
         .onChange(of: scenePhase) { _, _ in
             // Foreground-only: pause the live-update canal when the app leaves
@@ -195,7 +202,9 @@ struct ContentView: View {
             liveSync = LiveSyncCoordinator(
                 app: app,
                 mailbox: mailbox,
-                isActive: { [weak app] in (app?.isPaired ?? false) && (app?.isUnlocked ?? false) },
+                isActive: { [weak app] in
+                    (app?.isPaired ?? false) && (app?.isUnlocked ?? false) && !UpdateLock.shared.isLocked
+                },
                 makeReconciler: { fetch in
                     // Same reconcile path Home uses: surface registered/pending
                     // pods, drop ghosts, and run the secret-free SWK deposit for
@@ -222,7 +231,7 @@ struct ContentView: View {
                 }
             )
         }
-        let shouldRun = app.isPaired && scenePhase == .active
+        let shouldRun = app.isPaired && scenePhase == .active && !UpdateLock.shared.isLocked
         if shouldRun { liveSync?.start() } else { liveSync?.stop() }
     }
 
@@ -274,6 +283,7 @@ struct ContentView: View {
                 isActive: { [weak app] in
                     guard let app else { return false }
                     return app.isPaired && app.isUnlocked && !app.isRestrictedDevice && AdminOrderGate.allows(app)
+                        && !UpdateLock.shared.isLocked
                 },
                 alertsEnabled: { privacy.pushNotificationsEnabled && !Self.gymSuppressesAccessAlerts }
             )
@@ -298,7 +308,7 @@ struct ContentView: View {
             )
         }
         guard let center = accessAlerts else { return }
-        let inFront = app.isPaired && app.isUnlocked && scenePhase == .active
+        let inFront = app.isPaired && app.isUnlocked && scenePhase == .active && !UpdateLock.shared.isLocked
         if inFront, let prefs = pushPrefs {
             Task { await prefs.resync() }
         }
@@ -340,7 +350,9 @@ struct ContentView: View {
             let poller = AiChatAlertPoller(
                 operations: operations,
                 client: client,
-                isActive: { [weak app] in (app?.isPaired ?? false) && (app?.isUnlocked ?? false) },
+                isActive: { [weak app] in
+                    (app?.isPaired ?? false) && (app?.isUnlocked ?? false) && !UpdateLock.shared.isLocked
+                },
                 notify: { sessionId, request, server in
                     guard let delegate = UIApplication.shared.delegate as? AppDelegate,
                           let push = delegate.push else { return }

@@ -24,7 +24,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         #if canImport(Network)
         if let host, let lan = LanDirectRegistry.shared.session(for: host) {
             do {
-                return try await lan.data(for: req)
+                return try await lan.gatedData(for: req)
             } catch {
                 if Task.isCancelled { throw error }
                 // A pin mismatch here means some other device holds that LAN
@@ -35,7 +35,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
             }
         }
         #endif
-        return try await urlSession.data(for: req)
+        return try await urlSession.gatedData(for: req)
     }
 
     /// The box's STK-signed LAN hint, or nil (204: it has none to offer).
@@ -47,7 +47,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         }
         var req = URLRequest(url: url)
         req.setValue(token, forHTTPHeaderField: "x-flagship-session")
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         guard (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
         return try JSONDecoder().decode(LanHint.Envelope.self, from: data)
     }
@@ -179,7 +179,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
                 req.setValue(token, forHTTPHeaderField: "x-flagship-session")
                 req.setValue("text/event-stream", forHTTPHeaderField: "accept")
                 do {
-                    let (bytes, _) = try await urlSession.bytes(for: req)
+                    let (bytes, _) = try await urlSession.gatedBytes(for: req)
                     var buffer = ""
                     for try await line in bytes.lines {
                         if line.isEmpty {
@@ -423,7 +423,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
                 guard let url = comps.url else { continuation.finish(); return }
                 var req = URLRequest(url: url)
                 req.setValue(token, forHTTPHeaderField: "x-flagship-session")
-                let ws = urlSession.webSocketTask(with: req)
+                guard let ws = try? urlSession.gatedWebSocketTask(with: req) else { continuation.finish(); return }
                 ws.resume()
                 while !Task.isCancelled {
                     guard let msg = try? await ws.receive() else { break }
@@ -487,7 +487,10 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
                 }
                 var req = URLRequest(url: url)
                 req.setValue(token, forHTTPHeaderField: "x-flagship-session")
-                let ws = urlSession.webSocketTask(with: req)
+                guard let ws = try? urlSession.gatedWebSocketTask(with: req) else {
+                    finish(incomplete: UpdateRequiredError.sentence)
+                    return
+                }
                 ws.resume()
                 while !Task.isCancelled {
                     do {
@@ -708,7 +711,7 @@ public final class LiveBrowserStream: BrowserStream, @unchecked Sendable {
         let encodedTabId = tabId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? tabId
         let urlStr = "\(wsBase)/api/screens/browser-tabs/\(encodedTabId)/stream?sessionToken=\(encodedToken)"
         guard let url = URL(string: urlStr) else { return true }
-        let ws = urlSession.webSocketTask(with: url)
+        guard let ws = try? urlSession.gatedWebSocketTask(with: url) else { return true }
         lock.withLock { self.task = ws }
         ws.resume()
         var sawAnyFrame = false

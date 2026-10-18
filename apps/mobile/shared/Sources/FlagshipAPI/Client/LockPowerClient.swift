@@ -101,7 +101,7 @@ public final class LiveLockPowerClient: LockPowerClient, @unchecked Sendable {
         let data: Data
         let resp: URLResponse
         do {
-            (data, resp) = try await urlSession.data(for: req)
+            (data, resp) = try await urlSession.gatedData(for: req)
         } catch {
             // UX-A — a hard-fail pin mismatch surfaces as a generic transport
             // error; if the pinning delegate just flagged this host, report

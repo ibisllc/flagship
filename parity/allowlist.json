@@ -33,8 +33,6 @@
     { "check": "signed-tags", "key": "web:flagship/outstanding-orders/v1", "reason": "iOS's IRK-signed reconcile read; the webapp reconciles pending servers from the unauthenticated /pods pending[] list." },
     { "check": "signed-tags", "key": "web:flagship/recovery/v1", "reason": "The native default PRF salt; the webapp's passkey recovery derives its PRF salt from the user's passphrase (Argon2id in the recovery sub-origin)." },
     { "check": "signed-tags", "key": "android:flagship/swk/v1", "reason": "iOS's slash-form app-backup SWK (Keystore.deriveSWK) is not used by any other client; Android and the webapp derive the dotted protocol SWK (ServerKeys.deriveSwk)." },
-    { "check": "signed-tags", "key": "web:flagship/voici-shorten/v1", "reason": "No client offers one-off voi.ci short links: iOS and Android carry only the unused canonical-bytes primitive, and the webapp has no such screen." },
-    { "check": "signed-tags", "key": "ios:flagship/security-notice/v1", "reason": "Phase 2 (docs/security-notices.md): the Swift port of the security notice follows the webapp and the TypeScript reference; parity/features.json security-notices tracks it. Delete this entry when SecurityNotice.swift lands." },
-    { "check": "test-vectors", "key": "swift:security-notice", "reason": "Phase 2: the Swift port reads packages/protocol/test-vectors/security-notice when it lands." }
+    { "check": "signed-tags", "key": "web:flagship/voici-shorten/v1", "reason": "No client offers one-off voi.ci short links: iOS and Android carry only the unused canonical-bytes primitive, and the webapp has no such screen." }
   ]
 }

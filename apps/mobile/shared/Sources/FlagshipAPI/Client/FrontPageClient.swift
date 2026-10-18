@@ -58,7 +58,7 @@ public final class LiveFrontPageClient: FrontPageClient, @unchecked Sendable {
         let data: Data
         let resp: URLResponse
         do {
-            (data, resp) = try await urlSession.data(for: req)
+            (data, resp) = try await urlSession.gatedData(for: req)
         } catch {
             if let host = req.url?.host,
                CertPinMismatchSink.shared.consumeRecentMismatch(host: host) {

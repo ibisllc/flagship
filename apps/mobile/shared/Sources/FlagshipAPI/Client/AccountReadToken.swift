@@ -69,7 +69,7 @@ public final class LiveAccountReadTokenMinter: AccountReadTokenMinting, @uncheck
         case .irk(let envelope):
             req.httpBody = try JSONEncoder().encode(envelope)
         }
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")

@@ -71,7 +71,7 @@ public final class LiveQrRelayClient: QrRelayClient, @unchecked Sendable {
         guard let url = URL(string: "\(scheme)://\(host)/qr-pipe/\(encodedSid)?role=phone") else {
             throw QrRelayError.connectionFailed("bad URL")
         }
-        let t = urlSession.webSocketTask(with: url)
+        let t = try urlSession.gatedWebSocketTask(with: url)
         task = t
         t.resume()
 

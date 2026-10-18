@@ -9,12 +9,16 @@ import FlagshipUI
 @main
 struct FlagshipApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @Environment(\.scenePhase) private var scenePhase
     @State private var appState: AppState
     @State private var linker = DeepLinker()
     @State private var toasts = ToastCenter()
     @State private var operations = ActiveOperationsCenter()
     @State private var trust: TrustCenter
     @State private var privacy = PrivacySettings()
+    /// Security notices (docs/security-notices.md): the banner, and the
+    /// "Update required" lock for a security reason.
+    @State private var notices: SecurityNoticeCenter
     @State private var pushRegistrar: PushRegistrar?
     @State private var persistedIdentityRestoreStarted = false
     @State private var orphanedPersistedUsername: String?
@@ -39,6 +43,7 @@ struct FlagshipApp: App {
         #endif
         let state = AppState()
         _appState = State(initialValue: state)
+        _notices = State(initialValue: Self.makeNoticeCenter())
         // `.com` serves the account's servers, devices and app names only
         // with a read token (docs/account-read-token.md), minted from keys
         // already at hand and never with a prompt.
@@ -161,6 +166,28 @@ struct FlagshipApp: App {
             await readTokens.retryNow(for: user)
         }
     }
+
+    /// The notice center: the real poller against `flagshipserver.com`. The
+    /// mock gym (Debug builds) has no `.com`: it serves whatever
+    /// `-gym-notice` names (SecurityNoticeGym) and otherwise nothing.
+    @MainActor
+    private static func makeNoticeCenter() -> SecurityNoticeCenter {
+        #if DEBUG
+        if GymLaunch.usesMocks {
+            if let gym = SecurityNoticeGym.center(args: ProcessInfo.processInfo.arguments) {
+                gymNoticeFeed = (gym.feed, gym.every)
+                return gym.center
+            }
+            return SecurityNoticeCenter(storage: SecurityNoticeStorage(defaults: UserDefaults(suiteName: "flagship.gym.notices") ?? .standard),
+                                        fetcher: SecurityNoticeGym.Feed([]))
+        }
+        #endif
+        return SecurityNoticeCenter()
+    }
+
+    #if DEBUG
+    private nonisolated(unsafe) static var gymNoticeFeed: (feed: SecurityNoticeGym.Feed, every: TimeInterval)?
+    #endif
 
     #if DEBUG
     /// The mock gym's entry point (Debug builds only): launched with
@@ -631,6 +658,7 @@ struct FlagshipApp: App {
                 .environment(operations)
                 .environment(trust)
                 .environment(privacy)
+                .environment(notices)
                 .environment(\.screensClient, activeClient)
                 .environment(\.sessionStore, sessionStore)
                 .environment(\.podScreensClients, activePodClients)
@@ -647,6 +675,7 @@ struct FlagshipApp: App {
                 .environment(\.serverTransferClient, activeServerTransfer)
                 .environment(\.serverMigrationClient, activeServerMigration)
                 .environment(\.pushRegistrar, pushRegistrar)
+                .updateLockHost()
                 .alert(
                     "Account no longer listed",
                     isPresented: Binding(
@@ -700,6 +729,10 @@ struct FlagshipApp: App {
                 .task {
                     await restorePersistedIdentity()
                 }
+                .task { startNotices() }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { noticesForeground() }
+                }
                 .onOpenURL { url in
                     if let link = DeepLink.parse(url) { linker.enqueue(link) }
                 }
@@ -713,6 +746,26 @@ struct FlagshipApp: App {
                     }
                 }
         }
+    }
+
+    /// Poll for a notice shortly after launch (the mock gym polls its own feed).
+    @MainActor
+    private func startNotices() {
+        #if DEBUG
+        if GymLaunch.usesMocks {
+            if let gym = Self.gymNoticeFeed { SecurityNoticeGym.poll(notices, feed: gym.feed, every: gym.every) }
+            return
+        }
+        #endif
+        notices.start()
+    }
+
+    @MainActor
+    private func noticesForeground() {
+        #if DEBUG
+        if GymLaunch.usesMocks { return }
+        #endif
+        notices.foreground()
     }
 
     @MainActor

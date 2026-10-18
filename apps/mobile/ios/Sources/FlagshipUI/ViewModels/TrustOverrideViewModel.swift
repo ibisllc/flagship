@@ -80,7 +80,7 @@ public final class TrustOverrideViewModel {
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = body
         do {
-            let (_, resp) = try await URLSession.shared.data(for: req)
+            let (_, resp) = try await URLSession.shared.gatedData(for: req)
             let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
             return (200..<300).contains(status)
         } catch {

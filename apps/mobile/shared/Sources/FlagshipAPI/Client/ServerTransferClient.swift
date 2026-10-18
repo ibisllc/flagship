@@ -241,7 +241,7 @@ public final class LiveServerTransferClient: ServerTransferClient, @unchecked Se
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = body
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await urlSession.gatedData(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if (200..<300).contains(status) { return (data, status) }
         if status == 404 { return (data, 404) }

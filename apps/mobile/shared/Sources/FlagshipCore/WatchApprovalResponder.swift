@@ -1,4 +1,5 @@
 import Foundation
+import FlagshipAPI
 
 /// What the watch's Approve needs from the boot-secret relay. Production is
 /// `SecretRequestCoordinator`; tests use a fake.
@@ -35,31 +36,37 @@ public struct WatchApprovalResponder {
     public static let openAndUnlock = "Open Flagship on your iPhone and unlock it once, then approve again."
     public static let signedOut = "Sign in to Flagship on your iPhone first."
     public static let gone = "This server isn't waiting any more."
+    /// The iPhone's app is locked behind a required update (docs/security-notices.md 6.3).
+    public static let updateRequired = "Update Flagship on your iPhone first. Approving is paused until you do."
 
     let delegateEnrolled: () -> Bool
     let hasSessionKey: () -> Bool
     let appInForeground: () -> Bool
     let onNeedsUnlock: (_ requestId: String) -> Void
     let makeSource: () -> (any WatchApprovalSource)?
+    let isPaused: () -> Bool
 
     public init(
         delegateEnrolled: @escaping () -> Bool,
         hasSessionKey: @escaping () -> Bool,
         appInForeground: @escaping () -> Bool = { false },
         onNeedsUnlock: @escaping (_ requestId: String) -> Void = { _ in },
-        makeSource: @escaping () -> (any WatchApprovalSource)?
+        makeSource: @escaping () -> (any WatchApprovalSource)?,
+        isPaused: @escaping () -> Bool = { UpdateLock.shared.isLocked }
     ) {
         self.delegateEnrolled = delegateEnrolled
         self.hasSessionKey = hasSessionKey
         self.appInForeground = appInForeground
         self.onNeedsUnlock = onNeedsUnlock
         self.makeSource = makeSource
+        self.isPaused = isPaused
     }
 
     public func respond(to cmd: WatchProtocol.ApproveCommand) async -> WatchProtocol.ApproveReply {
         func fail(_ message: String) -> WatchProtocol.ApproveReply {
             WatchProtocol.ApproveReply(requestId: cmd.requestId, ok: false, errorMessage: message)
         }
+        if isPaused() { return fail(Self.updateRequired) }
         guard cmd.kind == "approve-unlock" else { return fail("The watch asked for something this iPhone can't do.") }
         guard delegateEnrolled() else { return fail(Self.notEnrolled) }
         guard hasSessionKey() else {

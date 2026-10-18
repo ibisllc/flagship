@@ -20,7 +20,7 @@ public struct URLSessionShareTransport: ServerShareTransport {
     }
 
     public func send(_ request: URLRequest) async throws -> (status: Int, body: Data) {
-        let (data, resp) = try await session.data(for: request)
+        let (data, resp) = try await session.gatedData(for: request)
         return ((resp as? HTTPURLResponse)?.statusCode ?? 0, data)
     }
 }
