@@ -95,6 +95,8 @@ export interface ScheduledEnv {
   SERVICES_PASSTHROUGH_IPV6?: string;
   /** Accounts the legacy sweep leaves alone (the reap tool's protected list). */
   REAP_PROTECTED_ACCOUNTS?: string;
+  /** "1" switches the hourly legacy-record sweep on. Off by default: the owner trims with the reap tool first. */
+  DNS_LEGACY_SWEEP?: string;
   /** Plan A — numeric Hetzner SSH key id (set in [vars]). Unused by
    *  the cron itself but plumbed for symmetry with the request path. */
   DEMO_PUBLIC_SSH_KEY_ID?: string;
@@ -504,12 +506,16 @@ export async function runDnsChallengeGcCron(
  * Hourly: remove the A/AAAA/CAA records earlier DNS layouts left at account and
  * box names. Each one stops the zone's root wildcard for the names below it
  * (docs/wildcard-dns.md). It waits for the root wildcard to be in the zone and
- * deletes at most 20 a pass, so a zone with a backlog drains over a day.
+ * deletes at most 20 a pass, so a zone with a backlog drains over a day. Off
+ * unless `DNS_LEGACY_SWEEP` is "1": a bulk delete of live accounts' records is
+ * the owner's call (the reap tool, then this to mop up); the per-event clean-up
+ * (register, auth-code issue, revoke, delete, transfer) needs no switch.
  */
 export async function runLegacyDnsSweepCron(
   env: ScheduledEnv,
   now: Date,
 ): Promise<import("@flagship/control-plane").LegacyDnsSweepResult | null> {
+  if (env.DNS_LEGACY_SWEEP !== "1") return null;
   if (!env.CLOUDFLARE_DNS_API_TOKEN || !env.CLOUDFLARE_SERVICES_ZONE_ID || !env.SERVICES_PASSTHROUGH_IPV4) return null;
   const dns = new CloudflareDnsClient({
     apiToken: env.CLOUDFLARE_DNS_API_TOKEN,

@@ -296,10 +296,13 @@ FLAGSHIP_R2_TEMP_PUBLIC_BASE = "https://pub-260717b8631044a0bcee80ce0de8f7f9.r2.
 # unprefixed. Probed live 2026-05-21: 250 937 344 bytes at this key.)
 FLAGSHIP_BASE_ISO_KEY = "flagship-base-alpine-3.21.0-x86_64-apkovl3-debug3.iso"
 
-# Fly anycast IPs of the .services SNI passthrough listener. When DNS
-# auto-publish is enabled (CLOUDFLARE_DNS_API_TOKEN secret set), the
-# Worker writes A/AAAA records pointing each newly-registered server
-# subdomain at these IPs.
+# Fly anycast IPs of the .services SNI passthrough listener. The Worker writes
+# NO address record from these (docs/wildcard-dns.md): they are what the zone's
+# hand-made `*.flagship.services` A/AAAA must equal. The legacy-record clean-up
+# waits for that wildcard to match them exactly, and `npm run zone-health` checks
+# it. Moving the relay means editing the two wildcard records AND these.
+# DNS_LEGACY_SWEEP = "1" would turn on the hourly sweep of legacy account
+# records (off by default; the reap tool is the primary trim).
 SERVICES_PASSTHROUGH_IPV4 = "149.248.216.86"
 SERVICES_PASSTHROUGH_IPV6 = "2a09:8280:1::110:d2b6:0"
 # WebSocket URL daemons dial for the tunnel hub. Surfaced at

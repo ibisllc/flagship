@@ -11,6 +11,7 @@ const ENV = {
   SERVICES_APEX: "flagship.services",
   SERVICES_PASSTHROUGH_IPV4: "203.0.113.7",
   SERVICES_PASSTHROUGH_IPV6: "2001:db8::7",
+  DNS_LEGACY_SWEEP: "1",
 };
 const OLD = "2026-07-20T10:00:00.000Z";
 const NOW = new Date("2026-07-20T12:00:00.000Z");
@@ -45,6 +46,13 @@ const ROOT: Array<[string, string, string]> = [
 
 describe("runLegacyDnsSweepCron", () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  it("is off unless DNS_LEGACY_SWEEP is 1", async () => {
+    const records = zone([...ROOT, ["A", "*.alice.flagship.services", "203.0.113.7"]]);
+    expect(await runLegacyDnsSweepCron({ ...ENV, DNS_LEGACY_SWEEP: undefined }, NOW)).toBeNull();
+    expect(await runLegacyDnsSweepCron({ ...ENV, DNS_LEGACY_SWEEP: "true" }, NOW)).toBeNull();
+    expect(records).toHaveLength(3);
+  });
 
   it("does nothing without Cloudflare credentials or a relay address", async () => {
     expect(await runLegacyDnsSweepCron({}, NOW)).toBeNull();
