@@ -66,6 +66,8 @@ export const update: Group = {
       return `expires ${r.json?.expiresAt}`;
     });
     if (!deposited) return;
+    const depositedAt = Date.now();
+    let appliedAfterMs = 0;
     await rec.check("the box applies it and reports lastUpdate=applied at the target (≤25 min)", async () => {
       const deadline = Date.now() + 25 * 60_000;
       let last = "";
@@ -80,10 +82,20 @@ export const update: Group = {
         }
         const lu = r?.json?.lastUpdate;
         last = `${r?.status ?? 0} commit=${String(r?.json?.currentCommit ?? "").slice(0, 8)} lastUpdate=${short(lu, 160)}`;
-        if (lu?.outcome === "applied" && String(r?.json?.currentCommit ?? "").startsWith(target.slice(0, 12))) return last;
+        if (lu?.outcome === "applied" && String(r?.json?.currentCommit ?? "").startsWith(target.slice(0, 12))) {
+          appliedAfterMs = Date.now() - depositedAt;
+          return `${last} (${(appliedAfterMs / 60_000).toFixed(1)} min after the order)`;
+        }
         if (lu?.outcome === "refused" || lu?.outcome === "rolled-back") throw new Error(last);
       }
       throw new Error(`not applied in 25 min (${last})`);
+    });
+    // The heartbeat doorbell (docs/runbooks/workers-cpu-budget.md) may delay an order by at most one
+    // heartbeat (5 min); the apply itself (fetch, build, restart) takes a few minutes more.
+    await rec.check("the update order reached the box within the doorbell budget (heartbeat 5 min + apply: ≤ 12 min)", async () => {
+      assert(appliedAfterMs > 0, "the box never applied it");
+      assert(appliedAfterMs <= 12 * 60_000, `applied ${(appliedAfterMs / 60_000).toFixed(1)} min after the order`);
+      return `${(appliedAfterMs / 60_000).toFixed(1)} min`;
     });
   },
 };

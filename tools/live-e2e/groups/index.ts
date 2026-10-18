@@ -8,6 +8,7 @@ import { archive } from "./archive.js";
 import { backups } from "./backups.js";
 import { core } from "./core.js";
 import { enforcement } from "./enforcement.js";
+import { freePlan } from "./freePlan.js";
 import { gating } from "./gating.js";
 import { invites } from "./invites.js";
 import { lifecycle } from "./lifecycle.js";
@@ -33,6 +34,7 @@ export const GROUPS: Group[] = [
   serverOrder,
   runtimes,
   realAccount,
+  freePlan,
   accessLists,
   aiStaging,
   share,

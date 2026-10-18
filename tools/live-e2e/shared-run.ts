@@ -20,6 +20,7 @@
  *   npx tsx tools/live-e2e/shared-run.ts --reuse gym-results/<run>/fleet.json
  *   npx tsx tools/live-e2e/shared-run.ts --teardown --reuse gym-results/<run>/fleet.json   # tear a kept fleet down
  *   npx tsx tools/live-e2e/shared-run.ts --no-dns-probe        # skip the DNS timeline of the first box's issuance (and its "never went dark" check, docs/wildcard-dns.md)
+ *   npx tsx tools/live-e2e/shared-run.ts --no-tail             # skip `wrangler tail flagship-com-gym` (it records every Worker outcome and FAILS the run on exceededCpu / 1102)
  *   npx tsx tools/live-e2e/shared-run.ts --list
  *   npx tsx tools/live-e2e/shared-run.ts --all-boxes --keep    # provision the whole fleet whatever the groups need
  *
@@ -55,6 +56,7 @@ import {
 } from "./lib/fleet.js";
 import { GROUPS, type Group, type GroupCtx, type Slot } from "./groups/index.js";
 import { acmeBudget } from "./lib/acmeProbe.js";
+import { WorkerTail, setCurrentTail } from "./lib/workerTail.js";
 
 const args = process.argv.slice(2);
 const flag = (name: string): boolean => args.includes(name);
@@ -162,6 +164,13 @@ async function main(): Promise<number> {
       log("not provisioning: every new box (gym or prod) would fail to get a certificate; try again in a few hours");
       return 3;
     }
+  }
+  let tail: WorkerTail | undefined;
+  if (!flag("--no-tail") && !reusePath) {
+    tail = new WorkerTail({ cwd: new URL("../../apps/com", import.meta.url).pathname, config: "wrangler.gym.toml", script: "flagship-com-gym" });
+    const ok = await tail.start().catch(() => false);
+    if (ok) setCurrentTail(tail);
+    log(ok ? "worker tail: watching flagship-com-gym for exceededCpu / 1102" : `worker tail: not available (${tail.summary().reason ?? "unknown"}); CPU outcomes will not be checked`);
   }
   const startedAt = new Date();
   const summary: Record<string, { pass: number; fail: number; skip: number }> = {};
@@ -374,6 +383,13 @@ async function main(): Promise<number> {
         return "the zone wildcard answered everything; only challenge TXT came and went";
       });
     }
+    if (tail && tail.summary().available) {
+      await fleetRec.check("Worker tail: no request ran out of CPU or resources (exceededCpu / 1102) on the gym Worker", async () => {
+        const s = tail!.summary();
+        if (s.exceeded.length || s.error1102) throw new Error(`${s.exceeded.length} request(s): ${s.exceeded.slice(0, 5).map((e) => `${e.method} ${e.route} ${e.outcome}`).join("; ")}`);
+        return `${s.events} Worker invocations, outcomes ${JSON.stringify(s.outcomes)}`;
+      });
+    }
     writeJson(dir, "fleet-checks.json", fleetRec.results);
     summary.fleet = { pass: fleetRec.passed, fail: fleetRec.failed, skip: fleetRec.skipped };
     await doTeardown("end of run");
@@ -381,6 +397,13 @@ async function main(): Promise<number> {
       await new Promise((r) => setTimeout(r, 15_000));
       dnsProbe.stop();
       writeJson(dir, "dns-probe-summary.json", dnsProbe.summary());
+    }
+    if (tail) {
+      const s = tail.summary();
+      tail.stop();
+      setCurrentTail(null);
+      writeJson(dir, "worker-tail.json", s);
+      if (s.available && s.exceeded.length) log(`worker tail: ${s.exceeded.length} request(s) exceeded CPU or resources in total (see worker-tail.json)`);
     }
     if (keep && !reusePath) log(`--keep: fleet left up. Reuse: --reuse ${join(dir, "fleet.json")}`);
   }

@@ -85,6 +85,8 @@ export const lifecycle: Group = {
       throw new Error(`still listed: ${short(await row())}`);
     });
     if (!ordered || !released) return;
+    const orderedAt = Date.now();
+    let stoppedAfterMs = 0;
     await rec.check("home2 consumes the order, wipes itself and stops answering (≤ 12 min)", async () => {
       const deadline = Date.now() + 12 * 60_000;
       let last = "";
@@ -93,11 +95,20 @@ export const lifecycle: Group = {
         last = `${r.status} ${short(r.text, 60)}`;
         if (r.status === 0 || r.status >= 500) {
           const again = await tryHttp(`https://${b.fqdn}/api/services`, {}, 15_000);
-          if (again.status === 0 || again.status >= 500) return `stopped answering (${last})`;
+          if (again.status === 0 || again.status >= 500) {
+            stoppedAfterMs = Date.now() - orderedAt;
+            return `stopped answering ${(stoppedAfterMs / 60_000).toFixed(1)} min after the release (${last})`;
+          }
         }
         await sleep(20_000);
       }
       throw new Error(`home2 still answers after 12 min (${last})`);
+    });
+    // The decommission lane rings on the next heartbeat (5 min) and the wipe takes a little more.
+    await rec.check("the decommission order reached the box within the doorbell budget (heartbeat 5 min + wipe: ≤ 10 min)", async () => {
+      assert(stoppedAfterMs > 0, "home2 never stopped answering");
+      assert(stoppedAfterMs <= 10 * 60_000, `stopped ${(stoppedAfterMs / 60_000).toFixed(1)} min after the release`);
+      return `${(stoppedAfterMs / 60_000).toFixed(1)} min`;
     });
   },
 };

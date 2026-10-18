@@ -73,6 +73,7 @@ export const invites: Group = {
     });
     if (!installed) return;
 
+    let grantMintedAt = 0;
     await rec.check("a second, non-admin device joins the account (IRK-signed grant on .com)", async () => {
       const issuedAt = Date.now();
       const g: DeviceCapabilityGrant = {
@@ -89,6 +90,7 @@ export const invites: Group = {
         signature: bytesToHex(signDeviceCapabilityGrant(g, irk)),
       });
       assert(r.status === 200, `mint ${r.status}: ${short(r.text)}`);
+      grantMintedAt = Date.now();
       return `device ${phoneId.slice(0, 8)}…`;
     });
 
@@ -172,6 +174,17 @@ export const invites: Group = {
         signature: bytesToHex(signRevokeServiceInvite(rv, signer)),
       });
     };
+
+    // The box keeps the account's device book and refreshes it on a timer that the heartbeat
+    // doorbell may answer "unchanged"; a person waiting must never be satisfied by that timer.
+    await rec.check("DEVICE BOOK: a device added moments ago signs in at once, not after the next heartbeat", async () => {
+      assert(grantMintedAt > 0, "the grant was not minted");
+      const role = await appRole(phone);
+      const since = Date.now() - grantMintedAt;
+      assert(role === "manager", `the new device signed in as ${role}`);
+      assert(since < 90_000, `signed in ${(since / 1000).toFixed(0)} s after the grant (a heartbeat is 300 s)`);
+      return `signed in ${(since / 1000).toFixed(0)} s after the grant`;
+    });
 
     // ── default ranks per device ──────────────────────────────────────────
     await rec.check("DEFAULTS: the admin device signs in as master, the non-admin device as manager (members-only app)", async () => {
