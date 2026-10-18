@@ -699,4 +699,31 @@ test.describe("gym webapp account", () => {
     expect(await page.evaluate(async () => !!(await import("/lib/state.js")).getSession().umk)).toBe(true);
     await shot(page, testInfo, "rate-limited-delete");
   });
+
+  test("gym account a second device on the account blocks the delete with the next action, and the key stays", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin", servers: [HOME] });
+    await samePageApex(page);
+    const m = await mock(page);
+    baseAccount(m);
+    // `.com`'s own refusal while another device is on the account.
+    m.post("/api/account/self-delete", () => ({
+      status: 403,
+      json: {
+        error: "Another device is still on this account. Remove it in Settings, Trusted devices, then delete the account.",
+        code: "other-devices-remain",
+        otherDevices: 1,
+      },
+    }));
+    await openSettings(page);
+    await page.click("#settings-tab-account-delete");
+    await page.fill("#account-delete-confirm-input", "smoketest");
+    const mark = await toastMark(page);
+    await page.click("#account-delete-go");
+    await sawToast(page, "Remove it in Settings, Trusted devices", 15_000, mark);
+    expect(m.sent("/api/account/self-delete")).toHaveLength(1);
+    await expect(page.locator("#view-account-delete")).toBeVisible();
+    await expect(page.locator("#account-delete-go")).toBeEnabled();
+    expect(await page.evaluate(async () => !!(await import("/lib/state.js")).getSession().umk)).toBe(true);
+    await shot(page, testInfo, "delete-other-device");
+  });
 });

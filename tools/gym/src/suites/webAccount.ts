@@ -292,4 +292,13 @@ export const WEB_ACCOUNT: readonly Scenario[] = [
     [["rate-limited-delete", "After the refusal."]],
     "D4",
   ),
+  row(
+    "web-total-delete-other-device",
+    "A second device on the account blocks the delete: .com's sentence names the next action (remove it in Trusted devices), the ceremony stays and the key stays in memory.",
+    "gym account a second device on the account blocks the delete with the next action, and the key stays",
+    [["Delete account → type → Delete.", "#account-delete-go"]],
+    [{ describe: "Still in the ceremony", handle: "#view-account-delete", expect: "present" }],
+    [["delete-other-device", "After the refusal."]],
+    "D4",
+  ),
 ];
