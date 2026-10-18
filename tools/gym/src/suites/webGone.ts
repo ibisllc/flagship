@@ -22,6 +22,8 @@ export const WEB_GONE: readonly Scenario[] = [
       assertions: [
         { describe: "Title", handle: "#account-gone-title", expect: "text", text: "This account was removed" },
         { describe: "Body", handle: "[data-testid=account-gone-body]", expect: "text", text: "This account no longer exists on Flagship. This can happen after a reset." },
+        { describe: "Save leads", handle: "[data-testid=account-gone-save]", expect: "text", text: "Save my servers' data" },
+        { describe: "Coming soon until the rescue flow lands", handle: "[data-testid=account-gone-save-soon]", expect: "text", text: "Coming soon" },
         { describe: "Create", handle: "[data-testid=account-gone-create]", expect: "text", text: "Create a new account" },
         { describe: "Remove", handle: "[data-testid=account-gone-remove]", expect: "text", text: "Remove it from this browser" },
       ],
@@ -45,7 +47,7 @@ export const WEB_GONE: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-account-gone-remove",
-    "Remove it from this browser forgets the stored account (keys, profile, caches), returns to the welcome view, and a reload no longer asks to unlock it.",
+    "Remove it from this browser, on a device that holds an admin key, first asks (Save my data first / Remove anyway); Save my data first opens the key backup and removes nothing; Remove anyway forgets the stored account (keys, profile, caches), returns to the welcome view, and a reload no longer asks to unlock it.",
     "gym account-gone Remove it from this browser forgets the account and returns to the welcome view",
     {
       steps: [
@@ -63,7 +65,7 @@ export const WEB_GONE: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-account-gone-create",
-    "Create a new account removes the stored account and opens the create flow's passphrase step.",
+    "Create a new account asks the same first, then removes the stored account and opens the create flow's passphrase step.",
     "gym account-gone Create a new account removes the old one and opens the create flow",
     {
       steps: [
@@ -73,6 +75,21 @@ export const WEB_GONE: readonly Scenario[] = [
       ],
       assertions: [{ describe: "Screen gone", handle: "#account-gone", expect: "absent" }],
       screenshots: [shot("account-gone-create", "The create flow after Create a new account.")],
+      dimension: "D3",
+    },
+  ),
+  webTotal(
+    "web-total-account-gone-no-key",
+    "A device that holds no admin key and no server key removes the account at once, with no warning.",
+    "gym account-gone a device that holds no admin key or server key removes at once",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home with no admin key and no server session; the account is answered as gone." },
+        { kind: "tap", describe: "Remove it from this browser.", handle: "[data-testid=account-gone-remove]" },
+        { kind: "assert", describe: "No warning; the welcome view shows.", handle: "[data-testid=welcome-create]" },
+      ],
+      assertions: [{ describe: "No warning", handle: "[data-testid=account-gone-confirm]", expect: "absent" }],
+      screenshots: [shot("account-gone-no-key", "The welcome view after an immediate removal.")],
       dimension: "D3",
     },
   ),

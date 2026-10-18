@@ -31,7 +31,7 @@ import {
   importErrorMessage,
 } from "../lib/keyfileBackup.js";
 import { escapeHtml } from "../lib/util.js";
-import { get as profileGet } from "../lib/profilesStore.js";
+import { get as profileGet, set as profileSet } from "../lib/profilesStore.js";
 import { screensFetch } from "../lib/api.js";
 import { wrappedUmkRecordKey } from "../keystore.js";
 
@@ -333,6 +333,7 @@ export async function runKeyfileExportCeremony() {
       accountId,
       passphrase: ceremony.passphrase,
     });
+    try { profileSet("keyBackupAt", Date.now()); } catch { /* the warning just asks again */ }
     toast(KEYFILE_COPY.afterSave, "ok");
     return true;
   } catch (e) {

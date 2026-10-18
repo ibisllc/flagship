@@ -84,6 +84,8 @@ export const SLOT_FIELDS = Object.freeze([
   { slot: "currentIrkVersion",       legacy: "flagship.irk.version",                    deviceWideOrPreProfile: true },
   { slot: "recoveryWarn",            legacy: "flagship.recovery.warn.v1" },
   { slot: "recoveryBannerDismissed", legacy: "flagship.recovery.banner.dismissed.v1" },
+  // When this device last wrote an account-key file (the sign-out warning reads it).
+  { slot: "keyBackupAt",             legacy: "flagship.keyBackupAt.v1" },
   { slot: "peerBackupChoice",        legacy: "flagship.peerBackup.choice.v1" },
   { slot: "pushTokenId",             legacy: "flagship.pushTokenId" },
   { slot: "sessionId",               legacy: "flagship.sessionId" },

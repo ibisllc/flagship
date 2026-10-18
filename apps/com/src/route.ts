@@ -24,7 +24,7 @@
  */
 
 import { RELEASES_PATH, handleReleases } from "./releaseCatalog.js";
-import { tryControlPlane, tryBootHost } from "./controlPlaneRoutes.js";
+import { tryControlPlane, tryBootHost, isAccountGoneResponse } from "./controlPlaneRoutes.js";
 import {
   handleAdapterIndex,
   isAdapterIndexPath,
@@ -42,6 +42,8 @@ import {
 } from "./qrPipeMetrics.js";
 import {
   checkPipeUpgrade,
+  accountNameInApiPath,
+  chargeAccountGone,
   checkRateLimit,
   clientIp,
   endpointFor,
@@ -916,7 +918,15 @@ async function routeImpl(
   // (e.g. for the dev wrangler-without-d1 case).
   if (url.pathname.startsWith(PROXY_PREFIX) && env.DB) {
     const cp = await tryControlPlane(buffered, env);
-    if (cp) return cp;
+    if (cp) {
+      // An account-not-found answer costs the caller what an account/resolve
+      // lookup does (docs/account-gone.md).
+      if (isAccountGoneResponse(cp)) {
+        const rl = await chargeAccountGone(env, { ip: clientIp(request), name: accountNameInApiPath(url.pathname) }, ctx);
+        if (rl.limited) return rateLimitedResponse(rl);
+      }
+      return cp;
+    }
   }
 
   if (url.pathname.startsWith(PROXY_PREFIX)) {

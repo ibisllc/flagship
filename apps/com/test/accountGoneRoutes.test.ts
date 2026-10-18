@@ -9,6 +9,8 @@ import { tryControlPlane, type ControlPlaneEnv } from "../src/controlPlaneRoutes
 import { route, type RouteEnv } from "../src/route.js";
 import { D1Storage, type D1Database, type DemoUserRecord } from "@flagship/storage";
 import { createSqliteD1 } from "../../../packages/storage/tests/support/sqliteD1.js";
+import { memoryRateLimits } from "./rateLimitFakes.js";
+import { accountExists } from "@flagship/control-plane";
 import { ACCOUNT_READ_TOKEN_LABEL, deriveIRK, signDeviceEndpointClaim } from "@flagship/protocol";
 
 const ORIGIN = "https://flagshipserver.com";
@@ -197,5 +199,119 @@ describe("account-not-found", () => {
     } finally {
       close();
     }
+  });
+});
+
+describe("account-not-found is metered like the public lookup", () => {
+  async function metered() {
+    const { sqlite, close } = await setup();
+    const { ns } = memoryRateLimits();
+    const env = {
+      SERVICES_BASE_URL: "https://flagship.services",
+      ASSETS: { async fetch() { return new Response("asset"); } },
+      DB: sqlite as unknown as D1Database,
+      ACCOUNT_READ_TOKEN_SECRET: "route-secret",
+      RATE_LIMITS: ns,
+    } as unknown as RouteEnv;
+    const hit = (method: string, path: string, ip: string, headers: Record<string, string> = {}) =>
+      route(
+        new Request(`${ORIGIN}${path}`, {
+          method,
+          headers: { cookie: "flagship_preview=1", "cf-connecting-ip": ip, "content-type": "application/json", ...headers },
+          ...(method === "GET" ? {} : { body: "{}" }),
+        }),
+        env,
+      );
+    return { hit, close };
+  }
+
+  it("shares the account/resolve per-source budget, then answers the 429 sentence", async () => {
+    const { hit, close } = await metered();
+    try {
+      for (let i = 0; i < 20; i++) expect((await hit("GET", `/api/account/resolve/probe-${i}`, "9.9.9.9")).status).toBe(200);
+      for (let i = 0; i < 10; i++) {
+        const r = await hit("GET", `/api/users/ghost-${i}/pods`, "9.9.9.9");
+        expect(r.status, `gone ${i}`).toBe(404);
+      }
+      const refused = await hit("GET", "/api/users/ghost-last/pods", "9.9.9.9");
+      expect(refused.status).toBe(429);
+      const body = (await refused.json()) as { error: string; endpoint: string; limit: string; retryAfterSec: number; message: string };
+      expect(body).toMatchObject({ error: "rate-limited", endpoint: "account-resolve", limit: "ip" });
+      expect(body.retryAfterSec).toBeGreaterThan(0);
+      expect(body.message).toContain("Try again in");
+      expect((await hit("GET", "/api/account/resolve/anything", "9.9.9.9")).status).toBe(429);
+      // Another source keeps its own budget.
+      expect((await hit("GET", "/api/users/ghost-last/pods", "8.8.8.8")).status).toBe(404);
+    } finally {
+      close();
+    }
+  });
+
+  it("also counts one missing name per source and name, like resolve", async () => {
+    const { hit, close } = await metered();
+    try {
+      for (let i = 0; i < 10; i++) expect((await hit("GET", "/api/users/ghost/pods", `7.7.7.${i}`)).status).toBe(404);
+      const r = await hit("GET", "/api/users/Ghost/pods", "7.7.7.99");
+      expect(r.status).toBe(429);
+      expect(((await r.json()) as { limit: string }).limit).toBe("usernameHash");
+    } finally {
+      close();
+    }
+  });
+
+  it("never charges a real account: a signed-in client polls past the cap", async () => {
+    const { hit, close } = await metered();
+    try {
+      const mint = await hit("POST", "/api/accounts/alice/read-token", "6.6.6.6", {});
+      expect(mint.status).toBe(403);
+      for (let i = 0; i < 60; i++) {
+        const r = await hit("GET", "/api/users/alice/pods", "6.6.6.6");
+        expect(r.status, `poll ${i}`).toBe(401);
+      }
+      expect((await hit("GET", "/api/account/resolve/alice", "6.6.6.6")).status).toBe(200);
+    } finally {
+      close();
+    }
+  });
+
+  it("meters the read-token mint per source and per account", async () => {
+    const { hit, close } = await metered();
+    try {
+      for (let i = 0; i < 30; i++) expect((await hit("POST", "/api/accounts/alice/read-token", "5.5.5.5")).status).toBe(403);
+      const r = await hit("POST", "/api/accounts/alice/read-token", "5.5.5.5");
+      expect(r.status).toBe(429);
+      expect(((await r.json()) as { endpoint: string; limit: string }).endpoint).toBe("account-read-token");
+      // One account's budget holds across sources: 600 an hour, then refused
+      // (31 are spent above).
+      for (let i = 0; i < 569; i++) {
+        const r = await hit("POST", "/api/accounts/alice/read-token", `10.${i >> 8}.${i & 255}.1`);
+        if (r.status === 429) throw new Error(`refused too early at ${i}`);
+      }
+      const capped = await hit("POST", "/api/accounts/alice/read-token", "10.9.9.9");
+      expect(capped.status).toBe(429);
+      expect(((await capped.json()) as { limit: string }).limit).toBe("usernameHash");
+      // A few mints a day per device is nowhere near it.
+      expect((await hit("POST", "/api/accounts/bob/read-token", "4.4.4.4")).status).not.toBe(429);
+    } finally {
+      close();
+    }
+  });
+});
+
+describe("the existence check does the same work for every name", () => {
+  it("looks up both tables whether the account exists, is a demo, or is missing", async () => {
+    const calls: string[] = [];
+    const deps = {
+      usernames: { async get(u: string) { calls.push(`user:${u}`); return u === "real" || u === "demo" ? ({ username: u } as never) : undefined; } },
+      demoUsers: { async get(u: string) { calls.push(`demo:${u}`); return u === "demo" ? ({ state: "ready" } as never) : undefined; } },
+    };
+    for (const name of ["real", "demo", "ghost"]) {
+      calls.length = 0;
+      await accountExists(deps as never, name);
+      expect(calls.sort()).toEqual([`demo:${name}`, `user:${name}`]);
+    }
+    expect(await accountExists(deps as never, "real")).toBe(true);
+    expect(await accountExists(deps as never, "demo")).toBe(true);
+    expect(await accountExists(deps as never, "ghost")).toBe(false);
   });
 });

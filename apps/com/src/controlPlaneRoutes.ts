@@ -780,6 +780,13 @@ const ROUTE_RE = {
  * create-fetch/revoked-since) and the recovery, TOTP and admit ceremonies,
  * which keep their own answers.
  */
+/** Responses that were the account-not-found answer, so the Worker entry can
+ *  count each one against the sign-in lookup budget (route.ts). */
+const ACCOUNT_GONE_RESPONSES = new WeakSet<Response>();
+export function isAccountGoneResponse(r: Response): boolean {
+  return ACCOUNT_GONE_RESPONSES.has(r);
+}
+
 const ACCOUNT_GONE_ROUTES: { re: RegExp; methods?: readonly string[] }[] = [
   { re: ROUTE_RE.USER_PODS },
   { re: ROUTE_RE.USER_STREAM },
@@ -928,7 +935,11 @@ export async function tryControlPlane(
       }
       if (name === "check") break;
       const gone = await checkAccountExists({ usernames: storage.usernames, demoUsers: storage.demoUsers }, name);
-      if (gone) return finishRead(gone);
+      if (gone) {
+        const answer = finishRead(gone);
+        ACCOUNT_GONE_RESPONSES.add(answer);
+        return answer;
+      }
       break;
     }
   }

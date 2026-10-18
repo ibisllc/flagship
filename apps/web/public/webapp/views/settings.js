@@ -34,7 +34,7 @@ import {
 import { renderActiveProviderChip, stopRenewals } from "./home.js";
 import { handleReset } from "./unlock.js";
 import { enterRecovery } from "./recovery.js";
-import { resetDevice } from "../keystore.js";
+import { hasAdminRoot, resetDevice } from "../keystore.js";
 import { setSubtitle } from "../lib/router.js";
 import { remove as profileRemove } from "../lib/profilesStore.js";
 import { hasCloudRecovery } from "../lib/recovery.js";
@@ -49,6 +49,8 @@ import { accountDeletePolicy } from "../lib/accountDeletion.js";
 import { enterAccountDelete, removeDemoFromBrowser } from "./account-delete.js";
 import { getActiveProfile } from "../lib/profiles.js";
 import { isDemoProfile } from "../lib/demoAccount.js";
+import { get as profileGet } from "../lib/profilesStore.js";
+import { holdsRescueKey, removeWarning, saveDataFirst, signOutWarning } from "../lib/adminKeyWarning.js";
 
 registerView("view-settings");
 
@@ -401,6 +403,35 @@ async function runEnablePush() {
  *  the confirm carries no destructive proceed — its primary action routes
  *  into recovery enrollment instead, and signOutTier itself re-refuses
  *  the wipe (fail-closed) even if this UI gate is bypassed. */
+/** This device holds the account's admin key (in memory or sealed on disk). */
+function holdsAdminKey() {
+  return holdsRescueKey({ session: getSession(), hasAdminRootRecord: () => hasAdminRoot() });
+}
+
+/**
+ * On an admin device, say in plain words that this removes the admin key that
+ * can still save the servers' data, and offer to save first (docs/account-
+ * gone.md). Resolves true only when the person chose to go on.
+ * @param {"sign-out" | "remove"} kind
+ */
+async function confirmAdminKeyLoss(kind) {
+  const warning = kind === "sign-out" ? signOutWarning(!!profileGet("keyBackupAt")) : removeWarning();
+  const { inlineChoice } = await import("../lib/modal.js");
+  const picked = await inlineChoice(warning);
+  if (picked === "save") {
+    await saveDataFirst({
+      session: getSession(),
+      backupKey: async () => {
+        const { runKeyfileExportCeremony } = await import("./recovery.js");
+        return runKeyfileExportCeremony();
+      },
+      notify: (text) => toast(text),
+    });
+    return false;
+  }
+  return picked === "go";
+}
+
 async function handleSignOut() {
   const username = getSession().username;
   // Best-effort recovery probe (network). On any failure we fall back to
@@ -412,19 +443,24 @@ async function handleSignOut() {
   } catch {
     enrolled = false;
   }
-  const { inlineConfirm } = await import("../lib/modal.js");
   const copy = signOutConfirmCopy(enrolled);
-  const ok = await inlineConfirm({
-    title: copy.title,
-    message: copy.message,
-    okLabel: copy.okLabel,
-    danger: copy.danger,
-  });
-  if (!ok) return;
-  if (copy.blocked) {
-    // #52 — no recovery: the OK is "Set up recovery", never a wipe.
-    enterRecovery();
-    return;
+  if (!copy.blocked && (await holdsAdminKey())) {
+    // The admin key is the way out if .com ever stops recognising the account.
+    if (!(await confirmAdminKeyLoss("sign-out"))) return;
+  } else {
+    const { inlineConfirm } = await import("../lib/modal.js");
+    const ok = await inlineConfirm({
+      title: copy.title,
+      message: copy.message,
+      okLabel: copy.okLabel,
+      danger: copy.danger,
+    });
+    if (!ok) return;
+    if (copy.blocked) {
+      // #52 — no recovery: the OK is "Set up recovery", never a wipe.
+      enterRecovery();
+      return;
+    }
   }
   const res = await signOutTier({
     hasCloudRecovery: enrolled,
@@ -534,7 +570,13 @@ export function initSettingsView() {
       });
       return;
     }
-    handleReset();
+    void (async () => {
+      if ((await holdsAdminKey()) && !(await confirmAdminKeyLoss("remove"))) return;
+      handleReset();
+    })().catch((e) => {
+      console.error("remove this device failed", e);
+      toast(humanError(e), "err");
+    });
   });
   $("push-switch")?.addEventListener("change", () => void runPushSwitch());
   $("push-enable")?.addEventListener("click", runEnablePush);

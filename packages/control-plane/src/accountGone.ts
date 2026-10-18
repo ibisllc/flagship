@@ -22,9 +22,11 @@ export interface AccountGoneDeps {
 
 export async function accountExists(deps: AccountGoneDeps, username: string): Promise<boolean> {
   const u = username.toLowerCase();
-  const demo = await deps.demoUsers.get(u);
+  // Both lookups always run, so an existing, a demo and a missing name cost
+  // the same work before the answer.
+  const [demo, user] = await Promise.all([deps.demoUsers.get(u), deps.usernames.get(u)]);
   if (demo) return demo.state !== "cleanup-only";
-  return !!(await deps.usernames.get(u));
+  return !!user;
 }
 
 export const accountNotFoundResponse = (): HandlerResponseWithHeaders => ({

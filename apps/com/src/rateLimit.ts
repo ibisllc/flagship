@@ -120,6 +120,7 @@ export type RateLimitEndpoint =
   | "mint-reservation-acquire"
   | "mint-reservation-release"
   | "account-resolve"
+  | "account-read-token"
   // Phase 3b — vouched cross-device admit. The body carries the admit
   // (admit.username + newDevicePubHex), not the account IRK pub, so we
   // throttle per-IP only; the handler does the full DeviceAdmit
@@ -281,6 +282,17 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "account-resolve": [
     { axis: "ip", limit: 30, windowSec: 60 },
     { axis: "usernameHash", limit: 10, windowSec: 900 },
+  ],
+  // Minting an account read token (docs/account-read-token.md). A token lasts
+  // 30 days (device) or 24 h (IRK, box), so a real account mints a handful a
+  // day across all its devices and boxes; a client that re-mints on every 401
+  // is the worst honest case. Per source, and per account so one account can't
+  // be hammered from rotating addresses. The mint is signed: this bounds the
+  // verification work a flood costs, not a guess.
+  "account-read-token": [
+    { axis: "ip", limit: 30, windowSec: 60 },
+    { axis: "ip", limit: 600, windowSec: 3600 },
+    { axis: "usernameHash", limit: 600, windowSec: 3600 },
   ],
   // Phase 3b — vouched cross-device admit. Per-IP only (the body has no
   // IRK pub at the edge). A real admin admits a handful of devices; the
@@ -621,6 +633,9 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "GET" && /^\/api\/account\/resolve\/[^/]+$/.test(pathname)) {
     return "account-resolve";
   }
+  if (m === "POST" && /^\/api\/accounts\/[^/]+\/read-token$/.test(pathname)) {
+    return "account-read-token";
+  }
   // Phase 3b — vouched cross-device admit.
   if (m === "POST" && /^\/api\/users\/[^/]+\/devices\/admit$/.test(pathname)) {
     return "device-admit";
@@ -723,6 +738,35 @@ export function extractIrkPub(endpoint: RateLimitEndpoint, body: unknown): strin
     : undefined;
 }
 
+/** The account an own-account route names (`/api/users/<u>/...`, `/api/accounts/<u>/...`), lowercased. */
+export function accountNameInApiPath(pathname: string): string | undefined {
+  const m = pathname.match(/^\/api\/(?:users|accounts)\/([^/]+)/);
+  if (!m) return undefined;
+  try {
+    return decodeURIComponent(m[1]!).trim().toLowerCase();
+  } catch {
+    return m[1]!.toLowerCase();
+  }
+}
+
+/**
+ * Count one account-not-found answer (docs/account-gone.md) against the same
+ * budget, per source and per name, as the public `account/resolve` lookup, so
+ * the 404 is no cheaper to enumerate than resolve is. A real account is never
+ * charged: only the missing-account answer calls this.
+ */
+export async function chargeAccountGone(
+  env: RateLimitEnv,
+  input: { ip: string | null; name: string | undefined },
+  ctx?: WaitUntilLike,
+): Promise<RateLimitedResult | AllowedResult> {
+  return checkRateLimit(
+    env,
+    { endpoint: "account-resolve", ip: input.ip, ...(input.name ? { usernameHash: input.name } : {}) },
+    ctx,
+  );
+}
+
 /** Pull the username hash out of the recovery path (`/api/recovery/by-username/<hash>[/fetch]`). */
 export function extractUsernameHash(pathname: string): string | undefined {
   const m =
@@ -732,7 +776,8 @@ export function extractUsernameHash(pathname: string): string | undefined {
     // Re-pair initiate is keyed by its TARGET account, so one handle
     // can't be hammered from a rotating source address.
     pathname.match(/^\/api\/users\/([^/]+)\/re-pair$/) ??
-    pathname.match(/^\/api\/users\/([^/]+)\/totp\/verify$/);
+    pathname.match(/^\/api\/users\/([^/]+)\/totp\/verify$/) ??
+    pathname.match(/^\/api\/accounts\/([^/]+)\/read-token$/);
   if (!m) return undefined;
   // One budget per account however the path spells it (case, escapes).
   try {

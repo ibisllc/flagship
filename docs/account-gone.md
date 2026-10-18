@@ -31,8 +31,26 @@ vary: authorization
   Demo accounts and the store-review account are unaffected.
 - A real account keeps its normal answers (401 without a read token, 403 for an
   unauthorized signer, 200 with one).
-- The 429 limiter runs before the route, so these answers are counted like any
-  other. (The read-token mint has no limiter budget of its own today.)
+- Metering (2026-10-18): existence is public by design (`account/resolve`, name
+  availability, the `<server>.<user>.flagship.services` DNS names, CT logs), so
+  the 404 is not hidden, only made no cheaper to enumerate. The Worker entry
+  (`route.ts`) charges EVERY account-not-found answer to the `account-resolve`
+  budget: per source (30 a minute) and per name (10 per 15 minutes), the same
+  counters `GET /api/account/resolve/<name>` spends. When a budget is spent the
+  answer is the existing 429 `{ error: "rate-limited", endpoint, limit,
+  retryAfterSec, message }` with its sentence instead of the 404. A real
+  account is never charged: only the missing-account answer counts, so a
+  signed-in client with a real account never trips it. A client whose account
+  is gone stops after the first 404 (below), so it spends one.
+- Same work for any name: the existence check always reads both the account
+  and the demo tables before it answers, so a real, a demo and a missing name
+  cost the same lookups (no timing difference beyond noise).
+- `POST /api/accounts/<u>/read-token` was unmetered; it now has its own budget
+  `account-read-token`: per source 30 a minute and 600 an hour, and per account
+  600 an hour (the mint is signed, so this bounds verification work). A real
+  account mints a handful a day (tokens last 30 days for a device, 24 hours for
+  the IRK path and a box). Fails open if the counter is unreachable. Budgets
+  and tests: `apps/com/src/rateLimit.ts`, `apps/com/test/accountGoneRoutes.test.ts`.
 - Code: `packages/control-plane/src/accountGone.ts`; the table is
   `ACCOUNT_GONE_ROUTES` in `apps/com/src/controlPlaneRoutes.ts`; tests
   `apps/com/test/accountGoneRoutes.test.ts`.
@@ -78,17 +96,30 @@ account read token is required"), so a client could only show "status paused";
    call that names that account is answered locally with the same 404 and sends
    nothing. No retry, no backoff storm. Error toasts and alerts for failed
    calls stay quiet while the screen is up.
-4. The screen:
+4. The screen leads with saving the data, because the admin key on the
+   device can still save a server's data after `.com` stopped recognising the
+   account (a hostile `.com` can cut the passkey recovery route and can say the
+   account does not exist; it cannot take the key from the device). In order:
    - Title: `This account was removed`
    - Body: `This account no longer exists on Flagship. This can happen after a reset.`
    - Small line with the account name: `Account: <name>`
-   - Primary button `Create a new account`: remove this device's copy (below),
-     then open the create flow.
-   - Secondary button `Remove it from this browser` (phones: `Remove it from this
-     device`): remove this device's copy, then the welcome view. If another
-     saved account remains on the device, go to its normal sign-in instead.
-   - No data-loss or recovery claims: the screen says what happened and nothing
-     else. Sentence case, no em dashes.
+   - Primary button `Save my servers' data`: runs the rescue flow
+     (`docs/data-sovereignty.md`, "Rescue my data") once a build has it. Until
+     then it is disabled with the line `Coming soon` under it (web: a build
+     registers its flow with `registerRescueFlow` and the button enables).
+   - Secondary button `Create a new account`: removes this device's copy
+     (below), then opens the create flow.
+   - Quiet text action `Remove it from this browser` (phones: `Remove it from
+     this device`): removes this device's copy, then the welcome view. If
+     another saved account remains on the device, go to its normal sign-in.
+   - No data-loss or recovery claims beyond the warning below. Sentence case,
+     no em dashes.
+   - On a device that holds an admin root (in memory or sealed on disk) or a
+     session for any server, `Create a new account` and `Remove it from this
+     browser` do not act on the first tap. They show the removal warning in
+     place of the buttons; only `Remove anyway` removes. A device that holds
+     none of those removes at once.
+
 5. "Remove this device's copy" forgets everything the device holds for that
    account and nothing about other accounts: the stored device key and any PIN
    or biometric wrap of it, the sealed admin-root record, held secured
@@ -105,6 +136,44 @@ and `lib/accountRead.js`, poll stop in `lib/liveSync.js`, toast quiet in
 `lib/toast.js`. Gym: `apps/web/e2e/gym/gym-gone.spec.ts` (4 scenarios),
 registry `tools/gym/src/suites/webGone.ts`; unit
 `apps/web/tests/webappAccountGone.test.ts`.
+
+## The admin key is the way out: exact strings
+
+Mirror these on iOS and Android exactly (phones say "device" where the web
+says "browser"; the web strings are the reference, and the phone variants are
+listed). One warning copy for removing the account's keys, one for Sign out.
+
+| Where | Text |
+|---|---|
+| Account gone, primary button | `Save my servers' data` (disabled, with the line `Coming soon`, until the rescue flow ships) |
+| Account gone, secondary button | `Create a new account` |
+| Account gone, quiet text action | `Remove it from this browser` (phones: `Remove it from this device`) |
+| Removal warning (Create a new account, Remove it from this browser, Settings Remove this device) | title `Remove this account from this browser?` (phones: `from this device?`), message `This also removes this browser's admin key. Without it you can no longer save your servers' data. Save it first, or remove anyway.` (phones: `this device's admin key`) |
+| Removal warning buttons | `Save my data first`, `Remove anyway` |
+| Settings Sign out on an admin device, key not yet backed up | title `Sign out?`, message `Signing out removes this device's admin key. Without it you can no longer save your servers' data. Save it first, or sign out anyway.`, buttons `Save my data first`, `Sign out anyway` |
+| Settings Sign out, once an account-key file was written | title `Sign out?`, message `Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe: with them you can still save your servers' data.`, buttons `Cancel`, `Sign out` |
+| Unlock needed to save | `Unlock first to save your key.` |
+
+Rules:
+
+- Who is warned: a device that holds the admin root (in memory this session, or
+  the sealed record on disk) or a session for any server. The Settings Sign out
+  warning is for admin devices; demo accounts hold no keys and just remove
+  themselves as before.
+- Dismissing the dialog (Escape, a tap outside, system back) does nothing: it
+  is never a choice. Only the named buttons act.
+- `Save my data first` runs the rescue flow when the build has one; until then
+  it opens the account-key backup (web: the `.flagshipkey` export ceremony), or
+  says `Unlock first to save your key.` when the key is locked. It never
+  removes anything, and the warning asks again afterwards.
+- Backed-up state: web stores `keyBackupAt` (per profile) when the key file is
+  written (`views/recovery.js`). Native uses its existing backup-key state; if
+  it keeps none, add one with the same meaning (a key file was written on this
+  device).
+- Web files: `lib/adminKeyWarning.js` (copy and decisions), `lib/modal.js`
+  `inlineChoice`, `lib/accountGoneUi.js`, `views/settings.js`. Unit
+  `apps/web/tests/webappAdminKeyWarning.test.ts`; gym `gym-gone.spec.ts` and
+  `gym-account.spec.ts`.
 
 ## Native notes
 

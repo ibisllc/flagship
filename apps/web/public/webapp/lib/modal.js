@@ -160,6 +160,53 @@ export function inlineConfirm({
 }
 
 /**
+ * Inline choice: title/message and several named buttons. Resolves to the
+ * chosen button's `id`, or `null` when dismissed (Escape, a tap outside), so
+ * dismissing never counts as picking one. `choices` run left to right, e.g.
+ * `[{ id: "save", label: "Save my data first", secondary: true },
+ *   { id: "go", label: "Remove anyway", danger: true }]`.
+ */
+export function inlineChoice({ title, message, choices = [] } = {}) {
+  return new Promise((resolve) => {
+    const host = ensureHost();
+    const overlay = buildOverlay();
+    overlay.innerHTML = `
+      <div class="modal-card" role="document">
+        ${title ? `<h3 class="modal-title">${escapeHtml(title)}</h3>` : ""}
+        ${message ? `<p class="modal-message">${escapeHtml(message)}</p>` : ""}
+        <div class="row-2 mt-3">
+          ${choices
+            .map(
+              (c) =>
+                `<button class="${[c.secondary ? "secondary" : "", c.danger ? "danger" : ""].filter(Boolean).join(" ")}" data-modal-choice="${escapeHtml(c.id)}">${escapeHtml(c.label)}</button>`,
+            )
+            .join("")}
+        </div>
+      </div>
+    `;
+    host.appendChild(overlay);
+    document.body.classList.add("modal-open");
+    const close = (v) => {
+      overlay.remove();
+      document.body.classList.remove("modal-open");
+      document.removeEventListener("keydown", onKey);
+      resolve(v);
+    };
+    const onKey = (ev) => {
+      if (ev.key === "Escape") { ev.preventDefault(); close(null); }
+    };
+    for (const b of overlay.querySelectorAll("[data-modal-choice]")) {
+      b.addEventListener("click", () => close(b.getAttribute("data-modal-choice")));
+    }
+    overlay.addEventListener("click", (ev) => {
+      if (ev.target === overlay) close(null);
+    });
+    document.addEventListener("keydown", onKey);
+    queueMicrotask(() => overlay.querySelector("[data-modal-choice]")?.focus({ preventScroll: true }));
+  });
+}
+
+/**
  * Inline alert: title/message and one button. Resolves when dismissed.
  */
 export function inlineAlert({ title, message, okLabel = "OK" } = {}) {

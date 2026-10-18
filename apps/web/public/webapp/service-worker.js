@@ -330,7 +330,11 @@
 //       longer exists (404 account-not-found) shows a full-screen state with
 //       Create a new account / Remove it from this browser, and stops polling
 //       (lib/accountGone.js, lib/accountGoneUi.js).
-const SHELL_VERSION = "v145";
+//  v146: the admin key is the way out: "This account was removed" leads with
+//       Save my servers' data, and removing the account, Sign out and Remove
+//       this device warn first on a device that holds an admin key
+//       (lib/adminKeyWarning.js).
+const SHELL_VERSION = "v146";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -461,6 +465,7 @@ const OPTIONAL_SHELL = [
   "/lib/lockSweep.js",
   "/lib/accountGone.js",
   "/lib/accountGoneUi.js",
+  "/lib/adminKeyWarning.js",
   "/lib/securityNotice.js",
   "/lib/noticeUi.js",
   "/lib/updateLock.js",
