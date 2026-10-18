@@ -8,6 +8,9 @@
 import { randomBytes } from "node:crypto";
 import { signBoxReadTokenRequest, type Bytes } from "@flagship/protocol";
 
+/** A call to `.com` that has not answered by now is given up, so a hung connection never holds a poller. */
+const DEFAULT_TIMEOUT_MS = 20_000;
+
 /** Re-mint this long before `.com`'s expiry so a read never races it. */
 const REFRESH_MARGIN_MS = 10 * 60_000;
 
@@ -19,6 +22,8 @@ export interface BoxReadTokenDeps {
   signAsBox: (msg: Bytes) => Bytes;
   fetchImpl?: typeof fetch;
   now?: () => number;
+  /** How long one call to `.com` may take (default 20 s). */
+  timeoutMs?: number;
 }
 
 export class BoxReadToken {
@@ -33,12 +38,17 @@ export class BoxReadToken {
     const attempt = async (token: string) => {
       const headers = new Headers(init.headers);
       headers.set("authorization", `Bearer ${token}`);
-      return await fetchImpl(url, { ...init, headers });
+      return await fetchImpl(url, { ...init, headers, signal: this.signal(init.signal) });
     };
     const first = await attempt(await this.token());
     if (first.status !== 401) return first;
     this.cached = null;
     return await attempt(await this.token());
+  }
+
+  private signal(caller?: AbortSignal | null): AbortSignal {
+    const timeout = AbortSignal.timeout(this.deps.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    return caller ? AbortSignal.any([caller, timeout]) : timeout;
   }
 
   private async token(): Promise<string> {
@@ -64,6 +74,7 @@ export class BoxReadToken {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ box, signature }),
+      signal: this.signal(),
     });
     if (!r.ok) throw new Error(`read token refused: status ${r.status}`);
     const body = (await r.json()) as { token?: unknown; expiresAt?: unknown };

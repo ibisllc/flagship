@@ -71,4 +71,31 @@ describe("the box's account read token", () => {
     expect(r.status).toBe(200);
     expect(h.calls.map((c) => c.auth)).toEqual([null, "Bearer art1.t1.m", null, "Bearer art1.t2.m"]);
   });
+
+  it("gives up on a .com that never answers, on the mint and on the read", async () => {
+    const hang = ((_url: string, init: RequestInit = {}) =>
+      new Promise((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () => reject(init.signal!.reason ?? new Error("aborted")));
+      })) as unknown as typeof fetch;
+    const mk = (fetchImpl: typeof fetch) =>
+      new BoxReadToken({
+        comBaseUrl: "https://flagshipserver.com",
+        username: "alice",
+        serverFqdn: "home.alice.flagship.services",
+        boxPublicKey: () => pub,
+        signAsBox: (m) => ed.sign(m, seed),
+        fetchImpl,
+        timeoutMs: 40,
+      });
+    const started = Date.now();
+    await expect(mk(hang).fetch(ALIASES)).rejects.toBeDefined();
+    expect(Date.now() - started).toBeLessThan(2_000);
+
+    // Minting works but the read hangs: it still gives up.
+    const slowRead = (async (url: string, init: RequestInit = {}) => {
+      if (url.endsWith("/read-token")) return new Response(JSON.stringify({ token: "art1.t1.m", expiresAt: NOW + 24 * 3_600_000 }), { status: 200 });
+      return hang(url, init);
+    }) as typeof fetch;
+    await expect(mk(slowRead).fetch(ALIASES)).rejects.toBeDefined();
+  });
 });
