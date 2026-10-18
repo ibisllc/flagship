@@ -46,6 +46,11 @@ public struct OnboardingFlow: View {
             )
             .onChange(of: linker.pending) { _, link in consumePairingLink(link) }
             .task(id: linker.pending) { consumePairingLink(linker.pending) }
+            .task(id: app.openCreateAccountOnWelcome) {
+                guard app.openCreateAccountOnWelcome else { return }
+                app.openCreateAccountOnWelcome = false
+                path.append(.chooseUsername)
+            }
             .navigationDestination(for: OnboardingRoute.self) { route in
                 switch route {
                 case .chooseUsername:

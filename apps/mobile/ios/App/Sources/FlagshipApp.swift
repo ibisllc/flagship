@@ -19,6 +19,9 @@ struct FlagshipApp: App {
     /// Security notices (docs/security-notices.md): the banner, and the
     /// "Update required" lock for a security reason.
     @State private var notices: SecurityNoticeCenter
+    /// "This account was removed" (docs/account-gone.md): `.com` says this
+    /// device's own account no longer exists.
+    @State private var accountGone = AccountGoneCenter()
     @State private var pushRegistrar: PushRegistrar?
     @State private var persistedIdentityRestoreStarted = false
     @State private var orphanedPersistedUsername: String?
@@ -303,6 +306,10 @@ struct FlagshipApp: App {
         // render offline. Assigned BOTH ways so a prior same-process launch's
         // seed can never leak into an unflagged run. Gym-only.
         GymSeams.forceAdminRoot = args.contains("-smoke-admin-root")
+        GymSeams.noServerSessions = args.contains("-smoke-no-server-sessions")
+        // `-smoke-key-backed-up`: this device already wrote an account-key
+        // file (Sign out then says what to keep). Set both ways.
+        if args.contains("-smoke-key-backed-up") { KeyBackupState.record(username: user) } else { KeyBackupState.forget(username: user) }
         // Smoke launches bypass the UI-level Face-ID consent prompts (no
         // enrolled biometric on a Simulator) — consent-only, no crypto
         // emitted; see GymSeams. EXCEPT under -smoke-locked: the launch lock
@@ -649,8 +656,9 @@ struct FlagshipApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                // Inside the environment below: the lock window reads the app state.
+                // Inside the environment below: the overlay windows read the app state.
                 .updateLockHost()
+                .accountGoneHost()
                 .onGeometryChange(for: CGSize.self, of: { $0.size }) { _ in
                     OrientationPolicy.reconcile()
                 }
@@ -661,6 +669,7 @@ struct FlagshipApp: App {
                 .environment(trust)
                 .environment(privacy)
                 .environment(notices)
+                .environment(accountGone)
                 .environment(\.screensClient, activeClient)
                 .environment(\.sessionStore, sessionStore)
                 .environment(\.podScreensClients, activePodClients)
@@ -731,6 +740,13 @@ struct FlagshipApp: App {
                     await restorePersistedIdentity()
                 }
                 .task { startNotices() }
+                .task {
+                    #if DEBUG
+                    if GymLaunch.usesMocks {
+                        AccountGoneGym.start(args: ProcessInfo.processInfo.arguments, ownName: { [appState] in appState.currentUser })
+                    }
+                    #endif
+                }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { noticesForeground() }
                 }

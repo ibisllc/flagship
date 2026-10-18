@@ -36,6 +36,8 @@ struct ContentView: View {
     /// The security notice's state: while a required update locks the app,
     /// the background workers below stand down (nothing leaves the phone).
     @Environment(SecurityNoticeCenter.self) private var notices: SecurityNoticeCenter?
+    /// While "This account was removed" is up, the pollers below stand down.
+    @Environment(AccountGoneCenter.self) private var accountGone: AccountGoneCenter?
 
     var body: some View {
         ZStack {
@@ -107,6 +109,10 @@ struct ContentView: View {
             Task { await prefs?.changed() }
         }
         .onChange(of: notices?.isLocked ?? false) { _, _ in
+            syncLiveSync()
+            syncAccessAlerts()
+        }
+        .onChange(of: accountGone?.isGone ?? false) { _, _ in
             syncLiveSync()
             syncAccessAlerts()
         }
@@ -203,7 +209,7 @@ struct ContentView: View {
                 app: app,
                 mailbox: mailbox,
                 isActive: { [weak app] in
-                    (app?.isPaired ?? false) && (app?.isUnlocked ?? false) && !UpdateLock.shared.isLocked
+                    (app?.isPaired ?? false) && (app?.isUnlocked ?? false) && !UpdateLock.shared.isLocked && !AccountGoneRegistry.shared.isGone
                 },
                 makeReconciler: { fetch in
                     // Same reconcile path Home uses: surface registered/pending
@@ -231,7 +237,7 @@ struct ContentView: View {
                 }
             )
         }
-        let shouldRun = app.isPaired && scenePhase == .active && !UpdateLock.shared.isLocked
+        let shouldRun = app.isPaired && scenePhase == .active && !UpdateLock.shared.isLocked && !AccountGoneRegistry.shared.isGone
         if shouldRun { liveSync?.start() } else { liveSync?.stop() }
     }
 
@@ -283,7 +289,7 @@ struct ContentView: View {
                 isActive: { [weak app] in
                     guard let app else { return false }
                     return app.isPaired && app.isUnlocked && !app.isRestrictedDevice && AdminOrderGate.allows(app)
-                        && !UpdateLock.shared.isLocked
+                        && !UpdateLock.shared.isLocked && !AccountGoneRegistry.shared.isGone
                 },
                 alertsEnabled: { privacy.pushNotificationsEnabled && !Self.gymSuppressesAccessAlerts }
             )
@@ -308,7 +314,7 @@ struct ContentView: View {
             )
         }
         guard let center = accessAlerts else { return }
-        let inFront = app.isPaired && app.isUnlocked && scenePhase == .active && !UpdateLock.shared.isLocked
+        let inFront = app.isPaired && app.isUnlocked && scenePhase == .active && !UpdateLock.shared.isLocked && !AccountGoneRegistry.shared.isGone
         if inFront, let prefs = pushPrefs {
             Task { await prefs.resync() }
         }
@@ -351,7 +357,7 @@ struct ContentView: View {
                 operations: operations,
                 client: client,
                 isActive: { [weak app] in
-                    (app?.isPaired ?? false) && (app?.isUnlocked ?? false) && !UpdateLock.shared.isLocked
+                    (app?.isPaired ?? false) && (app?.isUnlocked ?? false) && !UpdateLock.shared.isLocked && !AccountGoneRegistry.shared.isGone
                 },
                 notify: { sessionId, request, server in
                     guard let delegate = UIApplication.shared.delegate as? AppDelegate,

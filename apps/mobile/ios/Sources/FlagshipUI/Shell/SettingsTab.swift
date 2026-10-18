@@ -286,7 +286,17 @@ public struct SettingsTab: View {
                             path.append(.deleteAccount)
                         }
                     },
-                    isDemoAccount: app.isDemoAccount
+                    isDemoAccount: app.isDemoAccount,
+                    holdsAdminKey: !app.isDemoAccount && RescueKeyCheck.holdsAdminRoot,
+                    holdsRescueKey: RescueKeyCheck.holdsRescueKey(app),
+                    keyBackedUp: KeyBackupState.hasBackup(username: app.currentUser ?? ""),
+                    onSaveDataFirst: {
+                        if let run = RescueFlowRegistry.shared.run {
+                            Task { _ = await run() }
+                        } else {
+                            path.append(.keyfileBackup)
+                        }
+                    }
                 )
                 .alert(
                     "Replace device",

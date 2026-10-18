@@ -1,4 +1,5 @@
 import Foundation
+import FlagshipAPI
 import Observation
 
 /// App-wide toast queue. Views publish `info` / `success` / `warning` /
@@ -32,6 +33,9 @@ public final class ToastCenter {
     }
 
     private func publish(_ toast: Toast) {
+        // While "This account was removed" is up, failed calls stay quiet
+        // (docs/account-gone.md): the screen already says what happened.
+        if AccountGoneRegistry.shared.isGone && (toast.kind == .error || toast.kind == .warning) { return }
         if queue.contains(where: { $0.kind == toast.kind && $0.message == toast.message }) {
             return
         }

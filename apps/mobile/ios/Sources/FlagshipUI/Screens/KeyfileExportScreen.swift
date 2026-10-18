@@ -60,6 +60,7 @@ public struct KeyfileExportScreen: View {
                 // After the share sheet dismisses, surface the
                 // "saved" confirmation + clean up the temp file.
                 showSaved = true
+                KeyBackupState.record(username: vm.username)
                 vm.reset()
                 try? FileManager.default.removeItem(at: url)
             }

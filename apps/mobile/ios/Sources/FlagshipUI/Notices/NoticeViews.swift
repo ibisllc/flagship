@@ -263,25 +263,32 @@ struct UpdateLockScreen: View {
     }
 }
 
-// MARK: - Presenting the lock above everything
+// MARK: - Presenting a full-screen state above everything
 
-/// The lock is its own window above every other: sheets, menus, the
-/// onboarding cover and the biometric lock all live in the app window (or
+/// A full-screen state is its own window above every other: sheets, menus,
+/// the onboarding cover and the biometric lock all live in the app window (or
 /// presented from it), so nothing can stay open and operable on top of it, and
-/// it cannot be swiped away. Showing it first runs the lock sweep.
+/// it cannot be swiped away. Showing it first runs the lock sweep. Used by the
+/// "Update required" lock and the "This account was removed" screen.
 @MainActor
-final class UpdateLockPresenter {
-    static let shared = UpdateLockPresenter()
+final class OverlayWindowPresenter {
+    static let updateLock = OverlayWindowPresenter(level: .alert + 1)
+    static let accountGone = OverlayWindowPresenter(level: .alert + 2)
+
+    private let level: UIWindow.Level
     private var window: UIWindow?
-    private(set) var shownSeq: Int64?
+    private(set) var shownKey: AnyHashable?
+
+    init(level: UIWindow.Level) { self.level = level }
 
     var isShown: Bool { window != nil }
 
-    func sync(notice: SecurityNotice?, content: () -> AnyView) {
-        guard let notice else { hide(); return }
-        if window != nil, shownSeq == notice.seq { return }
+    /// Show `content` while `key` is non-nil (a new key replaces what is shown); hide it on nil.
+    func sync(key: AnyHashable?, content: () -> AnyView) {
+        guard let key else { hide(); return }
+        if window != nil, shownKey == key { return }
         if window == nil {
-            // Nothing of a menu, dialog or sheet stays open behind the lock.
+            // Nothing of a menu, dialog or sheet stays open behind it.
             PresentationSweeper.dismissAll()
         }
         guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
@@ -291,13 +298,13 @@ final class UpdateLockPresenter {
         host.view.accessibilityViewIsModal = true
         host.view.backgroundColor = .systemBackground
         let w = window ?? UIWindow(windowScene: scene)
-        w.windowLevel = .alert + 1
+        w.windowLevel = level
         w.rootViewController = host
         w.accessibilityViewIsModal = true
         w.isHidden = false
         w.makeKeyAndVisible()
         window = w
-        shownSeq = notice.seq
+        shownKey = key
     }
 
     func hide() {
@@ -306,7 +313,7 @@ final class UpdateLockPresenter {
         w.rootViewController = nil
         let scene = w.windowScene
         window = nil
-        shownSeq = nil
+        shownKey = nil
         scene?.windows.first(where: { !$0.isHidden })?.makeKey()
     }
 }
@@ -332,7 +339,7 @@ private struct UpdateLockHost: ViewModifier {
     }
 
     private func present(_ notice: SecurityNotice?) {
-        UpdateLockPresenter.shared.sync(notice: notice) {
+        OverlayWindowPresenter.updateLock.sync(key: notice.map { AnyHashable($0.seq) }) {
             guard let notice else { return AnyView(EmptyView()) }
             return AnyView(
                 UpdateLockScreen(notice: notice)

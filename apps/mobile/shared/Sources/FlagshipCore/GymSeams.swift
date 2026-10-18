@@ -17,6 +17,12 @@ public enum GymSeams {
     /// the absent real key — by design).
     public nonisolated(unsafe) static var forceAdminRoot = false
 
+    /// Count no server session for the "does this device hold a key that can
+    /// still save a server's data?" check (`-smoke-no-server-sessions`): the
+    /// mock gym pairs sessions with its sample boxes, which a device that
+    /// holds no key at all would not have.
+    public nonisolated(unsafe) static var noServerSessions = false
+
     /// Auto-pass `BiometricGate.evaluate` (the UI-level Face-ID consent
     /// prompts, e.g. the Settings → Add-a-device entry). The Simulator has no
     /// enrolled biometric, so those gates would make their screens unreachable

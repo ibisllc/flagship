@@ -104,6 +104,10 @@ public final class AppState {
     /// authenticated directory read, meaning another device ran a revoke,
     /// replace, or wipe operation against us.
     public var accountWasReset: Bool
+    /// "Create a new account" on the "account was removed" screen: the
+    /// device's copy is removed, then Welcome opens the create flow at once.
+    public var openCreateAccountOnWelcome = false
+
     /// B12 — when true, the app requires a successful biometric
     /// evaluation at launch (and on resume from cold-background)
     /// before any content beyond the lock screen renders. Default

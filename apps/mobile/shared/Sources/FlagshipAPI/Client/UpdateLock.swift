@@ -64,9 +64,19 @@ public final class UpdateLock: @unchecked Sendable {
 
 extension URLSession {
     /// `data(for:)` behind the update lock.
+    ///
+    /// Also the one place that sees every `.com` answer for "this account was
+    /// removed" (docs/account-gone.md): a call that names the removed account
+    /// is answered here, locally, and a `404 account-not-found` for this
+    /// device's own account flips the state.
     public func gatedData(for request: URLRequest) async throws -> (Data, URLResponse) {
+        if let local = AccountGoneRegistry.shared.localAnswer(for: request) { return local }
         try UpdateLock.shared.check(request)
-        return try await data(for: request)
+        let (body, response) = try await data(for: request)
+        if let http = response as? HTTPURLResponse, http.statusCode == 404 {
+            AccountGoneRegistry.shared.note(url: request.url, status: 404, body: body)
+        }
+        return (body, response)
     }
 
     /// `bytes(for:)` behind the update lock.

@@ -48,6 +48,11 @@ public struct SettingsScreen: View {
     /// severity adapt on `hasCloudRecovery` (a wipe without recovery is
     /// permanent account loss, so it gets the danger-zone framing).
     @State private var signOutConfirm: Bool = false
+    /// The admin-key warnings (docs/account-gone.md): Sign out on an admin
+    /// device, and Remove this device on one that holds a key that can still
+    /// save a server's data. Only the named buttons act.
+    @State private var signOutWarning: Bool = false
+    @State private var removeWarning: Bool = false
     @State private var nameEditor: NameEditor?
     @State private var nameEditMessage: String?
     let username: String
@@ -164,6 +169,17 @@ public struct SettingsScreen: View {
     /// push the full-page irreversible warning (typed-username + biometric →
     /// owner-IRK self-delete bundle → local wipe → Welcome).
     var onDeleteAccount: () -> Void = {}
+    /// This device holds the account's admin root: Sign out says it removes
+    /// that key (a demo account holds none).
+    var holdsAdminKey: Bool = false
+    /// This device holds a key that can still save a server's data (the admin
+    /// root, or a session for a server): Remove this device warns first.
+    var holdsRescueKey: Bool = false
+    /// This device wrote an account-key file: Sign out then says what to keep.
+    var keyBackedUp: Bool = false
+    /// "Save my data first": the rescue flow when the build has one, else the
+    /// account-key backup. Removes nothing.
+    var onSaveDataFirst: () -> Void = {}
 
     public init(
         username: String,
@@ -206,7 +222,11 @@ public struct SettingsScreen: View {
         signOutPolicy: SignOutPolicy = .allowed,
         onRecoveryRequired: @escaping () -> Void = {},
         onDeleteAccount: @escaping () -> Void = {},
-        isDemoAccount: Bool = false
+        isDemoAccount: Bool = false,
+        holdsAdminKey: Bool = false,
+        holdsRescueKey: Bool = false,
+        keyBackedUp: Bool = false,
+        onSaveDataFirst: @escaping () -> Void = {}
     ) {
         self.username = username
         self.accountDisplayName = accountDisplayName
@@ -249,6 +269,10 @@ public struct SettingsScreen: View {
         self.onRecoveryRequired = onRecoveryRequired
         self.onDeleteAccount = onDeleteAccount
         self.isDemoAccount = isDemoAccount
+        self.holdsAdminKey = holdsAdminKey
+        self.holdsRescueKey = holdsRescueKey
+        self.keyBackedUp = keyBackedUp
+        self.onSaveDataFirst = onSaveDataFirst
     }
 
     /// Optional promo announcement at the top of Settings. Wired but empty by
@@ -414,6 +438,31 @@ public struct SettingsScreen: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This erases this device's account key and data so nothing sensitive is left at rest. Your account and your servers are untouched — sign back in with your recovery passkey and the same key is restored, no re-pair.")
+        }
+        .alert(
+            AdminKeyWarning.signOut(backedUp: keyBackedUp).title,
+            isPresented: $signOutWarning
+        ) {
+            ForEach(AdminKeyWarning.signOut(backedUp: keyBackedUp).choices, id: \.label) { choice in
+                switch choice.role {
+                case .cancel: Button(choice.label, role: .cancel) {}
+                case .save: Button(choice.label) { onSaveDataFirst() }
+                case .go: Button(choice.label, role: .destructive) { onSignOut() }
+                }
+            }
+        } message: {
+            Text(AdminKeyWarning.signOut(backedUp: keyBackedUp).message)
+        }
+        .alert(AdminKeyWarning.remove.title, isPresented: $removeWarning) {
+            ForEach(AdminKeyWarning.remove.choices, id: \.label) { choice in
+                switch choice.role {
+                case .cancel: Button(choice.label, role: .cancel) {}
+                case .save: Button(choice.label) { onSaveDataFirst() }
+                case .go: Button(choice.label, role: .destructive) { Task { await onRemoveFromAccount() } }
+                }
+            }
+        } message: {
+            Text(AdminKeyWarning.remove.message)
         }
     }
 
@@ -820,6 +869,7 @@ public struct SettingsScreen: View {
                 FSDangerButton("Sign out", muted: gated, block: true, large: true) {
                     if gated { onRecoveryRequired() }
                     else if signOutPolicy == .deletionCeremony { onDeleteAccount() }
+                    else if holdsAdminKey { signOutWarning = true }
                     else { signOutConfirm = true }
                 }
                 .accessibilityIdentifier("settings-sign-out-btn")
@@ -844,6 +894,7 @@ public struct SettingsScreen: View {
                     FSDangerButton("Remove this device from account", muted: gated, block: true) {
                         if gated { onRecoveryRequired() }
                         else if signOutPolicy == .deletionCeremony { onDeleteAccount() }
+                        else if holdsRescueKey { removeWarning = true }
                         else { showRemoveConfirm = true }
                     }
                     .accessibilityIdentifier("remove-from-account-btn")
