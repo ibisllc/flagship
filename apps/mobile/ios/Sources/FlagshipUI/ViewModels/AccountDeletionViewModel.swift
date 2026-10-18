@@ -130,11 +130,14 @@ public final class AccountDeletionViewModel {
         do {
             _ = try await server.selfDeleteAccount(bundle)
         } catch ScreensClientError.http(let status, let message) where status == 403 {
-            // The authoritative last-device backstop. `.com` returns "not the
-            // last device: other active devices exist" / "stale request" /
-            // "invalid … signature" — surface plainly, never wipe.
-            if message.lowercased().contains("last device") {
-                phase = .failed("Another device is still on this account, so it can't be deleted from here. Remove the other devices first.")
+            // The authoritative last-device backstop. `.com` answers with
+            // `code: other-devices-remain` and the sentence (older ones said
+            // "not the last device"); a stale request or a bad signature falls
+            // to the generic line. Never wipe.
+            let lowered = message.lowercased()
+            if lowered.contains("other-devices-remain") || lowered.contains("last device")
+                || lowered.contains("another device is still") {
+                phase = .failed("Another device is still on this account. Remove it in Settings, Trusted devices, then delete the account.")
             } else {
                 phase = .failed("The server rejected the request. Sign in again and retry.")
             }

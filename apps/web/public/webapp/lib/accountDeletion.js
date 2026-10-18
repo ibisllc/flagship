@@ -79,6 +79,17 @@ export function accountDeletePolicy({
   return "ceremony";
 }
 
+export const OTHER_DEVICES_REMAIN_SENTENCE =
+  "Another device is still on this account. Remove it in Settings, Trusted devices, then delete the account.";
+
+/** `.com` answers 403 `code: other-devices-remain` while a second device is on
+ *  the account (older: "not the last device"). */
+export function isOtherDevicesRemain(status, text) {
+  if (status !== 403) return false;
+  const t = String(text || "").toLowerCase();
+  return t.includes("other-devices-remain") || t.includes("last device") || t.includes("another device is still");
+}
+
 function makeError(message, status) {
   const e = new Error(message);
   if (status != null) e.status = status;
@@ -158,6 +169,11 @@ export async function submitAccountSelfDelete(args, deps = {}) {
     return { ok: true, body: await resp.json().catch(() => ({})) };
   }
   const text = await resp.text().catch(() => "");
+  if (isOtherDevicesRemain(resp.status, text)) {
+    const e = makeError(text, resp.status);
+    e.userMessage = OTHER_DEVICES_REMAIN_SENTENCE;
+    throw e;
+  }
   throw makeError(text || `account self-delete failed (${resp.status})`, resp.status);
 }
 

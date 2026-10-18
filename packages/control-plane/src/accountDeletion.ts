@@ -32,6 +32,7 @@ import type {
   AutoUnlockLeaseStorage,
   BoxSealedLeaseStorage,
   DeviceCapabilityGrantStorage,
+  DeviceIdentityStorage,
   LuksKeyStorage,
   PushTokenStorage,
   ServerHealthStorage,
@@ -66,6 +67,10 @@ export interface AccountDeletionDeps {
   routing: RoutingStorage;
   authCodes: AuthCodeStorage;
   deviceCapabilityGrants: DeviceCapabilityGrantStorage;
+  /** The account's device rows. With it, the last-device check counts the
+   *  devices the Trusted devices list shows and a deleted account's devices
+   *  are retired with it. */
+  deviceIdentities?: DeviceIdentityStorage;
   auditEvents: AuditEventStorage;
   /** Optional teardown participants — all best-effort, mirroring
    *  serverRevocation/serverRelease. */
@@ -195,9 +200,7 @@ async function teardownServer(
 }
 
 /**
- * Count ACTIVE (`revokedAt === null`) device grants. The founding device is NOT
- * in this table, so 0 active grants + a valid founding-IRK signature ⇒ the
- * caller IS the last device.
+ * Count ACTIVE (`revokedAt === null`) device grants.
  */
 async function activeGrantCount(
   grants: DeviceCapabilityGrantStorage,
@@ -205,6 +208,46 @@ async function activeGrantCount(
 ): Promise<number> {
   const rows = await grants.listForUser(username);
   return rows.filter((r) => r.revokedAt === null).length;
+}
+
+/** The sentence every app shows when a second device blocks the delete. */
+export const OTHER_DEVICES_REMAIN =
+  "Another device is still on this account. Remove it in Settings, Trusted devices, then delete the account.";
+export const OTHER_DEVICES_REMAIN_CODE = "other-devices-remain";
+
+/**
+ * How many devices OTHER than the one deleting are still on the account.
+ *
+ * An account opened by a current app has its founding device in the device
+ * table with an admin grant (bootstrap writes both), and a demo account is
+ * built the same way. The caller proves the admin root, which only an admin
+ * device holds, so one live device is the caller itself and every further one
+ * is "another device". Counting the founder as "another" made every
+ * single-device account undeletable. A legacy account (no admin root pinned)
+ * has a founding device that is in neither table, so there every row counts.
+ *
+ * A device is live while its row is not revoked: exactly what Trusted devices
+ * lists. A grant with no device row (older data) counts as that device.
+ */
+async function otherLiveDevices(
+  deps: AccountDeletionDeps,
+  username: string,
+  adminRootPinned: boolean,
+): Promise<number> {
+  const live = new Set<string>();
+  const rows = await deps.deviceCapabilityGrants.listForUser(username);
+  const identities = deps.deviceIdentities ? await deps.deviceIdentities.listForAccount(username) : [];
+  const known = new Set(identities.map((d) => d.deviceId));
+  for (const d of identities) if (d.revokedAt === null) live.add(d.deviceId);
+  for (const g of rows) if (g.revokedAt === null && !known.has(g.deviceId)) live.add(g.deviceId);
+  return adminRootPinned ? Math.max(0, live.size - 1) : live.size;
+}
+
+function otherDevicesRemain(others: number): HandlerResponseWithHeaders {
+  return {
+    status: 403,
+    body: { error: OTHER_DEVICES_REMAIN, code: OTHER_DEVICES_REMAIN_CODE, otherDevices: others },
+  };
 }
 
 /**
@@ -292,6 +335,23 @@ async function commitAccountHardDelete(
     }
   }
 
+  // The account's devices go with it: a name claimed again must not inherit
+  // them in its Trusted devices list or its last-device check.
+  if (deps.deviceIdentities) {
+    try {
+      for (const d of await deps.deviceIdentities.listForAccount(username)) {
+        if (d.revokedAt !== null) continue;
+        try {
+          await deps.deviceIdentities.revoke(username, d.deviceId, now);
+        } catch {
+          /* swallow */
+        }
+      }
+    } catch {
+      /* swallow */
+    }
+  }
+
   // The row delete is the irreversible act — name is claimable again at once.
   await deps.usernames.delete(username);
   return { serversTornDown };
@@ -366,10 +426,8 @@ export async function handleAccountDeletionBundle(
 
   // LAST-DEVICE enforcement: the founding-IRK signature above proves the caller
   // holds the founding device; there must be ZERO OTHER active device grants.
-  const others = await activeGrantCount(deps.deviceCapabilityGrants, username);
-  if (others > 0) {
-    return forbidden("not the last device: other active devices exist");
-  }
+  const others = await otherLiveDevices(deps, username, !!userRec.adminRootPubHex);
+  if (others > 0) return otherDevicesRemain(others);
 
   // ── §5 bundle invariant — validate the (optional) servers-self-delete BEFORE
   //    any commit, so a bad companion rejects the WHOLE bundle (neither order

@@ -228,9 +228,7 @@ describe("handleAccountDeletionBundle — LAST-DEVICE enforcement", () => {
       accountSelfDelete: acctEnvelope("erin", irk),
     });
     expect(res.status).toBe(403);
-    expect(String((res.body as { error?: string }).error ?? "")).toContain(
-      "last device",
-    );
+    expect(res.body).toMatchObject({ code: "other-devices-remain" });
     expect(await storage.usernames.get("erin")).toBeDefined();
   });
 

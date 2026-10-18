@@ -265,6 +265,34 @@ describe("account-deletion ceremony — webapp", () => {
     });
   });
 
+  describe("a second device blocks the delete", () => {
+    it("403 other-devices-remain carries the sentence with the next action", async () => {
+      const d = await loadDeletion();
+      const f = vi.fn(async () => ({
+        status: 403,
+        text: async () => JSON.stringify({ error: d.OTHER_DEVICES_REMAIN_SENTENCE, code: "other-devices-remain", otherDevices: 1 }),
+        json: async () => ({}),
+      }) as any);
+      const err = await d
+        .submitAccountSelfDelete(
+          { username: "alice", umk: new Uint8Array(32), signWithIrk: async () => new Uint8Array(64) },
+          { fetch: f },
+        )
+        .catch((e: any) => e);
+      expect(err.status).toBe(403);
+      expect(err.userMessage).toContain("Trusted devices");
+      const { humanError } = await import("../public/webapp/lib/humanError.js");
+      expect(humanError(err)).toBe(d.OTHER_DEVICES_REMAIN_SENTENCE);
+    });
+
+    it("other 403s keep the generic copy", async () => {
+      const d = await loadDeletion();
+      expect(d.isOtherDevicesRemain(403, "invalid accountSelfDelete signature")).toBe(false);
+      expect(d.isOtherDevicesRemain(403, "not the last device: other active devices exist")).toBe(true);
+      expect(d.isOtherDevicesRemain(500, "other-devices-remain")).toBe(false);
+    });
+  });
+
   // ---- ceremony: local wipe ONLY after a 200 ----
 
   describe("runDeletionCeremony — wipe-after-200 invariant", () => {

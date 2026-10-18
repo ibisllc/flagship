@@ -163,8 +163,8 @@ fun AccountDeletionScreen(nav: NavController) {
                             app.signOut()
                         } catch (e: HttpException) {
                             error = when {
-                                e.status == 403 && e.body.lowercase().contains("last device") ->
-                                    "Another device is still on this account, so it can't be deleted from here. Remove the other devices first."
+                                e.status == 403 && otherDevicesRemain(e.body) ->
+                                    "Another device is still on this account. Remove it in Settings, Trusted devices, then delete the account."
                                 e.status == 404 -> "That account no longer exists."
                                 e.status == 403 -> "The server rejected the request. Sign in again and retry."
                                 else -> "That didn't work (HTTP ${e.status}). Try again in a moment."
@@ -185,6 +185,13 @@ fun AccountDeletionScreen(nav: NavController) {
             )
         }
     }
+}
+
+/** `.com` answers 403 with `code: other-devices-remain` (older builds of it said
+ *  "not the last device"). */
+internal fun otherDevicesRemain(body: String): Boolean {
+    val b = body.lowercase()
+    return b.contains("other-devices-remain") || b.contains("last device") || b.contains("another device is still")
 }
 
 @Composable
