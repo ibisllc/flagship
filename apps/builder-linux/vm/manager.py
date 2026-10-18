@@ -24,6 +24,7 @@ from typing import Callable, Dict, List, Optional
 
 from . import host_arch, kvm_probe, resource_plan
 from .config import VMConfig
+from .control_plane import order_url
 from .host_resources import HostResources
 from .inventory import VMBundleLayout, VMInventoryStore, VMRecord, VMStoreError
 from .lifecycle import (
@@ -757,7 +758,7 @@ class VMManager:
         started_at = server.record.state_changed_at if server else self._clock()
         stop = threading.Event()
         self._install_polls[name] = stop
-        url = f"https://flagshipserver.com/api/order/{serial}/status"
+        url = order_url(serial, "status")
 
         def poll() -> None:
             while not stop.is_set():

@@ -15,6 +15,12 @@ import pytest  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
+def _production_control_plane(monkeypatch):
+    """A developer's FLAGSHIP_CONTROL_HOST must not change what tests expect."""
+    monkeypatch.delenv("FLAGSHIP_CONTROL_HOST", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _no_published_appliance(monkeypatch):
     """No test reaches flagshipserver.com: by default nothing is published,
     so hosting takes the installer path. Appliance tests inject their own."""

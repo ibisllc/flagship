@@ -14,6 +14,8 @@ import re
 from dataclasses import dataclass
 from typing import List, Optional
 
+from .control_plane import order_url
+
 _SERIAL_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 
 
@@ -46,7 +48,7 @@ class VMServerHealth:
     def order_health_url(serial: str) -> Optional[str]:
         if not _SERIAL_RE.fullmatch(serial or ""):
             return None
-        return f"https://flagshipserver.com/api/order/{serial}/health"
+        return order_url(serial, "health")
 
     @staticmethod
     def from_order_health(body: bytes | str, server_domain: str) -> Optional["VMServerHealth"]:
