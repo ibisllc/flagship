@@ -1046,16 +1046,33 @@ const TOTAL: readonly Scenario[] = [
         { kind: "launch", describe: "Reach paired Home; mint a box STK + sign a secret-request in-page; route /pods + /api/secret-requests." },
         { kind: "assert", describe: "The card reads waiting-for-approval + Approve unlock.", handle: "#servers-list" },
         { kind: "tap", describe: "Approve unlock (the one-tap affordance)." },
-        { kind: "assert", describe: "The verified request card renders with the approve button.", handle: "#view-boot-approval" },
+        { kind: "assert", describe: "The verified request card renders with the approve button.", handle: "#activity-approvals" },
       ],
       assertions: [
         { describe: "Home card reads waiting for approval", handle: "#servers-list", expect: "text", text: "waiting for approval" },
-        { describe: "Box Request Inbox opens", handle: "#view-boot-approval", expect: "present" },
+        { describe: "Server approvals section opens on Activity", handle: "#activity-approvals", expect: "present" },
         { describe: "Verified request card with approve affordance", handle: "[data-boot-request-id]", expect: "present" },
       ],
       screenshots: [
         shot("inbox-home-card", "The waiting-for-approval one-tap card."),
         shot("inbox-approve-card", "The STK-verified approve card."),
+      ],
+      dimension: "D5",
+    },
+  ),
+  webTotal(
+    "web-total-activity-approvals-states",
+    "The Activity tab's Server approvals section is static, so it stays reachable when its load fails: it shows a plain failure with Try again, and once the inbox answers it reads 'Nothing waiting for you' with no count badge.",
+    "gym total webapp activity approvals section recovers from a failed load and says nothing is waiting",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach paired Home; the approvals inbox answers 503." },
+        { kind: "tap", describe: "Try again, now that the inbox answers with nothing waiting.", handle: "#boot-approval-retry" },
+      ],
+      assertions: [{ describe: "Nothing waiting", handle: "#boot-approval-content", expect: "text", text: "Nothing waiting for you" }],
+      screenshots: [
+        shot("approvals-try-again", "The failed load with Try again."),
+        shot("approvals-nothing-waiting", "Nothing waiting for you."),
       ],
       dimension: "D5",
     },

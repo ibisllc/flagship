@@ -78,7 +78,7 @@ describe("service worker — secret-request push", () => {
     expect(opened).toEqual(["https://webapp.flagshipserver.com/?view=boot-approval"]);
   });
 
-  it("the cold-start dispatcher opens the approvals view for ?view=boot-approval", () => {
+  it("the cold-start dispatcher opens Activity at the approvals section for ?view=boot-approval", () => {
     const src = readFileSync(DEEP_LINK_PATH, "utf8");
     expect(src).toMatch(/q\.view === "view-boot-approval"[\s\S]{0,160}enterBootApproval\(\)/);
   });

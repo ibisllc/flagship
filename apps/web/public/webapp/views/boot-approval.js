@@ -4,9 +4,15 @@
 // (unlock-key AND entitlement) from one registry, satisfies any of them with
 // one dispatch, and auto-refreshes on a foreground poll so there's no
 // drag-to-refresh. Mirror of the iOS/Android inbox.
+//
+// It lives in the Activity tab's "Server approvals" section (there is no
+// separate page): the list, its count badge, an empty state, a loading state
+// and a "Try again" state. The section is static markup, so it stays
+// reachable when the activity feed can't load. `enterBootApproval` is the
+// alias for the old route: push and deep links open Activity at this section.
 
-import { $, registerView, show } from "../lib/router.js";
-import { humanError } from "../lib/humanError.js";
+import { $, show } from "../lib/router.js";
+import { boxErrorText, humanError } from "../lib/humanError.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
 import { getSession } from "../lib/state.js";
@@ -16,8 +22,6 @@ import {
   BOX_REQUEST_TYPES,
 } from "../lib/bootApproval.js";
 import { fetchFirstBootMap } from "../lib/boxInbox.js";
-
-registerView("view-boot-approval");
 
 let inFlightId = null;
 let pollTimer = null;
@@ -75,15 +79,45 @@ function requestCard(req, firstBootMap = {}) {
   `;
 }
 
+/** The count badge on the section header: hidden at 0. */
+function setCount(n) {
+  const badge = $("activity-approvals-count");
+  if (!badge) return;
+  badge.textContent = String(n);
+  badge.hidden = n === 0;
+}
+
+/** "already answered": another device (or an earlier tap) did it. Done, not an error. */
+export function isAlreadyAnswered(e) {
+  return e?.status === 409;
+}
+
+let lastVerified = [];
+
+function paintList(root, verified, firstBootMap) {
+  setCount(verified.length);
+  root.dataset.painted = "1";
+  if (!verified.length) {
+    root.innerHTML = `<div class="card placeholder">Nothing waiting for you</div>`;
+    return;
+  }
+  root.innerHTML = verified.map((req) => requestCard(req, firstBootMap)).join("");
+  bindCards(root, verified, firstBootMap);
+}
+
+let lastFirstBootMap = {};
+
 export async function renderBootApproval() {
   const root = $("boot-approval-content");
   if (!root) return;
   const session = getSession();
   if (!session.username) {
+    setCount(0);
     root.innerHTML = `<div class="card placeholder">Sign in to approve a box.</div>`;
     return;
   }
   if (!session.umk) {
+    setCount(0);
     root.innerHTML = `<div class="card placeholder">Unlock the webapp first.</div>`;
     return;
   }
@@ -94,42 +128,67 @@ export async function renderBootApproval() {
   try {
     verified = await fetchVerifiedRequests();
   } catch (e) {
-    if (!root.dataset.painted) {
-      root.innerHTML = `<div class="card placeholder err-text">${escapeHtml(
-        e?.message ?? "Couldn't load pending boxes.",
-      )}</div>`;
+    console.error("approvals load failed", e);
+    // A poll that fails behind a painted list leaves the list alone.
+    if (!root.dataset.painted || root.dataset.failed === "1") {
+      root.dataset.failed = "1";
+      root.innerHTML = `
+        <div class="card">
+          <p class="err-text">${escapeHtml(boxErrorText(e))}</p>
+          <button class="secondary full-width mt-2" id="boot-approval-retry">Try again</button>
+        </div>`;
+      $("boot-approval-retry")?.addEventListener("click", () => {
+        delete root.dataset.painted;
+        renderBootApproval().catch((err) => toast(humanError(err), "err"));
+      });
     }
     return;
   }
-  root.dataset.painted = "1";
+  delete root.dataset.failed;
+  lastVerified = verified;
   if (!verified.length) {
-    root.innerHTML = `<div class="card placeholder">No box is waiting for approval right now.</div>`;
+    lastFirstBootMap = {};
+    paintList(root, verified, lastFirstBootMap);
     return;
   }
   // Cheap, non-biometric: which boxes are on their FIRST boot (so the unlock
   // copy reads fuller). Best-effort — a blip leaves the map empty ⇒ every card
   // defaults to first-boot (today's wording), never a worse state.
-  const firstBootMap = await fetchFirstBootMap().catch(() => ({}));
-  root.innerHTML = verified.map((req) => requestCard(req, firstBootMap)).join("");
-  bindCards(root, verified);
+  lastFirstBootMap = await fetchFirstBootMap().catch(() => ({}));
+  paintList(root, verified, lastFirstBootMap);
 }
 
-function bindCards(root, verified) {
+function bindCards(root, verified, firstBootMap) {
   for (const btn of root.querySelectorAll("[data-approve-id]")) {
     btn.addEventListener("click", async () => {
       const id = btn.getAttribute("data-approve-id");
       const req = verified.find((r) => r.id === id);
-      if (!req) return;
+      if (!req || inFlightId) return;
       inFlightId = id;
-      await renderBootApproval();
+      btn.disabled = true;
+      btn.textContent = "Working…";
+      let answered = false;
       try {
         await satisfy(req);
+        answered = true;
         toast(`Approved ${req.serverDomain}. Your box will pick it up.`);
       } catch (e) {
-        toast(`Approval failed: ${e?.message ?? "unknown error"}`, "err");
+        if (isAlreadyAnswered(e)) {
+          answered = true; // someone answered it already: done, no error
+        } else {
+          console.error("approval failed", e);
+          toast(`Couldn't approve ${req.serverDomain}. ${boxErrorText(e)}`, "err");
+        }
       } finally {
         inFlightId = null;
-        await renderBootApproval();
+        if (answered) {
+          // The card clears at once; the re-fetch below confirms it.
+          lastVerified = lastVerified.filter((r) => r.id !== id);
+          paintList(root, lastVerified, firstBootMap);
+        } else {
+          paintList(root, lastVerified, firstBootMap);
+        }
+        renderBootApproval().catch(() => {});
       }
     });
   }
@@ -151,23 +210,25 @@ function stopPoll() {
   }
 }
 
+/** The old route's alias: land on Activity with the approvals section in view. */
 export async function enterBootApproval() {
-  show("view-boot-approval");
+  show("view-activity");
   const root = $("boot-approval-content");
   if (root) delete root.dataset.painted;
   await renderBootApproval();
-  startPoll();
+  $("activity-approvals")?.scrollIntoView?.({ block: "start" });
 }
 
 export function initBootApprovalView() {
-  $("boot-approval-back")?.addEventListener("click", () => {
-    stopPoll();
-    show("view-activity");
-  });
-  $("boot-approval-refresh")?.addEventListener("click", () => {
-    renderBootApproval().catch((e) => {
-      console.error(e);
-      toast(humanError(e), "err");
-    });
+  // The section is part of Activity: it loads and polls while that tab shows.
+  document.addEventListener("flagship:view-shown", (ev) => {
+    if (ev.detail?.id === "view-activity") {
+      const root = $("boot-approval-content");
+      if (root) delete root.dataset.painted;
+      renderBootApproval().catch(() => {});
+      startPoll();
+    } else {
+      stopPoll();
+    }
   });
 }

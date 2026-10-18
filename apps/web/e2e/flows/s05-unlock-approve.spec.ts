@@ -129,8 +129,7 @@ test("S5 — Approve a pending unlock request → webapp re-seals the disk key f
   });
 
   await page.click('[data-tab-target="activity"]');
-  await page.click("#activity-open-boot-approval");
-  await expect(page.locator("#view-boot-approval")).toBeVisible();
+  await expect(page.locator("#activity-approvals")).toBeVisible();
 
   // Only the request that re-verifies against the directory STK renders.
   const cards = page.locator("#boot-approval-content [data-boot-request-id]");

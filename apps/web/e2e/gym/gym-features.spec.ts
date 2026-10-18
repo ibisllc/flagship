@@ -353,12 +353,37 @@ test.describe("gym webapp features", () => {
     // the approve affordance ("Yes, this is my box"). We do NOT approve — the
     // reply path needs a live boot worker (live slice).
     await approveBtn.click();
-    await expect(page.locator("#view-boot-approval")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#view-activity")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#activity-approvals-count")).toHaveText("1", { timeout: 10_000 });
     const card = page.locator(`[data-boot-request-id="${FQDN}#${fixture.nonceHex}"]`);
     await expect(card).toBeVisible({ timeout: 10_000 });
     await expect(card).toContainText(FQDN);
     await expect(card.locator("[data-approve-id]")).toContainText(/yes, this is my box/i);
     await shot(page, testInfo, "inbox-approve-card");
+  });
+
+  test("gym total webapp activity approvals section recovers from a failed load and says nothing is waiting", async ({ page }, testInfo) => {
+    // The Server approvals section is part of Activity, so it stays reachable
+    // when its feed can't load: a failed load shows Try again, and once the
+    // inbox answers with nothing it reads "Nothing waiting for you" with no badge.
+    await reachHome(page);
+    await seedPairedHome(page);
+    await routeAnyJson(page, "/api/users/smoketest/pods", { pods: [] });
+    await routeAnyJson(page, "/api/secret-requests", { error: "down" }, 503);
+    await page.evaluate(async () => {
+      const { enterBootApproval } = await import("/views/boot-approval.js");
+      await enterBootApproval();
+    });
+    await expect(page.locator("#view-activity")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#boot-approval-retry")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#activity-approvals")).toContainText("briefly unavailable");
+    await expect(page.locator("#activity-approvals-count")).toBeHidden();
+    await shot(page, testInfo, "approvals-try-again");
+    await routeAnyJson(page, "/api/secret-requests", { requests: [] });
+    await page.click("#boot-approval-retry");
+    await expect(page.locator("#boot-approval-content")).toContainText("Nothing waiting for you", { timeout: 10_000 });
+    await expect(page.locator("#activity-approvals-count")).toBeHidden();
+    await shot(page, testInfo, "approvals-nothing-waiting");
   });
 
   // ─── Multi-pod — honest liveness + the PodSwitcher ────────────────────────

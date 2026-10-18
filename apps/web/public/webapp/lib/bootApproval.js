@@ -260,7 +260,7 @@ export async function fetchVerifiedRequests(deps = {}) {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(authBody),
-    }).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`secret-requests: HTTP ${r.status}`)))),
+    }).then((r) => (r.ok ? r.json() : Promise.reject(Object.assign(new Error(`secret-requests: HTTP ${r.status}`), { status: r.status })))),
     accountReadFetch(`${comBase}/api/users/${encodeURIComponent(username)}/pods`, { cache: "no-store" }, { fetch: f, baseUrl: comBase })
       .then((r) => (r.ok ? r.json() : { pods: [] })),
   ]);
@@ -356,7 +356,8 @@ async function postBootResponse(req, sealedHex, deps) {
   });
   if (!(r.status === 200 || r.status === 201 || r.status === 204)) {
     const txt = await r.text().catch(() => "");
-    throw new Error(`post boot response failed: ${r.status} ${txt}`.trim());
+    // `status` lets the inbox treat "already answered" (409) as done.
+    throw Object.assign(new Error(`post boot response failed: ${r.status} ${txt}`.trim()), { status: r.status, body: txt });
   }
 }
 

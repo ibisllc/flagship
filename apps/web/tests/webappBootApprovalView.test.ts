@@ -61,7 +61,8 @@ describe("webapp boot-approval relay (parity with iOS SecretRequestsScreen)", ()
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/webapp/views/boot-approval.js" });
     expect(r.statusCode).toBe(200);
-    expect(r.body).toContain('registerView("view-boot-approval")');
+    // No page of its own any more: the list lives in Activity's Server approvals.
+    expect(r.body).not.toContain("registerView(");
     expect(r.body).toContain("fetchVerifiedRequests");
     // The inbox now dispatches ANY type through the registry's `satisfy`
     // (not just unlock), and titles come from BOX_REQUEST_TYPES.
@@ -74,21 +75,26 @@ describe("webapp boot-approval relay (parity with iOS SecretRequestsScreen)", ()
     expect(r.body).toContain("Region");
   });
 
-  it("app.js + index.html wire the boot-approval view under the activity tab", async () => {
+  it("app.js + index.html put the approvals list inside the Activity tab", async () => {
     const app = buildServer();
     const js = await app.inject({ method: "GET", url: "/webapp/app.js" });
     expect(js.statusCode).toBe(200);
     expect(js.body).toContain('from "./views/boot-approval.js"');
     expect(js.body).toContain("initBootApprovalView");
-    expect(js.body).toContain("enterBootApproval");
-    expect(js.body).toContain('"view-boot-approval": "activity"');
-    expect(js.body).toContain("activity-open-boot-approval");
+    expect(js.body).not.toContain('"view-boot-approval"');
+    expect(js.body).not.toContain("activity-open-boot-approval");
 
     const html = await app.inject({ method: "GET", url: "/webapp/" });
     expect(html.statusCode).toBe(200);
-    expect(html.body).toContain('id="view-boot-approval"');
-    expect(html.body).toContain('id="boot-approval-content"');
-    expect(html.body).toContain('id="activity-open-boot-approval"');
+    expect(html.body).not.toContain('id="view-boot-approval"');
+    expect(html.body).not.toContain('id="activity-open-boot-approval"');
+    expect(html.body).toContain('id="activity-approvals"');
+    expect(html.body).toContain("Server approvals");
+    expect(html.body).toContain('id="activity-approvals-count"');
+    // The section is static Activity markup, inside #view-activity.
+    const activity = html.body.slice(html.body.indexOf('id="view-activity"'));
+    expect(activity.indexOf('id="boot-approval-content"')).toBeGreaterThan(0);
+    expect(activity.indexOf('id="boot-approval-content"')).toBeLessThan(activity.indexOf('id="activity-feed"'));
   });
 
   it("the new view + lib files are precached in the service worker (offline)", async () => {
@@ -101,5 +107,30 @@ describe("webapp boot-approval relay (parity with iOS SecretRequestsScreen)", ()
     expect(r.body).toContain('"/lib/totp.js"');
     expect(r.body).toContain('"/views/boot-approval.js"');
     expect(r.body).toContain('"/views/account-audit.js"');
+  });
+
+  it("an approval another device already answered (409) is done, a failed one is not", async () => {
+    const { isAlreadyAnswered } = await import("../public/webapp/views/boot-approval.js");
+    expect(isAlreadyAnswered(Object.assign(new Error('post boot response failed: 409 {"error":"already answered"}'), { status: 409 }))).toBe(true);
+    expect(isAlreadyAnswered(Object.assign(new Error("x"), { status: 500 }))).toBe(false);
+    expect(isAlreadyAnswered(new Error("x"))).toBe(false);
+  });
+
+  it("an approval clears its card at once and never prints the raw error", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(new URL("../public/webapp/views/boot-approval.js", import.meta.url), "utf8");
+    expect(src).toContain("lastVerified = lastVerified.filter((r) => r.id !== id)");
+    expect(src).not.toMatch(/Approval failed: \$\{e\?\.message/);
+    expect(src).toContain("Nothing waiting for you");
+    expect(src).toContain('id="boot-approval-retry"');
+    expect(src).toContain('"flagship:view-shown"');
+  });
+
+  it("the old route is an alias that lands on Activity with the section in view", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(new URL("../public/webapp/views/boot-approval.js", import.meta.url), "utf8");
+    const fn = src.slice(src.indexOf("export async function enterBootApproval"));
+    expect(fn.slice(0, fn.indexOf("\n}\n"))).toContain('show("view-activity")');
+    expect(fn.slice(0, fn.indexOf("\n}\n"))).toContain('scrollIntoView');
   });
 });
