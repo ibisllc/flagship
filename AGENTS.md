@@ -450,6 +450,12 @@ of the last check here: **not yet checked**.
   `scripts/publish-vm-appliance.sh <run-id>…` (one image at a time, checked
   against its manifest), manifests in `apps/web/public/downloads/`. A new
   server's first boot moves it to the newest endorsed release.
+  **Both are stale since 2026-10-18:** the amd64 one stops at its login prompt on
+  first boot (disk resize without the build key, found on Windows; fixed on
+  `main`). Rebuilt from `d4c7ef4c0` as runs `39142014433` (amd64) and
+  `39142016230` (arm64); the owner publishes them
+  (`docs/runbooks/republish-vm-appliance.md`). Until then "Host on this PC"
+  stalls on every Studio.
 - **AI privacy, staging and egress (2026-10-12): built, endorsed as
   `37ba277d`; apps on `main`.** Follows the rule in Conventions. The AI works
   on a fenced staging copy (neutral identity, placeholder secrets, sample
