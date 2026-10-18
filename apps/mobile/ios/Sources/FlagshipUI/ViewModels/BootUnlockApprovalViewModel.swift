@@ -150,6 +150,9 @@ public final class BootUnlockApprovalViewModel {
             }
             state = .approved
         } catch {
+            // `.com` answers 409 when the request was already answered (a second
+            // tap, another device): the approval stands, so there is no error to show.
+            if SecretRequestsModel.isAlreadyAnswered(error) { state = .approved; return }
             state = .failed(HumanError.humanize(error))
         }
     }

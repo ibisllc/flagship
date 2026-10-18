@@ -365,10 +365,10 @@
     },
     {
       "id": "push-secret-request",
-      "title": "Push: secret-request (boot/unlock approval) tap opens the approvals list",
+      "title": "Push: secret-request (boot/unlock approval) tap opens Activity with the Server approvals section open and the request in it",
       "ref": "ios",
       "surfaces": {
-        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/PushNotifications.swift", "\\[\"aps\"\\] as\\? \\[AnyHashable: Any\\]\\)\\?\\[\"category\"\\]"]] },
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/PushNotifications.swift", "\\[\"aps\"\\] as\\? \\[AnyHashable: Any\\]\\)\\?\\[\"category\"\\]"], ["apps/mobile/ios/Sources/FlagshipUI/Shell/ActivityTab.swift", "openApprovals \\+= 1"], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/SecretRequestsModel.swift", "Nothing waiting for you"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/push/SecretRequestPush.kt", "secret-request"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/DeepLink.kt", "\"secret-requests\""]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/service-worker.js", "\"secret-requests\": \"/\\?view=boot-approval\""]] }
       }

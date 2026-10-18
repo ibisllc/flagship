@@ -4,169 +4,79 @@ import FlagshipCore
 import FlagshipAPI
 import Flagship
 
-/// Phone-as-unlock-endpoint approval surface.
+/// Phone-as-unlock-endpoint approvals, shown inside Activity's "Server
+/// approvals" section (no page of their own).
 ///
-/// Opened by the `secret-request` push ("your box is finishing setup —
-/// open to approve") and from a manual "pending setup" entry. On open it
-/// fetches the account's pending mailbox requests, RE-VERIFIES each one
-/// against the box's STK as independently resolved from the directory, and
-/// shows the box's device-info for a one-tap "Yes, this is my box" confirm.
-///
-/// On confirm the coordinator unseals/re-seals the LUKS key (unlock-key) or
+/// Opened by the `secret-request` push ("your box is finishing setup, open to
+/// approve") or by opening the section. The requests were fetched and
+/// RE-VERIFIED against the box's STK by `SecretRequestsModel`; each card shows
+/// the box's device-info for a one-tap "Yes, this is my server" confirm. On
+/// confirm the coordinator unseals/re-seals the LUKS key (unlock-key) or
 /// IRK-signs the entitlement carrier (entitlement) and posts the reply back
 /// through `.com`. The box picks it up on its poll.
-struct SecretRequestsContainer: View {
-    @Environment(\.secretMailboxClient) private var mailbox
-    @Environment(AppState.self) private var app
+struct SecretRequestsPanel: View {
     @Environment(ToastCenter.self) private var toasts
     @Environment(\.colorScheme) private var scheme
-
-    @State private var state: LoadingState<[SecretRequestCoordinator.VerifiedRequest]> = .idle
-    @State private var inFlightId: String?
-    private let bootUnlock = BootUnlockStore()
+    let model: SecretRequestsModel
+    /// In the accordion the list scrolls inside a bounded area; in the wide
+    /// layout's detail pane it just flows.
+    var bounded: Bool = true
+    @ScaledMetric(relativeTo: .body) private var listMaxHeight: CGFloat = 360
 
     var body: some View {
         let c = FSColors.scheme(scheme)
-        ScrollView {
-            VStack(alignment: .leading, spacing: FS.space.s4) {
-                Text("Your server is finishing setup. Confirm it's yours to release its boot secret — only your phone can.")
-                    .font(FS.font.body())
-                    .foregroundColor(c.textMuted)
-
-                switch state {
-                case .idle, .loading:
-                    ForEach(0..<2) { _ in ServerCardSkeleton() }
-                case .failed(let msg):
-                    ErrorCard(message: msg)
-                case .loaded(let requests):
-                    if requests.isEmpty {
-                        FSCard { Text("No server is waiting for approval right now.").foregroundColor(c.textMuted) }
-                    } else {
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            switch model.state {
+            case .idle, .loading:
+                ForEach(0..<2) { _ in ServerCardSkeleton() }
+            case .failed(let msg):
+                ErrorCard(message: msg, retry: { await model.reload() })
+            case .loaded(let requests):
+                if requests.isEmpty {
+                    Text(SecretRequestsModel.emptyText)
+                        .font(FS.font.scaled(15)).foregroundColor(c.textMuted)
+                        .accessibilityIdentifier("approvals-empty")
+                } else {
+                    let list = VStack(alignment: .leading, spacing: FS.space.s3) {
+                        Text(SecretRequestsModel.introText)
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.textMuted)
                         ForEach(requests) { req in
                             SecretRequestCard(
                                 request: req,
                                 // First boot vs established reboot: a box that has
-                                // never come online (no daemon check-in, no cert)
-                                // is on its FIRST boot, where this approval also
-                                // authorizes it to serve — so show the full copy.
-                                // A box that has come online before is just
-                                // re-unlocking, so the "…join your cloud" phrase is
-                                // noise. Unknown (pod not in the list yet) defaults
-                                // to first-boot = the fuller copy (today's wording).
-                                isFirstBoot: isFirstBoot(req.serverDomain),
-                                isInFlight: inFlightId == req.id,
+                                // never come online is on its FIRST boot, where
+                                // this approval also authorizes it to serve, so
+                                // show the full copy. Unknown defaults to it.
+                                isFirstBoot: model.isFirstBoot(req.serverDomain),
+                                isInFlight: model.inFlightId == req.id,
                                 onApprove: { await approve(req) }
                             )
                         }
                     }
+                    if bounded {
+                        ScrollView { list }.frame(maxHeight: listMaxHeight)
+                    } else {
+                        list
+                    }
                 }
             }
-            .padding(FS.space.s6)
         }
-        .navigationTitle("Approve server")
-        .navigationBarTitleDisplayMode(.inline)
-        .refreshable { await reload() }
-        .task { if case .idle = state { await reload() } }
-    }
-
-    private func makeCoordinator() -> SecretRequestCoordinator? {
-        guard let username = app.currentUser else { return nil }
-        return SecretRequestCoordinator(
-            mailbox: mailbox,
-            username: username,
-            irkProvider: {
-                try await Keystore.deriveIRK(reason: "Approve your server's boot secret")
-            },
-            unsealSeedProvider: { serverDomain in
-                // The installer seals the LUKS key against one of the
-                // phone's Ed25519 keys. Try the per-server BAK first
-                // (deterministically derivable from the UMK), then the
-                // IRK — whichever it was sealed against opens it.
-                var seeds: [Data] = []
-                if let bak = try? await Keystore.deriveBAK(
-                    serverId: serverDomain,
-                    reason: "Unseal the disk key for \(serverDomain)"
-                ) {
-                    seeds.append(bak.rawRepresentation)
-                }
-                if let irk = try? await Keystore.deriveIRK(reason: "Unseal the disk key") {
-                    seeds.append(irk.rawRepresentation)
-                }
-                return seeds
-            },
-            // Slice D — the RootEntitlement this approval mints signs under the
-            // admin master root when this device holds one (a reburned
-            // admin-pinned box rejects an IRK-signed one), else the owner IRK.
-            // This screen's providers aren't memoized, so the admin root is its
-            // own Face ID — acceptable, and only on admin-root accounts.
-            orderKeyProvider: {
-                Keystore.hasAdminRoot
-                    ? try await Keystore.adminRootKey(reason: "Authorize your server to serve")
-                    : nil
-            },
-            // When the user opted into "Quick approve from Apple Watch", a
-            // plain unlock approval signs the boot-response with this delegate
-            // key (role="delegate") instead of the IRK — no biometric prompt.
-            // nil (not enrolled) ⇒ today's IRK path.
-            watchDelegateKeyProvider: { Keystore.watchDelegateKey() }
-        )
-    }
-
-    private func reload() async {
-        guard let coord = makeCoordinator() else {
-            state = .failed("Sign in to approve a server.")
-            return
-        }
-        state = .loading
-        do {
-            let verified = try await coord.fetchVerifiedRequests()
-            state = .loaded(verified)
-            // Mirror the pending approvals onto the watch (bridge is a
-            // no-op when unwired). Project from the underlying mailbox
-            // request, not the verified wrapper, so the wire type stays
-            // FlagshipAPI-free.
-            WatchSecurityAlertsBridge.shared.publishApprovals(
-                verified.map { WatchProtocol.PendingApproval(secretRequest: $0.pending) }
-            )
-        } catch {
-            state = .failed(UserErrorText.of(error))
-        }
-    }
-
-    /// True when the box behind [serverDomain] has NOT come online before — its
-    /// FIRST boot, where the unlock approval also authorizes serving. Reads the
-    /// per-pod `cameOnline` already on `AppState.pods` (populated by the /pods
-    /// reconcile). A box absent from the list (no reconcile yet) defaults to
-    /// first-boot, i.e. the fuller copy = today's wording.
-    private func isFirstBoot(_ serverDomain: String) -> Bool {
-        guard let pod = app.pods.first(where: {
-            $0.fqdn.lowercased() == serverDomain.lowercased()
-        }) else { return true }
-        return !pod.cameOnline
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("approvals-panel")
     }
 
     private func approve(_ req: SecretRequestCoordinator.VerifiedRequest) async {
-        guard let coord = makeCoordinator() else { return }
-        inFlightId = req.id
-        defer { inFlightId = nil }
-        do {
-            // "auto" servers (the default) also get a box-sealed lease so future
-            // boots self-unlock without the phone. The returned lease id is the
-            // kill-switch handle — persist it per-server. ("approve" servers
-            // deposit nothing; the box asks again every boot.)
-            let depositLease = bootUnlock.effectiveMode(for: req.serverDomain) == .auto
-            let leaseId = try await coord.confirmAndRespond(req, depositAutoLease: depositLease)
-            if let leaseId { bootUnlock.setLeaseId(leaseId, for: req.serverDomain) }
-            toasts.success("Approved \(req.serverDomain). Your server will pick it up.")
-            await reload()
-        } catch {
-            toasts.error("Approval failed: \(UserErrorText.of(error))")
+        switch await model.approve(req) {
+        case .approved(let domain): toasts.success("Approved \(domain). Your server will pick it up.")
+        case .alreadyAnswered: break
+        case .failed(let msg): toasts.error(msg)
         }
     }
 }
 
 /// One pending request card: device-info backstop + one-tap confirm.
-private struct SecretRequestCard: View {
+struct SecretRequestCard: View {
     @Environment(\.colorScheme) private var scheme
     let request: SecretRequestCoordinator.VerifiedRequest
     /// The box behind this request has never come online — its FIRST boot.

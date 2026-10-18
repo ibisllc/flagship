@@ -85,6 +85,29 @@ extension GymSweepSeams {
                 phase: nil, createdAt: Int64(Date().timeIntervalSince1970 * 1000))]
         }
 
+        // `-smoke-approval-pending`: the first online server asked the phone to release its
+        // boot secret. The request is signed by that server's (gym) STK and `.com`'s
+        // directory vouches for the same key, so it verifies and shows.
+        if args.contains("-smoke-approval-pending"), let home = app.pods.first(where: { $0.status == .online }) {
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            let seed = Data(SHA256.hash(data: Data("gym-stk|\(home.fqdn.lowercased())".utf8)))
+            if let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: seed) {
+                let pub = key.publicKey.rawRepresentation
+                let nonce = Data(repeating: 0x42, count: 32)
+                let request = SecretRequest(serverDomain: home.fqdn, stkPub: pub, purpose: .entitlement, nonce: nonce, issuedAt: now)
+                if let sig = try? key.signature(for: request.canonicalBytes()) {
+                    mocks.mailbox.pending = [PendingSecretRequest(
+                        serverDomain: home.fqdn, requestNonceHex: HexUtil.encode(nonce), stkPub: HexUtil.encode(pub),
+                        purpose: SecretPurpose.entitlement.rawValue, issuedAt: now, requestSignature: HexUtil.encode(sig),
+                        deviceInfo: DeviceInfoHint(ip: "203.0.113.7", region: "fsn1", os: "Debian 13"),
+                        postedAt: now, expiresAt: now + 300_000)]
+                    mocks.mailbox.directory = [PodDirectoryEntry(
+                        serverDomain: home.fqdn, identityPubKey: HexUtil.encode(pub), lastReported: now,
+                        registeredAt: now - 86_400_000, hasCert: true, liveness: "live", lastSeenMsAgo: 0)]
+                }
+            }
+        }
+
         // `-smoke-install-stopped`: that pending server's install stopped, with
         // the box's own words (shell line number and all).
         if args.contains("-smoke-install-stopped") {
