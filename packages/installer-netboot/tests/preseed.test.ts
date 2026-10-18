@@ -49,8 +49,8 @@ describe("Debian preseed.cfg (W12)", () => {
     expect(directives).not.toContain("flagship-firstboot-placeholder");
     expect(src).not.toMatch(/partman-crypto\/passphrase(-again)? string/);
     expect(src).toContain("tr -dc A-Za-z0-9 </dev/urandom | head -c 48");
-    // The matching confirm line — d-i requires both passphrase + again.
-    expect(src).toContain("d-i partman-crypto/passphrase-again string");
+    // Both passphrase questions are fed from the installer-generated value.
+    expect(src).toContain('debconf-set partman-crypto/passphrase-again "$BURN"');
   });
 
   it("auto-confirms partitioning prompts (else the install wedges)", () => {
