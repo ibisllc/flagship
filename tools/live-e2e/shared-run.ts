@@ -33,6 +33,7 @@ import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 import { deriveSWK, ed } from "@flagship/protocol";
 import { join } from "node:path";
 import { ADMIN, CONTROL, KEK, Recorder, SERVICES, runDir, tryHttp, writeJson } from "./lib/harness.js";
+import { dnsRecordsNeeded } from "./lib/dnsBudget.js";
 
 /** The shared flagship.services DNS zone's record cap (gym and prod together). */
 const DNS_ZONE_CAP = Number(process.env.GYM_DNS_ZONE_CAP || 200);
@@ -192,8 +193,10 @@ async function main(): Promise<number> {
       return 3;
     }
     if (zoneRecords !== null) {
-      // Measured live: an account adds ~8 records to the shared zone (CAA + its name), each box ~4.
-      const need = alivePeak * 4 + accountsNeeded.size * 8;
+      // One wildcard per account (docs/wildcard-dns.md): an account holds 4 records
+      // whatever its box count; a box only adds records while its certificate is
+      // being issued. (Before it was ~8 per account and ~4 per box.)
+      const need = dnsRecordsNeeded(alivePeak, accountsNeeded.size);
       log(`DNS zone: ${zoneRecords} of ${DNS_ZONE_CAP} records; this run adds up to ~${need} (peak ${alivePeak} boxes)`);
       if (zoneRecords + need > DNS_ZONE_CAP - 5) {
         log("not provisioning: the shared zone would fill and new boxes (prod's too) couldn't get their DNS-01 records; run fewer groups (--groups) or free prod records");

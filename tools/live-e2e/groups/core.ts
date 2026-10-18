@@ -18,8 +18,9 @@ import {
   type ServiceEnvChange,
   type UninstallServiceRequest,
 } from "@flagship/protocol";
-import { pair } from "../lib/fleet.js";
-import { CONTROL, assert, certInfo, http, postJson, rawTlsGet, short, sleep, tryHttp } from "../lib/harness.js";
+import { pair, sweep } from "../lib/fleet.js";
+import { accountRecordSurprises } from "../lib/dnsBudget.js";
+import { CONTROL, SERVICES, assert, certInfo, http, postJson, rawTlsGet, short, sleep, tryHttp } from "../lib/harness.js";
 import type { Group } from "./types.js";
 
 export function whoamiManifest(slug: string, extra: Record<string, unknown> = {}): string {
@@ -63,6 +64,50 @@ export const core: Group = {
       assert(/Let's Encrypt/i.test(c.issuer), `issuer=${c.issuer || "<none>"}`);
       assert(c.sans.includes(fqdn) && c.sans.includes(`*.${fqdn}`), `sans=${c.sans.join(",")}`);
       return c.sans.join(", ");
+    });
+    // One wildcard per account (docs/wildcard-dns.md): the zone holds the
+    // account's four records and nothing per box, and every name under it resolves
+    // to the relay whether or not a box is registered there.
+    await rec.check("the account's DNS is the four-record wildcard set, nothing per box", async () => {
+      const z = await sweep(false);
+      assert(z.status === 200, `gym sweep dry run ${z.status}`);
+      const records = (z.body?.dnsRecords ?? []) as Array<{ type: string; name: string }>;
+      assert(records.length > 0, "the gym sweep returned no record names");
+      const surprises = accountRecordSurprises(records, user, SERVICES);
+      assert(surprises.length === 0, surprises.join("; "));
+      return `4 records under ${user}.${SERVICES}`;
+    });
+    await rec.check("a box name, a service name and an unregistered name all resolve to the relay", async () => {
+      const { Resolver } = await import("node:dns/promises");
+      const r = new Resolver();
+      r.setServers(["1.1.1.1", "8.8.8.8"]);
+      const names = [fqdn, `svc.${fqdn}`, `ghost.${user}.${SERVICES}`, `deep.er.ghost.${user}.${SERVICES}`];
+      const answers = await Promise.all(names.map(async (n) => (await r.resolve4(n)).sort().join(",")));
+      assert(answers.every((a) => a.length > 0), `no A answer for one of ${names.join(", ")}`);
+      assert(new Set(answers).size === 1, `names resolve to different addresses: ${answers.join(" | ")}`);
+      return answers[0]!;
+    });
+    await rec.check("a name nobody registered gets no TLS answer, in the time an unknown account takes", async () => {
+      const { Resolver } = await import("node:dns/promises");
+      const tls = await import("node:tls");
+      const r = new Resolver();
+      r.setServers(["1.1.1.1", "8.8.8.8"]);
+      const ip = (await r.resolve4(fqdn))[0]!;
+      const dial = (sni: string) =>
+        new Promise<{ ms: number; secure: boolean }>((resolve) => {
+          const t0 = Date.now();
+          let secure = false;
+          const s = tls.connect({ host: ip, port: 443, servername: sni, rejectUnauthorized: false });
+          s.on("secureConnect", () => { secure = true; s.destroy(); });
+          s.on("error", () => {});
+          s.on("close", () => resolve({ ms: Date.now() - t0, secure }));
+          setTimeout(() => s.destroy(), 20_000);
+        });
+      const mine = await dial(`ghost.${user}.${SERVICES}`);
+      const theirs = await dial(`ghost.no-such-account-${Date.now().toString(36)}.${SERVICES}`);
+      assert(!mine.secure && !theirs.secure, "the relay completed a TLS handshake for an unregistered name");
+      assert(Math.abs(mine.ms - theirs.ms) < 1500, `close times differ: ${mine.ms} ms vs ${theirs.ms} ms`);
+      return `${mine.ms} ms / ${theirs.ms} ms, no handshake`;
     });
     await rec.check("GET /api/front-page returns the apex assignment", async () => {
       const r = await http(`https://${fqdn}/api/front-page`);

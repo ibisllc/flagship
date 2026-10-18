@@ -126,6 +126,8 @@ describe("handleGymTeardown under load", () => {
     const dry = await handleGymTeardown({ ...deps(cloud), dns, pause: async () => {} }, { all: true, dryRun: true });
     expect(dry.body.zoneRecords).toBe(2);
     expect(dry.body.dnsWouldDelete).toBe(1);
+    // A dry run names the records, so a live check can read an account's set.
+    expect(dry.body.dnsRecords).toEqual([{ type: "A", name: "home.gx1.gym.flagship.services" }]);
     const r = await handleGymTeardown({ ...deps(cloud), dns, pause: async () => {} }, { usernames: ["gx1"] });
     expect(r.body.dnsDeleted).toBe(1);
     expect(r.body.dnsFailed).toEqual([]);

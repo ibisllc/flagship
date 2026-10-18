@@ -97,16 +97,19 @@ Issued via DNS-01 against the .com Worker. SAN list:
 alias. `*.<server>.<user>.flagship.services` covers the canonical service
 URLs `<service>.<server>.<user>.flagship.services`.
 
-### One wildcard CNAME per user
+### One wildcard per user
 
-The .com Worker writes A/AAAA records on every server registration:
+The .com Worker writes ONE wildcard per account, at auth-code issue and on
+every server registration (idempotent):
 
-- `<server>.<user>.flagship.services` → .services anycast IP
-- `*.<server>.<user>.flagship.services` → .services anycast IP
-- `<user>.flagship.services` → .services anycast IP
-- `*.<user>.flagship.services` → .services anycast IP
+- `*.<user>.flagship.services` A + AAAA → .services anycast IP
 
-Idempotent on re-register.
+By closest-encloser synthesis it answers `<server>.<user>`,
+`<service>.<server>.<user>` and the tier-2 `<service>.<user>`; nothing is
+published per box. Steady state an account holds four records (that pair plus
+two CAA at `<user>`). Full design, threat assessment and the challenge-shield
+that keeps a box answering during DNS-01: [[wildcard-dns]]
+(`docs/wildcard-dns.md`).
 
 ### Sibling coordination
 

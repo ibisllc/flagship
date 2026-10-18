@@ -124,6 +124,8 @@ export async function handleGymTeardown(
   // The zone is shared with prod and capped (200 records on this plan), so a
   // gym run must leave nothing behind.
   let dnsDeleted = 0;
+  /** A dry run names what it would delete, so a live check can look at an account's record set. */
+  const dnsRecords: Array<{ type: string; name: string }> = [];
   const dnsFailed: string[] = [];
   /** Every record in the zone (prod's too): the zone has a record cap gym and prod share. */
   let zoneRecords: number | null = null;
@@ -147,6 +149,7 @@ export async function handleGymTeardown(
     for (const r of records.filter((x) => doomed(x.name))) {
       if (dryRun) {
         dnsDeleted += 1;
+        dnsRecords.push({ type: r.type, name: r.name });
         continue;
       }
       try {
@@ -166,7 +169,7 @@ export async function handleGymTeardown(
   }
 
   if (dryRun) {
-    return { status: 200, body: { dryRun: true, servers: listed, wouldDestroy: targets, refused, dnsWouldDelete: dnsDeleted, zoneRecords } };
+    return { status: 200, body: { dryRun: true, servers: listed, wouldDestroy: targets, refused, dnsWouldDelete: dnsDeleted, dnsRecords, zoneRecords } };
   }
   const status = failed.length || dnsFailed.length ? 502 : 200;
   return { status, body: { destroyed, failed, refused, dnsDeleted, dnsFailed, zoneRecords } };
