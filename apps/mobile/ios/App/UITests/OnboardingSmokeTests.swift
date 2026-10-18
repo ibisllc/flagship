@@ -45,7 +45,7 @@ final class OnboardingSmokeTests: XCTestCase {
         skipAnyway.tap()
 
         // 5. The empty Home — the device that opened the account holds the
-        // admin root, so it gets Add/Import a server; create the first one.
+        // admin root, so it gets Add/Restore server; create the first one.
         let addFirst = app.buttons["home-add-server"]
         XCTAssertTrue(addFirst.waitForExistence(timeout: 15), "A new account lands on Home with no servers.")
         addFirst.tap()

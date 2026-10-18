@@ -75,8 +75,7 @@ public struct HomeScreen: View {
     var onOpenPod: (PodInfo) -> Void = { _ in }
     var onAddServer: () -> Void = {}
     /// "Import a backup" in the Add/Import chooser.
-    var onImportBackup: () -> Void = {}
-    var onRestoreFromPeers: () -> Void = {}
+    var onRestoreFromBackup: () -> Void = {}
     /// "Co-manage a running server": accept a server another account shares
     /// (docs/share-a-server.md), from the Add/Import chooser.
     var onCoManage: () -> Void = {}
@@ -147,8 +146,7 @@ public struct HomeScreen: View {
         onCancelServer: @escaping (PodInfo) -> Void = { _ in },
         onDeleteServer: @escaping (PodInfo) -> Void = { _ in },
         onAddServer: @escaping () -> Void = {},
-        onImportBackup: @escaping () -> Void = {},
-        onRestoreFromPeers: @escaping () -> Void = {},
+        onRestoreFromBackup: @escaping () -> Void = {},
         onCoManage: @escaping () -> Void = {},
         onMakeLeader: @escaping (PodInfo) -> Void = { _ in },
         onReorder: @escaping ([String]) -> Void = { _ in },
@@ -182,8 +180,7 @@ public struct HomeScreen: View {
         self.canChangeServers = canChangeServers
         self.onOpenPod = onOpenPod
         self.onAddServer = onAddServer
-        self.onImportBackup = onImportBackup
-        self.onRestoreFromPeers = onRestoreFromPeers
+        self.onRestoreFromBackup = onRestoreFromBackup
         self.onCoManage = onCoManage
         self.onMakeLeader = onMakeLeader
         self.onReorder = onReorder
@@ -652,7 +649,7 @@ public struct HomeScreen: View {
         Button(action: { showAddOrImport = true }) {
             HStack(spacing: 8) {
                 Image(systemName: "plus.circle.fill").foregroundColor(c.accent)
-                Text("Add/Import a server").font(FS.font.scaled(15, weight: .semibold)).foregroundColor(c.text)
+                Text("Add/Restore server").font(FS.font.scaled(15, weight: .semibold)).foregroundColor(c.text)
                 Spacer()
             }
             .padding(.horizontal, FS.space.s4)
@@ -663,15 +660,13 @@ public struct HomeScreen: View {
         }
         .buttonStyle(FSPressStyle())
         .accessibilityIdentifier("home-add-server")
-        .confirmationDialog("Add/Import a server", isPresented: $showAddOrImport, titleVisibility: .visible) {
-            Button("Create a new server") { onAddServer() }
+        .confirmationDialog("Add/Restore server", isPresented: $showAddOrImport, titleVisibility: .visible) {
+            Button("Create a server") { onAddServer() }
                 .accessibilityIdentifier("home-add-new-server")
             Button("Co-manage a running server") { onCoManage() }
                 .accessibilityIdentifier("home-co-manage")
-            Button("Import a backup") { onImportBackup() }
-                .accessibilityIdentifier("home-import-backup")
-            Button("Restore from other servers") { onRestoreFromPeers() }
-                .accessibilityIdentifier("home-restore-from-peers")
+            Button("Restore from backup") { onRestoreFromBackup() }
+                .accessibilityIdentifier("home-restore-backup")
             Button("Cancel", role: .cancel) {}
         }
     }

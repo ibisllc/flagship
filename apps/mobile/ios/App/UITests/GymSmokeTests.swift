@@ -36,7 +36,7 @@ final class GymSmokeTests: XCTestCase {
     func test_gymColdLaunchRendersHome() throws {
         let app = XCUIApplication()
         // The smoke-mode seam: skip onboarding, seed DemoFixtures, land on Home.
-        // `-smoke-admin-root`: only an admin device sees Add/Import a server.
+        // `-smoke-admin-root`: only an admin device sees Add/Restore server.
         app.launchArguments = ["-smoke-mode", "-smoke-tab", "home", "-smoke-admin-root"]
         app.launch()
 

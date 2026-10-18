@@ -110,7 +110,7 @@ final class GymEveryMergeTests: XCTestCase {
     /// and assert the disk-encryption toggle. Renders against the mock client;
     /// no backend.
     func test_createServerFormReachable() throws {
-        // Only an admin device sees Add/Import a server: play one.
+        // Only an admin device sees Add/Restore server: play one.
         let app = launch(tab: "home", extra: ["-smoke-admin-root"])
         let addServer = app.buttons["home-add-server"]
         XCTAssertTrue(addServer.waitForExistence(timeout: 15), "Home should show add-server.")
@@ -140,16 +140,14 @@ final class GymEveryMergeTests: XCTestCase {
 
     // ─── Backup/clone server: import and backup (docs/server-backup-and-clone.md) ──
 
-    /// Add/Import a server → Import a backup opens the restore flow at its
+    /// Add/Restore server → Import a backup opens the restore flow at its
     /// first step: pick the two files.
     func test_importBackupOpensTheRestoreFlow() throws {
         let app = launch(tab: "home", extra: ["-smoke-admin-root"])
         let addServer = app.buttons["home-add-server"]
-        XCTAssertTrue(addServer.waitForExistence(timeout: 15), "Home should show Add/Import a server.")
+        XCTAssertTrue(addServer.waitForExistence(timeout: 15), "Home should show Add/Restore server.")
         addServer.tap()
-        let importBackup = app.buttons.matching(identifier: "home-import-backup").firstMatch
-        XCTAssertTrue(importBackup.waitForExistence(timeout: 10), "Add/Import should offer Import a backup.")
-        importBackup.tap()
+        app.chooseRestoreSource("file")
         XCTAssertTrue(app.buttons["import-backup-choose"].waitForExistence(timeout: 10), "Import a backup should start by picking the files.")
         XCTAssertTrue(app.staticTexts["import-backup-files"].exists || app.otherElements["import-backup-files"].exists,
                       "It should say which files are picked and which are missing.")
@@ -169,11 +167,11 @@ final class GymEveryMergeTests: XCTestCase {
     }
 
     /// A device without the account's admin root is not an admin device: Home
-    /// lists the servers but offers no Add/Import a server (and so no menu).
+    /// lists the servers but offers no Add/Restore server (and so no menu).
     func test_nonAdminHomeHasNoAddServer() throws {
         let app = launch(tab: "home")
         XCTAssertTrue(app.staticTexts["Your servers"].waitForExistence(timeout: 15), "Home should list the seeded servers.")
-        XCTAssertFalse(app.buttons["home-add-server"].exists, "Only an admin device sees Add/Import a server.")
+        XCTAssertFalse(app.buttons["home-add-server"].exists, "Only an admin device sees Add/Restore server.")
         XCTAssertFalse(app.buttons["home-add-new-server"].exists)
         gymShot(app, "home-non-admin")
     }

@@ -321,9 +321,7 @@ final class GymSweepServerTests: GymSweepCase {
     func test_importBackupAsANewServerReachesTheCreateScreen() throws {
         let app = launchServer(["-smoke-import-archive"])
         app.buttons["home-add-server"].tap()
-        let importBackup = app.buttons.matching(identifier: "home-import-backup").firstMatch
-        XCTAssertTrue(importBackup.waitForExistence(timeout: 10))
-        importBackup.tap()
+        app.chooseRestoreSource("file")
         let name = app.textFields["import-backup-name"]
         XCTAssertTrue(name.waitForExistence(timeout: 20), "A backup no server waits for asks for a name.")
         XCTAssertEqual(value(name), "attic", "It suggests the saved server's name.")
@@ -346,7 +344,7 @@ final class GymSweepServerTests: GymSweepCase {
     func test_importBackupFromAnotherAccountAsksForItsPasscode() throws {
         let app = launchServer(["-smoke-import-archive", "other"])
         app.buttons["home-add-server"].tap()
-        app.buttons.matching(identifier: "home-import-backup").firstMatch.tap()
+        app.chooseRestoreSource("file")
         let passcode = app.secureTextFields["import-backup-passcode"]
         XCTAssertTrue(passcode.waitForExistence(timeout: 20), "Another account's backup asks for its passcode.")
         let unlock = app.buttons["import-backup-unlock"]
@@ -966,9 +964,7 @@ final class GymSweepServerTests: GymSweepCase {
         let add = app.buttons["home-add-server"]
         XCTAssertTrue(add.waitForExistence(timeout: 20))
         add.tap()
-        let door = app.buttons.matching(identifier: "home-restore-from-peers").firstMatch
-        XCTAssertTrue(door.waitForExistence(timeout: 10), "Add/Import a server offers Restore from other servers.")
-        door.tap()
+        app.chooseRestoreSource("peers")
         let lost = app.textFields["restore-peers-lost"]
         XCTAssertTrue(lost.waitForExistence(timeout: 10))
         lost.tap()
@@ -993,7 +989,7 @@ final class GymSweepServerTests: GymSweepCase {
         let add = app.buttons["home-add-server"]
         XCTAssertTrue(add.waitForExistence(timeout: 20))
         add.tap()
-        app.buttons.matching(identifier: "home-restore-from-peers").firstMatch.tap()
+        app.chooseRestoreSource("peers")
         let lost = app.textFields["restore-peers-lost"]
         XCTAssertTrue(lost.waitForExistence(timeout: 10))
         lost.tap()
@@ -1024,9 +1020,7 @@ final class GymSweepServerTests: GymSweepCase {
         let add = app.buttons["home-add-server"]
         XCTAssertTrue(add.waitForExistence(timeout: 20))
         add.tap()
-        let importBackup = app.buttons.matching(identifier: "home-import-backup").firstMatch
-        XCTAssertTrue(importBackup.waitForExistence(timeout: 10))
-        importBackup.tap()
+        app.chooseRestoreSource("file")
         let err = any(app, "import-backup-error")
         XCTAssertTrue(err.waitForExistence(timeout: 15))
         XCTAssertEqual(err.label, "This backup is cut short: it ends before its data.")

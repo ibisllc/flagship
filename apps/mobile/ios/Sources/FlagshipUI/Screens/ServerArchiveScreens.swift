@@ -155,6 +155,8 @@ struct ImportBackupContainer: View {
     let targetFqdn: String?
     /// Restore from other servers (docs/peer-backup.md) instead of picking a file.
     var fromPeers = false
+    /// A backup already on this phone (a saved phone copy): opened as if picked.
+    var preselectedFile: URL? = nil
     /// The create screen made a server (put it on Home like any new server).
     let onServerCreated: (_ serverDomain: String, _ serial: String, _ name: String) -> Void
     let onClose: () -> Void
@@ -231,8 +233,9 @@ struct ImportBackupContainer: View {
                 )
                 // Gym-only: the file a `-smoke-restore-*` launch prepared (the
                 // system file picker can't be driven from a test).
+                if let preselectedFile { await vm?.choose([preselectedFile]) }
                 #if DEBUG
-                if let file = GymSweepSeams.importFile {
+                if preselectedFile == nil, let file = GymSweepSeams.importFile {
                     GymSweepSeams.importFile = nil
                     await vm?.choose([file])
                 }

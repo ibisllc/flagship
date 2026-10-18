@@ -180,6 +180,24 @@ extension GymSweepSeams {
                 mocks.screens.restoreWaiting = ServerRestoreWaiting(archiveId: restoreArchiveId, bytes: made.dataBytes, sha256: made.sha256)
             }
         }
+        // `-smoke-phone-copies`: the phone keeps one saved copy of the attic
+        // server's backup (Restore from backup → From this phone).
+        if args.contains("-smoke-phone-copies") {
+            let fqdn = "attic.bright-maple.flagship.services"
+            if let made = try? makeBackupFile(server: fqdn) {
+                let store = PhoneBackupStore.shared
+                store.remember(.init(fqdn: fqdn, policy: "phone", reserveBytes: 32 << 30))
+                let dir = store.root.appendingPathComponent(fqdn).appendingPathComponent("gym-copy-1", isDirectory: true)
+                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let file = dir.appendingPathComponent("attic.flagship")
+                try? FileManager.default.removeItem(at: file)
+                try? FileManager.default.copyItem(at: made.url, to: file)
+                let size = ((try? FileManager.default.attributesOfItem(atPath: file.path)[.size]) as? NSNumber)?.int64Value ?? 0
+                let copy = PhoneBackupStore.Copy(archiveId: "gym-copy-1", createdAt: now - day, bytes: size, fileName: "attic.flagship")
+                try? JSONEncoder().encode(copy).write(to: dir.appendingPathComponent("copy.json"))
+                mocks.screens.restoreWaiting = ServerRestoreWaiting(archiveId: restoreArchiveId, bytes: made.dataBytes, sha256: made.sha256)
+            }
+        }
         builderPairClient = args.contains("-smoke-builder-peer") ? GymBuilderPairClient() : nil
     }
 

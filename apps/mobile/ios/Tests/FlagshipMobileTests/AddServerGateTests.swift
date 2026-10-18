@@ -35,6 +35,10 @@ final class AddServerGateTests: XCTestCase {
         XCTAssertTrue(HomeRoute.acceptShare(shareId: "s", secretHex: "k").addsServerToAccount)
         XCTAssertTrue(HomeRoute.importBackup(targetFqdn: nil).addsServerToAccount)
         XCTAssertTrue(HomeRoute.importBackup(targetFqdn: "home.harry.flagship.services").addsServerToAccount)
+        XCTAssertTrue(HomeRoute.restoreFromPeers.addsServerToAccount)
+        XCTAssertTrue(HomeRoute.restoreFromBackup.addsServerToAccount)
+        XCTAssertTrue(HomeRoute.restoreFromPhone.addsServerToAccount)
+        XCTAssertTrue(HomeRoute.importPhoneCopy(path: "/tmp/a.flagship").addsServerToAccount)
     }
 
     func test_everythingElseOnHomeIsNot() {

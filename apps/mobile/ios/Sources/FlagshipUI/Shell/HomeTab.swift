@@ -159,8 +159,7 @@ public struct HomeTab: View {
                         pendingDeletePod = pod
                     },
                     onAddServer: { path.append(.provisionServer) },
-                    onImportBackup: { path.append(.importBackup(targetFqdn: nil)) },
-                    onRestoreFromPeers: { path.append(.restoreFromPeers) },
+                    onRestoreFromBackup: { path.append(.restoreFromBackup) },
                     onCoManage: { path.append(.acceptShare(shareId: nil, secretHex: nil)) },
                     onMakeLeader: { pod in
                         Task { await saveServerOrder { await $0.makeLeader(podId: pod.podId) } }
@@ -396,6 +395,23 @@ public struct HomeTab: View {
                                onLeft: { path.removeAll() })
         case .sharedApp(let shareId, let serviceId):
             SharedAppScreen(shareId: shareId, serviceId: serviceId)
+        case .restoreFromBackup:
+            RestoreSourceScreen(
+                onFile: { path.append(.importBackup(targetFqdn: nil)) },
+                onPeers: { path.append(.restoreFromPeers) },
+                onPhone: { path.append(.restoreFromPhone) }
+            )
+        case .restoreFromPhone:
+            PhoneBackupsScreen(onPick: { path.append(.importPhoneCopy(path: $0.path)) })
+        case .importPhoneCopy(let filePath):
+            ImportBackupContainer(
+                targetFqdn: nil,
+                preselectedFile: URL(fileURLWithPath: filePath),
+                onServerCreated: { serverDomain, serial, name in
+                    addPendingPod(name: name, description: "", fqdn: serverDomain, serial: serial, navigateHome: false)
+                },
+                onClose: { path.removeAll() }
+            )
         case .restoreFromPeers:
             ImportBackupContainer(
                 targetFqdn: nil,

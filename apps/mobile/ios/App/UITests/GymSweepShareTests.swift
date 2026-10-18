@@ -240,7 +240,7 @@ final class GymSweepShareTests: GymSweepCase {
         XCTAssertTrue(add.waitForExistence(timeout: 15))
         add.tap()
         let coManage = app.buttons.matching(identifier: "home-co-manage").firstMatch
-        XCTAssertTrue(coManage.waitForExistence(timeout: 10), "Add/Import offers Co-manage a running server.")
+        XCTAssertTrue(coManage.waitForExistence(timeout: 10), "Add/Restore offers Co-manage a running server.")
         coManage.tap()
         XCTAssertTrue(app.navigationBars["Shared server"].waitForExistence(timeout: 15))
 

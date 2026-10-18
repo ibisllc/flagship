@@ -36,7 +36,7 @@ final class GymSweepHomeTests: GymSweepCase {
         start.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)))
     }
 
-    // MARK: Add/Import a server
+    // MARK: Add/Restore server
 
     /// The menu's other choices: Cancel does nothing, Co-manage opens the
     /// accept-a-share screen, Import opens the restore flow.
@@ -65,9 +65,91 @@ final class GymSweepHomeTests: GymSweepCase {
 
         XCTAssertTrue(add.waitForExistence(timeout: 10))
         add.tap()
-        app.buttons.matching(identifier: "home-import-backup").firstMatch.tap()
+        app.chooseRestoreSource("file")
         XCTAssertTrue(app.buttons["import-backup-choose"].waitForExistence(timeout: 10),
                       "Import a backup starts by picking the files.")
+    }
+
+    // MARK: Restore from backup
+
+    /// The menu is Create a server, Co-manage a running server, Restore from
+    /// backup. Restore opens a chooser (a file, other servers, this phone), each
+    /// with one line; "From this phone" lists the phone's saved copies.
+    func test_restoreFromBackupChoosesASource() throws {
+        let app = launch(admin: true, ["-smoke-import-archive", "-smoke-phone-copies"])
+        let add = app.buttons["home-add-server"]
+        XCTAssertTrue(add.waitForExistence(timeout: 20))
+        XCTAssertEqual(add.label, "Add/Restore server")
+        add.tap()
+        XCTAssertTrue(app.buttons.matching(identifier: "home-add-new-server").firstMatch.waitForExistence(timeout: 10))
+        XCTAssertEqual(app.buttons.matching(identifier: "home-add-new-server").firstMatch.label, "Create a server")
+        XCTAssertTrue(app.buttons.matching(identifier: "home-co-manage").firstMatch.exists)
+        XCTAssertTrue(app.buttons.matching(identifier: "home-restore-backup").firstMatch.exists)
+        XCTAssertFalse(app.buttons.matching(identifier: "home-import-backup").firstMatch.exists, "Import a backup is part of Restore now.")
+        XCTAssertFalse(app.buttons.matching(identifier: "home-restore-from-peers").firstMatch.exists, "So is Restore from other servers.")
+        shot(app, "restore-menu")
+        app.buttons.matching(identifier: "home-restore-backup").firstMatch.tap()
+        for source in ["file", "peers", "phone"] {
+            XCTAssertTrue(app.buttons["restore-source-\(source)"].waitForExistence(timeout: 10), "The chooser offers \(source).")
+        }
+        XCTAssertTrue(text(app, containing: "A .flagship backup file").exists)
+        XCTAssertTrue(text(app, containing: "other Flagship servers keep").exists)
+        XCTAssertTrue(text(app, containing: "this phone keeps").exists)
+        shot(app, "restore-chooser")
+        app.buttons["restore-source-phone"].tap()
+        let copy = app.buttons["restore-phone-copy-attic"]
+        XCTAssertTrue(copy.waitForExistence(timeout: 10), "The phone lists its saved copy by server.")
+        XCTAssertTrue(copy.label.contains("attic"), "Got: \(copy.label)")
+        shot(app, "restore-phone-copies")
+        copy.tap()
+        XCTAssertTrue(app.textFields["import-backup-name"].waitForExistence(timeout: 20),
+                      "A phone copy opens like a picked file: it asks for the new server's name.")
+    }
+
+    /// With no saved copy, From this phone says why.
+    func test_restoreFromThisPhoneWithNoCopiesSaysSo() throws {
+        let app = launch(admin: true)
+        app.buttons["home-add-server"].tap()
+        app.chooseRestoreSource("phone")
+        XCTAssertTrue(any(app, "restore-phone-empty").waitForExistence(timeout: 10))
+    }
+
+    // MARK: Locking closes everything presented
+
+    /// A menu that was open when the app locked must not stay on screen or
+    /// operable over the lock screen, and must not come back on unlock.
+    func test_lockDismissesAnOpenMenuAndItDoesNotReturn() throws {
+        let app = launch(admin: true, ["-smoke-lock-after-s", "9", "-smoke-unlock-after-s", "4"])
+        let add = app.buttons["home-add-server"]
+        XCTAssertTrue(add.waitForExistence(timeout: 20))
+        add.tap()
+        let create = app.buttons.matching(identifier: "home-add-new-server").firstMatch
+        XCTAssertTrue(create.waitForExistence(timeout: 10), "The menu is open.")
+        XCTAssertTrue(app.buttons["lock-unlock-btn"].waitForExistence(timeout: 25), "The app locks.")
+        XCTAssertFalse(create.exists, "Nothing of the menu is on screen while locked.")
+        XCTAssertFalse(app.buttons.matching(identifier: "home-restore-backup").firstMatch.exists)
+        XCTAssertEqual(app.sheets.count + app.alerts.count + app.popovers.count, 0, "No dialog is left over the lock screen.")
+        shot(app, "locked-no-menu")
+        waitGone(app.buttons["lock-unlock-btn"], timeout: 25)
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons.matching(identifier: "home-add-new-server").firstMatch.exists, "The menu does not re-present on unlock.")
+        add.tap()
+        XCTAssertTrue(app.buttons.matching(identifier: "home-add-new-server").firstMatch.waitForExistence(timeout: 10),
+                      "The button still works after a lock and unlock.")
+    }
+
+    /// The same for a sheet.
+    func test_lockDismissesAnOpenSheet() throws {
+        let app = launch(tab: "settings", admin: true, ["-smoke-lock-after-s", "9", "-smoke-unlock-after-s", "4"])
+        let row = app.buttons["settings-edit-account-name"]
+        XCTAssertTrue(row.waitForExistence(timeout: 20))
+        row.tap()
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "The name sheet is open.")
+        XCTAssertTrue(app.buttons["lock-unlock-btn"].waitForExistence(timeout: 25), "The app locks.")
+        XCTAssertFalse(app.textFields.firstMatch.exists, "The sheet's field is not on screen while locked.")
+        waitGone(app.buttons["lock-unlock-btn"], timeout: 25)
+        XCTAssertFalse(app.textFields.firstMatch.waitForExistence(timeout: 3), "The sheet does not come back on unlock.")
     }
 
     // MARK: Filters and search
@@ -128,7 +210,7 @@ final class GymSweepHomeTests: GymSweepCase {
     /// drag handle, and the pending page says why it can't cancel.
     func test_nonAdminDeviceIsNotOfferedServerOrders() throws {
         let app = launch(admin: false, ["-smoke-pod-keys", "-smoke-pending-pod"])
-        XCTAssertFalse(app.buttons["home-add-server"].waitForExistence(timeout: 10), "No Add/Import a server.")
+        XCTAssertFalse(app.buttons["home-add-server"].waitForExistence(timeout: 10), "No Add/Restore server.")
         XCTAssertTrue(app.staticTexts["home-servers-admin-only"].waitForExistence(timeout: 10),
                       "Home says the servers are read-only on this device.")
         openMenu(app, on: "Office")

@@ -267,4 +267,21 @@ final class PolishShotsTests: GymSweepCase {
         sleep(2)
         snap("79-create-account")
     }
+
+    /// iPad only: tap the sidebar rows and dump what the tap found.
+    func test_zzSidebarTapDebug() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad)
+        let app = launch(tab: "home")
+        let rows = app.descendants(matching: .any).matching(NSPredicate(format: "identifier == %@", "ipad-sidebar")).allElementsBoundByIndex
+        var lines = ["sidebar elements: \(rows.count)"]
+        for r in rows { lines.append("\(r.elementType.rawValue) '\(r.label)' hittable=\(r.isHittable) frame=\(r.frame)") }
+        let row = app.descendants(matching: .any).matching(NSPredicate(format: "identifier == %@ AND label == %@", "ipad-sidebar", "Services")).firstMatch
+        lines.append("found Services: \(row.exists)")
+        if row.exists { row.tap() }
+        sleep(2)
+        lines.append("nav bars: \(app.navigationBars.allElementsBoundByIndex.map { $0.identifier })")
+        lines.append(app.debugDescription)
+        let a = XCTAttachment(string: lines.joined(separator: "\n")); a.lifetime = .keepAlways; add(a)
+        try? lines.joined(separator: "\n").write(toFile: (outDir?.path ?? "/tmp") + "/sidebar-debug.txt", atomically: true, encoding: .utf8)
+    }
 }

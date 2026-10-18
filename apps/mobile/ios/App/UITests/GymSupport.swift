@@ -18,13 +18,24 @@ extension XCUIApplication {
         navigationBars[title].descendants(matching: .any).matching(identifier: "BackButton").firstMatch
     }
 
-    /// "Add/Import a server" asks which: pick "Create a new server".
+    /// "Add/Restore server" asks which: pick "Create a new server".
     func chooseAddNewServer(file: StaticString = #filePath, line: UInt = #line) {
         // The dialog nests the button in a button with the same id.
         let add = buttons.matching(identifier: "home-add-new-server").firstMatch
-        XCTAssertTrue(add.waitForExistence(timeout: 10), "Add/Import should offer Create a new server.",
+        XCTAssertTrue(add.waitForExistence(timeout: 10), "Add/Restore should offer Create a new server.",
                       file: file, line: line)
         add.tap()
+    }
+
+    /// Add/Restore server → Restore from backup → a source:
+    /// `file` | `peers` | `phone` (the menu must be open).
+    func chooseRestoreSource(_ source: String, file: StaticString = #filePath, line: UInt = #line) {
+        let door = buttons.matching(identifier: "home-restore-backup").firstMatch
+        XCTAssertTrue(door.waitForExistence(timeout: 10), "Add/Restore server should offer Restore from backup.", file: file, line: line)
+        door.tap()
+        let option = buttons.matching(identifier: "restore-source-\(source)").firstMatch
+        XCTAssertTrue(option.waitForExistence(timeout: 10), "Restore from backup should offer \(source).", file: file, line: line)
+        option.tap()
     }
 
     /// The Backups step preselects nothing and Continue stays off until the

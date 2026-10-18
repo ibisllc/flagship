@@ -8,11 +8,10 @@ import FlagshipAPI
 /// iPhone (compact): bottom TabView; each tab owns its own
 /// NavigationStack(path:).
 ///
-/// iPad (regular): custom HStack-based sidebar + main panel. We avoid
-/// nesting NavigationStack inside NavigationSplitView's detail column —
-/// SwiftUI asserts on `NavigationColumnState.boundPathChange` when the
-/// sidebar selection changes a tab that owns a bound path, so we
-/// sidestep the conflict by composing the layout manually.
+/// iPad (regular): a NavigationSplitView whose sidebar lists the
+/// destinations and whose detail keeps every visited destination alive (each
+/// owns its own NavigationStack, so a server page opened on Home is still open
+/// after a visit to Services).
 public struct RootShell: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.scenePhase) private var scenePhase
@@ -229,6 +228,12 @@ public struct RootShell: View {
                 runAutoPair()
             } else {
                 autoPair?.resetForNewUnlock()
+                // Everything presented over the shell goes with the lock.
+                pendingRedeem = nil
+                pendingKnock = nil
+                pendingAccept = nil
+                pendingBackupApproval = nil
+                PresentationSweeper.dismissAll()
             }
         }
         // Slice B — the pod list loads asynchronously (after unlock on a cold

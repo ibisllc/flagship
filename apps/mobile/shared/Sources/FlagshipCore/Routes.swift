@@ -35,6 +35,13 @@ public enum HomeRoute: Hashable, Sendable {
     /// Restore a lost server from the pieces other servers keep
     /// (docs/peer-backup.md): Add/Import a server → Restore from other servers.
     case restoreFromPeers
+    /// Home's one "Restore from backup": the chooser of where the backup is
+    /// (a file, other servers, this phone).
+    case restoreFromBackup
+    /// The saved phone copies the backup policy keeps, by server and date.
+    case restoreFromPhone
+    /// Import one of those phone copies (the file's path inside the app's storage).
+    case importPhoneCopy(path: String)
 
     public var builderLink: String? {
         if case .provisionServerForBuilder(let link) = self { return link }
@@ -46,7 +53,8 @@ public enum HomeRoute: Hashable, Sendable {
     /// open them.
     public var addsServerToAccount: Bool {
         switch self {
-        case .provisionServer, .provisionServerForBuilder, .transferAcquirer, .acceptShare, .importBackup, .restoreFromPeers: return true
+        case .provisionServer, .provisionServerForBuilder, .transferAcquirer, .acceptShare, .importBackup, .restoreFromPeers,
+             .restoreFromBackup, .restoreFromPhone, .importPhoneCopy: return true
         case .serverDetail, .installProgress, .sharedServer, .sharedApp: return false
         }
     }

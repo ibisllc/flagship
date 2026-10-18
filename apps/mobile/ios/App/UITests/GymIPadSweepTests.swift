@@ -98,7 +98,7 @@ final class GymIPadSweepTests: GymSweepCase {
         shot(app, "ipad-landscape")
     }
 
-    /// Add/Import a server is a popover on iPad: no Cancel button, a tap
+    /// Add/Restore server is a popover on iPad: no Cancel button, a tap
     /// outside closes it without going anywhere, and its choices still work.
     func test_addImportIsAPopoverClosedByTappingOutside() throws {
         let app = launch(tab: "home")
@@ -107,7 +107,7 @@ final class GymIPadSweepTests: GymSweepCase {
         add.tap()
         let create = app.buttons.matching(identifier: "home-add-new-server").firstMatch
         XCTAssertTrue(create.waitForExistence(timeout: 10), "The choices show.")
-        XCTAssertTrue(app.buttons.matching(identifier: "home-import-backup").firstMatch.exists)
+        XCTAssertTrue(app.buttons.matching(identifier: "home-restore-backup").firstMatch.exists)
         XCTAssertFalse(button(app, "Cancel").exists, "A popover has no Cancel button.")
         XCTAssertLessThan(create.frame.width, window(app).width / 2, "The choices sit in a popover, not an action sheet.")
         shot(app, "ipad-add-import-popover")

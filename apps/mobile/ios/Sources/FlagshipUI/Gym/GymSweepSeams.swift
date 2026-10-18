@@ -44,6 +44,23 @@ public struct GymMocks {
 public enum GymSweepSeams {
     public static func apply(args: [String], app: AppState, operations: ActiveOperationsCenter, mocks: GymMocks) {
         resetAiKeys()
+        // `-smoke-lock-after-s N [-smoke-unlock-after-s M]`: lock the app N seconds
+        // after launch (the lock is otherwise only reachable from Settings, which
+        // can't be tapped while a menu is open) and optionally unlock M seconds later.
+        if let lockAfter = value(args, "-smoke-lock-after-s").flatMap(Double.init) {
+            let unlockAfter = value(args, "-smoke-unlock-after-s").flatMap(Double.init)
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(lockAfter))
+                app.lock()
+                if let unlockAfter {
+                    try? await Task.sleep(for: .seconds(unlockAfter))
+                    app.markUnlocked()
+                }
+            }
+        }
+        // The phone's saved backup copies: every launch starts with none.
+        UserDefaults.standard.removeObject(forKey: "flagship.phoneBackup.servers")
+        try? FileManager.default.removeItem(at: PhoneBackupStore.shared.root)
         // The create form's draft (including the backup pick) lives in
         // UserDefaults: every launch starts with nothing chosen.
         CreateServerDraftStore().reset()

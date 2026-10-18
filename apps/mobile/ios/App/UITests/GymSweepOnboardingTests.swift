@@ -106,7 +106,7 @@ final class GymSweepOnboardingTests: GymSweepCase {
     }
 
     /// Typing the demo account's name opens its sandbox: the demo server on
-    /// Home, and Add/Import a server (a demo account's device stands in for
+    /// Home, and Add/Restore server (a demo account's device stands in for
     /// its owner).
     func test_joinTheDemoAccountOpensItsSandbox() throws {
         let app = launchOnboarding()
@@ -193,7 +193,7 @@ final class GymSweepOnboardingTests: GymSweepCase {
     /// Create your account: Try another changes the handle (after its
     /// cooldown); the account and device names are typed; Skip for now
     /// warns and Back keeps the step; Save a backup file opens the account
-    /// backup sheet, and Done there lands on Home with Add/Import a server
+    /// backup sheet, and Done there lands on Home with Add/Restore server
     /// (the opener holds the admin root). Creates a real account on the
     /// simulator (mock `.com` only).
     func test_createRegeneratesTheHandleAndBacksUpToAFile() throws {
