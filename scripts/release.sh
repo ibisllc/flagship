@@ -44,6 +44,7 @@ RESULTS_BRANCH="device-results/windows-2026-10-17"
 COM_URL="https://flagshipserver.com"
 SERVICES_URL="https://flagship.services"
 WEBAPP_URL="https://webapp.flagshipserver.com"
+REMOTE_URL="https://remote.flagshipserver.com"
 BOOT_URL="https://boot.flagshipserver.com"
 SHIM_URL="https://inference.flagshipserver.com"
 export PATH="$HOME/.fly/bin:$PATH"
@@ -195,7 +196,7 @@ meta_gym() {
   RUNBOOK="6. Gym refresh and live verification of the root wildcard (GATE: nothing deploys to prod until this passes)"
   REQUIRED=1
   OUTWARD=0
-  WHAT="Prints the gym go/no-go checklist; this script cannot verify it, so you type 'verified' once the gym run is green on the commit you will deploy."
+  WHAT="Prints the gym go/no-go checklist; this script cannot verify it, so you type 'verified' once the gym run is green on the commit you will deploy. The static-only webapp Worker is NOT exercised by the gym: the .com post-checks are its first real test."
   read -r -d '' CMDS <<'EOF' || true
 (you run, in another terminal, from the shared checkout, when no other live run is in progress:)
   bash scripts/gym-refresh.sh
@@ -206,18 +207,22 @@ EOF
   ROLLBACK="No-go blocks the prod deploys: fix on main, rerun gym-refresh, run again."
 }
 meta_backup() {
-  TITLE="D1 backup prerequisites (GitHub Actions workflow)"
-  RUNBOOK="14. Free vs Paid (Workers plan)"
-  WHAT="Checks the repo secrets, the age recipient and the R2 bucket, runs d1-backup.yml once and verifies the object exists (or prints the manual instructions while the workflow is not on main yet)."
+  TITLE="D1 backup prerequisites: bucket, secrets, age key, first backup (BEFORE .com)"
+  RUNBOOK="1b. Free-plan prerequisites: GitHub secrets, the backup bucket, the first backup"
+  WHAT="Follows runbook step 1b: the private bucket with its 30-day rule on d1/daily/, the two repo secrets, a real age public key, then runs d1-backup.yml and model-capabilities.yml once and verifies latest.json. The .com deploy removes the Worker's own backup, so this MUST be done before it; the .com step refuses without it."
   read -r -d '' CMDS <<'EOF' || true
-gh secret list                      (needs CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID)
-cat .maintainers/backup-recipient.pub   (must be an age recipient, not the placeholder)
-wrangler r2 bucket list             (needs flagship-d1-backups)
+gh secret list                      (names CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID)
+cat .maintainers/backup-recipient.pub   (a real age1... public key, not the placeholder)
+wrangler r2 bucket list             (flagship-d1-backups)
+wrangler r2 bucket lifecycle list flagship-d1-backups           (the d1/daily/ 30 day rule)
+(if absent, on your yes:) wrangler r2 bucket create flagship-d1-backups
+                          wrangler r2 bucket lifecycle add flagship-d1-backups expire-daily d1/daily/ --expire-days 30
 gh workflow run d1-backup.yml --ref main ; gh run watch <id> --exit-status
-wrangler r2 object get flagship-d1-backups/<key> --remote --file <tmp>
+wrangler r2 object get flagship-d1-backups/latest.json --file <tmp> --remote      (takenAt fresh, tables > 0, key under d1/daily/)
+gh workflow run model-capabilities.yml --ref main ; gh run watch <id> --exit-status
 EOF
-  GATE="The workflow run is green and the backup object exists with a size above 0."
-  ROLLBACK="A backup object can be deleted from R2; nothing else changes."
+  GATE="d1-backup.yml is green and latest.json is fresh (taken in the last 15 minutes) with a key under d1/daily/; model-capabilities.yml is green."
+  ROLLBACK="None needed: the workflows only read D1 and write the new bucket."
 }
 meta_migrations() {
   TITLE="Pending D1 migrations (check, apply, stamp the ledger)"
@@ -234,12 +239,15 @@ EOF
 }
 meta_com() {
   TITLE="Deploy .com (Cloudflare Worker) and check it"
-  RUNBOOK="7. Deploy \`.com\`"
+  RUNBOOK="7. Deploy \`.com\` (two Workers)"
   REQUIRED=1
-  WHAT="Runs 'npm run deploy' in apps/com from the clean worktree (clean rebuild, route-safety, migration drift gates) once the wildcard exists, then probes health, shell version, notices, the account-not-found answer, the boot route, the shim, and runs zone-health (now deployed) as a post-check."
+  WHAT="Runs 'npm run deploy' in apps/com in the foreground of your terminal: the guards, then the NEW static-only Worker flagship-webapp, then flagship-com. The first run moves the webapp. and remote. custom domains and wrangler ASKS to confirm: answer yes. Refuses without the D1 backup step. Then probes the webapp and remote hosts (200, strict CSP), the tree's shell version, the marketing page, health, notices, account-not-found, the boot route, the shim, and runs zone-health as a post-check."
   read -r -d '' CMDS <<'EOF' || true
 (cd apps/com && wrangler deployments list)         (the rollback target)
-(cd apps/com && npm run deploy)
+(cd apps/com && npm run deploy)     (flagship-webapp first, then flagship-com; answer YES to the custom-domain prompt; no pipe, no redirect)
+curl -sI https://webapp.flagshipserver.com/ ; curl -sI https://remote.flagshipserver.com/    (200 and a strict content-security-policy)
+curl -s -o /dev/null -w "%{http_code}" https://webapp.flagshipserver.com/lib/no-such-file.js (404 from the static-only Worker)
+curl -s -o /dev/null -w "%{http_code}" https://flagshipserver.com/                          (the marketing page, 200)
 curl -s -o /dev/null -w "%{http_code}" https://flagshipserver.com/api/health
 curl -s https://webapp.flagshipserver.com/service-worker.js | grep "^const SHELL_VERSION"     (equals the tree's)
 curl -s -o /dev/null -w "%{http_code}" https://flagshipserver.com/api/notices        (204 until a notice is signed)
@@ -249,8 +257,8 @@ curl -s https://inference.flagshipserver.com/healthz                            
 curl -sI https://flagshipserver.com/ | grep -i "x-frame-options\|strict-transport"
 npm run zone-health                                                                  (post-check: wildcard + CAA lines must be OK; legacy account records are listed until the reap; admin secret)
 EOF
-  GATE="health 200, the live shell version equals the tree's, notices 204, account-not-found 404, boot route 404, framing headers present."
-  ROLLBACK="(cd apps/com && wrangler deployments list && wrangler rollback <version-id>): code only; D1 and custom domains are untouched."
+  GATE="webapp. and remote. answer 200 with the strict CSP, the live shell version equals the tree's, / answers, health 200, notices 204, account-not-found 404, boot route 404, framing headers present."
+  ROLLBACK="Move of the webapp hosts: put the two custom_domain lines for webapp. and remote. back in the routes array of apps/com/wrangler.toml (git history has them) and deploy flagship-com (answer yes at the prompt). Code: (cd apps/com && wrangler deployments list && wrangler rollback <version-id>), which leaves custom domains and D1 untouched."
 }
 meta_cpu() {
   TITLE="Watch for exceededCpu (60 s tail while you use the app)"
@@ -431,7 +439,7 @@ EOF
 }
 meta_redeployB() {
   TITLE="Redeploy .com with everything pushed in phase B"
-  RUNBOOK="7. Deploy \`.com\`"
+  RUNBOOK="7. Deploy \`.com\` (two Workers)"
   WHAT="One deploy that carries the notice, the Studio download URLs, the DMG and the arm64 manifest, with the post-checks and the download redirects."
   read -r -d '' CMDS <<'EOF' || true
 (cd apps/com && npm run deploy)
@@ -629,6 +637,30 @@ console.log(c.length&&c.every(x=>x==="success")?"success":(c[0]||""))})'
 # flyctl ips list output on stdin; $1 = v4, $2 = v6 (may be empty) -> exit 0 when both are listed
 ips_agree() { local t; t=$(cat); echo "$t" | grep -qF "$1" && { [ -z "${2:-}" ] || echo "$t" | grep -qF "$2"; }; }
 
+# .maintainers/backup-recipient.pub on stdin -> exit 0 when it holds a real age public key (not the placeholder)
+age_recipient_ok() {
+  local k; k=$(grep -v '^[[:space:]]*#' | sed '/^[[:space:]]*$/d' | head -1 | tr -d '[:space:]')
+  [[ "$k" =~ ^age1[0-9a-z]{50,}$ ]]
+}
+
+# gh run list --json databaseId,createdAt (any status) + ISO time $1 -> id of the newest run created at/after it
+newest_run_since() {
+  node -e '
+const t=Date.parse(process.argv[1]);let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+const r=JSON.parse(s).filter(x=>Date.parse(x.createdAt)>=t).sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt))[0];
+if(r)console.log(r.databaseId)})' "$1"
+}
+
+# latest.json of the D1 backup on stdin, $1 = max age in minutes -> prints a summary, exit 0 when fresh with tables and a d1/ key
+latest_json_ok() {
+  node -e '
+const max=Number(process.argv[1]);let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+let j;try{j=JSON.parse(s)}catch{console.log("not JSON");process.exit(1)}
+const age=(Date.now()-Date.parse(j.takenAt))/60000;
+console.log(`takenAt ${j.takenAt} (${Math.round(age)} min ago), tables ${j.tables}, key ${j.key}`);
+process.exit(age>=0&&age<=max&&Number(j.tables)>0&&/^d1\//.test(String(j.key))?0:1)})' "$1"
+}
+
 # file names on stdin -> the ones under a box path
 box_files_in() {
   local f p keep
@@ -783,6 +815,15 @@ com_checks() {
   local want got i; want=$(shell_version "$WT")
   for i in 1 2 3 4 5 6; do got=$(live_shell_version); [ "$got" = "$want" ] && break; sleep 5; done
   if [ "$got" = "$want" ] && [ -n "$want" ]; then ok "webapp shell version $got equals the tree's"; else err "webapp shell version live '$got', tree '$want'"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
+  local host code csp
+  for host in "$WEBAPP_URL" "$REMOTE_URL"; do
+    code=$(http_code "$host/")
+    csp=$(curl -sI -m 25 "$host/" | tr -d '\r' | grep -i '^content-security-policy:' | head -1 || true)
+    if [ "$code" = 200 ] && echo "$csp" | grep -q "script-src 'self'"; then ok "$host/ answers 200 with the strict shell CSP"
+    else err "$host/ answered $code, CSP '${csp:-none}' (want 200 and script-src 'self')"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
+  done
+  probe_code "the static-only Worker's 404 for an unknown file" "$WEBAPP_URL/lib/no-such-file.js" 404
+  probe_code "marketing page" "$COM_URL/" 200
   local n; n=$(http_code "$COM_URL/api/notices")
   if [ "$n" = 204 ]; then ok "notices: 204 (none signed)"; elif [ "$n" = 200 ]; then ok "notices: 200 (a notice is published)"; else err "notices: $n"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
   probe_code "account-not-found" "$COM_URL/api/users/zz-no-such-account-release-probe/pods" 404
@@ -809,6 +850,15 @@ com_deploy() { # deploy the pinned commit from the worktree
   say "  deploying $(short "$PIN") (shell $(shell_version "$WT"))"
   say "  current deployments (the rollback target is the previous one):"
   ( cd "$WT/apps/com" && WR deployments list 2>&1 | tail -14 ) | sed 's/^/    /' || true
+  cat <<'EOF'
+
+  'npm run deploy' now deploys TWO Workers: the static-only flagship-webapp first, then flagship-com.
+  The FIRST run moves the webapp. and remote. custom domains from flagship-com to flagship-webapp, and
+  wrangler will ask "Custom Domains already exist for these domains ... Update them to point to this
+  script instead?": answer YES. It runs in the foreground of this terminal (nothing is piped), so the
+  prompt reaches you. If you answer no, the hostnames stay on flagship-com and the webapp keeps working
+  from the old Worker; rerun the step to be asked again.
+EOF
   confirm "Deploy .com now ('npm run deploy' in apps/com)?" || return 10
   XA "$WT/apps/com" npm run deploy
   st_w set comDeployedSha "$PIN"
@@ -1000,6 +1050,12 @@ run_gym() {
         https://flagship-services-gym.fly.dev:8443/api/health answer 200
   NO-GO (any red, a missing certificate, a dark name): do not deploy; fix on main,
   gym-refresh, run again.
+
+  NOT COVERED BY THE GYM: the static-only webapp Worker (flagship-webapp, apps/webapp-static)
+  that now serves webapp. and remote.flagshipserver.com. The gym Worker still serves the
+  webapp itself, so the .com deploy's post-checks (step 12) are the FIRST real test of that
+  path: the custom-domain move, the strict CSP from _headers, the 404 for unknown files.
+  Stay at the terminal for that deploy.
 EOF
   say "  pinned commit: $(short "$PIN")"
   local a; a=$(ask_word "Type the word  verified  once every box above is true")
@@ -1008,56 +1064,59 @@ EOF
   st_w set gymVerifiedSha "$PIN"
 }
 
+dispatch_and_wait() { # dispatch_and_wait workflow.yml  -> 0 when the run it started is green
+  local wf=$1 t0 id i
+  t0=$(date -u -v-30S +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '-30 seconds' +%Y-%m-%dT%H:%M:%SZ)
+  XA "$WT" gh workflow run "$wf" --ref main
+  for i in 1 2 3 4 5 6; do
+    sleep 6
+    id=$( (cd "$WT" && gh run list --workflow "$wf" --event workflow_dispatch --json databaseId,createdAt --limit 5 2>/dev/null) | newest_run_since "$t0" || true)
+    [ -n "$id" ] && break
+  done
+  [ -n "$id" ] || fail "could not find the run that $wf started"
+  XA "$WT" gh run watch "$id" --exit-status
+}
+
 run_backup() {
   ensure_wt
-  local wf="$WT/.github/workflows/d1-backup.yml"
-  if [ ! -f "$wf" ]; then
-    warn ".github/workflows/d1-backup.yml is not on main yet."
-    cat <<'EOF'
-  Manual prerequisites (the backup moved off the Worker to a GitHub Actions workflow):
-    1. repo secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID  (gh secret set NAME)
-    2. an age recipient PUBLIC key in .maintainers/backup-recipient.pub (the private key stays offline)
-    3. an R2 bucket named flagship-d1-backups
-    4. run the workflow once and check an object appears
-  Until the workflow lands, take a manual export before any migration or scrub:
-    cd apps/com && wrangler d1 export flagship-state --remote --output ~/d1-backup.sql
-EOF
-    local a; a=$(ask_word "Type backup-ok when you did this by hand, or press Enter to stop")
-    [ "$a" = backup-ok ] || return 10
-    return 0
-  fi
-  local names; names=$( (cd "$WT" && gh secret list 2>/dev/null) | gh_secret_names || true)
-  local s bad=0
-  for s in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
-    if echo "$names" | grep -qx "$s"; then ok "repo secret $s exists"; else err "repo secret $s is missing (gh secret set $s)"; bad=1; fi
+  local wf
+  for wf in d1-backup.yml model-capabilities.yml; do
+    [ -f "$WT/.github/workflows/$wf" ] || fail ".github/workflows/$wf is not on the pinned commit: this release cannot back up D1 (the .com deploy removes the Worker's own backup)"
   done
-  local pub="$WT/.maintainers/backup-recipient.pub"
-  if [ -f "$pub" ] && grep -q '^age1[0-9a-z]\{20,\}' "$pub" && ! grep -qi 'placeholder\|replace\|todo\|example' "$pub"; then
-    ok ".maintainers/backup-recipient.pub looks like a real age recipient"
-  else err ".maintainers/backup-recipient.pub is missing or still the placeholder"; bad=1; fi
-  if WRQ r2 bucket list 2>/dev/null | grep -q 'flagship-d1-backups'; then ok "R2 bucket flagship-d1-backups exists"; else err "R2 bucket flagship-d1-backups not found (wrangler r2 bucket create flagship-d1-backups)"; bad=1; fi
+  local bad=0 names s
+  names=$( (cd "$WT" && gh secret list 2>/dev/null) | gh_secret_names || true)
+  for s in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+    if echo "$names" | grep -qx "$s"; then ok "repo secret $s exists"; else err "repo secret $s is missing (repo Settings > Secrets and variables > Actions; runbook step 1b.2-3: a token with D1 Edit + Workers R2 Storage Edit only)"; bad=1; fi
+  done
+  if age_recipient_ok < "$WT/.maintainers/backup-recipient.pub"; then ok ".maintainers/backup-recipient.pub holds a real age public key"
+  else err ".maintainers/backup-recipient.pub is still the placeholder (runbook step 1b.4: age-keygen offline, commit the single age1... line to main, then re-run with a new pin)"; bad=1; fi
   [ "$bad" = 0 ] || return 11
-  confirm "Run d1-backup.yml once on main and verify the object?" || return 10
-  local t0; t0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  XA "$WT" gh workflow run d1-backup.yml --ref main
-  sleep 8
-  local id
-  id=$(cd "$WT" && gh run list --workflow d1-backup.yml --event workflow_dispatch --limit 3 --json databaseId,createdAt -q "[.[]|select(.createdAt>=\"$t0\")][0].databaseId" 2>/dev/null || true)
-  [ -n "$id" ] || fail "could not find the dispatched run"
-  XA "$WT" gh run watch "$id" --exit-status
-  local key; key=$(cd "$WT" && gh run view "$id" --log 2>/dev/null | grep -o 'flagship-d1-backups/[A-Za-z0-9._/-]*' | tail -1 || true)
-  if [ -n "$key" ]; then
-    local tmp; tmp=$(mktemp "$RELEASE_HOME/backup.XXXXXX")
-    WRX r2 object get "$key" --remote --file "$tmp"
-    local size; size=$(wc -c < "$tmp" | tr -d ' ')
-    rm -f "$tmp"
-    [ "$size" -gt 0 ] || fail "the backup object $key is empty"
-    ok "backup object $key exists ($size bytes)"
+  if WRQ r2 bucket list 2>/dev/null | grep -q 'flagship-d1-backups'; then ok "R2 bucket flagship-d1-backups exists"
   else
-    warn "the object key is not in the run log; check R2 flagship-d1-backups in the dashboard"
-    [ "$(ask_word "Type backup-ok once you see the new object")" = backup-ok ] || return 11
+    warn "R2 bucket flagship-d1-backups does not exist"
+    confirm "Create it (private, no public access) with the 30 day rule on d1/daily/?" || return 10
+    WRX r2 bucket create flagship-d1-backups
+    WRX r2 bucket lifecycle add flagship-d1-backups expire-daily d1/daily/ --expire-days 30
   fi
+  local rules; rules=$(WRQ r2 bucket lifecycle list flagship-d1-backups 2>&1 || true)
+  echo "$rules" | sed 's/^/    /'
+  if echo "$rules" | grep -q 'd1/daily/'; then ok "a lifecycle rule covers d1/daily/"
+  else
+    warn "no lifecycle rule on d1/daily/ was found in that output"
+    if confirm "Add the rule (expire-daily, d1/daily/, 30 days)?"; then WRX r2 bucket lifecycle add flagship-d1-backups expire-daily d1/daily/ --expire-days 30; else return 11; fi
+  fi
+  say "  This runs the backup workflow on GitHub (exports prod D1, age-encrypts, uploads to R2) and the model capability refresh once."
+  confirm "Run d1-backup.yml now?" || return 10
+  dispatch_and_wait d1-backup.yml
+  local tmp; tmp=$(mktemp "$RELEASE_HOME/latest.XXXXXX")
+  ( cd "$WT/apps/com" && WR r2 object get flagship-d1-backups/latest.json --file "$tmp" --remote >/dev/null 2>&1 ) || { rm -f "$tmp"; fail "could not read flagship-d1-backups/latest.json"; }
+  if latest_json_ok 15 < "$tmp" | sed 's/^/    /'; then :; fi
+  if latest_json_ok 15 < "$tmp" >/dev/null; then ok "latest.json is fresh with a key under d1/daily/"; else rm -f "$tmp"; fail "latest.json is stale or malformed: the backup did not land"; fi
+  rm -f "$tmp"
+  confirm "Run model-capabilities.yml once (about 350 model rows into D1)?" || return 10
+  dispatch_and_wait model-capabilities.yml
   st_w set d1BackupAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  ok "backup prerequisites done: the .com deploy may now remove the Worker's own backup"
 }
 
 run_migrations() {
@@ -1085,6 +1144,11 @@ run_migrations() {
 run_com() {
   require_gym_gate || return $?
   require_done migrations services dns || return 10
+  if ! st_has done "$(step_index backup)" && [ -z "$(st_get d1BackupAt)" ]; then
+    err "the D1 backup prerequisites (step $(step_index backup)) are not recorded. This deploy REMOVES the Worker's own D1 backup: without them there is no backup at all (Time Travel's 7 days is the only net)."
+    [ "$(ask_word "Type  no-backup-accepted  to deploy anyway, or press Enter to stop")" = no-backup-accepted ] || return 10
+    st_w set noBackupAccepted "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  fi
   com_deploy || return $?
   com_checks zone
 }

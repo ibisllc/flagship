@@ -1,0 +1,15 @@
+# PLACEHOLDER: the D1 backup refuses to run until this file holds a real age PUBLIC key.
+#
+# What the owner does (docs/runbooks/final-deploy.md step 1b), once, on an offline Mac:
+#
+#   brew install age                      (or apt install age)
+#   age-keygen -o d1-backup-key.txt       prints "Public key: age1..." ; the file is the PRIVATE identity
+#   # store d1-backup-key.txt OFFLINE, twice (password manager attachment and a printed or USB copy).
+#   # Without it no backup can ever be read. Never put it in this repo, in GitHub, or in R2.
+#
+# Then replace THIS WHOLE FILE (delete these comment lines) with the single public line:
+#
+#   age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+#
+# and commit it to main. The public key can be shared; only the private file decrypts.
+# scripts/d1-backup.sh and scripts/release.sh check for a line starting "age1".

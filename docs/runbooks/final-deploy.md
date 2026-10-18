@@ -55,6 +55,14 @@ phase B. What it cannot do for you: the gym run (it prints the checklist and you
 tools ask on `/dev/tty`), the App Store Connect and Play Console submissions, and
 reading the Windows results (typed `windows-ok` before the scrub).
 
+Two things to know before `--phase A`: step 8 (backup prerequisites, runbook step 1b) must be
+done before the `.com` deploy because that deploy removes the Worker's own D1 backup, and the
+`.com` step refuses without it unless you type `no-backup-accepted`; and the `.com` deploy
+(`npm run deploy`) runs in the foreground of your terminal because wrangler asks to move the
+`webapp.` and `remote.` custom domains to the new `flagship-webapp` Worker (answer yes). The gym
+does not exercise that static-only Worker, so that deploy's post-checks are its first real test:
+stay at the terminal.
+
 Set up a clean deploy tree once and reuse it for every step that builds:
 
 ```sh

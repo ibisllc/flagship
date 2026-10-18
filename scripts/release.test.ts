@@ -98,11 +98,11 @@ describe("release.sh", () => {
     const r = run(env, ["--list"]);
     const sections = [...r.out.matchAll(/runbook: (\S+?)\. /g)].map((m) => m[1]);
     // 0 ready | 1 plan | 2 lease | 3 endorse | 9 appliance builds start after the endorsement
-    // | 5 secrets | 6 gym | 14 backup | 4 migrations (after the gym gate and a fresh backup)
+    // | 5 secrets | 6 gym | 1b backup prerequisites | 4 migrations (after the gym gate and a fresh backup)
     // | 8 .services FIRST | 6a DNS wildcard (before .com: the new .com writes no per-box records)
     // | 7 .com (+ zone-health post-check) | 14 cpu watch | 9 publish | 9 redeploy | 9 status ...
     expect(sections).toEqual([
-      "0", "1", "2", "3", "9", "5", "6", "14", "4", "8", "6a", "7", "14", "9", "9", "9",
+      "0", "1", "2", "3", "9", "5", "6", "1b", "4", "8", "6a", "7", "14", "9", "9", "9",
       "12", "12", "12", "12", "10", "10", "9", "7", "11", "11", "13",
     ]);
     // every referenced heading exists verbatim in the runbook
@@ -112,6 +112,8 @@ describe("release.sh", () => {
     // gym gate before any prod change; DNS after the deploys; scrub after DNS; reap after scrub
     const idx = (needle: string) => planSteps(r.out).find((s) => s.title.includes(needle))!.n;
     expect(idx("Gym gate")).toBeLessThan(idx("Pending D1 migrations"));
+    expect(idx("D1 backup prerequisites")).toBeLessThan(idx("Pending D1 migrations"));
+    expect(idx("D1 backup prerequisites")).toBeLessThan(idx("Deploy .com"));
     expect(idx("Pending D1 migrations")).toBeLessThan(idx("Deploy .services"));
     expect(idx("Deploy .services")).toBeLessThan(idx("Cloudflare DNS by hand"));
     expect(idx("Cloudflare DNS by hand")).toBeLessThan(idx("Deploy .com"));
@@ -140,6 +142,12 @@ describe("release.sh", () => {
     expect(r.out).toContain("flyctl deploy --remote-only --strategy=immediate --yes -a flagship-services");
     expect(r.out).toContain("endorse-release.mjs --to <PIN> --from <endorsed> --sign");
     expect(r.out).toContain("wrangler tail flagship-com --format json");
+    // the two-Worker deploy: terminal-attached, domain prompt, webapp/remote post-checks, backup first
+    expect(r.out).toContain("answer YES to the custom-domain prompt");
+    expect(r.out).toContain("curl -sI https://webapp.flagshipserver.com/ ; curl -sI https://remote.flagshipserver.com/");
+    expect(r.out).toContain("gh workflow run model-capabilities.yml --ref main");
+    expect(r.out).toContain("wrangler r2 bucket lifecycle add flagship-d1-backups expire-daily d1/daily/ --expire-days 30");
+    expect(r.out).toContain("put the two custom_domain lines for webapp. and remote. back");
     // .services, then the DNS wildcard (dig only), then .com with zone-health as its post-check
     expect(r.out.indexOf("flyctl deploy --remote-only")).toBeLessThan(r.out.indexOf("dig +short A anything-at-all"));
     expect(r.out.indexOf("dig +short A anything-at-all")).toBeLessThan(r.out.indexOf("(cd apps/com && npm run deploy)"));
@@ -223,6 +231,13 @@ echo "open=$(phase_open A | wc -w | tr -d ' ')"`;
     const pushes = [...SOURCE.matchAll(/push origin (\S+)/g)].map((m) => m[1]!.replace(/["')?]+$/, "").replace(/^"/, ""));
     expect(pushes.length).toBeGreaterThan(3);
     for (const p of pushes) expect(p).toMatch(/^HEAD:(main|refs\/heads\/(\$RESULTS_BRANCH|device-results\/windows-2026-10-17))$/);
+  });
+
+  it("runs npm run deploy attached to the terminal and refuses .com without the backup", () => {
+    expect(SOURCE).toMatch(/XA "\$WT\/apps\/com" npm run deploy\n/); // foreground: not piped, not redirected, not tee'd
+    expect(SOURCE).not.toMatch(/npm run deploy\s*(\||>|2>)/);
+    expect(SOURCE).toContain("no-backup-accepted");
+    expect(SOURCE).toContain("answer YES");
   });
 
   it("never prints or stores the admin secret", () => {
@@ -323,6 +338,31 @@ describe("release.sh parsers against captured tool output", () => {
     expect(sh(`ips_agree ${v4} ${v6}`, ips).code).toBe(0);
     expect(sh(`ips_agree 1.2.3.4 ${v6}`, ips).code).toBe(1);
     expect(sh(`ips_agree ${v4} 2001:db8::1`, ips).code).toBe(1);
+  });
+
+  it("backup-recipient.pub: the placeholder is refused, a real age key is accepted", () => {
+    expect(readFileSync(join(ROOT, ".maintainers/backup-recipient.pub"), "utf8").length).toBeGreaterThan(0);
+    expect(sh("age_recipient_ok", fx("backup-recipient.placeholder.pub")).code).toBe(1);
+    expect(sh("age_recipient_ok", fx("backup-recipient.valid.synthetic.pub")).code).toBe(0);
+    expect(sh("age_recipient_ok", "age1short\n").code).toBe(1);
+    expect(sh("age_recipient_ok", "").code).toBe(1);
+  });
+
+  it("the run a workflow dispatch started -> its id", () => {
+    expect(sh("newest_run_since 2026-10-18T19:00:00Z", fx("gh-run-list.json")).out).toBe("39160505562");
+    expect(sh("newest_run_since 2026-10-18T18:00:00Z", fx("gh-run-list.json")).out).toBe("39160505562");
+    expect(sh("newest_run_since 2027-01-01T00:00:00Z", fx("gh-run-list.json")).out).toBe("");
+  });
+
+  it("latest.json of the backup: fresh and keyed, else refused (synthetic shape from the runbook)", () => {
+    const at = (min: number) => new Date(Date.now() - min * 60000).toISOString();
+    const good = JSON.stringify({ takenAt: at(2), tables: 89, key: "d1/daily/2026-10-18.sql.gz.age" });
+    expect(sh("latest_json_ok 15", good).code).toBe(0);
+    expect(sh("latest_json_ok 15", good).out).toContain("tables 89");
+    expect(sh("latest_json_ok 15", JSON.stringify({ takenAt: at(300), tables: 89, key: "d1/daily/x" })).code).toBe(1);
+    expect(sh("latest_json_ok 15", JSON.stringify({ takenAt: at(2), tables: 0, key: "d1/daily/x" })).code).toBe(1);
+    expect(sh("latest_json_ok 15", JSON.stringify({ takenAt: at(2), tables: 89, key: "other/x" })).code).toBe(1);
+    expect(sh("latest_json_ok 15", "not json").code).toBe(1);
   });
 
   it("git diff names -> box files and test filters", () => {
