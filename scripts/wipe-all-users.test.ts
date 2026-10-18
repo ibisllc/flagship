@@ -4,7 +4,7 @@ import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// Guard tests for the prod-wipe runner (CLAUDE.md → "GA close-out TODO" item 1).
+// Guard tests for the prod-wipe runner (AGENTS.md → "GA close-out" item 1).
 // The script can delete every user/server; the guards make it require BOTH a
 // --yes AND a WIPE_CONFIRM token that matches the target env, with a dry-run
 // row-count preview first. These tests must NEVER touch a real DB, so a stub
@@ -72,6 +72,14 @@ function run(
   return { code: r.status ?? -1, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
 }
 
+function readCalls(): string {
+  try {
+    return readFileSync(callLog, "utf8");
+  } catch {
+    return "";
+  }
+}
+
 function deleteCalls(): string[] {
   let log = "";
   try {
@@ -82,9 +90,67 @@ function deleteCalls(): string[] {
   return log.split("\n").filter((l) => l.includes("DELETE FROM"));
 }
 
+const GYM = { WIPE_ENV: "gym", WIPE_D1: "flagship-state-gym" };
+const PROD = { WIPE_ENV: "prod", WIPE_D1: "flagship-state" };
+
+/** Run under a pseudo-terminal (stdin is a TTY) and feed `typed` to the prompt. */
+function runWithTty(
+  typed: string,
+  env: Record<string, string>,
+): { code: number; out: string } {
+  const py = [
+    "import os, pty, sys, select",
+    "typed = sys.argv[2].encode()",
+    "pid, fd = pty.fork()",
+    "if pid == 0:",
+    "    os.execvp('bash', ['bash', sys.argv[1], '--yes'])",
+    "out = b''",
+    "sent = False",
+    "while True:",
+    "    r, _, _ = select.select([fd], [], [], 30)",
+    "    if not r: break",
+    "    try: d = os.read(fd, 4096)",
+    "    except OSError: break",
+    "    if not d: break",
+    "    out += d",
+    "    if not sent and b'to continue' in out:",
+    "        os.write(fd, typed); sent = True",
+    "_, st = os.waitpid(pid, 0)",
+    "sys.stdout.write(out.decode(errors='replace'))",
+    "sys.exit(os.waitstatus_to_exitcode(st))",
+  ].join("\n");
+  const r = spawnSync("python3", ["-I", "-c", py, SCRIPT, typed], {
+    encoding: "utf8",
+    timeout: 60_000,
+    env: { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ""}`, ...env },
+  });
+  return { code: r.status ?? -1, out: (r.stdout ?? "") + (r.stderr ?? "") };
+}
+
 describe("wipe-all-users.sh — guards", () => {
-  it("default (no args) is a dry run: previews, deletes NOTHING", () => {
+  it("with no WIPE_ENV / WIPE_D1 it refuses: nothing defaults to prod", () => {
     const r = run([]);
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("WIPE_ENV and WIPE_D1 are both required");
+    expect(readCalls()).toBe("");
+    const r2 = run(["--yes"], { WIPE_CONFIRM: "prod" });
+    expect(r2.code).toBe(1);
+    expect(readCalls()).toBe("");
+    const r3 = run([], { WIPE_ENV: "gym" });
+    expect(r3.code).toBe(1);
+    const r4 = run([], { WIPE_D1: "flagship-state" });
+    expect(r4.code).toBe(1);
+    expect(readCalls()).toBe("");
+  });
+
+  it("--help works without a target and prints the guards", () => {
+    const r = run(["--help"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("GUARDS");
+  });
+
+  it("default (target named, no --yes) is a dry run: previews, deletes NOTHING", () => {
+    const r = run([], GYM);
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("wipe preview");
     expect(r.stdout).toContain("DRY RUN");
@@ -92,14 +158,13 @@ describe("wipe-all-users.sh — guards", () => {
   });
 
   it("the preview reports a row total from the counts", () => {
-    const r = run([]);
-    // Each table stub returns 7; total is reported.
+    const r = run([], GYM);
     expect(r.stdout).toMatch(/would delete ~\d+ row\(s\)/);
     expect(r.stdout).toContain("row(s)");
   });
 
   it("--yes WITHOUT WIPE_CONFIRM refuses before any delete", () => {
-    const r = run(["--yes"], { WIPE_CONFIRM: "", WIPE_ENV: "prod" });
+    const r = run(["--yes"], { ...GYM, WIPE_CONFIRM: "" });
     expect(r.code).toBe(1);
     expect(r.stderr).toContain("REFUSING TO WIPE");
     expect(r.stderr).toContain("WIPE_CONFIRM must equal the target env");
@@ -107,80 +172,76 @@ describe("wipe-all-users.sh — guards", () => {
   });
 
   it("--yes with a MISMATCHED WIPE_CONFIRM refuses (gym token, prod target)", () => {
-    const r = run(["--yes"], { WIPE_CONFIRM: "gym", WIPE_ENV: "prod" });
+    const r = run(["--yes"], { ...PROD, WIPE_CONFIRM: "gym" });
     expect(r.code).toBe(1);
     expect(r.stderr).toContain("REFUSING TO WIPE");
     expect(deleteCalls()).toHaveLength(0);
   });
 
-  it("--yes with a MATCHING WIPE_CONFIRM proceeds to the delete loop + audits", () => {
-    const r = run(["--yes"], { WIPE_CONFIRM: "prod", WIPE_ENV: "prod" });
+  it("the gym path works with its own env + token + D1 and audits", () => {
+    const r = run(["--yes"], { ...GYM, WIPE_CONFIRM: "gym" });
     expect(r.code).toBe(0);
+    expect(r.stdout).toContain("target env : gym");
     expect(r.stdout).toContain("AUDIT");
     expect(r.stdout).toContain("WIPE START");
     expect(r.stdout).toContain("WIPE DONE");
-    // It actually issued DELETEs (one per table in the canonical .sql).
-    const dels = deleteCalls();
-    expect(dels.length).toBeGreaterThan(30);
-  });
-
-  it("the gym/dev path still works with its own env + token + D1", () => {
-    const r = run(["--yes"], {
-      WIPE_ENV: "gym",
-      WIPE_CONFIRM: "gym",
-      WIPE_D1: "flagship-state-gym",
-    });
-    expect(r.code).toBe(0);
-    expect(r.stdout).toContain("target env : gym");
-    // The configured D1 binding is the one wrangler is invoked against.
-    const log = readFileSync(callLog, "utf8");
-    expect(log).toContain("flagship-state-gym");
+    expect(readFileSync(callLog, "utf8")).toContain("flagship-state-gym");
     expect(deleteCalls().length).toBeGreaterThan(30);
   });
 
+  it("PROD with --yes and WIPE_CONFIRM=prod but no terminal refuses (CI / agents / pipes)", () => {
+    const r = run(["--yes"], { ...PROD, WIPE_CONFIRM: "prod" });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("stdin is not a terminal");
+    expect(deleteCalls()).toHaveLength(0);
+  });
+
+  it("PROD at a terminal: a wrong typed name refuses, the right one proceeds", () => {
+    const bad = runWithTty("flagship\n", { ...PROD, WIPE_CONFIRM: "prod" });
+    expect(bad.code).not.toBe(0);
+    expect(bad.out).toContain("REFUSING TO WIPE PRODUCTION");
+    expect(deleteCalls()).toHaveLength(0);
+    const good = runWithTty("flagship-state\n", { ...PROD, WIPE_CONFIRM: "prod" });
+    expect(good.out).toContain("WIPE DONE");
+    expect(good.code).toBe(0);
+    expect(deleteCalls().length).toBeGreaterThan(30);
+  });
+
+  it("PROD target with a non-prod D1 refuses", () => {
+    const r = run(["--yes"], { WIPE_ENV: "prod", WIPE_D1: "flagship-state-gym", WIPE_CONFIRM: "prod" });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("must name the prod database");
+    expect(deleteCalls()).toHaveLength(0);
+  });
+
   it("HARD-GUARD: a non-prod env pointing at the PROD D1 refuses before anything", () => {
-    // The gym/CI path must be structurally incapable of wiping flagship-state:
-    // WIPE_ENV=gym with the default (prod) WIPE_D1 exits 1 before the preview.
-    const r = run(["--yes"], { WIPE_ENV: "gym", WIPE_CONFIRM: "gym" });
+    const r = run(["--yes"], { WIPE_ENV: "gym", WIPE_CONFIRM: "gym", WIPE_D1: "flagship-state" });
     expect(r.code).toBe(1);
     expect(r.stderr).toContain("PROD database");
-    expect(deleteCalls()).toHaveLength(0);
-    // Same refusal even for an explicit WIPE_D1=flagship-state.
-    const r2 = run(["--yes"], { WIPE_ENV: "gym", WIPE_CONFIRM: "gym", WIPE_D1: "flagship-state" });
-    expect(r2.code).toBe(1);
     expect(deleteCalls()).toHaveLength(0);
   });
 
   it("WIPE_WRANGLER_CONFIG threads --config into every wrangler call", () => {
-    const r = run(["--yes"], {
-      WIPE_ENV: "gym",
-      WIPE_CONFIRM: "gym",
-      WIPE_D1: "flagship-state-gym",
-      WIPE_WRANGLER_CONFIG: "wrangler.gym.toml",
-    });
+    const r = run(["--yes"], { ...GYM, WIPE_CONFIRM: "gym", WIPE_WRANGLER_CONFIG: "wrangler.gym.toml" });
     expect(r.code).toBe(0);
-    const log = readFileSync(callLog, "utf8");
-    expect(log).toContain("--config wrangler.gym.toml");
-    // And the prod path (no override) stays config-free — behavior unchanged.
+    expect(readFileSync(callLog, "utf8")).toContain("--config wrangler.gym.toml");
   });
 
-  it("prod default carries NO --config flag (behavior unchanged)", () => {
-    run(["--yes"], { WIPE_CONFIRM: "prod", WIPE_ENV: "prod", WIPE_WRANGLER_CONFIG: "" });
-    const log = readFileSync(callLog, "utf8");
-    expect(log).not.toContain("--config");
+  it("without WIPE_WRANGLER_CONFIG no --config flag is passed", () => {
+    run(["--yes"], { ...GYM, WIPE_CONFIRM: "gym", WIPE_WRANGLER_CONFIG: "" });
+    expect(readFileSync(callLog, "utf8")).not.toContain("--config");
   });
 
   it("an unknown argument is rejected (no delete)", () => {
-    const r = run(["--nuke-everything"]);
+    const r = run(["--nuke-everything"], GYM);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("unknown argument");
     expect(deleteCalls()).toHaveLength(0);
   });
 
   it("preserves marketplace_listings (never in the DELETE set)", () => {
-    run(["--yes"], { WIPE_CONFIRM: "prod" });
-    const log = readFileSync(callLog, "utf8");
-    expect(log).not.toContain("DELETE FROM marketplace_listings");
+    run(["--yes"], { ...GYM, WIPE_CONFIRM: "gym" });
+    expect(readFileSync(callLog, "utf8")).not.toContain("DELETE FROM marketplace_listings");
   });
 });
 

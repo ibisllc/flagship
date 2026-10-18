@@ -1192,8 +1192,10 @@ first update after it (`docs/anonymous-vouchers.md`, $1 voucher unit). Detail: `
 
 ### GA close-out (do NOT do in dev)
 
-1. Guard or remove the prod-wipe script (`scripts/wipe-all-users*`); keep its
-   table list in step with migrations until then.
+1. ~~Prod-wipe script~~ guarded 2026-10-17 (`scripts/wipe-all-users.sh`: no
+   default target, env must match the database, a prod wipe needs a person
+   typing `flagship-state` at a terminal; `release-guard.sh` fails if a guard
+   goes). Keep its table list in step with migrations (a test enforces it).
 2. Remove the burn-time LUKS passphrase
    (`flagship-build-time-luks-rekey-me-immediately`) and re-enable the
    `luksRemoveKey` guard. `release-guard.sh` stays red on release tags until then.

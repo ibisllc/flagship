@@ -13,31 +13,36 @@
 # The table list is sourced from the canonical .sql so there is one source of
 # truth. PRESERVES marketplace_listings (catalog) + CF/SQLite internals.
 #
-# ── GUARDS (CLAUDE.md → "GA close-out TODO" item 1) ───────────────────────────
-# This script can delete every user + server in one command. To stop it nuking a
-# real prod DB by accident it now requires THREE things to actually delete:
-#   1. A row-count PREVIEW runs first and prints what WOULD be deleted. Without
-#      --yes the script STOPS there (a dry run); it deletes nothing.
-#   2. --yes is required to proceed past the preview.
-#   3. WIPE_CONFIRM must equal the target env name (WIPE_ENV, default "prod").
-#      This binds the operator's intent to a specific environment so a
-#      muscle-memory --yes can't wipe prod when gym was meant.
+# ── GUARDS (AGENTS.md → "GA close-out" item 1) ────────────────────────────────
+# This script can delete every user + server in one command, demo accounts and
+# the store-review account included. It cannot be pointed at a database by
+# default or by accident:
+#   1. WIPE_ENV and WIPE_D1 are REQUIRED. Nothing defaults to prod.
+#   2. The pair must be consistent: env "prod" is the PROD database
+#      (flagship-state) and nothing else; any other env must name its own D1.
+#   3. A row-count PREVIEW runs first. Without --yes the script STOPS there.
+#   4. --yes plus WIPE_CONFIRM equal to WIPE_ENV is needed to delete.
+#   5. A PROD wipe additionally needs a human at a terminal: stdin must be a
+#      TTY and the operator must TYPE the database name. No env var can answer
+#      that prompt, so CI, agents and pipes can never wipe prod.
 # An audit line (timestamp · env · D1 · operator · rows) is printed before the
-# delete and after it completes.
+# delete and after it completes. scripts/release-guard.sh fails (always, dev
+# too) if any of these guards is removed.
 #
 # Usage:
-#   # dry run (default) — preview only, deletes nothing:
-#   bash scripts/wipe-all-users.sh
-#   # really wipe PROD:
-#   WIPE_CONFIRM=prod bash scripts/wipe-all-users.sh --yes
-#   # wipe the gym/dev DB instead:
+#   # dry run (preview only, deletes nothing):
+#   WIPE_ENV=gym WIPE_D1=flagship-state-gym bash scripts/wipe-all-users.sh
+#   # wipe the gym DB:
 #   WIPE_ENV=gym WIPE_CONFIRM=gym WIPE_D1=flagship-state-gym \
+#       WIPE_WRANGLER_CONFIG=wrangler.gym.toml bash scripts/wipe-all-users.sh --yes
+#   # wipe PROD (owner at a terminal; you will be asked to type "flagship-state"):
+#   WIPE_ENV=prod WIPE_D1=flagship-state WIPE_CONFIRM=prod \
 #       bash scripts/wipe-all-users.sh --yes
 #
 # Env:
-#   WIPE_ENV      target env name (default "prod"); WIPE_CONFIRM must match it.
+#   WIPE_ENV      target env name (required); WIPE_CONFIRM must match it.
 #   WIPE_CONFIRM  must equal WIPE_ENV to authorize a real delete.
-#   WIPE_D1       wrangler D1 binding/name (default "flagship-state").
+#   WIPE_D1       wrangler D1 binding/name (required; prod is "flagship-state").
 #   WIPE_WRANGLER_CONFIG  optional wrangler --config path (e.g.
 #                 wrangler.gym.toml, relative to apps/com). Unset = prod
 #                 behavior unchanged (apps/com/wrangler.toml).
@@ -48,18 +53,33 @@ here="$(cd "$(dirname "$0")" && pwd)"
 sql="$here/wipe-all-users-prerelease-2026-06-02.sql"
 com_dir="$here/../apps/com"
 
-target_env="${WIPE_ENV:-prod}"
-d1="${WIPE_D1:-flagship-state}"
+for arg in "$@"; do
+  case "$arg" in -h|--help) sed -n '2,/^set -uo/p' "$0" | sed '$d'; exit 0 ;; esac
+done
+
+PROD_D1="flagship-state"
+target_env="${WIPE_ENV:-}"
+d1="${WIPE_D1:-}"
 wr_config="${WIPE_WRANGLER_CONFIG:-}"
 
-# HARD GUARD: a non-prod env may NEVER point at the prod D1. This makes the
-# gym/CI path structurally incapable of wiping flagship-state even when the
-# caller forgets WIPE_D1 (the default) or fat-fingers it — WIPE_CONFIRM alone
-# can't save that case because the operator DID intend a wipe, just not prod's.
-if [ "$target_env" != "prod" ] && [ "$d1" = "flagship-state" ]; then
-  echo "REFUSING TO WIPE: WIPE_ENV='$target_env' but WIPE_D1 is the PROD database (flagship-state)." >&2
+# GUARD 1: nothing defaults to prod.
+if [ -z "$target_env" ] || [ -z "$d1" ]; then
+  echo "REFUSING TO RUN: WIPE_ENV and WIPE_D1 are both required (no default target)." >&2
+  echo "  e.g. WIPE_ENV=gym WIPE_D1=flagship-state-gym bash scripts/wipe-all-users.sh" >&2
+  exit 1
+fi
+
+# GUARD 2: env and database must agree. A non-prod env may NEVER point at the
+# prod D1, and "prod" may never point at anything else (so a typo'd WIPE_ENV
+# can't borrow prod's weaker-looking path).
+if [ "$target_env" != "prod" ] && [ "$d1" = "$PROD_D1" ]; then
+  echo "REFUSING TO WIPE: WIPE_ENV='$target_env' but WIPE_D1 is the PROD database ($PROD_D1)." >&2
   echo "A non-prod wipe must name its own D1, e.g.:" >&2
   echo "  WIPE_ENV=gym WIPE_CONFIRM=gym WIPE_D1=flagship-state-gym bash scripts/wipe-all-users.sh --yes" >&2
+  exit 1
+fi
+if [ "$target_env" = "prod" ] && [ "$d1" != "$PROD_D1" ]; then
+  echo "REFUSING TO WIPE: WIPE_ENV=prod must name the prod database WIPE_D1=$PROD_D1 (got '$d1')." >&2
   exit 1
 fi
 
@@ -69,8 +89,6 @@ for arg in "$@"; do
   case "$arg" in
     --yes|--force) proceed=1 ;;
     --dry-run) proceed=0 ;;
-    -h|--help)
-      sed -n '2,42p' "$0"; exit 0 ;;
     *)
       echo "unknown argument: $arg (try --yes, --dry-run, --help)" >&2; exit 2 ;;
   esac
@@ -122,7 +140,7 @@ echo "  → would delete ~$total row(s) across $present table(s) ($absent absent
 if [ "$proceed" -ne 1 ]; then
   echo
   echo "DRY RUN — nothing deleted. To really wipe:"
-  echo "  WIPE_CONFIRM=$target_env bash scripts/wipe-all-users.sh --yes"
+  echo "  WIPE_ENV=$target_env WIPE_D1=$d1 WIPE_CONFIRM=$target_env bash scripts/wipe-all-users.sh --yes"
   exit 0
 fi
 
@@ -132,8 +150,27 @@ if [ "$confirm" != "$target_env" ]; then
   echo "REFUSING TO WIPE: WIPE_CONFIRM must equal the target env." >&2
   echo "  target env   : $target_env" >&2
   echo "  WIPE_CONFIRM : '${confirm:-<unset>}'" >&2
-  echo "Re-run with:  WIPE_CONFIRM=$target_env bash scripts/wipe-all-users.sh --yes" >&2
+  echo "Re-run with:  WIPE_ENV=$target_env WIPE_D1=$d1 WIPE_CONFIRM=$target_env bash scripts/wipe-all-users.sh --yes" >&2
   exit 1
+fi
+
+# GUARD 5: production needs a person at a terminal typing the database name.
+if [ "$target_env" = "prod" ]; then
+  if [ ! -t 0 ]; then
+    echo >&2
+    echo "REFUSING TO WIPE PRODUCTION: stdin is not a terminal. A prod wipe needs a person" >&2
+    echo "typing the database name; no flag or environment variable can answer for them." >&2
+    exit 1
+  fi
+  echo >&2
+  echo "THIS DELETES EVERY USER AND SERVER IN PRODUCTION ($d1), demo and store-review accounts included." >&2
+  printf 'Type the database name (%s) to continue: ' "$d1" >&2
+  typed=""
+  read -r typed || true
+  if [ "$typed" != "$d1" ]; then
+    echo "REFUSING TO WIPE PRODUCTION: typed '${typed}', expected '$d1'." >&2
+    exit 1
+  fi
 fi
 
 operator="${USER:-$(id -un 2>/dev/null || echo unknown)}"

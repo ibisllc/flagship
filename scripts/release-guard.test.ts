@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -185,5 +185,30 @@ describe("release-guard.sh — against a clean tree (post-GA, backdoors removed)
       rmSync(dir, { recursive: true, force: true });
     }
     dir = "";
+  });
+
+  it("the real prod-wipe runner passes; a copy that lost a guard or defaults to prod fails even a dev build", () => {
+    const real = readFileSync(join(__dirname, "wipe-all-users.sh"), "utf8");
+    dir = makeCleanTree();
+    mkdirSync(join(dir, "scripts"), { recursive: true });
+    writeFileSync(join(dir, "scripts", "wipe-all-users.sh"), real);
+    const ok = run({ RELEASE: "", RELEASE_GUARD_ROOT: dir });
+    expect(ok.code).toBe(0);
+    expect(ok.stderr).not.toContain("prod-wipe guard removed");
+    for (const broken of [
+      real.split("stdin is not a terminal").join("x"),
+      real.split("Type the database name").join("x"),
+      real.split("WIPE_ENV and WIPE_D1 are both required").join("x"),
+      real + '\ntarget_env="${WIPE_ENV:-prod}"\n',
+    ]) {
+      writeFileSync(join(dir, "scripts", "wipe-all-users.sh"), broken);
+      const r = run({ RELEASE: "", RELEASE_GUARD_ROOT: dir });
+      expect(r.code).toBe(1);
+      expect(r.stderr).toContain("prod-wipe guard removed");
+    }
+  });
+
+  it("the real repo's wipe runner raises no finding", () => {
+    expect(run({ RELEASE: "" }).stderr).not.toContain("prod-wipe guard removed");
   });
 });
