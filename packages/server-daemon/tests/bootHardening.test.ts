@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { shouldReuseCert, shouldServeStaleCert } from "../src/acme/persistentStore.js";
 import { waitForRelay } from "../src/runtime.js";
 
-describe("a box with no relay still comes up (docs/data-sovereignty.md)", () => {
+describe("boot hardening: a box with no relay still comes up", () => {
   it("goes on after the grace period when the relay never answers", async () => {
     const started = Date.now();
     expect(await waitForRelay(() => new Promise(() => {}), 40)).toBe(false);

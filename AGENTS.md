@@ -159,6 +159,9 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   **`feat/phone-usb-burn`** (Android burns a USB stick on its own),
   **`feat/other-os-installers`** (the Ubuntu autoinstall and Debian-netboot
   installer paths `main` shed on 2026-10-18, kept for a possible multi-OS effort),
+  **`feat/data-sovereignty`** (parked 2026-10-18, not needed at launch: rescue a
+  server's data over the LAN when `.com` is gone; plan in its
+  `docs/data-sovereignty.md`),
   **`feat/custom-names`** (dibs + paid name change) and **`feat/custom-domains`**
   (custom domains as a Pro feature) and **`feat/outbound-proxy`** (a box's
   traffic through a proxy + OHTTP setup) — the last three branch OFF `feat/marketplace`
@@ -828,6 +831,10 @@ allowances (1M / 5M / 20M a month) are placeholders.
   same framing headers (`pageHeaders.ts`, `d0658fb6`), which needs an endorsed box
   release. Reporter credit pending; listed in the security page's hall of
   fame.
+- **Boot hardening (2026-10-18):** a rebooting box waits at most 60 s for the
+  relay's first HELLO_ACK (it keeps dialing in the background) and, while a new
+  certificate is requested, serves the one it holds if it names the box, even
+  inside the renewal window or past its end. Needs an endorsed box release.
 - **Box state files written whole, corrupt ones fail closed (2026-10-16):**
   every daemon state write goes through `durableFile.ts` (one queue per
   path, unique fsynced temp file; `withFileLock` for read-modify-writes). An

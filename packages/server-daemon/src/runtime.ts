@@ -139,8 +139,7 @@ export interface DaemonRuntimeOptions {
    * Called when the box serves the certificate it already holds because it
    * cannot get a new one yet (inside its renewal window, or past its end).
    * Not a new issuance: no "live" report, no status beat. The daemon uses it
-   * to know which certificate its owner's phone will see
-   * (docs/data-sovereignty.md).
+   * to know which certificate its owner's phone will see.
    */
   onCertFallback?: (cert: CertMaterial, notAfter: number, names: string[]) => void;
   /**
@@ -1159,7 +1158,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   void tunnelInitialDomains;
   // The relay is one way in, not a precondition: a box whose relay or `.com`
   // is gone must still come up and serve its owner on the LAN with the
-  // certificate it holds (docs/data-sovereignty.md). The tunnel keeps dialing
+  // certificate it holds. The tunnel keeps dialing
   // in the background and claims its domains when it connects.
   if (!(await waitForRelay(() => tunnel.ready(), opts.relayGraceMs ?? 60_000))) {
     console.warn(

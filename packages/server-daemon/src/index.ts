@@ -1304,7 +1304,7 @@ async function main(): Promise<void> {
           }
         : {}),
       // The box serves the certificate it already holds because it can't get a
-      // new one yet: say which one it is (the rescue hello names it), nothing more.
+      // new one yet: say which one it is (screens and the LAN hint use it), nothing more.
       onCertFallback: (cert, notAfter, names) => {
         liveCertInfoRef.current = liveCertInfo(cert.certPem, notAfter, names);
         liveCertPemRef.current = cert.certPem;

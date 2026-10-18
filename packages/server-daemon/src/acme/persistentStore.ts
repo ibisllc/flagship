@@ -186,7 +186,7 @@ export function shouldReuseCert(
  * or past its end) is still the best thing to show while a new one is being
  * requested, as long as it names this box: a phone that knows the box by its
  * key does not look at the date, and a browser's warning is better than a
- * handshake that fails (docs/data-sovereignty.md).
+ * handshake that fails.
  */
 export function shouldServeStaleCert(existing: PersistedCert | null, desiredSans: ReadonlyArray<string>): boolean {
   return existing !== null && sansEqual(existing.names, desiredSans);
