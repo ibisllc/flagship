@@ -28,7 +28,6 @@ import { startDaemonStatusHeartbeat, type DaemonStatusHeartbeat } from "./daemon
 import { buildSignedLanHint, hostAddresses, lanPortFromEnv, leafCertSha256 } from "./lanDirect.js";
 import { buildRescue } from "./rescue/rescue.js";
 import { buildRescueAuthorize } from "./rescue/authority.js";
-import { exportNotice } from "./rescue/exportNotice.js";
 import { DeviceRevocations } from "./deviceRevocations.js";
 import { makeRelayTrustExceptionResolver } from "./relayTrustExceptions.js";
 import { sendPushRelay, sendRelayTrustAlert } from "./relaySos.js";
@@ -3022,24 +3021,6 @@ async function wireRuntimeSurfaces(deps: {
 
   // "Backup/clone server": one sealed archive of every app, downloadable, and
   // importable onto any server of the account under any name.
-  // Every copy of the server's data that leaves it is told to the admin devices:
-  // an alert for the ones that poll, a content-free wake for the rest.
-  const exportAlert = exportNotice({
-    alert: (a) => void deps.alertInbox.emit(a),
-    ...(accessPushCfg
-      ? {
-          wake: () =>
-            sendPushRelay({
-              category: "generic",
-              targetUsername: accessPushCfg.userId,
-              signer: custodian,
-              controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
-              logTag: "[export] push",
-              log: (l) => console.log(l),
-            }),
-        }
-      : {}),
-  });
   const serverArchiveService = await (async () => {
     const platform = runtime.servicePlatform;
     if (!cfg || !platform || !env.serverFqdn) return null;
@@ -3102,7 +3083,6 @@ async function wireRuntimeSurfaces(deps: {
         log: (m) => console.log(m),
       },
       note: (kind, detail, ok) => deps.activityLog.note(kind, detail, { ok: ok ?? true }),
-      onExport: (e) => exportAlert(e),
       // A browser download needs the owner's signed approval (QR + Face ID).
       authorizeDownload: (approval, sig) =>
         authorizeSensitiveOrder({
@@ -3349,7 +3329,6 @@ async function wireRuntimeSurfaces(deps: {
             archive: serverArchiveService,
             apps: () => (runtime.servicePlatform?.list() ?? []).map((a) => ({ serviceId: a.serviceId, name: a.manifest.name })),
             note: (kind, detail, ok) => deps.activityLog.note(kind, detail, { ok: ok ?? true }),
-            onExport: (e) => exportAlert(e),
             log: (m) => console.log(m),
           })
         : null,

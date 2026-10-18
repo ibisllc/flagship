@@ -24,24 +24,16 @@ import {
   openBackupWithPasscode,
   parseBackupBundleHeader,
   parseBackupFile,
-  signAdminRootRotation,
-  signDeviceCapabilityGrant,
   signInstallService,
   signRescueSession,
-  signRevokeDeviceCapabilityGrant,
   verifyInstallService,
+  verifyRescueSession,
   wrapAccountSlot,
   wrapPasscodeSlot,
-  type DeviceCapabilityGrant,
   type Keypair,
   type RescueExchange,
 } from "@flagship/protocol";
-import { AccountDeviceBook, type ListedGrant } from "../src/accessPrincipals.js";
-import { DeviceRevocations } from "../src/deviceRevocations.js";
-import { applyDeliveredRotations, type AdminRootPin, type AdminRootPinStore } from "../src/adminRootRotationConsumer.js";
-import { buildRescueAuthorize } from "../src/rescue/authority.js";
-import { exportNotice } from "../src/rescue/exportNotice.js";
-import type { PhoneAlert } from "../src/phoneAlerts.js";
+import { authorizeSensitiveOrder } from "../src/adminAuthorityLocal.js";
 import { FilePairedSessionStore } from "../src/pairedSessionStore.js";
 import { buildRescue, RESCUE_SESSION_TTL_MS } from "../src/rescue/rescue.js";
 import { buildServerArchiveService } from "../src/serverArchive/service.js";
@@ -87,7 +79,7 @@ const fetchSpy = vi.fn(async () => {
   throw new Error("the network is unreachable (.com and .services are down)");
 });
 
-async function archiveService(dir: string, onExport?: (e: { stage: "downloaded" | "browser-approved" }) => void) {
+async function archiveService(dir: string) {
   const provisioner = new DataProvisioner({ postgres: new InMemoryPostgresAdmin(), files: new InMemoryFilesAdmin(), nameKey: "s".repeat(40) });
   const cmd: CommandRunner = { run: async () => {}, capture: async () => ({ stdout: "", stderr: "" }) };
   const platform = new ServicePlatform({
@@ -133,7 +125,6 @@ async function archiveService(dir: string, onExport?: (e: { stage: "downloaded" 
       pullImage: async () => {},
     },
     note: (kind, _d, ok = true) => void events.push({ kind, ok }),
-    ...(onExport ? { onExport } : {}),
     freeBytes: async () => 1e12,
   });
   return { svc, platform, events };
@@ -144,71 +135,31 @@ interface Rig {
   certSha: string;
   rescue: ReturnType<typeof buildRescue>;
   notes: Array<{ kind: string; ok: boolean }>;
-  alerts: PhoneAlert[];
-  /** Grants `.com` would list; push to it to "admit" a device. */
-  listed: ListedGrant[];
-  book: AccountDeviceBook;
-  revocations: DeviceRevocations;
-  pins: { current: AdminRootPin | null; restarts: number };
-  refreshBook: () => Promise<void>;
   close: () => Promise<void>;
 }
 
 /** A box: real TLS in front of the daemon's own screens handler, `adminPinned` as the config says. */
-async function startBox(opts: { adminPinned: boolean; expiredCert?: boolean; coolingMs?: number }): Promise<Rig> {
+async function startBox(opts: { adminPinned: boolean; expiredCert?: boolean; rogueFor?: (req: HttpRequest) => Promise<HttpResponse | null> }): Promise<Rig> {
   const dir = mkdtempSync(join(tmpdir(), "rescue-"));
-  const alerts: PhoneAlert[] = [];
-  const notify = exportNotice({ alert: (a) => alerts.push(a), now: () => clock });
-  const { svc, platform } = await archiveService(dir, notify);
+  const { svc, platform, events } = await archiveService(dir);
   const tlsMaterial = await selfSigned(FQDN, { expired: opts.expiredCert === true });
   const notes: Array<{ kind: string; ok: boolean }> = [];
-  const listed: ListedGrant[] = [];
-  const revocations = new DeviceRevocations({
-    path: join(dir, "device-revocations.json"),
-    username: "harry",
-    adminRootPub: () => (opts.adminPinned ? adminRoot.publicKey : undefined),
-    now: () => clock,
-  });
-  const book = new AccountDeviceBook({
-    path: join(dir, "account-devices.json"),
-    username: "harry",
-    ownerIrkPub: () => irk.publicKey,
-    adminRootPub: () => (opts.adminPinned ? adminRoot.publicKey : undefined),
-    isRevoked: (id) => revocations.has(id),
-    fetchGrants: async () => ({ grants: listed }),
-    now: () => clock,
-  });
-  revocations.subscribe((id) => void book.dropGrant(id));
-  const pins: { current: AdminRootPin | null; restarts: number } = { current: null, restarts: 0 };
-  const pinStore: AdminRootPinStore = { read: async () => pins.current, write: async (p) => void (pins.current = p) };
   const rescue = buildRescue({
     serverFqdn: FQDN,
     signAsBox: (m) => box.signAsBox(m),
     certSha256: () => leafCertSha256(tlsMaterial.cert),
-    authorize: buildRescueAuthorize({
-      irkPub: () => irk.publicKey,
-      adminRootPub: () => (opts.adminPinned ? adminRoot.publicKey : undefined),
-      username: "harry",
-      adminGrants: () => book.adminGrants(),
-      now: () => clock,
-    }),
-    ...(opts.coolingMs !== undefined ? { coolingMs: opts.coolingMs } : {}),
-    revocations,
-    rotations: async (entries) => {
-      const out = await applyDeliveredRotations({
+    authorize: (order, signature) =>
+      authorizeSensitiveOrder({
+        ownerIrkPub: irk.publicKey,
+        ...(opts.adminPinned ? { adminRootPub: adminRoot.publicKey } : {}),
         username: "harry",
-        seedAdminRootHex: opts.adminPinned ? Buffer.from(adminRoot.publicKey).toString("hex") : null,
-        pinStore,
-        entries,
-        restart: () => void pins.restarts++,
-        now: () => clock,
-      });
-      return { rotated: out.rotated, ...(out.rotated ? {} : { reason: out.reason }) };
-    },
+        order,
+        signature,
+        verify: verifyRescueSession,
+      }),
     archive: svc,
     apps: () => platform.list().map((a) => ({ serviceId: a.serviceId, name: a.manifest.name })),
     note: (kind, _d, ok = true) => void notes.push({ kind, ok }),
-    onExport: notify,
     now: () => clock,
   });
   const paired = new FilePairedSessionStore(join(dir, "paired-sessions.json"));
@@ -216,45 +167,14 @@ async function startBox(opts: { adminPinned: boolean; expiredCert?: boolean; coo
   const handler = async (req: HttpRequest): Promise<HttpResponse> => (await screens(req)) ?? { status: 404, headers: {}, body: "not found" };
   const server = tls.createServer({ cert: tlsMaterial.cert, key: tlsMaterial.key }, (s) => _handleHttpConnectionForTest(s, handler));
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
+  void events;
   return {
     port: (server.address() as AddressInfo).port,
     certSha: leafCertSha256(tlsMaterial.cert)!,
     rescue,
     notes,
-    alerts,
-    listed,
-    book,
-    revocations,
-    pins,
-    refreshBook: () => book.refresh(),
     close: () => new Promise<void>((r) => server.close(() => r())),
   };
-}
-
-/** An admin device of the account: its own key and a grant the admin root signed `ageMs` ago. */
-function admitAdminDevice(rig: Rig, seedByte: number, ageMs: number, grantId = `grant-${seedByte}-abcdef`): { key: Keypair; grant: DeviceCapabilityGrant } {
-  const key = deriveIRK({ seed: new Uint8Array(32).fill(seedByte) });
-  const grant: DeviceCapabilityGrant = {
-    grantId,
-    username: "harry",
-    deviceId: Buffer.alloc(16, seedByte).toString("hex"),
-    devicePubKey: key.publicKey,
-    scopes: ["admin"],
-    issuedAt: clock - ageMs,
-    expiresAt: clock - ageMs + 90 * 86_400_000,
-  };
-  rig.listed.push({
-    grantId,
-    username: "harry",
-    deviceId: grant.deviceId,
-    devicePubHex: Buffer.from(key.publicKey).toString("hex"),
-    scopes: ["admin"],
-    issuedAt: grant.issuedAt,
-    expiresAt: grant.expiresAt,
-    signatureHex: Buffer.from(signDeviceCapabilityGrant(grant, adminRoot)).toString("hex"),
-    signerRoot: "admin-root",
-  });
-  return { key, grant };
 }
 
 interface Reply {
@@ -544,183 +464,3 @@ describe("rescue session with .com unreachable", () => {
   });
 });
 
-
-describe("admin devices, revocation and rotation without .com", () => {
-  let rig: Rig | null = null;
-  afterEach(async () => {
-    await rig?.close();
-    rig = null;
-  });
-
-  const revoke = (grantId: string, signer: Keypair = adminRoot, issuedAt = clock) => {
-    const r = { grantId, username: "harry", reason: "stolen" as const, issuedAt };
-    return { revoke: r, signatureHex: Buffer.from(signRevokeDeviceCapabilityGrant(r, signer)).toString("hex") };
-  };
-
-  it("an admin device opens a session with its own key once its grant is 24 hours old, the admin key at once", async () => {
-    rig = await startBox({ adminPinned: true });
-    const old = admitAdminDevice(rig, 21, 25 * 3_600_000);
-    const fresh = admitAdminDevice(rig, 22, 2 * 3_600_000);
-    await rig.refreshBook();
-    expect((await openSession(rig.port, old.key)).reply.status).toBe(200);
-    const tooNew = await openSession(rig.port, fresh.key);
-    expect(tooNew.reply.status).toBe(403);
-    expect(tooNew.reply.json.code).toBe("admin-too-new");
-    expect(tooNew.reply.json.error).toMatch(/less than 24 hours ago.*about 22 more.*admin key itself/);
-    // The original key is never held back.
-    expect((await openSession(rig.port, adminRoot)).reply.status).toBe(200);
-    clock += 23 * 3_600_000;
-    expect((await openSession(rig.port, fresh.key)).reply.status).toBe(200);
-  });
-
-  it("a device with no grant, or only a membership grant, gets nothing", async () => {
-    rig = await startBox({ adminPinned: true });
-    const stranger = deriveIRK({ seed: new Uint8Array(32).fill(23) });
-    expect((await openSession(rig.port, stranger)).reply.status).toBe(403);
-    // A member-scope grant is not admin authority.
-    const key = deriveIRK({ seed: new Uint8Array(32).fill(24) });
-    const g: DeviceCapabilityGrant = { grantId: "grant-24-abcdef", username: "harry", deviceId: Buffer.alloc(16, 24).toString("hex"), devicePubKey: key.publicKey, scopes: ["browse"], issuedAt: clock - 3 * 86_400_000, expiresAt: clock + 86_400_000 };
-    rig.listed.push({ grantId: g.grantId, username: "harry", deviceId: g.deviceId, devicePubHex: Buffer.from(key.publicKey).toString("hex"), scopes: g.scopes, issuedAt: g.issuedAt, expiresAt: g.expiresAt, signatureHex: Buffer.from(signDeviceCapabilityGrant(g, adminRoot)).toString("hex") });
-    await rig.refreshBook();
-    expect((await openSession(rig.port, key)).reply.status).toBe(403);
-  });
-
-  it("a revocation the admin key delivers directly applies at once, kills that device's open sessions, and survives .com listing the grant again", async () => {
-    rig = await startBox({ adminPinned: true });
-    const dev = admitAdminDevice(rig, 31, 3 * 86_400_000);
-    await rig.refreshBook();
-    const open = await openSession(rig.port, dev.key);
-    expect(open.reply.status).toBe(200);
-    const other = await openSession(rig.port, adminRoot);
-    expect((await request(rig.port, "GET", "/api/rescue/server", { headers: auth(open.token) })).status).toBe(200);
-
-    const r = await request(rig.port, "POST", "/api/rescue/revoke", { body: revoke(dev.grant.grantId) });
-    expect(r.status).toBe(200);
-    // The race: a session opened a moment before is dead the moment the box has the order.
-    expect((await request(rig.port, "GET", "/api/rescue/server", { headers: auth(open.token) })).status).toBe(401);
-    expect((await request(rig.port, "GET", "/api/rescue/server", { headers: auth(other.token) })).status).toBe(200);
-    expect((await openSession(rig.port, dev.key)).reply.status).toBe(403);
-    // `.com` lists the grant again (stale, or lying): nothing changes.
-    await rig.refreshBook();
-    expect(rig.listed.some((g) => g.grantId === dev.grant.grantId)).toBe(true);
-    expect((await openSession(rig.port, dev.key)).reply.status).toBe(403);
-    expect(rig.revocations.has(dev.grant.grantId)).toBe(true);
-    expect(rig.notes.map((n) => n.kind)).toContain("server.device.revoked");
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it("a revocation survives a restart of the box", async () => {
-    rig = await startBox({ adminPinned: true });
-    const dev = admitAdminDevice(rig, 32, 3 * 86_400_000);
-    await request(rig.port, "POST", "/api/rescue/revoke", { body: revoke(dev.grant.grantId) });
-    const again = new DeviceRevocations({ path: (rig.revocations as unknown as { opts: { path: string } }).opts.path, username: "harry", adminRootPub: () => adminRoot.publicKey });
-    await again.load();
-    expect(again.has(dev.grant.grantId)).toBe(true);
-  });
-
-  it("only the admin key can revoke: not a device, not the IRK, not a forged or misdirected order", async () => {
-    rig = await startBox({ adminPinned: true });
-    const dev = admitAdminDevice(rig, 33, 3 * 86_400_000);
-    const victim = admitAdminDevice(rig, 34, 3 * 86_400_000);
-    await rig.refreshBook();
-    for (const body of [
-      revoke(victim.grant.grantId, dev.key),
-      revoke(victim.grant.grantId, irk),
-      revoke(victim.grant.grantId, deriveIRK({ seed: new Uint8Array(32).fill(99) })),
-      { ...revoke(victim.grant.grantId), revoke: { ...revoke(victim.grant.grantId).revoke, grantId: dev.grant.grantId } },
-      revoke(victim.grant.grantId, adminRoot, clock + 60 * 60_000),
-      { revoke: { grantId: 5 }, signatureHex: "00" },
-    ]) {
-      expect((await request(rig.port, "POST", "/api/rescue/revoke", { body })).status).toBeGreaterThanOrEqual(400);
-    }
-    expect(rig.revocations.list()).toEqual([]);
-    expect((await openSession(rig.port, victim.key)).reply.status).toBe(200);
-    // A box that pins no admin key can't revoke a device this way.
-    await rig.close();
-    rig = await startBox({ adminPinned: false });
-    expect((await request(rig.port, "POST", "/api/rescue/revoke", { body: revoke("grant-35-abcdef") })).status).toBe(403);
-  });
-
-  it("a rotation the admin key delivers directly re-pins the box and the old key is out", async () => {
-    rig = await startBox({ adminPinned: true });
-    const next = deriveIRK({ seed: new Uint8Array(32).fill(88) });
-    const rot = { username: "harry", oldAdminRootPub: adminRoot.publicKey, newAdminRootPub: next.publicKey, issuedAt: clock };
-    const entry = { seq: 1, oldAdminRootPub: Buffer.from(adminRoot.publicKey).toString("hex"), newAdminRootPub: Buffer.from(next.publicKey).toString("hex"), issuedAt: clock, signatureHex: Buffer.from(signAdminRootRotation(rot, adminRoot)).toString("hex") };
-    const r = await request(rig.port, "POST", "/api/rescue/admin-root-rotation", { body: { rotations: [entry] } });
-    expect(r.status).toBe(200);
-    expect(rig.pins.restarts).toBe(1);
-    expect(rig.pins.current?.adminRootPubHex).toBe(entry.newAdminRootPub);
-    expect(rig.notes.map((n) => n.kind)).toContain("server.admin.rotated");
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it("a rotation that doesn't continue the pinned key changes nothing, whoever sends it", async () => {
-    rig = await startBox({ adminPinned: true });
-    const evil = deriveIRK({ seed: new Uint8Array(32).fill(66) });
-    const stranger = deriveIRK({ seed: new Uint8Array(32).fill(67) });
-    const rot = { username: "harry", oldAdminRootPub: stranger.publicKey, newAdminRootPub: evil.publicKey, issuedAt: clock };
-    const bad = { seq: 1, oldAdminRootPub: Buffer.from(stranger.publicKey).toString("hex"), newAdminRootPub: Buffer.from(evil.publicKey).toString("hex"), issuedAt: clock, signatureHex: Buffer.from(signAdminRootRotation(rot, stranger)).toString("hex") };
-    expect((await request(rig.port, "POST", "/api/rescue/admin-root-rotation", { body: { rotations: [bad] } })).status).toBe(403);
-    // Right chain, wrong signer.
-    const forged = { ...bad, oldAdminRootPub: Buffer.from(adminRoot.publicKey).toString("hex") };
-    expect((await request(rig.port, "POST", "/api/rescue/admin-root-rotation", { body: { rotations: [forged] } })).status).toBe(403);
-    expect((await request(rig.port, "POST", "/api/rescue/admin-root-rotation", { body: { rotations: [] } })).status).toBe(400);
-    expect(rig.pins.current).toBeNull();
-    expect(rig.pins.restarts).toBe(0);
-  });
-});
-
-describe("every copy that leaves the server is told to the admin devices", () => {
-  let rig: Rig | null = null;
-  afterEach(async () => {
-    await rig?.close();
-    rig = null;
-  });
-
-  it("a rescue session raises an alert naming who opened it and the acting phone's own nonce, and the activity log has its line", async () => {
-    rig = await startBox({ adminPinned: true });
-    const clientNonce = nonce();
-    const h = await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce } });
-    const order = { ...(h.json.hello as RescueExchange), issuedAt: clock };
-    await request(rig.port, "POST", "/api/rescue/session", { body: { order, signatureHex: Buffer.from(signRescueSession(order, adminRoot)).toString("hex") } });
-    expect(rig.alerts).toEqual([{ kind: "backup-exported", serviceId: "", stage: "rescue-opened", by: "the admin key", ref: clientNonce, at: clock }]);
-    expect(rig.notes.map((n) => n.kind)).toEqual(["server.rescue.opened"]);
-  });
-
-  it("an admin device's session names the device", async () => {
-    rig = await startBox({ adminPinned: true });
-    const dev = admitAdminDevice(rig, 41, 3 * 86_400_000);
-    await rig.refreshBook();
-    await openSession(rig.port, dev.key);
-    expect(rig.alerts[0]).toMatchObject({ stage: "rescue-opened", by: `admin device ${dev.grant.deviceId.slice(0, 8)}` });
-  });
-
-  it("finishing the download raises a second alert, through the same route a normal backup uses", async () => {
-    rig = await startBox({ adminPinned: true });
-    const { token } = await openSession(rig.port, adminRoot);
-    await backUpAndDownload(rig.port, token);
-    expect(rig.alerts.map((a) => (a as { stage: string }).stage)).toEqual(["rescue-opened", "downloaded"]);
-  });
-});
-
-describe("exportNotice", () => {
-  it("emits an alert each time and wakes the phones at most once a minute, with nothing in the wake", async () => {
-    let t = 1_000_000;
-    const alerts: unknown[] = [];
-    let wakes = 0;
-    const notify = exportNotice({ alert: (a) => alerts.push(a), wake: async () => void wakes++, now: () => t });
-    notify({ stage: "downloaded" });
-    notify({ stage: "browser-approved" });
-    t += 61_000;
-    notify({ stage: "downloaded" });
-    expect(alerts).toHaveLength(3);
-    expect(wakes).toBe(2);
-    expect(JSON.stringify(alerts[0])).not.toMatch(/archive|app|notes|harry/i);
-  });
-  it("a failing push never loses the alert or throws", async () => {
-    const alerts: unknown[] = [];
-    const notify = exportNotice({ alert: (a) => alerts.push(a), wake: async () => { throw new Error("com is down"); } });
-    expect(() => notify({ stage: "downloaded" })).not.toThrow();
-    expect(alerts).toHaveLength(1);
-  });
-});
