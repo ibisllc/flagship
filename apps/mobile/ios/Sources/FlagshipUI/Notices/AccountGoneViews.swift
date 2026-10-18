@@ -9,6 +9,7 @@ import FlagshipAPI
 public enum AccountGoneCopy {
     public static let title = "This account was removed"
     public static let body = "This account no longer exists on Flagship. This can happen after a reset."
+    public static let restoreHint = "If you saved a backup of your servers, you can restore it into a new account."
     public static let create = "Create a new account"
     public static let remove = "Remove it from this device"
     public static func account(_ name: String) -> String { "Account: \(name)" }
@@ -22,7 +23,7 @@ enum RescueKeyCheck {
     static func holdsRescueKey(_ app: AppState) -> Bool {
         var sessions = app.sessionPodIds?.count ?? 0
         #if DEBUG
-        if GymSeams.noServerSessions { sessions = 0 }
+        if let forced = GymSeams.serverSessionCount { sessions = forced }
         #endif
         return AdminKeyWarning.holdsRescueKey(
             isDemoAccount: app.isDemoAccount,
@@ -33,7 +34,9 @@ enum RescueKeyCheck {
 
     static var holdsAdminRoot: Bool {
         #if DEBUG
-        if GymSeams.forceAdminRoot { return true }
+        // The mock gym decides by its launch arguments, not by whatever an
+        // earlier onboarding walk left in the simulator's keychain.
+        if GymLaunch.usesMocks { return GymSeams.forceAdminRoot }
         #endif
         return Keystore.hasAdminRoot
     }
@@ -70,7 +73,6 @@ struct AccountGoneScreen: View {
 
     var body: some View {
         let c = FSColors.scheme(scheme)
-        let rescue = RescueFlowRegistry.shared.isAvailable
         ZStack {
             c.bg.ignoresSafeArea()
             ScrollView {
@@ -89,21 +91,16 @@ struct AccountGoneScreen: View {
                         .font(FS.font.scaled(12))
                         .foregroundColor(c.textMuted)
                         .accessibilityIdentifier("account-gone-name")
+                    Text(AccountGoneCopy.restoreHint)
+                        .font(FS.font.scaled(15))
+                        .foregroundColor(c.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("account-gone-restore-hint")
                     if let pending {
                         warning(pending, c: c)
                     } else {
                         VStack(spacing: FS.space.s3) {
-                            FSPrimaryButton(AdminKeyCopy.saveData, enabled: rescue, block: true, large: true) {
-                                Task { _ = await RescueFlowRegistry.shared.run?() }
-                            }
-                            .accessibilityIdentifier("account-gone-save")
-                            if !rescue {
-                                Text(AdminKeyCopy.comingSoon)
-                                    .font(FS.font.scaled(14))
-                                    .foregroundColor(c.textMuted)
-                                    .accessibilityIdentifier("account-gone-coming-soon")
-                            }
-                            FSSecondaryButton(AccountGoneCopy.create, block: true, large: true) { ask(.create) }
+                            FSPrimaryButton(AccountGoneCopy.create, block: true, large: true) { ask(.create) }
                                 .accessibilityIdentifier("account-gone-create")
                             Button(AccountGoneCopy.remove) { ask(.remove) }
                                 .font(FS.font.scaled(15))
@@ -181,17 +178,12 @@ struct AccountGoneScreen: View {
         AccountGoneRemoval.removeCopy(app: app, gone: gone, thenCreate: p == .create)
     }
 
-    /// Save the data before anything is removed. The rescue flow (docs/
-    /// data-sovereignty.md) is not on this build until it registers itself, so
-    /// until then this opens the account-key backup, the one artifact that
-    /// still opens the servers. It never removes anything; the warning stays.
+    /// Save a backup of the account key before anything is removed: the
+    /// existing account-key export. It never removes anything; the warning
+    /// stays up.
     @MainActor
     private func saveFirst() async {
         note = nil
-        if let run = RescueFlowRegistry.shared.run {
-            _ = await run()
-            return
-        }
         #if DEBUG
         let bypass = GymSeams.bypassBiometricGates
         #else

@@ -17,11 +17,11 @@ public enum GymSeams {
     /// the absent real key — by design).
     public nonisolated(unsafe) static var forceAdminRoot = false
 
-    /// Count no server session for the "does this device hold a key that can
-    /// still save a server's data?" check (`-smoke-no-server-sessions`): the
-    /// mock gym pairs sessions with its sample boxes, which a device that
-    /// holds no key at all would not have.
-    public nonisolated(unsafe) static var noServerSessions = false
+    /// How many server sessions this device holds, for the "does it hold a key
+    /// that can still save a server's data?" check. The mock gym pairs
+    /// sessions with its sample boxes, which says nothing about the scenario,
+    /// so a smoke launch counts none unless `-smoke-server-session` asks for one.
+    public nonisolated(unsafe) static var serverSessionCount: Int?
 
     /// Auto-pass `BiometricGate.evaluate` (the UI-level Face-ID consent
     /// prompts, e.g. the Settings → Add-a-device entry). The Simulator has no

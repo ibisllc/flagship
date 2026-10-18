@@ -68,9 +68,8 @@ final class GymAccountGoneTests: XCTestCase {
         XCTAssertEqual(text(any(app, "account-gone-title")), "This account was removed")
         XCTAssertEqual(text(any(app, "account-gone-body")), "This account no longer exists on Flagship. This can happen after a reset.")
         XCTAssertEqual(text(any(app, "account-gone-name")), "Account: smoketest")
-        XCTAssertEqual(app.buttons["account-gone-save"].label, "Save my servers' data")
-        XCTAssertFalse(app.buttons["account-gone-save"].isEnabled, "The rescue flow is not in this build yet.")
-        XCTAssertEqual(text(any(app, "account-gone-coming-soon")), "Coming soon")
+        XCTAssertEqual(text(any(app, "account-gone-restore-hint")), "If you saved a backup of your servers, you can restore it into a new account.")
+        XCTAssertFalse(any(app, "account-gone-save").exists, "No rescue button in this build.")
         XCTAssertEqual(app.buttons["account-gone-create"].label, "Create a new account")
         XCTAssertEqual(app.buttons["account-gone-remove"].label, "Remove it from this device")
         XCTAssertFalse(app.buttons.matching(identifier: "home-add-new-server").firstMatch.exists, "The open menu was closed.")
@@ -91,20 +90,20 @@ final class GymAccountGoneTests: XCTestCase {
         gymShot(nocode, "account-gone-not-mine")
     }
 
-    // 3. Remove on an admin device warns first; Save my data first removes nothing; Remove anyway removes
+    // 3. Remove on an admin device warns first; Save my account key first removes nothing; Remove anyway removes
     func test_removeOnAnAdminDeviceWarnsFirstAndOnlyRemoveAnywayRemoves() throws {
         let app = launch(["-smoke-admin-root", "-gym-account-gone", "6"])
         screenShows(app)
         app.buttons["account-gone-remove"].tap()
         XCTAssertEqual(text(any(app, "account-gone-warning-title")), "Remove this account from this device?")
         XCTAssertEqual(text(any(app, "account-gone-warning-message")),
-                       "This also removes this device's admin key. Without it you can no longer save your servers' data. Save it first, or remove anyway.")
-        XCTAssertEqual(app.buttons["account-gone-save-first"].label, "Save my data first")
+                       "This also removes this device's admin key, which you need to sign in to your servers. Save a backup of your account key first, or remove anyway.")
+        XCTAssertEqual(app.buttons["account-gone-save-first"].label, "Save my account key first")
         XCTAssertEqual(app.buttons["account-gone-remove-anyway"].label, "Remove anyway")
         XCTAssertFalse(app.buttons["Create your account"].exists, "Nothing was removed by asking.")
         gymShot(app, "account-gone-warning")
 
-        // Save my data first opens the account-key backup and removes nothing.
+        // Save my account key first opens the account-key backup and removes nothing.
         app.buttons["account-gone-save-first"].tap()
         XCTAssertTrue(app.buttons["keyfile-export-create"].waitForExistence(timeout: 15), "It opens the account backup.")
         app.buttons["account-gone-backup-done"].tap()
@@ -129,7 +128,7 @@ final class GymAccountGoneTests: XCTestCase {
 
     // 5. a device with no key removes at once
     func test_aDeviceThatHoldsNoKeyRemovesAtOnce() throws {
-        let app = launch(["-gym-account-gone", "6", "-smoke-no-server-sessions"])
+        let app = launch(["-gym-account-gone", "6"])
         screenShows(app)
         app.buttons["account-gone-remove"].tap()
         XCTAssertTrue(app.buttons["Create your account"].waitForExistence(timeout: 20), "No key to lose: it removes without asking.")
@@ -145,12 +144,12 @@ final class GymAccountGoneTests: XCTestCase {
         signOut.tap()
         let alert = app.alerts["Sign out?"]
         XCTAssertTrue(alert.waitForExistence(timeout: 10))
-        XCTAssertEqual(message(alert), "Signing out removes this device's admin key. Without it you can no longer save your servers' data. Save it first, or sign out anyway.")
-        XCTAssertTrue(alert.buttons["Save my data first"].exists)
+        XCTAssertEqual(message(alert), "Signing out removes this device's admin key. Save a backup of your account key first, or sign out anyway.")
+        XCTAssertTrue(alert.buttons["Save my account key first"].exists)
         XCTAssertTrue(alert.buttons["Sign out anyway"].exists)
         gymShot(app, "signout-admin-warning")
-        alert.buttons["Save my data first"].tap()
-        XCTAssertTrue(app.buttons["keyfile-export-create"].waitForExistence(timeout: 15), "Save my data first opens the account backup.")
+        alert.buttons["Save my account key first"].tap()
+        XCTAssertTrue(app.buttons["keyfile-export-create"].waitForExistence(timeout: 15), "Save my account key first opens the account backup.")
         XCTAssertFalse(app.buttons["Create your account"].exists, "Nothing was signed out.")
     }
 
@@ -163,9 +162,9 @@ final class GymAccountGoneTests: XCTestCase {
         signOut.tap()
         let alert = app.alerts["Sign out?"]
         XCTAssertTrue(alert.waitForExistence(timeout: 10))
-        XCTAssertEqual(message(alert), "Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe: with them you can still save your servers' data.")
+        XCTAssertEqual(message(alert), "Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe.")
         XCTAssertTrue(alert.buttons["Cancel"].exists)
-        XCTAssertFalse(alert.buttons["Save my data first"].exists)
+        XCTAssertFalse(alert.buttons["Save my account key first"].exists)
         gymShot(app, "signout-backed-up")
         alert.buttons["Sign out"].tap()
         XCTAssertTrue(app.buttons["Create your account"].waitForExistence(timeout: 20), "Sign out then signs out.")
@@ -180,7 +179,16 @@ final class GymAccountGoneTests: XCTestCase {
         remove.tap()
         let alert = app.alerts["Remove this account from this device?"]
         XCTAssertTrue(alert.waitForExistence(timeout: 10))
-        XCTAssertTrue(alert.buttons["Save my data first"].exists)
+        XCTAssertTrue(alert.buttons["Save my account key first"].exists)
         XCTAssertTrue(alert.buttons["Remove anyway"].exists)
+    }
+
+    // 9. a device that only holds a server session is warned too
+    func test_aDeviceThatOnlyHoldsAServerSessionIsWarned() throws {
+        let app = launch(["-gym-account-gone", "6", "-smoke-server-session"])
+        screenShows(app)
+        app.buttons["account-gone-remove"].tap()
+        XCTAssertTrue(any(app, "account-gone-warning-title").waitForExistence(timeout: 5), "A server session is a key that can still open a server.")
+        XCTAssertFalse(app.buttons["Create your account"].exists)
     }
 }

@@ -12,25 +12,24 @@ import FlagshipAPI
 /// it from this device and Create a new account on the "account was removed"
 /// screen, Sign out and Remove this device in Settings) first says so, in
 /// plain words, and offers to save first. The strings are the webapp's
-/// (`lib/adminKeyWarning.js`), with the phone variants ("device").
+/// (`lib/adminKeyWarning.js`), with the phone variants ("device"). The rescue
+/// flow ("Save my servers' data") is not part of this build: the way out is a
+/// backup of the account key.
 public enum AdminKeyCopy {
-    /// The account-gone screen's primary action.
-    public static let saveData = "Save my servers' data"
-    public static let comingSoon = "Coming soon"
     /// Removing the account's keys from this device.
     public static let removeTitle = "Remove this account from this device?"
     public static let removeMessage =
-        "This also removes this device's admin key. Without it you can no longer save your servers' data. Save it first, or remove anyway."
-    public static let saveFirst = "Save my data first"
+        "This also removes this device's admin key, which you need to sign in to your servers. Save a backup of your account key first, or remove anyway."
+    public static let saveFirst = "Save my account key first"
     public static let removeAnyway = "Remove anyway"
     /// Settings, Sign out, on an admin device.
     public static let signOutTitle = "Sign out?"
     public static let signOutMessage =
-        "Signing out removes this device's admin key. Without it you can no longer save your servers' data. Save it first, or sign out anyway."
+        "Signing out removes this device's admin key. Save a backup of your account key first, or sign out anyway."
     public static let signOutAnyway = "Sign out anyway"
     /// The same, once this device has written an account-key file.
     public static let signOutBackedUpMessage =
-        "Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe: with them you can still save your servers' data."
+        "Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe."
     public static let signOutBackedUpOk = "Sign out"
     public static let cancel = "Cancel"
     /// Shown when a save-first path needs the key unlocked.
@@ -94,20 +93,6 @@ public enum KeyBackupState {
     public static func forget(username: String, defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: key(username))
     }
-}
-
-/// The rescue flow ("Rescue my data", docs/data-sovereignty.md) registers
-/// itself here when a build has it; until then the account-gone screen shows
-/// `Save my servers' data` disabled with `Coming soon`, and `Save my data
-/// first` opens the account-key backup instead.
-@MainActor
-public final class RescueFlowRegistry {
-    public static let shared = RescueFlowRegistry()
-    public private(set) var run: (@MainActor () async -> Bool)?
-    public init() {}
-    public func register(_ run: @escaping @MainActor () async -> Bool) { self.run = run }
-    public func unregister() { run = nil }
-    public var isAvailable: Bool { run != nil }
 }
 
 /// The "account was removed" state of this install, for the screen and the

@@ -274,10 +274,11 @@ of the last check here: **not yet checked**.
   answer, later calls for the gone account are answered locally, a window
   above everything shows the screen, and Settings Sign out / Remove this
   device and the screen's Create / Remove warn first when the device holds an
-  admin root or a server session (gym `GymAccountGoneTests`). "Save my
-  servers' data" stays disabled ("Coming soon") until the rescue flow registers
-  itself (`RescueFlowRegistry`); "Save my data first" opens the account-key
-  backup meanwhile. Needs iOS/Android store builds.
+  admin root or a server session (gym `GymAccountGoneTests`). The rescue
+  flow was moved off `main` (owner, 2026-10-18): the screen says "If you saved a
+  backup of your servers, you can restore it into a new account." and the
+  warnings send people to a backup of the account key ("Save my account key
+  first"). Needs iOS/Android store builds.
 - **Security notices (2026-10-18, `docs/security-notices.md`).** One
   maintainer-signed notice, picked up from one anonymous `GET /api/notices`,
   for (A) a dismissible "we will update on {date}" banner and (B) a full-screen

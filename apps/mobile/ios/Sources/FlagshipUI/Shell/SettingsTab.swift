@@ -290,13 +290,7 @@ public struct SettingsTab: View {
                     holdsAdminKey: !app.isDemoAccount && RescueKeyCheck.holdsAdminRoot,
                     holdsRescueKey: RescueKeyCheck.holdsRescueKey(app),
                     keyBackedUp: KeyBackupState.hasBackup(username: app.currentUser ?? ""),
-                    onSaveDataFirst: {
-                        if let run = RescueFlowRegistry.shared.run {
-                            Task { _ = await run() }
-                        } else {
-                            path.append(.keyfileBackup)
-                        }
-                    }
+                    onSaveDataFirst: { path.append(.keyfileBackup) }
                 )
                 .alert(
                     "Replace device",

@@ -177,8 +177,7 @@ public struct SettingsScreen: View {
     var holdsRescueKey: Bool = false
     /// This device wrote an account-key file: Sign out then says what to keep.
     var keyBackedUp: Bool = false
-    /// "Save my data first": the rescue flow when the build has one, else the
-    /// account-key backup. Removes nothing.
+    /// "Save my account key first": opens the account-key export. Removes nothing.
     var onSaveDataFirst: () -> Void = {}
 
     public init(

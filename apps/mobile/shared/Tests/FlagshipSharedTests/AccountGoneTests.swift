@@ -127,25 +127,24 @@ final class AccountGoneTests: XCTestCase {
 
     // MARK: the admin-key warnings
 
-    func testTheWarningWordsAreTheDocsExactStrings() {
+    func testTheWarningWordsAreTheOwnersExactStrings() {
         let remove = AdminKeyWarning.remove
         XCTAssertEqual(remove.title, "Remove this account from this device?")
-        XCTAssertEqual(remove.message, "This also removes this device's admin key. Without it you can no longer save your servers' data. Save it first, or remove anyway.")
-        XCTAssertEqual(remove.choices.map(\.label), ["Save my data first", "Remove anyway"])
+        XCTAssertEqual(remove.message, "This also removes this device's admin key, which you need to sign in to your servers. Save a backup of your account key first, or remove anyway.")
+        XCTAssertEqual(remove.choices.map(\.label), ["Save my account key first", "Remove anyway"])
         XCTAssertEqual(remove.choices.map(\.role), [.save, .go])
 
         let notBackedUp = AdminKeyWarning.signOut(backedUp: false)
         XCTAssertEqual(notBackedUp.title, "Sign out?")
-        XCTAssertEqual(notBackedUp.message, "Signing out removes this device's admin key. Without it you can no longer save your servers' data. Save it first, or sign out anyway.")
-        XCTAssertEqual(notBackedUp.choices.map(\.label), ["Save my data first", "Sign out anyway"])
+        XCTAssertEqual(notBackedUp.message, "Signing out removes this device's admin key. Save a backup of your account key first, or sign out anyway.")
+        XCTAssertEqual(notBackedUp.choices.map(\.label), ["Save my account key first", "Sign out anyway"])
+        XCTAssertEqual(notBackedUp.choices.map(\.role), [.save, .go])
 
         let backedUp = AdminKeyWarning.signOut(backedUp: true)
-        XCTAssertEqual(backedUp.message, "Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe: with them you can still save your servers' data.")
+        XCTAssertEqual(backedUp.message, "Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe.")
         XCTAssertEqual(backedUp.choices.map(\.label), ["Cancel", "Sign out"])
         XCTAssertEqual(backedUp.choices.map(\.role), [.cancel, .go])
 
-        XCTAssertEqual(AdminKeyCopy.saveData, "Save my servers' data")
-        XCTAssertEqual(AdminKeyCopy.comingSoon, "Coming soon")
         XCTAssertEqual(AdminKeyCopy.unlockFirst, "Unlock first to save your key.")
     }
 
@@ -164,15 +163,5 @@ final class AccountGoneTests: XCTestCase {
         XCTAssertFalse(KeyBackupState.hasBackup(username: "other", defaults: d))
         KeyBackupState.forget(username: "smoketest", defaults: d)
         XCTAssertFalse(KeyBackupState.hasBackup(username: "smoketest", defaults: d))
-    }
-
-    @MainActor
-    func testTheSaveButtonIsOnlyAvailableOnceARescueFlowRegisters() async {
-        let registry = RescueFlowRegistry()
-        XCTAssertFalse(registry.isAvailable)
-        registry.register { true }
-        XCTAssertTrue(registry.isAvailable)
-        let ran = await registry.run?()
-        XCTAssertEqual(ran, true)
     }
 }

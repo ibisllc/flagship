@@ -306,7 +306,7 @@ struct FlagshipApp: App {
         // render offline. Assigned BOTH ways so a prior same-process launch's
         // seed can never leak into an unflagged run. Gym-only.
         GymSeams.forceAdminRoot = args.contains("-smoke-admin-root")
-        GymSeams.noServerSessions = args.contains("-smoke-no-server-sessions")
+        GymSeams.serverSessionCount = args.contains("-smoke-server-session") ? 1 : 0
         // `-smoke-key-backed-up`: this device already wrote an account-key
         // file (Sign out then says what to keep). Set both ways.
         if args.contains("-smoke-key-backed-up") { KeyBackupState.record(username: user) } else { KeyBackupState.forget(username: user) }

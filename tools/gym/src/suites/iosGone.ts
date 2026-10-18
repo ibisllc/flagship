@@ -15,7 +15,7 @@ const G = "FlagshipAppUITests/GymAccountGoneTests/";
 export const IOS_GONE: readonly Scenario[] = [
   iosTotal(
     "ios-total-account-gone-screen",
-    "When .com answers 404 account-not-found for the signed-in device's own account, a full-screen This account was removed takes over: every menu closed, nothing behind it reachable, Save my servers' data disabled with Coming soon, then Create a new account and a quiet Remove it from this device.",
+    "When .com answers 404 account-not-found for the signed-in device's own account, a full-screen This account was removed takes over: every menu closed, nothing behind it reachable, the line about restoring a saved backup into a new account, then Create a new account and a quiet Remove it from this device.",
     G + "test_removedAccountShowsTheScreenAndClosesWhatWasOpen",
     {
       steps: [
@@ -25,7 +25,7 @@ export const IOS_GONE: readonly Scenario[] = [
       assertions: [
         { describe: "Title", handle: "account-gone-title", expect: "text", text: "This account was removed" },
         { describe: "Body", handle: "account-gone-body", expect: "text", text: "This account no longer exists on Flagship. This can happen after a reset." },
-        { describe: "Coming soon", handle: "account-gone-coming-soon", expect: "text", text: "Coming soon" },
+        { describe: "Restore hint", handle: "account-gone-restore-hint", expect: "text", text: "If you saved a backup of your servers, you can restore it into a new account." },
         { describe: "Create", handle: "account-gone-create", expect: "text", text: "Create a new account" },
         { describe: "Remove", handle: "account-gone-remove", expect: "text", text: "Remove it from this device" },
       ],
@@ -49,13 +49,13 @@ export const IOS_GONE: readonly Scenario[] = [
   ),
   iosTotal(
     "ios-total-account-gone-remove",
-    "Remove it from this device on a device that holds the admin key warns first (Save my data first opens the account backup and removes nothing); only Remove anyway forgets the account and returns to Welcome.",
+    "Remove it from this device on a device that holds the admin key warns first (Save my account key first opens the account backup and removes nothing); only Remove anyway forgets the account and returns to Welcome.",
     G + "test_removeOnAnAdminDeviceWarnsFirstAndOnlyRemoveAnywayRemoves",
     {
       steps: [
         { kind: "launch", describe: "Reach Home on an admin device; the account is answered as gone." },
         { kind: "tap", describe: "Remove it from this device.", handle: "account-gone-remove" },
-        { kind: "tap", describe: "Save my data first.", handle: "account-gone-save-first" },
+        { kind: "tap", describe: "Save my account key first.", handle: "account-gone-save-first" },
         { kind: "tap", describe: "Remove anyway.", handle: "account-gone-remove-anyway" },
       ],
       assertions: [
@@ -97,13 +97,13 @@ export const IOS_GONE: readonly Scenario[] = [
   ),
   iosTotal(
     "ios-total-signout-admin-warning",
-    "Settings Sign out on an admin device whose key is not backed up says it removes the admin key; Save my data first opens the account backup and signs nothing out.",
+    "Settings Sign out on an admin device whose key is not backed up says it removes the admin key; Save my account key first opens the account backup and signs nothing out.",
     G + "test_signOutOnAnAdminDeviceWarnsAndSaveMyDataFirstSignsNothingOut",
     {
       steps: [
         { kind: "launch", describe: "Open Settings on an admin device." },
         { kind: "tap", describe: "Sign out.", handle: "settings-sign-out-btn" },
-        { kind: "tap", describe: "Save my data first.", handle: "Save my data first" },
+        { kind: "tap", describe: "Save my account key first.", handle: "Save my account key first" },
       ],
       assertions: [{ describe: "Account backup opens", handle: "keyfile-export-create", expect: "present" }],
       screenshots: [shot("signout-admin-warning", "The Sign out warning.")],
@@ -126,7 +126,7 @@ export const IOS_GONE: readonly Scenario[] = [
   ),
   iosTotal(
     "ios-total-remove-device-admin-warning",
-    "Settings Remove this device on a device that holds the admin key shows the same removal warning (Save my data first, Remove anyway).",
+    "Settings Remove this device on a device that holds the admin key shows the same removal warning (Save my account key first, Remove anyway).",
     G + "test_removeThisDeviceInSettingsWarnsOnAnAdminDevice",
     {
       steps: [
@@ -135,6 +135,20 @@ export const IOS_GONE: readonly Scenario[] = [
       ],
       assertions: [{ describe: "Warning", handle: "Remove anyway", expect: "present" }],
       screenshots: [shot("remove-device-warning", "The removal warning.")],
+      dimension: "D3",
+    },
+  ),
+  iosTotal(
+    "ios-total-account-gone-server-session",
+    "A device that holds only a server session (no admin root) is warned before removing the account, too: a server session is a key that can still open a server.",
+    G + "test_aDeviceThatOnlyHoldsAServerSessionIsWarned",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home on a device holding a server session; the account is answered as gone." },
+        { kind: "tap", describe: "Remove it from this device.", handle: "account-gone-remove" },
+      ],
+      assertions: [{ describe: "Warning", handle: "account-gone-warning-title", expect: "text", text: "Remove this account from this device?" }],
+      screenshots: [shot("account-gone-session-warning", "The removal warning.")],
       dimension: "D3",
     },
   ),
