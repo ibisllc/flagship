@@ -1,0 +1,94 @@
+import { execFileSync, spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+// @ts-expect-error plain .mjs without types
+import { checkFreshness } from "./d1-backup-freshness.mjs";
+import { inline } from "./refresh-model-capabilities-sql.js";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const read = (p: string) => readFileSync(join(root, p), "utf8");
+
+describe("D1 backup freshness", () => {
+  const NOW = Date.parse("2026-10-18T12:00:00Z");
+  const latest = (takenAt: string) =>
+    JSON.stringify({ takenAt, key: "d1/daily/flagship-state-20261018T030000Z.sql.gpg", bytes: 1234, sha256: "ab" });
+
+  it("accepts a backup under 36 hours old", () => {
+    expect(checkFreshness(latest("2026-10-17T03:17:00Z"), NOW).ok).toBe(true);
+    expect(checkFreshness(latest("2026-10-17T00:30:00Z"), NOW).ok).toBe(true);
+  });
+
+  it("fails when it is older than 36 hours, with the age in the message", () => {
+    const r = checkFreshness(latest("2026-10-16T23:00:00Z"), NOW);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toMatch(/37\.0 hours old/);
+  });
+
+  it("fails on anything that is not a backup record", () => {
+    expect(checkFreshness("not json", NOW).ok).toBe(false);
+    expect(checkFreshness("{}", NOW).ok).toBe(false);
+    expect(checkFreshness(JSON.stringify({ takenAt: "2026-10-18T11:00:00Z", key: "x", bytes: 1 }), NOW).ok).toBe(false);
+    expect(checkFreshness(JSON.stringify({ takenAt: "2026-10-18T11:00:00Z", key: "d1/daily/a.sql.gpg", bytes: 0 }), NOW).ok).toBe(false);
+  });
+
+  it("the CLI exits 1 on a stale file and 0 on a fresh one", () => {
+    const run = (iso: string) =>
+      spawnSync("node", [join(root, "scripts/d1-backup-freshness.mjs"), "/dev/stdin", "--now", "2026-10-18T12:00:00Z"], {
+        input: latest(iso),
+        encoding: "utf8",
+      });
+    expect(run("2026-10-18T03:00:00Z").status).toBe(0);
+    const stale = run("2026-10-15T03:00:00Z");
+    expect(stale.status).toBe(1);
+    expect(stale.stdout).toMatch(/STALE/);
+  });
+});
+
+describe("D1 backup wiring", () => {
+  const wf = read(".github/workflows/d1-backup.yml");
+  const script = read("scripts/d1-backup.sh");
+
+  it("uses exactly the two repo secrets and never a literal credential", () => {
+    const used = [...wf.matchAll(/secrets\.([A-Z_]+)/g)].map((m) => m[1]);
+    expect([...new Set(used)].sort()).toEqual(["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"]);
+    expect(wf).not.toMatch(/(?:token|secret|key)\s*[:=]\s*["']?[A-Za-z0-9_-]{30,}/i);
+  });
+
+  it("runs daily, checks freshness at 36 hours, and can be started by hand", () => {
+    expect(wf).toMatch(/cron: "\d+ 3 \* \* \*"/);
+    expect(wf).toMatch(/--max-hours 36/);
+    expect(wf).toMatch(/workflow_dispatch/);
+  });
+
+  it("encrypts before anything leaves the runner and prunes nothing", () => {
+    expect(script.indexOf("--encrypt")).toBeGreaterThan(0);
+    expect(script.indexOf("--encrypt")).toBeLessThan(script.indexOf("r2 object put"));
+    expect(script).not.toMatch(/r2 object delete|bucket lifecycle/);
+    expect(script).toMatch(/flagship-d1-backups/);
+  });
+
+  it("encrypts to the security@ key that is published in the repo, pinned by fingerprint", () => {
+    const m = script.match(/D1_BACKUP_FPR:-([0-9A-F]{40})/);
+    expect(m).not.toBeNull();
+    const out = execFileSync("gpg", ["--batch", "--with-colons", "--show-keys", join(root, "apps/web/public/.well-known/pgp-key.txt")], {
+      encoding: "utf8",
+    });
+    const fpr = out.split("\n").find((l) => l.startsWith("fpr:"))!.split(":")[9];
+    expect(fpr).toBe(m![1]);
+    expect(out).toMatch(/^sub:.*:e:/m); // it has an encryption subkey
+  });
+
+  it("the Worker no longer has the backup binding or the cron job", () => {
+    expect(read("apps/com/wrangler.toml")).not.toMatch(/BACKUPS_BUCKET/);
+  });
+});
+
+describe("model capability refresh from CI", () => {
+  it("inlines binds the way SQLite reads a literal", () => {
+    expect(inline("INSERT INTO t VALUES (?, ?, ?, ?, ?)", ["it's", 5, null, true, '{"a":"b\\n"}'])).toBe(
+      `INSERT INTO t VALUES ('it''s', 5, NULL, 1, '{"a":"b\\n"}')`,
+    );
+  });
+});

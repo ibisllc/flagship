@@ -15,8 +15,9 @@
  *                                     and a change (x-admin-secret;
  *                                     scripts/inference-settings.mjs)
  *
- * The table is rebuilt once a day by the 00:00 UTC cron from OpenRouter's
- * public catalog (runModelCapabilityRefresh). None of this takes or keeps
+ * The table is rebuilt once a day from OpenRouter's public catalog by
+ * .github/workflows/model-capabilities.yml (scripts/refresh-model-capabilities.ts;
+ * it does not fit a Workers Free cron). None of this takes or keeps
  * anything about the caller.
  */
 
@@ -189,18 +190,6 @@ export class D1InferenceSettingsStore implements InferenceSettingsStore {
       .bind(JSON.stringify(row.settings), row.note, row.setAt)
       .run();
   }
-}
-
-/** The daily refresh (00:00 UTC cron). */
-export async function runModelCapabilityRefresh(env: InferenceModelEnv, now: Date): Promise<void> {
-  if (!env.DB) return;
-  const r = await refreshModelCapabilities({
-    store: new D1ModelCapabilityStore(env.DB),
-    fetch: (url) => fetch(url, { headers: { accept: "application/json" } }),
-    now: now.getTime(),
-    log: (m) => console.log(m),
-  });
-  console.log(`[model-capabilities] refreshed ${r.total} models, ${r.added.length} new`);
 }
 
 /** D1 `model_capabilities` (migration 0095). */

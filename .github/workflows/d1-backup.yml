@@ -1,0 +1,79 @@
+name: D1 backup
+
+# The production database's backup. It used to be a Worker cron (89 D1 calls, 45 ms
+# of CPU), which cannot finish on the Workers Free plan (50 subrequests, 10 ms), so
+# it lives here: `wrangler d1 export` -> gpg-encrypt to the security@ key -> R2.
+# docs/runbooks/d1-restore.md has the restore; scripts/d1-restore-drill.sh rehearses it.
+#
+# Owner prerequisites (docs/runbooks/final-deploy.md step 1b), none of them secret
+# values in the repo:
+#   - repo secrets CLOUDFLARE_API_TOKEN (D1 Edit + Workers R2 Storage Edit on this
+#     account) and CLOUDFLARE_ACCOUNT_ID
+#   - the private R2 bucket flagship-d1-backups and its 30-day rule on d1/daily/
+#
+# Two schedules: the daily backup, and a freshness check every six hours that fails
+# (GitHub emails the owner a failed scheduled run) when the newest backup is older
+# than 36 hours, which also catches this workflow itself being disabled by GitHub
+# after 60 idle days (a push or a manual run re-enables it).
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+    - cron: "47 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      what:
+        description: "backup (default) or check"
+        required: false
+        default: backup
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d1-backup
+  cancel-in-progress: false
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  backup:
+    if: github.event_name == 'workflow_dispatch' && inputs.what != 'check' || github.event.schedule == '17 3 * * *'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Secrets are present
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::repo secret CLOUDFLARE_API_TOKEN is not set (docs/runbooks/final-deploy.md step 1b)"; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "::error::repo secret CLOUDFLARE_ACCOUNT_ID is not set (docs/runbooks/final-deploy.md step 1b)"; exit 1; }
+      - name: Export, encrypt, upload, read back
+        run: bash scripts/d1-backup.sh
+      - name: Newest backup is fresh
+        run: |
+          npx --yes wrangler@4.151.0 r2 object get flagship-d1-backups/latest.json --file latest.json --remote
+          cat latest.json
+          node scripts/d1-backup-freshness.mjs latest.json --max-hours 2
+
+  freshness:
+    if: github.event_name == 'workflow_dispatch' && inputs.what == 'check' || github.event.schedule == '47 */6 * * *'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Fetch latest.json
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::repo secret CLOUDFLARE_API_TOKEN is not set"; exit 1; }
+          npx --yes wrangler@4.151.0 r2 object get flagship-d1-backups/latest.json --file latest.json --remote \
+            || { echo "::error::no latest.json in flagship-d1-backups: no backup has ever completed"; exit 1; }
+          cat latest.json
+      - name: No older than 36 hours
+        run: node scripts/d1-backup-freshness.mjs latest.json --max-hours 36
