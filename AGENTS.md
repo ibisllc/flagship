@@ -11,7 +11,6 @@ apps/com/                  Cloudflare Worker — flagshipserver.com (identity + 
 apps/web/                  Fly app — flagship.services (stateless data plane) + the webapp static surface
 apps/web/public/           Static assets served by the Worker's [assets] binding
    studio/                 /studio — short desktop download + direct phone-pairing guide
-   dev/create-server       /dev/create-server — phone simulator
    status/                 /status/ — live health dashboard
    security/               disclosure.html, report.html
    webapp/                 PWA source (served at root on webapp. AND remote.flagshipserver.com)
@@ -52,7 +51,6 @@ fly.toml                   :443 raw-TCP (SNI passthrough) + :8443 TLS-term (API 
 - `https://webapp.flagshipserver.com/` — the owner webapp (PWA)
 - `https://remote.flagshipserver.com/` — browser remote (phone-approved, keyless)
 - `https://flagshipserver.com/studio` — download Studio + direct phone-pairing guide
-- `https://flagshipserver.com/dev/create-server` — phone simulator (mints build codes)
 - `https://flagshipserver.com/status/` — live health
 - `https://flagshipserver.com/api/health` — JSON health
 - `https://flagship.services/api/health` — direct Fly health
@@ -1199,7 +1197,7 @@ first update after it (`docs/anonymous-vouchers.md`, $1 voucher unit). Detail: `
 2. Remove the burn-time LUKS passphrase
    (`flagship-build-time-luks-rekey-me-immediately`) and re-enable the
    `luksRemoveKey` guard. `release-guard.sh` stays red on release tags until then.
-3. Remove the demo/dev flips (demo mode, any remaining hidden toggles). **iOS and webapp done 2026-10-16:** Release iOS builds carry no mock clients, fixtures, gym seams or developer mode (all `#if DEBUG`; `scripts/ios-release-clean.mjs`, `--build` checks a built app), the webapp has no `?debug=1` tools. Demo accounts stay (real `.com` accounts). iOS Add a device / Join an account had only the in-process mock relay, so Release now refuses with a sentence until the `/qr-pipe` pairing transport exists.
+3. Remove the demo/dev flips (demo mode, any remaining hidden toggles). **iOS and webapp done 2026-10-16:** Release iOS builds carry no mock clients, fixtures, gym seams or developer mode (all `#if DEBUG`; `scripts/ios-release-clean.mjs`, `--build` checks a built app), the webapp has no `?debug=1` tools. Demo accounts stay (real `.com` accounts). iOS Add a device / Join an account had only the in-process mock relay, so Release now refuses with a sentence until the `/qr-pipe` pairing transport exists. **Rest done 2026-10-17:** the public `/dev/create-server` phone simulator is gone; `scripts/release-clean-sources.test.ts` scans the webapp, the site, Android's main source sets and `.com`'s `/api/dev` surface (only the demo `sample-user` routes remain) in plain vitest; Android's built-APK check is `apps/mobile/android/scripts/check-release-clean.sh`. Open: Studio's `FLAGSHIP_CONTROL_INSECURE` (Windows pairing over plain ws) and the box's `FLAGSHIP_MAINTAINER_PIN_OVERRIDE` seam are env-only and root-gated, left for the owner to decide.
 4. Fill the `pro.html` payment placeholders (on `feat/marketplace`).
 5. ~~`DEV_LATE_LOG` / W12 debug endpoints~~ removed 2026-10-17 (late-log, Hetzner
    rescue/destroy/server-info, upload-iso; installers post no logs any more; needs
