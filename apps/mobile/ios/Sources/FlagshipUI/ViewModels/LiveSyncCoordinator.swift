@@ -31,6 +31,21 @@ public final class LiveSyncCoordinator {
     /// Wait between rounds when /stream is down (the /pods fallback cadence —
     /// the safety net, matching BootApprovalWatcher's 5s feel).
     public nonisolated static let fallbackNanos: UInt64 = 5_000_000_000 // 5s
+    /// The longest gap between retries while `.com` keeps failing. Every retry
+    /// is a request the Free plan counts (and a Cloudflare 1102 means the Worker
+    /// is already struggling), so a failing loop backs off instead of repeating
+    /// every 5 s.
+    public nonisolated static let maxBackoffNanos: UInt64 = 120_000_000_000 // 2 min
+    /// While /pods still answers but /stream does not, the screen refreshes at
+    /// most this slowly.
+    public nonisolated static let podsOnlyMaxNanos: UInt64 = 30_000_000_000 // 30s
+
+    /// The wait before retry number `streak` (1 = the first failure): the
+    /// fallback cadence doubled each time, capped.
+    public nonisolated static func backoffNanos(streak: Int, fallback: UInt64 = fallbackNanos) -> UInt64 {
+        let doublings = max(0, min(streak - 1, 16))
+        return min(maxBackoffNanos, fallback << UInt64(doublings))
+    }
 
     private let app: AppState
     private let mailbox: any SecretMailboxClient
@@ -49,6 +64,10 @@ public final class LiveSyncCoordinator {
     private var cursor: String?
     /// Whether the last round fell back to /pods (a prior stream error).
     public private(set) var degraded = false
+    /// Consecutive failed rounds; the retry gap doubles with it.
+    private var streak = 0
+    /// Whether the last /pods fallback answered, so a failing stream can lean on it.
+    private var podsAnswered = true
 
     public init(
         app: AppState,
@@ -99,6 +118,8 @@ public final class LiveSyncCoordinator {
         do {
             let snap = try await mailbox.fetchLiveSync(username: user, cursor: cursor)
             degraded = false
+            streak = 0
+            podsAnswered = true
             let changed = snap.cursor != cursor
             cursor = snap.cursor
             // Only feed the shared state on a genuine change. A timeout hold
@@ -113,13 +134,25 @@ public final class LiveSyncCoordinator {
             // so behavior never degrades below today's. Then wait the fallback
             // cadence (the next round retries /stream first).
             degraded = true
+            streak += 1
             // Clear the cursor so the next /stream attempt connects fresh and
             // returns the current state immediately.
             cursor = nil
-            if let dir = try? await mailbox.fetchPods(username: user) {
-                await feed(directory: dir)
+            // When /pods failed too (the service itself is failing: a 5xx such
+            // as Cloudflare's 1102, or a 429), ask it only every fourth round,
+            // so an outage is not hit twice a round.
+            if podsAnswered || streak == 1 || streak % 4 == 0 {
+                if let dir = try? await mailbox.fetchPods(username: user) {
+                    await feed(directory: dir)
+                    podsAnswered = true
+                    // /pods answered, so only /stream is failing: keep the
+                    // screen fresh, but not every 5 s for as long as the stream
+                    // stays down.
+                    return min(Self.backoffNanos(streak: streak, fallback: fallback), Self.podsOnlyMaxNanos) + jitter()
+                }
+                podsAnswered = false
             }
-            return fallback + jitter()
+            return Self.backoffNanos(streak: streak, fallback: fallback) + jitter()
         }
     }
 

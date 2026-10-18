@@ -153,4 +153,49 @@ final class LiveSyncCoordinatorTests: XCTestCase {
         // Fallback waits the longer cadence (not an immediate reconnect).
         XCTAssertGreaterThanOrEqual(delay, LiveSyncCoordinator.fallbackNanos)
     }
+
+    // The retry gap doubles from the fallback cadence and stops at the cap.
+    func test_backoffDoublesAndCaps() {
+        let s = LiveSyncCoordinator.fallbackNanos
+        XCTAssertEqual((1...6).map { LiveSyncCoordinator.backoffNanos(streak: $0) },
+                       [s, 2 * s, 4 * s, 8 * s, 16 * s, LiveSyncCoordinator.maxBackoffNanos])
+        XCTAssertEqual(LiveSyncCoordinator.backoffNanos(streak: 400), LiveSyncCoordinator.maxBackoffNanos)
+    }
+
+    // While only /stream fails, /pods keeps the screen fresh at a growing,
+    // capped gap (5s, 10s, 20s, then 30s), and a recovered stream resets it.
+    func test_podsOnlyFallbackGrowsThenCaps() async {
+        let app = AppState(); app.completeOnboarding(username: "harry", pods: [])
+        let mailbox = MockSecretMailboxClient()
+        mailbox.directory = [pod("home.harry.flagship.services")]
+        let coord = makeCoordinator(app: app, mailbox: mailbox)
+        var delays: [UInt64] = []
+        for _ in 0..<5 {
+            mailbox.liveSyncError = ScreensClientError.http(status: 503, message: "error code: 1102")
+            delays.append(await coord.tickOnce())
+        }
+        let s = LiveSyncCoordinator.fallbackNanos
+        XCTAssertEqual(delays, [s, 2 * s, 4 * s, 6 * s, 6 * s])
+        XCTAssertEqual(mailbox.podsFetchCount, 5)
+        let recovered = await coord.tickOnce()
+        XCTAssertEqual(recovered, 0, "a working stream reconnects at once")
+        XCTAssertFalse(coord.degraded)
+    }
+
+    // When /pods fails too (a 503 / 1102 on the whole service), the gap keeps
+    // doubling and /pods is asked only on the first failure and every fourth.
+    func test_wholeServiceDownBacksOffAndStopsDoubleHitting() async {
+        let app = AppState(); app.completeOnboarding(username: "harry", pods: [])
+        let mailbox = MockSecretMailboxClient()
+        mailbox.podsError = ScreensClientError.http(status: 503, message: "error code: 1102")
+        let coord = makeCoordinator(app: app, mailbox: mailbox)
+        var delays: [UInt64] = []
+        for _ in 0..<6 {
+            mailbox.liveSyncError = ScreensClientError.http(status: 503, message: "error code: 1102")
+            delays.append(await coord.tickOnce())
+        }
+        let s = LiveSyncCoordinator.fallbackNanos
+        XCTAssertEqual(delays, [s, 2 * s, 4 * s, 8 * s, 16 * s, LiveSyncCoordinator.maxBackoffNanos])
+        XCTAssertEqual(mailbox.podsFetchCount, 2, "tried on the first failure and the fourth, not every round")
+    }
 }

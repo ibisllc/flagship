@@ -1127,8 +1127,15 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
         }
         return SealedLuksKeyResponse(serverDomain: serverDomain, sealedKey: hex, sealedAt: 1)
     }
+    /// Make every `fetchPods` throw (tests of a service that is down).
+    public var podsError: Error?
+    /// How many times `fetchPods` was called.
+    public private(set) var podsFetchCount = 0
+
     public func fetchPods(username: String) async throws -> PodsDirectoryResponse {
         GymProbe.note("read pods")
+        podsFetchCount += 1
+        if let err = podsError { throw err }
         return PodsDirectoryResponse(username: username, pods: visibleDirectory, pending: directoryPending, serverOrder: directoryServerOrder)
     }
 
