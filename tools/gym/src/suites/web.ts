@@ -24,6 +24,7 @@ import { WEB_ONBOARDING } from "./webOnboarding.js";
 import { WEB_MISC } from "./webMisc.js";
 import { WEB_DIALOGS } from "./webDialogs.js";
 import { WEB_NOTICES } from "./webNotices.js";
+import { WEB_GONE } from "./webGone.js";
 
 // ───────────────────────── every-merge (fast gate) ─────────────────────────
 
@@ -2032,4 +2033,5 @@ export const WEB_GYM_SCENARIOS: readonly Scenario[] = [
   ...WEB_MISC,
   ...WEB_DIALOGS,
   ...WEB_NOTICES,
+  ...WEB_GONE,
 ];

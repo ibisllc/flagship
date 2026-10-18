@@ -141,49 +141,55 @@ describe("accountReadFetch", () => {
 });
 
 describe("removing the account from this browser", () => {
-  it("forgets the identity, the profile and the tokens, and returns whether another profile remains", async () => {
+  const recorder = (order: string[], over: Record<string, unknown> = {}) => ({
+    getActiveProfile: () => ({ cloudName: "bright-maple", accountId: "bright-maple" }),
+    activeProfileId: () => "profile-id",
+    stopRenewals: () => void order.push("stopRenewals"),
+    forgetProfileKeys: async (id: string) => void order.push(`keys:${id}`),
+    profileRemove: (slot: string) => void order.push(`slot:${slot}`),
+    removeProfileRecord: (name: string) => void order.push(`record:${name}`),
+    forgetProfile: (name: string) => void order.push(`forget:${name}`),
+    loadProfiles: () => ({ profiles: [], activeCloudName: null }),
+    forgetDefaultProfileKeys: async () => void order.push("keys:default"),
+    setActiveKeystoreProfile: (id: unknown) => void order.push(`active:${id}`),
+    clearAccountReadTokens: () => void order.push("tokens"),
+    lockSession: () => void order.push("lock"),
+    ...over,
+  });
+
+  it("forgets the keys, the profile and the tokens, the default record too when no profile is left", async () => {
     const ui = await imp("accountGoneUi.js");
     const g = await imp("accountGone.js");
     g.markAccountGone("bright-maple");
     const order: string[] = [];
-    const othersRemain = await ui.removeGoneAccountFromBrowser({
-      getActiveProfile: () => ({ cloudName: "bright-maple", accountId: "bright-maple" }),
-      stopRenewals: () => order.push("stopRenewals"),
-      resetDevice: async () => void order.push("resetDevice"),
-      profileRemove: (slot: string) => void order.push(`slot:${slot}`),
-      forgetProfile: (name: string) => void order.push(`forget:${name}`),
-      clearAccountReadTokens: () => void order.push("tokens"),
-      lockSession: () => void order.push("lock"),
-      loadProfiles: () => ({ profiles: [], activeCloudName: null }),
-    });
+    const othersRemain = await ui.removeGoneAccountFromBrowser(recorder(order));
     expect(othersRemain).toBe(false);
     expect(order).toEqual([
       "stopRenewals",
-      "resetDevice",
+      "keys:profile-id",
       "slot:sessionId",
       "slot:sessionToken",
       "slot:podBaseUrl",
       "slot:username",
+      "record:bright-maple",
       "forget:bright-maple",
+      "keys:default",
+      "active:null",
       "tokens",
       "lock",
     ]);
     expect(g.isAccountGone()).toBe(false);
   });
 
-  it("reports another saved profile", async () => {
+  it("keeps the default record and the active profile when another profile remains", async () => {
     const ui = await imp("accountGoneUi.js");
-    const remains = await ui.removeGoneAccountFromBrowser({
-      getActiveProfile: () => ({ cloudName: "a" }),
-      stopRenewals: () => {},
-      resetDevice: async () => {},
-      profileRemove: () => {},
-      forgetProfile: () => {},
-      clearAccountReadTokens: () => {},
-      lockSession: () => {},
-      loadProfiles: () => ({ profiles: [{ cloudName: "b" }], activeCloudName: "b" }),
-    });
+    const order: string[] = [];
+    const remains = await ui.removeGoneAccountFromBrowser(
+      recorder(order, { loadProfiles: () => ({ profiles: [{ cloudName: "b" }], activeCloudName: "b" }) }),
+    );
     expect(remains).toBe(true);
+    expect(order).not.toContain("keys:default");
+    expect(order).not.toContain("active:null");
   });
 });
 

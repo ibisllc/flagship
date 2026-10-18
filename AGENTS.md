@@ -254,6 +254,16 @@ of the last check here: **not yet checked**.
 
 ### In flight
 
+- **Account gone (2026-10-18, N1, `docs/account-gone.md`).** After the pre-GA
+  wipe a signed-in device must learn its account no longer exists. `.com`
+  answers `404 { error, code: "account-not-found" }` before any auth check on
+  every own-account route (read-token, pods, stream, audit, device-grants,
+  directory/profile, server-order, orders, lists); a real or demo account is
+  unchanged. The webapp (shell v145) shows a full-screen "This account was
+  removed" (Create a new account / Remove it from this browser), stops polling
+  and toasts, and forgets the stored account. Gym `gym-gone.spec.ts`, parity
+  row `account-gone`. Needs a `.com` deploy (and the shell with it); iOS and
+  Android implement the same contract next (docs "Native notes").
 - **Security notices (2026-10-18, `docs/security-notices.md`).** One
   maintainer-signed notice, picked up from one anonymous `GET /api/notices`,
   for (A) a dismissible "we will update on {date}" banner and (B) a full-screen

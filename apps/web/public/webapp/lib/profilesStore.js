@@ -209,6 +209,21 @@ export function ensureProfile(cloudName, storage = defaultStorage()) {
   return state;
 }
 
+/** Drop a profile's whole record (every slot) and, when it was the active
+ *  one, hand the active pointer to another profile or to none. For an account
+ *  that no longer exists (docs/account-gone.md). */
+export function removeProfileRecord(cloudName, storage = defaultStorage()) {
+  if (!isStorage(storage) || typeof cloudName !== "string" || !cloudName) return null;
+  const state = readState(storage);
+  delete state.profiles[cloudName];
+  if (state.activeCloudName === cloudName) {
+    state.activeCloudName = Object.keys(state.profiles)[0] ?? null;
+  }
+  writeState(state, storage);
+  mirrorActiveToLegacy(state.activeCloudName, storage);
+  return state;
+}
+
 /** Switch the active profile. Mirrors into the legacy `flagship.profiles.v1`
  *  pointer so the keystore + lib/profiles.js see the same active cloud.
  *  No-op if `cloudName` isn't in the store. */

@@ -915,6 +915,24 @@ export async function persistSeedForProfile(seed, cloudName, passphrase) {
 }
 
 /**
+ * Forget every key this device holds for a profile once its account is gone
+ * (docs/account-gone.md): the wrapped device key, any PIN wrap and held
+ * sessions (resetDevice), and the sealed admin-root record. `profileId` is the
+ * keystore id, as {@link activeProfileId} returns it.
+ */
+export async function forgetProfileKeys(profileId = activeProfileId()) {
+  await resetDevice(profileId);
+  await dbDel(adminRootRecordKey(profileId));
+}
+
+/** Forget the bootstrap's DEFAULT record too. The first account's key is
+ *  created there and copied onto the account's own profile, so it outlives
+ *  the account unless it is dropped with it. */
+export async function forgetDefaultProfileKeys() {
+  await forgetProfileKeys(DEFAULT_PROFILE_ID);
+}
+
+/**
  * Carry this device's keys onto a newly opened account's profile: the wrapped
  * device key (still under the passphrase the owner chose) and the admin-root
  * record, both from the profile active now (the bootstrap's DEFAULT record for

@@ -18,10 +18,15 @@ import {
 import { clearAccountReadTokens } from "./accountRead.js";
 import { dismissOverlays } from "./lockSweep.js";
 import { getActiveProfile, loadProfiles, removeProfile } from "./profiles.js";
-import { remove as profileRemove } from "./profilesStore.js";
+import { remove as profileRemove, removeProfileRecord } from "./profilesStore.js";
 import { isUpdateLocked } from "./updateLock.js";
 import { getSession, lockSession } from "./state.js";
-import { resetDevice } from "../keystore.js";
+import {
+  activeProfileId,
+  forgetDefaultProfileKeys,
+  forgetProfileKeys,
+  setActiveKeystoreProfile,
+} from "../keystore.js";
 import { setSubtitle, show } from "./router.js";
 
 export const ACCOUNT_GONE_COPY = Object.freeze({
@@ -38,28 +43,37 @@ const esc = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 /**
- * Forget this browser's copy of the gone account: the stored identity (the
- * keystore record, any PIN wrap and held sessions), the profile row and its
- * slots, the held read tokens, and the unlocked session. Nothing here talks to
- * the network. Returns whether another saved profile remains.
+ * Forget this browser's copy of the gone account: every key it held (the
+ * wrapped device key, any PIN wrap and held sessions, the sealed admin root,
+ * and the bootstrap's default record once no profile is left), the profile
+ * row and all its slots, the held read tokens, and the unlocked session.
+ * Nothing here talks to the network. Returns whether another saved profile
+ * remains.
  *
  * @param {object} [deps] injected for tests
  */
 export async function removeGoneAccountFromBrowser(deps = {}) {
   const profile = (deps.getActiveProfile ?? getActiveProfile)();
   const name = String(profile?.cloudName ?? goneAccountName() ?? "");
+  const profileId = (deps.activeProfileId ?? activeProfileId)();
   try { (deps.stopRenewals ?? (await defaultStopRenewals()))(); } catch { /* best-effort */ }
-  await (deps.resetDevice ?? resetDevice)();
+  await (deps.forgetProfileKeys ?? forgetProfileKeys)(profileId);
   for (const slot of SLOTS) {
     try { (deps.profileRemove ?? profileRemove)(slot); } catch { /* best-effort */ }
   }
   if (name) {
+    try { (deps.removeProfileRecord ?? removeProfileRecord)(name); } catch { /* best-effort */ }
     try { (deps.forgetProfile ?? removeProfile)(name); } catch { /* best-effort local cleanup */ }
+  }
+  const othersRemain = (deps.loadProfiles ?? loadProfiles)().profiles.length > 0;
+  if (!othersRemain) {
+    await (deps.forgetDefaultProfileKeys ?? forgetDefaultProfileKeys)();
+    (deps.setActiveKeystoreProfile ?? setActiveKeystoreProfile)(null);
   }
   (deps.clearAccountReadTokens ?? clearAccountReadTokens)();
   (deps.lockSession ?? lockSession)();
   (deps.clearAccountGone ?? clearAccountGone)();
-  return (deps.loadProfiles ?? loadProfiles)().profiles.length > 0;
+  return othersRemain;
 }
 
 async function defaultStopRenewals() {
