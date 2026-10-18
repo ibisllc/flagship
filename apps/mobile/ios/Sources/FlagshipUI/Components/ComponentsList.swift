@@ -490,7 +490,10 @@ public extension View {
     /// the list, no separators, so a screen can mix native groups with its own
     /// cards and controls.
     func fsPlainListRow(vertical: CGFloat = 6) -> some View {
-        listRowInsets(EdgeInsets(top: vertical, leading: 0, bottom: vertical, trailing: 0))
+        // Plain buttons: in a List row the default style makes every Button in
+        // the row fire together when any part of it is tapped.
+        buttonStyle(.plain)
+            .listRowInsets(EdgeInsets(top: vertical, leading: 0, bottom: vertical, trailing: 0))
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
     }

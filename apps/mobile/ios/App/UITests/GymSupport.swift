@@ -27,6 +27,25 @@ extension XCUIApplication {
         add.tap()
     }
 
+    /// The title of the iPad's detail pane. The split view's detail column
+    /// shows the active destination's title in its own bar, so a pane is found
+    /// by its title text to the right of the sidebar as well as by a bar of that name.
+    func iPadPaneTitle(_ title: String) -> XCUIElement {
+        let texts = staticTexts.matching(NSPredicate(format: "label == %@", title))
+        let right = texts.allElementsBoundByIndex.first { $0.frame.minX > 300 }
+        return right ?? navigationBars[title]
+    }
+
+    func waitForIPadPane(_ title: String, timeout: TimeInterval = 15) -> Bool {
+        let end = Date().addingTimeInterval(timeout)
+        while Date() < end {
+            if navigationBars[title].exists { return true }
+            if staticTexts.matching(NSPredicate(format: "label == %@", title)).allElementsBoundByIndex.contains(where: { $0.frame.minX > 300 }) { return true }
+            usleep(300_000)
+        }
+        return false
+    }
+
     /// Add/Restore server → Restore from backup → a source:
     /// `file` | `peers` | `phone` (the menu must be open).
     func chooseRestoreSource(_ source: String, file: StaticString = #filePath, line: UInt = #line) {

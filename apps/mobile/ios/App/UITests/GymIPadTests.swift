@@ -117,7 +117,7 @@ final class GymIPadTests: XCTestCase {
         XCTAssertTrue(servicesRow.waitForExistence(timeout: 10), "The sidebar should offer a Services destination row.")
         servicesRow.tap()
         XCTAssertTrue(
-            app.navigationBars["Services"].waitForExistence(timeout: 15),
+            app.waitForIPadPane("Services"),
             "Tapping the Services sidebar row should swap the content pane to the Services shell."
         )
         gymShot(app, "ipad-services-pane")

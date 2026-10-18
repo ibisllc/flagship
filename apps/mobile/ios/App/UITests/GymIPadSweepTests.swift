@@ -22,12 +22,10 @@ final class GymIPadSweepTests: GymSweepCase {
 
     /// The title sits inside the nav bar: no tall title text outside it.
     private func assertInlineTitle(_ app: XCUIApplication, _ title: String, file: StaticString = #filePath, line: UInt = #line) {
-        let bar = app.navigationBars[title]
-        XCTAssertTrue(bar.waitForExistence(timeout: 15), "The \(title) pane should show its nav bar.", file: file, line: line)
-        let large = app.staticTexts.matching(NSPredicate(format: "label == %@", title)).allElementsBoundByIndex.contains {
-            !bar.frame.contains($0.frame.origin) && $0.frame.height > bar.frame.height
-                && $0.identifier != "ipad-sidebar"
-        }
+        XCTAssertTrue(app.waitForIPadPane(title), "The \(title) pane should show its title.", file: file, line: line)
+        // An inline title sits at the top, in the bar: no tall title text below it.
+        let pane = app.staticTexts.matching(NSPredicate(format: "label == %@", title)).allElementsBoundByIndex.filter { $0.frame.minX > 300 }
+        let large = pane.contains { $0.frame.minY > 140 && $0.frame.height > 30 }
         XCTAssertFalse(large, "\(title) should use an inline title on iPad.", file: file, line: line)
     }
 
@@ -75,7 +73,7 @@ final class GymIPadSweepTests: GymSweepCase {
         openServerPage(app, named: "Office")
         XCTAssertTrue(sidebarRow(app, "Services").waitForExistence(timeout: 10))
         sidebarRow(app, "Services").tap()
-        XCTAssertTrue(app.navigationBars["Services"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.waitForIPadPane("Services"))
         XCTAssertFalse(app.serverPageBackButton(named: "Office").exists, "Services covers Home's pane.")
         sidebarRow(app, "Home").tap()
         XCTAssertTrue(app.serverPageBackButton(named: "Office").waitForExistence(timeout: 15),

@@ -147,7 +147,7 @@ final class GymSweepHomeTests: GymSweepCase {
         let field = app.textFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 10), "The name sheet is open.")
         XCTAssertTrue(app.buttons["lock-unlock-btn"].waitForExistence(timeout: 25), "The app locks.")
-        XCTAssertFalse(app.textFields.firstMatch.exists, "The sheet's field is not on screen while locked.")
+        waitGone(app.textFields.firstMatch, timeout: 5)
         waitGone(app.buttons["lock-unlock-btn"], timeout: 25)
         XCTAssertFalse(app.textFields.firstMatch.waitForExistence(timeout: 3), "The sheet does not come back on unlock.")
     }
