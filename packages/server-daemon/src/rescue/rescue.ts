@@ -32,11 +32,18 @@ import { ARCHIVE_PATH } from "../serverArchive/service.js";
 
 export const RESCUE_PATH = "/api/rescue";
 export const RESCUE_SESSION_TTL_MS = 60 * 60_000;
-const MAX_OUTSTANDING_NONCES = 32;
+/**
+ * Everything on the local network reaches the app as one loopback source, so
+ * there is no per-caller limit to be had. A guess cannot succeed (a signature
+ * is needed), so these caps only bound memory and log noise; a flood can slow
+ * the owner down (the oldest pending hello is dropped) but never lock them
+ * out, and never gets anyone in.
+ */
+const MAX_OUTSTANDING_NONCES = 256;
 const MAX_SESSIONS = 4;
-const FAILURE_WINDOW_MS = 60_000;
-const MAX_FAILURES_PER_WINDOW = 10;
-const MAX_HELLOS_PER_WINDOW = 30;
+const WINDOW_MS = 60_000;
+const MAX_HELLOS_PER_WINDOW = 300;
+const NOTE_REFUSALS_EVERY_MS = 10_000;
 
 /** The only backup routes a rescue token opens: method, rescue-relative path. */
 const ARCHIVE_ROUTES: ReadonlySet<string> = new Set([
@@ -94,15 +101,14 @@ export function buildRescue(deps: RescueDeps) {
   const nonces = new Map<string, { clientNonce: string; issuedAt: number }>();
   /** sha256(token) -> expiry. */
   const sessions = new Map<string, number>();
-  let failures: number[] = [];
   let hellos: number[] = [];
+  let lastRefusalNote = -Infinity;
 
   const sweep = () => {
     const t = now();
     for (const [k, v] of nonces) if (t - v.issuedAt > RESCUE_HELLO_TTL_MS) nonces.delete(k);
     for (const [k, exp] of sessions) if (exp <= t) sessions.delete(k);
-    failures = failures.filter((x) => t - x < FAILURE_WINDOW_MS);
-    hellos = hellos.filter((x) => t - x < FAILURE_WINDOW_MS);
+    hellos = hellos.filter((x) => t - x < WINDOW_MS);
   };
 
   function hello(req: HttpRequest): HttpResponse {
@@ -115,8 +121,12 @@ export function buildRescue(deps: RescueDeps) {
     if (typeof b.clientNonce !== "string" || !/^[0-9a-f]{32}$/.test(b.clientNonce)) return err(400, "clientNonce must be 16 bytes of lowercase hex");
     const cert = deps.certSha256();
     if (!cert) return err(503, "this server has no certificate yet", "no-certificate");
-    if (hellos.length >= MAX_HELLOS_PER_WINDOW || nonces.size >= MAX_OUTSTANDING_NONCES) return err(429, "too many tries: wait a minute", "rate-limited");
+    if (hellos.length >= MAX_HELLOS_PER_WINDOW) return err(429, "too many tries: wait a minute", "rate-limited");
     hellos.push(now());
+    if (nonces.size >= MAX_OUTSTANDING_NONCES) {
+      const oldest = nonces.keys().next().value;
+      if (oldest !== undefined) nonces.delete(oldest);
+    }
     const boxNonce = random(16).toString("hex");
     const h: RescueExchange = { serverDomain: deps.serverFqdn, clientNonce: b.clientNonce, boxNonce, certSha256: cert, issuedAt: now() };
     nonces.set(boxNonce, { clientNonce: b.clientNonce, issuedAt: h.issuedAt });
@@ -124,13 +134,14 @@ export function buildRescue(deps: RescueDeps) {
   }
 
   function refuse(why: string, status = 403): HttpResponse {
-    failures.push(now());
-    note("server.rescue.refused", `A rescue session was refused: ${why}.`, false);
+    if (now() - lastRefusalNote >= NOTE_REFUSALS_EVERY_MS) {
+      lastRefusalNote = now();
+      note("server.rescue.refused", `A rescue session was refused: ${why}.`, false);
+    }
     return err(status, `the rescue session was refused: ${why}`, "rescue-refused");
   }
 
   function session(req: HttpRequest): HttpResponse {
-    if (failures.length >= MAX_FAILURES_PER_WINDOW) return err(429, "too many refused tries: wait a minute", "rate-limited");
     let b: { order?: unknown; signatureHex?: unknown };
     try {
       b = JSON.parse(req.body.toString("utf8")) as typeof b;
