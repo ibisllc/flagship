@@ -18,6 +18,9 @@ on:
       git_ref:
         description: "The ref recipes name (installerGitRef); the image carries it as its label"
         default: "main"
+      label:
+        description: "Test only: the ref label the image carries when it differs from git_ref (blank = git_ref)"
+        default: ""
       release:
         description: "Commit to install: 'latest-endorsed' (the newest release a box would verify), 'tip' (the ref's tip, unsigned), or a 40-hex commit"
         default: "latest-endorsed"
@@ -113,12 +116,12 @@ jobs:
         run: |
           bash scripts/build-vm-appliance-cloud-qemu.sh \
             "$RUNNER_TEMP/debian-source.qcow2" "$SOURCE_SHA512" \
-            "$RUNNER_TEMP/base.raw" "$ARCH" "${{ inputs.git_ref }}" $GIT_COMMIT
+            "$RUNNER_TEMP/base.raw" "$ARCH" "${{ inputs.label || inputs.git_ref }}" $GIT_COMMIT
           cat "$RUNNER_TEMP/base.raw.json"
 
       - name: Compress, split and write the distribution manifest
         env:
-          GIT_REF: ${{ inputs.git_ref }}
+          GIT_REF: ${{ inputs.label || inputs.git_ref }}
           DEBIAN_BUILD: ${{ inputs.debian_build }}
         run: |
           set -euo pipefail
