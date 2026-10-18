@@ -50,7 +50,7 @@ class GymAppsTest : GymBase() {
     fun servicesSearchFindsAnApp() {
         launch(tab = "apps")
         waitText("Houseplant watering tracker", 20_000)
-        composeRule.onAllNodes(hasSetTextAction()).onFirst().performTextInput("zzzz")
+        composeRule.onAllNodes(hasSetTextAction()).onFirst().typeText("zzzz")
         eventually(what = "no Plants") { textCount("Houseplant watering tracker") == 0 }
         gymShot("services-no-match")
     }
@@ -193,7 +193,7 @@ class GymAppsTest : GymBase() {
         openPlants()
         tap("service-detail-access-view", 20_000)
         waitUntilExists("access-list-save", 15_000)
-        composeRule.onAllNodes(hasSetTextAction()).onFirst().performTextInput("allow api.gym.example\n")
+        composeRule.onAllNodes(hasSetTextAction()).onFirst().typeText("allow api.gym.example\n")
         tap("access-list-save")
         assertSigned("app-access", "admin")
         eventually(what = "saved list") { screensMock.accessCalls.lastOrNull()?.second?.list?.contains("api.gym.example") == true }
@@ -347,7 +347,7 @@ class GymAppsTest : GymBase() {
         tap("db-sql-run")
         waitUntilExists("db-sql-summary", 15_000)
         composeRule.onNode(hasSetTextAction() and (hasTestTag("db-sql-editor") or hasAnyAncestor(hasTestTag("db-sql-editor"))))
-            .performTextReplacement("UPDATE plants SET watered = true")
+            .replaceText("UPDATE plants SET watered = true")
         tap("db-sql-run")
         tap("db-confirm-write", 15_000)
         assertSigned("app-db-write", "admin")

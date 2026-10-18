@@ -287,7 +287,7 @@ class GymBackupsTest : GymBase() {
 
     private fun typePasscodeAndOpen() {
         waitUntilExists("import-backup-passcode", timeoutMs = 15_000)
-        composeRule.onNodeWithTag("import-backup-passcode").performTextInput(passcode)
+        composeRule.onNodeWithTag("import-backup-passcode").typeText(passcode)
         composeRule.onNodeWithTag("import-backup-unlock").performClick()
     }
 

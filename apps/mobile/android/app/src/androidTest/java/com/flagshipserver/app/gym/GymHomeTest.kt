@@ -286,7 +286,7 @@ class GymHomeTest : GymBase() {
     fun searchAndStatusChipsFilterTheList() {
         launch(tab = "home")
         waitText(home, 20_000)
-        composeRule.onNode(androidx.compose.ui.test.hasSetTextAction()).performTextInput("zzz")
+        composeRule.onNode(androidx.compose.ui.test.hasSetTextAction()).typeText("zzz")
         waitText("No servers match")
         gymShot("no-match")
         composeRule.onNode(androidx.compose.ui.test.hasSetTextAction()).performTextClearance()

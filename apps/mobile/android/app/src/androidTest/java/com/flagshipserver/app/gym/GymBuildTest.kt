@@ -122,7 +122,7 @@ class GymBuildTest : GymBase() {
     fun gitCheckThenInstall() {
         openChooser()
         tap("build-src-git")
-        composeRule.onAllNodes(hasSetTextAction()).onFirst().performTextInput("https://github.com/gym/ready")
+        composeRule.onAllNodes(hasSetTextAction()).onFirst().typeText("https://github.com/gym/ready")
         tap("build-git-check")
         waitText("Flagship-ready", 15_000)
         gymShot("git-ready")
@@ -139,7 +139,7 @@ class GymBuildTest : GymBase() {
         openChooser()
         buildMock.gitFitFixture = false
         tap("build-src-git")
-        composeRule.onAllNodes(hasSetTextAction()).onFirst().performTextInput("https://github.com/gym/plain")
+        composeRule.onAllNodes(hasSetTextAction()).onFirst().typeText("https://github.com/gym/plain")
         tap("build-git-check")
         waitUntilExists("build-git-adapt", 15_000)
         tap("build-git-share")

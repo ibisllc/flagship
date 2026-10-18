@@ -37,7 +37,7 @@ class GymOnboardingTest : GymBase() {
         composeRule.onNodeWithTag("connect-or").assertIsDisplayed()
         composeRule.onNodeWithTag("connect-scan").performScrollTo().assertIsDisplayed()
         gymShot("connect-account")
-        composeRule.onNodeWithTag("connect-pair-field").performScrollTo().performTextInput("bright-maple")
+        composeRule.onNodeWithTag("connect-pair-field").performScrollTo().typeText("bright-maple")
         composeRule.onNodeWithTag("connect-pair-continue").performScrollTo().performClick()
         // The hint arrives a frame or more after the tap on a busy emulator.
         waitText(ConnectInput.NAME_IN_CODE, 15_000)
@@ -62,7 +62,7 @@ class GymOnboardingTest : GymBase() {
     fun pairingLinkTypedAsTheNameOpensJoin() {
         openConnectPage()
         composeRule.onNodeWithTag("connect-name-field")
-            .performTextInput("https://${JoinLink.HOST}/join?sid=gym123&pk=${"A".repeat(43)}")
+            .typeText("https://${JoinLink.HOST}/join?sid=gym123&pk=${"A".repeat(43)}")
         composeRule.onNodeWithTag("connect-name-continue").performClick()
         waitUntilExistsDesc("join-device")
         gymShot("connect-link-to-join")

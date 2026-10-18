@@ -92,7 +92,7 @@ class GymPeerBackupTest : GymBase() {
     fun restoreFromOtherServersFindsAndOpensTheRecord() {
         openRestoreFromPeers()
         mock.peerRootFixture = record("00112233445566778899aabbccddeeff")
-        composeRule.onNodeWithTag("restore-peers-lost").performTextInput(lost)
+        composeRule.onNodeWithTag("restore-peers-lost").typeText(lost)
         composeRule.onNodeWithTag("restore-peers-find").performClick()
         // Opening the record runs the account-key crypto: wait for the name step or the refusal, and name the refusal.
         composeRule.waitUntil(40_000) {
@@ -111,7 +111,7 @@ class GymPeerBackupTest : GymBase() {
     fun aMissingRecordSaysSo() {
         openRestoreFromPeers()
         mock.peerRootFixture = null
-        composeRule.onNodeWithTag("restore-peers-lost").performTextInput(lost)
+        composeRule.onNodeWithTag("restore-peers-lost").typeText(lost)
         composeRule.onNodeWithTag("restore-peers-find").performClick()
         waitUntilExists("import-backup-error", timeoutMs = 20_000)
         gymShot("restore-peers-not-found")
@@ -121,7 +121,7 @@ class GymPeerBackupTest : GymBase() {
     fun aWaitingServerFetchesThePiecesAndRestores() {
         openRestoreFromPeers(podsVariant = "awaiting-backup", backups = "restore-partial")
         mock.peerRootFixture = record("ab".repeat(16))
-        composeRule.onNodeWithTag("restore-peers-lost").performTextInput(lost)
+        composeRule.onNodeWithTag("restore-peers-lost").typeText(lost)
         composeRule.onNodeWithTag("restore-peers-find").performClick()
         waitUntilExists("import-backup-send-existing", timeoutMs = 20_000)
         composeRule.onNodeWithTag("import-backup-send-existing").performClick()

@@ -282,8 +282,46 @@ abstract class GymBase {
     protected fun type(tag: String, text: String) {
         waitUntilExists(tag)
         composeRule.onNode(hasSetTextAction() and (hasTestTag(tag) or hasAnyAncestor(hasTestTag(tag))))
-            .scrollIfNeeded().performTextInput(text)
+            .scrollIfNeeded().typeText(text)
+    }
+
+    /** Whether the soft keyboard is on screen (or still sliding in or out). */
+    private fun keyboardShown(): Boolean {
+        var shown = false
+        scenario?.onActivity { a ->
+            shown = androidx.core.view.ViewCompat.getRootWindowInsets(a.window.decorView)
+                ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+        }
+        return shown
+    }
+
+    /**
+     * Put the soft keyboard away and wait until it is gone. Typing into a field
+     * raises it over the bottom of the screen, where it covers (and takes the
+     * touches meant for) the button the scenario taps next, and the page
+     * resizes under it; on a busy machine the next tap lands before that has
+     * settled. Every scenario types through [typeText] / [replaceText], which end here.
+     */
+    protected fun hideKeyboard() {
         composeRule.waitForIdle()
+        if (!keyboardShown()) return
+        runCatching { androidx.test.espresso.Espresso.closeSoftKeyboard() }
+        composeRule.waitUntil(10_000) { !keyboardShown() }
+        composeRule.waitForIdle()
+    }
+
+    /** Type [text] into this field, then put the keyboard away so the next tap reaches the page. */
+    protected fun androidx.compose.ui.test.SemanticsNodeInteraction.typeText(text: String): androidx.compose.ui.test.SemanticsNodeInteraction {
+        performTextInput(text)
+        hideKeyboard()
+        return this
+    }
+
+    /** Replace this field's text, then put the keyboard away. */
+    protected fun androidx.compose.ui.test.SemanticsNodeInteraction.replaceText(text: String): androidx.compose.ui.test.SemanticsNodeInteraction {
+        performTextReplacement(text)
+        hideKeyboard()
+        return this
     }
 
     /** The text a tagged node shows. */
@@ -486,7 +524,7 @@ abstract class GymBase {
         // The tag sits on the field's wrapper; type into the text input inside it.
         // The field starts prefilled ("home"): replace it.
         composeRule.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag("cs-name-field")))
-            .performTextReplacement(name)
+            .replaceText(name)
         composeRule.onNodeWithTag("cs-next-button").performScrollTo().performClick()
         composeRule.waitForIdle()
     }

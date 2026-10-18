@@ -92,7 +92,7 @@ class GymOctoberTest : GymBase() {
         composeRule.onNodeWithTag("sd-debug-access-open").performScrollTo().performClick()
         waitUntilExists("sd-debug-access-key")
         composeRule.onNodeWithTag("sd-debug-access-key").performScrollTo()
-            .performTextInput("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINBKsjJ0K7SrOhNovUYV5ObQIkq3GgFrr4UgozLJd4c3 gym@laptop")
+            .typeText("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINBKsjJ0K7SrOhNovUYV5ObQIkq3GgFrr4UgozLJd4c3 gym@laptop")
         waitUntilTextExists("Anyone with this key can read everything on this server while it's on.")
         gymShot("debug-access-form")
         composeRule.onNodeWithTag("sd-debug-access-submit").performScrollTo().performClick()
@@ -134,8 +134,8 @@ class GymOctoberTest : GymBase() {
 
         composeRule.onNodeWithTag("service-env-add-btn").performScrollTo().performClick()
         waitUntilExists("service-env-name-field")
-        composeRule.onNodeWithTag("service-env-name-field").performTextInput("plant-token")
-        composeRule.onNodeWithTag("service-env-value-field").performTextInput("tok-gym-1")
+        composeRule.onNodeWithTag("service-env-name-field").typeText("plant-token")
+        composeRule.onNodeWithTag("service-env-value-field").typeText("tok-gym-1")
         composeRule.onNodeWithTag("service-env-save-btn").performClick()
         waitUntilExists("service-env-name-error")
         assertTrue(
@@ -143,7 +143,7 @@ class GymOctoberTest : GymBase() {
         )
 
         composeRule.onNodeWithTag("service-env-name-field").performTextClearance()
-        composeRule.onNodeWithTag("service-env-name-field").performTextInput("PLANT_TOKEN")
+        composeRule.onNodeWithTag("service-env-name-field").typeText("PLANT_TOKEN")
         composeRule.onNodeWithTag("service-env-save-btn").performClick()
         waitUntilExists("service-env-row-PLANT_TOKEN", timeoutMs = 15_000)
         assertEquals("Saving a second variable keeps the first", 1, count("service-env-row-WEATHER_API_KEY"))
@@ -298,7 +298,7 @@ class GymOctoberTest : GymBase() {
         openAccessControl()
         composeRule.onNodeWithTag("service-access-add-person").performClick()
         waitUntilExists("service-access-name-field")
-        composeRule.onNodeWithTag("service-access-name-field").performTextInput("Gym friend")
+        composeRule.onNodeWithTag("service-access-name-field").typeText("Gym friend")
         // The button enables once the typed name has reached the view model; an earlier click does nothing.
         composeRule.waitUntil(10_000) {
             runCatching { composeRule.onNodeWithTag("service-access-create-invite").assertIsEnabled() }.isSuccess
@@ -321,7 +321,7 @@ class GymOctoberTest : GymBase() {
         waitUntilTextExists("Garden sensor", timeoutMs = 15_000)
         composeRule.onNodeWithTag("service-detail-api-keys-create").performScrollTo().performClick()
         waitUntilExists("api-key-create-label")
-        composeRule.onNodeWithTag("api-key-create-label").performTextInput("Gym sensor")
+        composeRule.onNodeWithTag("api-key-create-label").typeText("Gym sensor")
         composeRule.onNodeWithTag("api-key-create-confirm").performClick()
         waitUntilExists("api-key-created-value", timeoutMs = 15_000)
         gymShot("api-key-created")
@@ -382,7 +382,7 @@ class GymOctoberTest : GymBase() {
         waitUntilExists("db-run-sql", timeoutMs = 15_000)
         composeRule.onNodeWithTag("db-run-sql").performScrollTo().performClick()
         waitUntilExists("db-sql-editor")
-        composeRule.onNode(hasSetTextActionIn("db-sql-editor")).performTextInput("DELETE FROM plants")
+        composeRule.onNode(hasSetTextActionIn("db-sql-editor")).typeText("DELETE FROM plants")
         composeRule.onNodeWithTag("db-sql-run").performClick()
         waitUntilExists("db-write-admin-only", timeoutMs = 15_000)
         composeRule.onNodeWithTag("db-write-admin-only")
@@ -597,7 +597,7 @@ class GymOctoberTest : GymBase() {
 
         composeRule.onNodeWithTag("share-server-open").performScrollTo().performClick()
         waitUntilExists("share-sheet")
-        composeRule.onNodeWithTag("share-label").performTextInput("Robin")
+        composeRule.onNodeWithTag("share-label").typeText("Robin")
         composeRule.onNodeWithTag("share-next").performClick()
         // The active rows offer the same choice; take the sheet's.
         val sheetManage = hasTestTag("share-level-manage") and hasAnyAncestor(hasTestTag("share-sheet"))
@@ -699,7 +699,7 @@ class GymOctoberTest : GymBase() {
         assertEquals(1, count("co-invite-none"))
         composeRule.onNodeWithTag("co-invite-add-person").performScrollTo().performClick()
         waitUntilExists("co-invite-name")
-        composeRule.onNodeWithTag("co-invite-name").performTextInput("Alex")
+        composeRule.onNodeWithTag("co-invite-name").typeText("Alex")
         composeRule.onNodeWithTag("co-invite-create").performScrollTo().performClick()
         // Creating signs and posts through the shared server: wait for the link or a refusal, and name the refusal.
         composeRule.waitUntil(30_000) { count("co-invite-link") > 0 || count("co-invite-error") > 0 }
