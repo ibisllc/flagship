@@ -57,7 +57,7 @@ public final class UnrevokeServerViewModel {
         do {
             key = try await signer("Un-revoke server \(serverDomain)")
         } catch {
-            phase = .failed("Couldn't access your account key: \(error.localizedDescription)")
+            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
             return
         }
         let issuedAt = now()

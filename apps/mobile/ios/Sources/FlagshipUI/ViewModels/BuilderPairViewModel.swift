@@ -97,7 +97,7 @@ public final class BuilderPairViewModel: Identifiable {
             phoneSk = sk
             try await openStream(sid: sid)
         } catch {
-            await fail(error.localizedDescription)
+            await fail(UserErrorText.of(error))
         }
     }
 
@@ -121,16 +121,16 @@ public final class BuilderPairViewModel: Identifiable {
         case .accepted:
             reconnectAttempts = 0
             do { try await sendHelloIfReady() }
-            catch { await handleConnectionLoss(error.localizedDescription) }
+            catch { await handleConnectionLoss(UserErrorText.of(error)) }
         case .peerPresent, .peerJoined:
             // Re-send our hello if we already have the builder's key (covers a
             // late-joining builder in the QR path).
             do { try await sendHelloIfReady() }
-            catch { await handleConnectionLoss(error.localizedDescription) }
+            catch { await handleConnectionLoss(UserErrorText.of(error)) }
         case .builderHello(let pkB64):
             if builderPk == nil { builderPk = Base64URL.decode(pkB64) }
             do { try await sendHelloIfReady() }
-            catch { await handleConnectionLoss(error.localizedDescription) }
+            catch { await handleConnectionLoss(UserErrorText.of(error)) }
         case .recipeAccepted:
             guard case .delivering = phase, let domain = deliveredDomain else { break }
             receiptTimeoutTask?.cancel()
@@ -206,7 +206,7 @@ public final class BuilderPairViewModel: Identifiable {
                 await self.fail("The builder saved the recipe but didn't confirm receipt. Update or reopen the builder and try again.")
             }
         } catch {
-            await fail(error.localizedDescription)
+            await fail(UserErrorText.of(error))
         }
     }
 
@@ -253,7 +253,7 @@ public final class BuilderPairViewModel: Identifiable {
             do {
                 try await self.openStream(sid: sid)
             } catch {
-                await self.handleConnectionLoss(error.localizedDescription)
+                await self.handleConnectionLoss(UserErrorText.of(error))
             }
         }
     }
@@ -266,6 +266,7 @@ public final class BuilderPairViewModel: Identifiable {
         streamTask?.cancel()
         streamTask = nil
         await client.close()
-        phase = .failed(message)
+        // "Connection lost (NSURLErrorDomain -1005): ..." is for a log, not a person.
+        phase = .failed(UserErrorText.ofRaw(message, fallback: UserErrorText.dropped))
     }
 }

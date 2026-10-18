@@ -79,7 +79,7 @@ public final class SettingsViewModel {
             // Trusted devices, not Browser sessions.
             browserSessions = .loaded(ss.sessions.filter(\.isBrowserSession))
         } catch {
-            browserSessions = .failed(error.localizedDescription)
+            browserSessions = .failed(UserErrorText.of(error))
         }
         await loadTrustedDevices()
         await loadAccountType()
@@ -191,7 +191,7 @@ public final class SettingsViewModel {
             // no directory to read — that is the expected state, not a failure.
             trustedDevices = .loaded([])
         } catch {
-            trustedDevices = .failed(error.localizedDescription)
+            trustedDevices = .failed(UserErrorText.of(error))
         }
         await loadPendingRePair()
     }

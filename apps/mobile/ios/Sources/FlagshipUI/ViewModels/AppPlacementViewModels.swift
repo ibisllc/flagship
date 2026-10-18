@@ -115,7 +115,7 @@ public enum AppCopyOrder {
         do {
             signature = try key.signature(for: grant.canonicalBytes())
         } catch {
-            throw Failure(message: "Couldn't sign the copy: \(error.localizedDescription)")
+            throw Failure(message: "Couldn't sign the copy: \(UserErrorText.of(error))")
         }
         return AppCopyRequest(grant: grant, signature: HexUtil.encode(signature))
     }
@@ -473,7 +473,7 @@ public final class AppRunsOnController {
             do {
                 key = try await signer("Copy \(appName) to \(target.name)")
             } catch {
-                throw AppCopyOrder.Failure(message: "Couldn't access your account key: \(error.localizedDescription)")
+                throw AppCopyOrder.Failure(message: "Couldn't access your account key: \(UserErrorText.of(error))")
             }
             let boxClient = await client(target.fqdn)
             do {
@@ -514,7 +514,7 @@ public final class AppRunsOnController {
         do {
             key = try await irkSigner("Remove \(appName) from \(target.name)")
         } catch {
-            message = "Couldn't access your account key: \(error.localizedDescription)"
+            message = "Couldn't access your account key: \(UserErrorText.of(error))"
             return false
         }
         let order = UninstallServiceOrder(serverId: target.fqdn, creator: creator, slug: slug,

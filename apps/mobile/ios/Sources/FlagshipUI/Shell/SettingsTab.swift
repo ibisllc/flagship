@@ -739,7 +739,7 @@ struct PrivacyScreen: View {
                 } catch {
                     let gate = BiometricGate.GateError.from(error)
                     if !gate.isSilent {
-                        pendingError = "Couldn't enable: \(gate.localizedDescription)"
+                        pendingError = "Couldn't enable: \(UserErrorText.of(gate))"
                     }
                 }
             }

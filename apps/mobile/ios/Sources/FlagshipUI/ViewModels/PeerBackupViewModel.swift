@@ -21,7 +21,7 @@ public final class PeerBackupViewModel {
         do {
             state = .loaded(try await client.peerBackupStatus())
         } catch {
-            state = .failed(error.localizedDescription)
+            state = .failed(UserErrorText.of(error))
         }
     }
 

@@ -100,7 +100,7 @@ public final class AuditLogViewModel {
             // Keep any already-shown events on a load-more failure so the
             // list doesn't blank out; only a fresh load surfaces .failed.
             if replacing && events.isEmpty {
-                status = .failed(error.localizedDescription)
+                status = .failed(UserErrorText.of(error))
             } else {
                 status = .loaded
             }

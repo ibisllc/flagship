@@ -40,7 +40,7 @@ public enum BuilderPairError: Error, LocalizedError, Sendable {
     case connectionFailed(String)
     public var errorDescription: String? {
         switch self {
-        case .connectionFailed(let m): return "Couldn't reach the relay: \(m)"
+        case .connectionFailed(let m): return UserErrorText.ofRaw(m, fallback: "Couldn't reach the relay. Check your connection and try again.")
         }
     }
 }

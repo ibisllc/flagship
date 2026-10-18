@@ -3,6 +3,7 @@ import Observation
 import CryptoKit
 import Flagship
 import FlagshipCore
+import FlagshipAPI
 
 /// Drives "Back up your account key" — reads the UMK out of the
 /// Keystore (behind the biometric gate) and wraps it into a
@@ -96,7 +97,7 @@ public final class KeyfileExportViewModel {
             let text = try Keyfile.wrap(umkSeed: umk, passphrase: passphrase, meta: meta)
             phase = .ready(text: text)
         } catch {
-            phase = .failed("Couldn't create the backup file: \(error.localizedDescription)")
+            phase = .failed("Couldn't create the backup file: \(UserErrorText.of(error))")
         }
     }
 

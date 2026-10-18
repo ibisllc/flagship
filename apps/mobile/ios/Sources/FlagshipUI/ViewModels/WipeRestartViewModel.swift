@@ -82,7 +82,7 @@ public final class WipeRestartViewModel {
         do {
             _ = try await Keystore.currentUMK(reason: "Wipe & restart")
         } catch {
-            phase = .failed("Couldn't access your current account key: \(error.localizedDescription)")
+            phase = .failed("Couldn't access your current account key: \(UserErrorText.of(error))")
             return
         }
         let newUmk = SymmetricKey(size: .bits256)
@@ -93,7 +93,7 @@ public final class WipeRestartViewModel {
         do {
             registration = try await webAuthn.register()
         } catch {
-            phase = .failed("Passkey registration failed: \(error.localizedDescription)")
+            phase = .failed("Passkey registration failed: \(UserErrorText.of(error))")
             return
         }
         // 3 — PRF assert against the new credential.
@@ -101,7 +101,7 @@ public final class WipeRestartViewModel {
         do {
             prfSecret = try await webAuthn.prfAssert(credentialId: registration.credentialId)
         } catch {
-            phase = .failed("PRF assertion failed: \(error.localizedDescription)")
+            phase = .failed("PRF assertion failed: \(UserErrorText.of(error))")
             return
         }
 
@@ -113,7 +113,7 @@ public final class WipeRestartViewModel {
         do {
             newWrappedUmkB64 = try Recovery.wrap(umkSeed: newUmk, prfSecret: prfSecret)
         } catch {
-            phase = .failed("Couldn't wrap new key: \(error.localizedDescription)")
+            phase = .failed("Couldn't wrap new key: \(UserErrorText.of(error))")
             return
         }
         // The Worker's canonical bytes SHA-256 the DECODED ciphertext bytes
@@ -146,7 +146,7 @@ public final class WipeRestartViewModel {
             )
             newIrkPubHex = HexUtil.encode(newIrkKey.publicKey.rawRepresentation)
         } catch {
-            phase = .failed("Couldn't derive identity keys: \(error.localizedDescription)")
+            phase = .failed("Couldn't derive identity keys: \(UserErrorText.of(error))")
             return
         }
         let oldIrkPubHex = HexUtil.encode(oldIrk.publicKey.rawRepresentation)
@@ -163,7 +163,7 @@ public final class WipeRestartViewModel {
         do {
             signature = try oldIrk.signature(for: canonical)
         } catch {
-            phase = .failed("Couldn't sign: \(error.localizedDescription)")
+            phase = .failed("Couldn't sign: \(UserErrorText.of(error))")
             return
         }
 
@@ -197,7 +197,7 @@ public final class WipeRestartViewModel {
             phase = .failed("Another rotation completed first. Your account is fine — refresh and check Activity for the audit trail.")
             return
         } catch {
-            phase = .failed("Couldn't reach the server: \(error.localizedDescription)")
+            phase = .failed(UserErrorText.of(error))
             return
         }
 
@@ -212,7 +212,7 @@ public final class WipeRestartViewModel {
             // it on next foreground via /api/users/:u/devices, and
             // the user will be prompted to sign in again — which
             // is the right recovery path.
-            phase = .failed("Server committed but local install failed: \(error.localizedDescription). Open the app fresh to recover.")
+            phase = .failed("Server committed but local install failed: \(UserErrorText.of(error)). Open the app fresh to recover.")
             return
         }
         // Bonus on success: forget OUR push token so we don't try

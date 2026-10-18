@@ -305,7 +305,7 @@ public final class CreateServerViewModel {
                 }
             }
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserErrorText.of(error))
             await relay.close()
         }
     }
@@ -340,7 +340,7 @@ public final class CreateServerViewModel {
             )
             await relay.close()
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserErrorText.of(error))
             await relay.close()
         }
     }

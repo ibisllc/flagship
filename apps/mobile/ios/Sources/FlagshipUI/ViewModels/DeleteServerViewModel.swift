@@ -126,7 +126,7 @@ public final class DeleteServerViewModel {
         do {
             k = try await keys("Delete server \(serverLabel)")
         } catch {
-            phase = .failed("Couldn't access your account key: \(error.localizedDescription)")
+            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
             return
         }
 

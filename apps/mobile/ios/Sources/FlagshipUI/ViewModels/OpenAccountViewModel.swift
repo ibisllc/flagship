@@ -251,7 +251,7 @@ public final class OpenAccountViewModel {
             createdDeviceId = deviceId
             phase = .opened(deviceName: effectiveDeviceName)
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserErrorText.of(error))
         }
     }
 }

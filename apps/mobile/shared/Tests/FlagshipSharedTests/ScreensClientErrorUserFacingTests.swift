@@ -27,10 +27,11 @@ final class ScreensClientErrorUserFacingTests: XCTestCase {
     }
 
     func testUntypedErrorCollapsesToGenericFallback() {
-        // A raw transport error (or anything non-ScreensClientError) must
-        // collapse to one honest sentence, never `String(describing:)`.
+        // Anything non-ScreensClientError we can't classify must collapse to
+        // one honest sentence (not a claim about the connection), never
+        // `String(describing:)`.
         let msg = ScreensClientError.userFacing(RawError())
-        XCTAssertEqual(msg, "Couldn't reach the server. Check your connection and try again.")
+        XCTAssertEqual(msg, "Something went wrong. Try again.")
         XCTAssertFalse(msg.contains("RawError"))
         XCTAssertFalse(msg.contains("noSessionToken"))
     }

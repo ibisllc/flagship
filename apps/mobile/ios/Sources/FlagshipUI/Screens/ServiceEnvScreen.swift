@@ -162,7 +162,7 @@ public struct ServiceEnvScreen: View {
             let r = try await client.serviceEnvList(appId: appId)
             names = r.names
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = UserErrorText.of(error)
         }
     }
 
@@ -177,7 +177,7 @@ public struct ServiceEnvScreen: View {
             )
             await reload()
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = UserErrorText.of(error)
         }
     }
 }
@@ -283,7 +283,7 @@ private struct AddEnvVarSheet: View {
             value = ""
             onCommitted()
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = UserErrorText.of(error)
         }
     }
 }

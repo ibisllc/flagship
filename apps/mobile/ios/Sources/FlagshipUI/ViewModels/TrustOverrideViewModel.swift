@@ -95,7 +95,7 @@ public final class TrustOverrideViewModel {
         do {
             key = try await signer("Continue with an unverified Flagship control server")
         } catch {
-            phase = .failed("Couldn't access your account key: \(error.localizedDescription)")
+            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
             return
         }
 
@@ -110,7 +110,7 @@ public final class TrustOverrideViewModel {
         do {
             signature = try exception.sign(with: key)
         } catch {
-            phase = .failed("Couldn't sign: \(error.localizedDescription)")
+            phase = .failed("Couldn't sign: \(UserErrorText.of(error))")
             return
         }
 

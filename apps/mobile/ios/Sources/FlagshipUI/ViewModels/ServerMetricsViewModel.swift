@@ -23,7 +23,7 @@ public final class ServerMetricsViewModel {
         do {
             state = .loaded(try await client.serverMetrics(podId: podId))
         } catch {
-            state = .failed(error.localizedDescription)
+            state = .failed(UserErrorText.of(error))
         }
     }
 

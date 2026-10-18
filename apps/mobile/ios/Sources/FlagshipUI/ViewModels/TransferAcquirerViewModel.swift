@@ -119,7 +119,7 @@ public final class TransferAcquirerViewModel {
         do {
             key = try await signer("Take over \(parsed.serverDomain)")
         } catch {
-            phase = .failed("Couldn't access your account key: \(error.localizedDescription)")
+            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
             return
         }
         do {

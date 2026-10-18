@@ -146,7 +146,7 @@ final class ScreensClientErrorPlainLanguageTests: XCTestCase {
         XCTAssertTrue(ScreensClientError.plainLanguage(forStatus: 404).lowercased().contains("couldn't find"))
         XCTAssertTrue(ScreensClientError.plainLanguage(forStatus: 429).lowercased().contains("busy"))
         XCTAssertTrue(ScreensClientError.plainLanguage(forStatus: 401).lowercased().contains("signed in"))
-        XCTAssertTrue(ScreensClientError.plainLanguage(forStatus: 400).lowercased().contains("connection"))
+        XCTAssertEqual(ScreensClientError.plainLanguage(forStatus: 400), UserErrorText.refused)
         XCTAssertTrue(ScreensClientError.plainLanguage(forStatus: 0).lowercased().contains("connection"))
     }
 
@@ -164,7 +164,9 @@ final class ScreensClientErrorPlainLanguageTests: XCTestCase {
         // A non-ScreensClientError collapses to a single honest message —
         // never Apple's developer-facing localizedDescription.
         let shown = ScreensClientError.userFacing(Raw())
-        XCTAssertTrue(shown.lowercased().contains("couldn't reach"))
+        XCTAssertEqual(shown, UserErrorText.generic)
+        // A dropped network is still said as such.
+        XCTAssertTrue(ScreensClientError.userFacing(URLError(.cannotFindHost)).lowercased().contains("couldn't reach"))
         // A ScreensClientError routes through its plain-language description.
         let pinShown = ScreensClientError.userFacing(
             ScreensClientError.certPinMismatch(host: "x.y.flagship.services")

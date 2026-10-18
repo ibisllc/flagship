@@ -218,7 +218,7 @@ public struct CreateServerStubScreen: View {
             // The recipe is out — surface the pending pod via the delivered page.
             vm.phase = .delivered(serial: minted.serial, serverDomain: minted.serverDomain)
         } catch {
-            vm.phase = .failed(error.localizedDescription)
+            vm.phase = .failed(UserErrorText.of(error))
         }
     }
 
@@ -232,7 +232,7 @@ public struct CreateServerStubScreen: View {
             copiedToast = true
             vm.phase = .delivered(serial: minted.serial, serverDomain: minted.serverDomain)
         } catch {
-            vm.phase = .failed(error.localizedDescription)
+            vm.phase = .failed(UserErrorText.of(error))
         }
     }
 

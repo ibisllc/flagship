@@ -84,7 +84,7 @@ public final class CompanionRequestsViewModel {
         } catch {
             // Keep last-good rows; only surface a failure when we have none.
             if case .loaded = state { return }
-            state = .failed(error.localizedDescription)
+            state = .failed(UserErrorText.of(error))
         }
     }
 
@@ -124,7 +124,7 @@ public final class CompanionRequestsViewModel {
                 return
             }
         } catch {
-            rowError[request.requestId] = error.localizedDescription
+            rowError[request.requestId] = UserErrorText.of(error)
             return
         }
         await postResolve(requestId: request.requestId, outcome: "approved")
@@ -147,7 +147,7 @@ public final class CompanionRequestsViewModel {
                 state = .loaded(rows)
             }
         } catch {
-            rowError[requestId] = error.localizedDescription
+            rowError[requestId] = UserErrorText.of(error)
         }
     }
 

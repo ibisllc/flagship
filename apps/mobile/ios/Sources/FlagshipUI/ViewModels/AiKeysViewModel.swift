@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import Flagship
+import FlagshipAPI
 
 /// Backs Settings → AI keys. Views saved keys as masked slugs, adds a new
 /// one, and deletes. No full key is ever shown — only the typed input holds
@@ -64,7 +65,7 @@ public final class AiKeysViewModel {
                 relay: formRelay
             )
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = UserErrorText.of(error)
             return false
         }
         resetForm()
