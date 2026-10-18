@@ -45,13 +45,14 @@ export const lifecycle: Group = {
       assert(r.status === 403, `expected 403, got ${r.status}: ${short(r.text)}`);
       return "403";
     });
-    await rec.check("un-revoke (admin-root signed) → /pods clears it and DNS is republished", async () => {
+    await rec.check("un-revoke (admin-root signed) → /pods clears it; no DNS is written (the zone wildcard answers the box)", async () => {
       const u: ServerUnrevocation = { username: user, serverDomain: b.fqdn, issuedAt: Date.now() };
       const r = await postJson(`https://${CONTROL}/api/server-registry/unrevoke`, { request: u, signature: bytesToHex(signServerUnrevocation(u, A.keys.adminRoot)) });
       assert(r.status === 200 && r.json?.ok !== false, `${r.status}: ${short(r.text)}`);
       const p = await row();
       assert(p && !p.revokedAt, `/pods row: ${short(p)}`);
-      return `dnsRepublished=${r.json?.dnsRepublished}`;
+      assert(r.json?.legacyDnsRemoved === 0, `legacyDnsRemoved=${r.json?.legacyDnsRemoved} (an un-revoke writes no record and finds none to clear)`);
+      return "legacyDnsRemoved=0";
     });
 
     let stk = "";

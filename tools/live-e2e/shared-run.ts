@@ -195,9 +195,9 @@ async function main(): Promise<number> {
       return 3;
     }
     if (zoneRecords !== null) {
-      // One wildcard per account (docs/wildcard-dns.md): an account holds 4 records
-      // whatever its box count; a box only adds records while its certificate is
-      // being issued. (Before it was ~8 per account and ~4 per box.)
+      // Root wildcard (docs/wildcard-dns.md): the zone holds 4 records at rest and an
+      // account none, whatever its box count; a box only adds its 2 challenge TXT
+      // while its certificate is being issued. (Before it was 4 per account.)
       const need = dnsRecordsNeeded(alivePeak, accountsNeeded.size);
       log(`DNS zone: ${zoneRecords} of ${DNS_ZONE_CAP} records; this run adds up to ~${need} (peak ${alivePeak} boxes)`);
       if (zoneRecords + need > DNS_ZONE_CAP - 5) {
@@ -367,6 +367,11 @@ async function main(): Promise<number> {
         const dark = dnsProbe!.dark();
         if (dark.length) throw new Error(dark.slice(0, 6).join("; "));
         return "no NODATA or NXDOMAIN on the box name or a random label under it (authoritative, 1.1.1.1, 8.8.8.8)";
+      });
+      await fleetRec.check("DNS: no address or CAA record was ever written for the account or its boxes", async () => {
+        const written = dnsProbe!.recordsWritten();
+        if (written.length) throw new Error(`records appeared under the account: ${written.slice(0, 6).join("; ")}`);
+        return "the zone wildcard answered everything; only challenge TXT came and went";
       });
     }
     writeJson(dir, "fleet-checks.json", fleetRec.results);

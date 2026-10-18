@@ -2,14 +2,15 @@
  * A timeline of what DNS says about one box's names while its first certificate
  * is being issued (docs/wildcard-dns.md "Live verification").
  *
- * The wildcard design leans on two things nobody had seen live: that a name
- * which only has a descendant (the challenge TXT at `_acme-challenge.<box>`)
- * stops being answered from the account wildcard, so the shield must already be
- * there; and that shield and TXT are seen in the order they were written. This
- * polls, every 200 ms, the box name, a random label under it (never cached), the
- * challenge TXT, against Cloudflare's own name servers and public resolvers,
- * and polls the gym sweep dry run for the zone's record set, and writes down
- * every CHANGE of answer with its time. Nothing here writes to DNS.
+ * Under the root wildcard (docs/wildcard-dns.md) the zone holds `*.<apex>` and
+ * nothing at an account or box name, so the box name must answer from the first
+ * query, and the challenge TXT beneath it (measured: a TXT below a name blocks
+ * nothing) must never darken it. This polls, every 200 ms, the box name, a
+ * random label under it (never cached), the challenge TXT, against Cloudflare's
+ * own name servers and public resolvers, and polls the gym sweep dry run for
+ * the zone's record set (any address or CAA record that appears at the account
+ * is a violation: {@link DnsProbe.recordsWritten}), and writes down every
+ * CHANGE of answer with its time. Nothing here writes to DNS.
  */
 import { Resolver } from "node:dns";
 import { randomBytes } from "node:crypto";
@@ -202,10 +203,23 @@ export class DnsProbe {
 
   private issuanceEnd: number | null = null;
 
-  /** When the account wildcard first showed in the zone (+3 s for it to reach the name servers); null if it never did. */
+  /**
+   * From when the box name must answer. Under the root wildcard (docs/wildcard-dns.md)
+   * every name under the account answers from the zone's `*.<apex>`, before the
+   * account or the box exists, so the whole probe counts. Null if it recorded nothing.
+   */
   issuanceStart(): number | null {
-    const e = this.events.find((x) => x.via === "cloudflare API" && x.state === `+ A *.${this.targets.account}`);
-    return e ? e.t + 3000 : null;
+    return this.events.some((x) => x.via !== "cloudflare API") ? 0 : null;
+  }
+
+  /**
+   * Address, CAA or other non-challenge records that appeared at the account or
+   * a box name during the run: under the root wildcard there must be none.
+   */
+  recordsWritten(): string[] {
+    return this.events
+      .filter((x) => x.via === "cloudflare API" && x.state.startsWith("+ ") && !/^\+ TXT _acme-challenge\./.test(x.state))
+      .map((x) => x.state.slice(2));
   }
 
   /** The box has its certificate, or the run is about to tear it down: what happens after is not issuance. */
@@ -214,10 +228,10 @@ export class DnsProbe {
     this.stopIssuance();
   }
 
-  /** Dark stretches of the box name between the wildcard appearing and the end of issuance. */
+  /** Dark stretches of the box name from the start of the probe to the end of issuance. */
   dark(): string[] {
     const from = this.issuanceStart();
-    if (from === null) return ["the account wildcard never showed in the zone, so there was nothing to check"];
+    if (from === null) return ["the probe recorded no answer at all, so there was nothing to check"];
     return darkDuringIssuance(this.events, from, this.issuanceEnd ?? Date.now() - this.t0);
   }
 

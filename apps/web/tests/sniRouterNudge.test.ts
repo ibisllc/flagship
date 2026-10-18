@@ -311,6 +311,32 @@ describe("SNI router: names the wildcard DNS resolves here but no box registered
     expect(reassembleAllData(attic)).not.toContain("\u0016\u0003");
   });
 
+  it("treats a one-label name under the apex the same whether or not an account has that name (root wildcard, docs/wildcard-dns.md)", async () => {
+    // `*.flagship.services` now resolves `harry.flagship.services` and
+    // `anything.flagship.services` to the relay. Neither is a box or a service
+    // of anybody's: both close at once, say nothing and open nothing, so the
+    // time to close does not tell an account from a stranger.
+    const reg = new TunnelRegistry();
+    const home = mockTunnel("home.harry.flagship.services");
+    reg.register({ tunnel: home, canonicals: ["home.harry.flagship.services"] });
+    router = await startSniRouter(reg, { port: 0, host: "127.0.0.1", ...FAST });
+    const probes = await Promise.all([
+      probe(router.port, "harry.flagship.services"), // an account with a box online
+      probe(router.port, "nobody.flagship.services"), // no such account
+      probe(router.port, "anything.flagship.services"),
+    ]);
+    for (const p of probes) {
+      expect(p.received).toBe(0);
+      expect(p.ms).toBeLessThan(FAST.holdTimeoutMs - 100);
+    }
+    const spread = Math.max(...probes.map((p) => p.ms)) - Math.min(...probes.map((p) => p.ms));
+    expect(spread).toBeLessThan(200);
+    for (const sni of ["harry.flagship.services", "nobody.flagship.services", "anything.flagship.services"]) {
+      expect(opensFor(home, sni), sni).toHaveLength(0);
+    }
+    expect(reassembleAllData(home)).not.toContain("\u0016\u0003");
+  });
+
   it("still drops a name that is not under the apex at once", async () => {
     const reg = new TunnelRegistry();
     router = await startSniRouter(reg, { port: 0, host: "127.0.0.1", ...FAST });

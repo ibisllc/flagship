@@ -65,19 +65,20 @@ export const core: Group = {
       assert(c.sans.includes(fqdn) && c.sans.includes(`*.${fqdn}`), `sans=${c.sans.join(",")}`);
       return c.sans.join(", ");
     });
-    // One wildcard per account (docs/wildcard-dns.md): the zone holds the
-    // account's four records and nothing per box, and every name under it resolves
-    // to the relay whether or not a box is registered there.
-    await rec.check("the account's DNS is the four-record wildcard set, nothing per box", async () => {
+    // Root wildcard (docs/wildcard-dns.md): the zone holds `*.<apex>` and the apex
+    // CAA and NOTHING at the account or its boxes, and every name under the
+    // account resolves to the relay through the zone wildcard whether or not a
+    // box is registered there.
+    await rec.check("the account holds ZERO address or CAA records (no per-account, no per-box)", async () => {
       const z = await sweep(false);
       assert(z.status === 200, `gym sweep dry run ${z.status}`);
       const records = (z.body?.dnsRecords ?? []) as Array<{ type: string; name: string }>;
       assert(records.length > 0, "the gym sweep returned no record names");
       const surprises = accountRecordSurprises(records, user, SERVICES);
       assert(surprises.length === 0, surprises.join("; "));
-      return `4 records under ${user}.${SERVICES}`;
+      return `0 records under ${user}.${SERVICES}`;
     });
-    await rec.check("a box name, a service name and an unregistered name all resolve to the relay", async () => {
+    await rec.check("its box, service and unregistered names all resolve to the relay through the zone wildcard", async () => {
       const { Resolver } = await import("node:dns/promises");
       const r = new Resolver();
       r.setServers(["1.1.1.1", "8.8.8.8"]);

@@ -16,9 +16,12 @@
  *   npx tsx tools/live-e2e/dns-ent-experiment.ts --canary   # ~30 s, exit 1 if a challenge TXT darkens a name
  *   npx tsx tools/live-e2e/dns-ent-experiment.ts --matrix [--only f-A,f-TXT]   # which names lose a zone-level wildcard
  *
- * `--canary` is the standing check behind running with no challenge shield
- * (docs/wildcard-dns.md "Live verification"): re-run it after any change of
- * Cloudflare plan or zone settings, and weekly with the gym.
+ * `--canary` is the standing check behind the root-wildcard layout and its lack
+ * of a challenge shield (docs/wildcard-dns.md "Live verification"): it writes NO
+ * account records, only a challenge TXT under a throwaway account name, and the
+ * zone's own `*.<apex>` must keep answering the box, a child of it and a
+ * sibling. Re-run it after any change of Cloudflare plan or zone settings, and
+ * weekly with the gym.
  */
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -136,7 +139,7 @@ async function main(): Promise<void> {
   if (!/^\d+\.\d+\.\d+\.\d+$/.test(v4) || !v6.includes(":")) throw new Error(`could not read the gym relay addresses (${v4} / ${v6})`);
   log({ step: "relay addresses", v4, v6, auth: AUTH });
 
-  const U = `zz${randomBytes(3).toString("hex")}.${SERVICES}`; // throwaway account with its four records
+  const U = `zz${randomBytes(3).toString("hex")}.${SERVICES}`; // throwaway account (its four records only in the full experiment, none in --canary)
   const V = `zy${randomBytes(3).toString("hex")}.${SERVICES}`; // throwaway account with NO records (zone-level wildcard only)
   const MARK4 = "192.0.2.1"; // a shield with its own address, so its arrival can be told from the wildcard's
   const MARK6 = "2001:db8::1";
@@ -173,12 +176,14 @@ async function main(): Promise<void> {
   };
   const isRelay = (a: Answer): boolean => a.rcode === "NOERROR" && a.answer === v4;
   try {
-    // Account set, as .com writes it: CAA at the account, wildcard A/AAAA below it.
-    await make("CAA", U, null, { flags: 0, tag: "issue", value: "letsencrypt.org" });
-    await make("A", `*.${U}`, v4);
-    await make("AAAA", `*.${U}`, v6);
-    await waitAuth("account wildcard A", `x.${U}`, "A", isRelay);
-    await waitAuth("account wildcard AAAA", `x.${U}`, "AAAA", (a) => a.rcode === "NOERROR" && a.answer === v6);
+    if (!CANARY) {
+      // The previous per-account set: CAA at the account, wildcard A/AAAA below it.
+      await make("CAA", U, null, { flags: 0, tag: "issue", value: "letsencrypt.org" });
+      await make("A", `*.${U}`, v4);
+      await make("AAAA", `*.${U}`, v6);
+      await waitAuth("account wildcard A", `x.${U}`, "A", isRelay);
+      await waitAuth("account wildcard AAAA", `x.${U}`, "AAAA", (a) => a.rcode === "NOERROR" && a.answer === v6);
+    }
 
     // (a) the wildcard answers; then a TXT with NO shield.
     ask("a0 wildcard only", [`x.${U}`, `y.deep.${U}`], ["A", "AAAA"]);

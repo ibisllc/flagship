@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { darkDuringIssuance, describeAnswer } from "../lib/dnsProbe.js";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DnsProbe, darkDuringIssuance, describeAnswer } from "../lib/dnsProbe.js";
 
 const err = (code: string): NodeJS.ErrnoException => Object.assign(new Error(code), { code });
 
@@ -45,5 +48,42 @@ describe("dark stretches during issuance", () => {
   it("does not blame the challenge TXT or the account name", () => {
     const events = [ev(0, "challenge TXT", "NXDOMAIN"), ev(0, "account A", "NODATA")];
     expect(darkDuringIssuance(events, 0, 9000)).toEqual([]);
+  });
+});
+
+describe("the probe under the root wildcard", () => {
+  const probe = (): DnsProbe =>
+    new DnsProbe({ box: "home.ga1.gym.flagship.services", account: "ga1.gym.flagship.services", apex: "gym.flagship.services" }, mkdtempSync(join(tmpdir(), "probe-")), {
+      auth: ["127.0.0.1"],
+      public: [],
+    });
+  const note = (p: DnsProbe, target: string, via: string, state: string) =>
+    (p as unknown as { note(t: string, v: string, s: string): void }).note(target, via, state);
+
+  it("counts the box name from its first answer: there is no wildcard to wait for", () => {
+    const p = probe();
+    expect(p.issuanceStart()).toBeNull();
+    note(p, "box A", "authoritative", "A 1.1.1.1");
+    expect(p.issuanceStart()).toBe(0);
+  });
+
+  it("reports a box name that was dark at the start", async () => {
+    const p = probe();
+    note(p, "box A", "authoritative", "NXDOMAIN");
+    await new Promise((r) => setTimeout(r, 30));
+    note(p, "box A", "authoritative", "A 1.1.1.1");
+    await new Promise((r) => setTimeout(r, 10));
+    expect(p.dark()).toHaveLength(1);
+  });
+
+  it("sees an address or CAA record that appears at the account, not the challenge TXT", () => {
+    const p = probe();
+    const zone = (state: string) => (p as unknown as { zoneEvent(s: string): void }).zoneEvent(state);
+    zone("+ TXT _acme-challenge.home.ga1.gym.flagship.services");
+    expect(p.recordsWritten()).toEqual([]);
+    zone("+ A *.ga1.gym.flagship.services");
+    zone("+ CAA ga1.gym.flagship.services");
+    zone("- A *.ga1.gym.flagship.services");
+    expect(p.recordsWritten()).toEqual(["A *.ga1.gym.flagship.services", "CAA ga1.gym.flagship.services"]);
   });
 });
