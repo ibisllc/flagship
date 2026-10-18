@@ -98,6 +98,26 @@ final class GymSweepSettingsTests: GymSweepCase {
         }
     }
 
+    /// About names the one product version every surface shares
+    /// (release/version.json), then the App Store version and build.
+    func test_aboutShowsTheProductVersionAndStoreBuild() throws {
+        let file = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("release/version.json")
+        let shared = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        let line = "Flagship \(shared["product"] as! String) \(shared["label"] as! String) "
+            + "(iOS \(shared["iosVersion"] as! String), build \(shared["iosBuild"] as! Int))"
+        let app = launch(tab: "settings")
+        settings(app)
+        open(app, row: "About Flagship", screen: "About")
+        let el = app.staticTexts[line]
+        XCTAssertTrue(el.waitForExistence(timeout: 10), "About should read \(line).")
+        back(app, from: "About")
+    }
+
     // MARK: - Browser sessions
 
     /// Only docked browsers (`kind: remote`) are listed, never this phone's

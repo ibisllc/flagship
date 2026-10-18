@@ -6,6 +6,6 @@
     <description>Field notes from a personal-cloud project that takes self-hosting seriously.</description>
     <language>en-us</language>
     <atom:link href="https://flagshipserver.com/blog/rss.xml" rel="self" type="application/rss+xml" />
-    <!-- First posts ship alongside v1 alpha. Until then this feed is empty by design. -->
+    <!-- First posts ship alongside the 0.2 Beta launch. Until then this feed is empty by design. -->
   </channel>
 </rss>

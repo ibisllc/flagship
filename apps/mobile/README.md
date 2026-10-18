@@ -56,7 +56,7 @@ every request as the `x-flagship-session` header. The webapp's
 ## What's NOT in this README
 
 - Native UI implementation: deferred (P5.5 / P5.6 in the cycle plan).
-  The webapp is the v1 alpha surface; native ports follow once the
+  The webapp is the 0.2 Beta surface; native ports follow once the
   contract is battle-tested in production.
 - Real HTTP / WebSocket client + Secure Enclave / StrongBox key wrapping:
   deferred. The `Keystore.swift` / `Keystore.kt` scaffolds exist for the

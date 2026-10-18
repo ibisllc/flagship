@@ -30,6 +30,18 @@ class GymSettingsTest : GymBase() {
         waitUntilExists("settings-title", 20_000)
     }
 
+    /** About names the one product version every surface shares
+     *  (release/version.json, compiled into BuildConfig) and the Play build. */
+    @Test
+    fun aboutShowsTheProductVersionAndBuild() {
+        settings()
+        waitText(
+            "Flagship ${com.flagshipserver.app.BuildConfig.VERSION_NAME} " +
+                "${com.flagshipserver.app.BuildConfig.PRODUCT_LABEL} " +
+                "(build ${com.flagshipserver.app.BuildConfig.VERSION_CODE})",
+        )
+    }
+
     // ─── Lock and sign out ───────────────────────────────────────────────────
 
     @Test

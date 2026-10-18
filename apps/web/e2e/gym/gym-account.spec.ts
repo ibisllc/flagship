@@ -12,6 +12,8 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   ACCOUNT_ID,
   HOME,
@@ -150,6 +152,10 @@ test.describe("gym webapp account", () => {
     await expect(page.locator('#view-about a[href="https://flagshipserver.com/"]')).toHaveAttribute("rel", "noopener");
     await expect(page.locator('#view-about a[href="https://flagshipserver.com/security#report"]')).toHaveText("Security report");
     await expect(page.locator("#view-about")).toContainText("BUSL-1.1");
+    const product = JSON.parse(readFileSync(fileURLToPath(new URL("../../../../release/version.json", import.meta.url)), "utf8"));
+    await expect(page.locator("#about-version")).toHaveText(
+      new RegExp(`^Flagship ${product.product.replace(".", "\\.")} ${product.label} \\(web build \\d+\\)$`),
+    );
     await shot(page, testInfo, "settings-about");
     await page.click("#about-back");
     await expect(page.locator("#view-settings-tab")).toBeVisible();
