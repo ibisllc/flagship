@@ -254,19 +254,27 @@ export function handleCaCert(deps: PubkeyCertDeps): HandlerResponseWithHeaders {
   });
 }
 
+// The CA key never changes inside an isolate (it comes from a Worker secret), and
+// deriving its public half is a scalar multiplication (about 0.3 ms of CPU) that
+// every control-plane request used to repeat. Remembered per (secret, issuer).
+const CA_KEYPAIRS = new Map<string, CaIssuer>();
+
 export function caKeypairFromEnv(env: Record<string, string | undefined>): CaIssuer {
   const privHex = env.FLAGSHIP_CA_PRIV_HEX;
-  if (privHex && /^[0-9a-f]{64}$/i.test(privHex)) {
-    const sk = new Uint8Array(32);
-    for (let i = 0; i < 32; i++) sk[i] = parseInt(privHex.slice(i * 2, i * 2 + 2), 16);
-    return {
-      keypair: { privateKey: sk, publicKey: ed.getPublicKey(sk) },
-      issuer: env.FLAGSHIP_CA_ISSUER ?? "flagship-ca-v1",
-    };
+  const real = !!privHex && /^[0-9a-f]{64}$/i.test(privHex);
+  const issuer = env.FLAGSHIP_CA_ISSUER ?? (real ? "flagship-ca-v1" : "flagship-ca-dev");
+  const memo = `${real ? privHex!.toLowerCase() : "dev"}|${issuer}`;
+  const known = CA_KEYPAIRS.get(memo);
+  if (known) return known;
+  let sk: Uint8Array;
+  if (real) {
+    sk = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) sk[i] = parseInt(privHex!.slice(i * 2, i * 2 + 2), 16);
+  } else {
+    sk = new Uint8Array(32).fill(0xCA);
   }
-  const sk = new Uint8Array(32).fill(0xCA);
-  return {
-    keypair: { privateKey: sk, publicKey: ed.getPublicKey(sk) },
-    issuer: env.FLAGSHIP_CA_ISSUER ?? "flagship-ca-dev",
-  };
+  const made: CaIssuer = { keypair: { privateKey: sk, publicKey: ed.getPublicKey(sk) }, issuer };
+  if (CA_KEYPAIRS.size >= 8) CA_KEYPAIRS.clear();
+  CA_KEYPAIRS.set(memo, made);
+  return made;
 }

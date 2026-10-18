@@ -2,7 +2,7 @@
  * Device-capability-grant domain — an account-scoped opaque device identity
  * bound to a device key and explicit scope set, plus the revoke envelope.
  */
-import { ed } from "./edSync.js";
+import { ed, edVerifyFast } from "./edSync.js";
 import { hex } from "./canonicalBase.js";
 import type { Bytes, Keypair } from "./types.js";
 
@@ -185,6 +185,19 @@ function canonicalDeviceCapabilityGrant(g: DeviceCapabilityGrant): Bytes {
 
 export function signDeviceCapabilityGrant(g: DeviceCapabilityGrant, irk: Keypair): Bytes {
   return ed.sign(canonicalDeviceCapabilityGrant(g), irk.privateKey);
+}
+
+/** `verifyDeviceCapabilityGrant`, with the native Ed25519 check where the runtime has it. */
+export async function verifyDeviceCapabilityGrantFast(
+  g: DeviceCapabilityGrant,
+  sig: Bytes,
+  irkPub: Bytes,
+): Promise<boolean> {
+  try {
+    return await edVerifyFast(sig, canonicalDeviceCapabilityGrant(g), irkPub);
+  } catch {
+    return false;
+  }
 }
 
 export function verifyDeviceCapabilityGrant(

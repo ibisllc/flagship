@@ -27,6 +27,7 @@ import {
   DEVICE_SCOPES,
   isSensitiveScope,
   verifyDeviceCapabilityGrant,
+  verifyDeviceCapabilityGrantFast,
   verifyRevokeDeviceCapabilityGrant,
   type DeviceCapabilityGrant,
   type DeviceScope,
@@ -386,7 +387,7 @@ export async function requireDeviceScope(
     issuedAt: grantRec.issuedAt,
     expiresAt: grantRec.expiresAt,
   };
-  if (!verifyDeviceCapabilityGrant(grant, sig, irkPub)) {
+  if (!(await verifyDeviceCapabilityGrantFast(grant, sig, irkPub))) {
     return { ok: false, reason: "grant signature failed verification" };
   }
 

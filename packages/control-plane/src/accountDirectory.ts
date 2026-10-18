@@ -169,13 +169,24 @@ export async function handleGetAccountDirectory(
   const path = `/api/accounts/${account}/directory`;
   const caller = await authorizeActiveDevice(deps, auth, { accountId: account, method: "GET", path });
   if (!caller) return forbidden("not authorized");
-  const scoped = await requireDeviceScope(
-    { storage: deps.grants, identities: deps.identities, usernames: deps.usernames, now: deps.now },
-    caller.signerPubHex,
-    account,
-    "view-directory",
-  );
-  if (!scoped.ok && !(await isAdministrator(deps, caller))) return forbidden("not authorized");
+  // Allowed when the device is an administrator OR holds a view-directory
+  // grant; the two checks are independent reads, so the order only changes what
+  // they cost. An admin device is answered by its admin grant alone, without
+  // first failing the membership-root check its admin-root-signed grant can
+  // never pass.
+  if (
+    !(await isAdministrator(deps, caller)) &&
+    !(
+      await requireDeviceScope(
+        { storage: deps.grants, identities: deps.identities, usernames: deps.usernames, now: deps.now },
+        caller.signerPubHex,
+        account,
+        "view-directory",
+      )
+    ).ok
+  ) {
+    return forbidden("not authorized");
+  }
   const [accountProfile, devices, grants, selfProfiles, managedProfiles] = await Promise.all([
     deps.accountProfiles.get(account),
     deps.identities.listForAccount(account),

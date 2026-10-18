@@ -1,3 +1,4 @@
+import "./warmCrypto.js";
 import { route, type RouteEnv } from "./route.js";
 import { scheduled, type ScheduledEnv } from "./scheduled.js";
 

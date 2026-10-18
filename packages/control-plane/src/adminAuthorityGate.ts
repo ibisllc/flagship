@@ -44,7 +44,12 @@
  * sensitive handler passes a raw owner-IRK token to a `verify*` call anymore —
  * that invariant is what `scripts/admin-authority-guard.sh` enforces in CI.
  */
-import { requireMasterAdmin, type AdminGrantView, type DeviceScope } from "@flagship/protocol";
+import {
+  requireMasterAdmin,
+  verifyDeviceCapabilityGrantFast,
+  type AdminGrantView,
+  type DeviceScope,
+} from "@flagship/protocol";
 import type {
   DeviceCapabilityGrantStorage,
   DeviceCapabilityGrantRecord,
@@ -186,6 +191,17 @@ export async function authorizeSensitiveComOp(
   for (const v of views) {
     const devHex = bytesToHex(v.grant.devicePubKey).toLowerCase();
     if (!safeVerify(verifyWith, devHex)) continue;
+    // `requireMasterAdmin` re-verifies the stored grant with the synchronous
+    // check, which remembers what it has verified. Verify it here first with the
+    // native check (about 25x cheaper) so that call is answered from memory; the
+    // verdict is the same function of the same inputs either way.
+    if (v.signerRoot === "admin-root") {
+      try {
+        await verifyDeviceCapabilityGrantFast(v.grant, hexToBytes(v.signatureHex.toLowerCase()), hexToBytes(adminRoot));
+      } catch {
+        /* malformed row: requireMasterAdmin refuses it itself */
+      }
+    }
     const decision = requireMasterAdmin(devHex, username, adminRoot, views, now);
     if (decision.ok) return { ok: true, gated: true, signerPubHex: devHex };
   }
