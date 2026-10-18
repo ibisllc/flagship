@@ -335,6 +335,14 @@ of the last check here: **not yet checked**.
   zone is back to its base. Open: the `update` group can only move a gym box
   (unendorsed main HEAD) to an older endorsed release;
   `/api/dev/sample-user/<u>/order-update` assumes the prod apex.
+  2026-10-18: `boot.gym.`/`recovery.gym.` fell through to the `.services`
+  proxy (hard-coded prod hosts in `route.ts`), so a gym box could never post
+  its unlock request: fixed on main (`bootHost`/`recoveryHost` follow
+  `CONTROL_APEX`), live after the next `gym-refresh.sh`. The gym Worker was
+  killed at ~11 ms CPU on signed reads (Cloudflare 1102 = HTTP 503 in the
+  apps; a directory read measured 15-21 ms): the CA mandate chain was
+  re-verified on every request, now once per isolate. Open: if 1102 persists,
+  check the Worker's CPU limit (a Free-plan limit is 10 ms).
 - **Scheduled backups, backup policy, one `.flagship` file, Migrate on the
   archive path (2026-10-16/17, `docs/server-backup-and-clone.md`).** Box:
   scheduled backups with retention and a KEK-pool deposit
