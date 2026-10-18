@@ -42,7 +42,7 @@ class FakeZoneApi implements ZoneApi {
 }
 
 describe("ServerDnsPublisher", () => {
-  it("publishes apex + wildcard A records pointing at the tunnel ingress for mode=tunnel", async () => {
+  it("publishes ONE account wildcard A record (no per-box records) for mode=tunnel", async () => {
     const zone = new FakeZoneApi();
     const registry = new InMemoryServerDnsRegistry();
     const publisher = new ServerDnsPublisher({
@@ -55,19 +55,14 @@ describe("ServerDnsPublisher", () => {
       serverName: "home-box",
       mode: "tunnel",
     });
-    // PER-BOX DNS (model A′): two box-zone records. The wildcard makes every
-    // canonical service name `<service>.home-box.harry` resolve.
     expect(out.apex).toBe("home-box.harry.flagship.services");
     expect(out.wildcard).toBe("*.home-box.harry.flagship.services");
     expect(out.target).toBe("203.0.113.1");
-    expect(zone.a.map((r) => r.name).sort()).toEqual([
-      "*.home-box.harry.flagship.services",
-      "home-box.harry.flagship.services",
-    ]);
+    expect(zone.a.map((r) => r.name)).toEqual(["*.harry.flagship.services"]);
     for (const r of zone.a) expect(r.value).toBe("203.0.113.1");
   });
 
-  it("two boxes under one user get DISTINCT record pairs", async () => {
+  it("two boxes under one user share the single account record", async () => {
     const zone = new FakeZoneApi();
     const publisher = new ServerDnsPublisher({
       zone,
@@ -76,12 +71,20 @@ describe("ServerDnsPublisher", () => {
     });
     await publisher.publish({ username: "harry", serverName: "home-box", mode: "tunnel" });
     await publisher.publish({ username: "harry", serverName: "chillout", mode: "tunnel" });
-    expect(zone.a.map((r) => r.name).sort()).toEqual([
-      "*.chillout.harry.flagship.services",
-      "*.home-box.harry.flagship.services",
-      "chillout.harry.flagship.services",
-      "home-box.harry.flagship.services",
-    ]);
+    expect(zone.a.map((r) => r.name)).toEqual(["*.harry.flagship.services"]);
+  });
+
+  it("a tunnel publish removes older per-box records of the same box", async () => {
+    const zone = new FakeZoneApi();
+    await zone.createA({ name: "home-box.harry.flagship.services", value: "203.0.113.1" });
+    await zone.createA({ name: "*.home-box.harry.flagship.services", value: "203.0.113.1" });
+    const publisher = new ServerDnsPublisher({
+      zone,
+      registry: new InMemoryServerDnsRegistry(),
+      tunnelIngressIp: "203.0.113.1",
+    });
+    await publisher.publish({ username: "harry", serverName: "home-box", mode: "tunnel" });
+    expect(zone.a.map((r) => r.name)).toEqual(["*.harry.flagship.services"]);
   });
 
   it("publishes A records pointing at the user-supplied IP for mode=direct", async () => {
@@ -101,15 +104,15 @@ describe("ServerDnsPublisher", () => {
     for (const r of zone.a) expect(r.value).toBe("192.0.2.10");
   });
 
-  it("flipping tunnel → direct removes the old records before writing the new (clean zone)", async () => {
+  it("flipping direct → direct → tunnel removes the old records before writing the new (clean zone)", async () => {
     const zone = new FakeZoneApi();
     const publisher = new ServerDnsPublisher({
       zone,
       registry: new InMemoryServerDnsRegistry(),
       tunnelIngressIp: "203.0.113.1",
     });
-    await publisher.publish({ username: "harry", serverName: "home-box", mode: "tunnel" });
-    expect(zone.a.every((r) => r.value === "203.0.113.1")).toBe(true);
+    await publisher.publish({ username: "harry", serverName: "home-box", mode: "direct", directIp: "192.0.2.9" });
+    expect(zone.a.every((r) => r.value === "192.0.2.9")).toBe(true);
     await publisher.publish({
       username: "harry",
       serverName: "home-box",
@@ -118,6 +121,8 @@ describe("ServerDnsPublisher", () => {
     });
     expect(zone.a.every((r) => r.value === "192.0.2.10")).toBe(true);
     expect(zone.a).toHaveLength(2); // apex + wildcard, no stragglers
+    await publisher.publish({ username: "harry", serverName: "home-box", mode: "tunnel" });
+    expect(zone.a.map((r) => r.name)).toEqual(["*.harry.flagship.services"]); // direct pair gone
   });
 
   it("rejects mode=direct without a directIp", async () => {
@@ -159,32 +164,29 @@ describe("ServerDnsPublisher", () => {
     ).rejects.toThrow(/RFC 1035/);
   });
 
-  it("unpublish removes both records for the named server", async () => {
+  it("unpublish removes a direct box's records for the named server", async () => {
     const zone = new FakeZoneApi();
     const publisher = new ServerDnsPublisher({
       zone,
       registry: new InMemoryServerDnsRegistry(),
       tunnelIngressIp: "203.0.113.1",
     });
-    await publisher.publish({ username: "harry", serverName: "home-box", mode: "tunnel" });
+    await publisher.publish({ username: "harry", serverName: "home-box", mode: "direct", directIp: "192.0.2.10" });
     expect(zone.a).toHaveLength(2);
     await publisher.unpublish({ username: "harry", serverName: "home-box" });
     expect(zone.a).toHaveLength(0);
   });
 
-  it("unpublishing one box leaves a sibling box's records intact (per-box A′)", async () => {
+  it("unpublishing one direct box leaves a sibling's records and the account wildcard intact", async () => {
     const zone = new FakeZoneApi();
     const publisher = new ServerDnsPublisher({
       zone,
       registry: new InMemoryServerDnsRegistry(),
       tunnelIngressIp: "203.0.113.1",
     });
-    await publisher.publish({ username: "harry", serverName: "home-box", mode: "tunnel" });
+    await publisher.publish({ username: "harry", serverName: "home-box", mode: "direct", directIp: "192.0.2.10" });
     await publisher.publish({ username: "harry", serverName: "chillout", mode: "tunnel" });
     await publisher.unpublish({ username: "harry", serverName: "home-box" });
-    expect(zone.a.map((r) => r.name).sort()).toEqual([
-      "*.chillout.harry.flagship.services",
-      "chillout.harry.flagship.services",
-    ]);
+    expect(zone.a.map((r) => r.name)).toEqual(["*.harry.flagship.services"]);
   });
 });

@@ -1,26 +1,31 @@
+import { accountWildcardName, userZoneOf } from "./accountDns.js";
 import type { ZoneApi } from "./types.js";
 
 /**
- * Publishes the PER-BOX DNS record set (model A′) that makes
- * `<server>.<user>.flagship.services` — and every canonical service name
- * `<service>.<server>.<user>` under it — resolvable.
+ * Publishes the DNS that makes `<server>.<user>.flagship.services` — and every
+ * canonical service name `<service>.<server>.<user>` under it — resolvable.
  *
- *   mode = "tunnel": the box apex `<server>.<user>` resolves to the tunnel
- *                    ingress anycast IP. Wildcard `*.<server>.<user>` resolves
- *                    to the same. The SNI router peeks the ClientHello and
+ *   mode = "tunnel": the box resolves through the ACCOUNT wildcard
+ *                    `*.<user>` -> tunnel ingress anycast IP (one record per
+ *                    account, shared by all its boxes; docs/wildcard-dns.md).
+ *                    No per-box record is written, and any older per-box one
+ *                    is removed. The SNI router peeks the ClientHello and
  *                    forwards over the user's outbound WebSocket.
  *
  *   mode = "direct": the apex points at the user-supplied A record (their
- *                    VPS / port-forwarded home box). Wildcard CNAMEs the same.
- *                    `.services` is not in the traffic path.
+ *                    VPS / port-forwarded home box). Wildcard points the same.
+ *                    `.services` is not in the traffic path. This is the one
+ *                    case that still needs per-box records, because the
+ *                    address differs from the account's.
  *
  * Each call is idempotent — existing records for the same name are removed
  * before the new set is written, so a tunnel→direct flip leaves a clean zone.
  *
  * NOTE: the LIVE register-time DNS path is control-plane
  * `handleServerRegister`; this publisher backs the Fly app's
- * `/server-dns` route. It is kept on the per-box A′ shape so no caller can
- * silently regress to user-zone records.
+ * `/server-dns` route. Account records go away with the account's last
+ * server in `.com` (it knows the other servers); `unpublish` here only removes
+ * the box's own records.
  */
 
 export type ServerDnsMode = "tunnel" | "direct";
@@ -88,19 +93,31 @@ export class ServerDnsPublisher {
     if (!isLabel(args.username) || !isLabel(args.serverName)) {
       throw new Error("username and serverName must be RFC 1035 labels");
     }
-    // PER-BOX DNS (model A′): publish the TWO box-zone records — the box apex
-    // `<server>.<user>.<apex>` and the wildcard `*.<server>.<user>.<apex>`.
-    // The wildcard makes every canonical service name
-    // `<service>.<server>.<user>` resolve to the passthrough; the names are
-    // distinct per box, matching the per-box wildcard cert.
     const apexFqdn = `${args.serverName}.${args.username}.${apex}`;
     const wildcardFqdn = `*.${args.serverName}.${args.username}.${apex}`;
     const target = args.mode === "direct" ? requireIp(args.directIp) : this.opts.tunnelIngressIp;
 
-    // Delete any prior records for this exact name so a flip leaves a clean zone.
+    // Delete any prior per-box records for this exact name so a flip (or an
+    // older per-box publish) leaves a clean zone.
     await this.purge(apexFqdn);
     await this.purge(wildcardFqdn);
 
+    if (args.mode === "tunnel") {
+      // The account wildcard answers for this box. Write it only when absent
+      // or pointing elsewhere, so a second box under the user is a no-op.
+      const zone = userZoneOf(apexFqdn, apex);
+      const wild = accountWildcardName(zone ?? `${args.username}.${apex}`);
+      const existing = await this.listA(wild);
+      if (!existing.some((r) => r.value === target)) {
+        await this.purge(wild);
+        await this.writeA(wild, target);
+      }
+      this.opts.registry.put(apexFqdn, { apex: apexFqdn, wildcard: wildcardFqdn });
+      return { apex: apexFqdn, wildcard: wildcardFqdn, mode: args.mode, target };
+    }
+
+    // mode = "direct": the box's own address differs from the account's, so
+    // it keeps its own pair (box apex + box wildcard).
     const apexRec = await this.writeA(apexFqdn, target);
     const wildRec = await this.writeA(wildcardFqdn, target);
 
@@ -112,6 +129,11 @@ export class ServerDnsPublisher {
     });
 
     return { apex: apexFqdn, wildcard: wildcardFqdn, mode: args.mode, target };
+  }
+
+  private async listA(name: string): Promise<{ id?: string; value: string }[]> {
+    const z = this.opts.zone as ZoneApiWithA;
+    return (await (z.listAByName?.(name) ?? Promise.resolve([]))) ?? [];
   }
 
   /**
@@ -127,12 +149,11 @@ export class ServerDnsPublisher {
   }
 
   /**
-   * Remove a server's DNS record set entirely (e.g. after revocation).
+   * Remove a server's own per-box records (e.g. after revocation). The account
+   * wildcard stays: other boxes of the account may still use it.
    */
   async unpublish(args: { username: string; serverName: string }): Promise<void> {
     const apex = this.opts.apex ?? "flagship.services";
-    // PER-BOX DNS (model A′): each box owns its own record pair, so tearing
-    // one box down never disturbs a sibling box under the same user.
     const apexFqdn = `${args.serverName}.${args.username}.${apex}`;
     const wildcardFqdn = `*.${args.serverName}.${args.username}.${apex}`;
     await this.purge(apexFqdn);

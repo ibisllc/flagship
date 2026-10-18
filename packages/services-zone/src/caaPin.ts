@@ -29,16 +29,6 @@ const DEFAULT_CA_DOMAIN = "letsencrypt.org";
 /** Default ACME validation method to pin (matches the wildcard DNS-01 path). */
 const DEFAULT_VALIDATION_METHODS = ["dns-01"] as const;
 
-/**
- * Default `iodef` reporting endpoint a CA emails on a CAA-violating
- * issuance attempt (RFC 8659 §4.4). A `mailto:` URI.
- *
- * TODO(confirm-address): point this at a monitored inbox. `security@`
- * is the convention; swap in the real address (or an https:// incident
- * webhook) when the security inbox is finalised.
- */
-const DEFAULT_IODEF = "mailto:security@flagshipserver.com";
-
 export interface CaaIssueValueOptions {
   /**
    * The CA the `issue` property authorises. Defaults to `letsencrypt.org`.
@@ -91,29 +81,22 @@ export interface CaaRecord {
 }
 
 /**
- * Build the CAA record set for one user's zone. Two records share the same
- * pinned `issue` value:
- *
- *   - `<userZone>`          — covers `<user>.flagship.services` itself.
- *   - `*.<userZone>`        — covers the `*.<user>.flagship.services` wildcard.
- *
- * A wildcard cert's authorisation is checked against the CAA record at the
- * wildcard name's own node (`*.<user>`), so the wildcard record is not
- * redundant with the apex one — both are required for the full SAN set.
+ * Build the account-pinned CAA record set for one user's zone (PHASE 2, not
+ * published yet): a single `issue` record at `<userZone>`. CAA climbs from
+ * every name below it (RFC 8659 §3), and a wildcard certificate is checked at
+ * its base name, so no copy at `*.<userZone>` is needed (see
+ * {@link buildUserZoneCaRestrictionCaaRecords}).
  *
  * `flags` is `0` (non-critical) and `tag` is `issue`; we deliberately do NOT
- * emit `issuewild` — the `*.<userZone>` `issue` record already authorises the
- * wildcard, and a missing `issuewild` falls back to `issue` per RFC 8659.
+ * emit `issuewild` here — a missing `issuewild` falls back to `issue` per
+ * RFC 8659, so the one record also pins wildcard issuance.
  */
 export function buildUserZoneCaaRecords(
   userZone: string,
   opts: CaaIssueValueOptions,
 ): CaaRecord[] {
   const value = buildCaaIssueValue(opts);
-  return [
-    { name: userZone, type: "CAA", flags: 0, tag: "issue", value },
-    { name: `*.${userZone}`, type: "CAA", flags: 0, tag: "issue", value },
-  ];
+  return [{ name: userZone, type: "CAA", flags: 0, tag: "issue", value }];
 }
 
 /**
@@ -139,9 +122,10 @@ export function expectedCertSans(serverFqdn: string): string[] {
 // PHASE 1 — CA-RESTRICTION CAA (no account pinning).
 //
 // This is the layer we publish *today*, at the point a user's zone records are
-// set up (server registration). It restricts issuance for the user's zone to
-// Let's Encrypt and nobody else — a defense-in-depth layer against EXTERNAL
-// mis-issuance / a CA tricked into issuing for `*.<user>.flagship.services`.
+// set up (auth-code issue and server registration). It restricts issuance for
+// the user's zone to Let's Encrypt and nobody else — a defense-in-depth layer
+// against EXTERNAL mis-issuance / a CA tricked into issuing for
+// `*.<user>.flagship.services`.
 //
 // HONEST SCOPE: `.com` is authoritative for the `flagship.services` zone, so
 // CAA alone does NOT stop a *malicious* `.com` — it could rewrite this record
@@ -161,26 +145,31 @@ export interface CaRestrictionCaaOptions {
   /** CA the `issue`/`issuewild` properties authorise. Default `letsencrypt.org`. */
   caDomain?: string;
   /**
-   * `iodef` reporting URI a violating CA contacts. Default
-   * `mailto:security@flagshipserver.com`. Pass an empty string to omit the
-   * `iodef` record entirely.
+   * Optional `iodef` reporting URI (RFC 8659 §4.4), e.g.
+   * `mailto:security@flagshipserver.com`. Off by default: Let's Encrypt does
+   * not send these reports, and the record would cost one zone slot per
+   * account (docs/wildcard-dns.md).
    */
   iodef?: string;
 }
 
 /**
  * Build the PHASE-1 CA-restriction CAA record set for one user's zone — no
- * account pinning. Three records per name:
+ * account pinning. Two records, at the user-zone node only:
  *
  *   - `0 issue "letsencrypt.org"`      — only LE may issue non-wildcard certs.
  *   - `0 issuewild "letsencrypt.org"`  — only LE may issue wildcard certs.
- *   - `0 iodef "mailto:security@…"`    — where a violating CA reports.
  *
- * Emitted at BOTH the user-zone apex `<user>.flagship.services` and the
- * wildcard `*.<user>.flagship.services`: a wildcard cert's authorisation is
- * checked against the CAA record at the wildcard node itself, so the wildcard
- * record is not redundant with the apex one (RFC 8659 §3 tree-climbing applies
- * to each requested name independently).
+ * (and `0 iodef "<uri>"` when `opts.iodef` is given).
+ *
+ * One node is enough. A CA looks up CAA for the name it is asked to certify
+ * with a leading `*.` removed (`home.alice` for `*.home.alice`), and climbs
+ * to the parent whenever a node has no CAA RRset (RFC 8659 §3), so a record at
+ * `<user>` covers every box, wildcard and service name below it. A copy at
+ * `*.<user>` (older builds published one) only repeats it, and now that
+ * `*.<user>` carries the account's A/AAAA wildcard it would also be returned
+ * for every name under the account. `issuewild` is kept explicit even though
+ * `issue` alone already governs wildcards when `issuewild` is absent.
  *
  * `flags` is `0` (non-critical) throughout.
  */
@@ -189,15 +178,12 @@ export function buildUserZoneCaRestrictionCaaRecords(
   opts: CaRestrictionCaaOptions = {},
 ): CaaRecord[] {
   const caDomain = opts.caDomain ?? DEFAULT_CA_DOMAIN;
-  const iodef = opts.iodef ?? DEFAULT_IODEF;
-  const names = [userZone, `*.${userZone}`];
-  const recs: CaaRecord[] = [];
-  for (const name of names) {
-    recs.push({ name, type: "CAA", flags: 0, tag: "issue", value: caDomain });
-    recs.push({ name, type: "CAA", flags: 0, tag: "issuewild", value: caDomain });
-    if (iodef) {
-      recs.push({ name, type: "CAA", flags: 0, tag: "iodef", value: iodef });
-    }
+  const recs: CaaRecord[] = [
+    { name: userZone, type: "CAA", flags: 0, tag: "issue", value: caDomain },
+    { name: userZone, type: "CAA", flags: 0, tag: "issuewild", value: caDomain },
+  ];
+  if (opts.iodef) {
+    recs.push({ name: userZone, type: "CAA", flags: 0, tag: "iodef", value: opts.iodef });
   }
   return recs;
 }

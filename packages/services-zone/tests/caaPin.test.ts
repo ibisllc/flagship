@@ -42,7 +42,7 @@ describe("buildCaaIssueValue", () => {
 });
 
 describe("buildUserZoneCaaRecords", () => {
-  it("emits one issue record for the zone apex and one for the wildcard", () => {
+  it("emits one issue record, at the user zone only (CAA climbs; no *. copy)", () => {
     const recs = buildUserZoneCaaRecords("alice.flagship.services", { accountUri: ACCT });
     expect(recs).toEqual([
       {
@@ -52,20 +52,7 @@ describe("buildUserZoneCaaRecords", () => {
         tag: "issue",
         value: `letsencrypt.org; accounturi=${ACCT}; validationmethods=dns-01`,
       },
-      {
-        name: "*.alice.flagship.services",
-        type: "CAA",
-        flags: 0,
-        tag: "issue",
-        value: `letsencrypt.org; accounturi=${ACCT}; validationmethods=dns-01`,
-      },
     ]);
-  });
-
-  it("both records carry the identical pinned value", () => {
-    const recs = buildUserZoneCaaRecords("bob.flagship.services", { accountUri: ACCT });
-    expect(recs).toHaveLength(2);
-    expect(recs[0]!.value).toBe(recs[1]!.value);
   });
 
   it("threads custom options through to the value", () => {
@@ -83,16 +70,17 @@ describe("buildUserZoneCaaRecords", () => {
 });
 
 describe("buildUserZoneCaRestrictionCaaRecords (PHASE 1 — no account pinning)", () => {
-  it("emits issue + issuewild + iodef at both the apex and the wildcard", () => {
+  it("emits exactly issue + issuewild, at the user-zone node only", () => {
     const recs = buildUserZoneCaRestrictionCaaRecords("alice.flagship.services");
     expect(recs).toEqual([
       { name: "alice.flagship.services", type: "CAA", flags: 0, tag: "issue", value: "letsencrypt.org" },
       { name: "alice.flagship.services", type: "CAA", flags: 0, tag: "issuewild", value: "letsencrypt.org" },
-      { name: "alice.flagship.services", type: "CAA", flags: 0, tag: "iodef", value: "mailto:security@flagshipserver.com" },
-      { name: "*.alice.flagship.services", type: "CAA", flags: 0, tag: "issue", value: "letsencrypt.org" },
-      { name: "*.alice.flagship.services", type: "CAA", flags: 0, tag: "issuewild", value: "letsencrypt.org" },
-      { name: "*.alice.flagship.services", type: "CAA", flags: 0, tag: "iodef", value: "mailto:security@flagshipserver.com" },
     ]);
+  });
+
+  it("never writes a *.<user> CAA (it only repeats the climbed one and rides the account wildcard)", () => {
+    const recs = buildUserZoneCaRestrictionCaaRecords("alice.flagship.services", { iodef: "mailto:a@b.c" });
+    expect(recs.some((r) => r.name.startsWith("*."))).toBe(false);
   });
 
   it("carries NO accounturi (that is PHASE 2)", () => {
@@ -103,7 +91,7 @@ describe("buildUserZoneCaRestrictionCaaRecords (PHASE 1 — no account pinning)"
     }
   });
 
-  it("honours a custom caDomain and iodef", () => {
+  it("honours a custom caDomain and an opt-in iodef", () => {
     const recs = buildUserZoneCaRestrictionCaaRecords("eve.flagship.services", {
       caDomain: "pki.goog",
       iodef: "mailto:abuse@example.com",
@@ -111,19 +99,18 @@ describe("buildUserZoneCaRestrictionCaaRecords (PHASE 1 — no account pinning)"
     expect(recs.find((r) => r.tag === "issue")!.value).toBe("pki.goog");
     expect(recs.find((r) => r.tag === "issuewild")!.value).toBe("pki.goog");
     expect(recs.find((r) => r.tag === "iodef")!.value).toBe("mailto:abuse@example.com");
+    expect(recs).toHaveLength(3);
   });
 
-  it("omits the iodef record when iodef is the empty string", () => {
-    const recs = buildUserZoneCaRestrictionCaaRecords("eve.flagship.services", { iodef: "" });
-    expect(recs.some((r) => r.tag === "iodef")).toBe(false);
-    // issue + issuewild at apex and wildcard = 4 records.
-    expect(recs).toHaveLength(4);
+  it("omits iodef unless asked (Let's Encrypt ignores it; it would cost a record per account)", () => {
+    expect(buildUserZoneCaRestrictionCaaRecords("eve.flagship.services").some((r) => r.tag === "iodef")).toBe(false);
+    expect(buildUserZoneCaRestrictionCaaRecords("eve.flagship.services", { iodef: "" })).toHaveLength(2);
   });
 });
 
 describe("caaRecordRdata", () => {
   it("renders the zone-file presentation form", () => {
-    const recs = buildUserZoneCaRestrictionCaaRecords("alice.flagship.services");
+    const recs = buildUserZoneCaRestrictionCaaRecords("alice.flagship.services", { iodef: "mailto:security@flagshipserver.com" });
     expect(caaRecordRdata(recs[0]!)).toBe('0 issue "letsencrypt.org"');
     expect(caaRecordRdata(recs[1]!)).toBe('0 issuewild "letsencrypt.org"');
     expect(caaRecordRdata(recs[2]!)).toBe('0 iodef "mailto:security@flagshipserver.com"');

@@ -91,7 +91,7 @@ function buildSignedPublish(
 }
 
 describe("/api/services-zone/publish-server", () => {
-  it("publishes tunnel-ingress A records on a valid IRK-signed claim", async () => {
+  it("publishes the account's tunnel-ingress wildcard on a valid IRK-signed claim", async () => {
     const { app, zone } = makeApp();
     const r = await app.inject({
       method: "POST",
@@ -101,12 +101,9 @@ describe("/api/services-zone/publish-server", () => {
     expect(r.statusCode).toBe(200);
     const body = JSON.parse(r.body);
     expect(body.target).toBe("203.0.113.1");
-    // Cert model A′: two per-box records; `*.home-box.harry` resolves every
-    // service name under the box.
-    expect(zone.a.map((x) => x.name).sort()).toEqual([
-      "*.home-box.harry.flagship.services",
-      "home-box.harry.flagship.services",
-    ]);
+    // One wildcard per account (docs/wildcard-dns.md): `*.harry` answers the
+    // box, its services and every tier-2 name; no per-box record.
+    expect(zone.a.map((x) => x.name)).toEqual(["*.harry.flagship.services"]);
   });
 
   it("publishes user-supplied A records for mode=direct", async () => {
@@ -164,8 +161,12 @@ describe("/api/services-zone/publish-server", () => {
       url: "/api/services-zone/publish-server",
       payload: buildSignedPublish({ mode: "direct", directIp: "192.0.2.10" }),
     });
-    expect(zone.a).toHaveLength(2);
-    expect(zone.a.every((r) => r.value === "192.0.2.10")).toBe(true);
+    // The account wildcard stays for the account's other boxes; the box gets its own pair.
+    expect(zone.a.map((r) => `${r.name}=${r.value}`).sort()).toEqual([
+      "*.harry.flagship.services=203.0.113.1",
+      "*.home-box.harry.flagship.services=192.0.2.10",
+      "home-box.harry.flagship.services=192.0.2.10",
+    ]);
   });
 
   it("DELETE removes the published records for the named server", async () => {
@@ -173,7 +174,7 @@ describe("/api/services-zone/publish-server", () => {
     await app.inject({
       method: "POST",
       url: "/api/services-zone/publish-server",
-      payload: buildSignedPublish(),
+      payload: buildSignedPublish({ mode: "direct", directIp: "192.0.2.10" }),
     });
     expect(zone.a).toHaveLength(2);
     const del = await app.inject({
