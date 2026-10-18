@@ -4,6 +4,12 @@
  * registers `runsc` with dockerd, and proves it runs a container before any
  * app is started on it. Every app container then runs in its own gVisor
  * sandbox: its system calls reach gVisor's user-space kernel, not the host's.
+ *
+ * The bundle comes from Flagship's own mirror first (an object in the R2
+ * `flagship-iso` bucket, served by `.com` at `/build/iso/`), then from
+ * upstream (storage.googleapis.com, which answered 403 to a whole cloud
+ * provider's address range). Wherever it comes from it must match the pinned
+ * SHA-512, so a mirror can be wrong or absent but never hostile.
  */
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
@@ -34,6 +40,34 @@ export function gvisorUrl(arch: "x86_64" | "aarch64"): string {
   return `https://storage.googleapis.com/gvisor/releases/release/${GVISOR_RELEASE}/${arch}/gvisor.tar.zstd`;
 }
 
+/** The object name a mirror serves the bundle under. */
+export function gvisorMirrorName(arch: "x86_64" | "aarch64"): string {
+  return `gvisor-${GVISOR_RELEASE}-${arch}.tar.zstd`;
+}
+
+/** Where to try, in order: each mirror base (a directory URL), then upstream. */
+export function gvisorSources(arch: "x86_64" | "aarch64", mirrors: readonly string[] = []): string[] {
+  const urls: string[] = [];
+  for (const m of mirrors) {
+    const base = m.trim();
+    if (!/^https?:\/\//.test(base)) continue;
+    const url = `${base.replace(/\/+$/, "")}/${gvisorMirrorName(arch)}`;
+    if (!urls.includes(url)) urls.push(url);
+  }
+  urls.push(gvisorUrl(arch));
+  return urls;
+}
+
+/**
+ * Mirror bases for a box: `FLAGSHIP_GVISOR_MIRRORS` (comma-separated
+ * directory URLs, tried first) and its own control plane's `/build/iso/`.
+ */
+export function gvisorMirrorBases(controlPlaneBaseUrl: string | undefined, env: NodeJS.ProcessEnv = process.env): string[] {
+  const bases = (env.FLAGSHIP_GVISOR_MIRRORS ?? "").split(",").map((m) => m.trim()).filter(Boolean);
+  if (controlPlaneBaseUrl) bases.push(`${controlPlaneBaseUrl.replace(/\/+$/, "")}/build/iso`);
+  return bases;
+}
+
 export type GvisorResult = { ok: true; version: string; runscPath: string } | { ok: false; reason: string };
 
 export interface EnsureGvisorOptions {
@@ -43,6 +77,8 @@ export interface EnsureGvisorOptions {
   baseDir?: string;
   daemonJson?: string;
   arch?: "x86_64" | "aarch64" | null;
+  /** Directory URLs tried before upstream (see gvisorMirrorBases). */
+  mirrors?: readonly string[];
   /** In place of GVISOR_SHA512 (tests). */
   pinnedSha512?: string;
   fetch?: (url: string) => Promise<Response>;
@@ -112,11 +148,30 @@ async function install(o: EnsureGvisorOptions, arch: "x86_64" | "aarch64", base:
   await mkdir(tmp, { recursive: true, mode: 0o700 });
   try {
     const tarball = join(tmp, "gvisor.tar.zstd");
-    const res = await (o.fetch ?? ((u: string) => fetch(u, { signal: AbortSignal.timeout(15 * 60_000) })))(gvisorUrl(arch));
-    if (!res.ok || !res.body) throw new Error(`couldn't download gVisor (HTTP ${res.status})`);
-    await pipeline(Readable.fromWeb(res.body as unknown as WebReadableStream), createWriteStream(tarball, { mode: 0o600 }));
-    const got = await sha("sha512", tarball);
-    if (got !== want) throw new Error("the gVisor download doesn't match the checksum this release pins");
+    const doFetch = o.fetch ?? ((u: string) => fetch(u, { signal: AbortSignal.timeout(15 * 60_000) }));
+    const failures: string[] = [];
+    let fetched = false;
+    for (const url of gvisorSources(arch, o.mirrors)) {
+      const host = new URL(url).host;
+      try {
+        const res = await doFetch(url);
+        if (!res.ok || !res.body) {
+          failures.push(`${host}: HTTP ${res.status}`);
+          await res.body?.cancel().catch(() => {});
+          continue;
+        }
+        await pipeline(Readable.fromWeb(res.body as unknown as WebReadableStream), createWriteStream(tarball, { mode: 0o600 }));
+        if ((await sha("sha512", tarball)) !== want) {
+          failures.push(`${host}: doesn't match the checksum this release pins`);
+          continue;
+        }
+        fetched = true;
+        break;
+      } catch (e) {
+        failures.push(`${host}: ${(e as Error).message}`);
+      }
+    }
+    if (!fetched) throw new Error(`couldn't download gVisor (${failures.join("; ")})`);
     const out = join(tmp, "out");
     await mkdir(out, { mode: 0o755 });
     await (o.extract ?? ((t, d) => extractWithTar(o.cmd, t, d)))(tarball, out);

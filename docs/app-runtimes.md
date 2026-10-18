@@ -355,7 +355,8 @@ refused with "update this server first" (no compatibility needed yet).
    tier 3 comes with phase 7); `enable_icc=false` on every sandbox bridge.
 2. **Built 2026-10-12**: gVisor for every app and staging copy
    (`appSandbox/`). Release `20260921.0`'s `gvisor.tar.zstd` (both arches) is
-   pinned by SHA-512, downloaded once into `/usr/local/lib/flagship-gvisor/`
+   pinned by SHA-512, downloaded once (Flagship's mirror first, then upstream: see
+   below) into `/usr/local/lib/flagship-gvisor/`
    (zstd installed when missing), re-hashed every boot, registered in
    `/etc/docker/daemon.json` (other settings kept) with a `systemctl reload
    docker`, and proved with a locked-down `--runtime=runsc` container of the
@@ -366,6 +367,17 @@ refused with "update this server first" (no compatibility needed yet).
    apps can't start. Helper containers (files archive, staging listing) and
    the data services stay on runc: pinned images that run no app code.
    Build `RUN` steps still use runc until phase 3.
+   **Mirror (2026-10-17):** storage.googleapis.com answered 403 to UpCloud's
+   address ranges, so a box tries, in order, `FLAGSHIP_GVISOR_MIRRORS` (comma-
+   separated directory URLs), its own control plane's
+   `<.com>/build/iso/gvisor-<release>-<arch>.tar.zstd` (an object in the R2
+   `flagship-iso` bucket, served by the existing `/build/iso/` route), then
+   upstream. A mirror that is missing, down or wrong falls through to the next;
+   the SHA-512 pin applies to every source, and the failure sentence names each
+   source that failed. Owner, once per `GVISOR_RELEASE`:
+   `bash scripts/publish-gvisor-mirror.sh` (`--dry-run` downloads and checks
+   without uploading). Needs an endorsed box release; the object can go up
+   before or after it.
 3. Install in a locked-down container; COPY-only assembly; bundle hashing.
 4. Copies send bundles (§8); runtime prefetch and pruning.
 5. **Built 2026-10-16**: disk quotas (§5.3): files images, database write

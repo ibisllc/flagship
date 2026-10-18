@@ -4,7 +4,7 @@ import { mkdtemp, readFile, writeFile, mkdir, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { GVISOR_RELEASE, GVISOR_SHA512, ensureGvisor, gvisorArch, gvisorUrl, probeFailure } from "../src/appSandbox/gvisor.js";
+import { GVISOR_RELEASE, GVISOR_SHA512, ensureGvisor, gvisorArch, gvisorMirrorBases, gvisorMirrorName, gvisorSources, gvisorUrl, probeFailure } from "../src/appSandbox/gvisor.js";
 import { appSandboxRunArgs, appSandboxStatus, keepAppSandbox, resetAppSandbox, setEgressFence, startAppSandbox } from "../src/appSandbox/state.js";
 import { AppRunner, type CommandRunner } from "../src/serviceRunner.js";
 
@@ -95,10 +95,81 @@ describe("installing gVisor", () => {
     const r = rig();
     const d = await dirs();
     const res = await ensureGvisor({ cmd: r.cmd, probeImage: "h", baseDir: d.base, daemonJson: d.daemonJson, arch: "aarch64", fetch: r.fetch, extract: r.extract, pinnedSha512: "0".repeat(128) });
-    expect(res).toEqual({ ok: false, reason: "the gVisor download doesn't match the checksum this release pins" });
+    expect(res).toEqual({ ok: false, reason: "couldn't download gVisor (storage.googleapis.com: doesn't match the checksum this release pins)" });
     expect(await readdir(d.base)).toEqual([]);
     await expect(readFile(d.daemonJson, "utf8")).rejects.toThrow();
     expect(r.calls.some((c) => c.startsWith("systemctl"))).toBe(false);
+  });
+
+  it("lists mirrors first and upstream last, one object name per release and processor", () => {
+    expect(gvisorMirrorName("aarch64")).toBe(`gvisor-${GVISOR_RELEASE}-aarch64.tar.zstd`);
+    expect(gvisorSources("x86_64")).toEqual([gvisorUrl("x86_64")]);
+    expect(gvisorSources("x86_64", ["https://flagshipserver.com/build/iso/", "https://m.example/g", "ftp://nope", " ", "https://m.example/g/"])).toEqual([
+      `https://flagshipserver.com/build/iso/gvisor-${GVISOR_RELEASE}-x86_64.tar.zstd`,
+      `https://m.example/g/gvisor-${GVISOR_RELEASE}-x86_64.tar.zstd`,
+      gvisorUrl("x86_64"),
+    ]);
+    expect(gvisorMirrorBases("https://flagshipserver.com/", {})).toEqual(["https://flagshipserver.com/build/iso"]);
+    expect(gvisorMirrorBases("https://flagshipserver.com", { FLAGSHIP_GVISOR_MIRRORS: " https://a.example/x , https://b.example/y " })).toEqual([
+      "https://a.example/x",
+      "https://b.example/y",
+      "https://flagshipserver.com/build/iso",
+    ]);
+    expect(gvisorMirrorBases(undefined, {})).toEqual([]);
+  });
+
+  async function mirrored(responses: Record<string, () => Response | Promise<Response>>, mirrors = ["https://flagshipserver.com/build/iso"]) {
+    const r = rig();
+    const d = await dirs();
+    const tried: string[] = [];
+    const res = await ensureGvisor({
+      cmd: r.cmd, probeImage: "h", baseDir: d.base, daemonJson: d.daemonJson, arch: "aarch64", extract: r.extract, pinnedSha512: SHA, sleep: async () => {}, mirrors,
+      fetch: async (url) => {
+        tried.push(url);
+        const answer = responses[new URL(url).host];
+        if (!answer) throw new Error("no route to host");
+        return answer();
+      },
+    });
+    return { res, tried, d };
+  }
+
+  it("takes the bundle from Flagship's mirror and never touches upstream when it is there", async () => {
+    const { res, tried } = await mirrored({
+      "flagshipserver.com": () => new Response(TARBALL),
+      "storage.googleapis.com": () => new Response("blocked", { status: 403 }),
+    });
+    expect(res.ok).toBe(true);
+    expect(tried).toEqual([`https://flagshipserver.com/build/iso/gvisor-${GVISOR_RELEASE}-aarch64.tar.zstd`]);
+  });
+
+  it("falls back to upstream when the mirror has no object or can't be reached", async () => {
+    for (const mirror of [() => new Response("{}", { status: 404 }), () => { throw new Error("connection reset"); }]) {
+      const { res, tried } = await mirrored({ "flagshipserver.com": mirror, "storage.googleapis.com": () => new Response(TARBALL) });
+      expect(res.ok).toBe(true);
+      expect(tried).toEqual([`https://flagshipserver.com/build/iso/gvisor-${GVISOR_RELEASE}-aarch64.tar.zstd`, gvisorUrl("aarch64")]);
+    }
+  });
+
+  it("never trusts a mirror: a wrong bundle there falls through to upstream, and the pin still decides", async () => {
+    const wrong = await mirrored({ "flagshipserver.com": () => new Response("evil bundle"), "storage.googleapis.com": () => new Response(TARBALL) });
+    expect(wrong.res.ok).toBe(true);
+    expect(wrong.tried).toHaveLength(2);
+    expect(await readFile(join(wrong.d.base, GVISOR_RELEASE, "gvisor-bin", "gvisor_sentry"), "utf8")).toBe("sentry");
+    const allWrong = await mirrored({ "flagshipserver.com": () => new Response("evil"), "storage.googleapis.com": () => new Response("also evil") });
+    expect(allWrong.res).toEqual({
+      ok: false,
+      reason: "couldn't download gVisor (flagshipserver.com: doesn't match the checksum this release pins; storage.googleapis.com: doesn't match the checksum this release pins)",
+    });
+    expect(await readdir(allWrong.d.base)).toEqual([]);
+  });
+
+  it("names every source that failed when none works (mirror 404, upstream 403)", async () => {
+    const { res } = await mirrored({
+      "flagshipserver.com": () => new Response("{}", { status: 404 }),
+      "storage.googleapis.com": () => new Response("denied", { status: 403 }),
+    });
+    expect(res).toEqual({ ok: false, reason: "couldn't download gVisor (flagshipserver.com: HTTP 404; storage.googleapis.com: HTTP 403)" });
   });
 
   it("uses what's installed on the next boot: no download, no reload", async () => {

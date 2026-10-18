@@ -374,6 +374,24 @@ describe("/build/iso/* — R2 streaming", () => {
     expect(body[0]).toBe(0x42);
   });
 
+  it("serves the gVisor mirror object boxes ask for, by the exact key the owner uploads", async () => {
+    const asked: string[] = [];
+    const env = makeEnv({
+      ISO_BUCKET: {
+        async get(key: string) {
+          asked.push(key);
+          return { body: new ReadableStream({ start(c) { c.enqueue(new Uint8Array(4)); c.close(); } }), size: 4 };
+        },
+      },
+    });
+    const r = await route(
+      new Request("https://flagshipserver.com/build/iso/gvisor-20260921.0-x86_64.tar.zstd"),
+      env,
+    );
+    expect(r.status).toBe(200);
+    expect(asked).toEqual(["gvisor-20260921.0-x86_64.tar.zstd"]);
+  });
+
   it("400s on a filename that contains path traversal", async () => {
     const env = makeEnv({
       ISO_BUCKET: { async get() { return { body: null, size: 0 }; } },

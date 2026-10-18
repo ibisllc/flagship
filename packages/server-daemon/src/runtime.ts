@@ -21,7 +21,7 @@ import {
 import { FileAppEnvStore, type AppEnvStore } from "./serviceEnvStore.js";
 import { fileUsedNonceStore } from "./updateConsumer.js";
 import { AppRunner, buildStartCheck, realCommandRunner, setBuildDiskWatch, setFilesVolumeGuard, type CommandRunner } from "./serviceRunner.js";
-import { ensureGvisor } from "./appSandbox/gvisor.js";
+import { ensureGvisor, gvisorMirrorBases } from "./appSandbox/gvisor.js";
 import { keepAppSandbox, setEgressFence } from "./appSandbox/state.js";
 import { dockerRepaired, wakeDocker } from "./dockerHealth.js";
 import { FILES_HELPER_IMAGE } from "./volumeDump.js";
@@ -1301,7 +1301,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
         const docker = await wakeDocker({ cmd: realCommandRunner as Required<CommandRunner>, log: (m) => console.warn(m) });
         if (!docker.ok) return { ok: false, reason: docker.reason };
         if (docker.repaired) dockerRepaired(docker.repaired);
-        return ensureGvisor({ cmd: realCommandRunner as Required<CommandRunner>, probeImage: FILES_HELPER_IMAGE, log: (m) => console.log(m) });
+        return ensureGvisor({ cmd: realCommandRunner as Required<CommandRunner>, probeImage: FILES_HELPER_IMAGE, mirrors: gvisorMirrorBases(opts.controlPlaneBaseUrl), log: (m) => console.log(m) });
       },
       // Apps that couldn't start while it was down start now.
       onRecovered: () => void servicePlatformRef.current?.restore().catch(() => {}),
