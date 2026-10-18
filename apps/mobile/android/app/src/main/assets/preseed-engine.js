@@ -319,7 +319,7 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     var lateCommand =
     // Beacon B — network is guaranteed up by late_command; ping home that the
     // installer is running, before the blob-decode + bootstrap. Best-effort.
-    "".concat(stopInstallerTelemetry, "; ").concat(lateBeacon, "; mkdir -p /target/var/flagship; echo '").concat(blobB64, "' | base64 -d > /target/var/flagship/install-blob.json; chmod 600 /target/var/flagship/install-blob.json; ") + burnKeyHandoff + "echo '".concat(bootstrapB64, "' | base64 -d > /target/usr/local/sbin/flagship-bootstrap.sh; chmod +x /target/usr/local/sbin/flagship-bootstrap.sh; ") + wifiLateCommand + // Run the first-boot bootstrap capturing its output to a log on the target
+    "".concat(stopInstallerTelemetry, "; ").concat(lateBeacon, "; mkdir -p /target/var/flagship; sed -i '/^deb cdrom:/d' /target/etc/apt/sources.list; echo '").concat(blobB64, "' | base64 -d > /target/var/flagship/install-blob.json; chmod 600 /target/var/flagship/install-blob.json; ") + burnKeyHandoff + "echo '".concat(bootstrapB64, "' | base64 -d > /target/usr/local/sbin/flagship-bootstrap.sh; chmod +x /target/usr/local/sbin/flagship-bootstrap.sh; ") + wifiLateCommand + // Run the first-boot bootstrap capturing its output to a log on the target
     // (/var/log/flagship-bootstrap.log). On SUCCESS, fire the `installed` beacon
     // (best-effort `|| true`, so it never blocks the imminent poweroff and never
     // trips the failure branch). On FAILURE the installer must NOT power off as if

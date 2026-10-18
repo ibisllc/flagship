@@ -105,7 +105,41 @@ Results (serial log excerpts):
   the d-i busybox; `debconf-set` alone is NOT enough (the passphrase is still
   asked) and the seen flags fix it.
 
-## 5. Live proof
+## 5. Live proof (UpCloud, 2026-10-18)
 
-See the UpCloud lane result in `AGENTS.md` (GA close-out) and
-`tools/live-e2e/lanes/`.
+`tools/live-e2e/lanes/luks-burn.ts`, a limited lane (not the full gym): mint a gym
+account and signed recipe, build the REAL preseed, remaster the pinned amd64
+Debian 13.6.0 netinst ISO, upload it to an UpCloud storage, boot a server from it
+(2xCPU-4GB, empty 40 GB disk, `flagship-env=gym`), and read the gym `.com` order
+status until the one-slot detail appears. It stops there, then destroys the server
+through the gym teardown, deletes the ISO storage and checks the gym is back to
+base. The installer's progress beacons (hard-coded to the production control plane)
+are blackholed in the installer, so the lane never contacts production.
+
+Result of the run that passed (`swift-dingo`): the unattended install ran the real
+bootstrap on the server: `downloading` 17:05:16Z, `registering` 17:05:31Z (against
+the gym `.com`), `sealing` 17:06:01Z, then `sealing` with detail "Disk key secured:
+one unlock key slot, install key removed" at 17:06:16Z. That detail is only sent
+after `flagship_assert_single_luks_slot` passed on the server's own disk, so it is
+the one-slot evidence. Cleanup: server destroyed, 12 DNS records deleted (one
+account, one box), ISO storage gone; gym before and after: 0 servers, 0 DNS records;
+whole `flagship.services` zone 166 records before and after.
+
+The first lane attempts found two real bugs, fixed in the same change:
+
+- **BIOS boot never ran the preseed.** The Debian ISO's `spkgtk.cfg` carries
+  `timeout 300` + `ontimeout <speech installer>` and is included last, so the
+  remaster's `timeout 1` lost and a BIOS boot landed in the accessible installer
+  (speech synthesis, language menu, no preseed) after 30 s. `editIsolinuxCfgForPreseed`
+  now points `ontimeout` at the plain installer and the remaster also patches
+  `spkgtk.cfg` and `spk.cfg` (TS, Swift, C#). UEFI boots (grub) were not affected.
+- **apt hung on the install CD.** d-i leaves an active `deb cdrom:[...]` line in
+  the target's sources.list; with the install medium as a CD-ROM device the
+  bootstrap's first `apt-get` started apt's cdrom method, which waits for the disc
+  for ever (the install sat at "Running preseed..." for 30+ minutes). late_command
+  now deletes the line before the bootstrap.
+
+Re-run it with `set -a; source .gym-secrets.env; set +a; npx tsc -b && npx tsx
+tools/live-e2e/lanes/luks-burn.ts` (about 8 minutes once the ISO is cached;
+`tools/live-e2e/lanes/vnc-screenshot.py` shows the server console if a run stalls).
+It refuses to start while the gym has any server, and the gym.lock rule applies.

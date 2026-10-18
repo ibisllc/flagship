@@ -171,6 +171,12 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
     // installer is running, before the blob-decode + bootstrap. Best-effort.
     `${stopInstallerTelemetry}; ${lateBeacon}; ` +
     `mkdir -p /target/var/flagship; ` +
+    // d-i leaves an active `deb cdrom:[...]` line in the target's sources.list. The
+    // bootstrap's first apt-get then starts apt's cdrom method, which waits for the
+    // disc for ever when the install medium is a CD-ROM device (seen on a UpCloud
+    // server booting the ISO: the install sat at "Running preseed..." for 30+
+    // minutes). Every package comes from the network mirror, so drop the line.
+    `sed -i '/^deb cdrom:/d' /target/etc/apt/sources.list; ` +
     `echo '${blobB64}' | base64 -d > /target/var/flagship/install-blob.json; ` +
     `chmod 600 /target/var/flagship/install-blob.json; ` +
     burnKeyHandoff +

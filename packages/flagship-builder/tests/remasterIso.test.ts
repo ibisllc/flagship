@@ -128,6 +128,27 @@ describe("editIsolinuxCfgForPreseed (Debian BIOS)", () => {
     expect(out).toMatch(/^\s*prompt\s+0/m);
   });
 
+  it("sends the speech-synthesis autoboot to the plain installer, which carries the preseed", () => {
+    // spkgtk.cfg ships `timeout 300` + an `ontimeout` straight into the accessible
+    // installer; left alone, a BIOS boot lands there after 30 s with NO preseed.
+    const spk = [
+      "label installspk",
+      "\tmenu label Install with ^speech synthesis",
+      "\tkernel /install.amd/vmlinuz",
+      "\tappend vga=788 initrd=/install.amd/gtk/initrd.gz speakup.synth=soft --- quiet ",
+      "# timeout to speech-enabled install",
+      "timeout 300",
+      "ontimeout /install.amd/vmlinuz vga=788 initrd=/install.amd/gtk/initrd.gz speakup.synth=soft --- quiet ",
+      "",
+    ].join("\n");
+    const out = editIsolinuxCfgForPreseed(spk);
+    expect(out).toContain("ontimeout install\n");
+    expect(out).not.toContain("ontimeout /install.amd");
+    expect(out).toMatch(/^timeout 1$/m);
+    expect(out).toContain(`initrd=/install.amd/gtk/initrd.gz ${DEBIAN_PRESEED_CMDLINE} speakup.synth=soft`);
+    expect(editIsolinuxCfgForPreseed(out)).toBe(out);
+  });
+
   it("is idempotent", () => {
     const once = editIsolinuxCfgForPreseed(DEB_TXT);
     expect(editIsolinuxCfgForPreseed(once)).toBe(once);

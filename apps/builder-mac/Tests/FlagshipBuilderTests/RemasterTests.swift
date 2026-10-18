@@ -65,6 +65,16 @@ final class RemasterTests: XCTestCase {
         XCTAssertEqual(Remaster.editIsolinuxCfgForPreseed(out), out)
     }
 
+    func testIsolinuxSpeechAutobootGoesToThePlainInstaller() {
+        let spk = "label installspk\n\tkernel /install.amd/vmlinuz\n\tappend vga=788 initrd=/install.amd/gtk/initrd.gz speakup.synth=soft --- quiet \ntimeout 300\nontimeout /install.amd/vmlinuz vga=788 initrd=/install.amd/gtk/initrd.gz speakup.synth=soft --- quiet \n"
+        let out = Remaster.editIsolinuxCfgForPreseed(spk)
+        XCTAssertTrue(out.contains("ontimeout install"))
+        XCTAssertFalse(out.contains("ontimeout /install.amd"))
+        XCTAssertTrue(out.range(of: "(?m)^timeout 1$", options: .regularExpression) != nil)
+        XCTAssertTrue(out.contains("initrd=/install.amd/gtk/initrd.gz \(Remaster.debianPreseedCmdline) speakup.synth=soft"))
+        XCTAssertEqual(Remaster.editIsolinuxCfgForPreseed(out), out)
+    }
+
     func testClassifyIsoText() {
         XCTAssertEqual(Remaster.classifyIsoText("Debian 13.5.0 amd64 1"), "debian")
         XCTAssertEqual(Remaster.classifyIsoText("/install.amd\n/boot\n/EFI"), "debian")

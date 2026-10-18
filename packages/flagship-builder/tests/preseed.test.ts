@@ -535,6 +535,13 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
     );
   });
 
+  it("late_command drops the cdrom apt source before the bootstrap's first apt-get", () => {
+    const c = cfg();
+    const sedAt = c.indexOf("sed -i '/^deb cdrom:/d' /target/etc/apt/sources.list");
+    expect(sedAt).toBeGreaterThan(0);
+    expect(sedAt).toBeLessThan(c.indexOf("in-target /usr/local/sbin/flagship-bootstrap.sh"));
+  });
+
   it("Beacon C — partman/early_command POSTs the partitioning phase right before the wipe", () => {
     const c = cfg();
     expect(c).toContain(`${PARTITION_BEACON}; \\`);

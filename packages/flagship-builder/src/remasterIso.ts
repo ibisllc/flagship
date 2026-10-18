@@ -150,6 +150,12 @@ export function editIsolinuxCfgForPreseed(cfg: string): string {
   }
   // Default to the auto-install label if a prompt would otherwise show.
   out = out.replace(/^\s*prompt\s+\d+/gm, "prompt 0");
+  // The speech-synthesis configs (spkgtk.cfg, spk.cfg) are included last and
+  // carry `timeout 300` + `ontimeout <speech installer kernel line>`: without
+  // this the BIOS boot drops into the accessible installer after 30 s, with no
+  // preseed (found booting a remastered ISO on a real BIOS server). Point the
+  // timeout at the plain installer label, which carries the preseed.
+  out = out.replace(/^\s*ontimeout\s+.*$/gm, "ontimeout install");
   return out;
 }
 
@@ -330,6 +336,8 @@ export async function remasterIsoWithPreseed(args: RemasterPreseedArgs): Promise
       { iso: "/isolinux/isolinux.cfg", edit: editIsolinuxCfgForPreseed },
       { iso: "/isolinux/txt.cfg", edit: editIsolinuxCfgForPreseed },
       { iso: "/isolinux/gtk.cfg", edit: editIsolinuxCfgForPreseed },
+      { iso: "/isolinux/spkgtk.cfg", edit: editIsolinuxCfgForPreseed },
+      { iso: "/isolinux/spk.cfg", edit: editIsolinuxCfgForPreseed },
     ];
     let patchedAny = false;
     for (let i = 0; i < patchTargets.length; i++) {

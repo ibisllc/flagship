@@ -97,6 +97,10 @@ public enum Remaster {
         }
         out = out.replacingOccurrences(
             of: "(?m)^\\s*prompt\\s+\\d+", with: "prompt 0", options: .regularExpression)
+        // spkgtk.cfg / spk.cfg: `timeout 300` + `ontimeout <speech installer>` would drop a
+        // BIOS boot into the accessible installer with no preseed; use the plain label.
+        out = out.replacingOccurrences(
+            of: "(?m)^\\s*ontimeout\\s+.*$", with: "ontimeout install", options: .regularExpression)
         return out
     }
 
@@ -159,6 +163,8 @@ public enum Remaster {
             ("/isolinux/isolinux.cfg", editIsolinuxCfgForPreseed),
             ("/isolinux/txt.cfg", editIsolinuxCfgForPreseed),
             ("/isolinux/gtk.cfg", editIsolinuxCfgForPreseed),
+            ("/isolinux/spkgtk.cfg", editIsolinuxCfgForPreseed),
+            ("/isolinux/spk.cfg", editIsolinuxCfgForPreseed),
         ]
         var mapArgs: [String] = []
         var patchedAny = false
