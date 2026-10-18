@@ -428,6 +428,23 @@ class GymOctoberTest : GymBase() {
         gymShot("server-apps")
     }
 
+    /** The server is online but the phone's resolver can't find its name (a cached
+     *  "no such name" from before the box registered): the Apps card keeps trying and
+     *  says so, never "Couldn't reach the server", and fills in once the name resolves. */
+    @Test
+    fun appsCardReconnectsInsteadOfSayingItCannotReach() {
+        launch(tab = "home")
+        waitUntilTextExists("Living-room mini-PC", timeoutMs = 20_000)
+        screensMock.appsListFailure = java.net.UnknownHostException("Unable to resolve host \"home.bright-maple.flagship.services\"")
+        composeRule.onNodeWithText("Living-room mini-PC").performScrollTo().performClick()
+        waitUntilExists("server-apps-reconnecting", timeoutMs = 30_000)
+        assertTrue("No can't-reach error while online", textCount("Couldn't reach the server") == 0 && textCount("Can't reach the server") == 0)
+        gymShot("server-apps-reconnecting")
+        screensMock.appsListFailure = null
+        composeRule.waitUntil(30_000) { composeRule.onAllNodes(tagStartsWith("server-app-")).fetchSemanticsNodes().isNotEmpty() }
+        gymShot("server-apps-reconnected")
+    }
+
     // ─── Server order: Make leader stays gray until the box confirms ─────────
 
     @Test

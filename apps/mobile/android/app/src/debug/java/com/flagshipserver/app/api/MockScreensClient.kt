@@ -119,8 +119,12 @@ class MockScreensClient(
         ),
     )
 
+    /** Gym: a failure for the apps list (e.g. a name the phone's resolver can't find). */
+    var appsListFailure: Throwable? = null
+
     override suspend fun appsList(): AppsListResponse {
         tick()
+        appsListFailure?.let { throw it }
         // url mirrors the live daemon's tier-1 form
         // `https://<urlLabel>.<serverFqdn>` (screensHttp builds it off the
         // box's per-box wildcard name — cert model A′).

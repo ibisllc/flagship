@@ -41,9 +41,12 @@ object HttpClientFactory {
             .addNetworkInterceptor(CertPinInterceptor(CertPinRegistry.shared::pinFor))
             // LAN-direct: a box host resolves to its pin-verified LAN address
             // first when the phone is next to it (docs/lan-direct.md).
-            .dns(LanDirectDns())
+            // A box name the phone's resolver can't find (cached "no such name")
+            // is reached through the relay instead (core/RelayFallback.kt).
+            .dns(RelayFallbackDns(LanDirectDns()))
             .socketFactory(LanAwareSocketFactory())
             .addInterceptor(LanDirectFallbackInterceptor())
+            .addInterceptor(DnsRetryInterceptor())
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)

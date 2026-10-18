@@ -390,7 +390,11 @@ fun ServerDetailScreen(
                         .semantics { contentDescription = "sd-app-sandbox-notice" },
                 )
             }
-            ServerAppsSection(podId = podId, client = podClient)
+            ServerAppsSection(
+                podId = podId,
+                client = podClient,
+                serverOnline = liveness == com.flagshipserver.app.core.PodInfo.LivenessState.ONLINE,
+            )
         }
 
         (detail as? LoadingState.Loaded)?.value?.let { d ->
@@ -678,7 +682,12 @@ private fun BootUnlockApprovalCard(
  *  being copied here is greyed out with its progress; the list is polled
  *  while a copy is underway and the page is visible. */
 @Composable
-private fun ServerAppsSection(podId: String, client: com.flagshipserver.app.api.ScreensClient) {
+private fun ServerAppsSection(
+    podId: String,
+    client: com.flagshipserver.app.api.ScreensClient,
+    /** The directory says the server is online: a failed load is retried, not reported. */
+    serverOnline: Boolean = false,
+) {
     val deepLinker = com.flagshipserver.app.core.LocalDeepLinker.current
     val vm = remember(podId, client) { com.flagshipserver.app.viewmodels.ServerAppsViewModel(client) }
     val phase by vm.phase.collectAsState()
@@ -698,7 +707,13 @@ private fun ServerAppsSection(podId: String, client: com.flagshipserver.app.api.
         when (val p = phase) {
             is com.flagshipserver.app.viewmodels.ServerAppsViewModel.Phase.Loading -> ServerCardSkeleton()
             is com.flagshipserver.app.viewmodels.ServerAppsViewModel.Phase.Failed ->
-                ErrorCard(p.message, onRetry = { retryScope.launch { vm.load() } })
+                if (serverOnline) {
+                    // Never "can't reach the server" while it is online: try again,
+                    // slower each time, and say so.
+                    ReconnectingApps(vm)
+                } else {
+                    ErrorCard(p.message, onRetry = { retryScope.launch { vm.load() } })
+                }
             is com.flagshipserver.app.viewmodels.ServerAppsViewModel.Phase.Loaded -> {
                 if (p.rows.isEmpty()) {
                     FSNote(com.flagshipserver.app.viewmodels.ServerAppsViewModel.EMPTY)
@@ -730,6 +745,26 @@ private fun ServerAppsSection(podId: String, client: com.flagshipserver.app.api.
             onClick = { deepLinker.enqueue(com.flagshipserver.app.core.DeepLink.CreateApp(podId)) },
             block = true,
             modifier = Modifier.testTag("server-create-app-here"),
+        )
+    }
+}
+
+@Composable
+private fun ReconnectingApps(vm: com.flagshipserver.app.viewmodels.ServerAppsViewModel) {
+    LaunchedEffect(vm) {
+        var wait = 3_000L
+        while (vm.phase.value is com.flagshipserver.app.viewmodels.ServerAppsViewModel.Phase.Failed) {
+            kotlinx.coroutines.delay(wait)
+            vm.load()
+            wait = (wait * 2).coerceAtMost(30_000L)
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.testTag("server-apps-reconnecting")) {
+        ServerCardSkeleton()
+        Text(
+            "Reconnecting to this server…",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
         )
     }
 }
