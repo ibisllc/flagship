@@ -2,6 +2,7 @@
   "about": "Derived-check findings that are intentional. Each entry names its check id and finding key exactly as scripts/parity-check.mjs prints them, and says why. An entry that no longer matches anything is reported as stale: delete it.",
   "entries": [
     { "check": "test-vectors", "key": "mac:vm-core-vectors.applianceSeed", "reason": "By the section's own notes the Mac's JSONEncoder writes an equivalent seed body, not the same bytes, so it doesn't assert this vector." },
+    { "check": "test-vectors", "key": "mac:vm-core-vectors.qemuFailure", "reason": "The Mac hosts on Virtualization.framework and never runs QEMU, so there is no QEMU stderr or WHPX memory failure to describe; its VZ errors are already plain. Only the Windows and Linux ports implement QemuFailure/qemu_failure." },
     { "check": "test-vectors", "key": "linux:vm-core-vectors.applianceSeed", "reason": "Linux writes the seed through the Node CLI's appliance-provision, which packages/flagship-builder/tests/appliance.test.ts checks against this section." },
     { "check": "deep-links", "key": "ios-lacks-host:deadman", "reason": "Android's own dead-man reminder notification opens app/deadman/<server>; iOS's local reminder carries category deadman-affirm and serverDomain in userInfo instead of a link." },
     { "check": "signed-tags", "key": "android:flagship/umk-wrap/v1", "reason": "iOS Secure Enclave keystore wrapping, local storage only and never on the wire; Android wraps in the Android Keystore." },
@@ -33,6 +34,7 @@
     { "check": "signed-tags", "key": "web:flagship/outstanding-orders/v1", "reason": "iOS's IRK-signed reconcile read; the webapp reconciles pending servers from the unauthenticated /pods pending[] list." },
     { "check": "signed-tags", "key": "web:flagship/recovery/v1", "reason": "The native default PRF salt; the webapp's passkey recovery derives its PRF salt from the user's passphrase (Argon2id in the recovery sub-origin)." },
     { "check": "signed-tags", "key": "android:flagship/swk/v1", "reason": "iOS's slash-form app-backup SWK (Keystore.deriveSWK) is not used by any other client; Android and the webapp derive the dotted protocol SWK (ServerKeys.deriveSwk)." },
+    { "check": "signed-tags", "key": "web:flagship/acme-account-key-grant/v1", "reason": "Only the canonical-bytes primitive exists on iOS and Android, pinned by their unit tests; no client issues, seals or unseals an ACME account-key grant yet (AGENTS.md open item 5). A webapp port would be dead code; port all three together with the sealing flow." },
     { "check": "signed-tags", "key": "web:flagship/voici-shorten/v1", "reason": "No client offers one-off voi.ci short links: iOS and Android carry only the unused canonical-bytes primitive, and the webapp has no such screen." }
   ]
 }

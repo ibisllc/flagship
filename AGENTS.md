@@ -1201,7 +1201,7 @@ published (not CI) appliance, the Android fixes landed after `eb08dcdc4`.
 5. **Restricted-device profile-key delivery is unimplemented.** The server
    stores and authorizes `accountDirectoryKeyGrant`s, but no client seals or
    unseals `sealedKeyHex`. Mirror the `AcmeAccountKeyGrant` envelope with
-   TS/Swift/Kotlin parity, golden vectors and negative tests.
+   TS/Swift/Kotlin parity, golden vectors and negative tests. Until then the webapp has no `acme-account-key-grant/v1` primitive on purpose (parity allowlist: iOS/Android carry only the unused canonical bytes).
 6. **Native UI tests** for account/device rename, managed override, lock/unlock
    were deleted in the private-naming cutover and never replaced.
 7. **Recovery Phase B re-pair** needs a real-device check (rotated key ⇒
