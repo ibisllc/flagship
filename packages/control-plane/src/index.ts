@@ -18,6 +18,7 @@ export * from "./inferenceToken.js";
 export * from "./cloudflareDns.js";
 export * from "./brokerDnsClient.js";
 export * from "./caaPublish.js";
+export * from "./accountDns.js";
 export * from "./dns01.js";
 export * from "./luksKeys.js";
 export * from "./secretMailbox.js";

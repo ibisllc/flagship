@@ -42,6 +42,7 @@ import {
 } from "@flagship/protocol";
 import type {
   AuditEventStorage,
+  AuthCodeStorage,
   AutoUnlockLeaseStorage,
   BoxSealedLeaseStorage,
   DeviceCapabilityGrantStorage,
@@ -56,7 +57,13 @@ import {
   type DeviceCapabilityGrantsDeps,
 } from "./deviceCapabilityGrants.js";
 import { HEX64, hexToBytes } from "./hex.js";
-import type { DnsUpsertClient } from "./serverRegister.js";
+import {
+  accountZoneOfServerDomain,
+  ensureAccountDns,
+  reconcileAccountDns,
+  removeBoxDns,
+  type AccountDnsDeps,
+} from "./accountDns.js";
 import {
   conflict,
   forbidden,
@@ -81,14 +88,22 @@ export interface ServerRevocationDeps {
   autoUnlockLeases?: AutoUnlockLeaseStorage;
   boxSealedLeases?: BoxSealedLeaseStorage;
   /**
-   * Optional. When wired, the revoked server's per-box DNS records
-   * (A/AAAA at `<serverDomain>` and `*.<serverDomain>`) are deleted so the
+   * Optional. When wired, the revoked server's DNS is cleaned so the
    * `flagship.services` zone doesn't accumulate orphan records and exhaust
-   * its record quota. Best-effort — a DNS failure never undoes the
-   * revocation that already landed. The user-zone CAA is deliberately NOT
-   * touched here: it's shared across all of the user's servers.
+   * its record quota (docs/wildcard-dns.md): any per-box A/AAAA older builds
+   * published for it is deleted, and when it was the account's LAST live
+   * server (and no install is in flight) the account's own records —
+   * `*.<user>` A/AAAA and the CAA at `<user>` — go too. Best-effort — a DNS
+   * failure never undoes the revocation that already landed.
    */
   dns?: DnsDeleteClient;
+  /**
+   * Optional with `dns`. Lets the account clean-up put the account's records
+   * back when a registration slipped in while it was deleting them.
+   */
+  accountDns?: AccountDnsDeps;
+  /** Optional with `dns`. An install in flight keeps the account's DNS. */
+  authCodes?: Pick<AuthCodeStorage, "listOutstandingByUsername">;
   /**
    * Optional. When wired, the revocation request body may carry an explicit
    * `signerPubHex` to authorize the action under a per-device
@@ -344,22 +359,22 @@ export async function handleRevokeServer(
     // swallow.
   }
 
-  // DNS cleanup: delete the per-box A/AAAA records published at
-  // registration so the zone doesn't accumulate orphans. Best-effort —
-  // the server record IS revoked; a DNS hiccup must not undo it. The
-  // box's serverDomain comes from the (just-revoked) target row.
+  // DNS cleanup (best-effort — the server record IS revoked; a DNS hiccup must
+  // not undo it). The box's serverDomain comes from the just-revoked row.
   let dnsRecordsDeleted = 0;
   if (deps.dns) {
-    const serverDomain = target.serverDomain;
-    const targets: Array<[string, string]> = [
-      [serverDomain, "A"],
-      [serverDomain, "AAAA"],
-      [`*.${serverDomain}`, "A"],
-      [`*.${serverDomain}`, "AAAA"],
-    ];
-    for (const [name, type] of targets) {
+    dnsRecordsDeleted += await removeBoxDns(deps.dns, target.serverDomain);
+    const userZone = accountZoneOfServerDomain(target.serverDomain);
+    if (userZone) {
       try {
-        dnsRecordsDeleted += await deps.dns.deleteByName(name, type);
+        const rec = await reconcileAccountDns({
+          use: { servers: deps.servers, authCodes: deps.authCodes, now: () => now },
+          username: target.username,
+          userZone,
+          remover: deps.dns,
+          publish: deps.accountDns,
+        });
+        dnsRecordsDeleted += rec.deleted;
       } catch {
         // swallow — see comment above.
       }
@@ -396,7 +411,7 @@ export interface ServerUnrevocationDeps {
    * the box's names resolve again. Best-effort: a DNS failure never undoes the
    * un-revoke.
    */
-  dns?: { client: DnsUpsertClient; servicesIpv4: string; servicesIpv6?: string };
+  dns?: AccountDnsDeps;
   maxAgeMs?: number;
   now?: () => number;
 }
@@ -467,17 +482,12 @@ export async function handleUnrevokeServer(
 
   let dnsRepublished = 0;
   if (deps.dns) {
-    for (const name of [target.serverDomain, `*.${target.serverDomain}`]) {
-      try {
-        await deps.dns.client.upsert({ name, type: "A", content: deps.dns.servicesIpv4 });
-        dnsRepublished++;
-        if (deps.dns.servicesIpv6) {
-          await deps.dns.client.upsert({ name, type: "AAAA", content: deps.dns.servicesIpv6 });
-          dnsRepublished++;
-        }
-      } catch {
-        // swallow — the server IS un-revoked; DNS re-publishes on next register.
-      }
+    const userZone = accountZoneOfServerDomain(target.serverDomain);
+    if (userZone) {
+      // The revoke may have removed the account's records with its last
+      // server; put them back (a no-op when they are still there).
+      const r2 = await ensureAccountDns(deps.dns, userZone);
+      dnsRepublished = r2.dnsPublished.length;
     }
   }
 

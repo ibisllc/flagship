@@ -1,4 +1,5 @@
 import type { ServerStorage } from "@flagship/storage";
+import { accountZoneOfServerDomain, ensureAccountDns } from "./accountDns.js";
 import type { CloudflareDnsClient } from "./cloudflareDns.js";
 import { forbidden, type HandlerResponse } from "./types.js";
 
@@ -34,14 +35,16 @@ export function authorizeAdmin(auth: AdminAuth): HandlerResponse | null {
 }
 
 /**
- * DNS re-publisher. Walks every non-revoked server in storage and
- * upserts apex + wildcard A/AAAA records to the currently-configured
- * passthrough IPs. Used after editing the IPs in wrangler.toml — one
- * curl re-establishes correct DNS for every user.
+ * DNS re-publisher. Walks every non-revoked server in storage and makes sure
+ * each ACCOUNT's records exist at the currently-configured passthrough IPs:
+ * `*.<user>` A/AAAA and the CAA at `<user>` (docs/wildcard-dns.md; no per-box
+ * records). Used after editing the IPs in wrangler.toml — one curl
+ * re-establishes correct DNS for every user — and to give an account that
+ * predates the wildcard its records.
  *
  * Idempotent: existing-content matches are no-ops at the CF API.
- * Caller can re-invoke safely. Reports per-server outcomes so a
- * partial failure is visible.
+ * Caller can re-invoke safely. Reports per-server outcomes (servers of one
+ * account share its outcome) so a partial failure is visible.
  */
 export interface RepublishDeps {
   servers: ServerStorage;
@@ -62,28 +65,29 @@ export async function handleRepublishServerDns(
   const all = await deps.servers.listAll();
   const active = all.filter((s) => !s.revokedAt);
   const outcomes: RepublishOutcome[] = [];
-  // PER-BOX DNS (cert model A′): each box gets its own pair —
-  // `<server>.<user>` + `*.<server>.<user>` — matching the SANs of the
-  // box's per-box wildcard cert. No shared user-zone records, so nothing
-  // to dedup across a user's servers.
+  const byZone = new Map<string, { ok: boolean; error?: string }>();
   for (const rec of active) {
-    const apex = rec.serverDomain;
-    const wildcard = `*.${apex}`;
-    try {
-      for (const name of [apex, wildcard]) {
-        await deps.dns.upsert({ name, type: "A", content: deps.servicesIpv4 });
-        if (deps.servicesIpv6) {
-          await deps.dns.upsert({ name, type: "AAAA", content: deps.servicesIpv6 });
-        }
-      }
-      outcomes.push({ serverDomain: rec.serverDomain, ok: true });
-    } catch (e) {
-      outcomes.push({
-        serverDomain: rec.serverDomain,
-        ok: false,
-        error: e instanceof Error ? e.message : String(e),
-      });
+    const zone = accountZoneOfServerDomain(rec.serverDomain);
+    if (!zone) {
+      outcomes.push({ serverDomain: rec.serverDomain, ok: false, error: "not a <server>.<user>.<apex> name" });
+      continue;
     }
+    let result = byZone.get(zone);
+    if (!result) {
+      const r = await ensureAccountDns(
+        {
+          client: deps.dns,
+          servicesIpv4: deps.servicesIpv4,
+          servicesIpv6: deps.servicesIpv6,
+          caa: { client: deps.dns },
+        },
+        zone,
+      );
+      const error = r.dnsError ?? r.caaError;
+      result = error ? { ok: false, error } : { ok: true };
+      byZone.set(zone, result);
+    }
+    outcomes.push({ serverDomain: rec.serverDomain, ok: result.ok, ...(result.error ? { error: result.error } : {}) });
   }
   return {
     status: 200,

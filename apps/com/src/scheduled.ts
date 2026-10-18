@@ -89,6 +89,9 @@ export interface ScheduledEnv {
   CLOUDFLARE_DNS_API_TOKEN?: string;
   CLOUDFLARE_SERVICES_ZONE_ID?: string;
   SERVICES_APEX?: string;
+  /** The relay's address: lets the stale-challenge sweep release challenge shields. */
+  SERVICES_PASSTHROUGH_IPV4?: string;
+  SERVICES_PASSTHROUGH_IPV6?: string;
   /** Plan A — numeric Hetzner SSH key id (set in [vars]). Unused by
    *  the cron itself but plumbed for symmetry with the request path. */
   DEMO_PUBLIC_SSH_KEY_ID?: string;
@@ -483,6 +486,14 @@ export async function runDnsChallengeGcCron(
   return dns.deleteStaleAcmeTxt({
     apex: env.SERVICES_APEX ?? "flagship.services",
     cutoffMs: now.getTime() - 60 * 60 * 1000,
+    ...(env.SERVICES_PASSTHROUGH_IPV4
+      ? {
+          relay: {
+            servicesIpv4: env.SERVICES_PASSTHROUGH_IPV4,
+            ...(env.SERVICES_PASSTHROUGH_IPV6 ? { servicesIpv6: env.SERVICES_PASSTHROUGH_IPV6 } : {}),
+          },
+        }
+      : {}),
   });
 }
 

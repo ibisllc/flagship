@@ -53,13 +53,21 @@ import {
 } from "@flagship/protocol";
 import type {
   AuditEventStorage,
+  AuthCodeStorage,
   DeviceCapabilityGrantStorage,
   RoutingStorage,
   ServerStorage,
   ServerTransferStorage,
   UsernameStorage,
 } from "@flagship/storage";
-import type { DnsUpsertClient } from "./serverRegister.js";
+import {
+  accountZoneOfServerDomain,
+  ensureAccountDns,
+  reconcileAccountDns,
+  removeBoxDns,
+  type AccountDnsDeps,
+} from "./accountDns.js";
+import type { DnsDeleteClient } from "./cloudflareDns.js";
 import { addServerRefused, authorizeAddServer, authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import { HEX64, HEX128, equalHex, hexToBytes } from "./hex.js";
 import {
@@ -77,14 +85,15 @@ export interface ServerTransferDeps {
    *  28 [giver] + 29 [acquirer's admin root]). Optional: absent ⇒ only the bare
    *  admin root satisfies the open gate. */
   grants?: DeviceCapabilityGrantStorage;
-  /** Per-box DNS publisher for the acquirer's new FQDN (same shape as
-   *  registration). Absent ⇒ the migration completes without re-publishing
-   *  DNS (best-effort, mirroring registration's dnsError path). */
-  dns?: {
-    client: DnsUpsertClient;
-    servicesIpv4: string;
-    servicesIpv6?: string;
-  };
+  /** The acquirer's account DNS (`*.<acquirer>` A/AAAA + CAA, same as
+   *  registration; no per-box record). Absent ⇒ the migration completes without
+   *  re-publishing DNS (best-effort, mirroring registration's dnsError path). */
+  dns?: AccountDnsDeps;
+  /** Cleans the giver's side once the box has moved: its old per-box records
+   *  and, when that was the giver's last server, the giver's account records.
+   *  Absent ⇒ nothing is deleted (the reap tool picks the leftovers up). */
+  dnsCleanup?: DnsDeleteClient;
+  authCodes?: Pick<AuthCodeStorage, "listOutstandingByUsername">;
   /** Data-plane apex (`flagship.services` prod, `gym.flagship.services` test).
    *  Used to re-home the FQDN. Defaults to the prod literal. */
   apex?: string;
@@ -511,16 +520,27 @@ export async function handlePostTransferClaim(
         String((e as Error).message ?? e);
     }
 
-    // 3) Publish the acquirer's per-box DNS (apex + wildcard), same as
-    //    registration. Best-effort.
+    // 3) The acquirer's account DNS (the wildcard answers for the moved box;
+    //    no per-box record), then the giver's clean-up. Best-effort.
     if (deps.dns) {
+      const zone = accountZoneOfServerDomain(newDomain);
+      if (zone) {
+        const r3 = await ensureAccountDns(deps.dns, zone);
+        if (r3.dnsError) migration.dnsError = r3.dnsError;
+      }
+    }
+    if (deps.dnsCleanup) {
       try {
-        const names = [newDomain, `*.${newDomain}`];
-        for (const name of names) {
-          await deps.dns.client.upsert({ name, type: "A", content: deps.dns.servicesIpv4 });
-          if (deps.dns.servicesIpv6) {
-            await deps.dns.client.upsert({ name, type: "AAAA", content: deps.dns.servicesIpv6 });
-          }
+        await removeBoxDns(deps.dnsCleanup, host);
+        const giverZone = accountZoneOfServerDomain(host);
+        if (giverZone) {
+          await reconcileAccountDns({
+            use: { servers: deps.servers, authCodes: deps.authCodes, now },
+            username: offerRow.giverUsername,
+            userZone: giverZone,
+            remover: deps.dnsCleanup,
+            publish: deps.dns,
+          });
         }
       } catch (e) {
         migration.dnsError = String((e as Error).message ?? e);

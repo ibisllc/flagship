@@ -14,6 +14,10 @@ import {
   handleStampSchemaVersion,
   handleCaLeaseStatus,
   BrokerDnsClient,
+  removeAccountDns,
+  removeBoxDns,
+  type AccountDnsDeps,
+  type RelayAddress,
   caKeypairFromEnv,
   CloudflareDnsClient,
   proxyDns01DeleteToBroker,
@@ -493,6 +497,42 @@ interface ProvisioningBaseBucket {
     body: ReadableStream<Uint8Array> | null;
     size: number;
   } | null>;
+}
+
+/** The relay's address, when this deployment has one configured. */
+function relayAddressOf(env: { SERVICES_PASSTHROUGH_IPV4?: string; SERVICES_PASSTHROUGH_IPV6?: string }): RelayAddress | undefined {
+  return env.SERVICES_PASSTHROUGH_IPV4
+    ? {
+        servicesIpv4: env.SERVICES_PASSTHROUGH_IPV4,
+        ...(env.SERVICES_PASSTHROUGH_IPV6 ? { servicesIpv6: env.SERVICES_PASSTHROUGH_IPV6 } : {}),
+      }
+    : undefined;
+}
+
+/**
+ * The account-wildcard DNS dependency (docs/wildcard-dns.md) for a handler:
+ * the broker when configured, else the direct client; CAA goes through the
+ * direct client only (the broker has no CAA RPC). Undefined when there is no
+ * relay address or no way to write.
+ */
+function accountDnsDepsOf(
+  env: {
+    SERVICES_PASSTHROUGH_IPV4?: string;
+    SERVICES_PASSTHROUGH_IPV6?: string;
+    DNS_BROKER_URL?: string;
+    CLOUDFLARE_DNS_API_TOKEN?: string;
+    CLOUDFLARE_SERVICES_ZONE_ID?: string;
+  },
+): AccountDnsDeps | undefined {
+  const relay = relayAddressOf(env);
+  if (!relay) return undefined;
+  const direct =
+    env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
+      ? new CloudflareDnsClient({ apiToken: env.CLOUDFLARE_DNS_API_TOKEN, zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID })
+      : null;
+  const client = env.DNS_BROKER_URL ? new BrokerDnsClient({ brokerUrl: env.DNS_BROKER_URL }) : direct;
+  if (!client) return undefined;
+  return { client, ...relay, ...(direct ? { caa: { client: direct } } : {}) };
 }
 
 const ROUTE_RE = {
@@ -1034,6 +1074,11 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           grants: storage.deviceCapabilityGrants,
           apex: env.SERVICES_APEX,
+          // The account's wildcard DNS exists before its box registers.
+          ...(() => {
+            const dns = accountDnsDepsOf(env);
+            return dns ? { dns } : {};
+          })(),
         },
         await readJson(request),
       ),
@@ -1183,7 +1228,10 @@ export async function tryControlPlane(
             identities: storage.deviceIdentities,
             usernames: storage.usernames,
           },
-          ...(revokeDns ? { dns: revokeDns } : {}),
+          ...(revokeDns ? { dns: revokeDns, authCodes: storage.authCodes } : {}),
+          ...(revokeDns && relayAddressOf(env)
+            ? { accountDns: { client: revokeDns, ...relayAddressOf(env)!, caa: { client: revokeDns } } }
+            : {}),
         },
         await readJson(request),
       ),
@@ -1191,16 +1239,8 @@ export async function tryControlPlane(
   }
 
   if (method === "POST" && ROUTE_RE.SERVER_REGISTRY_UNREVOKE.test(path)) {
-    // Owner-signed undo of a lost/stolen/decommissioned revoke. Re-publishes
-    // the per-box DNS the revoke deleted (same client choice as register).
-    const dnsClient = env.DNS_BROKER_URL
-      ? new BrokerDnsClient({ brokerUrl: env.DNS_BROKER_URL })
-      : env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
-        ? new CloudflareDnsClient({
-            apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
-            zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
-          })
-        : null;
+    // Owner-signed undo of a lost/stolen/decommissioned revoke. Puts back the
+    // account's wildcard DNS the revoke may have removed with its last server.
     return finish(
       await handleUnrevokeServer(
         {
@@ -1208,15 +1248,10 @@ export async function tryControlPlane(
           servers: storage.servers,
           auditEvents: storage.auditEvents,
           grants: storage.deviceCapabilityGrants,
-          ...(dnsClient && env.SERVICES_PASSTHROUGH_IPV4
-            ? {
-                dns: {
-                  client: dnsClient,
-                  servicesIpv4: env.SERVICES_PASSTHROUGH_IPV4,
-                  ...(env.SERVICES_PASSTHROUGH_IPV6 ? { servicesIpv6: env.SERVICES_PASSTHROUGH_IPV6 } : {}),
-                },
-              }
-            : {}),
+          ...(() => {
+            const dns = accountDnsDepsOf(env);
+            return dns ? { dns } : {};
+          })(),
         },
         await readJson(request),
       ),
@@ -1608,7 +1643,14 @@ export async function tryControlPlane(
       // (resolving the user IRK to verify a phone-issued ServiceCertAuthority).
       // Without it, a `<svc>.<user>` challenge 403s "service-cert authority not
       // supported here". The gym uses this legacy direct-CF path (no broker).
-      { servers: storage.servers, usernames: storage.usernames, dns, apex: env.SERVICES_APEX },
+      {
+        servers: storage.servers,
+        usernames: storage.usernames,
+        dns,
+        apex: env.SERVICES_APEX,
+        // Keep the box's names answering while its challenge TXT exists.
+        ...(relayAddressOf(env) ? { shield: relayAddressOf(env)! } : {}),
+      },
       await readJson(request),
     );
     return finishPlain(res);
@@ -2107,9 +2149,11 @@ export async function tryControlPlane(
                 client: xferDnsClient,
                 servicesIpv4: env.SERVICES_PASSTHROUGH_IPV4,
                 servicesIpv6: env.SERVICES_PASSTHROUGH_IPV6,
+                ...(xferCfDns ? { caa: { client: xferCfDns } } : {}),
               },
             }
           : {}),
+        ...(xferCfDns ? { dnsCleanup: xferCfDns, authCodes: storage.authCodes } : {}),
         apex: env.SERVICES_APEX,
       });
       const domain = decodeURIComponent(xferM![1]!);
@@ -2978,6 +3022,7 @@ export async function tryControlPlane(
       const result = await dns.deleteStaleAcmeTxt({
         apex: env.SERVICES_APEX ?? "flagship.services",
         cutoffMs: Date.now() - 60 * 60 * 1000,
+        relay: relayAddressOf(env),
       });
       return jsonResponse({ ok: true, ...result });
     }
@@ -3528,9 +3573,8 @@ export async function tryControlPlane(
         ...(demoDns ? {
           cleanupDns: async (username: string) => {
             const domain = `home.${username}.${servicesApex}`;
-            for (const name of [domain, `*.${domain}`]) {
-              for (const type of ["A", "AAAA"]) await demoDns.deleteByName(name, type);
-            }
+            await removeBoxDns(demoDns, domain);
+            await removeAccountDns(demoDns, `${username}.${servicesApex}`);
           },
         } : {}),
       }, await readJson(request)));

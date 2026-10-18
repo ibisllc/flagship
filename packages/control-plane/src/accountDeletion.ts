@@ -45,6 +45,7 @@ import type {
 } from "@flagship/storage";
 import { recordAuditEvent } from "./auditEvents.js";
 import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
+import { accountZoneOfServerDomain, removeAccountDns, removeBoxDns } from "./accountDns.js";
 import type { DnsDeleteClient } from "./cloudflareDns.js";
 import { HEX128, hexToBytes } from "./hex.js";
 import { validateUserLabel } from "./labels.js";
@@ -173,19 +174,9 @@ async function teardownServer(
     }
   }
   if (deps.dns) {
-    const targets: Array<[string, string]> = [
-      [domain, "A"],
-      [domain, "AAAA"],
-      [`*.${domain}`, "A"],
-      [`*.${domain}`, "AAAA"],
-    ];
-    for (const [name, type] of targets) {
-      try {
-        await deps.dns.deleteByName(name, type);
-      } catch {
-        /* swallow */
-      }
-    }
+    // Any per-box A/AAAA older builds published (the account's own records go
+    // with the account, in commitAccountHardDelete).
+    await removeBoxDns(deps.dns, domain);
   }
   if (deps.luksKeys) {
     try {
@@ -234,6 +225,26 @@ async function commitAccountHardDelete(
     if (s.revokedAt) continue;
     await teardownServer(deps, s, now);
     serversTornDown++;
+  }
+
+  // The account's own DNS (`*.<user>` A/AAAA, the CAA at `<user>`): nothing is
+  // left to serve, so drop it, or the zone fills with dead accounts. The zone
+  // comes from the account's servers and any install still in flight.
+  if (deps.dns) {
+    const zones = new Set<string>();
+    for (const s of servers) {
+      const z = accountZoneOfServerDomain(s.serverDomain);
+      if (z) zones.add(z);
+    }
+    try {
+      for (const c of await deps.authCodes.listOutstandingByUsername(username, now)) {
+        const z = accountZoneOfServerDomain(c.serverDomain);
+        if (z) zones.add(z);
+      }
+    } catch {
+      /* swallow */
+    }
+    for (const z of zones) await removeAccountDns(deps.dns, z);
   }
 
   // Purge account-scoped credentials so a reclaimed name starts clean and no

@@ -17,8 +17,8 @@ import type {
 import { HEX64, HEX128, equalBytes, hexToBytes, bytesToHex } from "./hex.js";
 import { addServerRefused } from "./adminAuthorityGate.js";
 import { SERIAL_RE, validateAndUseAuthCode } from "./authCode.js";
-import { publishUserZoneCaa, type CaaUpsertClient } from "./caaPublish.js";
-import type { CaRestrictionCaaOptions } from "@flagship/services-zone";
+import { ensureAccountDns, type AccountDnsDeps } from "./accountDns.js";
+import { userZoneOf } from "@flagship/services-zone";
 /**
  * Minimum DNS-client surface `handleServerRegister` needs. Both
  * `CloudflareDnsClient` (direct CF token, dev/legacy) and
@@ -49,29 +49,11 @@ export interface ServerRegisterDeps {
   usernames?: UsernameStorage;
   /** Optional. When provided, server registration also: (a) sets the
    *  routing target if the user has registered an RCK for this subdomain,
-   *  (b) publishes A/AAAA records pointing the subdomain at the
-   *  flagship.services anycast IP. */
+   *  (b) makes sure the account's wildcard A/AAAA (and CAA) exist. */
   routing?: RoutingStorage;
-  dns?: {
-    client: DnsUpsertClient;
-    /** IPv4 address of .services SNI passthrough listener. */
-    servicesIpv4: string;
-    /** IPv6 address (optional). */
-    servicesIpv6?: string;
-    /**
-     * When the DNS client also supports CAA (`type:"CAA"` with a structured
-     * `data` field — the `CloudflareDnsClient` does), the user-zone CAA
-     * CA-restriction records are published alongside the A/AAAA records, once
-     * per user. Defaults to the same `client`. Best-effort: a CAA failure
-     * never fails registration. See `caaPublish.ts` for scope (PHASE-1
-     * CA-restriction only; PHASE-2 accounturi pinning is a TODO).
-     */
-    caa?: {
-      client: CaaUpsertClient;
-      /** Override the CA domain / iodef. Defaults to LE + security@. */
-      options?: CaRestrictionCaaOptions;
-    };
-  };
+  /** The account-wildcard DNS (A/AAAA + CAA) published at registration; see
+   *  `accountDns.ts` for what it writes and `AccountDnsDeps.caa` for CAA. */
+  dns?: AccountDnsDeps;
   /** N0d-2: when all three are provided, a successful new-server
    *  registration fans a category-only ("server-registered"),
    *  empty-payload push out to the user's device family so they
@@ -321,89 +303,38 @@ export async function handleServerRegister(
     );
   }
 
-  // Publish A/AAAA so the box's URLs resolve to the .services SNI
-  // passthrough. PER-BOX DNS (cert model A′): TWO names per registration,
-  // both scoped to THIS box (idempotent — DNS upsert is a no-op when the
-  // record already exists with the right content):
-  //   - <server>.<user>.flagship.services    (box apex — the canonical name)
-  //   - *.<server>.<user>.flagship.services  (every service under the box:
-  //                                           <service>.<server>.<user>)
-  // These are exactly the SANs of the box's per-box wildcard cert, so each
-  // registration publishes a distinct pair — no shared user-zone records
-  // (the model-C user-zone pair is gone with the per-user wildcard cert).
-  // Best-effort: a DNS failure shouldn't fail registration.
+  // DNS: one wildcard per ACCOUNT (docs/wildcard-dns.md). `*.<user>` A/AAAA
+  // makes every name under the account resolve to the .services SNI
+  // passthrough: this box (`<server>.<user>`), everything under it
+  // (`<service>.<server>.<user>`, which closest-encloser synthesis answers
+  // from the same record) and the tier-2 leader-routed `<svc>.<user>` names.
+  // Nothing is published per box any more. The records are idempotent (a
+  // second box of the account, or a registration that follows the auth-code
+  // issue which already created them, is a no-op) and are removed with the
+  // account's last server. CAA stays at the user zone: RFC 8659 tree-climbing
+  // makes the one pair at `<user>` cover every name below it. PHASE-1 only —
+  // no accounturi pinning yet (see caaPublish.ts / caaPin.ts TODO).
+  // Best-effort: a DNS or CAA failure must never fail registration.
+  //
+  // CAA needs a CAA-capable client. The production `BrokerDnsClient` exposes
+  // A/AAAA + ACME-TXT only and does NOT carry CAA — so the Worker wires its
+  // CAA-capable `CloudflareDnsClient` here explicitly. When no `caa.client`
+  // is configured we skip (no silent broker-throw).
+  // TODO(broker-caa): teach the dns-broker a `publishCaa` RPC so production
+  // can publish CAA through the broker's pinned credentials too, then default
+  // `caa.client` to `deps.dns.client`.
   let dnsPublished: { type: string; name: string; content: string }[] = [];
   let dnsError: string | undefined;
   let caaPublished: { name: string; rdata: string }[] = [];
   let caaError: string | undefined;
   if (deps.dns) {
-    const podApex = authCode.serverDomain;
-    const userZone = userZoneOf(podApex, deps.apex ?? "flagship.services");
-    // PER-USER wildcard for TIER-2 leader-routed service names: a tier-2
-    // canonical `<svc>.<user>.<apex>` is hardware-agnostic (no per-box wildcard
-    // covers it — `*.<server>.<user>` only covers `<x>.<server>.<user>`). It
-    // must resolve to the same `.services` SNI-passthrough hub IP so the hub can
-    // route it to whichever box currently holds the `<svc>.<user>` leader slot.
-    // One idempotent `*.<user>.<apex>` A/AAAA per user does that for EVERY tier-2
-    // name under the user (RFC 1034 wildcard). The CAA at the user zone already
-    // covers it (tree-climb). A second box under the same user re-asserts the
-    // same record (no-op). The cert for each `<svc>.<user>` is still minted
-    // box-local under phone authority (Phase 5) — this is purely the A-record so
-    // the name resolves; routing + TLS are gated separately by the hub + cert.
-    const names = [podApex, `*.${podApex}`];
-    if (userZone) names.push(`*.${userZone}`);
-    try {
-      for (const name of names) {
-        const a = await deps.dns.client.upsert({
-          name,
-          type: "A",
-          content: deps.dns.servicesIpv4,
-        });
-        dnsPublished.push({ type: "A", name, content: a.content });
-        if (deps.dns.servicesIpv6) {
-          const aaaa = await deps.dns.client.upsert({
-            name,
-            type: "AAAA",
-            content: deps.dns.servicesIpv6,
-          });
-          dnsPublished.push({ type: "AAAA", name, content: aaaa.content });
-        }
-      }
-    } catch (e) {
-      dnsError = String((e as Error).message ?? e);
-    }
-
-    // CAA CA-restriction (defense-in-depth against EXTERNAL mis-issuance):
-    // restrict cert issuance for the user's names to Let's Encrypt. Certs are
-    // PER-BOX (A′), but CAA stays at the USER zone — locked decision: RFC 8659
-    // §3 tree-climbing means a CAA record at `<user>.flagship.services` covers
-    // every name below it (`<server>.<user>` box apexes, `*.<server>.<user>`
-    // wildcards, `<service>.<user>` shared-service names), so one user-zone
-    // record set restricts issuance for ALL per-box and service certs and
-    // per-box CAA would be redundant churn. Published once per user; each
-    // record is idempotent (keyed by its exact rdata), so a re-register / a
-    // second pod under the user is a no-op. PHASE-1 only — no accounturi
-    // pinning yet (see caaPublish.ts / caaPin.ts TODO). Best-effort: a CAA
-    // failure must never fail registration.
-    //
-    // Requires a CAA-capable client. The production `BrokerDnsClient` exposes
-    // A/AAAA + ACME-TXT only and does NOT carry CAA — so the Worker wires its
-    // CAA-capable `CloudflareDnsClient` here explicitly. When no `caa.client`
-    // is configured we skip (no silent broker-throw).
-    // TODO(broker-caa): teach the dns-broker a `publishCaa` RPC so production
-    // can publish CAA through the broker's pinned credentials too, then default
-    // `caa.client` to `deps.dns.client`.
-    const caaClient: CaaUpsertClient | undefined = deps.dns.caa?.client;
-    if (userZone && caaClient) {
-      try {
-        caaPublished = await publishUserZoneCaa({
-          client: caaClient,
-          userZone,
-          options: deps.dns.caa?.options,
-        });
-      } catch (e) {
-        caaError = String((e as Error).message ?? e);
-      }
+    const userZone = userZoneOf(authCode.serverDomain, deps.apex ?? "flagship.services");
+    if (userZone) {
+      const r2 = await ensureAccountDns(deps.dns, userZone);
+      dnsPublished = r2.dnsPublished;
+      dnsError = r2.dnsError;
+      caaPublished = r2.caaPublished;
+      caaError = r2.caaError;
     }
   }
 
@@ -416,27 +347,6 @@ export async function handleServerRegister(
     caaPublished,
     caaError,
   });
-}
-
-/**
- * For a podApex of the form `<server>.<user>.<apex>`, return the user zone
- * `<user>.<apex>` (the CAA record-set anchor — A/AAAA publishing is
- * per-box). Parses apex-RELATIVE: strip the configured apex suffix, then
- * the user is the LAST remaining label — so a deeper apex like
- * `gym.flagship.services` resolves `home.alice.gym.flagship.services` to
- * `alice.gym.flagship.services`, not the wrong label. `apex` defaults to
- * the prod literal. Returns null on shape mismatch.
- */
-function userZoneOf(podApex: string, apex = "flagship.services"): string | null {
-  const lower = podApex.toLowerCase();
-  const suffix = `.${apex}`;
-  if (!lower.endsWith(suffix)) return null;
-  const head = lower.slice(0, -suffix.length);
-  const parts = head.split(".");
-  if (parts.length < 2) return null;
-  const user = parts[parts.length - 1]!;
-  if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(user)) return null;
-  return `${user}.${apex}`;
 }
 
 export async function handleServerLookup(

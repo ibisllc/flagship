@@ -6,6 +6,8 @@ import {
   type AuthCodeRevocation,
 } from "@flagship/protocol";
 import type { AuthCodeStorage, DeviceCapabilityGrantStorage, UsernameStorage } from "@flagship/storage";
+import { userZoneOf } from "@flagship/services-zone";
+import { ensureAccountDns, type AccountDnsDeps } from "./accountDns.js";
 import { addServerRefused, authorizeAddServer } from "./adminAuthorityGate.js";
 import { HEX64, HEX128, equalHex, hexToBytes, bytesToHex } from "./hex.js";
 import { validateServerLabel, validateUserLabel } from "./labels.js";
@@ -26,6 +28,13 @@ export interface AuthCodeDeps {
    * behavior (and the serverDomain validation) is byte-identical.
    */
   apex?: string;
+  /**
+   * The account-wildcard DNS (docs/wildcard-dns.md). When wired, an admitted
+   * issue makes sure `*.<user>` A/AAAA (and CAA) exist, so the new box's name
+   * resolves before it registers and no resolver caches "no such name" for it
+   * (the zone's SOA says 30 minutes). Best-effort and idempotent.
+   */
+  dns?: AccountDnsDeps;
   freshnessMs?: number;
   maxExpiryMs?: number;
   now?: () => number;
@@ -176,6 +185,10 @@ export async function handleAuthCodeIssue(
     ...(adminRootPubKeyHex ? { adminRootPubKeyHex } : {}),
   });
   if (!out.ok) return conflict(out.reason);
+  if (deps.dns) {
+    const userZone = userZoneOf(expectedDomain, apex);
+    if (userZone) await ensureAccountDns(deps.dns, userZone);
+  }
   return ok({ ok: true, serial: code.serial, expiresAt: code.expiresAt });
 }
 
