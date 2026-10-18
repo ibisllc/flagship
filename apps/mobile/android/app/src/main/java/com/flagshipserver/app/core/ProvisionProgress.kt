@@ -107,6 +107,13 @@ object ProvisionProgress {
         return StepKey.BOOTING
     }
 
+    /** The box's failure text for a person: "Setup stopped while Expanding the
+     *  disk (line 66)" loses the shell line number; empty becomes the title. */
+    fun failureDetail(lastError: String?): String? {
+        val stripped = lastError?.let { UserErrorText.stripInternals(it) }
+        return if (stripped.isNullOrEmpty()) phaseTitles["error"] else stripped
+    }
+
     /** Project (phase, lastError, prevPhase) into the per-group checklist
      *  every detail page renders. `error` fails the currently-active
      *  group (derived from `prevPhase`). */
@@ -127,7 +134,7 @@ object ProvisionProgress {
                 when {
                     i < failedIdx -> StepView(g.key, g.label, StepState.DONE, null)
                     i == failedIdx -> {
-                        val d = if (lastError.isNullOrEmpty()) phaseTitles["error"] else lastError
+                        val d = failureDetail(lastError)
                         StepView(g.key, g.label, StepState.FAILED, d)
                     }
                     else -> StepView(g.key, g.label, StepState.PENDING, null)

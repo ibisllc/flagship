@@ -77,7 +77,7 @@ object ProvisionNoticeModel {
             )
             "error" -> ProvisionNotice(
                 title = title,
-                text = u.detail?.takeIf { it.isNotBlank() } ?: ProvisionProgress.phaseTitles.getValue("error"),
+                text = ProvisionProgress.failureDetail(u.detail).orEmpty(),
                 progress = 0,
                 ongoing = false,
                 failed = true,

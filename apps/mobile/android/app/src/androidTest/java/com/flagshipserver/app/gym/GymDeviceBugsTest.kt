@@ -143,6 +143,67 @@ class GymDeviceBugsTest : GymBase() {
             .fetchSemanticsNodes().let { assertTrue("no ghost row", it.isEmpty()) }
     }
 
+    // Device report 2026-10-18 (A-3): Cancel order told a person with a healthy
+    // connection to check it. The reason shows in plain words (no status line,
+    // no "error code: 1102"), the order stays, and the button runs it again.
+    @Test
+    fun cancelOrderSaysWhyItFailedAndTheSameButtonTriesAgain() {
+        launch(tab = "home", adminRoot = true, podsVariant = "pending-ghost")
+        waitText("Home2", 20_000)
+        val flagship = com.flagshipserver.app.core.GymProbe.flagship!!
+        flagship.failure = com.flagshipserver.app.core.HttpException(503, "error code: 1102")
+        tapText("Home2")
+        waitUntilExists("pending-cancel-order-button")
+        tap("pending-cancel-order-button")
+        waitUntilExists("pending-cancel-error", timeoutMs = 20_000)
+        val shown = textOfTag("pending-cancel-error")
+        gymShot("cancel-order-failed")
+        assertTrue(shown, shown.contains("temporary problem"))
+        assertTrue(shown, !shown.contains("1102") && !shown.contains("HTTP"))
+        assertTrue("the order stays", com.flagshipserver.app.core.GymProbe.appState!!.pods.value.any { it.fqdn.startsWith("home2.") })
+
+        flagship.failure = null
+        tap("pending-cancel-order-button")
+        eventually(20_000, "the order is cancelled") {
+            com.flagshipserver.app.core.GymProbe.appState!!.pods.value.none { it.fqdn.startsWith("home2.") }
+        }
+        assertEquals(1, flagship.releasedServerNames.size)
+    }
+
+    // Device report 2026-10-18 (A-4): "Failed: Setup stopped while Expanding the
+    // disk to 68 GB (line 66)" leaked a shell line number, and "Run in
+    // background" was the only button. The text loses the line number and the
+    // screen offers to start again (cancel the order) or to contact us.
+    @Test
+    fun aStoppedInstallShowsNoShellLineAndOffersWhatToDoNext() {
+        launch(tab = "home", adminRoot = true, podsVariant = "pending-ghost")
+        waitText("Home2", 20_000)
+        val flagship = com.flagshipserver.app.core.GymProbe.flagship!!
+        val serial = com.flagshipserver.app.core.DemoFixtures.GHOST_ORDER_SERIAL
+        flagship.provisionStatuses[serial] = com.flagshipserver.app.api.ProvisionStatusRecord(
+            serial = serial,
+            phase = "error",
+            detail = "Setup stopped while Expanding the disk to 68 GB (line 66)",
+            updatedAt = System.currentTimeMillis(),
+            history = listOf(
+                com.flagshipserver.app.api.ProvisionStatusEntry("installing", null, System.currentTimeMillis() - 1000),
+                com.flagshipserver.app.api.ProvisionStatusEntry("error", "Setup stopped while Expanding the disk to 68 GB (line 66)", System.currentTimeMillis()),
+            ),
+        )
+        tapText("Home2")
+        waitUntilExists("setup-stopped", timeoutMs = 20_000)
+        gymShot("setup-stopped")
+        waitText("Expanding the disk to 68 GB")
+        assertEquals(0, textCount("line 66"))
+        assertEquals(0, textCount("(line"))
+        assertEquals(1, tagCount("setup-stopped-contact"))
+        tap("setup-stopped-start-again")
+        eventually(20_000, "the order is cancelled") {
+            com.flagshipserver.app.core.GymProbe.appState!!.pods.value.none { it.fqdn.startsWith("home2.") }
+        }
+        assertEquals(1, flagship.releasedServerNames.size)
+    }
+
     // Device report 2026-10-18 (A-7): Trusted devices showed "HTTP 503: error
     // code: 1102". Plain sentence, and Try again loads the list.
     @Test

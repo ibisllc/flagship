@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -48,6 +49,7 @@ import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun InstallProgressScreen(
@@ -114,6 +116,10 @@ fun InstallProgressScreen(
             }
         }
 
+        if (phase == "error") {
+            SetupStoppedCard(serial = serial, step = ProvisionProgress.failureDetail(detail), onStartedOver = { onFinish(null, false) })
+        }
+
         if (isLive) {
             FSPrimaryButton(
                 label = "Continue",
@@ -173,6 +179,84 @@ internal fun InstallStepRow(
                     Text(d, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                 }
             }
+        }
+    }
+}
+
+/**
+ * What a person can do when the install stopped: cancel the order and make the
+ * server again, or write to support with the order number. Replaces a bare
+ * "Failed: ..." line whose only button was "Run in background".
+ */
+@Composable
+internal fun SetupStoppedCard(
+    serial: String,
+    step: String?,
+    onStartedOver: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val app = com.flagshipserver.app.core.LocalAppState.current
+    val flagshipServer = LocalFlagshipServerClient.current
+    val toasts = com.flagshipserver.app.core.LocalToastCenter.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var working by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    FSCard(modifier = modifier.testTag("setup-stopped"), padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Text("Setup stopped", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+            Text(
+                "This server didn't finish installing" + (step?.takeIf { it.isNotBlank() }?.let { ". $it" } ?: "") + ". " +
+                    "Cancel this order to free the name and create the server again, or contact us and we'll look at it.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            error?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+            }
+            FSPrimaryButton(
+                label = if (working) "Cancelling…" else if (error != null) "Try again" else "Cancel order and start again",
+                enabled = !working,
+                onClick = {
+                    val user = app.currentUser.value
+                    val pod = app.pods.value.firstOrNull { it.pendingAuthCodeSerial == serial }
+                    if (user == null || pod == null) { onStartedOver(); return@FSPrimaryButton }
+                    scope.launch {
+                        working = true
+                        error = null
+                        when (val out = com.flagshipserver.app.core.CancelPendingOrder.run(pod, user, flagshipServer)) {
+                            is com.flagshipserver.app.core.CancelPendingOrder.Outcome.Cancelled -> {
+                                com.flagshipserver.app.core.PendingRckStore.from(context).clear(pod.fqdn)
+                                app.removePod(pod.podId)
+                                toasts.success("Order cancelled. You can create the server again.")
+                                onStartedOver()
+                            }
+                            is com.flagshipserver.app.core.CancelPendingOrder.Outcome.Failed -> error = out.message
+                        }
+                        working = false
+                    }
+                },
+                block = true,
+                modifier = Modifier.testTag("setup-stopped-start-again"),
+            )
+            FSSecondaryButton(
+                label = "Contact us",
+                onClick = {
+                    val body = "My server's setup stopped.\nOrder: $serial\nStep: ${step.orEmpty()}\n"
+                    val uri = android.net.Uri.parse(
+                        "mailto:support@flagshipserver.com?subject=" + android.net.Uri.encode("Server setup stopped") +
+                            "&body=" + android.net.Uri.encode(body),
+                    )
+                    runCatching {
+                        context.startActivity(
+                            android.content.Intent(android.content.Intent.ACTION_SENDTO, uri)
+                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }
+                },
+                block = true,
+                modifier = Modifier.testTag("setup-stopped-contact"),
+            )
         }
     }
 }

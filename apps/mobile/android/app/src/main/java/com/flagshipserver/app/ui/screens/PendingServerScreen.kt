@@ -30,24 +30,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalSecretMailboxClient
 import com.flagshipserver.app.core.LocalToastCenter
+import com.flagshipserver.app.core.CancelPendingOrder
+import com.flagshipserver.app.core.PendingRckStore
 import com.flagshipserver.app.core.PodInfo
 import com.flagshipserver.app.core.ProvisionProgress
-import com.flagshipserver.app.core.AuthCodeRevoke as AuthCodeRevokeBytes
-import com.flagshipserver.app.core.ReleaseServerName as ReleaseServerNameBytes
-import com.flagshipserver.app.api.AuthCodeRevokeRequest
-import com.flagshipserver.app.api.ReleaseServerNameRequest
-import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSScreen
@@ -71,6 +68,8 @@ fun PendingServerScreen(
     val app = LocalAppState.current
     val toasts = LocalToastCenter.current
     val scope = rememberCoroutineScope()
+    var cancelError by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    var cancelling by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
     // Live install ladder — order mode with the locally-held serial;
     // directory fallback for a serial-less pod surfaced from `/pods`.
@@ -142,6 +141,16 @@ fun PendingServerScreen(
                 }
             }
         }
+        if (timeline != null && !pod.pendingAuthCodeSerial.isNullOrEmpty()) {
+            val failed by timeline.status.collectAsState()
+            if (failed?.phase == "error") {
+                SetupStoppedCard(
+                    serial = pod.pendingAuthCodeSerial!!,
+                    step = ProvisionProgress.failureDetail(failed?.detail),
+                    onStartedOver = onCancel,
+                )
+            }
+        }
         if (pod.fqdn.isNotEmpty()) {
             FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("pending-server-domain")) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
@@ -167,71 +176,45 @@ fun PendingServerScreen(
                 }
             }
         }
+        if (cancelError != null) {
+            Text(
+                cancelError!!,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.testTag("pending-cancel-error"),
+            )
+        }
         FSDangerButton(
-            label = "Cancel order",
+            label = if (cancelling) "Cancelling…" else if (cancelError != null) "Try cancelling again" else "Cancel order",
+            enabled = !cancelling,
             onClick = {
                 scope.launch {
-                    val username = app.currentUser.value
-                    if (username == null) {
+                    val user = app.currentUser.value
+                    if (user == null) {
                         // No account context — nothing to release; just drop
                         // the local placeholder.
                         onCancel()
                         return@launch
                     }
+                    cancelling = true
+                    cancelError = null
                     // Mirrors webapp `cancelServer` + iOS HomeTab.cancelOrder:
-                    // FIRST release the name (the IRK-signed
-                    // ReleaseServerName → /api/server/release un-pins the
-                    // routing record so the name can be re-used), THEN
-                    // belt-and-braces revoke the install auth-code. If the
-                    // release fails we surface the error and KEEP the pod —
-                    // dropping it locally would strand the name as
-                    // still-reserved.
-                    try {
-                        // Releasing a name is a sensitive order: `.com` takes
-                        // only the admin root on an admin-pinned account
-                        // (serverRevoke.ts); the auth-code revoke stays IRK.
-                        val adminKey = Keystore.adminSigningKey("Cancel server ${pod.name}")
-                        val irk = Keystore.deriveIRK("Cancel server ${pod.name}")
-                        val now = System.currentTimeMillis()
-                        // 1. Release the name. serverDomain =
-                        // <server>.<user>.flagship.services, held on the pod
-                        // as its fqdn.
-                        val releaseBytes = ReleaseServerNameBytes.canonicalBytes(username, pod.fqdn, now)
-                        val releaseSig = HexUtil.encode(adminKey.sign(releaseBytes))
-                        flagshipServer.releaseServerName(
-                            ReleaseServerNameRequest(
-                                request = ReleaseServerNameRequest.Inner(
-                                    username = username, serverDomain = pod.fqdn, issuedAt = now,
-                                ),
-                                signature = releaseSig,
-                            ),
-                        )
-                        // 2. Belt-and-braces auth-code revoke. The release
-                        // already revoked active codes server-side; 403/404
-                        // (already gone) is treated as success by the client.
-                        val serial = pod.pendingAuthCodeSerial
-                        if (serial != null) {
-                            val revokeBytes = AuthCodeRevokeBytes.canonicalBytes(serial, username, now)
-                            val revokeSig = HexUtil.encode(irk.sign(revokeBytes))
-                            runCatching {
-                                flagshipServer.revokeAuthCode(
-                                    AuthCodeRevokeRequest(
-                                        request = AuthCodeRevokeRequest.Inner(
-                                            serial = serial, username = username, issuedAt = now,
-                                        ),
-                                        signature = revokeSig,
-                                    ),
-                                )
-                            }
+                    // release the name FIRST, then revoke the install
+                    // auth-code. On a failure the pod is KEPT (dropping it
+                    // would strand the name as still reserved) and the reason
+                    // is shown with a button that runs the same cancel again.
+                    when (val out = CancelPendingOrder.run(pod, user, flagshipServer)) {
+                        is CancelPendingOrder.Outcome.Cancelled -> {
+                            PendingRckStore.from(context).clear(pod.fqdn)
+                            toasts.success(
+                                if (out.releasedName) "Server \"${pod.name}\" cancelled — the name is free again."
+                                else "Removed \"${pod.name}\" from your servers.",
+                            )
+                            onCancel()
                         }
-                        toasts.success("Server \"${pod.name}\" cancelled — the name is free again.")
-                        onCancel()
-                    } catch (_: Throwable) {
-                        // Keep the pod: the name is still reserved, so
-                        // dropping it locally would just hide a name the
-                        // user can't re-use.
-                        toasts.warning("Couldn't cancel — the name is still reserved. Check your connection and try again.")
+                        is CancelPendingOrder.Outcome.Failed -> cancelError = out.message
                     }
+                    cancelling = false
                 }
             },
             block = true,

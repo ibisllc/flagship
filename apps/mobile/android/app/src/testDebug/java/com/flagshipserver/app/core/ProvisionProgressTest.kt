@@ -170,6 +170,18 @@ class ProvisionProgressTest {
         assertEquals("boom", v.first().detail)
     }
 
+    // Device report 2026-10-18 (A-4): the box's text carried a shell line number.
+    @Test fun stepStates_errorNeverShowsAShellLineNumber() {
+        val v = ProvisionProgress.stepStates("error", "Setup stopped while Expanding the disk to 68 GB (line 66)", "sealing")
+        assertEquals(
+            "Setup stopped while Expanding the disk to 68 GB",
+            v.first { it.state == ProvisionProgress.StepState.FAILED }.detail,
+        )
+        assertEquals("Setup stopped while Setting up this server's identity", ProvisionProgress.failureDetail("Setup stopped while Setting up this server's identity (line 78)"))
+        assertEquals(ProvisionProgress.phaseTitles["error"], ProvisionProgress.failureDetail(null))
+        assertEquals(ProvisionProgress.phaseTitles["error"], ProvisionProgress.failureDetail(" (line 3)"))
+    }
+
     @Test fun shouldShowProgressBar_listVisibilityLogic() {
         assertFalse(ProvisionProgress.shouldShowProgressBar(null, "none"))
         assertFalse(ProvisionProgress.shouldShowProgressBar("live", "up"))
