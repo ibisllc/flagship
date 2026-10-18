@@ -20,10 +20,13 @@ import java.util.concurrent.TimeUnit
 // server that is online.
 class RelayFallbackTest {
     private val apex = "flagship.services"
+    private val label = "relay-fallback.flagship.services"
     private val box = "home.alice.flagship.services"
     private val relayAddr = InetAddress.getByAddress(byteArrayOf(10, 0, 0, 7))
+    private val cloudflare = InetAddress.getByAddress(byteArrayOf(172.toByte(), 67, 185.toByte(), 244.toByte()))
+    private val baked = InetAddress.getByAddress(byteArrayOf(10, 9, 9, 9))
 
-    /** The phone's resolver after a negative-cached lookup: the box's name is unknown, the apex is not. */
+    /** The phone's resolver after a negative-cached lookup: the box's name is unknown, the label is not. */
     private class Resolver(private val known: Map<String, List<InetAddress>>) : Dns {
         val asked = mutableListOf<String>()
         override fun lookup(hostname: String): List<InetAddress> {
@@ -32,39 +35,82 @@ class RelayFallbackTest {
         }
     }
 
-    private fun dns(resolver: Dns) = RelayFallbackDns(resolver, { apex }, { })
+    private fun dns(resolver: Dns) = RelayFallbackDns(resolver, { apex }, { }, { listOf(baked) })
 
-    @Test fun anUnknownBoxNameUsesTheRelaysAddresses() {
-        val resolver = Resolver(mapOf(apex to listOf(relayAddr)))
+    @Test fun anUnknownBoxNameUsesTheRelayFallbackLabel() {
+        val resolver = Resolver(mapOf(label to listOf(relayAddr), apex to listOf(cloudflare)))
         assertEquals(listOf(relayAddr), dns(resolver).lookup(box))
-        assertEquals(listOf(box, apex), resolver.asked)
+        assertEquals(listOf(box, label), resolver.asked)
+    }
+
+    @Test fun whenTheLabelIsUnknownTooTheBuiltInRelayAddressesAreUsed() {
+        val resolver = Resolver(mapOf(apex to listOf(cloudflare)))
+        assertEquals(listOf(baked), dns(resolver).lookup(box))
+        assertEquals(listOf(box, label), resolver.asked)
+    }
+
+    @Test fun theApexAndItsCloudflareAddressesAreNeverUsed() {
+        val resolver = Resolver(mapOf(apex to listOf(cloudflare)))
+        assertEquals(false, dns(resolver).lookup(box).contains(cloudflare))
+        assertEquals(false, resolver.asked.contains(apex))
+        // With nothing to fall back to, the original failure stands rather than the apex.
+        val none = RelayFallbackDns(resolver, { apex }, { }, { emptyList() })
+        assertThrows(UnknownHostException::class.java) { none.lookup(box) }
+        assertEquals(false, resolver.asked.contains(apex))
     }
 
     @Test fun aNameThatResolvesIsLeftAlone() {
         val own = InetAddress.getByAddress(byteArrayOf(10, 0, 0, 9))
-        val resolver = Resolver(mapOf(box to listOf(own), apex to listOf(relayAddr)))
+        val resolver = Resolver(mapOf(box to listOf(own), label to listOf(relayAddr)))
         assertEquals(listOf(own), dns(resolver).lookup(box))
         assertEquals(listOf(box), resolver.asked)
     }
 
     @Test fun aNameOutsideTheDataApexStaysUnknown() {
-        val resolver = Resolver(mapOf(apex to listOf(relayAddr)))
+        val resolver = Resolver(mapOf(label to listOf(relayAddr)))
         assertThrows(UnknownHostException::class.java) { dns(resolver).lookup("example.invalid") }
         // Only the data apex's own boxes may fall back; a lookalike suffix may not.
         assertThrows(UnknownHostException::class.java) { dns(resolver).lookup("home.alice.notflagship.services") }
         assertEquals(listOf("example.invalid", "home.alice.notflagship.services"), resolver.asked)
     }
 
-    @Test fun whenTheRelayIsUnknownTooTheOriginalFailureStands() {
-        val resolver = Resolver(emptyMap())
-        val e = assertThrows(UnknownHostException::class.java) { dns(resolver).lookup(box) }
-        assertEquals(true, e.message?.contains(box))
-    }
-
-    @Test fun theApexItselfIsNotRetriedThroughItself() {
+    @Test fun theApexAndTheLabelAreNotRetriedThroughThemselves() {
         val resolver = Resolver(emptyMap())
         assertThrows(UnknownHostException::class.java) { dns(resolver).lookup(apex) }
-        assertEquals(listOf(apex), resolver.asked)
+        assertThrows(UnknownHostException::class.java) { dns(resolver).lookup(label) }
+        assertEquals(listOf(apex, label), resolver.asked)
+    }
+
+    @Test fun theDefaultLastResortIsTheProdRelayOnlyOnTheProdApex() {
+        assertEquals(
+            listOf(InetAddress.getByName("149.248.216.86"), InetAddress.getByName("2a09:8280:1::110:d2b6:0")),
+            RelayAddresses.prod,
+        )
+        val prod = RelayFallbackDns(Resolver(emptyMap()), { apex }, { })
+        assertEquals(RelayAddresses.prod, prod.lookup(box))
+        val gym = RelayFallbackDns(Resolver(emptyMap()), { "gym.flagship.services" }, { })
+        assertThrows(UnknownHostException::class.java) { gym.lookup("home.alice.gym.flagship.services") }
+    }
+
+    // The whole OkHttp path: the box's name doesn't resolve, the relay answers
+    // under it, and the request still names the box (Host header, and so SNI and
+    // the pin on https) rather than the relay.
+    @Test fun aRealRequestReachesTheRelayAndStillNamesTheBox() {
+        val relay = okhttp3.mockwebserver.MockWebServer()
+        relay.enqueue(okhttp3.mockwebserver.MockResponse().setBody("ok"))
+        relay.start()
+        try {
+            val loopback = InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1))
+            val resolver = Resolver(mapOf(label to listOf(loopback), apex to listOf(cloudflare)))
+            val client = okhttp3.OkHttpClient.Builder().dns(dns(resolver)).build()
+            client.newCall(Request.Builder().url("http://$box:${relay.port}/api/screens/apps").build()).execute().use {
+                assertEquals(200, it.code)
+            }
+            assertEquals("$box:${relay.port}", relay.takeRequest().getHeader("Host"))
+            assertEquals(false, resolver.asked.contains(apex))
+        } finally {
+            relay.shutdown()
+        }
     }
 
     private class Chain(private val request: Request, private val failures: Int) : Interceptor.Chain {
