@@ -47,9 +47,8 @@ Known state at the time of writing (re-check, do not trust):
 - The five feature branches that conflict with `main` (`feat/marketplace`,
   `feat/retail`, `feat/phone-usb-burn`, `alpine`, `gym`) are not part of GA.
   `gym` is rebased by `scripts/gym-refresh.sh` (step 6).
-- The arm64 VM appliance does not build on `main` yet (the factory failed at
-  `tar` while copying the live root; the fix is on `fix/appliance-factory-tar`,
-  not on `main` when this was written). See step 9.
+- The arm64 VM appliance failed to build until `35e207cda`; its first green
+  `main` run is the one named in step 9.
 
 ## 1. Cloudflare plan and DNS limits (do this first)
 
@@ -228,13 +227,15 @@ owner still has to choose).
 
 ## 6. Gym refresh and live verification of wildcard DNS (GATE: nothing deploys to prod until this passes)
 
-The wildcard-DNS change (`docs/wildcard-dns.md`, `545b7bd1b`) rewrites how every
-account's names resolve and how every certificate is issued. It is verified live
-on the **gym first**, because two of its assumptions were never proven (section 4
-of that doc, "Verification status"): that Cloudflare answers NODATA for a name
-that only has a descendant (the challenge TXT's empty non-terminal), and that
-the challenge shield is seen in the right order on every anycast node. The gym
-issues real certificates, so it exercises both.
+The wildcard-DNS change (`docs/wildcard-dns.md`, `545b7bd1b`, amended by
+`2963833d7`) rewrites how every account's names resolve and how every
+certificate is issued, so it is proven live on the **gym first**. The first gym
+run already overturned one design assumption: a challenge TXT does *not* make
+the box name an empty non-terminal on Cloudflare (the name keeps answering from
+the account wildcard), and the "shield" written against that was itself what
+opened a 5 s NXDOMAIN window, so it is **off by default** now
+(`DNS_CHALLENGE_SHIELD=1` would turn it back on: never set that on prod). What is
+still to prove is the whole path with the shield off, on real certificates.
 
 ```sh
 cd ~/flagship-deploy
@@ -243,22 +244,24 @@ npx tsx tools/live-e2e/shared-run.ts      # the live fleet run (about 11 minutes
 ```
 
 Run it only when no other live run is in progress. The gym refuses to start if
-its fleet will not fit the zone. Teardown goes through `/api/gym/teardown`.
-The gym agent also runs a 200 ms probe (every 200 ms through 1.1.1.1) of a box
-name during a first certificate issuance, which is the proof of the unverified
-NODATA/shield behaviour.
+its fleet will not fit the zone. Teardown goes through `/api/gym/teardown`. Every
+shared run now records DNS for the first box's issuance (a poll every 200 ms of
+the box name and a random label under it against Cloudflare's name servers and
+two public resolvers) and **fails if the box name or a label under it goes
+dark**; `npx tsx tools/live-e2e/dns-ent-experiment.ts` is the 30 s canary and the
+matrix of which names a zone-level wildcard would lose (also in `gym:total`).
 
 Go / no-go:
 
-- **Go:** the core group is all green (the four-record set, the unregistered
-  name closes after the fixed wait, the box gets its Let's Encrypt certificate
-  and serves HTTPS 200) and the probe never sees the box name go NXDOMAIN or
-  NODATA while the challenge TXT exists.
+- **Go:** the core group is all green (the four-record set, an unregistered name
+  closes after the fixed wait, the box gets its Let's Encrypt certificate and
+  serves HTTPS 200) and the DNS record shows no gap in the box name's answers
+  during issuance.
 - **No-go (blocks the prod `.com` and `.services` deploys, steps 7 and 8):** any
   failed core check; a certificate not issued (CAA at `<user>` found by tree
-  climbing is exactly what is being proven); or the probe seeing a gap in the box
-  name's answers. Do not deploy; the old per-box DNS keeps working on prod until
-  you do. Fix on `main`, `gym-refresh.sh`, run again.
+  climbing is exactly what is being proven); or the DNS record showing the box
+  name or a label under it going dark. Do not deploy; the old per-box DNS keeps
+  working on prod until you do. Fix on `main`, `gym-refresh.sh`, run again.
 - The gym and prod share the `flagship.services` zone and the Let's Encrypt
   budget (50 certificates a week): do not burn the budget on repeated runs right
   before the prod deploy.
@@ -277,7 +280,7 @@ npm run deploy        # predeploy: clean rebuild of the bundled packages, route-
 ```
 
 This deploy carries the wildcard-DNS logic (the account's four-record set, the
-challenge shield, the reap rules): it needs the step 6 gate green, **no D1
+reap rules; the challenge shield is off unless `DNS_CHALLENGE_SHIELD=1`, which you must not set): it needs the step 6 gate green, **no D1
 migration** and **no endorsed box release** (boxes only publish and delete their
 own `_acme-challenge` TXT through `.com`). Do not use `--force` or set `FLAGSHIP_SKIP_*`. If the migration check says it
 cannot read the ledger, log in (`npx wrangler login`) and rerun.
@@ -341,7 +344,8 @@ Rollback: `flyctl releases rollback -a flagship-services` (stateless; clean).
 Per-account records fall to **4** (`*.<user>` A + AAAA to the relay, two CAA at
 `<user>`), so the 200-record zone holds about 45 accounts whatever their server
 count (it held 15 with one server each), plus about 20 records of headroom for
-concurrent challenges (each issuance briefly adds 2 TXT + 4 shield records).
+concurrent challenges (each issuance briefly adds 2 challenge TXT records; 4 more
+only if the shield is switched on).
 Accounts that predate the change keep their old per-box records until you do
 these two things, in this order:
 
@@ -368,15 +372,17 @@ newest endorsed release and the first-boot specializer. Rebuild when step 3
 endorsed something new or `packages/flagship-builder/src/appliance.ts` or the
 appliance scripts changed (`docs/runbooks/republish-vm-appliance.md`).
 
-State at the time of writing:
+State at the time of writing (check `gh run list --workflow vm-appliance.yml`):
 
-- amd64 on `main`: run **39153553427** (green, built from `668281523`). Earlier
-  green: `39142014433` (from `d4c7ef4c0`, the first-boot resize fix).
-- arm64 on `main`: **no green run.** `39142016230` (from `d4c7ef4c0`) failed in
-  the appliance factory (`[appliance-factory] failed line=92 rc=1`, tar). The fix
-  is the single commit `370c55d2b` on `fix/appliance-factory-tar`, run
-  `39153555449` was still going. Do not publish arm64 until that fix is on
-  `main` and a `main` arm64 run is green.
+- The arm64 factory failure (`tar: file changed as we read it` while copying the
+  live root, run `39142016230`) is fixed on `main` (`35e207cda`). Runs on that
+  fix: arm64 `39158345483` (main, in progress when this was written; the same fix
+  on its branch, `39153555449`, was green) and amd64 `39160505562` (main,
+  started by the release-candidate pass from `2963833d7`).
+- Older green amd64 runs, from before the fix: `39153553427` (`668281523`) and
+  `39142014433` (`d4c7ef4c0`, the first-boot resize fix). Prefer the new pair.
+- **Publish only a green run from `main`, one per arch, and only after reading
+  its job log for the boot smoke.** If either is red, do not publish that arch.
 - The release workflow takes the newest endorsed release, not the tip of
   `main`, so a newer `main` alone does not make a run stale; a **new
   endorsement (step 3) does**.
@@ -394,7 +400,7 @@ Publish (uploads to R2, one image at a time, each checked against its manifest):
 
 ```sh
 cd ~/flagship-deploy
-bash scripts/publish-vm-appliance.sh 39153553427 <the green arm64 run id>
+bash scripts/publish-vm-appliance.sh <green amd64 run id> <green arm64 run id>
 git add apps/web/public/downloads/FlagshipVMAppliance-*.json
 git commit -m "Publish the rebuilt VM appliances"
 git push origin HEAD:main
@@ -578,8 +584,8 @@ list exactly what went.
   `main` (including the Android lease fix); the current Play build does not
   create servers on a real account (`add-server-admin-only`) until new builds
   and `.com` are in step.
-- The arm64 appliance has no green build on `main` (step 9): Apple Silicon Mac
-  hosting and arm64 Linux/Windows users would get an out-of-date image.
+- The arm64 appliance needs a green `main` run published (step 9): until then
+  Apple Silicon hosting gets the 2026-10-13 image, which stops at first boot.
 - Windows and Linux Studio have not run end to end on real hardware; ship them
   as preview (already the plan).
 - Mac Studio reports version 0.1.0 (step 10).
