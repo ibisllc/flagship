@@ -744,7 +744,7 @@ Implementation-ready bullets:
 
 All under `/api/dev/sample-user`. Admin endpoints reuse the existing
 `FLAGSHIP_ADMIN_SECRET` bearer pattern (same as
-`POST /api/admin/republish-server-dns`).
+`POST /api/admin/dns-route-gc`).
 
 ### 10.1 Endpoint table
 

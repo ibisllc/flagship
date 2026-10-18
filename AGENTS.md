@@ -252,44 +252,35 @@ of the last check here: **not yet checked**.
 - **The `flagship.services` DNS zone is nearly full (2026-10-16); the fix is on
   `main`, not deployed (2026-10-18).** Cloudflare Free caps the zone at 200
   records (and fixes the SOA negative-cache time at 30 minutes); prod held ~154
-  when measured. An account used 8 records plus 4 per box (12 with one server),
-  ~70 of the 154 left behind by accounts with no server (`demoent1-4`,
-  `demouser7347*`, `demo1234`, `harry1`, `ltsln0yduha`: 4 each; `drill-1010`,
-  `update-drill`, `openai-build`, `jolly-quince`, `harry2`: 6-8 each). Built
-  (owner decision 2026-10-18, `docs/wildcard-dns.md`): **one wildcard per
-  account**, `*.<user>` A + AAAA to the relay, plus two CAA at `<user>`
-  (issue, issuewild): **4 records per account whatever its server count**
-  (was 12, 16, 20 for 1, 2, 3 servers), nothing per box, so 200 records hold
-  ~45 accounts and a box name never sits in a 30-minute negative cache. Each
-  box's DNS-01 challenge briefly adds 2 TXT (the 4-record shield is OFF since
-  2026-10-18: measured live, Cloudflare keeps the wildcard answering under a
-  challenge TXT and the shield opened a 5 s NXDOMAIN window; `docs/wildcard-dns.md`
-  section 11, `DNS_CHALLENGE_SHIELD=1` brings it back; every gym run and
-  `dns-ent-experiment.ts --canary` check it); removed after issuance (sweep: TXT
-  older than an hour), so reserve ~10 of headroom. The relay now closes every unmatched
-  first-party SNI after the same wait. **To do (owner):** deploy `.com`
-  (`apps/com`; nothing on the box changes, so no endorsed release) and
-  `.services` (relay timing only); run the live gym (core group checks the
-  four-record set and the unregistered-name behaviour; the first run also
-  exercises Let's Encrypt against CAA found by tree climbing); then
-  the reap tool (`scripts/reap-orphans.mjs`: dry run by default, saved plan,
-  `--apply --plan`, typed confirmation, over `/api/admin/reap/{list,classify,
-  delete-one}` in `apps/com/src/prodReap.ts`; steps in
-  `docs/runbooks/pre-ga-scrub.md`) removes the records and demo servers of
-  accounts gone from D1, and now also trims accounts that stay: per-box records
-  the wildcard replaces, the CAA copy at `*.<user>` and `iodef`, and the records
-  of an account with no live server; each item is re-checked against D1 and the
-  zone right before deleting. `POST /api/admin/republish-server-dns` gives
-  accounts that predate the wildcard their set. Studio no longer looks a box
-  name up before the box reports in (the old negative-cache hazard).
-  Cloudflare lets only Enterprise accounts change the SOA values. Still open for the
-  owner: a paid Cloudflare plan (higher cap), the gym on its own registered
-  domain (also frees the shared Let's Encrypt budget: `flagship.services`
-  isn't on the PSL yet, so gym and prod certificates share 50 a week), a
-  zone-level wildcard (0 per account; measured: a CAA at `<user>` or any stale
-  record at a box name kills it for the names below, section 11.4), dropping
-  `issuewild` (3 per account). The live gym refuses to start when its fleet
-  won't fit.
+  when measured, ~70 of them leftovers of accounts with no server. Owner decision
+  2026-10-18 (`docs/wildcard-dns.md`): the **root wildcard**. The zone holds ONE
+  `*.flagship.services` A + AAAA (the relay, DNS only) and ONE apex CAA pair
+  (`issue`, `issuewild` "letsencrypt.org"): **about 4 records at rest, 0 per
+  account or box, 2 temporary challenge TXT per certificate in flight**, so
+  thousands of accounts fit and Cloudflare Free suffices. `.com` writes no
+  address or CAA record for anybody any more; a record owned by an account or box
+  name stops the wildcard below it (measured, section 3 of the doc), so what
+  earlier layouts left is removed: at each account's next event (issue,
+  register, un-revoke, transfer, revoke), by the reap tool (`npm run
+  reap-orphans`: every A/AAAA/CAA/TXT at an account or box name, live accounts
+  too once the wildcard is in place) and, opt-in (`DNS_LEGACY_SWEEP=1`), hourly.
+  Nothing is deleted before the wildcard is in the zone at exactly the relay's
+  address. The challenge shield is OFF (a TXT below a name blocks nothing); direct-IP
+  servers are refused (`direct-mode-unsupported`); `republish-server-dns` is gone.
+  `npm run zone-health` (read-only, exit 1 on a missing/wrong/proxied wildcard,
+  a missing apex CAA or any record at an account or box name) is the standing
+  check; run it after the manual step and weekly. The gym core group checks the
+  account holds ZERO records and its names resolve through the zone wildcard.
+  **To do (owner):** (1) the one-time manual DNS step in Cloudflare
+  (`docs/runbooks/final-deploy.md` step 6a): `*` A = `149.248.216.86` and `*`
+  AAAA = `2a09:8280:1::110:d2b6:0`, both DNS only (grey cloud; confirm with
+  `flyctl ips list -a flagship-services`), plus the apex CAA `0 issue
+  "letsencrypt.org"` and `0 issuewild "letsencrypt.org"` (the apex has none
+  today), then `npm run zone-health`; (2) deploy `.com` (`apps/com`; no D1
+  migration, **no endorsed box release**, the relay needs nothing new for this);
+  (3) a live gym run first (step 6), then the reap (dry run, then `--apply`) and
+  `npm run zone-health` again. The protected review account keeps its own
+  records until its review ends.
 
 ### In flight
 

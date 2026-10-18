@@ -9,6 +9,14 @@
 > flattening is retired. The per-user-wildcard SAN sections below are
 > HISTORICAL. Still live from this doc: the leftmost-label namespace
 > invariant (§3.4), CAA + CT defenses, and the revocation mapping.
+>
+> **DNS (2026-10-18): no record per account or box.** The zone holds one
+> `*.flagship.services` A + AAAA to the relay and one apex CAA pair, set up once
+> by hand; every name below resolves by wildcard synthesis and nothing is
+> published at `<user>` or `<box>.<user>` (a record owned by those names would
+> stop the wildcard). Where this doc says CAA at `<user>` (§4.3), read the apex;
+> the `accounturi` pin is not published (it would need a record at `<user>`; see
+> [[wildcard-dns]] "What was dropped"). Detection by CT monitoring is unchanged.
 
 **Status:** spec / decided. Pending implementation. The user-facing
 *contract* (§2, §3, §4, §5) ships before public launch; the multi-box
@@ -249,7 +257,11 @@ that is a latent active-MITM capability. Close it:
 - **CAA `accounturi` + `validationmethods` (RFC 8657)** pinning issuance
   to the user's phone-held ACME account. LE then refuses issuance from
   any other account. `.com` could still rewrite CAA, but that is visible
-  in DNS history and the resulting cert appears in CT logs.
+  in DNS history and the resulting cert appears in CT logs. *Not built, and
+  not buildable at the apex for one account: a per-account pin needs a CAA
+  record owned by `<user>`, which stops the zone's root wildcard for that
+  account unless it also gets its own `*.<user>` A/AAAA pair
+  ([[wildcard-dns]]).*
 - **CT monitoring** on the trust-root device: watch Certificate
   Transparency for `*.<user>.flagship.services`; alarm on any cert the
   user did not mint.

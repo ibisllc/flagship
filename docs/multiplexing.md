@@ -10,6 +10,9 @@
 > (`<slug>.<user>`) is KEPT but rides a shared per-service cert that
 > ships in a later phase. HELLO / controlledDomains / claim machinery
 > is unchanged.
+>
+> **DNS (2026-10-18):** one zone-level wildcard, not one per account; see
+> "One wildcard for the whole zone" below.
 
 > **The shape.** Pods declare what they serve. The .services tunnel hub
 > uses that declaration as the only source of truth. Services own their own
@@ -97,19 +100,19 @@ Issued via DNS-01 against the .com Worker. SAN list:
 alias. `*.<server>.<user>.flagship.services` covers the canonical service
 URLs `<service>.<server>.<user>.flagship.services`.
 
-### One wildcard per user
+### One wildcard for the whole zone
 
-The .com Worker writes ONE wildcard per account, at auth-code issue and on
-every server registration (idempotent):
+The zone holds ONE wildcard, created once by hand (and never by `.com`):
 
-- `*.<user>.flagship.services` A + AAAA → .services anycast IP
+- `*.flagship.services` A + AAAA → .services anycast IP (DNS only)
 
 By closest-encloser synthesis it answers `<server>.<user>`,
-`<service>.<server>.<user>` and the tier-2 `<service>.<user>`; nothing is
-published per box. Steady state an account holds four records (that pair plus
-two CAA at `<user>`). Full design, threat assessment and the challenge-shield
-that keeps a box answering during DNS-01: [[wildcard-dns]]
-(`docs/wildcard-dns.md`).
+`<service>.<server>.<user>` and the tier-2 `<service>.<user>` for every account;
+nothing is published per account or per box (an account holds zero records, the
+zone about four at rest, with one CAA pair at the apex). A record owned by an
+account or box name would stop the wildcard below it, so none may exist. Full
+design, the measured blocking matrix and the clean-up of earlier layouts:
+[[wildcard-dns]] (`docs/wildcard-dns.md`).
 
 ### Sibling coordination
 

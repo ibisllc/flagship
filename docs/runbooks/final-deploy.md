@@ -62,12 +62,11 @@ and a 10-minute cron.
    (`apps/com/wrangler.toml` has no `[limits]`; the default paid CPU limit is
    what we want).
 2. The `flagship.services` zone's record cap (AGENTS.md "Urgent": 200 records,
-   ~154 used, ~70 are leftovers). Two things reduce it, neither needs the plan
-   change: the wildcard-DNS change (new accounts take 4 records instead of
-   12+; `docs/wildcard-dns.md`, deploys with `.com` and `.services`, steps 7 and 8, after the step 6 gate) and the reap (step
-   12). If you want headroom beyond that, look at the zone's plan in the
-   dashboard (DNS -> Records shows "N of M"); a higher cap is a zone-plan
-   decision, not a Workers one.
+   ~154 used, ~70 are leftovers). The **root wildcard** removes the constraint
+   without a plan change: the zone then holds about 4 records at rest and 2 per
+   certificate in flight, whatever the number of accounts
+   (`docs/wildcard-dns.md`; the one-time manual DNS step is step 6a, the reap of
+   the leftovers is step 12). Cloudflare Free suffices.
 
 Check:
 
@@ -225,50 +224,117 @@ Flagship Inference `FLAGSHIP_INFERENCE_TOKEN_SECRET` + `FLAGSHIP_INFERENCE_ENDPO
 (`infra/inference/README.md`; also the shim's own `UPSTREAM_*` secrets, which the
 owner still has to choose).
 
-## 6. Gym refresh and live verification of wildcard DNS (GATE: nothing deploys to prod until this passes)
+## 6. Gym refresh and live verification of the root wildcard (GATE: nothing deploys to prod until this passes)
 
-The wildcard-DNS change (`docs/wildcard-dns.md`, `545b7bd1b`, amended by
-`2963833d7`) rewrites how every account's names resolve and how every
-certificate is issued, so it is proven live on the **gym first**. The first gym
-run already overturned one design assumption: a challenge TXT does *not* make
-the box name an empty non-terminal on Cloudflare (the name keeps answering from
-the account wildcard), and the "shield" written against that was itself what
-opened a 5 s NXDOMAIN window, so it is **off by default** now
-(`DNS_CHALLENGE_SHIELD=1` would turn it back on: never set that on prod). What is
-still to prove is the whole path with the shield off, on real certificates.
+The root-wildcard change (`docs/wildcard-dns.md`) rewrites how every account's
+names resolve and how every certificate is issued, so it is proven live on the
+**gym first**. The gym's own apex wildcard (`*.gym.flagship.services`) already
+works this way, so a gym run exercises exactly the new code path: no address or
+CAA record is written for an account, and the box gets its Let's Encrypt
+certificate. The first gym run already overturned one design assumption: a
+challenge TXT does *not* make the box name an empty non-terminal on Cloudflare,
+and the "shield" written against that was itself what opened a 5 s NXDOMAIN
+window, so it is **off** (`DNS_CHALLENGE_SHIELD=1` would turn it back on: never
+set that on prod).
 
 ```sh
 cd ~/flagship-deploy
 bash scripts/gym-refresh.sh               # rebases `gym` onto main, gym D1 migrations, secret parity, deploys the gym Worker and gym Fly app, health
-npx tsx tools/live-e2e/shared-run.ts      # the live fleet run (about 11 minutes, 3 boxes); its core group checks the account's four-record DNS set and the unregistered-name behaviour
+npx tsx tools/live-e2e/shared-run.ts      # the live fleet run (about 11 minutes, 3 boxes); its core group checks that the account holds ZERO records and that box, service and unregistered names resolve through the zone wildcard
 ```
 
 Run it only when no other live run is in progress. The gym refuses to start if
 its fleet will not fit the zone. Teardown goes through `/api/gym/teardown`. Every
-shared run now records DNS for the first box's issuance (a poll every 200 ms of
-the box name and a random label under it against Cloudflare's name servers and
-two public resolvers) and **fails if the box name or a label under it goes
-dark**; `npx tsx tools/live-e2e/dns-ent-experiment.ts` is the 30 s canary and the
-matrix of which names a zone-level wildcard would lose (also in `gym:total`).
+shared run records DNS for the first box's issuance (a poll every 200 ms of the
+box name and a random label under it against Cloudflare's name servers and two
+public resolvers) and **fails if the box name or a label under it goes dark, or
+if any address or CAA record appears for the account**;
+`npx tsx tools/live-e2e/dns-ent-experiment.ts --canary` is the 30 s canary (also
+in `gym:total`).
 
 Go / no-go:
 
-- **Go:** the core group is all green (the four-record set, an unregistered name
-  closes after the fixed wait, the box gets its Let's Encrypt certificate and
-  serves HTTPS 200) and the DNS record shows no gap in the box name's answers
-  during issuance.
+- **Go:** the core group is all green (zero records for the account, an
+  unregistered name closes after the fixed wait, the box gets its Let's Encrypt
+  certificate and serves HTTPS 200) and the DNS record shows no gap in the box
+  name's answers during issuance.
 - **No-go (blocks the prod `.com` and `.services` deploys, steps 7 and 8):** any
-  failed core check; a certificate not issued (CAA at `<user>` found by tree
-  climbing is exactly what is being proven); or the DNS record showing the box
-  name or a label under it going dark. Do not deploy; the old per-box DNS keeps
-  working on prod until you do. Fix on `main`, `gym-refresh.sh`, run again.
+  failed core check; a certificate not issued; or the DNS record showing the box
+  name or a label under it going dark. Do not deploy; the old DNS keeps working
+  on prod until you do. Fix on `main`, `gym-refresh.sh`, run again.
 - The gym and prod share the `flagship.services` zone and the Let's Encrypt
   budget (50 certificates a week): do not burn the budget on repeated runs right
   before the prod deploy.
 
 Check: `curl -s https://gym.flagshipserver.com/api/health` and
 `curl -s https://flagship-services-gym.fly.dev:8443/api/health` are 200.
-Rollback: the gym is disposable; refresh it again, or leave it.
+
+## 6a. The one-time manual DNS step: the root wildcard and the apex CAA
+
+The owner creates these **once, by hand, in the Cloudflare dashboard** (DNS ->
+Records of the `flagship.services` zone). Nothing in the repo creates them: `.com`
+only ever writes and deletes `_acme-challenge` TXT, and it deletes nothing of an
+account's before these exist (the guard in `docs/wildcard-dns.md` section 5). So
+this step may come before or after the `.com` deploy (step 7), but the trim
+(step 8's follow-up and step 12) needs it.
+
+1. Look up the relay's exact addresses (read-only), and compare with the repo
+   (`apps/com/wrangler.toml`: `SERVICES_PASSTHROUGH_IPV4/6`, the same pair
+   `apps/dns-broker/wrangler.toml` and `docs/runbooks/multi-region-rollout.md`
+   record; any box name already resolves to them):
+
+   ```sh
+   export PATH="$HOME/.fly/bin:$PATH"
+   flyctl ips list -a flagship-services          # the shared v4 and the v6 of the app
+   dig +short A home.<an-existing-account>.flagship.services @1.1.1.1    # 149.248.216.86 at the time of writing
+   dig +short AAAA home.<an-existing-account>.flagship.services @1.1.1.1 # 2a09:8280:1::110:d2b6:0
+   ```
+
+   If `flyctl ips list` disagrees with `wrangler.toml`, stop and fix the repo
+   first: the zone-health check compares against the Worker's variables.
+2. Add, **Proxy status: DNS only (grey cloud)** on both (the dashboard offers
+   orange by default; an orange wildcard bypasses the relay), TTL 60 seconds or
+   Auto:
+
+   | Type | Name | Content |
+   |---|---|---|
+   | A | `*` | `149.248.216.86` (the relay's IPv4) |
+   | AAAA | `*` | `2a09:8280:1::110:d2b6:0` (the relay's IPv6) |
+
+3. Run the zone health check. It will still list the old per-account and per-box
+   records as problems (they are what the reap removes) but the wildcard lines
+   must be OK:
+
+   ```sh
+   FLAGSHIP_ADMIN_SECRET=... npm run zone-health
+   dig +short A anything-at-all.flagship.services @1.1.1.1      # the relay address, after a few seconds
+   dig +short A home.<an-existing-account>.flagship.services @1.1.1.1   # unchanged
+   ```
+
+4. Add the apex CAA pair (still **by hand**):
+
+   | Type | Name | Tag | Value |
+   |---|---|---|---|
+   | CAA | `@` (`flagship.services`) | Only allow specific hostnames (`issue`) | `letsencrypt.org` |
+   | CAA | `@` | Only allow wildcards (`issuewild`) | `letsencrypt.org` |
+
+   The apex has **no CAA today** (checked 2026-10-18), and the apex name itself
+   (proxied A/AAAA, mail, SPF) is not affected by a wildcard or by this CAA for
+   its own site beyond the CA list: Cloudflare adds its own CAs to answers for a
+   proxied name, but check the dashboard's SSL/TLS -> Edge Certificates still
+   shows the apex certificate active afterwards. Then prove a real issuance with
+   the CAA in place (a gym run, step 6; the gym's names climb to this apex CAA)
+   before the first prod box renews. Rollback: delete the two CAA records.
+5. Re-run `npm run zone-health`: only the legacy account records remain as
+   problems, and they go in step 8's follow-up.
+
+Moving the relay later (a new Fly address) means editing these two records by
+hand and `SERVICES_PASSTHROUGH_IPV4/6` in `apps/com/wrangler.toml` (the old
+`republish-server-dns` call is gone), then `npm run zone-health`.
+
+Rollback of the whole step: delete the wildcard pair. Accounts that still hold
+their own records keep resolving; ones already trimmed go dark until it is back,
+so do not roll back after the trim.
 
 ## 7. Deploy `.com`
 
@@ -279,10 +345,13 @@ cd apps/com
 npm run deploy        # predeploy: clean rebuild of the bundled packages, route-safety, dist freshness, orphaned output, prod-migration drift
 ```
 
-This deploy carries the wildcard-DNS logic (the account's four-record set, the
-reap rules; the challenge shield is off unless `DNS_CHALLENGE_SHIELD=1`, which you must not set): it needs the step 6 gate green, **no D1
-migration** and **no endorsed box release** (boxes only publish and delete their
-own `_acme-challenge` TXT through `.com`). Do not use `--force` or set `FLAGSHIP_SKIP_*`. If the migration check says it
+This deploy carries the root-wildcard logic (no address or CAA record is written
+for anybody; legacy records are cleared once the step 6a wildcard exists; the new
+reap rules and `zone-health`; the challenge shield is off unless
+`DNS_CHALLENGE_SHIELD=1`, which you must not set): it needs the step 6 gate green,
+**no D1 migration** and **no endorsed box release** (boxes only publish and
+delete their own `_acme-challenge` TXT through `.com`; they publish no A, AAAA or
+CAA). The hourly legacy sweep stays off until you set `DNS_LEGACY_SWEEP=1`. Do not use `--force` or set `FLAGSHIP_SKIP_*`. If the migration check says it
 cannot read the ledger, log in (`npx wrangler login`) and rerun.
 
 Check:
@@ -306,13 +375,14 @@ Rollback: `cd apps/com && npx wrangler deployments list && npx wrangler rollback
 
 ## 8. Deploy `.services` (Fly): needed, one image
 
-The wildcard change needs this deploy too (the relay's uniform drop timing for an
-unregistered first-party name); deploy it right after `.com`, not before.
+The earlier wildcard change adds the relay's uniform drop timing for an
+unregistered first-party name (the root wildcard itself needs nothing on Fly);
+deploy it right after `.com`, not before.
 
 Needed if the last Fly release is older than the relay changes on `main`.
 Known: `0ea6e7a5e` (peer-backup mailboxes over the tunnel, 2026-10-16) is relay
 code and needs a Fly deploy, and the wildcard-DNS change adds the relay's
-uniform drop timing (`docs/wildcard-dns.md` section 8: `.com` is the DNS logic,
+uniform drop timing (`docs/wildcard-dns.md` section 4: `.com` is the DNS logic,
 Fly only that timing). The Dockerfile bakes `packages/`, `apps/web/src` and
 `apps/web/public`, so one image covers them all.
 
@@ -339,31 +409,38 @@ then watch `https://flagshipserver.com/status/` until every box is back online
 
 Rollback: `flyctl releases rollback -a flagship-services` (stateless; clean).
 
-### After both are deployed: finish the wildcard rollout
+### After both are deployed: finish the root-wildcard rollout
 
-Per-account records fall to **4** (`*.<user>` A + AAAA to the relay, two CAA at
-`<user>`), so the 200-record zone holds about 45 accounts whatever their server
-count (it held 15 with one server each), plus about 20 records of headroom for
-concurrent challenges (each issuance briefly adds 2 challenge TXT records; 4 more
-only if the shield is switched on).
-Accounts that predate the change keep their old per-box records until you do
-these two things, in this order:
+Per-account records fall to **0** (the zone holds the wildcard pair and the apex
+CAA once, step 6a), so the 200-record zone no longer limits the number of
+accounts; it only bounds certificates in flight (2 TXT each, minutes long).
+Accounts that predate the change keep their old records until you trim them, in
+this order:
 
-1. The reap dry run (needs `FLAGSHIP_ADMIN_SECRET`; deletes nothing):
-   `node scripts/reap-orphans.mjs --show --out ~/pre-ga-reap-plan.json`. It now
-   prints a **trim** table next to the orphans: per-box A/AAAA records the
-   account wildcard replaces, the `*.<user>` CAA copy and `iodef`, and the
-   records of an account with no live server. Read it. Applying it is part of
-   step 12 (do it after the scrub so the two plans are not mixed).
-2. `POST /api/admin/republish-server-dns` (header `x-admin-secret`) re-creates
-   the account set for every live account and fills the wildcard in for accounts
-   that predate it. Do this **before** applying the trim, so no account loses its
-   per-box records without having the wildcard.
+1. Step 6a done (`npm run zone-health` shows the wildcard and CAA lines OK).
+2. The reap dry run (needs `FLAGSHIP_ADMIN_SECRET`; deletes nothing):
+   `node scripts/reap-orphans.mjs --show --out ~/pre-ga-reap-plan.json`. It says
+   whether the root wildcard is in place and prints a **trim** table next to the
+   orphans: every A, AAAA, CAA and TXT at an account or box name (they stop the
+   wildcard for the names below), for live accounts too. Read it. Applying it is
+   part of step 12 (do it after the scrub so the two plans are not mixed); it
+   deletes in an order that never darkens a name, and the Worker re-checks each
+   record against D1 and the zone right before deleting.
+3. `POST /api/admin/republish-server-dns` **no longer exists**: nothing is
+   published per account any more. Its job (and a bulk legacy clean-up) is
+   `POST /api/admin/dns-route-gc?dryRun=true` (admin secret; lists, then without
+   `dryRun` deletes up to `max=N`, default 20, at most 100, per call) and the
+   opt-in hourly cron (`DNS_LEGACY_SWEEP=1` in `apps/com/wrangler.toml`), both
+   of which wait for the root wildcard:
 
    ```sh
-   curl -s -X POST -H "x-admin-secret: $FLAGSHIP_ADMIN_SECRET" https://flagshipserver.com/api/admin/republish-server-dns
-   dig +short anyname.<an-existing-account>.flagship.services @1.1.1.1      # now the relay address
+   curl -s -X POST -H "x-admin-secret: $FLAGSHIP_ADMIN_SECRET" "https://flagshipserver.com/api/admin/dns-route-gc?dryRun=true" | jq
    ```
+4. After the trim: `npm run zone-health` is OK with no account records, and
+   `dig +short A home.<an-existing-account>.flagship.services @1.1.1.1` still
+   answers the relay. The protected review account (`playstore-test-0725`) keeps
+   its own records (a warning in zone-health) until its store review ends; trim
+   it by hand then.
 
 ## 9. Publish the VM appliances
 
@@ -552,10 +629,10 @@ with the go/no-go points:
    node scripts/reap-orphans.mjs --apply --plan ~/pre-ga-reap-plan.json  # types "delete N records and M servers"
    ```
 
-   Run `POST /api/admin/republish-server-dns` first (step 8, "finish the wildcard rollout"), so no account loses per-box records before it has the wildcard.
-   Re-run the dry run: 0 orphaned records and servers, zone count under the cap.
-   If the wildcard-DNS change is deployed, the same pass also lists the
-   superseded per-box records (`docs/wildcard-dns.md` section 7).
+   Step 6a (the root wildcard) must be in the zone first: the plan keeps live
+   accounts' records until it is. Re-run the dry run: 0 orphaned records and
+   servers, zone count a handful, then `npm run zone-health` is OK. The same pass
+   trims every record at an account or box name (`docs/wildcard-dns.md` section 5).
 6. **Retire the wipe tooling** only after step 4 and the reap are verified: the
    ready commit is on the branch `chore/delete-wipe-tooling` (deliberately not
    on `main`; rebase it first):
@@ -575,9 +652,9 @@ is 200; the review login's server is online (give it one heartbeat).
 Rollback: the wipe cannot be undone except from the 6-hourly R2 D1 dump
 (`docs/runbooks/d1-restore.md`): take a manual export first
 (`cd apps/com && npx wrangler d1 export flagship-state --remote --output ~/d1-before-scrub.sql`).
-The reap deletes DNS records and demo servers that can be recreated by
-`POST /api/admin/republish-server-dns`; the plan file and its `.log.jsonl`
-list exactly what went.
+The reap deletes DNS records and demo servers. The DNS records need no recreating
+(the root wildcard answers every name); a demo server is recreated from its
+account. The plan file and its `.log.jsonl` list exactly what went.
 
 ## 13. What should block GA
 
