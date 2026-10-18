@@ -17,7 +17,7 @@ Once a recipe is in hand:
 1. **Recipe** — delivered over the paired session, or pasted/dropped via
    "I have a recipe". The app verifies the signature and shows you the
    server-domain + expiry so you can sanity-check before flashing.
-2. **ISO** — drag in a stock Debian netinst ISO (see
+2. **ISO** — drag in a stock Ubuntu Server ISO (see
    `flagship-build distros` for accepted SHAs).
 3. **Drive** — pick a USB drive from a read-only list. Only removable,
    external whole-disks appear; the internal boot disk and Apple

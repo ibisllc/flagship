@@ -2,7 +2,7 @@
  * Engine entry — the ONE function the native builders (macOS/iOS JavaScriptCore,
  * Android Rhino) call to turn a signed recipe + burn options into the unattended
  * install config. It runs the SAME canonical generator (`buildDebianPreseed` /
- * bootstrap generators) as the Node CLI, so there is exactly ONE
+ * `buildAutoinstallUserData`) as the Node CLI, so there is exactly ONE
  * implementation of this security-critical, signed-bootstrap path — no Swift /
  * Kotlin re-implementation to drift. The output is proven byte-identical across
  * Node + JSC + Rhino against shared golden vectors (tests/preseedEngine.test.ts +
@@ -22,6 +22,7 @@ import { parseInstallBlob } from "./installBlobParse.js";
 import type { LoadedBlob } from "./loadBlob.js";
 import { buildDebianPreseed } from "./preseed.js";
 import {
+  buildAutoinstallUserData,
   buildBootstrapScript,
   installBlobToJson,
   resolveBootstrapInputs,
@@ -94,6 +95,11 @@ export function buildPreseedFromRecipe(recipeJson: string, burnOptsJson?: string
   return buildDebianPreseed(optionsFromRecipeJson(recipeJson, parseBurn(burnOptsJson)));
 }
 
+/** Ubuntu autoinstall user-data from a signed recipe + burn options. */
+export function buildUserDataFromRecipe(recipeJson: string, burnOptsJson?: string): string {
+  return buildAutoinstallUserData(optionsFromRecipeJson(recipeJson, parseBurn(burnOptsJson)));
+}
+
 /** Generate the per-owner half of appliance specialization. The generalized
  * image already contains packages + the built repository; first boot runs this
  * canonical bootstrap with FLAGSHIP_APPLIANCE_PREINSTALLED=1 so identity,
@@ -109,6 +115,7 @@ export function buildBootstrapFromRecipe(recipeJson: string, burnOptsJson?: stri
     bootUnlockMode,
     bootHost,
     approvedBootHosts,
+    family: "debian",
     wifiSSID: opts.wifiSSID,
     wifiPassword: opts.wifiPassword,
     debugSshAuthorizedKey: opts.debugSshAuthorizedKey,
@@ -142,9 +149,10 @@ export function installAsEngineGlobal(): void {
   const g = globalThis as unknown as { FlagshipPreseed?: unknown };
   g.FlagshipPreseed = {
     buildPreseedFromRecipe,
+    buildUserDataFromRecipe,
     buildBootstrapFromRecipe,
     buildInstallBlobJsonFromRecipe,
-    version: 4,
+    version: 3,
   };
 }
 

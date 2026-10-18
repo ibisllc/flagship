@@ -19,7 +19,7 @@ They differ only in *where the base ISO comes from*:
   cache; the server decides when a new base ships. The builder is a *dumb
   executor*: it reports the version+sha of whatever it has cached, obeys the
   manifest's download-or-keep instruction, and verifies the bytes it downloads.
-- **Advanced** — you bring your own stock Debian ISO (drag it in). No
+- **Advanced** — you bring your own stock Ubuntu/Debian ISO (drag it in). No
   manifest, no download. Toggle "Bring my own ISO (Advanced)" in the header.
 
 The base-ISO download URL is shown live under the progress bar so you can see
@@ -33,7 +33,7 @@ written to the log pane.
    after the phone scans the QR code. The GUI shells out to
    `flagship-build verify` and shows you the server-domain + expiry so
    you can sanity-check before flashing.
-2. **ISO** — *Advanced only.* Drag in a stock Debian netinst ISO. Run
+2. **ISO** — *Advanced only.* Drag in a stock Ubuntu/Debian Server ISO. Run
    `flagship-build distros` for accepted SHAs. In **Simple** mode this step is
    hidden — the Debian base ISO is fetched per the server manifest and cached.
 3. **Drive** — pick a USB drive from a read-only list. Only removable,

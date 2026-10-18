@@ -1,9 +1,11 @@
 import Foundation
 
-/// Thin façade over the SINGLE canonical preseed generator (run via
-/// `PreseedEngine` / JavaScriptCore). These functions marshal their arguments
-/// into the engine's `burnOpts` and delegate; there is no second Swift copy of
-/// the security-critical, signed-bootstrap path. The ISO surgery lives in
+/// Thin façade over the SINGLE canonical preseed / user-data generator (run via
+/// `PreseedEngine` / JavaScriptCore). This file USED to carry a full ~2,200-line
+/// Swift re-implementation of the generator (a second copy of a
+/// security-critical, signed-bootstrap path that could drift from the canonical
+/// TypeScript). That body is GONE — these two functions now marshal their
+/// arguments into the engine's `burnOpts` and delegate. The ISO surgery lives in
 /// `Remaster.swift` (NOT the generator) and is untouched.
 ///
 /// `recipeJSON` is the raw, already signature-verified recipe bytes (the engine
@@ -19,7 +21,28 @@ public enum UserData {
     /// which is this unless FLAGSHIP_CONTROL_HOST names another control plane.
     public static let defaultBootHost = "https://boot.flagshipserver.com"
 
-    /// Debian d-i preseed.cfg for the verified recipe.
+    /// Ubuntu autoinstall user-data for the verified recipe.
+    public static func autoinstallYAML(recipeJSON: Data,
+                                       installerGitRef: String,
+                                       repoURL: String = defaultRepoURL,
+                                       encryptRoot: Bool = true,
+                                       bootUnlockMode: String = "auto",
+                                       bootHost: String = defaultBootHost,
+                                       wifiSSID: String? = nil,
+                                       wifiPassword: String? = nil,
+                                       debugMode: Bool = false) throws -> String {
+        try PreseedEngine.shared.buildUserData(
+            recipeJSON: recipeJSON,
+            burnOpts: burnOptions(installerGitRef: installerGitRef,
+                                  repoURL: repoURL,
+                                  encryptRoot: encryptRoot,
+                                  bootHost: bootHost,
+                                  wifiSSID: wifiSSID,
+                                  wifiPassword: wifiPassword))
+    }
+
+    /// Debian d-i preseed.cfg for the verified recipe — the twin of
+    /// autoinstallYAML for the debian ISO path.
     public static func debianPreseed(recipeJSON: Data,
                                      installerGitRef: String,
                                      repoURL: String = defaultRepoURL,

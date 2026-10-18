@@ -166,8 +166,8 @@ systemctl enable --now podman.socket 2>/dev/null || echo "[flagship-bootstrap] W
 # Flagship cloud-init-direct bootstrap (W13).
 #
 # Runs ONCE on the freshly-booted debian-12 VPS via cloud-init runcmd.
-# Does everything installer/install.sh does, minus the partman/d-i
-# scaffolding and the trailer parse. The
+# Does everything installer/install.sh + installer-netboot/late-command.sh
+# do, minus the partman/d-i scaffolding and the trailer parse. The
 # install-blob is already at /var/flagship/install-blob.json (written
 # by write_files above).
 #

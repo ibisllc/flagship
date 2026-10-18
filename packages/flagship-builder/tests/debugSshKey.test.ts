@@ -1,7 +1,7 @@
 /**
  * DEBUG remote-access image — the `--debug-ssh-key[-file]` bring-up/diagnosis
  * path threaded through the CLI into BOTH installers (buildDebianPreseed +
- * buildDebianPreseed).
+ * buildAutoinstallUserData).
  *
  * When a dev SSH key is supplied the image becomes remote-access ONLY: sshd +
  * the key on the `flagship` user, no provisioning, no LUKS re-key — so a
@@ -18,6 +18,7 @@ import {
   type AuthCode,
   type InstallBlob,
 } from "@flagship/protocol";
+import { buildAutoinstallUserData } from "../src/userdata.js";
 import { buildDebianPreseed } from "../src/preseed.js";
 
 function makeKeypair(seedByte: number) {
@@ -71,6 +72,15 @@ function bootstrapFromPreseed(cfg: string): string {
   return Buffer.from(m[1]!, "base64").toString("utf8");
 }
 
+/** Decode the first-boot bootstrap out of the autoinstall user-data echo. */
+function bootstrapFromUserData(yaml: string): string {
+  const m = yaml.match(
+    /echo "([A-Za-z0-9+/=]+)" \| base64 -d > \/usr\/local\/sbin\/flagship-bootstrap\.sh/,
+  );
+  if (!m) throw new Error("bootstrap not found in user-data");
+  return Buffer.from(m[1]!, "base64").toString("utf8");
+}
+
 describe("--debug-ssh-key threads into the Debian preseed (the VM prepare path)", () => {
   it("with a key: sshd + the key on `flagship`, and NO provisioning / NO re-key", () => {
     const cfg = buildDebianPreseed({ ...baseOptions(), debugSshAuthorizedKey: DEV_KEY });
@@ -90,5 +100,22 @@ describe("--debug-ssh-key threads into the Debian preseed (the VM prepare path)"
     const explicitUndefined = buildDebianPreseed({ ...opts, debugSshAuthorizedKey: undefined });
     expect(explicitUndefined).toBe(production);
     expect(bootstrapFromPreseed(production)).not.toContain("Flagship DEBUG bootstrap");
+  });
+});
+
+describe("--debug-ssh-key threads into the Ubuntu autoinstall too (drift fix)", () => {
+  it("with a key: the debug remote-access bootstrap is baked", () => {
+    const yaml = buildAutoinstallUserData({ ...baseOptions(), debugSshAuthorizedKey: DEV_KEY });
+    const bootstrap = bootstrapFromUserData(yaml);
+    expect(bootstrap).toContain("Flagship DEBUG bootstrap");
+    expect(bootstrap).toContain(DEV_KEY);
+  });
+
+  it("absent key === byte-identical to the production user-data", () => {
+    const opts = baseOptions();
+    const production = buildAutoinstallUserData(opts);
+    const explicitUndefined = buildAutoinstallUserData({ ...opts, debugSshAuthorizedKey: undefined });
+    expect(explicitUndefined).toBe(production);
+    expect(bootstrapFromUserData(production)).not.toContain("Flagship DEBUG bootstrap");
   });
 });

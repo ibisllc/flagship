@@ -227,7 +227,7 @@ public partial class MainWindow : Window
     {
         var dialog = new OpenFileDialog
         {
-            Title = Strings.T("pickADebianInstallerIso"),
+            Title = Strings.T("pickADebianOrUbuntuInstallerIso"),
             Filter = "ISO image (*.iso)|*.iso|All files|*.*",
             CheckFileExists = true,
         };

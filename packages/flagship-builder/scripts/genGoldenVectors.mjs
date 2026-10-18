@@ -1,5 +1,5 @@
 // Generate the cross-engine golden vectors: {recipeJson, burnOptsJson} →
-// expected preseed + install-blob, produced by the canonical Node generator. The
+// expected preseed + user-data, produced by the canonical Node generator. The
 // Android (Rhino) + macOS/iOS (JavaScriptCore) engine tests load this fixture,
 // run THEIR engine on recipeJson/burnOptsJson, and assert byte-identical output
 // — so Node + Rhino + JSC can never diverge. Regenerate after a generator change:
@@ -8,7 +8,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { signInstallBlob, ed } from "@flagship/protocol";
-import { buildInstallBlobJsonFromRecipe, buildPreseedFromRecipe } from "../dist/index.js";
+import { buildInstallBlobJsonFromRecipe, buildPreseedFromRecipe, buildUserDataFromRecipe } from "../dist/index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const OUT = join(here, "..", "engine", "golden", "preseed-vectors.json");
@@ -73,6 +73,7 @@ const vectors = matrix.map((m) => {
     recipeJson,
     burnOptsJson,
     expectedPreseed: buildPreseedFromRecipe(recipeJson, burnOptsJson),
+    expectedUserData: buildUserDataFromRecipe(recipeJson, burnOptsJson),
     expectedInstallBlobJson: buildInstallBlobJsonFromRecipe(recipeJson),
   };
 });

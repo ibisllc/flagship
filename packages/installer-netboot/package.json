@@ -1,0 +1,10 @@
+{
+  "name": "@flagship/installer-netboot",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --dir tests"
+  },
+  "license": "BUSL-1.1"
+}

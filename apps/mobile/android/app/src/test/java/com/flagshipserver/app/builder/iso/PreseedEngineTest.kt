@@ -78,11 +78,17 @@ class PreseedEngineTest {
             val recipeJson = v["recipeJson"]!!.jsonPrimitive.content
             val burnOptsJson = v["burnOptsJson"]!!.jsonPrimitive.content
             val expectedPreseed = v["expectedPreseed"]!!.jsonPrimitive.content
+            val expectedUserData = v["expectedUserData"]!!.jsonPrimitive.content
 
             assertEquals(
                 "preseed mismatch for vector '$name'",
                 expectedPreseed,
                 eng.buildPreseedFromRecipe(recipeJson, burnOptsJson),
+            )
+            assertEquals(
+                "user-data mismatch for vector '$name'",
+                expectedUserData,
+                eng.buildUserDataFromRecipe(recipeJson, burnOptsJson),
             )
         }
     }

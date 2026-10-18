@@ -227,7 +227,7 @@
                                 <StackPanel Grid.Column="1" Margin="12,0,8,0"
                                             VerticalAlignment="Center">
                                     <TextBlock Style="{StaticResource RowTitle}"
-                                               Text="{local:Str debianIso}"/>
+                                               Text="{local:Str debianOrUbuntuIso}"/>
                                     <TextBlock Style="{StaticResource RowHint}"
                                                Text="{local:Str dropAStockInstallerIsoTo}"
                                                Visibility="{Binding HasIso,
