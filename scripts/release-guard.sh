@@ -163,23 +163,15 @@ elif grep -rIlq 'debug-access/v2' --include="*.ts" "$root/packages/server-daemon
 fi
 debug_count=$(( ${#findings[@]} - debug_start ))
 
-# The prod-wipe runner must keep its guards (AGENTS.md GA close-out item 1):
-# no default target, env/database must agree, and a prod wipe needs a person
-# typing the database name at a terminal. Removing one fails every run.
-WIPE_REL="scripts/wipe-all-users.sh"
+# Accounts are never bulk-wiped after GA (AGENTS.md Conventions): the pre-GA
+# scrub tooling was deleted once it had run (git history keeps it). Any
+# scripts/wipe-all-users* file that reappears fails every build, dev included.
 wipe_start=${#findings[@]}
-if [ -f "$root/$WIPE_REL" ]; then
-  for need in 'WIPE_ENV and WIPE_D1 are both required' 'must name the prod database' 'is the PROD database' 'stdin is not a terminal' 'Type the database name'; do
-    if ! grep -qF "$need" "$root/$WIPE_REL"; then
-      findings+=("prod-wipe guard removed"$'\t'"$WIPE_REL: '$need' not found")
-    fi
-  done
-  if grep -qE 'WIPE_(ENV|D1):-[a-z]' "$root/$WIPE_REL"; then
-    findings+=("prod-wipe guard removed"$'\t'"$WIPE_REL: WIPE_ENV/WIPE_D1 must not default to a target")
+for f in "$root"/scripts/wipe-all-users*; do
+  if [ -e "$f" ]; then
+    findings+=("bulk user-wipe tooling reappeared"$'\t'"scripts/$(basename "$f")")
   fi
-elif [ -e "$root/scripts/wipe-all-users-prerelease-2026-06-02.sql" ]; then
-  findings+=("prod-wipe guard removed"$'\t'"$WIPE_REL: missing but the wipe .sql is still present")
-fi
+done
 wipe_count=$(( ${#findings[@]} - wipe_start ))
 
 # An inline `debug` user outside the gate is an unconditional bake (header (b)).
@@ -218,8 +210,8 @@ fi
 
 if [ "$wipe_count" -gt 0 ]; then
   echo >&2
-  echo "::error::scripts/wipe-all-users.sh lost a guard. It can delete every user in prod;" >&2
-  echo "it needs an explicit target, a matching env/database and a typed prod confirmation." >&2
+  echo "::error::scripts/wipe-all-users* is back. Accounts are never bulk-wiped after GA;" >&2
+  echo "delete the file (it lives on in git history) instead of shipping a way to wipe users." >&2
   exit 1
 fi
 

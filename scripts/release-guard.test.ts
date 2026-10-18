@@ -237,28 +237,21 @@ describe("release-guard.sh — against a clean tree (post-GA, backdoors removed)
     dir = "";
   });
 
-  it("the real prod-wipe runner passes; a copy that lost a guard or defaults to prod fails even a dev build", () => {
-    const real = readFileSync(join(__dirname, "wipe-all-users.sh"), "utf8");
+  it("any scripts/wipe-all-users* file fails even a dev build; the clean tree passes", () => {
     dir = makeCleanTree();
     mkdirSync(join(dir, "scripts"), { recursive: true });
-    writeFileSync(join(dir, "scripts", "wipe-all-users.sh"), real);
-    const ok = run({ RELEASE: "", RELEASE_GUARD_ROOT: dir });
-    expect(ok.code).toBe(0);
-    expect(ok.stderr).not.toContain("prod-wipe guard removed");
-    for (const broken of [
-      real.split("stdin is not a terminal").join("x"),
-      real.split("Type the database name").join("x"),
-      real.split("WIPE_ENV and WIPE_D1 are both required").join("x"),
-      real + '\ntarget_env="${WIPE_ENV:-prod}"\n',
-    ]) {
-      writeFileSync(join(dir, "scripts", "wipe-all-users.sh"), broken);
+    expect(run({ RELEASE: "", RELEASE_GUARD_ROOT: dir }).code).toBe(0);
+    for (const name of ["wipe-all-users.sh", "wipe-all-users-prerelease-2026-06-02.sql", "wipe-all-users.test.ts"]) {
+      writeFileSync(join(dir, "scripts", name), "# back again\n");
       const r = run({ RELEASE: "", RELEASE_GUARD_ROOT: dir });
-      expect(r.code).toBe(1);
-      expect(r.stderr).toContain("prod-wipe guard removed");
+      expect(r.code, name).toBe(1);
+      expect(r.stderr, name).toContain("bulk user-wipe tooling reappeared");
+      expect(r.stderr, name).toContain(name);
+      rmSync(join(dir, "scripts", name));
     }
   });
 
-  it("the real repo's wipe runner raises no finding", () => {
-    expect(run({ RELEASE: "" }).stderr).not.toContain("prod-wipe guard removed");
+  it("the real repo carries no wipe tooling", () => {
+    expect(run({ RELEASE: "" }).stderr).not.toContain("bulk user-wipe tooling reappeared");
   });
 });
