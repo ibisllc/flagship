@@ -2410,6 +2410,14 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
 
     public func registerRck(_ req: RckRegisterRequest) async throws {
         try await tick()
+        // Like `.com`: a name is pinned to the first RCK registered for it
+        // until the name is released.
+        if let pinned = registeredRcks[req.request.subdomain], pinned != req.request.rckPubKey {
+            throw ScreensClientError.http(
+                status: 409,
+                message: #"{"error":"subdomain already controlled by a different RCK"}"#
+            )
+        }
         registeredRcks[req.request.subdomain] = req.request.rckPubKey
     }
 
@@ -2423,6 +2431,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         try await tick()
         try MockOrderSigners.shared.require(.sensitive, kind: "release-server-name", signatureHex: req.signature, payload: req)
         releasedServerNames.append(req)
+        registeredRcks.removeValue(forKey: req.request.serverDomain)
         onServerNameReleased?(req.request.serverDomain)
     }
 
