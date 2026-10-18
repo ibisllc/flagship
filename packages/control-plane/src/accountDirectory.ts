@@ -1,7 +1,7 @@
 import {
   accountDirectoryKeyGrantId,
   deviceSupportCode,
-  verifyAccountDirectoryRequest,
+  verifyAccountDirectoryRequestFast,
   verifyAccountProfile,
   verifyAccountDirectoryKeyGrant,
   verifyDeviceManagedProfile,
@@ -80,7 +80,7 @@ export async function authorizeActiveDevice(
   const identity = await deps.identities.get(accountId, request.deviceId);
   if (!identity || identity.revokedAt !== null || identity.devicePubHex !== request.signerPubHex.toLowerCase()) return null;
   const fullRequest = request as AccountDirectoryRequest;
-  if (!verifyAccountDirectoryRequest(fullRequest, signature, hexToBytes(identity.devicePubHex))) return null;
+  if (!(await verifyAccountDirectoryRequestFast(fullRequest, signature, hexToBytes(identity.devicePubHex)))) return null;
   const claimed = await deps.nonces.claim(
     `directory|${accountId}|${identity.deviceId}|${request.requestId}`,
     now + freshness,

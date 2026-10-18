@@ -24,7 +24,7 @@
  *   <lockedDown "1"|"0">|<failingCertHash or "">|
  *   <coveringExceptionCertHash or "">|<nonce>|<issuedAt>
  */
-import { ed } from "./edSync.js";
+import { ed, edVerifyFast } from "./edSync.js";
 import { legacyFieldGuard } from "./auth.js";
 import { resolveMsgSigner, type MsgSigner } from "./canonicalBase.js";
 import type { Bytes } from "./types.js";
@@ -83,6 +83,19 @@ export function signBoxTrustStatusReport(
   // Accepts the STK `Keypair` or a `sign(msg)` closure (custodian-backed);
   // signature bytes are identical either way.
   return resolveMsgSigner(identity)(canonicalBoxTrustStatusReport(r));
+}
+
+/** `verifyBoxTrustStatusReport`, with the native Ed25519 check where the runtime has it. */
+export async function verifyBoxTrustStatusReportFast(
+  r: BoxTrustStatusReport,
+  sig: Bytes,
+  stkPub: Bytes,
+): Promise<boolean> {
+  try {
+    return await edVerifyFast(sig, canonicalBoxTrustStatusReport(r), stkPub);
+  } catch {
+    return false;
+  }
 }
 
 export function verifyBoxTrustStatusReport(

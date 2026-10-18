@@ -26,7 +26,7 @@
 // bottom of this file.
 // ──────────────────────────────────────────────────────────────────────
 
-import { ed } from "./edSync.js";
+import { ed, edVerifyFast } from "./edSync.js";
 import {
   openSealedFromEd25519Recipient,
   sealForEd25519Recipient,
@@ -117,6 +117,19 @@ function canonicalDeviceEndpointClaim(c: DeviceEndpointClaim): Bytes {
 
 export function signDeviceEndpointClaim(c: DeviceEndpointClaim, irk: Keypair): Bytes {
   return ed.sign(canonicalDeviceEndpointClaim(c), irk.privateKey);
+}
+
+/** `verifyDeviceEndpointClaim`, with the native Ed25519 check where the runtime has it. */
+export async function verifyDeviceEndpointClaimFast(
+  c: DeviceEndpointClaim,
+  sig: Bytes,
+  irkPub: Bytes,
+): Promise<boolean> {
+  try {
+    return await edVerifyFast(sig, canonicalDeviceEndpointClaim(c), irkPub);
+  } catch {
+    return false;
+  }
 }
 
 export function verifyDeviceEndpointClaim(

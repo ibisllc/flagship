@@ -1,7 +1,7 @@
 import { gcm } from "@noble/ciphers/aes";
 import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
-import { ed } from "./edSync.js";
+import { ed, edVerifyFast } from "./edSync.js";
 import { base32Encode } from "./builderPairing.js";
 import { hex, resolveMsgSigner, validateNoSepCtrl, type MsgSigner } from "./canonicalBase.js";
 import type { Bytes } from "./types.js";
@@ -305,6 +305,19 @@ export function verifyDeviceManagedProfile(envelope: DeviceManagedProfileEnvelop
 
 export function signAccountDirectoryRequest(request: AccountDirectoryRequest, signer: MsgSigner): string {
   return hex(resolveMsgSigner(signer)(canonicalAccountDirectoryRequest(request)));
+}
+
+/** `verifyAccountDirectoryRequest`, with the native Ed25519 check where the runtime has it. */
+export async function verifyAccountDirectoryRequestFast(
+  request: AccountDirectoryRequest,
+  signatureHex: string,
+  signerPub: Bytes,
+): Promise<boolean> {
+  try {
+    return await edVerifyFast(bytesFromHex(signatureHex), canonicalAccountDirectoryRequest(request), signerPub);
+  } catch {
+    return false;
+  }
 }
 
 export function verifyAccountDirectoryRequest(

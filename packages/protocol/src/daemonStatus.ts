@@ -17,7 +17,7 @@
  *   <certValidUntil or "">|<certIssuer or "">|<appsServed sorted, ","-joined>|
  *   <nonce>|<issuedAt>
  */
-import { ed } from "./edSync.js";
+import { ed, edVerifyFast } from "./edSync.js";
 import { legacyFieldGuard } from "./auth.js";
 import { resolveMsgSigner, type MsgSigner } from "./canonicalBase.js";
 import type { Bytes } from "./types.js";
@@ -64,6 +64,19 @@ export function signDaemonStatusReport(
   // Accepts the STK `Keypair` or a `sign(msg)` closure (custodian-backed);
   // signature bytes are identical either way.
   return resolveMsgSigner(identity)(canonicalDaemonStatusReport(r));
+}
+
+/** `verifyDaemonStatusReport`, with the native Ed25519 check where the runtime has it. */
+export async function verifyDaemonStatusReportFast(
+  r: DaemonStatusReport,
+  sig: Bytes,
+  stkPub: Bytes,
+): Promise<boolean> {
+  try {
+    return await edVerifyFast(sig, canonicalDaemonStatusReport(r), stkPub);
+  } catch {
+    return false;
+  }
 }
 
 export function verifyDaemonStatusReport(

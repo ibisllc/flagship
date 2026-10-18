@@ -14,7 +14,7 @@
 //
 // The token itself is opaque to every client: only `.com` reads it.
 
-import { ed } from "./edSync.js";
+import { ed, edVerifyFast } from "./edSync.js";
 import { hex, validateNoSepCtrl, type MsgSigner, resolveMsgSigner } from "./canonicalBase.js";
 import type { Bytes } from "./types.js";
 
@@ -52,6 +52,18 @@ export function canonicalBoxReadTokenRequest(r: BoxReadTokenRequest): Bytes {
 
 export function signBoxReadTokenRequest(r: BoxReadTokenRequest, signer: MsgSigner): string {
   return hex(resolveMsgSigner(signer)(canonicalBoxReadTokenRequest(r)));
+}
+
+/** `verifyBoxReadTokenRequest`, with the native Ed25519 check where the runtime has it. */
+export async function verifyBoxReadTokenRequestFast(r: BoxReadTokenRequest, signatureHex: string, stkPub: Bytes): Promise<boolean> {
+  try {
+    if (!/^[0-9a-f]{128}$/.test(signatureHex)) return false;
+    const sig = new Uint8Array(64);
+    for (let i = 0; i < 64; i++) sig[i] = parseInt(signatureHex.slice(i * 2, i * 2 + 2), 16);
+    return await edVerifyFast(sig, canonicalBoxReadTokenRequest(r), stkPub);
+  } catch {
+    return false;
+  }
 }
 
 export function verifyBoxReadTokenRequest(r: BoxReadTokenRequest, signatureHex: string, stkPub: Bytes): boolean {
