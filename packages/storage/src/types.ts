@@ -571,6 +571,20 @@ export interface RoutingStorage {
    *  by a different RCK; idempotent for the same RCK pubkey. */
   register(rec: RoutingRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
   get(subdomain: string): Promise<RoutingRecord | undefined>;
+  /**
+   * Swap the RCK of a record that no box has activated yet, in ONE atomic
+   * step: only when the record belongs to `username`, still has an empty
+   * routing target and a different RCK. Returns false (and changes nothing)
+   * otherwise, e.g. when a box set the target between the caller's read and
+   * this write. Never a read-then-release: that could delete a target set in
+   * between.
+   */
+  replaceUnactivatedRck(
+    subdomain: string,
+    username: string,
+    newRckPubKeyHex: string,
+    at: number,
+  ): Promise<boolean>;
   setTarget(
     subdomain: string,
     newTargetHex: string,

@@ -167,11 +167,13 @@ export async function handleRegisterRck(
     return malformed(`invalid server label: ${labelV.reason}`);
   }
 
-  // A retry of the same pending order mints a new RCK (the phone keeps no
-  // RCK secret), so a claim that no box has activated yet may be replaced by
-  // the SAME account's fresh one. Nothing depends on the old key until
-  // setRoutingTargetFromRegistration or a signed SetRoutingTarget gives the
-  // name a target, and only the account's own admin authority got this far.
+  // A retry of the same pending order may carry a fresh RCK, so a claim that
+  // no box has activated yet (empty routing target) may be replaced by the
+  // SAME account's new one. Reached only after the admin-authority check
+  // above, and the new key is covered by that signature. Nothing reads the
+  // RCK except SetRoutingTarget, so nothing depends on the old key until a
+  // target exists. The swap is one conditional write: if a box set the
+  // target in the meantime it changes nothing and register() answers 409.
   const existing = await deps.routing.get(r.subdomain);
   if (
     existing &&
@@ -179,7 +181,13 @@ export async function handleRegisterRck(
     existing.username === r.username &&
     existing.currentTargetHex === ""
   ) {
-    await deps.routing.release(r.subdomain);
+    const swapped = await deps.routing.replaceUnactivatedRck(
+      r.subdomain,
+      r.username,
+      r.rckPubKey,
+      now,
+    );
+    if (swapped) return ok({ ok: true, subdomain: r.subdomain });
   }
 
   const out = await deps.routing.register({

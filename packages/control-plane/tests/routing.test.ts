@@ -253,6 +253,145 @@ describe("POST /api/routing/register-rck", () => {
     expect(rec?.rckPubKeyHex).toBe(bytesToHex(first.rck.publicKey));
   });
 
+  describe("replacing an unactivated RCK cannot be used to take a name", () => {
+    const SUB = "home.harry.flagship.services";
+    async function post(
+      storage: InMemoryStorage,
+      body: { username: string; subdomain: string; rck: ReturnType<typeof freshKeypair>; signer: { privateKey: Uint8Array; publicKey: Uint8Array }; issuedAt?: number },
+      routing: InMemoryStorage["routing"] = storage.routing,
+    ) {
+      const claim: RegisterRck = {
+        username: body.username,
+        subdomain: body.subdomain,
+        rckPubKey: body.rck.publicKey,
+        issuedAt: body.issuedAt ?? Date.now(),
+      };
+      return handleRegisterRck(
+        { routing, usernames: storage.usernames },
+        {
+          request: {
+            username: claim.username,
+            subdomain: claim.subdomain,
+            rckPubKey: bytesToHex(claim.rckPubKey),
+            issuedAt: claim.issuedAt,
+          },
+          signature: bytesToHex(signRegisterRck(claim, body.signer)),
+        },
+      );
+    }
+
+    it("another account cannot replace it, under its own name or under harry's", async () => {
+      const storage = await setUpClaimedHarry();
+      const malloryAdmin = freshKeypair(78);
+      await handleUsernameClaim(
+        { storage: storage.usernames },
+        {
+          request: {
+            username: "mallory",
+            irkPub: bytesToHex(malloryIrk.publicKey),
+            issuedAt: Date.now(),
+          },
+          signature: bytesToHex(
+            signClaimUsername(
+              { username: "mallory", irkPub: malloryIrk.publicKey, issuedAt: Date.now() },
+              malloryIrk,
+            ),
+          ),
+          adminRootPub: bytesToHex(malloryAdmin.publicKey),
+        },
+      );
+      const first = freshKeypair(21);
+      expect((await post(storage, { username: "harry", subdomain: SUB, rck: first, signer: harryAdmin })).status).toBe(200);
+      const evil = freshKeypair(66);
+      // Mallory's own username, harry's subdomain: the suffix rule refuses.
+      expect((await post(storage, { username: "mallory", subdomain: SUB, rck: evil, signer: malloryAdmin })).status).toBe(400);
+      // Harry's username signed by mallory's admin root: the signature refuses.
+      expect((await post(storage, { username: "harry", subdomain: SUB, rck: evil, signer: malloryAdmin })).status).toBe(403);
+      expect((await storage.routing.get(SUB))?.rckPubKeyHex).toBe(bytesToHex(first.publicKey));
+    });
+
+    it("the membership IRK of an admin-pinned account cannot replace it", async () => {
+      const storage = await setUpClaimedHarry();
+      const first = freshKeypair(21);
+      expect((await post(storage, { username: "harry", subdomain: SUB, rck: first, signer: harryAdmin })).status).toBe(200);
+      const evil = freshKeypair(66);
+      const refused = await post(storage, { username: "harry", subdomain: SUB, rck: evil, signer: harryIrk });
+      expect(refused.status).toBe(403);
+      expect((await storage.routing.get(SUB))?.rckPubKeyHex).toBe(bytesToHex(first.publicKey));
+    });
+
+    it("a stale signed request cannot replace it", async () => {
+      const storage = await setUpClaimedHarry();
+      const first = freshKeypair(21);
+      expect((await post(storage, { username: "harry", subdomain: SUB, rck: first, signer: harryAdmin })).status).toBe(200);
+      const stale = await post(storage, {
+        username: "harry",
+        subdomain: SUB,
+        rck: freshKeypair(66),
+        signer: harryAdmin,
+        issuedAt: Date.now() - 10 * 60_000,
+      });
+      expect(stale.status).toBe(400);
+      expect((await storage.routing.get(SUB))?.rckPubKeyHex).toBe(bytesToHex(first.publicKey));
+    });
+
+    it("a replaced RCK no longer signs a target, the new one does", async () => {
+      const storage = await setUpClaimedHarry();
+      const oldRck = freshKeypair(21);
+      const newRck = freshKeypair(22);
+      await post(storage, { username: "harry", subdomain: SUB, rck: oldRck, signer: harryAdmin });
+      await post(storage, { username: "harry", subdomain: SUB, rck: newRck, signer: harryAdmin });
+      const target = freshKeypair(12);
+      const setWith = async (signer: typeof oldRck, nonceByte: number) => {
+        const req: SetRoutingTarget = {
+          subdomain: SUB,
+          newTargetIdentityPubKey: target.publicKey,
+          issuedAt: Date.now(),
+          nonce: new Uint8Array(16).fill(nonceByte),
+        };
+        return handleSetRoutingTarget(
+          { routing: storage.routing, usernames: storage.usernames },
+          {
+            request: {
+              subdomain: req.subdomain,
+              newTargetIdentityPubKey: bytesToHex(req.newTargetIdentityPubKey),
+              issuedAt: req.issuedAt,
+              nonce: bytesToHex(req.nonce),
+            },
+            signature: bytesToHex(signSetRoutingTarget(req, signer)),
+          },
+        );
+      };
+      expect((await setWith(oldRck, 7)).status).toBe(403);
+      expect((await setWith(newRck, 8)).status).toBe(200);
+    });
+
+    it("a box that sets the target between the read and the swap is not undone", async () => {
+      const storage = await setUpClaimedHarry();
+      const first = freshKeypair(21);
+      expect((await post(storage, { username: "harry", subdomain: SUB, rck: first, signer: harryAdmin })).status).toBe(200);
+      const inner = storage.routing;
+      // The box registers right after the handler read the (still empty) target.
+      const racing = {
+        register: inner.register.bind(inner),
+        setTarget: inner.setTarget.bind(inner),
+        release: inner.release.bind(inner),
+        replaceUnactivatedRck: inner.replaceUnactivatedRck.bind(inner),
+        async get(sub: string) {
+          const seen = await inner.get(sub);
+          await inner.setTarget(sub, "aa".repeat(32), "00".repeat(8), Date.now());
+          return seen;
+        },
+      };
+      const second = freshKeypair(22);
+      const out = await post(storage, { username: "harry", subdomain: SUB, rck: second, signer: harryAdmin }, racing);
+      expect(out.status).toBe(409);
+      const rec = await inner.get(SUB);
+      expect(rec?.rckPubKeyHex).toBe(bytesToHex(first.publicKey));
+      expect(rec?.currentTargetHex).toBe("aa".repeat(32));
+    });
+  });
+
   it("the same RCK again stays idempotent", async () => {
     const storage = await setUpClaimedHarry();
     expect((await registerRck(storage, 21)).r.status).toBe(200);

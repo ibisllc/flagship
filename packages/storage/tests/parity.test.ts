@@ -565,6 +565,41 @@ describe("D1 ↔ InMemory parity", () => {
       expect(r.d1.target2).toBe("tgtA");
     });
 
+    it("replaceUnactivatedRck swaps only an own, target-less record with another key", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.routing.register(rec("u.alice", "rck1"));
+        const otherUser = await s.routing.replaceUnactivatedRck("u.alice", "bob", "rck2", 5);
+        const sameKey = await s.routing.replaceUnactivatedRck("u.alice", "alice", "rck1", 5);
+        const absent = await s.routing.replaceUnactivatedRck("nope.alice", "alice", "rck2", 5);
+        const swapped = await s.routing.replaceUnactivatedRck("u.alice", "alice", "rck2", 5);
+        const afterSwap = await s.routing.get("u.alice");
+        await s.routing.setTarget("u.alice", "tgtA", "n1", 10);
+        const afterTarget = await s.routing.replaceUnactivatedRck("u.alice", "alice", "rck3", 11);
+        const final = await s.routing.get("u.alice");
+        return {
+          otherUser,
+          sameKey,
+          absent,
+          swapped,
+          swappedRck: afterSwap?.rckPubKeyHex,
+          afterTarget,
+          finalRck: final?.rckPubKeyHex,
+          finalTarget: final?.currentTargetHex,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toMatchObject({
+        otherUser: false,
+        sameKey: false,
+        absent: false,
+        swapped: true,
+        swappedRck: "rck2",
+        afterTarget: false,
+        finalRck: "rck2",
+        finalTarget: "tgtA",
+      });
+    });
+
     it("release frees the subdomain; releasing an absent row is success", async () => {
       const r = await bothAdapters(async (s) => {
         await s.routing.register(rec("r.alice", "rck1"));

@@ -719,6 +719,22 @@ export class D1RoutingStorage implements RoutingStorage {
       .first<RoutingRow>();
     return r ? rowToRouting(r) : undefined;
   }
+  async replaceUnactivatedRck(
+    subdomain: string,
+    username: string,
+    newRckPubKeyHex: string,
+    at: number,
+  ) {
+    const result = await this.db
+      .prepare(
+        `UPDATE routing
+         SET rck_pubkey_hex = ?, registered_at = ?, last_target_update = 0, last_target_nonce = ''
+         WHERE subdomain = ? AND username = ? AND current_target_hex = '' AND rck_pubkey_hex <> ?`,
+      )
+      .bind(newRckPubKeyHex, at, subdomain, username, newRckPubKeyHex)
+      .run();
+    return Boolean(result.meta.changes && result.meta.changes > 0);
+  }
   async setTarget(subdomain: string, newTargetHex: string, nonce: string, at: number) {
     const result = await this.db
       .prepare(

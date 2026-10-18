@@ -456,6 +456,21 @@ export class InMemoryRoutingStorage implements RoutingStorage {
     const r = this.bySubdomain.get(subdomain);
     return r ? { ...r } : undefined;
   }
+  async replaceUnactivatedRck(
+    subdomain: string,
+    username: string,
+    newRckPubKeyHex: string,
+    at: number,
+  ) {
+    const r = this.bySubdomain.get(subdomain);
+    if (!r || r.username !== username || r.currentTargetHex !== "") return false;
+    if (r.rckPubKeyHex === newRckPubKeyHex) return false;
+    r.rckPubKeyHex = newRckPubKeyHex;
+    r.registeredAt = at;
+    r.lastTargetUpdate = 0;
+    r.lastTargetNonce = "";
+    return true;
+  }
   async setTarget(subdomain: string, newTargetHex: string, nonce: string, at: number) {
     const r = this.bySubdomain.get(subdomain);
     if (!r) return { ok: false as const, reason: "unknown subdomain" };
