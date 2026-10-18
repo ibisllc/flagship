@@ -132,8 +132,10 @@ the 4-record layouts.
 **Nothing is deleted before the root wildcard is in the zone and points
 exactly at the relay** (`rootWildcardStatus`: A and AAAA equal the configured
 `SERVICES_PASSTHROUGH_IPV4/6`, no extra or foreign record, not proxied). An
-account's own records may be all that resolve its names until then; so deploying
-`.com` before the manual DNS step is safe, it just does nothing.
+account's own records may be all that resolve its names until then. That protects
+existing accounts only: the new `.com` writes no address record for a box that
+registers, so create the wildcard BEFORE deploying `.com`, or a new box's names will
+not resolve (and resolvers cache that for 30 minutes).
 
 | trigger | what it removes | guarded |
 |---|---|---|
@@ -310,15 +312,16 @@ records no code path deletes or trims (`PROTECTED_DNS_ACCOUNTS`).
 
 ## 10. What needs deploying, and the manual DNS step
 
-- **The one-time manual DNS step (owner, Cloudflare dashboard)**, before or after
-  the deploys, in `docs/runbooks/final-deploy.md` step 6a: create
+- **The one-time manual DNS step (owner, Cloudflare dashboard)**, after `.services`
+  and before the `.com` deploy, in `docs/runbooks/final-deploy.md` step 6a: create
   `*.flagship.services` A and AAAA (DNS only) and the apex CAA pair, then run
   `npm run zone-health`.
 - **`.com` Worker (`apps/com`)**: all of the logic above and the reap rules. No D1
-  migration. Nothing happens to an existing account until the wildcard is in the
-  zone (the guard), after which its legacy records go at its next event or in
-  the owner's reap pass.
-- **`.services` (Fly)**: nothing for this change.
+  migration. Existing accounts keep their own records until the wildcard is in the
+  zone (the guard), after which their legacy records go at the next event or in
+  the owner's reap pass; a NEW box needs the wildcard already in place.
+- **`.services` (Fly)**: the relay's uniform drop timing for unregistered names
+  (`1ddccb2b9`) should be live before the wildcard starts answering them.
 - **Boxes: no endorsed release.** The box's only DNS action is the signed
   `dns-01/publish` / `delete` of its own `_acme-challenge` TXT through `.com`
   (`remoteDnsChallengeWriter.ts`); it publishes no A, AAAA or CAA.

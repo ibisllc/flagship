@@ -329,9 +329,12 @@ Check: `curl -s https://gym.flagshipserver.com/api/health` and
 The owner creates these **once, by hand, in the Cloudflare dashboard** (DNS ->
 Records of the `flagship.services` zone). Nothing in the repo creates them: `.com`
 only ever writes and deletes `_acme-challenge` TXT, and it deletes nothing of an
-account's before these exist (the guard in `docs/wildcard-dns.md` section 5). So
-this step may come before or after the `.com` deploy (step 7), but the trim
-(step 8's follow-up and step 12) needs it.
+account's before these exist (the guard in `docs/wildcard-dns.md` section 5). Do
+this step **after `.services` (8) and before the `.com` deploy (7)**: the new `.com`
+writes no per-box address records, so a box that registers while the wildcard is
+missing gets names that do not resolve (resolvers cache that for 30 minutes), and the
+trim (step 8's follow-up and step 12) needs the wildcard too. `scripts/release.sh`
+runs it in that order (`9ed418ce3`).
 
 1. Look up the relay's exact addresses (read-only), and compare with the repo
    (`apps/com/wrangler.toml`: `SERVICES_PASSTHROUGH_IPV4/6`, the same pair
