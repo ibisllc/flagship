@@ -6,7 +6,9 @@ import {
   evaluateZoneHealth,
   expectedApexCaaRdata,
   legacyAccountRecords,
+  isProtectedDnsName,
   legacyDeletionRank,
+  PROTECTED_DNS_ACCOUNTS,
   rootWildcardStatus,
   type ZoneRecordView,
 } from "../src/rootWildcard.js";
@@ -231,5 +233,37 @@ describe("evaluateZoneHealth", () => {
     const filler = (n: number) => Array.from({ length: n }, (_, i) => rec("A", `s${i}.${APEX}`, "198.51.100.9"));
     expect(health([...ROOT, ...filler(185)]).warnings.join(" ")).toMatch(/of 200/);
     expect(health([...ROOT, ...filler(200)]).ok).toBe(false);
+  });
+});
+
+describe("the protected store-review account", () => {
+  const P = "playstore-test-0725";
+  const protectedSet = [
+    rec("CAA", `${P}.${APEX}`, '0 issue "letsencrypt.org"'),
+    rec("A", `*.${P}.${APEX}`, RELAY.servicesIpv4),
+    rec("A", `home.${P}.${APEX}`, RELAY.servicesIpv4),
+    rec("AAAA", `*.home.${P}.${APEX}`, RELAY.servicesIpv6),
+  ];
+
+  it("is named in the shared constant", () => {
+    expect(PROTECTED_DNS_ACCOUNTS).toContain(P);
+  });
+
+  it("is recognised at every shape of its names, and nowhere else", () => {
+    for (const n of [`${P}.${APEX}`, `*.${P}.${APEX}`, `home.${P}.${APEX}`, `*.home.${P}.${APEX}`, `a.b.home.${P}.${APEX}`]) {
+      expect(isProtectedDnsName(n, APEX), n).toBe(true);
+    }
+    for (const n of [`alice.${APEX}`, `home.alice.${APEX}`, APEX, `*.${APEX}`, `_acme-challenge.home.${P}.${APEX}`]) {
+      expect(isProtectedDnsName(n, APEX), n).toBe(false);
+    }
+    expect(isProtectedDnsName(`home.carol.${APEX}`, APEX, ["carol"])).toBe(true);
+  });
+
+  it("no deletion plan includes its records, with or without a scope, though zone health still sees them", () => {
+    const zone = [...ROOT, ...protectedSet, rec("A", `*.alice.${APEX}`, RELAY.servicesIpv4)];
+    expect(legacyAccountRecords(zone, APEX).map((r) => r.name)).toEqual([`*.alice.${APEX}`]);
+    expect(legacyAccountRecords(zone, APEX, { user: P })).toEqual([]);
+    expect(legacyAccountRecords(zone, APEX, { accounts: new Set([P, "alice"]) }).map((r) => r.name)).toEqual([`*.alice.${APEX}`]);
+    expect(blockingRecords(zone, APEX, { user: P })).toHaveLength(4);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPlan, confirmationPhrase, formatPlan, parseArgs, selectOrphans } from "./reap-orphans.mjs";
+import { GROUP_WAIT_MS, applyPlan, confirmationPhrase, formatPlan, groupOf, parseArgs, selectOrphans } from "./reap-orphans.mjs";
 
 const hex = (n: number) => n.toString(16).padStart(32, "0");
 const SRV = "00000000-0000-4000-8000-0000000000a1";
@@ -182,6 +182,50 @@ describe("applyPlan", () => {
     expect(calls[hex(4)]).toBe(6);
     expect(sleeps.filter((s) => s === 30_000)).toHaveLength(2 + 5);
     expect(events.filter((e) => e.event === "retry")).toHaveLength(7);
+  });
+
+  it("waits 15 s between deletion groups, and only then (the record at <user>, the box names, the box wildcards, the account wildcard)", async () => {
+    const withOrder = (n: number, name: string, type: string, order: number) => ({ ...dns(n, name, type, "bob"), order });
+    const sel = selectOrphans(
+      plan({
+        dns: [
+          withOrder(3, "*.bob.flagship.services", "A", 42),
+          withOrder(4, "home.bob.flagship.services", "A", 12),
+          withOrder(5, "bob.flagship.services", "CAA", 0),
+          withOrder(6, "home.bob.flagship.services", "AAAA", 11),
+          withOrder(7, "*.home.bob.flagship.services", "A", 32),
+        ],
+        servers: [],
+      }),
+      NOW,
+    );
+    const timeline: string[] = [];
+    const out = await applyPlan(sel, {
+      post: async (b: unknown) => (timeline.push(`delete ${(b as { name: string; type: string }).type} ${(b as { name: string }).name}`), { status: 200, body: { result: "deleted" } }),
+      sleep: async (ms: number) => void (ms > 0 && timeline.push(`sleep ${ms}`)),
+      log: () => undefined,
+      pauseMs: 0,
+    });
+    expect(out.deleted).toBe(5);
+    expect(timeline).toEqual([
+      "delete CAA bob.flagship.services",
+      `sleep ${GROUP_WAIT_MS}`,
+      "delete AAAA home.bob.flagship.services",
+      "delete A home.bob.flagship.services",
+      `sleep ${GROUP_WAIT_MS}`,
+      "delete A *.home.bob.flagship.services",
+      `sleep ${GROUP_WAIT_MS}`,
+      "delete A *.bob.flagship.services",
+    ]);
+    expect(GROUP_WAIT_MS).toBe(15_000);
+    expect([0, 1, 2, 3, 4].map((g) => groupOf(g * 10 + 2))).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it("does not wait when everything is in one group", async () => {
+    const sel = selectOrphans(plan({ servers: [] }), NOW);
+    const sleeps: number[] = [];
+    await applyPlan(sel, fastOpts(async () => ({ status: 200, body: { result: "deleted" } }), [], sleeps));
+    expect(sleeps.filter((ms) => ms > 0)).toEqual([]);
   });
 
   it("counts a re-check refusal as skipped and carries on", async () => {

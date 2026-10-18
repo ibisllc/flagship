@@ -276,6 +276,118 @@ describe("removing what a gone account or box left", () => {
   });
 });
 
+/** The `TYPE name` of each record, in the order the code under test deleted them. */
+function trackDeletes(): string[] {
+  const order: string[] = [];
+  let known = new Map(cf.records.map((r) => [r.id, `${r.type} ${r.name}`] as const));
+  cf.afterRequest = (method) => {
+    if (method !== "DELETE") return;
+    const now = new Set(cf.records.map((r) => r.id));
+    for (const [id, label] of known) {
+      if (!now.has(id)) {
+        order.push(label);
+        known.delete(id);
+      }
+    }
+  };
+  return order;
+}
+
+describe("the order a legacy account's records go in (a name never answers worse in between)", () => {
+  const ZONE_RANK = (l: string): number => {
+    const name = l.split(" ")[1]!;
+    if (name === ZONE) return 0;
+    if (name === `home.${ZONE}`) return 1;
+    if (name === `*.home.${ZONE}`) return 3;
+    if (name === `*.${ZONE}`) return 4;
+    return 9;
+  };
+
+  it("clearLegacyAccountDns: the account name first, the box, the box wildcard, the account wildcard last; CAA, AAAA, then A within a name", async () => {
+    seedRoot();
+    seedTwelve("alice");
+    const order = trackDeletes();
+    expect((await clearLegacyAccountDns(deps(), ZONE)).removed).toBe(12);
+    expect(order.map(ZONE_RANK)).toEqual([...order.map(ZONE_RANK)].sort((a, b) => a - b));
+    expect(order[0]!.startsWith("CAA alice.")).toBe(true);
+    expect(order[order.length - 1]).toBe(`A *.${ZONE}`);
+    const at = (name: string) => order.filter((l) => l.split(" ")[1] === name).map((l) => l.split(" ")[0]);
+    expect(at(`home.${ZONE}`)).toEqual(["AAAA", "A"]);
+  });
+
+  it("removeAccountDns: the records at <user> first, *.<user> last", async () => {
+    seedRoot();
+    seedFour("alice");
+    const order = trackDeletes();
+    expect(await removeAccountDns(dns, ZONE)).toBe(4);
+    expect(order.slice(0, 2).every((l) => l === `CAA ${ZONE}`)).toBe(true);
+    expect(order.slice(2).sort()).toEqual([`A *.${ZONE}`, `AAAA *.${ZONE}`]);
+    expect(order.indexOf(`AAAA *.${ZONE}`)).toBeLessThan(order.indexOf(`A *.${ZONE}`));
+  });
+
+  it("removeBoxDns: the box name before the box wildcard", async () => {
+    for (const name of [BOX, `*.${BOX}`]) {
+      cf.seed("A", name, RELAY.servicesIpv4);
+      cf.seed("AAAA", name, RELAY.servicesIpv6);
+    }
+    const order = trackDeletes();
+    expect(await removeBoxDns(dns, BOX)).toBe(4);
+    expect(order).toEqual([`AAAA ${BOX}`, `A ${BOX}`, `AAAA *.${BOX}`, `A *.${BOX}`]);
+  });
+});
+
+describe("the store-review account's records are never touched", () => {
+  const P = "playstore-test-0725";
+  const PZONE = `${P}.${APEX}`;
+  const PBOX = `home.${PZONE}`;
+
+  /** Explicit records as the review demo has them: CAA at its name, a wildcard, a per-box pair. */
+  function seedProtected(): string[] {
+    cf.seed("CAA", PZONE, '0 issue "letsencrypt.org"');
+    cf.seed("CAA", PZONE, '0 issuewild "letsencrypt.org"');
+    for (const name of [`*.${PZONE}`, PBOX, `*.${PBOX}`]) {
+      cf.seed("A", name, RELAY.servicesIpv4);
+      cf.seed("AAAA", name, RELAY.servicesIpv6);
+    }
+    return cf.dump().filter((l) => l.includes(P));
+  }
+
+  it("registration, auth-code issue, un-revoke and transfer (clearLegacyAccountDns) leave every record", async () => {
+    seedRoot();
+    const before = seedProtected();
+    const r = await clearLegacyAccountDns(deps(), PZONE);
+    expect(r).toEqual({ removed: 0, names: [] });
+    expect(cf.dump().filter((l) => l.includes(P))).toEqual(before);
+    expect(cf.requests.filter((q) => !q.startsWith("GET"))).toEqual([]);
+  });
+
+  it("account deletion and demo cleanup (removeAccountDns, removeBoxDns) leave every record", async () => {
+    seedRoot();
+    const before = seedProtected();
+    expect(await removeAccountDns(dns, PZONE)).toBe(0);
+    expect(await removeBoxDns(dns, PBOX)).toBe(0);
+    expect(cf.dump().filter((l) => l.includes(P))).toEqual(before);
+    expect(cf.requests.filter((q) => q.startsWith("DELETE"))).toEqual([]);
+  });
+
+  it("the hourly legacy sweep leaves every record, even with an empty skip list", async () => {
+    seedRoot();
+    const before = seedProtected();
+    cf.seed("A", `*.alice.${APEX}`, RELAY.servicesIpv4);
+    const r = await dns.deleteLegacyAccountRecords({ apex: APEX, relay: RELAY, cutoffMs: Date.parse("2026-11-01T00:00:00Z"), skipUsers: [] });
+    expect(r.deleted).toBe(1);
+    expect(cf.dump().filter((l) => l.includes(P))).toEqual(before);
+  });
+
+  it("another account is still cleaned in the same pass", async () => {
+    seedRoot();
+    seedProtected();
+    seedFour("alice");
+    expect((await clearLegacyAccountDns(deps(), ZONE)).removed).toBe(4);
+    expect(mine("alice")).toEqual([]);
+  });
+});
+
 describe("account deletion", () => {
   it("removes the account's records, per-box leftovers included, and leaves the root set and others alone", async () => {
     const storage = new InMemoryStorage();

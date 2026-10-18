@@ -9,6 +9,7 @@ import {
   deleteOne,
   handleReapRoute,
   loadKnownAccounts,
+  protectedAccountsFrom,
   type KnownAccounts,
   type ReapCloudClient,
   type ReapDeps,
@@ -582,6 +583,33 @@ describe("buildPlan", () => {
 
   it("refuses to classify against the wrong database", async () => {
     await expect(buildPlan(deps({}, { usernames: ["alice"] }))).rejects.toMatchObject({ code: "protected-account-missing" });
+  });
+});
+
+describe("the store-review account can never be reaped", () => {
+  const P = "playstore-test-0725";
+  const recs = [
+    rec(hex(1), `*.${APEX}`, "A", RELAY.servicesIpv4),
+    rec(hex(2), `${P}.${APEX}`, "CAA", '0 issue "letsencrypt.org"'),
+    rec(hex(3), `home.${P}.${APEX}`, "A", RELAY.servicesIpv4),
+    rec(hex(4), `home.${P}.${APEX}`, "AAAA", "2001:db8::7"),
+    rec(hex(5), `*.home.${P}.${APEX}`, "A", RELAY.servicesIpv4),
+  ];
+
+  it("the protected list always holds it, whatever REAP_PROTECTED_ACCOUNTS says", () => {
+    expect(protectedAccountsFrom({})).toContain(P);
+    expect(protectedAccountsFrom({ REAP_PROTECTED_ACCOUNTS: "" })).toContain(P);
+    expect(protectedAccountsFrom({ REAP_PROTECTED_ACCOUNTS: "bob" })).toEqual([P, "bob"]);
+  });
+
+  it("delete-one refuses each of its records even when the deps protect nobody and it has no live server", async () => {
+    const dnsC = fakeDns(recs);
+    const d = { db: fakeDb(newWorld({ servers: [], liveServers: [] })), dns: dnsC, cloud: undefined, apex: APEX, protectedAccounts: [], relay: RELAY } as ReapDeps;
+    for (const r of recs.slice(1)) {
+      const out = await deleteOne(d, { kind: "dns", id: r.id, name: r.name, type: r.type });
+      expect(out, `${r.type} ${r.name}`).toMatchObject({ status: 409, body: { code: "not-orphan", reason: "protected account" } });
+    }
+    expect(dnsC.deleted).toEqual([]);
   });
 });
 

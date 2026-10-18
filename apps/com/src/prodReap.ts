@@ -48,11 +48,18 @@ import {
   validateUserLabel,
   type RelayAddress,
 } from "@flagship/control-plane";
-import { evaluateZoneHealth, legacyDeletionOrder, rootWildcardStatus, type ZoneHealth } from "@flagship/services-zone";
+import {
+  PROTECTED_DNS_ACCOUNTS,
+  evaluateZoneHealth,
+  isProtectedDnsName,
+  legacyDeletionOrder,
+  rootWildcardStatus,
+  type ZoneHealth,
+} from "@flagship/services-zone";
 import type { D1Database } from "@flagship/storage";
 
 export const REAP_PATH_PREFIX = "/api/admin/reap/";
-export const DEFAULT_PROTECTED_ACCOUNTS = ["playstore-test-0725"];
+export const DEFAULT_PROTECTED_ACCOUNTS = [...PROTECTED_DNS_ACCOUNTS];
 /** UpCloud label every Worker-created demo/sample-user server carries. */
 export const REAP_DEMO_LABEL = "flagship-demo";
 /** Label of the gym (and any other parallel environment); never reaped here. */
@@ -94,7 +101,7 @@ export interface ReapEnv {
   CLOUDFLARE_DNS_API_TOKEN?: string;
   CLOUDFLARE_SERVICES_ZONE_ID?: string;
   UPCLOUD_TOKEN?: string;
-  /** Comma list overriding DEFAULT_PROTECTED_ACCOUNTS (empty = none). */
+  /** Comma list of accounts protected IN ADDITION to PROTECTED_DNS_ACCOUNTS (which can never be un-protected). */
   REAP_PROTECTED_ACCOUNTS?: string;
   /** The relay's address: what the root wildcard must point at. */
   SERVICES_PASSTHROUGH_IPV4?: string;
@@ -338,8 +345,8 @@ export async function loadKnownAccounts(
 }
 
 export function protectedAccountsFrom(env: ReapEnv): string[] {
-  if (env.REAP_PROTECTED_ACCOUNTS === undefined) return [...DEFAULT_PROTECTED_ACCOUNTS];
-  return env.REAP_PROTECTED_ACCOUNTS.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const extra = (env.REAP_PROTECTED_ACCOUNTS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  return [...new Set([...DEFAULT_PROTECTED_ACCOUNTS, ...extra])];
 }
 
 export interface PlanDnsEntry extends ReapDnsRecord, DnsVerdict {}
@@ -550,6 +557,11 @@ export async function deleteOne(deps: ReapDeps, body: DeleteOneBody | undefined)
     if (live === null) return { status: 200, body: { result: "gone", kind, id, name } };
     if (live.name.toLowerCase() !== name.toLowerCase() || live.type.toUpperCase() !== type.toUpperCase()) {
       return { status: 409, body: { error: "the record is not the one in the plan", code: "mismatch" } };
+    }
+    // The store-review account's records are never deleted, whatever the plan or the env say.
+    if (isProtectedDnsName(live.name, deps.apex)) {
+      log(`reap refused dns ${live.type} ${live.name}: protected account`);
+      return { status: 409, body: { error: "not an orphan: protected account", code: "not-orphan", reason: "protected account" } };
     }
     // The root wildcard must be in the zone right now, not as the plan saw it.
     let ctx: ClassifyContext;

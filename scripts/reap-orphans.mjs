@@ -42,6 +42,17 @@ import { fileURLToPath } from "node:url";
 export const PLAN_MAX_AGE_MS = 24 * 3600 * 1000;
 export const RETRY_WAIT_MS = 30_000;
 export const MAX_ATTEMPTS = 6;
+/**
+ * Cloudflare shows a deleted record to its two name servers up to ~15 s apart and
+ * not always in order (docs/wildcard-dns.md section 9.5). The plan's order (the
+ * record at <user> first, the account wildcard last) only keeps every name
+ * answering if each group is gone everywhere before the next starts, so the
+ * apply waits this long whenever the next record is in a later group.
+ */
+export const GROUP_WAIT_MS = 15_000;
+
+/** The deletion group of a plan item: legacyDeletionOrder is group * 10 + type. */
+export const groupOf = (order) => Math.floor((Number.isFinite(order) ? order : 0) / 10);
 const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 const DNS_ID_RE = /^[0-9a-f]{32}$/i;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -173,10 +184,19 @@ export function confirmationPhrase(sel) {
  * Deletes the selection one item at a time through `post(body)`, which
  * returns {status, body} or throws on a network error. Returns the outcomes.
  */
-export async function applyPlan(sel, { post, sleep, log, retryWaitMs = RETRY_WAIT_MS, maxAttempts = MAX_ATTEMPTS, pauseMs = 300 }) {
+export async function applyPlan(sel, { post, sleep, log, retryWaitMs = RETRY_WAIT_MS, maxAttempts = MAX_ATTEMPTS, pauseMs = 300, groupWaitMs = GROUP_WAIT_MS }) {
   const out = { deleted: 0, gone: 0, skipped: 0, failed: 0, aborted: null };
   const items = [...sel.servers, ...sel.dns];
+  let lastGroup = null;
   for (const item of items) {
+    if (item.kind === "dns") {
+      const group = groupOf(item.order);
+      if (lastGroup !== null && group > lastGroup && groupWaitMs > 0) {
+        log({ event: "wait", kind: "dns", name: `group ${lastGroup} to ${group}`, waitMs: groupWaitMs, reason: "let the name servers drop the previous group first" });
+        await sleep(groupWaitMs);
+      }
+      lastGroup = group;
+    }
     const body = item.kind === "dns"
       ? { kind: "dns", id: item.id, name: item.name, type: item.type }
       : { kind: "server", id: item.id, owner: item.owner };
@@ -318,7 +338,8 @@ async function main() {
   const log = (entry) => {
     const line = JSON.stringify({ at: new Date().toISOString(), ...entry });
     appendFileSync(logPath, `${line}\n`, { mode: 0o600 });
-    if (entry.event === "retry") console.log(`  retry in ${entry.waitMs / 1000}s: ${entry.kind} ${entry.name ?? entry.id} (${entry.status} ${entry.error ?? ""})`);
+    if (entry.event === "wait") console.log(`  waiting ${entry.waitMs / 1000}s so the name servers drop the previous group (${entry.name})`);
+    else if (entry.event === "retry") console.log(`  retry in ${entry.waitMs / 1000}s: ${entry.kind} ${entry.name ?? entry.id} (${entry.status} ${entry.error ?? ""})`);
     else console.log(`  ${pad(entry.event, 8)} ${entry.kind} ${entry.type ?? ""} ${entry.name ?? entry.id}${entry.reason ? `  (${entry.reason})` : ""}`);
   };
   const result = await applyPlan(sel, {

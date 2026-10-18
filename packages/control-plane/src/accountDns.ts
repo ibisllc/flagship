@@ -4,6 +4,7 @@ import {
   rootWildcardName,
   rootWildcardStatus,
   boxRecordNames,
+  isProtectedDnsUser,
   userZoneOf,
   type ZoneRecordView,
 } from "@flagship/services-zone";
@@ -73,6 +74,18 @@ export function accountZoneOfServerDomain(serverDomain: string): string | null {
  * never darkens a name. Idempotent, safe to run concurrently (a record another
  * caller deleted first is simply gone), and a no-op until the root wildcard is
  * in the zone. Never throws: the caller's own work has already committed.
+ * Never touches a protected account (the store-review demo keeps its explicit
+ * records exactly as they are).
+ *
+ * Caveat, by design: this runs inside the Worker (Free plan: ~10 ms CPU and ~50
+ * subrequests), so it does not wait between deletions. Cloudflare shows a
+ * deleted record to its two name servers up to ~15 s apart and not always in
+ * order (measured, docs/wildcard-dns.md section 9.5), so for up to ~15 s after a
+ * legacy account's first registration a name under it can answer NXDOMAIN at a
+ * lagging server, and a resolver that asks then caches it for 30 minutes. It
+ * happens once per legacy account (a new account owns no record), and the
+ * pre-GA scrub removes every legacy account but the store-review demo. The reap
+ * CLI, which can wait, deletes one rank group at a time instead.
  */
 export async function clearLegacyAccountDns(
   deps: AccountDnsDeps,
@@ -84,6 +97,7 @@ export async function clearLegacyAccountDns(
     if (dot <= 0) return out;
     const user = userZone.slice(0, dot);
     const apex = userZone.slice(dot + 1);
+    if (isProtectedDnsUser(user)) return out;
     const records = await deps.client.listAll();
     const mine = legacyAccountRecords(records, apex, { user });
     if (mine.length === 0) return out;
@@ -111,14 +125,22 @@ export async function clearLegacyAccountDns(
 /**
  * Delete the legacy records of an account that is gone (its own names, plus the
  * `*.<user>` CAA and the plain A/AAAA/CAA at `<user>`). By name, best-effort
- * per record; returns how many were deleted. Not guarded: nobody is left to
- * resolve these names.
+ * per record; returns how many were deleted. Not guarded by the root wildcard:
+ * nobody is left to resolve these names. Never touches a protected account.
+ *
+ * Order: the records AT `<user>` first (CAA, AAAA, A), `*.<user>` last, the
+ * same safe order as {@link clearLegacyAccountDns}: while `*.<user>` stays,
+ * every name under the account still answers. (Cloudflare shows deletions to
+ * its name servers a few seconds apart and not always in order; for a gone
+ * account that does not matter.)
  */
 export async function removeAccountDns(client: DnsDeleteClient, userZone: string): Promise<number> {
+  const user = userZone.split(".")[0] ?? "";
+  if (isProtectedDnsUser(user)) return 0;
   const wild = `*.${userZone}`;
   let deleted = 0;
-  for (const name of [wild, userZone]) {
-    for (const type of ["A", "AAAA", "CAA"]) {
+  for (const name of [userZone, wild]) {
+    for (const type of ["CAA", "AAAA", "A"]) {
       try {
         deleted += await client.deleteByName(name, type);
       } catch {
@@ -130,12 +152,15 @@ export async function removeAccountDns(client: DnsDeleteClient, userZone: string
 }
 
 /**
- * Delete the per-box A/AAAA/CAA older builds published for a box (and an old challenge shield). Best-effort; returns how many were deleted.
+ * Delete the per-box A/AAAA/CAA older builds published for a box (and an old
+ * challenge shield), `<box>` before `*.<box>`. Best-effort; returns how many
+ * were deleted. Never touches a protected account's box.
  */
 export async function removeBoxDns(client: DnsDeleteClient, serverDomain: string): Promise<number> {
+  if (isProtectedDnsUser(serverDomain.split(".")[1] ?? "")) return 0;
   let deleted = 0;
   for (const name of boxRecordNames(serverDomain)) {
-    for (const type of ["A", "AAAA", "CAA"]) {
+    for (const type of ["CAA", "AAAA", "A"]) {
       try {
         deleted += await client.deleteByName(name, type);
       } catch {

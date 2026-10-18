@@ -90,6 +90,29 @@ export function classifyZoneName(nameIn: string, apexIn: string): ZoneNameKind {
 }
 
 /**
+ * Accounts whose DNS records are never deleted or trimmed by any code path
+ * (registration clean-up, revoke, delete, transfer, the hourly sweep, the reap
+ * tool, `removeAccountDns`/`removeBoxDns`). The store-review demo logs in with
+ * these accounts' explicit records, so they stay exactly as they are until its
+ * review ends and the owner trims them by hand.
+ */
+export const PROTECTED_DNS_ACCOUNTS: readonly string[] = ["playstore-test-0725"];
+
+/** Is `name` (a zone name, or a bare `<user>` label) at or below a protected account? Challenge TXT are not counted. */
+export function isProtectedDnsName(name: string, apex: string, extra: readonly string[] = []): boolean {
+  const k = classifyZoneName(name, apex);
+  if (k.kind !== "account") return false;
+  const all = new Set([...PROTECTED_DNS_ACCOUNTS, ...extra].map((u) => u.toLowerCase()));
+  return all.has(k.user);
+}
+
+/** Is the `<user>` of an account zone (`<user>.<apex>`) protected? */
+export function isProtectedDnsUser(user: string, extra: readonly string[] = []): boolean {
+  const all = new Set([...PROTECTED_DNS_ACCOUNTS, ...extra].map((u) => u.toLowerCase()));
+  return all.has(user.toLowerCase());
+}
+
+/**
  * Order in which blocking records must be deleted so that no name goes dark in
  * between: the record at `<user>` first (it blocks nothing while the others
  * answer), then the box names, then the box wildcards, last the account
@@ -161,7 +184,8 @@ export function legacyDeletionOrder(r: ZoneRecordView, apex: string): number {
 /**
  * The records an earlier layout wrote that the root wildcard replaces: A, AAAA
  * and CAA at an account or box name (per-account `*.<user>`, per-account CAA,
- * per-box pairs, challenge shields). Returned in safe deletion order.
+ * per-box pairs, challenge shields). Returned in safe deletion order. Never
+ * includes a protected account (the store-review demo, {@link PROTECTED_DNS_ACCOUNTS}).
  */
 export function legacyAccountRecords<T extends ZoneRecordView>(
   records: readonly T[],
@@ -169,6 +193,7 @@ export function legacyAccountRecords<T extends ZoneRecordView>(
   scope: AccountScope = {},
 ): T[] {
   return records
+    .filter((r) => !isProtectedDnsName(r.name, apex))
     .filter((r) => blocksRoot(r, classifyZoneName(r.name, apex), scope, LEGACY_TYPES))
     .sort(byDeletionOrder(apex));
 }
