@@ -32,6 +32,7 @@ import {
   type WaitUntilLike,
 } from "./adapterIndex.js";
 import { handleInferenceModelRoutes, isInferenceModelPath } from "./inferenceModelRoutes.js";
+import { handleSecurityNotices, isSecurityNoticesPath } from "./securityNotices.js";
 import { handlePeerBackupNetRoute, isPeerBackupNetPath } from "./peerBackupNetworkRoutes.js";
 import { handleRateLimitReport, RATE_LIMIT_REPORT_PATH } from "./rateLimitReport.js";
 import {
@@ -675,6 +676,13 @@ async function routeImpl(
   // here rather than reach an upstream.
   if (isAdapterIndexPath(url.pathname)) {
     return handleAdapterIndex(request, env, ctx);
+  }
+
+  // The maintainer-signed security notice (docs/security-notices.md). One
+  // static document for everybody, so it takes nothing from the caller and is
+  // answered before the rate limiter, which keys on the caller.
+  if (isSecurityNoticesPath(url.pathname)) {
+    return handleSecurityNotices(request, env, ctx);
   }
 
   // AI model menus: Flagship Inference's catalog and the capability table.
