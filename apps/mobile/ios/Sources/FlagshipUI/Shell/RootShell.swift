@@ -25,6 +25,11 @@ public struct RootShell: View {
     @Environment(\.flagshipServerClient) private var server
 
     @State private var selected: RootDestination
+    /// Bumped each time the app locks. The shell is rebuilt under this id, so
+    /// every menu, dialog, sheet and half-typed field that was open belongs to
+    /// the old identity and is gone: nothing of the locked session survives,
+    /// and nothing re-presents when the app unlocks (it opens at the tab roots).
+    @State private var lockGeneration = 0
     /// Slice B — the auto-pair batch coordinator (built lazily, once).
     @State private var autoPair: AutoPairCoordinator?
     /// #92 — a friend redeem invite is presented as a full-screen cover
@@ -88,6 +93,7 @@ public struct RootShell: View {
                     iPhoneShell(selected: $selected)
                 }
             }
+            .id(lockGeneration)
             // The global operations sliver lives in the top safe-area inset
             // so it physically slides the whole shell (every tab + its nav
             // stack) DOWN to reveal itself — WhatsApp's active-call bar — and
@@ -233,6 +239,7 @@ public struct RootShell: View {
                 pendingKnock = nil
                 pendingAccept = nil
                 pendingBackupApproval = nil
+                lockGeneration += 1
                 PresentationSweeper.dismissAll()
             }
         }
