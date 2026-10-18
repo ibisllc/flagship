@@ -64,6 +64,23 @@ const CA_TRACK_MANDATES: Mandate[] = [
 const CA_ENDORSEMENTS: CaEndorsement[] = caEndorsementsBundle as CaEndorsement[];
 
 /**
+ * The forward chain for a pin, verified once per isolate. The mandate JSON is
+ * static for a deployed bundle, so re-verifying its signatures on every request
+ * only burned CPU (about a third of a signed device-list request, which pushed
+ * the gym Worker over its CPU limit: Cloudflare error 1102). A throw is not
+ * cached, so a bad pin still fails closed on every call.
+ */
+const verifiedChains = new Map<string, ReturnType<typeof verifyMandateChainFromPin>>();
+function verifiedChainFor(pinnedMandateHash: string): ReturnType<typeof verifyMandateChainFromPin> {
+  let chain = verifiedChains.get(pinnedMandateHash);
+  if (!chain) {
+    chain = verifyMandateChainFromPin(pinnedMandateHash, CA_TRACK_MANDATES);
+    verifiedChains.set(pinnedMandateHash, chain);
+  }
+  return chain;
+}
+
+/**
  * Build the #30 `CaTrustChain` the control-plane handlers consult. The
  * forward chain is verified ONCE at module load (the mandate JSON is
  * static for the lifetime of a deployed bundle); the live-lease
@@ -75,10 +92,7 @@ const CA_ENDORSEMENTS: CaEndorsement[] = caEndorsementsBundle as CaEndorsement[]
 export function workerCaTrustChain(
   pinnedMandateHash: string = MAINTAINER_PINNED_MANDATE_HASH,
 ): CaTrustChain {
-  const verifiedChain = verifyMandateChainFromPin(
-    pinnedMandateHash,
-    CA_TRACK_MANDATES,
-  );
+  const verifiedChain = verifiedChainFor(pinnedMandateHash);
   return {
     authorizedCaKeys(now: number): string[] {
       return authorizedCaKeys(CA_ENDORSEMENTS, verifiedChain, new Date(now));
@@ -131,10 +145,7 @@ export function caTrustChainPublicMaterial(): {
 }
 
 export function activeCaLeaseNotAfterMs(now: number): number[] {
-  const verifiedChain = verifyMandateChainFromPin(
-    MAINTAINER_PINNED_MANDATE_HASH,
-    CA_TRACK_MANDATES,
-  );
+  const verifiedChain = verifiedChainFor(MAINTAINER_PINNED_MANDATE_HASH);
   // An endorsement contributes authority iff its caPubkey is among the
   // keys authorizedCaKeys resolves at `now` AND it is itself live
   // (notBefore <= now < notAfter). We filter the committed endorsements

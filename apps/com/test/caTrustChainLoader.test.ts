@@ -36,6 +36,26 @@ import {
 const NOW = Date.parse("2026-06-01T00:00:00.000Z");
 
 describe("workerCaTrustChain — real verifier over the committed assets", () => {
+  // The forward chain is verified once per isolate (a per-request re-verify
+  // pushed the gym Worker over its CPU limit). Caching must not blunt the
+  // gate: a wrong pin still fails closed after a good one is cached, and
+  // repeated calls agree.
+  it("caches the verified chain per pin without changing any verdict", () => {
+    const liveNow = Date.parse("2026-05-25T00:00:00.000Z");
+    const first = workerCaTrustChain().authorizedCaKeys(liveNow);
+    const second = workerCaTrustChain().authorizedCaKeys(liveNow);
+    expect(second).toEqual(first);
+    const forked = "0".repeat(64);
+    let wrong: string[] | "threw";
+    try {
+      wrong = workerCaTrustChain(forked).authorizedCaKeys(liveNow);
+    } catch {
+      wrong = "threw";
+    }
+    expect(wrong === "threw" || wrong.length === 0).toBe(true);
+    expect(workerCaTrustChain().authorizedCaKeys(liveNow)).toEqual(first);
+  });
+
   // The committed bundle.json now contains the first live CaEndorsement
   // (Operation 1b ceremony 2026-05-19 in apps/com). At a NOW within the
   // lease window the REAL forward-verify resolves to the endorsed
