@@ -290,6 +290,17 @@ nothing commit. This guarantees content can only be wiped as an inseparable side
 effect of irreversible account death — there is no "wipe my servers but keep my
 account" path, and a stray/replayed content-delete on its own is inert.
 
+**Known gap (2026-10-18): the order names the account, not the server, and
+carries no expiry.** `ServersSelfDelete` is `{username, issuedAt}`, signed by
+the owner, so a box verifies that it is the owner's but cannot verify it was
+meant for THIS box or is recent: `.com` aims it by the STK on the GET, and the
+box takes that on trust. A signed order `.com` still holds could be served to a
+box of the same account that was installed later. Closing it needs the
+server's domain (and a window) inside the signed bytes: a new canonical tag
+(`servers-self-delete/v2`), the three clients, `.com` and the box moving
+together, so it is not done as a quick fix. The box's marker only stops a
+second wipe on the same box.
+
 **Threat: attacker with a compromised phone uses this to nuke boxes.** Accepted
 reasoning: the order is only issuable inside the deletion ceremony, which only
 runs on the **last device** behind biometric + typed confirm. An attacker there

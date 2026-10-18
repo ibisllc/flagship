@@ -354,6 +354,44 @@ for its backup** indefinitely. It can be deleted from Home like any server,
 and picking the backup again offers **Send it to <name>** for a server that
 is waiting for that backup.
 
+## If we are ever forced to cut you off
+
+The launch promise is small and uses nothing new: if Flagship is ever legally
+forced to cut an account off, its owner can move their stuff to another
+account with the backup options that already exist. There is no self-hosting
+path and no separate rescue flow (a "rescue my data over the LAN" design is
+parked on `feat/data-sovereignty`).
+
+What a person does, before or after: keep a backup (a copy on the phone, or
+the `.flagship-backup` file and its `.flagship-data` with the **passcode**),
+then in a new account (Create a new account, or the "This account was removed"
+screen) use Home → Add/Restore server → Restore from backup, from the phone
+copy or from the files. Only the passcode opens a backup of another account;
+the old account's slot does nothing for the new one, so nothing about the old
+account is needed.
+
+How the box behaves (tested in `tests/serverArchive/service.test.ts`, "If we
+are ever forced to cut you off"):
+
+- The backup opens with the passcode alone, and the new account's key does not
+  open the account slot.
+- The new account's admin root signs the restore order for the new server; the
+  old account takes no part.
+- The apps become the new account's own: the creator in each app's id is
+  rewritten to the importing account (`harry--notes` becomes `sam--notes`), so
+  the install is not cross-creator and no auto-update pull is recorded from
+  `<slug>.<oldname>`, a name that is freed when an account is deleted and can
+  be claimed by anyone. A same-account clone is unchanged.
+- Members' access and invite links belong to the old account, API keys no
+  longer verify, and every address changes (new server, new account): people
+  are invited again and shared links are new.
+- A phone copy and a picked file arrive as the same chunked upload, so the box
+  cannot tell them apart.
+
+Not covered: a backup that was never made (a cut-off account's servers are
+unreachable through `.com`), and the unlock of the OLD server after the cut-off
+(it needs `.com` at every boot).
+
 ## Routes (owner sessions only; companions and shares are refused)
 
 ```

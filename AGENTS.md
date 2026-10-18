@@ -835,6 +835,19 @@ allowances (1M / 5M / 20M a month) are placeholders.
   relay's first HELLO_ACK (it keeps dialing in the background) and, while a new
   certificate is requested, serves the one it holds if it names the box, even
   inside the renewal window or past its end. Needs an endorsed box release.
+- **Box trust fixes (2026-10-18):** the re-pair watcher no longer takes `.com`'s
+  word that a re-pair finished: the swap (clear paired sessions, re-anchor
+  membership, adopt the new IRK) needs a proof whose old-IRK signature chains
+  from the IRK the box trusts, or, on an admin-pinned box, an admin-root
+  rotation the box verified itself since the re-pair began; otherwise it is
+  held for a week and nothing changes (`.com` now keeps and serves the
+  signatures: **D1 migration 0105 before the `.com` deploy**). A restored
+  backup's apps become the importing account's own (creator rewritten, no
+  pull from `<slug>.<oldname>`). `BoxReadToken` calls time out after 20 s.
+  Open: the self-delete order names the account, not the server, and has no
+  expiry (`docs/account-deletion-and-name-reclaim.md` §5). Launch promise
+  and its test: `docs/server-backup-and-clone.md` "If we are ever forced to
+  cut you off". Needs an endorsed box release and a `.com` deploy.
 - **Box state files written whole, corrupt ones fail closed (2026-10-16):**
   every daemon state write goes through `durableFile.ts` (one queue per
   path, unique fsynced temp file; `withFileLock` for read-modify-writes). An
