@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   acceptSecurityNotice,
@@ -17,10 +18,11 @@ import {
   type SecurityNoticeStore,
 } from "../src/securityNotice.js";
 import { ed } from "../src/edSync.js";
-import { buildSecurityNoticeVectors, VECTORS_PATH, T0 } from "./genSecurityNoticeVectors.js";
+import { buildSecurityNoticeVectors, T0 } from "./genSecurityNoticeVectors.js";
 
+// The shared file: Swift, Kotlin and the webapp read the same one.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const V = JSON.parse(readFileSync(VECTORS_PATH, "utf8")) as any;
+const V = JSON.parse(readFileSync(join(__dirname, "../test-vectors/security-notice/vectors.json"), "utf8")) as any;
 const text = (b: Uint8Array) => new TextDecoder().decode(b);
 const DAY = 24 * 3600_000;
 const auth = V.keys.authorityPubHex as string;
