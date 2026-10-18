@@ -163,6 +163,9 @@ public final class CreateServerViewModel {
     /// seals + deposits it once the box registers. Untouched when embed-secrets
     /// is ON (the order is baked into the recipe instead).
     private let pairingDepositStore: PendingPairingDepositStore
+    /// The routing key a pending name was minted with, so a retry registers
+    /// the same claim (`.com` refuses a second, different key for a name).
+    private let rckStore: PendingRckStore
     /// Per-service leadership: records that a CGK deposit is OWED for this server.
     /// The CGK is NEVER embedded in the recipe (it is the per-cloud gossip secret),
     /// so it is owed on EVERY created server, regardless of embed-secrets. The Home
@@ -193,6 +196,7 @@ public final class CreateServerViewModel {
         diskEncryption: DiskEncryptionStore = DiskEncryptionStore(),
         swkDepositStore: PendingSwkDepositStore = PendingSwkDepositStore(),
         pairingDepositStore: PendingPairingDepositStore = PendingPairingDepositStore(),
+        rckStore: PendingRckStore = PendingRckStore(),
         cgkDepositStore: PendingCgkDepositStore = PendingCgkDepositStore(),
         mailbox: any SecretMailboxClient = DefaultClients.secretMailbox(),
         sessionStore: any SessionStoring = SessionStore(),
@@ -218,6 +222,7 @@ public final class CreateServerViewModel {
         self.diskEncryption = diskEncryption
         self.swkDepositStore = swkDepositStore
         self.pairingDepositStore = pairingDepositStore
+        self.rckStore = rckStore
         self.cgkDepositStore = cgkDepositStore
         self.draftStore = draftStore
         self.mailbox = mailbox
@@ -490,12 +495,18 @@ public final class CreateServerViewModel {
             adminSignature: acAdminSig.map { HexUtil.encode($0) }
         ))
 
-        let rck = Curve25519.Signing.PrivateKey()
+        // The phone keeps no RCK secret; only the public key is pinned on
+        // `.com`. A pending order for this name keeps its key, so a retry
+        // registers the same claim instead of a second one `.com` refuses.
+        let rckPubHex = rckStore.reuseOrRecord(for: serverDomain) {
+            HexUtil.encode(Curve25519.Signing.PrivateKey().publicKey.rawRepresentation)
+        }
+        guard let rckPubBytes = HexUtil.decode(rckPubHex) else { throw CocoaError(.coderReadCorrupt) }
         let rckIssuedAt = Int64(Date().timeIntervalSince1970 * 1000)
         let rckBytes = RckRegister.canonicalBytes(
             username: username,
             subdomain: serverDomain,
-            rckPubHex: HexUtil.encode(rck.publicKey.rawRepresentation),
+            rckPubHex: rckPubHex,
             issuedAt: rckIssuedAt
         )
         // register-rck is a sensitive routing-authority operation and a step
@@ -505,7 +516,7 @@ public final class CreateServerViewModel {
             request: .init(
                 username: username,
                 subdomain: serverDomain,
-                rckPubKey: HexUtil.encode(rck.publicKey.rawRepresentation),
+                rckPubKey: rckPubHex,
                 issuedAt: rckIssuedAt
             ),
             signature: HexUtil.encode(rckSig)
@@ -518,7 +529,7 @@ public final class CreateServerViewModel {
             phoneDelegatedPubKey: delegated.publicKey.rawRepresentation,
             authCode: authCode,
             authCodeUserSignature: acSig,
-            rckPubKey: rck.publicKey.rawRepresentation,
+            rckPubKey: rckPubBytes,
             // Only "approve" rides the wire; "auto" stays absent so the
             // recipe bytes match the webapp + a pre-bootUnlockMode verifier
             // still accepts it. The box treats absence as "auto".

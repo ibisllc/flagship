@@ -671,7 +671,7 @@
       "surfaces": {
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/pendingRck.js", "export function reuseOrRecordRck"], ["apps/web/public/webapp/views/create-server.js", "reuseOrRecordRck\\(code\\.serverDomain"], ["apps/web/e2e/gym/gym-misc.spec.ts", "retried recipe registers the same routing key"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/PendingRckStore.kt", "class PendingRckStore"], ["apps/mobile/android/app/src/test/java/com/flagshipserver/app/core/CreateServerRckReuseTest.kt", "class "]] },
-        "ios": { "status": "partial", "reason": "iOS mints a new routing key on every recipe, so a retry for the same name relies on .com's replace-while-unactivated rule instead of reusing the key.", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/CreateServerViewModel.swift", "let rck = Curve25519\\.Signing\\.PrivateKey\\(\\)"]] }
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/PendingRckStore.swift", "struct PendingRckStore"], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/CreateServerViewModel.swift", "rckStore\\.reuseOrRecord"], ["apps/mobile/ios/Tests/FlagshipMobileTests/CreateServerRckReuseTests.swift", "class "]] }
       }
     },
     {

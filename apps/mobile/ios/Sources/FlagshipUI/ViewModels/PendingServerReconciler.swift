@@ -167,6 +167,9 @@ public struct PendingServerReconciler {
             // to seal the SWK to. The handler no-ops unless a deposit is owed
             // for this fqdn (idempotent via PendingSwkDepositStore).
             if !revoked && !entry.identityPubKey.isEmpty {
+                // The box is up: the name's routing key is settled, so the
+                // pending order's remembered key is no longer needed.
+                PendingRckStore().clear(for: fqdn)
                 await onRegistered(fqdn, entry.identityPubKey)
             }
         }
