@@ -32,6 +32,7 @@ import {
   remasterIsoWithInstaller,
   detectIsoFamily,
   buildBootstrapFromRecipe,
+  bootHostForControlHost,
   buildInstallBlobJsonFromRecipe,
   applianceBaseFormat,
   encodeApplianceSeed,
@@ -165,6 +166,7 @@ async function cmdUserData(rest: string[]): Promise<void> {
     encryptRoot: !rest.includes("--plaintext-root"),
     wifiSSID: extractFlagValue(rest, "--wifi-ssid"),
     wifiPassword: await resolveWifiPassword(rest),
+    bootHost: bootHostForControlHost(process.env.FLAGSHIP_CONTROL_HOST),
   };
   // Emit the Debian d-i preseed.cfg (this command is for inspection;
   // `prepare`/`write` bake it into the ISO).
@@ -220,6 +222,7 @@ async function cmdPrepare(rest: string[]): Promise<void> {
     encryptRoot: !rest.includes("--plaintext-root"),
     wifiSSID: extractFlagValue(rest, "--wifi-ssid"),
     wifiPassword: await resolveWifiPassword(rest),
+    bootHost: bootHostForControlHost(process.env.FLAGSHIP_CONTROL_HOST),
   };
   // Bake the d-i preseed into the ISO; anything but a Debian installer is
   // refused. --family debian skips the detection (tests / overrides).
@@ -306,9 +309,11 @@ async function cmdApplianceProvision(rest: string[]): Promise<void> {
   if (got !== manifest.sha256) throw new Error(`prebuilt appliance checksum mismatch: expected=${manifest.sha256} got=${got}`);
   const baseFormat = await applianceBaseFormat(basePath);
 
+  const bootHost = bootHostForControlHost(process.env.FLAGSHIP_CONTROL_HOST);
   const bootstrap = buildBootstrapFromRecipe(recipe.toString("utf8"), JSON.stringify({
     installerGitRef: loaded.blob.installerGitRef,
     encryptRoot: loaded.blob.diskEncryption !== "none",
+    ...(bootHost ? { bootHost } : {}),
   }));
   const seed = encodeApplianceSeed(
     new TextEncoder().encode(buildInstallBlobJsonFromRecipe(recipe.toString("utf8"))), bootstrap);

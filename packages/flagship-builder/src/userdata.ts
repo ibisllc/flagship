@@ -129,6 +129,19 @@ export interface UserDataOptions {
 export const DEFAULT_BOOT_HOST = "https://boot.flagshipserver.com";
 
 /**
+ * The boot worker of the control plane this builder is pointed at
+ * (FLAGSHIP_CONTROL_HOST, e.g. the gym), or undefined for production. Without
+ * it a sealed disk built against another control plane asks prod's boot worker
+ * for its unlock and gets "unknown server". A value that is not a plain host
+ * (letters, digits, dots, dashes, optional port) is ignored.
+ */
+export function bootHostForControlHost(controlHost: string | undefined): string | undefined {
+  const host = controlHost?.trim();
+  if (!host || !/^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:[0-9]{1,5})?$/.test(host)) return undefined;
+  return `https://boot.${host}`;
+}
+
+/**
  * The two boot-unlock modes (docs/security-phone-as-unlock-endpoint.md §7a.1).
  * Read from InstallBlob.bootUnlockMode (phone-signed); absent ⇒ "auto".
  */

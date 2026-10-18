@@ -13,6 +13,7 @@ export {
 } from "./loadBlob.js";
 export {
   buildBootstrapScript,
+  bootHostForControlHost,
   type UserDataOptions,
   type BootstrapTemplateArgs,
   type BootUnlockMode,

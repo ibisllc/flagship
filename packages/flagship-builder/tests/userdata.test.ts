@@ -29,6 +29,7 @@ import {
   buildInitramfsWifiBlock,
   wifiSetupScript,
   DEFAULT_BOOT_HOST,
+  bootHostForControlHost,
 } from "../src/userdata.js";
 import { buildDebianPreseed } from "../src/preseed.js";
 import { parseInstallBlob } from "../src/installBlobParse.js";
@@ -550,6 +551,17 @@ describe("boot worker repoint — boot.flagshipserver.com + box-STK Flagship-Boo
     const b = bootstrap({ bootHost: "https://boot.acme-enterprise.example" });
     expect(b).toContain('echo "https://boot.acme-enterprise.example" > /boot/flagship-boot-host');
     expect(b).not.toContain('echo "https://boot.flagshipserver.com" > /boot/flagship-boot-host');
+  });
+
+  it("follows FLAGSHIP_CONTROL_HOST: the boot worker of another control plane is baked, prod when unset", () => {
+    expect(bootHostForControlHost(undefined)).toBeUndefined();
+    expect(bootHostForControlHost("")).toBeUndefined();
+    expect(bootHostForControlHost("gym.flagshipserver.com")).toBe("https://boot.gym.flagshipserver.com");
+    expect(bootHostForControlHost(" localhost:8787 ")).toBe("https://boot.localhost:8787");
+    expect(bootHostForControlHost("evil.example/x?y")).toBeUndefined();
+    expect(bootHostForControlHost("a b")).toBeUndefined();
+    const b = bootstrap({ bootHost: bootHostForControlHost("gym.flagshipserver.com") });
+    expect(b).toContain('echo "https://boot.gym.flagshipserver.com" > /boot/flagship-boot-host');
   });
 
   it("rejects a non-https boot host", () => {

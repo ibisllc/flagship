@@ -33,6 +33,7 @@ import { tmpdir, platform } from "node:os";
 import { join } from "node:path";
 import { loadBlobFromFile } from "./loadBlob.js";
 import { buildDebianPreseed } from "./preseed.js";
+import { bootHostForControlHost } from "./userdata.js";
 import {
   remasterIsoWithInstaller,
   detectIsoFamily,
@@ -147,6 +148,7 @@ export async function runWriteCommand(opts: WriteCommandOpts): Promise<WriteComm
     // The box lets the grant's SSH key in itself, with an expiry, once it has
     // verified the grant; nothing here bakes that key into the image.
     debugGrant: loaded.debugGrant,
+    bootHost: bootHostForControlHost(process.env.FLAGSHIP_CONTROL_HOST),
   };
   const preseedCfg = buildDebianPreseed(genOpts);
   const remaster =
