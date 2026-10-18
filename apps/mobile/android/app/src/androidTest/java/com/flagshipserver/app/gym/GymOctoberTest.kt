@@ -28,6 +28,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.espresso.Espresso
@@ -465,7 +467,15 @@ class GymOctoberTest : GymBase() {
         waitUntilTextExists("Garage rack, music studio", timeoutMs = 20_000)
         composeRule.onNodeWithText("Garage rack, music studio").performScrollTo().performClick()
         waitUntilExists("server-detail-offline", timeoutMs = 20_000)
-        waitUntilTextExists("Offline — last seen")
+        waitUntilTextExists("This server has gone offline. Pull down to re-check")
+        // Nothing to monitor while it is offline, and no last-seen paragraph.
+        assertTrue("Monitoring is hidden while offline", textCount("Monitoring") == 0)
+        assertTrue("No last-seen text", textCount("Offline — last seen") == 0)
+        // Pulling down re-checks: the page stays on the offline banner (the box is
+        // still silent) and doesn't crash or leave the page.
+        composeRule.onNodeWithTag("server-detail-offline").performTouchInput { swipeDown() }
+        composeRule.waitForIdle()
+        waitUntilExists("server-detail-offline", timeoutMs = 20_000)
         gymShot("server-offline")
     }
 

@@ -41,4 +41,9 @@ class ServerDetailPlaceholderTest {
         assertEquals(NOT_PAIRED, of(notPaired = true))
         assertEquals(CONNECTING, of())
     }
+
+    // The owner's words from the iPhone: the whole banner, nothing else.
+    @Test fun theOfflineBannerIsExactlyTheOwnersWords() {
+        assertEquals("This server has gone offline. Pull down to re-check", SERVER_OFFLINE_BANNER)
+    }
 }

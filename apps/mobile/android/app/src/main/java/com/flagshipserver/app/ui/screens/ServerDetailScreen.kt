@@ -281,12 +281,42 @@ fun ServerDetailScreen(
     // Every order on this page signs under the admin root (`.com` and an
     // admin-pinned box refuse the IRK): another device sees it read-only.
     val serverReadOnly = !com.flagshipserver.app.core.AdminOrderGate.allows(LocalAppState.current)
+    val placeholderKind = ServerDetailPlaceholderKind.of(
+        loading = detail !is LoadingState.Failed,
+        attempted = failures > 0,
+        deadServer = deadServer,
+        offline = offline,
+        comingUp = comingUp,
+        notPaired = notPairedHere,
+    )
+    // An offline server has nothing to monitor until a re-check finds it online.
+    val showsOfflineBanner = detail !is LoadingState.Loaded && pod?.isRevoked != true &&
+        placeholderKind == ServerDetailPlaceholderKind.OFFLINE
+    // Pull down re-runs the same load, offline or not; the spinner follows it.
+    var refreshing by remember { mutableStateOf(false) }
+    val refreshScope = rememberCoroutineScope()
     androidx.compose.runtime.CompositionLocalProvider(LocalServerReadOnly provides serverReadOnly) {
     FSScreen(
         title = title,
         onBack = onBack,
         spacing = FS.space.s6,
-        onRefresh = detailVm?.let { vm -> { vm.load(); metricsVm?.load(); Unit } },
+        refreshing = refreshing,
+        onRefresh = detailVm?.let { vm ->
+            {
+                if (!refreshing) {
+                    refreshing = true
+                    refreshScope.launch {
+                        try {
+                            vm.load().join()
+                            metricsVm?.load()?.join()
+                        } finally {
+                            refreshing = false
+                        }
+                    }
+                }
+                Unit
+            }
+        },
     ) {
         if (serverReadOnly) {
             Text(
@@ -339,14 +369,7 @@ fun ServerDetailScreen(
             // The revoked card above already says why nothing loads.
             else -> if (!revoked) {
                 ServerDetailPlaceholder(
-                    kind = ServerDetailPlaceholderKind.of(
-                        loading = d !is LoadingState.Failed,
-                        attempted = failures > 0,
-                        deadServer = deadServer,
-                        offline = offline,
-                        comingUp = comingUp,
-                        notPaired = notPairedHere,
-                    ),
+                    kind = placeholderKind,
                     lastSeen = pod?.humanizedLastSeen(),
                     pairing = pairing,
                     onPair = onPair,
@@ -400,7 +423,7 @@ fun ServerDetailScreen(
 
         // The health report comes from the directory, not the box, so it still
         // shows when the box's own detail can't load.
-        if (detail !is LoadingState.Loaded && ServerHealthVerdict.evaluate(health, System.currentTimeMillis()) != null) {
+        if (detail !is LoadingState.Loaded && !showsOfflineBanner && ServerHealthVerdict.evaluate(health, System.currentTimeMillis()) != null) {
             MonitoringSection(health = health, metrics = null, cert = null)
         }
 
@@ -2272,6 +2295,10 @@ private fun buttonLabel(p: RevokeServerPhase, holding: Boolean): String = when {
     else -> "Hold to revoke"
 }
 
+/** The whole banner for an offline server (the iPhone's words). The page's
+ *  pull-to-refresh re-checks it; there is no button. */
+internal const val SERVER_OFFLINE_BANNER = "This server has gone offline. Pull down to re-check"
+
 /** What a server page shows while the box's own detail isn't loaded. Mirror of
  *  the iOS ServerDetailScreen state switch. */
 internal enum class ServerDetailPlaceholderKind {
@@ -2324,11 +2351,7 @@ private fun ServerDetailPlaceholder(
             "The install reserved this name and registered the server, but its software never checked in. If the install failed, you can delete it below — that frees the name so you can try again.",
             "server-detail-never-online",
         )
-        ServerDetailPlaceholderKind.OFFLINE -> Triple(
-            lastSeen?.let { "Offline — last seen $it" } ?: "Offline",
-            "This server has gone offline: its software isn't checking in right now. Its data is safe, and it reconnects when it's back online.",
-            "server-detail-offline",
-        )
+        ServerDetailPlaceholderKind.OFFLINE -> Triple(SERVER_OFFLINE_BANNER, "", "server-detail-offline")
         ServerDetailPlaceholderKind.COMING_UP -> Triple(
             "Still coming up…",
             "This server is registered and powering on, but hasn't checked in for the first time yet. This can take a few minutes after a fresh install.",
@@ -2365,7 +2388,9 @@ private fun ServerDetailPlaceholder(
                         color = MaterialTheme.colorScheme.onSurface,
                         style = MaterialTheme.typography.titleMedium,
                     )
-                    Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    if (body.isNotEmpty()) {
+                        Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
             when {
@@ -2377,7 +2402,7 @@ private fun ServerDetailPlaceholder(
                     large = true,
                     modifier = Modifier.testTag("sd-pair-server"),
                 )
-                kind != ServerDetailPlaceholderKind.NEVER_ONLINE && onRetry != null ->
+                kind != ServerDetailPlaceholderKind.NEVER_ONLINE && kind != ServerDetailPlaceholderKind.OFFLINE && onRetry != null ->
                     FSSecondaryButton(label = "Check again", onClick = onRetry)
                 else -> Unit
             }
