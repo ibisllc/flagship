@@ -165,19 +165,22 @@ factory_stage "filesystems ready"
 TARGET_ROOT=/mnt/flagship-target
 mkdir -p "$TARGET_ROOT"
 mount /dev/mapper/flagship_root "$TARGET_ROOT"
-tar --one-file-system --numeric-owner --acls --xattrs --xattrs-include='*' \
+# The factory guest is live (cloud-init, apt timers): GNU tar exits 1 for "file changed as
+# we read it" (seen on arm64 in ./var/lib/apt), which pipefail turns into a failed build.
+# Only exit 1 is tolerated; anything worse still fails.
+{ tar --one-file-system --numeric-owner --acls --xattrs --xattrs-include='*' \
     --exclude=./boot --exclude=./dev --exclude=./proc --exclude=./sys --exclude=./run \
     --exclude=./tmp --exclude=./mnt --exclude=./media --exclude=./lost+found \
     --exclude=./var/log --exclude=./var/lib/cloud \
-    -C / -cpf - . | \
+    -C / -cpf - . || [ $? -eq 1 ]; } | \
     tar --numeric-owner --acls --xattrs --xattrs-include='*' -C "$TARGET_ROOT" -xpf -
 factory_stage "base filesystem copied"
 chroot "$TARGET_ROOT" passwd -l debian >/dev/null 2>&1 || true
 mkdir -p "$TARGET_ROOT"/{dev,proc,sys,run,tmp,mnt,media,boot,var/log,var/lib/cloud}
 chmod 1777 "$TARGET_ROOT/tmp"
 mount "$TARGET_DEV"2 "$TARGET_ROOT/boot"
-tar --one-file-system --numeric-owner --acls --xattrs --xattrs-include='*' \
-    -C /boot -cpf - . | \
+{ tar --one-file-system --numeric-owner --acls --xattrs --xattrs-include='*' \
+    -C /boot -cpf - . || [ $? -eq 1 ]; } | \
     tar --numeric-owner --acls --xattrs --xattrs-include='*' -C "$TARGET_ROOT/boot" -xpf -
 mkdir -p "$TARGET_ROOT/boot/efi"
 mount "$TARGET_DEV"1 "$TARGET_ROOT/boot/efi"
