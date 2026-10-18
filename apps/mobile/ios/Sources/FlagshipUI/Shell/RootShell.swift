@@ -404,20 +404,28 @@ struct iPadShell: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         NavigationSplitView(columnVisibility: $columns) {
-            List(selection: Binding<RootDestination?>(
-                get: { selected },
-                set: { if let d = $0 { selected = d } }
-            )) {
+            List {
                 Section {
                     ForEach(RootDestination.allCases) { dest in
-                        Label(dest.title, systemImage: dest.systemImage)
-                            .tag(dest)
-                            .font(FS.font.scaled(17, weight: dest == selected ? .semibold : .regular))
-                            // Addressable so the gym's iPad pass can assert the
-                            // regular (iPad) shell renders the sidebar, not the
-                            // iPhone TabView. iPhone (compact) never builds this.
-                            .accessibilityIdentifier("ipad-sidebar")
-                            .accessibilityAddTraits(dest == selected ? .isSelected : [])
+                        let on = dest == selected
+                        Button { selected = dest } label: {
+                            Label(dest.title, systemImage: dest.systemImage)
+                                .font(FS.font.scaled(17, weight: on ? .semibold : .regular))
+                                .foregroundColor(c.text)
+                                .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        // Addressable so the gym's iPad pass can assert the
+                        // regular (iPad) shell renders the sidebar, not the
+                        // iPhone TabView. iPhone (compact) never builds this.
+                        .accessibilityIdentifier("ipad-sidebar")
+                        .accessibilityAddTraits(on ? .isSelected : [])
+                        .listRowBackground(
+                            RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous)
+                                .fill(on ? c.text.opacity(0.10) : Color.clear)
+                                .padding(.horizontal, FS.space.s2)
+                        )
                     }
                 } header: {
                     account(c)
@@ -444,7 +452,6 @@ struct iPadShell: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .toolbar(.hidden, for: .navigationBar)
         }
         .navigationSplitViewStyle(.balanced)
         .tint(c.accent)
