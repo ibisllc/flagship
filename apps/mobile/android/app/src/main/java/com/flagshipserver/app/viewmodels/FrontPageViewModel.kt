@@ -6,6 +6,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FrontPageClient
 import com.flagshipserver.app.api.FrontPageServiceEntry
@@ -83,7 +84,7 @@ class FrontPageViewModel(
             }
             irk = signer(reason)
         } catch (e: Throwable) {
-            _phase.value = FrontPagePhase.Failed("Couldn't access your account key: ${e.message}")
+            _phase.value = FrontPagePhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
             return
         }
         val issuedAt = now()
@@ -91,7 +92,7 @@ class FrontPageViewModel(
         try {
             signature = irk.sign(SetFrontPageOrder.canonicalBytes(serverDomain, label, issuedAt))
         } catch (e: Throwable) {
-            _phase.value = FrontPagePhase.Failed("Couldn't sign: ${e.message}")
+            _phase.value = FrontPagePhase.Failed("Couldn't sign: ${UserErrorText.reason(e)}")
             return
         }
 
@@ -118,7 +119,7 @@ class FrontPageViewModel(
             _phase.value = FrontPagePhase.Failed(friendly)
             return
         } catch (e: Throwable) {
-            _phase.value = FrontPagePhase.Failed("Couldn't reach the server: ${e.message}")
+            _phase.value = FrontPagePhase.Failed(UserErrorText.of(e, where = "reach"))
             return
         }
         _current.value = label.ifEmpty { null }

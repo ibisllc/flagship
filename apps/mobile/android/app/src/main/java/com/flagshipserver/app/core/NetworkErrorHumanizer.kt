@@ -90,11 +90,8 @@ object NetworkErrorHumanizer {
 
     /** The human string (UX-B mapping). Logs what it hides: the error's
      *  class, message and causes, tagged with [where] and the error code. */
-    fun humanize(t: Throwable, where: String = "error"): String {
-        val c = classify(t)
-        ErrorLog.caught(where, t, errorCode(t))
-        return c.message
-    }
+    fun humanize(t: Throwable, where: String = "error"): String =
+        UserErrorText.of(t, where = where)
 
     /** A short, stable code for an error's class, shown to the person and
      *  logged beside the details. */

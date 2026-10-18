@@ -172,7 +172,7 @@ fun ServicesListScreen(nav: NavController) {
     val noServer = pods.isEmpty()
     val subtitle = if (noServer) "Nothing installed yet." else when (val st = state) {
         is LoadingState.Loading -> "Loading…"
-        is LoadingState.Failed -> st.message
+        is LoadingState.Failed -> if (allApps.isEmpty()) null else st.message
         else -> if (allApps.isEmpty()) "Nothing installed yet." else "${allApps.size} installed"
     }
 
@@ -190,6 +190,11 @@ fun ServicesListScreen(nav: NavController) {
                 message = NO_SERVER_HINT,
                 icon = Icons.Outlined.Dns,
                 modifier = Modifier.testTag("services-no-server"),
+            )
+        } else if (allApps.isEmpty() && state is LoadingState.Failed) {
+            ErrorCard(
+                message = (state as LoadingState.Failed).message,
+                onRetry = { refreshScope.launch { vm.refresh() } },
             )
         } else if (allApps.isEmpty() && state !is LoadingState.Loading) {
             FSEmptyState(

@@ -5,6 +5,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.JournalInner
 import com.flagshipserver.app.api.JournalRequestBody
@@ -43,7 +44,7 @@ class JournalViewModel(
         try {
             irk = signer("Read the journal on $serverDomain")
         } catch (e: Throwable) {
-            _phase.value = JournalPhase.Failed("Couldn't access your account key: ${e.message}")
+            _phase.value = JournalPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
             return
         }
         val clamped = lines.coerceIn(1L, JournalUnits.MAX_LINES)
@@ -52,7 +53,7 @@ class JournalViewModel(
         try {
             signature = irk.sign(JournalRequest.canonicalBytes(serverDomain, unit, clamped, issuedAt))
         } catch (e: Throwable) {
-            _phase.value = JournalPhase.Failed("Couldn't sign: ${e.message}")
+            _phase.value = JournalPhase.Failed("Couldn't sign: ${UserErrorText.reason(e)}")
             return
         }
 
@@ -78,7 +79,7 @@ class JournalViewModel(
             }
             _phase.value = JournalPhase.Failed(friendly)
         } catch (e: Throwable) {
-            _phase.value = JournalPhase.Failed("Couldn't reach the server: ${e.message}")
+            _phase.value = JournalPhase.Failed(UserErrorText.of(e, where = "reach"))
         }
     }
 }

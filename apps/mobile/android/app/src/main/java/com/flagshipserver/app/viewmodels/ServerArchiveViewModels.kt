@@ -3,6 +3,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -864,7 +865,7 @@ class ImportBackupViewModel(
     }
 
     private fun importMessage(t: Throwable): String =
-        if (t is ImportException) t.message ?: "The restore failed." else message(t, "The restore failed.")
+        if (t is ImportException) UserErrorText.of(t, "The restore failed.") else message(t, "The restore failed.")
 
     companion object {
         /** Why a picked file's data part failed its check, said of the one file. */

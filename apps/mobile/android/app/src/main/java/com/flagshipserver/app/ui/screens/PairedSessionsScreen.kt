@@ -3,6 +3,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -133,7 +134,7 @@ fun PairedSessionsScreen(nav: NavController) {
                             sessions.removeAll { it.tokenPrefix == target.tokenPrefix }
                             toasts.success("Session revoked.")
                         } catch (t: Throwable) {
-                            toasts.error(t.message ?: "Couldn't revoke.")
+                            toasts.error(UserErrorText.of(t, "Couldn't revoke."))
                         }
                     }
                 }) {

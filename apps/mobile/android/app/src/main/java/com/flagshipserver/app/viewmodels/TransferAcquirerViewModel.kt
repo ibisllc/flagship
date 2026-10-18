@@ -9,6 +9,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.ServerTransferClient
 import com.flagshipserver.app.core.AddServerGate
 import com.flagshipserver.app.core.ServerTransferFlow
@@ -109,7 +110,7 @@ class TransferAcquirerViewModel(
             pub = irkPubHex()
             orderKey = orderSigner("Take over ${parsed.serverDomain}")
         } catch (e: Throwable) {
-            _phase.value = TransferAcquirerPhase.Failed("Couldn't access your account key: ${e.message}")
+            _phase.value = TransferAcquirerPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
             return
         }
         try {
@@ -128,7 +129,7 @@ class TransferAcquirerViewModel(
             }
         } catch (e: Throwable) {
             _phase.value = TransferAcquirerPhase.Failed(
-                if (AddServerGate.isServerRefusal(e)) AddServerGate.ADMIN_ONLY else "Couldn't claim the server: ${e.message}",
+                if (AddServerGate.isServerRefusal(e)) AddServerGate.ADMIN_ONLY else "Couldn't claim the server. ${UserErrorText.of(e)}",
             )
         }
     }

@@ -7,6 +7,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.AppCopyGrantBody
 import com.flagshipserver.app.api.AppCopyRecord
 import com.flagshipserver.app.api.AppCopyRequest
@@ -138,7 +139,7 @@ class AppPlacementViewModel(
             throw e
         } catch (t: Throwable) {
             set(podId, Presence.Absent)
-            _message.value = "Couldn't access your account key: ${t.message}"
+            _message.value = "Couldn't access your account key: ${UserErrorText.reason(t)}"
             return false
         }
         val issuedAt = maxOf(now(), lastIssuedAt + 1)
@@ -192,7 +193,7 @@ class AppPlacementViewModel(
             throw e
         } catch (t: Throwable) {
             set(podId, has)
-            _message.value = "Couldn't access your account key: ${t.message}"
+            _message.value = "Couldn't access your account key: ${UserErrorText.reason(t)}"
             return false
         }
         return try {

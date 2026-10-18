@@ -12,6 +12,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.LockPowerClient
 import com.flagshipserver.app.api.PowerOffOrderInner
@@ -60,7 +61,7 @@ class PowerOffViewModel(
             }
             irk = signer(reason)
         } catch (e: Throwable) {
-            _phase.value = PowerOffPhase.Failed("Couldn't access your account key: ${e.message}")
+            _phase.value = PowerOffPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
             return
         }
         val issuedAt = now()
@@ -68,7 +69,7 @@ class PowerOffViewModel(
         try {
             signature = irk.sign(PowerOffOrder.canonicalBytes(serverDomain, mode, issuedAt))
         } catch (e: Throwable) {
-            _phase.value = PowerOffPhase.Failed("Couldn't sign: ${e.message}")
+            _phase.value = PowerOffPhase.Failed("Couldn't sign: ${UserErrorText.reason(e)}")
             return
         }
 
@@ -94,7 +95,7 @@ class PowerOffViewModel(
             _phase.value = PowerOffPhase.Failed(friendly)
             return
         } catch (e: Throwable) {
-            _phase.value = PowerOffPhase.Failed("Couldn't reach the server: ${e.message}")
+            _phase.value = PowerOffPhase.Failed(UserErrorText.of(e, where = "reach"))
             return
         }
         _phase.value = PowerOffPhase.Completed(mode)

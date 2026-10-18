@@ -8,6 +8,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -78,7 +79,7 @@ fun PrivacyScreen(nav: NavController) {
                     } catch (_: BiometricCancelled) {
                         // No-op — user backed out.
                     } catch (e: Throwable) {
-                        errorMsg = "Couldn't enable: ${e.message}"
+                        errorMsg = "Couldn't enable. ${UserErrorText.of(e)}"
                     }
                 }
             }

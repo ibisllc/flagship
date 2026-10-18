@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.WipeRestartRequest
@@ -66,7 +67,7 @@ class WipeRestartViewModel(
             val pair = Ed25519Sign.KeyPair.newKeyPairFromSeed(oldSeed)
             oldIrkPubHex = HexUtil.encode(pair.publicKey)
         } catch (e: Throwable) {
-            _phase.value = WipeRestartPhase.Failed("Couldn't access your current key: ${e.message}")
+            _phase.value = WipeRestartPhase.Failed("Couldn't access your current key: ${UserErrorText.reason(e)}")
             return
         }
 

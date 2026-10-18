@@ -145,7 +145,7 @@ class BuilderPairController(
                 }
             }
         } catch (t: Throwable) {
-            fail(t.message ?: "Delivery failed.")
+            fail(UserErrorText.of(t, "Delivery failed."))
         }
     }
 

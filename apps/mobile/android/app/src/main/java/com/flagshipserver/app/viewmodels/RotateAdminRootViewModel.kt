@@ -27,6 +27,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.AdminRootRotationRequest
 import com.flagshipserver.app.api.FlagshipServerClient
@@ -154,7 +155,7 @@ class RotateAdminRootViewModel(
             }
         } catch (t: Throwable) {
             _phase.value = RotateAdminRootPhase.Failed(
-                t.message ?: "Couldn't rotate the admin key. Try again.",
+                UserErrorText.of(t, "Couldn't rotate the admin key. Try again."),
             )
         }
     }
@@ -179,7 +180,7 @@ class RotateAdminRootViewModel(
         } catch (t: Throwable) {
             _phase.value = current.copy(
                 updating = false,
-                errorMessage = t.message ?: "Couldn't update the recovery backup. Try again.",
+                errorMessage = UserErrorText.of(t, "Couldn't update the recovery backup. Try again."),
             )
         }
     }

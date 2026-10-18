@@ -10,6 +10,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.AuditEvent
 import com.flagshipserver.app.api.FlagshipServerClient
 import kotlinx.coroutines.CoroutineScope
@@ -138,7 +139,7 @@ class AuditLogViewModel(
                     _state.value = LoadingState.Loaded(AuditLogPage(events = events, canLoadMore = canLoadMore))
                 },
                 onFailure = { t ->
-                    _state.value = LoadingState.Failed(t.message ?: "couldn't load the audit log")
+                    _state.value = LoadingState.Failed(UserErrorText.of(t, "Couldn't load the activity log. Try again."))
                 },
             )
     }

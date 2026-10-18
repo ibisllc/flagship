@@ -9,6 +9,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.PeerBackupStatusResponse
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.ScreensError
@@ -45,7 +46,7 @@ class PeerBackupViewModel(
             t is ScreensError.Http && t.status == 404 -> PeerBackup.OLDER_ENGINE
             t is ScreensError.Http && t.status == 503 -> NOT_SET_UP
             t is ScreensError.Http -> NetworkErrorHumanizer.humanize(t)
-            else -> t.message ?: "couldn't load peer-backup status"
+            else -> UserErrorText.of(t, "Couldn't load the peer-backup status. Try again.")
         }
     }
 }

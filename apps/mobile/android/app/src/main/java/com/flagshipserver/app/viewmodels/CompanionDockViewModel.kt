@@ -8,6 +8,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.CompanionListResponse
 import com.flagshipserver.app.api.CompanionMintTicketRequest
 import com.flagshipserver.app.api.CompanionRevokeRequest
@@ -208,7 +209,7 @@ class CompanionDockViewModel(
         is ScreensError.Http -> NetworkErrorHumanizer.humanize(t, "remote")
         else -> {
             com.flagshipserver.app.core.ErrorLog.caught("remote", t, NetworkErrorHumanizer.errorCode(t))
-            t.message ?: "Something went wrong. Try again."
+            UserErrorText.of(t, "Something went wrong. Try again.")
         }
     }
 

@@ -142,4 +142,41 @@ class GymDeviceBugsTest : GymBase() {
         composeRule.onAllNodes(androidx.compose.ui.test.hasText("server.", substring = true))
             .fetchSemanticsNodes().let { assertTrue("no ghost row", it.isEmpty()) }
     }
+
+    // Device report 2026-10-18 (A-7): Trusted devices showed "HTTP 503: error
+    // code: 1102". Plain sentence, and Try again loads the list.
+    @Test
+    fun trustedDevicesShowAPlainSentenceAndTryAgainLoadsTheList() {
+        launch(tab = "settings", adminRoot = true)
+        waitUntilExists("settings-title")
+        val flagship = com.flagshipserver.app.core.GymProbe.flagship!!
+        flagship.failure = com.flagshipserver.app.core.HttpException(503, "error code: 1102")
+        tap("settings-trusted-devices")
+        waitUntilExists("trusted-devices-error", timeoutMs = 20_000)
+        gymShot("trusted-devices-error")
+        assertEquals(0, textCount("1102"))
+        assertEquals(0, textCount("HTTP"))
+        waitText("temporary problem")
+        flagship.failure = null
+        tap("trusted-devices-retry")
+        waitGone("trusted-devices-error", 20_000)
+    }
+
+    // A-5/A-6: "connection closed" under Peer-backup (and the Services tab).
+    @Test
+    fun peerBackupSaysTheConnectionDroppedInPlainWordsAndRetries() {
+        launch(tab = "settings", adminRoot = true)
+        waitUntilExists("settings-title")
+        val screens = com.flagshipserver.app.api.MockScreensClient.smokeInstance!!
+        screens.failure = java.io.IOException("connection closed")
+        tap("settings-peer-backup")
+        waitText("The connection dropped", 20_000)
+        gymShot("peer-backup-dropped")
+        assertEquals(0, textCount("connection closed"))
+        screens.failure = null
+        tapText("Try again")
+        waitUntilExists("peer-backup", timeoutMs = 20_000)
+        waitTextGone("The connection dropped", 20_000)
+    }
+
 }

@@ -9,6 +9,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.core.SecretPurpose
 import com.flagshipserver.app.core.SecretRequestCoordinator
@@ -125,7 +126,7 @@ class BootUnlockApprovalViewModel(
             }
             State.Approved
         } catch (t: Throwable) {
-            State.Failed(t.message ?: "Approval failed. Try again.")
+            State.Failed(UserErrorText.of(t, "Approval failed. Try again."))
         }
     }
 

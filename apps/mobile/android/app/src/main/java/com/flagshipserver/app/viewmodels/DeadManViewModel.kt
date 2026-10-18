@@ -9,6 +9,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.DeadManAffirmInner
 import com.flagshipserver.app.api.DeadManAffirmRequest
@@ -84,7 +85,7 @@ class DeadManViewModel(
             val verb = if (enabled) "Arm" else "Disarm"
             irk = signer("$verb dead-man lock for $serverDomain")
         } catch (e: Throwable) {
-            _phase.value = DeadManPhase.Failed("Couldn't access your account key: ${e.message}")
+            _phase.value = DeadManPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
             return false
         }
         val issuedAt = now()
@@ -101,7 +102,7 @@ class DeadManViewModel(
                 ),
             )
         } catch (e: Throwable) {
-            _phase.value = DeadManPhase.Failed("Couldn't sign: ${e.message}")
+            _phase.value = DeadManPhase.Failed("Couldn't sign: ${UserErrorText.reason(e)}")
             return false
         }
 
@@ -125,7 +126,7 @@ class DeadManViewModel(
             _phase.value = DeadManPhase.Failed(friendly(e))
             return false
         } catch (e: Throwable) {
-            _phase.value = DeadManPhase.Failed("Couldn't reach the server: ${e.message}")
+            _phase.value = DeadManPhase.Failed(UserErrorText.of(e, where = "reach"))
             return false
         }
         _phase.value = DeadManPhase.Completed
@@ -139,7 +140,7 @@ class DeadManViewModel(
         try {
             irk = signer("Keep $serverDomain unlocked")
         } catch (e: Throwable) {
-            _phase.value = DeadManPhase.Failed("Couldn't access your account key: ${e.message}")
+            _phase.value = DeadManPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
             return null
         }
         val nonce = nonceGen()
@@ -150,7 +151,7 @@ class DeadManViewModel(
                 DeadManAffirmation.canonicalBytes(serverDomain, nonce, issuedAt),
             )
         } catch (e: Throwable) {
-            _phase.value = DeadManPhase.Failed("Couldn't sign: ${e.message}")
+            _phase.value = DeadManPhase.Failed("Couldn't sign: ${UserErrorText.reason(e)}")
             return null
         }
 
@@ -173,7 +174,7 @@ class DeadManViewModel(
             _phase.value = DeadManPhase.Failed(friendly(e))
             return null
         } catch (e: Throwable) {
-            _phase.value = DeadManPhase.Failed("Couldn't reach the server: ${e.message}")
+            _phase.value = DeadManPhase.Failed(UserErrorText.of(e, where = "reach"))
             return null
         }
         _phase.value = DeadManPhase.Completed

@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.ServerMetricsResponse
 import kotlinx.coroutines.CoroutineScope
@@ -31,7 +32,7 @@ class ServerMetricsViewModel(
         try {
             _state.value = LoadingState.Loaded(client.serverMetrics(podId))
         } catch (t: Throwable) {
-            _state.value = LoadingState.Failed(t.message ?: "metrics failed")
+            _state.value = LoadingState.Failed(UserErrorText.of(t, "Couldn't load the server's numbers. Try again."))
         }
     }
 

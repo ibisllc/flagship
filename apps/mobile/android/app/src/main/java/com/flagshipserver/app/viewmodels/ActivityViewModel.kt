@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.AuditEvent
 import com.flagshipserver.app.api.BoxActivityEntry
 import com.flagshipserver.app.core.BoxEventLabels
@@ -201,7 +202,7 @@ class ActivityViewModel(
                 )
             },
             onFailure = { t ->
-                _state.value = LoadingState.Failed(t.message ?: "couldn't load activity")
+                _state.value = LoadingState.Failed(UserErrorText.of(t, "Couldn't load activity. Try again."))
             },
         )
     }

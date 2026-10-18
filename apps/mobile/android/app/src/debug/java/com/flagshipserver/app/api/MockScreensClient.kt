@@ -31,8 +31,12 @@ class MockScreensClient(
      *  revoked or never-online box: their server detail fails. */
     val unreachablePodContexts: MutableSet<String> = mutableSetOf()
 
+    /** The gym: a failure every call throws while set (any transport or HTTP error). */
+    @Volatile var failure: Throwable? = null
+
     private suspend fun tick() {
         if (simulatedLatencyMs > 0) delay(simulatedLatencyMs)
+        failure?.let { throw it }
         if (shouldFail) throw ScreensError.Http(503, "simulated failure")
     }
 

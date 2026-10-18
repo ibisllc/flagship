@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.ServerRevocationRequest
@@ -59,7 +60,7 @@ class RevokeServerViewModel(
         try {
             irk = signer("Revoke server $serverDomain")
         } catch (e: Throwable) {
-            _phase.value = RevokeServerPhase.Failed("Couldn't access your account key: ${e.message}")
+            _phase.value = RevokeServerPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
             return
         }
         val issuedAt = now()
@@ -73,7 +74,7 @@ class RevokeServerViewModel(
         try {
             signature = irk.sign(canonical)
         } catch (e: Throwable) {
-            _phase.value = RevokeServerPhase.Failed("Couldn't sign: ${e.message}")
+            _phase.value = RevokeServerPhase.Failed("Couldn't sign: ${UserErrorText.reason(e)}")
             return
         }
 
@@ -99,7 +100,7 @@ class RevokeServerViewModel(
             _phase.value = RevokeServerPhase.Failed(friendly)
             return
         } catch (e: Throwable) {
-            _phase.value = RevokeServerPhase.Failed("Couldn't reach the server: ${e.message}")
+            _phase.value = RevokeServerPhase.Failed(UserErrorText.of(e, where = "reach"))
             return
         }
         _phase.value = RevokeServerPhase.Completed

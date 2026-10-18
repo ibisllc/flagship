@@ -53,7 +53,7 @@ object DeleteServerFlow {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            return Outcome.Failed("Couldn't access your account key: ${e.message}")
+            return Outcome.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
         }
 
         var erasureRequested = false

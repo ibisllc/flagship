@@ -16,6 +16,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.api.ServerTransferClient
 import com.flagshipserver.app.core.HexUtil
@@ -80,7 +81,7 @@ class TransferGiverViewModel(
             key = signer("Transfer $serverDomain to another account")
             pub = irkPubHex()
         } catch (e: Throwable) {
-            _phase.value = TransferGiverPhase.Failed("Couldn't access your account key: ${e.message}")
+            _phase.value = TransferGiverPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
             return
         }
         irk = key
@@ -105,7 +106,7 @@ class TransferGiverViewModel(
             qrText = ServerTransferFlow.offerUrl(built.qr)
             _phase.value = TransferGiverPhase.AwaitingClaim
         } catch (e: Throwable) {
-            _phase.value = TransferGiverPhase.Failed("Couldn't reach the broker: ${e.message}")
+            _phase.value = TransferGiverPhase.Failed(UserErrorText.of(e, where = "reach"))
         }
     }
 

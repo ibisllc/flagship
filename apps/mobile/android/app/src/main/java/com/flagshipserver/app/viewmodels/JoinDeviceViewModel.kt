@@ -27,6 +27,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.DeviceAdmitRequest
 import com.flagshipserver.app.api.FlagshipServerClient
@@ -336,7 +337,7 @@ class JoinDeviceViewModel(
                 "Couldn't decrypt the invite — the codes may not have matched. Start over."
             m.contains("401") || m.contains("invalid admit") ->
                 "The account rejected this invite. Ask the admin to generate a fresh code."
-            else -> t.message ?: "Couldn't join. Start over."
+            else -> UserErrorText.of(t, "Couldn't join. Start over.")
         }
     }
 }

@@ -7,6 +7,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.AppDbQueryRequest
 import com.flagshipserver.app.api.AppDbQueryResult
 import com.flagshipserver.app.api.AppDbRefusal
@@ -267,7 +268,7 @@ class AppDbQueryViewModel(
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {
-            _phase.value = Phase.Failed("Couldn't access your account key: ${t.message}")
+            _phase.value = Phase.Failed("Couldn't access your account key: ${UserErrorText.reason(t)}")
             return
         }
         _phase.value = try {

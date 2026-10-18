@@ -18,6 +18,7 @@
 
 package com.flagshipserver.app.ui.onboarding
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -130,7 +131,7 @@ fun ConnectAccountScreen(
                     AccountResolution.AccountKind.Multi -> onRecover(resolution)
                 }
             } catch (t: Throwable) {
-                nameError = t.message ?: "Couldn't reach Flagship. Try again."
+                nameError = UserErrorText.of(t, "Couldn't reach Flagship. Try again.")
             } finally {
                 working = false
             }

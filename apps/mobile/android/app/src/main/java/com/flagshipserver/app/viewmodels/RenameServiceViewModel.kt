@@ -13,6 +13,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.AppLinksResponse
 import com.flagshipserver.app.api.AppRenameRequest
@@ -64,7 +65,7 @@ class RenameServiceViewModel(
         val signer = try {
             Keystore.deriveIRK("Rename service URL stem")
         } catch (e: Throwable) {
-            _phase.value = RenameServicePhase.Failed("Couldn't access your account keys: ${e.message}")
+            _phase.value = RenameServicePhase.Failed("Couldn't access your account keys: ${UserErrorText.reason(e)}")
             return false
         }
         val issuedAt = System.currentTimeMillis()

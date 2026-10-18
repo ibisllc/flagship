@@ -5,6 +5,7 @@ package com.flagshipserver.app.viewmodels
 
 import com.flagshipserver.app.api.MockScreensClient
 import com.flagshipserver.app.api.ScreensError
+import com.flagshipserver.app.core.UserErrorText
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -35,7 +36,7 @@ class HomeViewModelTest {
         vm.load().join()
         val state = vm.state.first()
         assertTrue(state is LoadingState.Failed)
-        assertEquals("HTTP 503: simulated failure", (state as LoadingState.Failed).message)
+        assertEquals(UserErrorText.SERVER_PROBLEM, (state as LoadingState.Failed).message)
     }
 
     // loadUntilLoaded keeps showing the skeleton across failures (never flashes

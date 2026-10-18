@@ -5,6 +5,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.flagshipserver.app.api.AccountDirectoryAuthorization
@@ -148,7 +149,7 @@ class TrustedDevicesViewModel(
                 _state.value = State.Loaded(devices)
                 cacheNames(accountName ?: user, devices.firstOrNull { it.isCurrent }?.displayName)
             } catch (t: Throwable) {
-                _state.value = State.Failed(t.message ?: "Couldn't load trusted devices")
+                _state.value = State.Failed(UserErrorText.of(t, "Couldn't load trusted devices. Try again."))
             }
             loadPendingRePair()
         }

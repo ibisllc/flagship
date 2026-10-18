@@ -83,4 +83,28 @@ class GymLiveAccountTest : GymBase() {
             Espresso.pressBackUnconditionally()
         }
     }
+
+    private val rawWords = listOf("HTTP", "error code", "Unable to resolve", "unable to resolve", "connection closed", "Exception", "timeout", "UnknownHost")
+
+    /** Device report 2026-10-18 (A-5..A-7): with the backend unreachable the
+     *  pages that load from it say so in plain words and offer Try again. */
+    @Test
+    fun unreachableBackendShowsPlainSentencesWithARetry() {
+        launchLive("settings")
+        waitUntilExists("settings-title")
+        tap("settings-trusted-devices")
+        waitUntilExists("trusted-devices-error", timeoutMs = 30_000)
+        gymShot("trusted-devices-unreachable")
+        for (w in rawWords) assertTrue("Trusted devices shows \"$w\"", textCount(w) == 0)
+        assertTrue(tagCount("trusted-devices-retry") == 1)
+        Espresso.pressBackUnconditionally()
+
+        launchLive("settings")
+        waitUntilExists("settings-title")
+        tap("settings-peer-backup")
+        composeRule.waitForIdle()
+        Thread.sleep(1_500)
+        for (w in rawWords) assertTrue("Peer-backup shows \"$w\"", textCount(w) == 0)
+    }
+
 }

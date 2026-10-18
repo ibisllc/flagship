@@ -6,6 +6,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.AppAccessGrantBody
 import com.flagshipserver.app.api.AppAccessLineError
 import com.flagshipserver.app.api.AppAccessPending
@@ -54,7 +55,7 @@ class AppAccessOrder(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                return Outcome.Failed("Couldn't access your account key: ${e.message}")
+                return Outcome.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
             }
             val signed = AppAccessList.sign(key, domain, serviceId, normalized, now())
             val r = client.serviceAccessSet(

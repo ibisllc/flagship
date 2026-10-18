@@ -21,6 +21,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.LastUpdate
 import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.core.InMemoryPendingUpdateStore
@@ -173,7 +174,7 @@ class UpdateServerViewModel(
             _phase.value = Phase.Done
             true
         } catch (t: Throwable) {
-            _phase.value = Phase.Failed(t.message ?: "That didn't work. Try again in a moment.")
+            _phase.value = Phase.Failed(UserErrorText.of(t, "That didn't work. Try again in a moment."))
             false
         }
     }

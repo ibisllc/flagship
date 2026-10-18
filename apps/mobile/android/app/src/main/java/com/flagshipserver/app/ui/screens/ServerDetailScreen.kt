@@ -6,6 +6,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.ui.components.fsFocusRing
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -461,7 +462,7 @@ private fun BootUnlockCard(serverDomain: String) {
                                             leaseId = null
                                             toasts.success("Auto-unlock disabled. This server will ask your phone on its next reboot.")
                                         } catch (t: Throwable) {
-                                            toasts.error("Couldn't disable auto-unlock: ${t.message}")
+                                            toasts.error("Couldn't disable auto-unlock. ${UserErrorText.of(t)}")
                                         } finally {
                                             revoking = false
                                         }

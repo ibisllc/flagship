@@ -9,6 +9,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.PendingRePairSnapshot
@@ -103,7 +104,7 @@ class ReplaceDeviceViewModel(
             oldPubHex = pubHexForVersion(oldVersion)
             newPubHex = pubHexForVersion(newVersion)
         } catch (e: Throwable) {
-            _phase.value = ReplaceDevicePhase.Failed("Couldn't access your account keys: ${e.message}")
+            _phase.value = ReplaceDevicePhase.Failed("Couldn't access your account keys: ${UserErrorText.reason(e)}")
             return
         }
         val issuedAt = System.currentTimeMillis()

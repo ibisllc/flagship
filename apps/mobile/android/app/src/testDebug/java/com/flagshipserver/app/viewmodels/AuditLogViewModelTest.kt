@@ -176,6 +176,7 @@ class AuditLogViewModelTest {
         assertTrue("expected Failed, was $s", s is LoadingState.Failed)
         val msg = (s as LoadingState.Failed).message
         assertNotNull(msg)
-        assertTrue(msg, msg.contains("transport broken"))
+        assertEquals("Couldn't load the activity log. Try again.", msg)
+        assertTrue(msg, !msg.contains("transport broken"))
     }
 }

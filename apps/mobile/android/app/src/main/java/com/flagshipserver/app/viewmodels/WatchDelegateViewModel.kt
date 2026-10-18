@@ -11,6 +11,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.WatchDelegateMintRequest
@@ -100,14 +101,14 @@ class WatchDelegateViewModel(
         try {
             pubHex = provisionDelegatePubHex()
         } catch (e: Throwable) {
-            _phase.value = WatchDelegatePhase.Failed("Couldn't create the watch key: ${e.message}")
+            _phase.value = WatchDelegatePhase.Failed("Couldn't create the watch key: ${UserErrorText.reason(e)}")
             return
         }
         val irk: Ed25519Sign
         try {
             irk = signer("Allow your watch to approve boots")
         } catch (e: Throwable) {
-            _phase.value = WatchDelegatePhase.Failed("Couldn't access your account key: ${e.message}")
+            _phase.value = WatchDelegatePhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
             return
         }
         val issuedAt = now()
@@ -139,7 +140,7 @@ class WatchDelegateViewModel(
         } catch (e: HttpException) {
             _phase.value = WatchDelegatePhase.Failed("Server rejected the request (${e.status}): ${e.body}")
         } catch (e: Throwable) {
-            _phase.value = WatchDelegatePhase.Failed("Couldn't reach the server: ${e.message}")
+            _phase.value = WatchDelegatePhase.Failed(UserErrorText.of(e, where = "reach"))
         }
     }
 
@@ -163,7 +164,7 @@ class WatchDelegateViewModel(
         try {
             irk = signer("Stop allowing your watch to approve boots")
         } catch (e: Throwable) {
-            _phase.value = WatchDelegatePhase.Failed("Couldn't access your account key: ${e.message}")
+            _phase.value = WatchDelegatePhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
             return
         }
         val issuedAt = now()

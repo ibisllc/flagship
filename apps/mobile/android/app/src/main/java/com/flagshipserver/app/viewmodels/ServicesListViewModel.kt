@@ -15,6 +15,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.AppLinksResponse
 import com.flagshipserver.app.api.AppSummary
 import com.flagshipserver.app.api.FlagshipServerClient
@@ -78,7 +79,7 @@ class ServicesListViewModel(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (t: Throwable) {
-            _state.value = LoadingState.Failed(t.message ?: "couldn't load services")
+            _state.value = LoadingState.Failed(UserErrorText.of(t, "Couldn't load your apps. Try again."))
             return
         }
         if (listed == null) {

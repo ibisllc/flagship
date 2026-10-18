@@ -5,6 +5,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.AppEgress
 import com.flagshipserver.app.api.AppEgressGrantBody
 import com.flagshipserver.app.api.AppEgressRequest
@@ -70,7 +71,7 @@ class AppEgressViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                _error.value = "Couldn't access your account key: ${e.message}"
+                _error.value = "Couldn't access your account key: ${UserErrorText.reason(e)}"
                 return false
             }
             val r = client.serviceEgressSet(

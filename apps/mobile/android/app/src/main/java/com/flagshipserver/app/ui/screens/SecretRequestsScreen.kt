@@ -12,6 +12,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -91,7 +92,7 @@ fun SecretRequestsScreen(nav: NavController) {
         state = try {
             LoadingState.Loaded(coord.fetchVerifiedRequests())
         } catch (t: Throwable) {
-            LoadingState.Failed(t.message ?: "Couldn't load requests")
+            LoadingState.Failed(UserErrorText.of(t, "Couldn't load requests"))
         }
     }
 

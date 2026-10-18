@@ -11,6 +11,7 @@
 
 package com.flagshipserver.app.ui.components
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Warning
@@ -188,7 +189,7 @@ fun GlobalTrustBar() {
                                 trustExceptions.post(user, wire)
                             }
                         } catch (t: Throwable) {
-                            toasts.error("Couldn't continue: ${t.message}")
+                            toasts.error("Couldn't continue. ${UserErrorText.of(t)}")
                         }
                     }
                 }) { Text("Continue anyway") }

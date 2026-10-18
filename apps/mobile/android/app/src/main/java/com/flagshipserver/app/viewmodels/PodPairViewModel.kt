@@ -20,6 +20,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.AddPairedSessionInner
 import com.flagshipserver.app.api.AddPairedSessionRequest
 import com.flagshipserver.app.api.LockPowerClient
@@ -74,7 +75,7 @@ class PodPairViewModel(
         try {
             irk = signer("Pair this device with $serverDomain")
         } catch (e: Throwable) {
-            _phase.value = PodPairPhase.Failed("Couldn't access your account key: ${e.message}")
+            _phase.value = PodPairPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
             return
         }
 
@@ -84,7 +85,7 @@ class PodPairViewModel(
         try {
             signature = irk.sign(AddPairedSessionOrder.canonicalBytes(serverDomain, token, issuedAt))
         } catch (e: Throwable) {
-            _phase.value = PodPairPhase.Failed("Couldn't sign: ${e.message}")
+            _phase.value = PodPairPhase.Failed("Couldn't sign: ${UserErrorText.reason(e)}")
             return
         }
 
@@ -107,7 +108,7 @@ class PodPairViewModel(
             )
             return
         } catch (e: Throwable) {
-            _phase.value = PodPairPhase.Failed("Couldn't reach the server: ${e.message}")
+            _phase.value = PodPairPhase.Failed(UserErrorText.of(e, where = "reach"))
             return
         }
 

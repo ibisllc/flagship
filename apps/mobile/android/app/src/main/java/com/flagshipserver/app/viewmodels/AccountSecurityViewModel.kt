@@ -13,6 +13,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.TotpDisableRequest
@@ -92,7 +93,7 @@ class AccountSecurityViewModel(
             val signer = Keystore.deriveIRK("Turn on code protection", Keystore.currentIrkVersion())
             signer.sign(canonicalEnrollBegin(user, issuedAt))
         } catch (e: Throwable) {
-            _phase.value = AccountSecurityPhase.Failed("Couldn't sign enroll-begin: ${e.message}")
+            _phase.value = AccountSecurityPhase.Failed("Couldn't sign enroll-begin: ${UserErrorText.reason(e)}")
             return
         }
 
@@ -139,7 +140,7 @@ class AccountSecurityViewModel(
             val signer = Keystore.deriveIRK("Confirm 2FA code", Keystore.currentIrkVersion())
             signer.sign(canonicalEnrollConfirm(user, issuedAt))
         } catch (e: Throwable) {
-            _phase.value = AccountSecurityPhase.Failed("Couldn't sign enroll-confirm: ${e.message}")
+            _phase.value = AccountSecurityPhase.Failed("Couldn't sign enroll-confirm: ${UserErrorText.reason(e)}")
             return
         }
 
@@ -194,7 +195,7 @@ class AccountSecurityViewModel(
             val signer = Keystore.deriveIRK("Turn off code protection", Keystore.currentIrkVersion())
             signer.sign(canonicalDisable(user, issuedAt))
         } catch (e: Throwable) {
-            _phase.value = AccountSecurityPhase.Failed("Couldn't sign disable: ${e.message}")
+            _phase.value = AccountSecurityPhase.Failed("Couldn't sign disable: ${UserErrorText.reason(e)}")
             return
         }
         try {

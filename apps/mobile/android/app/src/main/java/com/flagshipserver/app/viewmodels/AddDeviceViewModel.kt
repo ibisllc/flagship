@@ -24,6 +24,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.flagshipserver.app.core.AdminPairingRelay
@@ -280,5 +281,5 @@ class AddDeviceViewModel(
     }
 
     private fun humanize(t: Throwable): String =
-        t.message ?: "Pairing failed. Generate a fresh code and try again."
+        UserErrorText.of(t, "Pairing failed. Generate a fresh code and try again.")
 }

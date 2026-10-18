@@ -16,6 +16,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.RePairCompleteRequest
@@ -149,7 +150,7 @@ class KeyfileImportViewModel(
                     // factor field (yet); route via the sign-in flow.
                     "This account has a second factor enrolled. Choose \"Connect to an existing account\" and sign in with your account name — it will ask for your authenticator or recovery code."
                 else
-                    "Couldn't start bringing this device in: ${t.message}",
+                    "Couldn't start bringing this device in. ${UserErrorText.of(t)}",
             )
         }
     }
@@ -202,7 +203,7 @@ class KeyfileImportViewModel(
                     // #52 — completion window elapsed; the cloud swept the row.
                     "This expired before it was completed. Start again."
                 else
-                    "Couldn't finish bringing this device in: ${t.message}",
+                    "Couldn't finish bringing this device in. ${UserErrorText.of(t)}",
             )
         }
     }

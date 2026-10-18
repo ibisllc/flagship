@@ -18,6 +18,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.UsernameClaimRequest
@@ -219,7 +220,7 @@ class OpenAccountViewModel(
 
             _phase.value = OpenAccountPhase.Opened
         } catch (t: Throwable) {
-            _phase.value = OpenAccountPhase.Failed(t.message ?: "Couldn't open your account. Try again.")
+            _phase.value = OpenAccountPhase.Failed(UserErrorText.of(t, "Couldn't open your account. Try again."))
         }
     }
 }

@@ -6,6 +6,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.BuildClient
 import com.flagshipserver.app.api.BuildEnvRequest
 import com.flagshipserver.app.api.BuildGitRequest
@@ -37,7 +38,7 @@ import kotlinx.serialization.json.JsonPrimitive
 private fun friendly(t: Throwable): String {
     if (t is ScreensError.Http) return NetworkErrorHumanizer.humanize(t, "build")
     com.flagshipserver.app.core.ErrorLog.caught("build", t, NetworkErrorHumanizer.errorCode(t))
-    return t.message ?: "Something went wrong."
+    return UserErrorText.of(t, "Something went wrong.")
 }
 
 /**

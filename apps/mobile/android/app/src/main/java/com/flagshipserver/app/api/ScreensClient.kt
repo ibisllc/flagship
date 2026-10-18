@@ -12,6 +12,7 @@
 
 package com.flagshipserver.app.api
 
+import com.flagshipserver.app.core.UserErrorText
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -347,15 +348,16 @@ sealed class ScreensError(message: String) : Throwable(message) {
  * a user should never see "noSessionToken" or a stack message. Surfaces that show
  * an error to the user route it through this instead of a raw `t.message`.
  */
-fun Throwable.userFacing(): String {
-    com.flagshipserver.app.core.ErrorLog.caught(
-        "box", this, com.flagshipserver.app.core.NetworkErrorHumanizer.errorCode(this),
-    )
-    return when (this) {
-        is ScreensError -> message ?: "Something went wrong. Try again."
-        is com.flagshipserver.app.core.RateLimitedException -> userMessage
-        else -> "Couldn't reach the server. Check your connection and try again."
+fun Throwable.userFacing(): String = when (this) {
+    is ScreensError.Http -> com.flagshipserver.app.core.UserErrorText.of(this, where = "box")
+    is ScreensError.Decoding -> {
+        com.flagshipserver.app.core.ErrorLog.caught("box", this, com.flagshipserver.app.core.NetworkErrorHumanizer.errorCode(this))
+        "The server's answer couldn't be read. Update the app or the server, then try again."
     }
+    is ScreensError -> message ?: "Something went wrong. Try again."
+    else -> com.flagshipserver.app.core.UserErrorText.of(
+        this, "Couldn't reach the server. Check your connection and try again.", where = "box",
+    )
 }
 
 /** The box's own `{error}` wording from a refused call, if it sent one. */

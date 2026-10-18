@@ -127,14 +127,14 @@ class CompanionDockViewModelTest {
     @Test fun approve_failedBiometric_deliversNothing() = runTest {
         val client = MockScreensClient(simulatedLatencyMs = 0)
         val relay = FakeRelay()
-        val vm = vm(listOf(RemoteServer(home, client)), relay = relay, authenticate = { error("cancelled") })
+        val vm = vm(listOf(RemoteServer(home, client)), relay = relay, authenticate = { throw com.flagshipserver.app.keystore.BiometricCancelled() })
         assertTrue(vm.stageApproval(FakeBrowser().qr))
         runCurrent()
         vm.approve().join()
         assertTrue(client.companionMintCalls.isEmpty())
         assertNull(relay.delivered)
         assertEquals(CompanionDockViewModel.Phase.Idle, vm.phase.first())
-        assertEquals("cancelled", vm.approvalError.first())
+        assertEquals("Cancelled. Try again when you're ready.", vm.approvalError.first())
     }
 
     @Test fun stageApproval_rejectsTheOldDesktopLinkAndOtherCodes() = runTest {

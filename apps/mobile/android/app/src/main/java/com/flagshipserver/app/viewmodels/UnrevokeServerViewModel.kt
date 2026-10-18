@@ -5,6 +5,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.UnrevokeServerRequest
 import com.flagshipserver.app.core.HexUtil
@@ -49,7 +50,7 @@ class UnrevokeServerViewModel(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            _phase.value = UnrevokeServerPhase.Failed("Couldn't access your account key: ${e.message}")
+            _phase.value = UnrevokeServerPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
             return
         }
 
@@ -71,7 +72,7 @@ class UnrevokeServerViewModel(
             _phase.value = UnrevokeServerPhase.Failed(friendlyError(e.status, e.body))
             return
         } catch (e: Throwable) {
-            _phase.value = UnrevokeServerPhase.Failed("Couldn't reach the server: ${e.message}")
+            _phase.value = UnrevokeServerPhase.Failed(UserErrorText.of(e, where = "reach"))
             return
         }
         _phase.value = UnrevokeServerPhase.Completed

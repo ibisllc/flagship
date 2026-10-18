@@ -17,6 +17,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.MigrationSession
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.SecretMailboxClient
@@ -223,7 +224,7 @@ class MigrationViewModel(
             )
             mailbox.depositMigrationStart(serverFqdn, body)
         } catch (e: Throwable) {
-            _errorMessage.value = "Couldn't start the migration: ${e.message}"
+            _errorMessage.value = "Couldn't start the migration. ${UserErrorText.of(e)}"
             return
         } finally {
             _working.value = false
@@ -281,7 +282,7 @@ class MigrationViewModel(
             )
             mailbox.depositMigrationFreeze(serverFqdn, freeze)
         } catch (e: Throwable) {
-            _errorMessage.value = "Couldn't hand off: ${e.message}"
+            _errorMessage.value = "Couldn't hand off. ${UserErrorText.of(e)}"
         } finally {
             _working.value = false
         }
@@ -321,7 +322,7 @@ class MigrationViewModel(
             mailbox.depositMigrationAbort(serverFqdn, body)
             holdStore.clearHold(serverFqdn)
         } catch (e: Throwable) {
-            _errorMessage.value = "Couldn't abort: ${e.message}"
+            _errorMessage.value = "Couldn't abort. ${UserErrorText.of(e)}"
         } finally {
             _working.value = false
         }

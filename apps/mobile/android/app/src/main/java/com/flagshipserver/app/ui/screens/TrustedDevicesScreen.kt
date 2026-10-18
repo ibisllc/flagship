@@ -11,6 +11,7 @@ import android.app.Activity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -211,7 +212,7 @@ fun TrustedDevicesScreen(nav: NavController) {
             when (state) {
                 is TrustedDevicesViewModel.State.Idle,
                 is TrustedDevicesViewModel.State.Loading -> LoadingRow()
-                is TrustedDevicesViewModel.State.Failed -> ErrorRow(message = state.reason)
+                is TrustedDevicesViewModel.State.Failed -> ErrorRow(message = state.reason, onRetry = { vm.load() })
                 is TrustedDevicesViewModel.State.Loaded -> {
                     if (state.devices.isEmpty()) {
                         EmptyRow()
@@ -538,9 +539,12 @@ private fun LoadingRow() {
 }
 
 @Composable
-private fun ErrorRow(message: String) {
-    FSCard {
-        Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+private fun ErrorRow(message: String, onRetry: () -> Unit) {
+    FSCard(modifier = Modifier.testTag("trusted-devices-error")) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+            com.flagshipserver.app.ui.components.FSSecondaryButton(label = "Try again", onClick = onRetry, modifier = Modifier.testTag("trusted-devices-retry"))
+        }
     }
 }
 

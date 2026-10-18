@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.AppApiKeyCreateRequest
 import com.flagshipserver.app.api.AppApiKeyGrantBody
 import com.flagshipserver.app.api.AppApiKeyInfo
@@ -105,7 +106,7 @@ class AppApiKeysViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (t: Throwable) {
-                _error.value = "Couldn't access your account key: ${t.message}"
+                _error.value = "Couldn't access your account key: ${UserErrorText.reason(t)}"
                 return false
             }
             val issuedAt = now()

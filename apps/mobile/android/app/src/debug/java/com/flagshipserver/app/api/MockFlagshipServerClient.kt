@@ -88,8 +88,12 @@ class MockFlagshipServerClient(
     val registeredRcks: Map<String, String> get() = _registeredRcks
     val registeredPushTokens: Map<String, PushTokenRegisterRequest.Inner> get() = _registeredPushTokens
 
+    /** The gym: a failure every call throws while set (any transport or HTTP error). */
+    @Volatile var failure: Throwable? = null
+
     private suspend fun tick() {
         if (simulatedLatencyMs > 0) kotlinx.coroutines.delay(simulatedLatencyMs)
+        failure?.let { throw it }
         if (shouldFail) throw HttpException(503, "simulated failure")
     }
 

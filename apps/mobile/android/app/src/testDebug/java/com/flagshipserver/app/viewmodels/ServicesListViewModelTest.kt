@@ -135,4 +135,15 @@ class ServicesListViewModelTest {
         assertEquals(AppStatus.STOPPED, row.pill)
         assertTrue(row.podIds.isEmpty())
     }
+
+    // Device report 2026-10-18 (A-5): with no online server the list asks the
+    // current client, and "connection closed" was shown under the title.
+    @Test fun withoutServersARawTransportErrorIsAPlainSentence() = runTest {
+        val dropped = object : ScreensClient by MockScreensClient(simulatedLatencyMs = 0) {
+            override suspend fun appsList(): AppsListResponse = throw java.io.IOException("connection closed")
+        }
+        val m = vm(emptyMap(), fallback = dropped)
+        m.refresh()
+        assertEquals(LoadingState.Failed(com.flagshipserver.app.core.UserErrorText.DROPPED), m.state.value)
+    }
 }

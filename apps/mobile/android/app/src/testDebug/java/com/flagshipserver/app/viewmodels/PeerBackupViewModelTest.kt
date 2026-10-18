@@ -77,4 +77,17 @@ class PeerBackupViewModelTest {
         assertFalse(msg, msg.contains("500") || msg.contains("transport down"))
         assertTrue(msg, msg.contains("try again", ignoreCase = true))
     }
+
+    // Device report 2026-10-18 (A-6): "Couldn't load / connection closed".
+    @Test fun load_aDroppedConnectionIsAPlainSentence() = runTest {
+        val dropped = object : ScreensClient by MockScreensClient(simulatedLatencyMs = 0) {
+            override suspend fun peerBackupStatus(): PeerBackupStatusResponse = throw java.io.IOException("connection closed")
+        }
+        val vm = PeerBackupViewModel(dropped, scope = backgroundScope)
+        vm.load().join()
+        assertEquals(
+            com.flagshipserver.app.core.UserErrorText.DROPPED,
+            (vm.state.first() as LoadingState.Failed).message,
+        )
+    }
 }

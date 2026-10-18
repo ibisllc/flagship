@@ -7,6 +7,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.CompanionPendingWrite
 import com.flagshipserver.app.api.CompanionResolvePendingRequest
 import com.flagshipserver.app.api.FlagshipServerClient
@@ -240,8 +241,8 @@ class CompanionRequestsViewModel(
 
     private fun failureMessage(t: Throwable): String = when (t) {
         is ScreensError.Http -> NetworkErrorHumanizer.humanize(t)
-        is CompanionRequestsError -> t.message ?: "Companion intent is malformed."
-        else -> t.message ?: "couldn't complete the request"
+        is CompanionRequestsError -> UserErrorText.of(t, "Companion intent is malformed.")
+        else -> UserErrorText.of(t, "Couldn't complete that. Try again.")
     }
 
     companion object {
