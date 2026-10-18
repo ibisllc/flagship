@@ -29,14 +29,16 @@ public struct Keystore {
         case unwrapFailed(String)
         case keychainFailed(OSStatus)
 
+        /// Said to a person, so no status code or key-handling jargon: the
+        /// detail stays in the case for a log.
         public var errorDescription: String? {
             switch self {
-            case .keyNotFound:             return "No UMK is present yet."
-            case .biometricFailed(let s):  return "Biometric authentication failed (\(s))."
-            case .derivationFailed(let m): return "Key derivation failed: \(m)"
-            case .wrapFailed(let m):       return "UMK wrap failed: \(m)"
-            case .unwrapFailed(let m):     return "UMK unwrap failed: \(m)"
-            case .keychainFailed(let s):   return "Keychain operation failed (\(s))."
+            case .keyNotFound:
+                return "This device doesn't hold your account key yet."
+            case .biometricFailed:
+                return "This device couldn't confirm it was you. Try again."
+            case .derivationFailed, .wrapFailed, .unwrapFailed, .keychainFailed:
+                return "Your account key couldn't be read on this device. Try again."
             }
         }
     }

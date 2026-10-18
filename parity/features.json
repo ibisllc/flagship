@@ -681,7 +681,7 @@
       "surfaces": {
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/InstallProgressScreen.kt", "fun SetupStoppedCard"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/provisionProgress.js", "export function renderSetupStopped"], ["apps/web/public/webapp/lib/provisionProgress.js", "export function failureDetail"], ["apps/web/e2e/gym/gym-archive.spec.ts", "a stopped install shows Setup stopped"]] },
-        "ios": { "status": "missing", "reason": "iOS shows the box's failure text as is on the install timeline; no Setup stopped card, no line-number strip, no Contact us.", "anchors": [] }
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/SetupStoppedCard.swift", "struct SetupStoppedCard"], ["apps/mobile/shared/Sources/FlagshipCore/ProvisionProgress.swift", "func failureDetail"], ["apps/mobile/ios/App/UITests/GymDeviceBugsTests.swift", "test_stoppedInstallOffersCancelAndContactUs"]] }
       }
     },
     {

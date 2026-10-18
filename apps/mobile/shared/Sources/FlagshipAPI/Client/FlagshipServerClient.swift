@@ -2341,6 +2341,11 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public var nonRestorableRevokes: Set<String> = []
     /// When set, `unrevokeServer` throws this instead of recording.
     public var unrevokeError: Error? = nil
+    /// When set, `releaseServerName` throws this instead of releasing the name
+    /// (a refused or failing Cancel order); `releaseErrorOnce` clears it after
+    /// one use so a retry goes through.
+    public var releaseError: Error? = nil
+    public var releaseErrorOnce = false
     public private(set) var selfDeleteBundles: [AccountSelfDeleteBundleRequest] = [] // recorded deletion-ceremony bundles
     public private(set) var adminRootRotations: [AdminRootRotationRequest] = [] // Slice D — recorded rotation proofs
     /// When set, `selfDeleteAccount` throws this instead of recording — lets a
@@ -2429,6 +2434,10 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
 
     public func releaseServerName(_ req: ReleaseServerNameRequest) async throws {
         try await tick()
+        if let releaseError {
+            if releaseErrorOnce { self.releaseError = nil }
+            throw releaseError
+        }
         try MockOrderSigners.shared.require(.sensitive, kind: "release-server-name", signatureHex: req.signature, payload: req)
         releasedServerNames.append(req)
         registeredRcks.removeValue(forKey: req.request.serverDomain)

@@ -23,6 +23,11 @@ public struct PendingServerScreen: View {
     /// Set on a device that may not cancel (not an admin device): the
     /// sentence shown instead of Cancel order.
     var cancelRefusal: String?
+    /// Why the last cancel didn't go through (the real reason, in words), and
+    /// whether one is running. After a failure the button reads "Try
+    /// cancelling again" and the order stays.
+    var cancelError: String?
+    var cancelling: Bool = false
     /// Live "this box is waiting for a boot-unlock approval" signal, computed by
     /// the container from the account-level 5s watcher set (the per-pod flag
     /// alone is stale between full reconciles). Feeds the on-checklist Approve
@@ -32,8 +37,11 @@ public struct PendingServerScreen: View {
     @State private var timeline: ProvisionTimelineViewModel?
 
     public init(pod: PodInfo, username: String? = nil, awaitingUnlock: Bool = false, cancelRefusal: String? = nil,
+                cancelError: String? = nil, cancelling: Bool = false,
                 onCancelOrder: @escaping () -> Void = {}) {
         self.cancelRefusal = cancelRefusal
+        self.cancelError = cancelError
+        self.cancelling = cancelling
         self.pod = pod
         self.username = username
         self.awaitingUnlock = awaitingUnlock
@@ -100,14 +108,33 @@ public struct PendingServerScreen: View {
                     .padding(.vertical, FS.space.s3)
                 }
 
+                if timeline?.status?.phase == .error {
+                    SetupStoppedCard(
+                        serial: pod.pendingAuthCodeSerial ?? "",
+                        step: ProvisionProgress.failureDetail(timeline?.status?.detail),
+                        cancelError: cancelError,
+                        working: cancelling,
+                        onCancelOrder: cancelRefusal == nil ? onCancelOrder : nil
+                    )
+                }
                 if let cancelRefusal {
                     Text(cancelRefusal)
                         .font(FS.font.bodySm())
                         .foregroundColor(c.textMuted)
                         .accessibilityIdentifier("pending-cancel-admin-only")
-                } else {
-                    FSDangerButton("Cancel order", block: true, large: true, action: onCancelOrder)
-                        .accessibilityIdentifier("pending-cancel-order-button")
+                } else if timeline?.status?.phase != .error {
+                    if let cancelError {
+                        Text(cancelError)
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.danger)
+                            .accessibilityIdentifier("pending-cancel-error")
+                    }
+                    FSDangerButton(
+                        cancelling ? "Cancelling…" : (cancelError == nil ? "Cancel order" : CancelPendingOrder.retryLabel),
+                        block: true, large: true, action: onCancelOrder
+                    )
+                    .disabled(cancelling)
+                    .accessibilityIdentifier("pending-cancel-order-button")
                 }
 
                 Spacer().frame(height: FS.space.s12)

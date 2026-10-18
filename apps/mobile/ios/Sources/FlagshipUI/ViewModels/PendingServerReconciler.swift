@@ -212,6 +212,13 @@ public struct PendingServerReconciler {
             // minted order, so the directory can't vouch for it until its box
             // registers. Its lifecycle is owned by the demo flow, not here.
             if pod.demoServer != nil { continue }
+            // A pending row that names no `<server>.<user>` (an older build
+            // guessed "server.<apex>") can't be a real order: it can't be
+            // cancelled and would never go away while another order is open.
+            if !pod.fqdn.isEmpty && !Endpoints.isWellFormedServerFqdn(pod.fqdn) {
+                app.removePod(pod.podId)
+                continue
+            }
             let stillOutstanding: Bool
             if let serial = pod.pendingAuthCodeSerial, !serial.isEmpty {
                 stillOutstanding = outstandingRefs.contains(OrderRef.compute(serial: serial))

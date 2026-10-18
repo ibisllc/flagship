@@ -79,6 +79,20 @@ public enum ProvisionProgress {
         }
     }
 
+    /// The box's failure text for a person. It is the box's own wording and
+    /// stays, minus the shell line number ("Setup stopped while Expanding the
+    /// disk (line 66)"); a runtime artefact (an HTTP status, a Cloudflare code,
+    /// a JSON body) becomes a sentence, and an empty report becomes the phase
+    /// title.
+    public static func failureDetail(_ lastError: String?) -> String? {
+        let t = (lastError ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = phaseTitles["error"]
+        if t.isEmpty { return title }
+        if UserErrorText.isRawArtefact(t) { return UserErrorText.ofRaw(t, fallback: title) }
+        let stripped = UserErrorText.stripInternals(t)
+        return stripped.isEmpty ? title : stripped
+    }
+
     private static func isLadderPhase(_ p: String) -> Bool {
         ladder.contains(p)
     }
@@ -119,7 +133,7 @@ public enum ProvisionProgress {
                     return StepView(key: g.key, label: g.label, state: .done, detail: nil)
                 }
                 if i == failedIdx {
-                    let d = (lastError?.isEmpty ?? true) ? phaseTitles["error"] : lastError
+                    let d = failureDetail(lastError)
                     return StepView(key: g.key, label: g.label, state: .failed, detail: d)
                 }
                 return StepView(key: g.key, label: g.label, state: .pending, detail: nil)

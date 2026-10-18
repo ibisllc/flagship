@@ -134,6 +134,35 @@ final class DeleteServerViewModelTests: XCTestCase {
         XCTAssertEqual(h.deleted(), 0)
     }
 
+    /// The refusal's own sentence reaches the screen, not a claim about the connection.
+    func testReleaseRefusalShowsTheReason() async {
+        let h = harness()
+        h.server.releaseError = ScreensClientError.http(status: 409, message: #"{"error":"That server is mid-update."}"#)
+        await h.vm.run(typedName: "home2")
+        guard case .failed(let msg) = h.vm.phase else { return XCTFail("expected failure, got \(h.vm.phase)") }
+        XCTAssertTrue(msg.contains("That server is mid-update."), msg)
+        XCTAssertFalse(msg.lowercased().contains("check your connection"), msg)
+    }
+
+    /// A row that names no `<server>.<user>` holds no name: removed without a call or a key.
+    func testGhostRowIsRemovedWithoutACall() async {
+        let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
+        var deleted = 0
+        var keyCalls = 0
+        let vm = DeleteServerViewModel(
+            server: server, mailbox: MockSecretMailboxClient(),
+            serverFqdn: "server.flagship.services", identityPubKeyHex: "",
+            username: { "harry" }, onDeleted: { deleted += 1 },
+            keys: { _ in keyCalls += 1; return .init(orderKey: self.orderKey(), mailboxIrk: nil) }
+        )
+        await vm.run(typedName: "server")
+        XCTAssertEqual(vm.phase, .completed(eraseRequested: nil))
+        XCTAssertEqual(deleted, 1)
+        XCTAssertEqual(keyCalls, 0)
+        XCTAssertTrue(server.releasedServerNames.isEmpty)
+    }
+
     func testNoRegisteredIdentitySkipsEraseOrder() async {
         let h = harness(identity: "")
         await h.vm.run(typedName: "home2")

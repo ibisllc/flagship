@@ -77,6 +77,15 @@ extension GymSweepSeams {
                 phase: nil, createdAt: Int64(Date().timeIntervalSince1970 * 1000))]
         }
 
+        // `-smoke-install-stopped`: that pending server's install stopped, with
+        // the box's own words (shell line number and all).
+        if args.contains("-smoke-install-stopped") {
+            mocks.server?.provisionStatusScripts[pendingSerial] = [
+                (phase: .installing, detail: nil),
+                (phase: .error, detail: "Setup stopped while Expanding the disk to 68 GB (line 66)"),
+            ]
+        }
+
         // Another device removed this one: the danger banner asks to sign in again.
         if args.contains("-smoke-account-reset") {
             app.accountWasReset = true

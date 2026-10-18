@@ -121,6 +121,13 @@ public final class DeleteServerViewModel {
             phase = .failed("No active account on this device.")
             return
         }
+        // A row that names no `<server>.<user>` (an old ghost) holds no name on
+        // `.com`: there is nothing to release, so drop it without a call.
+        if !Endpoints.isWellFormedServerFqdn(serverFqdn) {
+            onDeleted()
+            phase = .completed(eraseRequested: nil)
+            return
+        }
         phase = .working
         let k: Keys
         do {
@@ -144,14 +151,14 @@ public final class DeleteServerViewModel {
                 request: .init(username: user, serverDomain: serverFqdn, issuedAt: issuedAt),
                 signature: HexUtil.encode(sig)
             ))
-        } catch let e as ScreensClientError {
-            phase = .failed("Couldn't delete it, so the name is still reserved. \(e.errorDescription ?? "Try again in a moment.")")
-            return
         } catch {
-            phase = .failed("Couldn't delete it, so the name is still reserved. Check your connection and try again.")
+            // The real reason, in words: a refusal `.com` sent and a dropped
+            // connection must not read the same.
+            phase = .failed("Couldn't delete it, so the name is still reserved. \(UserErrorText.of(error))")
             return
         }
 
+        PendingRckStore().clear(for: serverFqdn)
         onDeleted()
         phase = .completed(eraseRequested: eraseRequested)
     }

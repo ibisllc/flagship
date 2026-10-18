@@ -666,6 +666,8 @@ struct CreateServerContainer: View {
     @Environment(AppState.self) private var app
     @Environment(ToastCenter.self) private var toasts
     @State private var vm: CreateServerViewModel?
+    @State private var cancelError: String?
+    @State private var cancelling = false
 
     init(
         builderLink: String? = nil,
@@ -697,7 +699,9 @@ struct CreateServerContainer: View {
                         let serial = vm.lastDeliveredSerial ?? ""
                         onDelivered(serverDomain, serial, name, description)
                     },
-                    onCancel: { cancel(vm) }
+                    onCancel: { cancel(vm) },
+                    cancelError: cancelError,
+                    cancelling: cancelling
                 )
             } else {
                 ProgressView()
@@ -730,8 +734,13 @@ extension CreateServerContainer {
         guard case .delivered(_, let domain) = vm.phase,
               let pod = app.pods.first(where: { $0.fqdn.lowercased() == domain.lowercased() && $0.status == .pending })
         else { onCancel(); return }
+        guard !cancelling else { return }
+        cancelling = true
+        cancelError = nil
         Task {
-            if await cancelPendingServer(pod: pod, server: serverClient, app: app, toasts: toasts) { onCancel() }
+            let done = await cancelPendingServer(pod: pod, server: serverClient, app: app, toasts: toasts) { cancelError = $0 }
+            cancelling = false
+            if done { onCancel() }
         }
     }
 }
@@ -746,10 +755,13 @@ struct PendingPodContainer: View {
     @Environment(AppState.self) private var app
     @Environment(ToastCenter.self) private var toasts
     @State private var cancelling: Bool = false
+    @State private var cancelError: String?
 
     var body: some View {
         PendingServerScreen(pod: pod, username: app.currentUser, awaitingUnlock: app.isAwaitingUnlock(pod),
-                            cancelRefusal: AdminOrderGate.allows(app) ? nil : AdminOrderGate.server) {
+                            cancelRefusal: AdminOrderGate.allows(app) ? nil : AdminOrderGate.server,
+                            cancelError: cancelError,
+                            cancelling: cancelling) {
             Task { await cancelOrder() }
         }
     }
@@ -764,8 +776,9 @@ struct PendingPodContainer: View {
     private func cancelOrder() async {
         guard !cancelling else { return }
         cancelling = true
+        cancelError = nil
         defer { cancelling = false }
-        await cancelPendingServer(pod: pod, server: serverClient, app: app, toasts: toasts)
+        await cancelPendingServer(pod: pod, server: serverClient, app: app, toasts: toasts) { cancelError = $0 }
         // The shared helper removes the pod on success; if it's gone, dismiss.
         if !app.pods.contains(where: { $0.podId == pod.podId }) {
             onAfterCancel()
@@ -776,58 +789,37 @@ struct PendingPodContainer: View {
 /// Cancel a pending server: release the reserved name (un-pin the routing
 /// record so the name frees up), revoke the install auth-code, drop the local
 /// pending record, and remove the pod. Shared by the pending-detail screen
-/// (PendingPodContainer) and the Home list's "Cancel server" context action.
-/// Mirrors webapp `cancelServer`. On a release failure the pod is KEPT (the
-/// name is still reserved) with a warning toast.
+/// (PendingPodContainer), the delivered page and the Home list's "Cancel
+/// server" context action. Mirrors webapp `cancelServer`. On a failure the pod
+/// is KEPT (the name is still reserved) and the real reason is said: to
+/// `onFailure` when the caller shows it beside its button, else as a warning
+/// toast.
 @discardableResult
 @MainActor
 func cancelPendingServer(
     pod: PodInfo,
     server: any FlagshipServerClient,
     app: AppState,
-    toasts: ToastCenter
+    toasts: ToastCenter,
+    onFailure: ((String) -> Void)? = nil
 ) async -> Bool {
     guard let username = app.currentUser else {
         app.removePod(pod.podId)
         return true
     }
-    do {
-        // Slice D — release-server-name is a SENSITIVE order: sign with the admin
-        // master root when this device holds one, else the legacy owner IRK.
-        let orderKey = try await Keystore.sensitiveOrderSigningKey(reason: "Cancel server \(pod.name)")
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
-        // 1. Release the name (the real free-the-name mechanism).
-        let releaseBytes = ReleaseServerName.canonicalBytes(
-            username: username, serverDomain: pod.fqdn, issuedAt: now
-        )
-        let releaseSig = try orderKey.signature(for: releaseBytes)
-        try await server.releaseServerName(.init(
-            request: .init(username: username, serverDomain: pod.fqdn, issuedAt: now),
-            signature: HexUtil.encode(releaseSig)
-        ))
-        // 2. Belt-and-braces auth-code revoke (the release already revoked
-        // active codes server-side; 403/404 is treated as success). This is a
-        // NON-sensitive owner-IRK op, so it must be IRK-signed: reuse orderKey
-        // when it IS the IRK (no admin root), else derive the IRK.
-        if let serial = pod.pendingAuthCodeSerial {
-            let revokeKey = Keystore.hasAdminRoot
-                ? ((try? await Keystore.deriveIRK(reason: "Cancel server \(pod.name)")) ?? orderKey)
-                : orderKey
-            let revokeBytes = AuthCodeRevoke.canonicalBytes(serial: serial, username: username, issuedAt: now)
-            let revokeSig = try revokeKey.signature(for: revokeBytes)
-            try? await server.revokeAuthCode(.init(
-                request: .init(serial: serial, username: username, issuedAt: now),
-                signature: HexUtil.encode(revokeSig)
-            ))
+    switch await CancelPendingOrder.run(pod: pod, username: username, server: server) {
+    case .cancelled(let releasedName):
+        if releasedName {
+            toasts.success("Server \"\(pod.name)\" cancelled — the name is free again.")
         }
-        toasts.success("Server \"\(pod.name)\" cancelled — the name is free again.")
         app.removePod(pod.podId)
         PendingServerStore().remove(username: username, podId: pod.podId)
+        PendingRckStore().clear(for: pod.fqdn)
         return true
-    } catch {
+    case .failed(let message):
         // Keep the pod: the name is still reserved, so dropping it locally
         // would just hide a name the user can't re-use.
-        toasts.warning("Couldn't cancel — the name is still reserved. Check your connection and try again.")
+        if let onFailure { onFailure(message) } else { toasts.warning(message) }
         return false
     }
 }
