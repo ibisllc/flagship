@@ -4,11 +4,11 @@
  * (docs/wildcard-dns.md): an account holds four records however many boxes it
  * has (`*.<user>` A + AAAA, CAA issue + issuewild at `<user>`); a box adds none
  * of its own. While a box is getting its certificate it briefly holds its
- * DNS-01 TXTs (2) and the shield (A + AAAA at the box and at `*.<box>`: 4), so
- * the boxes up at once are budgeted for those too.
+ * DNS-01 TXTs (2; the 4-record shield is off since 2026-10-18, docs/wildcard-dns.md
+ * section 11), so the boxes up at once are budgeted for those too.
  */
 export const RECORDS_PER_ACCOUNT = 4;
-export const RECORDS_PER_BOX_ISSUING = 6;
+export const RECORDS_PER_BOX_ISSUING = 2;
 
 export function dnsRecordsNeeded(peakBoxes: number, accounts: number): number {
   return accounts * RECORDS_PER_ACCOUNT + peakBoxes * RECORDS_PER_BOX_ISSUING;

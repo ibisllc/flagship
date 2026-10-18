@@ -16,7 +16,7 @@ describe("the gym's zone budget", () => {
   it("an account costs four records however many boxes it has; boxes cost only while issuing", () => {
     expect(RECORDS_PER_ACCOUNT).toBe(4);
     expect(dnsRecordsNeeded(0, 2)).toBe(8);
-    expect(dnsRecordsNeeded(3, 2)).toBe(8 + 18);
+    expect(dnsRecordsNeeded(3, 2)).toBe(8 + 6);
     // Steady state, 3 boxes on 2 accounts: 8 records (the old layout held 8 per account + 4 per box = 28).
     expect(dnsRecordsNeeded(0, 2)).toBe(8);
   });
