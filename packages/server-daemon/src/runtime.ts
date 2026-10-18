@@ -3,7 +3,7 @@ import { connect as netConnect, type Socket } from "node:net";
 import { createServer as createTlsServer, type Server as TlsServer, type TLSSocket } from "node:tls";
 import acme from "acme-client";
 import { readFile } from "node:fs/promises";
-import { ed, egressSuggestions, rescueDiscoveryId, type AppApiKeyGrant, type Bytes, type Keypair } from "@flagship/protocol";
+import { ed, egressSuggestions, type AppApiKeyGrant, type Bytes, type Keypair } from "@flagship/protocol";
 import type { BoxSigner, SwkOps } from "./keyCustodian.js";
 import { ServicePlatform, buildServiceHttpHandlers, type InstalledService } from "./servicePlatform.js";
 import { AliasReconciler } from "./aliasReconciler.js";
@@ -1049,16 +1049,6 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
         })
     : null;
 
-  // Announce the box on the local network so its owner's phone can find it
-  // with no DNS (docs/data-sovereignty.md). A no-op when LAN-direct is off.
-  const lanDiscovery =
-    lan && process.env.FLAGSHIP_LAN_DISCOVERY !== "0"
-      ? (await import("./lanDiscovery.js")).startLanDiscovery({
-          id: rescueDiscoveryId(opts.custodian.boxPublicKey(), opts.serverFqdn),
-          endpoints: () => lan.endpoints(),
-        })
-      : null;
-
   // The same Ed25519 keypair the daemon uses for its server-identity
   // (signing tunnel HELLO, etc.) doubles as the X-Flagship-Signature
   // injector key — but the proxy + tunnel now sign through `opts.custodian`,
@@ -1725,7 +1715,6 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       if (renewalTimer) clearInterval(renewalTimer);
       aliasReconciler?.stop();
       await tunnel.close();
-      lanDiscovery?.close();
       await lan?.close();
       tls.close();
     },

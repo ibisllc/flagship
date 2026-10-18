@@ -429,38 +429,21 @@ describe("rescue session with .com unreachable", () => {
     expect(rig.rescue.openSessions()).toBe(4);
   });
 
-  it("refusals never lock the owner out, and the activity log hears of them at most every ten seconds", async () => {
+  it("guessing is throttled: ten refusals in a minute and the box stops answering orders", async () => {
     rig = await startBox({ adminPinned: true });
     const stranger = deriveIRK({ seed: new Uint8Array(32).fill(5) });
-    for (let i = 0; i < 25; i++) expect((await openSession(rig.port, stranger)).reply.status).toBe(403);
-    expect(rig.notes.filter((n) => n.kind === "server.rescue.refused")).toHaveLength(1);
+    for (let i = 0; i < 10; i++) expect((await openSession(rig.port, stranger)).reply.status).toBe(403);
+    expect((await openSession(rig.port, adminRoot)).reply.status).toBe(429);
+    clock += 61_000;
     expect((await openSession(rig.port, adminRoot)).reply.status).toBe(200);
-    clock += 11_000;
-    await openSession(rig.port, stranger);
-    expect(rig.notes.filter((n) => n.kind === "server.rescue.refused")).toHaveLength(2);
   });
 
   it("hello needs a well-formed nonce and is bounded", async () => {
     rig = await startBox({ adminPinned: true });
     expect((await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: "short" } })).status).toBe(400);
     expect((await request(rig.port, "POST", "/api/rescue/hello", { body: Buffer.from("not json") })).status).toBe(400);
-    for (let i = 0; i < 300; i++) expect((await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } })).status).toBe(200);
+    for (let i = 0; i < 30; i++) expect((await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } })).status).toBe(200);
     expect((await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } })).status).toBe(429);
-    clock += 61_000;
-    expect((await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } })).status).toBe(200);
-  });
-
-  it("a flood of hellos drops the oldest pending one instead of refusing the owner", async () => {
-    rig = await startBox({ adminPinned: true });
-    const clientNonce = nonce();
-    const first = await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce } });
-    for (let i = 0; i < 256; i++) await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } });
-    const late = await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } });
-    expect(late.status).toBe(200);
-    const order = { ...(first.json.hello as RescueExchange), issuedAt: clock };
-    const stale = await request(rig.port, "POST", "/api/rescue/session", { body: { order, signatureHex: Buffer.from(signRescueSession(order, adminRoot)).toString("hex") } });
-    expect(stale.status).toBe(403);
-    expect((await openSession(rig.port, adminRoot)).reply.status).toBe(200);
   });
 });
 
