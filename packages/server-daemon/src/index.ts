@@ -3530,6 +3530,17 @@ async function wireRuntimeSurfaces(deps: {
       statePath: defaultRePairWatcherPath(dataDir),
       pollIntervalMs: 5 * 60_000,
       clearPairedSessions: () => pairedSessions.removeAll(),
+      // `.com`'s word that a re-pair completed is applied only when the box can
+      // verify it itself: a signed proof, or (on a box that pins an admin root)
+      // a rotation its own consumer verified since the re-pair began.
+      ...(cfg.adminRootPub
+        ? {
+            rotationAppliedSince: async (sinceMs: number) => {
+              const pin = await fileAdminRootPinStore(`${dataDir}/admin-root-pin.json`).read();
+              return !!pin && pin.seq > 0 && pin.updatedAt >= sinceMs;
+            },
+          }
+        : {}),
       reissuerDeps: runtime.servicePlatform
         ? {
             servicePlatform: runtime.servicePlatform,

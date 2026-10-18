@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { InMemoryAlertInbox } from "../src/alertInbox.js";
 import type { ReissuanceAlert } from "../src/phoneAlerts.js";
-import { RePairWatcher, type RePairPendingRow } from "../src/postRecovery/rePairWatcher.js";
+import { ed, signRePairInitiate, type Keypair } from "@flagship/protocol";
+import { RePairWatcher, verifyRePairSwap, type RePairPendingRow } from "../src/postRecovery/rePairWatcher.js";
 import {
   InMemoryJournalStore,
   type ReissuerDeps,
@@ -56,6 +57,7 @@ function makeWatcher(opts: {
     "repair-watcher.json",
   );
   const watcher = new RePairWatcher({
+      rotationAppliedSince: async () => true,
     username: USERNAME,
     currentIrkPubHex: OLD_HEX,
     comBaseUrl: "https://flagshipserver.com",
@@ -200,6 +202,7 @@ describe("RePairWatcher", () => {
     const { fetchImpl, urls } = makeFetchSequence([{ pending: null }]);
     const dir = mkdtempSync(join(tmpdir(), "repair-watcher-"));
     const watcher = new RePairWatcher({
+      rotationAppliedSince: async () => true,
       username: odd,
       currentIrkPubHex: OLD_HEX,
       comBaseUrl: "https://flagshipserver.com/",
@@ -229,6 +232,7 @@ describe("RePairWatcher", () => {
     await first.watcher.pollOnce();
 
     const reborn = new RePairWatcher({
+      rotationAppliedSince: async () => true,
       username: USERNAME,
       currentIrkPubHex: PROBE,
       comBaseUrl: "https://flagshipserver.com",
@@ -316,6 +320,7 @@ describe("RePairWatcher → AlertInbox emission (J.4)", () => {
     };
     const { fetchImpl } = makeFetchSequence([{ pending }, { pending: null }]);
     const watcher = new RePairWatcher({
+      rotationAppliedSince: async () => true,
       username: USERNAME,
       currentIrkPubHex: OLD_HEX,
       comBaseUrl: "https://flagshipserver.com",
@@ -361,6 +366,7 @@ describe("RePairWatcher → AlertInbox emission (J.4)", () => {
       journal: new InMemoryJournalStore(),
     };
     const watcher = new RePairWatcher({
+      rotationAppliedSince: async () => true,
       username: USERNAME,
       currentIrkPubHex: OLD_HEX,
       comBaseUrl: "https://flagshipserver.com",
@@ -410,6 +416,7 @@ describe("RePairWatcher integration with paired sessions + reissuer", () => {
     };
     const { fetchImpl } = makeFetchSequence([{ pending }, { pending: null }]);
     const watcher = new RePairWatcher({
+      rotationAppliedSince: async () => true,
       username: USERNAME,
       currentIrkPubHex: OLD_HEX,
       comBaseUrl: "https://flagshipserver.com",
@@ -450,6 +457,7 @@ describe("RePairWatcher integration with paired sessions + reissuer", () => {
     };
     const fetched = makeFetchSequence([{ pending }, { pending: null }]);
     const watcher = new RePairWatcher({
+      rotationAppliedSince: async () => true,
       username: USERNAME,
       currentIrkPubHex: OLD_HEX,
       comBaseUrl: "https://flagshipserver.com",
@@ -466,5 +474,133 @@ describe("RePairWatcher integration with paired sessions + reissuer", () => {
     expect(await watcher.pollOnce()).toBe("completed");
     expect(store.list()).toHaveLength(0);
     expect(watcher.currentIrkPubHex).toBe(NEW_HEX);
+  });
+});
+
+
+describe("RePairWatcher does not take .com's word for a completed re-pair", () => {
+  const key = (): Keypair => {
+    const privateKey = new Uint8Array(32);
+    crypto.getRandomValues(privateKey);
+    return { privateKey, publicKey: ed.getPublicKey(privateKey) };
+  };
+  const hexOf = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+  const INITIATED = 5_000_000;
+
+  function row(oldK: Keypair, newK: Keypair, opts: { forgeOldWith?: Keypair; noOld?: boolean; issuedAt?: number } = {}): RePairPendingRow {
+    const issuedAt = opts.issuedAt ?? INITIATED;
+    const claim = { username: USERNAME, newIrkPub: newK.publicKey, oldIrkPub: oldK.publicKey, issuedAt };
+    return {
+      newIrkPub: hexOf(newK.publicKey),
+      oldIrkPub: hexOf(oldK.publicKey),
+      initiatedAt: INITIATED,
+      completesAt: INITIATED + 86_400_000,
+      objectedAt: null,
+      proof: {
+        issuedAt,
+        newIrkSignature: hexOf(signRePairInitiate(claim, newK)),
+        ...(opts.noOld ? {} : { oldIrkSignature: hexOf(signRePairInitiate(claim, opts.forgeOldWith ?? oldK)) }),
+      },
+    };
+  }
+
+  function watcherFor(oldHex: string, payloads: Array<{ pending: RePairPendingRow | null }>, rotation?: { at: number | null }) {
+    const paired = { count: 4 };
+    let swapped = 0;
+    const watcher = new RePairWatcher({
+      username: USERNAME,
+      currentIrkPubHex: oldHex,
+      comBaseUrl: "https://flagshipserver.com",
+      fetchImpl: makeFetchSequence(payloads).fetchImpl,
+      statePath: join(mkdtempSync(join(tmpdir(), "repair-watcher-")), "repair-watcher.json"),
+      now: () => INITIATED + 3 * 86_400_000,
+      pollIntervalMs: 60_000,
+      clearPairedSessions: async () => {
+        const n = paired.count;
+        paired.count = 0;
+        return n;
+      },
+      reissuerDeps: null,
+      onIrkSwapped: () => { swapped++; },
+      ...(rotation ? { rotationAppliedSince: async (since: number) => rotation.at !== null && rotation.at >= since } : {}),
+    });
+    return { watcher, paired, swapped: () => swapped };
+  }
+
+  it("a swap with no proof and no verified rotation changes nothing", async () => {
+    const o = key(), n = key();
+    const { proof: _p, ...bare } = row(o, n);
+    const w = watcherFor(hexOf(o.publicKey), [{ pending: bare }, { pending: null }]);
+    expect(await w.watcher.pollOnce()).toBe("initiated");
+    expect(await w.watcher.pollOnce()).toBe("unverified");
+    expect(w.watcher.currentIrkPubHex).toBe(hexOf(o.publicKey));
+    expect(w.paired.count).toBe(4);
+    expect(w.swapped()).toBe(0);
+    expect(w.watcher.state.unverified?.row.newIrkPub).toBe(hexOf(n.publicKey));
+    expect(w.watcher.state.lastError).toMatch(/could not be verified/);
+  });
+
+  it("applies a swap whose proof chains from the IRK the box trusts", async () => {
+    const o = key(), n = key();
+    const r = row(o, n);
+    const w = watcherFor(hexOf(o.publicKey), [{ pending: r }, { pending: null }]);
+    await w.watcher.pollOnce();
+    expect(await w.watcher.pollOnce()).toBe("completed");
+    expect(w.watcher.currentIrkPubHex).toBe(hexOf(n.publicKey));
+    expect(w.paired.count).toBe(0);
+    expect(w.swapped()).toBe(1);
+  });
+
+  it("refuses a proof whose old signature is not by the box's IRK, and one that names another old key", async () => {
+    const o = key(), n = key(), attacker = key();
+    const forged = row(o, n, { forgeOldWith: attacker });
+    const a = watcherFor(hexOf(o.publicKey), [{ pending: forged }, { pending: null }]);
+    await a.watcher.pollOnce();
+    expect(await a.watcher.pollOnce()).toBe("unverified");
+    expect(a.swapped()).toBe(0);
+
+    const other = key();
+    const b = watcherFor(hexOf(other.publicKey), [{ pending: row(o, n) }, { pending: null }]);
+    await b.watcher.pollOnce();
+    expect(await b.watcher.pollOnce()).toBe("unverified");
+    expect(b.watcher.currentIrkPubHex).toBe(hexOf(other.publicKey));
+  });
+
+  it("a recovery with no old signature needs a rotation the box verified since it began", async () => {
+    const o = key(), n = key();
+    const credential = row(o, n, { noOld: true });
+    const none = watcherFor(hexOf(o.publicKey), [{ pending: credential }, { pending: null }], { at: null });
+    await none.watcher.pollOnce();
+    expect(await none.watcher.pollOnce()).toBe("unverified");
+
+    const stale = watcherFor(hexOf(o.publicKey), [{ pending: credential }, { pending: null }], { at: INITIATED - 3_600_000 });
+    await stale.watcher.pollOnce();
+    expect(await stale.watcher.pollOnce()).toBe("unverified");
+
+    const fresh = watcherFor(hexOf(o.publicKey), [{ pending: credential }, { pending: null }], { at: INITIATED + 60_000 });
+    await fresh.watcher.pollOnce();
+    expect(await fresh.watcher.pollOnce()).toBe("completed");
+    expect(fresh.watcher.currentIrkPubHex).toBe(hexOf(n.publicKey));
+  });
+
+  it("applies a held swap once the rotation reaches the box", async () => {
+    const o = key(), n = key();
+    const rotation: { at: number | null } = { at: null };
+    const w = watcherFor(hexOf(o.publicKey), [{ pending: row(o, n, { noOld: true }) }, { pending: null }, { pending: null }], rotation);
+    await w.watcher.pollOnce();
+    expect(await w.watcher.pollOnce()).toBe("unverified");
+    rotation.at = INITIATED + 120_000;
+    expect(await w.watcher.pollOnce()).toBe("completed");
+    expect(w.watcher.state.unverified).toBeNull();
+    expect(w.swapped()).toBe(1);
+  });
+
+  it("verifyRePairSwap: an old signature from a different issuedAt does not verify", async () => {
+    const o = key(), n = key();
+    const r = row(o, n);
+    r.proof = { ...r.proof!, issuedAt: INITIATED + 1 };
+    expect(await verifyRePairSwap({ row: r, username: USERNAME, currentIrkPubHex: hexOf(o.publicKey) })).toBeNull();
+    expect(await verifyRePairSwap({ row: row(o, n), username: "someone-else", currentIrkPubHex: hexOf(o.publicKey) })).toBeNull();
+    expect(await verifyRePairSwap({ row: row(o, n), username: USERNAME, currentIrkPubHex: hexOf(o.publicKey) })).toBe("proof");
   });
 });

@@ -36,6 +36,22 @@
  *       c. Persists a "swap completed" marker so a restart doesn't
  *          re-fire the trigger.
  *
+ * Trust (docs/device-admin-tier-spec.md section 5): `.com` is not a trust
+ * anchor, so its report that a swap completed is only a hint. The box applies
+ * the swap (clears paired sessions, re-anchors membership, adopts the new IRK)
+ * only when it can verify it from a key it already trusts:
+ *
+ *   - proof: the row carries a `proof` with two signatures over the same
+ *     `RePairInitiate` bytes, one by the new IRK and one by the IRK this box
+ *     currently trusts (the key-file / device-pair recovery routes make it); or
+ *   - rotation: the box pins an admin root and its rotation consumer has
+ *     re-pinned at or after the re-pair began (a recovery that re-mints the
+ *     admin root signs old-root -> new-root, which the box verified itself).
+ *
+ * Anything else is left unapplied (`state.unverified`, kept for a week in case
+ * the rotation reaches the box after the row disappears) and the owner's key
+ * and sessions stay as they were.
+ *
  * Persistence: a single JSON file at
  * `<dataDir>/repair-watcher.json` holding the last observed pending row
  * + the last IRK pubkey we successfully swapped to. The file is the
@@ -49,6 +65,7 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { verifyRePairInitiate, type RePairInitiate } from "@flagship/protocol";
 import { writeFileDurable } from "../durableFile.js";
 import type { AlertInbox } from "../alertInbox.js";
 import type { ReissuanceAlert } from "../phoneAlerts.js";
@@ -61,6 +78,78 @@ export interface RePairPendingRow {
   initiatedAt: number;
   completesAt: number;
   objectedAt: number | null;
+  /** What `.com` stored of the initiate, so the box can check it itself. */
+  proof?: RePairProof | null;
+}
+
+export interface RePairProof {
+  issuedAt: number;
+  /** Hex Ed25519 by the NEW IRK over the RePairInitiate bytes. */
+  newIrkSignature: string;
+  /** Hex Ed25519 by the IRK the account had; only the key-file / device-pair routes have one. */
+  oldIrkSignature?: string | null;
+}
+
+const HEX = (n: number) => new RegExp(`^[0-9a-f]{${n}}$`);
+const PROOF_SKEW_MS = 60 * 60_000;
+const ROTATION_LEAD_MS = 10 * 60_000;
+const UNVERIFIED_KEEP_MS = 7 * 24 * 60 * 60_000;
+
+function fromHex(h: string): Uint8Array {
+  const out = new Uint8Array(h.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+
+/**
+ * Can the box verify this completed re-pair from a key it already trusts?
+ * "proof" (the signatures chain from `currentIrkPubHex`), "rotation" (a
+ * verified admin-root rotation was applied since the re-pair began), or null.
+ */
+export async function verifyRePairSwap(opts: {
+  row: RePairPendingRow;
+  username: string;
+  currentIrkPubHex: string;
+  /** True when the box's pinned admin root was re-pinned (by a chain it verified) at or after `sinceMs`. */
+  rotationAppliedSince?: (sinceMs: number) => Promise<boolean>;
+}): Promise<"proof" | "rotation" | null> {
+  const { row } = opts;
+  const oldHex = row.oldIrkPub.toLowerCase();
+  const newHex = row.newIrkPub.toLowerCase();
+  const proof = row.proof;
+  if (
+    proof &&
+    HEX(64).test(oldHex) &&
+    HEX(64).test(newHex) &&
+    oldHex === opts.currentIrkPubHex.toLowerCase() &&
+    typeof proof.issuedAt === "number" &&
+    Math.abs(proof.issuedAt - row.initiatedAt) <= PROOF_SKEW_MS &&
+    typeof proof.newIrkSignature === "string" &&
+    HEX(128).test(proof.newIrkSignature.toLowerCase()) &&
+    typeof proof.oldIrkSignature === "string" &&
+    HEX(128).test(proof.oldIrkSignature.toLowerCase())
+  ) {
+    const claim: RePairInitiate = {
+      username: opts.username,
+      newIrkPub: fromHex(newHex),
+      oldIrkPub: fromHex(oldHex),
+      issuedAt: proof.issuedAt,
+    };
+    if (
+      verifyRePairInitiate(claim, fromHex(proof.newIrkSignature.toLowerCase()), claim.newIrkPub) &&
+      verifyRePairInitiate(claim, fromHex(proof.oldIrkSignature.toLowerCase()), claim.oldIrkPub)
+    ) {
+      return "proof";
+    }
+  }
+  if (opts.rotationAppliedSince) {
+    try {
+      if (await opts.rotationAppliedSince(row.initiatedAt - ROTATION_LEAD_MS)) return "rotation";
+    } catch {
+      /* unreadable pin: no evidence */
+    }
+  }
+  return null;
 }
 
 export interface RePairWatcherState {
@@ -74,6 +163,11 @@ export interface RePairWatcherState {
   lastPolledAt: number;
   /** Most recent transient error, if any. */
   lastError: string | null;
+  /**
+   * A swap `.com` reported but the box could not verify (yet). Nothing was
+   * applied for it; it is re-checked each poll for a week.
+   */
+  unverified?: { row: RePairPendingRow; seenAt: number } | null;
 }
 
 export interface RePairWatcherDeps {
@@ -132,6 +226,12 @@ export interface RePairWatcherDeps {
    * alert emission.
    */
   alertInbox?: AlertInbox | null;
+  /**
+   * True when the box's pinned admin root was re-pinned at or after the given
+   * time by a rotation chain the box verified itself. Omit on a box that pins
+   * no admin root: then only a signed proof can authorize a swap.
+   */
+  rotationAppliedSince?: (sinceMs: number) => Promise<boolean>;
 }
 
 const FIVE_MIN_MS = 5 * 60_000;
@@ -193,6 +293,7 @@ export class RePairWatcher {
         lastSwapAt: parsed.lastSwapAt ?? null,
         lastPolledAt: parsed.lastPolledAt ?? 0,
         lastError: parsed.lastError ?? null,
+        unverified: parsed.unverified ?? null,
       };
       if (this.state.lastSwapTo) {
         this._currentIrkPubHex = this.state.lastSwapTo.toLowerCase();
@@ -222,7 +323,7 @@ export class RePairWatcher {
    * transition fires, only `lastPolledAt` / `lastSeen` change. Returns
    * the transition that fired (or `"none"`) for test assertions.
    */
-  async pollOnce(): Promise<"none" | "initiated" | "objected" | "completed"> {
+  async pollOnce(): Promise<"none" | "initiated" | "objected" | "completed" | "unverified"> {
     const now = (this.deps.now ?? (() => Date.now()))();
     let observed: RePairPendingRow | null;
     try {
@@ -237,7 +338,20 @@ export class RePairWatcher {
     this.state.lastPolledAt = now;
 
     const prior = this.state.lastSeen;
-    let transition: "none" | "initiated" | "objected" | "completed" = "none";
+    let transition: "none" | "initiated" | "objected" | "completed" | "unverified" = "none";
+
+    // A swap `.com` reported earlier that the box could not verify: the proof
+    // may have arrived since (the rotation lane is polled separately).
+    const waiting = this.state.unverified;
+    if (waiting) {
+      if (now - waiting.seenAt > UNVERIFIED_KEEP_MS) {
+        this.state.unverified = null;
+      } else if (await this.verified(waiting.row)) {
+        this.state.unverified = null;
+        await this.handleCompletedSwap(waiting.row, now);
+        transition = "completed";
+      }
+    }
 
     if (!prior && observed) {
       transition = "initiated";
@@ -249,9 +363,17 @@ export class RePairWatcher {
       //   - prior had an objection → just clear state, nothing to do
       if (!prior.objectedAt) {
         const newHex = prior.newIrkPub.toLowerCase();
-        if (this.state.lastSwapTo !== newHex) {
-          await this.handleCompletedSwap(prior, now);
-          transition = "completed";
+        if (this.state.lastSwapTo !== newHex && transition === "none") {
+          if (await this.verified(prior)) {
+            this.state.unverified = null;
+            await this.handleCompletedSwap(prior, now);
+            transition = "completed";
+          } else {
+            this.state.unverified = { row: prior, seenAt: now };
+            this.state.lastError =
+              "ignored a re-pair .com reported: it could not be verified from this server's trusted keys";
+            transition = "unverified";
+          }
         }
       }
     }
@@ -259,6 +381,17 @@ export class RePairWatcher {
     this.state.lastSeen = observed;
     await this.persist();
     return transition;
+  }
+
+  private async verified(row: RePairPendingRow): Promise<boolean> {
+    return (
+      (await verifyRePairSwap({
+        row,
+        username: this.deps.username,
+        currentIrkPubHex: this._currentIrkPubHex,
+        ...(this.deps.rotationAppliedSince ? { rotationAppliedSince: this.deps.rotationAppliedSince } : {}),
+      })) !== null
+    );
   }
 
   private async fetchPending(): Promise<RePairPendingRow | null> {

@@ -273,6 +273,7 @@ describe("stores survive twenty overlapping writes", () => {
     const fetchImpl = (async () =>
       new Response(JSON.stringify({ pending: null }), { status: 200, headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
     const w = new RePairWatcher({
+      rotationAppliedSince: async () => true,
       username: "alice",
       currentIrkPubHex: "aa".repeat(32),
       comBaseUrl: "https://flagshipserver.com",
