@@ -180,3 +180,14 @@ export function shouldReuseCert(
   if (!isCertFresh(existing, windowMs, now)) return false;
   return true;
 }
+
+/**
+ * A certificate that is not fresh enough to reuse (inside the renewal window,
+ * or past its end) is still the best thing to show while a new one is being
+ * requested, as long as it names this box: a phone that knows the box by its
+ * key does not look at the date, and a browser's warning is better than a
+ * handshake that fails (docs/data-sovereignty.md).
+ */
+export function shouldServeStaleCert(existing: PersistedCert | null, desiredSans: ReadonlyArray<string>): boolean {
+  return existing !== null && sansEqual(existing.names, desiredSans);
+}

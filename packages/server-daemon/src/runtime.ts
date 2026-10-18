@@ -42,7 +42,7 @@ import {
   type AcmeIssuancePhase,
   type LeEnvironment,
 } from "./acme/letsEncryptIssuer.js";
-import { PersistentAcmeStore, shouldReuseCert } from "./acme/persistentStore.js";
+import { PersistentAcmeStore, shouldReuseCert, shouldServeStaleCert } from "./acme/persistentStore.js";
 import { RemoteDnsChallengeWriter } from "./acme/remoteDnsChallengeWriter.js";
 import { buildServiceCertHandlers, rehydrateServiceCerts } from "./serviceCertHttp.js";
 import {
@@ -135,6 +135,21 @@ export interface DaemonRuntimeOptions {
    * Called when a new cert is issued (or renewed). Fires AFTER persistence.
    */
   onCertIssued?: (cert: CertMaterial, notAfter: number, names: string[]) => void;
+  /**
+   * Called when the box serves the certificate it already holds because it
+   * cannot get a new one yet (inside its renewal window, or past its end).
+   * Not a new issuance: no "live" report, no status beat. The daemon uses it
+   * to know which certificate its owner's phone will see
+   * (docs/data-sovereignty.md).
+   */
+  onCertFallback?: (cert: CertMaterial, notAfter: number, names: string[]) => void;
+  /**
+   * How long startup waits for the relay's first HELLO_ACK before it goes on
+   * without it (default 60 s: the first dial is jittered up to 30 s). The
+   * relay is one way to reach the box, not a condition of serving the owner
+   * on the local network.
+   */
+  relayGraceMs?: number;
   /**
    * Fine-grained ACME issuance observability. Fires per-step as the
    * issuer walks the order (`acme-order` → `dns01-publish-*` →
@@ -848,6 +863,22 @@ export function defaultApexPage(serverFqdn: string): string {
  *
  * Returns once the cert is installed (so the daemon is serving real HTTPS).
  */
+/** True when the relay answered within `graceMs`; false when startup should go on without it. */
+export async function waitForRelay(ready: () => Promise<unknown>, graceMs: number): Promise<boolean> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      ready().then(() => true, () => false),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), graceMs);
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<DaemonRuntime> {
   const wantWildcard = opts.wildcard ?? true;
   // SAN list — PER-BOX wildcard cert (cert model A′). Each box mints
@@ -1126,7 +1157,15 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     ...(opts.tunnelSupervisor ?? {}),
   });
   void tunnelInitialDomains;
-  await tunnel.ready();
+  // The relay is one way in, not a precondition: a box whose relay or `.com`
+  // is gone must still come up and serve its owner on the LAN with the
+  // certificate it holds (docs/data-sovereignty.md). The tunnel keeps dialing
+  // in the background and claims its domains when it connects.
+  if (!(await waitForRelay(() => tunnel.ready(), opts.relayGraceMs ?? 60_000))) {
+    console.warn(
+      `[runtime] the relay hasn't answered after ${Math.round((opts.relayGraceMs ?? 60_000) / 1000)} s; going on without it (the local network works, the relay keeps trying)`,
+    );
+  }
 
   // Persistent ACME state. If a `dataDir` (or test-injected store) is
   // configured, account key and issued certs are loaded on startup and
@@ -1207,6 +1246,20 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       sans,
     );
   } else {
+    // Inside the renewal window or past the end, with no way to get a new
+    // one yet: keep serving the one on disk. A phone that knows this box by
+    // its key (not by the certificate authority) still reaches it, and the
+    // retry loop below replaces it the moment an issuance works.
+    if (existing && shouldServeStaleCert(existing, sans)) {
+      certManager.install(
+        { certPem: existing.certPem, privateKeyPem: existing.privateKeyPem },
+        existing.notAfter,
+      );
+      console.warn(
+        `[runtime] serving the on-disk cert for ${opts.serverFqdn} (not after ${new Date(existing.notAfter).toISOString()}) while a new one is requested`,
+      );
+      opts.onCertFallback?.({ certPem: existing.certPem, privateKeyPem: existing.privateKeyPem }, existing.notAfter, sans);
+    }
     certRetryLoop = startCertRetryLoop({
       issuer,
       certManager,
