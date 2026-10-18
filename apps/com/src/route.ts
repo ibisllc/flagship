@@ -35,6 +35,9 @@ import { handleInferenceModelRoutes, isInferenceModelPath } from "./inferenceMod
 import { handleSecurityNotices, isSecurityNoticesPath } from "./securityNotices.js";
 import { handlePeerBackupNetRoute, isPeerBackupNetPath } from "./peerBackupNetworkRoutes.js";
 import { handleRateLimitReport, RATE_LIMIT_REPORT_PATH } from "./rateLimitReport.js";
+import { handleReapRoute, REAP_PATH_PREFIX } from "./prodReap.js";
+import { CloudflareDnsClient } from "@flagship/control-plane";
+import { createUpCloudClient } from "./upcloud.js";
 import {
   recordRateLimited,
   recordUpgrade,
@@ -703,6 +706,17 @@ async function routeImpl(
   // Public, cacheable, keyed to nobody; the admin view checks its secret.
   if (url.pathname === RATE_LIMIT_REPORT_PATH) {
     return handleRateLimitReport(request, env);
+  }
+  // Owner-run prod reap of what the pre-GA scrub leaves (DNS + demo servers);
+  // docs/runbooks/pre-ga-scrub.md. Admin secret; classifies, deletes one item.
+  if (url.pathname.startsWith(REAP_PATH_PREFIX)) {
+    return handleReapRoute(request, env, {
+      makeDns: (e) =>
+        e.CLOUDFLARE_DNS_API_TOKEN && e.CLOUDFLARE_SERVICES_ZONE_ID
+          ? new CloudflareDnsClient({ apiToken: e.CLOUDFLARE_DNS_API_TOKEN, zoneId: e.CLOUDFLARE_SERVICES_ZONE_ID })
+          : undefined,
+      makeCloud: (e) => (e.UPCLOUD_TOKEN ? createUpCloudClient({ token: e.UPCLOUD_TOKEN }) : undefined),
+    });
   }
   if (isInferenceModelPath(url.pathname)) {
     return handleInferenceModelRoutes(request, env);

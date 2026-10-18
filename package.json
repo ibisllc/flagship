@@ -38,6 +38,7 @@
     "build-eval": "npm --workspace=@flagship/build-eval run eval --",
     "parity": "node scripts/parity-check.mjs",
     "rate-limits": "node scripts/rate-limit-report.mjs",
+    "reap-orphans": "node scripts/reap-orphans.mjs",
     "inference-settings": "node scripts/inference-settings.mjs",
     "ready": "node scripts/release-readiness.mjs"
   },

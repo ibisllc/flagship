@@ -63,6 +63,8 @@ export interface UpCloudLabeledServer {
 export interface UpCloudClient {
   findServerByName(name: string): Promise<UpCloudServerResult | null>;
   listServersByLabel(key: string, value: string): Promise<UpCloudLabeledServer[]>;
+  /** Every server that has the label key, whatever its value (prod reap). */
+  listServersByLabelKey(key: string): Promise<UpCloudLabeledServer[]>;
   createServerWithUserData(args: UpCloudCreateServerArgs): Promise<UpCloudServerResult>;
   getServerLabels(serverId: string): Promise<Record<string, string> | null>;
   getServerStatus(serverId: string): Promise<{ status: string; ipv4: string | null }>;
@@ -166,6 +168,22 @@ export function createUpCloudClient(opts: UpCloudClientOptions): UpCloudClient {
         if (typeof s.uuid !== "string") continue;
         const labels = labelMap(s);
         if (labels[key] !== value) continue;
+        out.push({ serverId: s.uuid, title: typeof s.title === "string" ? s.title : "", state: String(s.state ?? ""), labels });
+      }
+      return out;
+    },
+
+    async listServersByLabelKey(key) {
+      const path = `/server?label=${encodeURIComponent(key)}`;
+      const { status, text } = await call("GET", path);
+      if (status < 200 || status >= 300) fail("GET", "/server", status, text);
+      const servers = (safeJsonParse(text) as { servers?: { server?: UpCloudServerBody[] } } | null)
+        ?.servers?.server ?? [];
+      const out: UpCloudLabeledServer[] = [];
+      for (const s of servers) {
+        if (typeof s.uuid !== "string") continue;
+        const labels = labelMap(s);
+        if (labels[key] === undefined) continue;
         out.push({ serverId: s.uuid, title: typeof s.title === "string" ? s.title : "", state: String(s.state ?? ""), labels });
       }
       return out;

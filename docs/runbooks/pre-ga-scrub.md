@@ -172,35 +172,82 @@ No orphaned server, DNS or R2 objects: D1 is only part of the picture, see
 "Reaping" next. The orphan check for those is the reap's own dry run coming
 back empty.
 
-## Reaping what the wipe leaves behind (dry-run first)
+## Reaping what the wipe leaves behind (the step AFTER the D1 scrub)
 
-The wipe deletes rows only. The wiped accounts' cloud servers, their
-`<server>.<user>.flagship.services` DNS records (the zone is near its 200-record
-cap: about 154 used, about 70 of them leftovers) and any R2 objects stay until
-you reap them. **Keep the dry-run output from step 1: once the rows are gone,
-that list of usernames is the only record of what to reap.**
+The wipe deletes rows only. The wiped accounts' demo cloud servers and their
+`<server>.<user>.flagship.services` DNS records (the zone is capped at 200
+records: about 154 used, about 70 of them leftovers from accounts that are
+already gone) stay until you reap them. R2 objects and Fly state are not
+covered by any tool; Hetzner is not covered (its account is suspended).
 
-1. **Demo accounts with a running cloud server: before the wipe.**
+1. **Demo accounts with a running cloud server: before the wipe, optional.**
    `node scripts/sample-user.mjs cleanup <username>` (needs `FLAGSHIP_ADMIN_SECRET`
-   in your shell; it has no dry-run, so work from the read-only list in "Before
-   you start" step 4 and run it one account at a time). It tears down the
-   provider server and the account's cloud-side state while the rows still exist
-   to find them. Do this for each demo account that is on the delete list.
+   in your shell; no dry-run, so work from the read-only list in "Before you
+   start" step 4, one account at a time). The prod reap below also finds these
+   servers afterwards, so this is only for ones you want gone first.
 2. **Gym leftovers (the shared zone's gym records and gym servers).** Dry run,
-   which lists what it would remove and the zone's record count, then destroy;
-   only when no live gym run is in progress:
+   then destroy; only when no live gym run is in progress:
    `npx tsx tools/live-e2e/sweep-cli.ts` then `npx tsx tools/live-e2e/sweep-cli.ts --destroy`
    (the gym Worker's `/api/gym/teardown`; it touches only `flagship-env=gym`
    servers and records under the gym apex, never prod's).
-3. **Prod DNS records and non-demo servers of wiped accounts: no tool exists
-   yet.** Nothing in the repo reaps prod's `flagship.services` records for
-   removed accounts (the gym teardown is deliberately gym-only), and boxes on
-   UpCloud/Hetzner that are not demo accounts are deleted by hand in the
-   provider console. Until a prod reap tool with a dry run exists (open task:
-   mirror `apps/com/src/gymCloud.ts`'s dry-run/destroy for named usernames
-   under the prod apex, owner-run), list the wiped usernames from your saved
-   dry run and remove their records in the Cloudflare dashboard by hand, then
-   confirm the zone count dropped. Never reap by pattern; reap by the saved list.
+3. **Prod DNS records and demo servers of removed accounts: `scripts/reap-orphans.mjs`.**
+   It talks to the `.com` Worker's admin routes (`/api/admin/reap/list`,
+   `/classify`, `/delete-one`, `apps/com/src/prodReap.ts`), because the
+   Cloudflare DNS token and the UpCloud token live only there. **The Worker
+   must be deployed with those routes first** (`npx tsc -b && (cd apps/com && npm run deploy)`
+   by the owner; nothing is deployed from this runbook). Run it after the D1
+   scrub has been verified (step 4): a record is an ORPHAN when its account no
+   longer exists in D1, so the same tool can also be run before the scrub to
+   clear the leftovers of accounts that are already gone.
+
+   Needs `FLAGSHIP_ADMIN_SECRET` (prod) in your shell. Nothing else is read.
+
+   **a. Dry run** (writes nothing in Cloudflare, UpCloud or D1; saves a plan file):
+
+   ```sh
+   cd /Users/harrywinner/flagship
+   node scripts/reap-orphans.mjs --show --out ~/pre-ga-reap-plan.json
+   ```
+
+   It prints the zone and server counts, a table of accounts that are gone
+   from D1 with how many records and servers each has, the kept accounts, and
+   with `--show` every orphan plus the records it kept because it did not
+   recognise their shape. Read it. What it keeps, always: the apex and
+   wildcard, every system or reserved name (`api`, `www`, `gym`, ...), the gym
+   subtree, `playstore-test-0725` and its server, every account that D1 still
+   knows (usernames, aliases, servers, demo users, auth codes), any record
+   shape Flagship does not publish, and any UpCloud server without the
+   `flagship-demo` label or with a `flagship-env` label. Sanity checks: the
+   orphan accounts are the ones you wiped (and the older leftovers listed
+   under "Urgent" in AGENTS.md); `zone after the reap` is well under 200; the
+   "kept accounts" list is exactly the accounts you kept. The route refuses to
+   classify at all if D1 does not hold `playstore-test-0725` (wrong database,
+   or the review login is gone), so a bad scrub cannot turn into a wide reap.
+
+   **b. Apply** (a real terminal only; deletes ONLY the orphans in that saved
+   plan, and only if the plan is under 24 hours old):
+
+   ```sh
+   node scripts/reap-orphans.mjs --apply --plan ~/pre-ga-reap-plan.json
+   ```
+
+   It prints the plan again, then asks you to type
+   `delete N records and M servers` (the real counts). It deletes one item at
+   a time. Before each one the Worker re-reads the record or server, re-checks
+   D1 as of that moment and refuses (409, "refused by the re-check") anything
+   that is not an orphan any more, that differs from the plan, or that touches
+   the apex or a protected account. A failed call (Cloudflare rate limit,
+   network) is retried every 30 seconds, up to 6 attempts, then marked
+   failed. Every outcome is appended to `~/pre-ga-reap-plan.json.log.jsonl`
+   (the Worker also logs each deletion). It ends by re-running the
+   classification and printing what is left and the zone's record count. Exit
+   0 means nothing failed or was stopped; rerun the dry run and apply again
+   for stragglers.
+
+   **c. Verify**: rerun the dry run. It should report 0 orphaned records and 0
+   orphaned servers, and the zone count should match `zone after the reap`.
+   Check `playstore-test-0725` still resolves (its box answers over HTTPS) and
+   a kept account's box still has its three record groups. Note the date here.
 
 ## Final step: retire the wipe tooling (only after the run is verified)
 
@@ -209,24 +256,29 @@ owner confirms the scrub happened **and** the verification in step 4 passed
 (only `playstore-test-0725` is left, four zero orphan counts, the review login
 signs in). Until then the tooling stays; after it, it must not exist.
 
-A ready commit is prepared on the local branch `chore/delete-wipe-tooling` in
-the worktree this runbook was written in (it was not pushed). It deletes the
-script, its table list, harness, fixture and tests, replaces the release-guard
-wipe checks with a rule that fails every build (dev included) if any
+A ready commit sits on the branch `chore/delete-wipe-tooling` (rebased on
+`main` on 2026-10-18 and pushed to `origin`; **it is deliberately not on
+`main`**). **Do not land it until the owner confirms that the scrub ran, was
+verified (step 4) and the reap (above) is done.** It deletes the script, its
+table list, harness, fixture and tests, replaces the release-guard wipe checks
+with a rule that fails every build (dev included) if any
 `scripts/wipe-all-users*` file reappears, drops GA close-out item 1 from
-AGENTS.md and adds the rule "Accounts are never bulk-wiped after GA". To land it:
+AGENTS.md and adds the rule "Accounts are never bulk-wiped after GA". Landing
+it also removes this runbook's scrub steps (it becomes a short historical
+note), so copy the reap commands first if you still need them; the reap tool
+(`scripts/reap-orphans.mjs`) stays. To land it, after rebasing it again:
 
 ```sh
-cd <that worktree>
 git fetch origin && git checkout chore/delete-wipe-tooling && git rebase origin/main
 npx tsc -b && npx vitest run scripts && RELEASE=1 bash scripts/release-guard.sh
 bash <scratchpad>/land-main.sh "retire wipe tooling" "npx tsc -b && npx vitest run scripts"
-# or, without that helper: git push origin chore/delete-wipe-tooling:main
 ```
 
 Git history keeps the script (`git log --diff-filter=D -- scripts/wipe-all-users.sh`).
-The branch also needs the owner's decision on how the weekly gym zeroes its own
-database now that this script is gone; see the branch's commit message.
+The gym no longer needs it: the owner decided on 2026-10-18 that the weekly gym
+does not zero its database (unique account names, `/api/gym/teardown` and the
+fleet sweep instead); `scripts/gym-weekly.sh` no longer calls the script, and
+nothing else in the tree does.
 
 ## If the dry run shows an unexpected account
 
@@ -245,9 +297,10 @@ If a *kept* name shows `MISSING`, fix the spelling (the script already refused).
 
 - Already-installed servers of wiped accounts are **not** scrubbed. They keep
   running; their registrations are gone, so they simply stop working and age
-  out. Delete the cloud ones you pay for (UpCloud, Hetzner) by hand.
-- Cloudflare DNS records, R2 objects and Fly state of wiped accounts are not
-  touched: see "Reaping" above.
+  out. Demo cloud servers are removed by the reap; delete any other cloud
+  server you pay for (Hetzner, or UpCloud without the `flagship-demo` label) by hand.
+- Cloudflare DNS records and demo servers of wiped accounts: run the reap
+  (above). R2 objects and Fly state are not touched by anything.
 - Note the date here and, in **AGENTS.md**, update GA close-out item 1 ("wipe
   script guard"): the scrub is done, and the script can now be guarded further or
   removed per that item. The release guard (`scripts/release-guard.sh`) still
@@ -256,7 +309,7 @@ If a *kept* name shows `MISSING`, fix the spelling (the script already refused).
 ## Rehearsing
 
 Never rehearse against prod. Against the gym database (zeroes it, the keep list
-still applies; the gym has no review account):
+still applies; the gym has no review account; the weekly gym no longer does this):
 
 ```sh
 WIPE_ENV=gym WIPE_D1=flagship-state-gym WIPE_WRANGLER_CONFIG=wrangler.gym.toml \

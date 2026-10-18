@@ -475,6 +475,18 @@ describe("/api/health", () => {
   });
 });
 
+describe("/api/admin/reap/* (prod reap, owner-run)", () => {
+  it("is answered by the Worker itself and needs the admin secret", async () => {
+    const env = makeEnv({ FLAGSHIP_ADMIN_SECRET: "adm" });
+    const url = "https://flagshipserver.com/api/admin/reap/classify";
+    expect((await route(new Request(url), env)).status).toBe(401);
+    expect((await route(new Request(url, { headers: { "x-admin-secret": "no" } }), env)).status).toBe(403);
+    const noDb = await route(new Request(url, { headers: { "x-admin-secret": "adm" } }), env);
+    expect(noDb.status).toBe(503);
+    expect(calls).toHaveLength(0);
+  });
+});
+
 describe(".com control-plane routes (Worker + D1)", () => {
   it("falls through to upstream when DB binding is missing", async () => {
     nextResp = new Response(JSON.stringify({ ok: true, fromUpstream: true }), {

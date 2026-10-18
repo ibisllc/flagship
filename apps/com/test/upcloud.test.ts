@@ -126,6 +126,18 @@ describe("UpCloud client", () => {
     expect(await client.findServerByName("flagship-demo-openai-build-00000000")).toBeNull();
   });
 
+  it("lists every server that carries a label key, whatever its value", async () => {
+    const { fn, calls } = fakeFetch(() => ({ status: 200, body: { servers: { server: [
+      { uuid: UUID, title: "a", state: "started", labels: { label: [{ key: "flagship-demo", value: "bob" }] } },
+      { uuid: "11111111-1111-4111-8111-111111111111", title: "b", state: "stopped", labels: { label: [{ key: "other", value: "x" }] } },
+    ] } } }));
+    const client = createUpCloudClient({ token: "t", fetch: fn });
+    const found = await client.listServersByLabelKey("flagship-demo");
+    expect(found.map((s) => s.serverId)).toEqual([UUID]);
+    expect(found[0]!.labels).toEqual({ "flagship-demo": "bob" });
+    expect(calls[0]!.url).toBe("https://api.upcloud.com/1.3/server?label=flagship-demo");
+  });
+
   it("maps UpCloud states onto the poller's vocabulary", async () => {
     for (const [state, mapped] of [["started", "running"], ["stopped", "off"], ["maintenance", "initializing"], ["error", "unknown"]]) {
       const { fn } = fakeFetch(() => ({ status: 200, body: serverBody(state!) }));

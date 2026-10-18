@@ -253,7 +253,14 @@ of the last check here: **not yet checked**.
   on the account name: ~3 per account); the gym on its own registered domain
   (also frees the shared Let's Encrypt budget: `flagship.services` isn't on
   the PSL yet, so gym and prod certificates share 50 a week); reap the
-  leftovers. The live gym now refuses to start when its fleet won't fit.
+  leftovers.
+  **Reap tool built (2026-10-18, not deployed):** `scripts/reap-orphans.mjs`
+  (dry run by default, saved plan, `--apply --plan`, typed confirmation) over new
+  admin routes `/api/admin/reap/{list,classify,delete-one}` on `.com`
+  (`apps/com/src/prodReap.ts`): it removes DNS records and demo UpCloud servers
+  of accounts that no longer exist in D1, re-checking each against D1 right
+  before deleting. Needs a `.com` deploy, then the owner's dry run; steps in
+  `docs/runbooks/pre-ga-scrub.md`. The live gym now refuses to start when its fleet won't fit.
 
 ### In flight
 
