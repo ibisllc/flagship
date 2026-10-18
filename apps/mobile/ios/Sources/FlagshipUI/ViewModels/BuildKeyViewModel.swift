@@ -171,7 +171,7 @@ public final class BuildKeyViewModel {
             )
             try? store.setActive(id: added.id)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = UserErrorText.of(error)
             return false
         }
         resetForm()
@@ -227,7 +227,7 @@ public final class BuildKeyViewModel {
                 )
                 reload()
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserErrorText.of(error)
                 return nil
             }
         }

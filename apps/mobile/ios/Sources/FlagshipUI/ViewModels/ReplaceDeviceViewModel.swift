@@ -108,7 +108,7 @@ public final class ReplaceDeviceViewModel {
             oldKey = try await Keystore.deriveIRK(reason: "Confirm replace device", version: oldVersion)
             newKey = try await Keystore.deriveIRK(reason: "Authorize replace device", version: newVersion)
         } catch {
-            phase = .failed("Couldn't access your account keys: \(error.localizedDescription)")
+            phase = .failed("Couldn't access your account keys: \(UserErrorText.of(error))")
             return
         }
         let oldPubHex = HexUtil.encode(oldKey.publicKey.rawRepresentation)
@@ -131,7 +131,7 @@ public final class ReplaceDeviceViewModel {
             // Without it .com refuses the rotation.
             oldSignature = try oldKey.signature(for: canonical)
         } catch {
-            phase = .failed("Couldn't sign the rotation request: \(error.localizedDescription)")
+            phase = .failed("Couldn't sign the rotation request: \(UserErrorText.of(error))")
             return
         }
 
@@ -169,7 +169,7 @@ public final class ReplaceDeviceViewModel {
             if let r = RateLimitedRefusal.from(error) {
                 phase = .failed(r.message)
             } else {
-                phase = .failed("Couldn't reach the server: \(error.localizedDescription)")
+                phase = .failed(UserErrorText.of(error))
             }
         }
     }
@@ -227,7 +227,7 @@ public final class ReplaceDeviceViewModel {
             phase = .failed("This replacement was cancelled. Local state stays unchanged.")
             try? Keystore.setPendingIrkRotationVersion(nil)
         } catch {
-            phase = .failed("Couldn't complete: \(error.localizedDescription)")
+            phase = .failed("Couldn't complete: \(UserErrorText.of(error))")
         }
     }
 }

@@ -76,7 +76,10 @@ public enum HumanError {
             return (.offline, offlineCopy)
         }
 
-        return (.unknown, genericCopy)
+        // 5. A box or relay failure carried as text or a typed error of its
+        //    own: the shared mapper turns "connection closed", "HTTP 503:
+        //    error code: 1102" and Foundation's domain lines into sentences.
+        return (.unknown, UserErrorText.of(error, fallback: genericCopy))
     }
 
     /// The plain-language string only (the common case). Equivalent to
@@ -135,9 +138,10 @@ public enum HumanError {
             return (.offline, "You're offline. Check your connection and try again.")
         case .timedOut:
             return (.offline, "The request timed out. Check your connection and try again.")
-        case .cannotFindHost,
-             .cannotConnectToHost,
-             .dnsLookupFailed,
+        case .cannotFindHost, .dnsLookupFailed:
+            // The connection is fine; the server's name just won't resolve yet.
+            return (.offline, UserErrorText.nameLookup)
+        case .cannotConnectToHost,
              .cannotLoadFromNetwork:
             return (.offline, offlineCopy)
         case .badServerResponse,

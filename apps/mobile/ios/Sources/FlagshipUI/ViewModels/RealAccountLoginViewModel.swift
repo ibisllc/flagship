@@ -225,7 +225,7 @@ public final class RealAccountLoginViewModel {
         do {
             try await installUMK(seed, "Bring this device into your Flagship account")
         } catch {
-            phase = .failed("Couldn't install your recovered account key: \(error.localizedDescription)")
+            phase = .failed("Couldn't install your recovered account key: \(UserErrorText.of(error))")
             return
         }
 
@@ -253,7 +253,7 @@ public final class RealAccountLoginViewModel {
             let irk = try await Keystore.deriveIRK(reason: "Verify recovered account key")
             recoveredIrkPubHex = HexUtil.encode(irk.publicKey.rawRepresentation)
         } catch {
-            phase = .failed("Couldn't verify your recovered account key: \(error.localizedDescription)")
+            phase = .failed("Couldn't verify your recovered account key: \(UserErrorText.of(error))")
             return
         }
 
@@ -281,7 +281,7 @@ public final class RealAccountLoginViewModel {
                                     oldIrkPubHex: recoveryVM.registeredIrkPubHex ?? recoveredIrkPubHex)
             phase = .needsSecondFactor(error: nil)
         } catch {
-            phase = .failed("Couldn't restore access: \(error.localizedDescription)")
+            phase = .failed("Couldn't restore access: \(UserErrorText.of(error))")
         }
     }
 
@@ -317,7 +317,7 @@ public final class RealAccountLoginViewModel {
         } catch ScreensClientError.http(let status, _) where status == 401 {
             phase = .needsSecondFactor(error: "That recovery code or authenticator code wasn't accepted. Check it and try again.")
         } catch {
-            phase = .failed("Couldn't restore access: \(error.localizedDescription)")
+            phase = .failed("Couldn't restore access: \(UserErrorText.of(error))")
         }
     }
 
@@ -396,7 +396,7 @@ public final class RealAccountLoginViewModel {
         do {
             try await installUMK(seed, "Bring this device into your Flagship account")
         } catch {
-            phase = .failed("Couldn't install your recovered account key: \(error.localizedDescription)")
+            phase = .failed("Couldn't install your recovered account key: \(UserErrorText.of(error))")
             return
         }
 
@@ -411,7 +411,7 @@ public final class RealAccountLoginViewModel {
         } catch ScreensClientError.http(let status, _) where status == 401 {
             phase = .failed("That recovery code or authenticator code wasn't accepted. Check it and try again.")
         } catch {
-            phase = .failed("Couldn't restore access: \(error.localizedDescription)")
+            phase = .failed("Couldn't restore access: \(UserErrorText.of(error))")
         }
     }
 
@@ -461,7 +461,7 @@ public final class RealAccountLoginViewModel {
             // is NOT "already done" — the recovery must be restarted.
             phase = .failed("This recovery expired before it was completed. Start again.")
         } catch {
-            phase = .failed("Couldn't finalize the takeover: \(error.localizedDescription)")
+            phase = .failed("Couldn't finalize the takeover: \(UserErrorText.of(error))")
         }
     }
 

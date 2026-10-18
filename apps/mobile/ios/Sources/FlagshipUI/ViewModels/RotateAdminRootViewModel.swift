@@ -152,7 +152,7 @@ public final class RotateAdminRootViewModel {
         do {
             oldRoot = try await loadOldAdminRoot("Rotate your admin key")
         } catch {
-            phase = .failed("Couldn't access your admin key: \(error.localizedDescription)")
+            phase = .failed("Couldn't access your admin key: \(UserErrorText.of(error))")
             return
         }
         let oldPubHex = HexUtil.encode(oldRoot.publicKey.rawRepresentation)
@@ -173,7 +173,7 @@ public final class RotateAdminRootViewModel {
         do {
             signatureHex = HexUtil.encode(try rotation.sign(withOldAdminRoot: oldRoot))
         } catch {
-            phase = .failed("Couldn't sign the rotation: \(error.localizedDescription)")
+            phase = .failed("Couldn't sign the rotation: \(UserErrorText.of(error))")
             return
         }
 
@@ -193,7 +193,7 @@ public final class RotateAdminRootViewModel {
                 )
             )
         } catch {
-            phase = .failed("Couldn't rotate your admin key: \(error.localizedDescription)")
+            phase = .failed("Couldn't rotate your admin key: \(UserErrorText.of(error))")
             return
         }
 
@@ -204,7 +204,7 @@ public final class RotateAdminRootViewModel {
         do {
             try await sealNewAdminRoot(newRoot.rawRepresentation)
         } catch {
-            phase = .failed("Your admin key was rotated, but saving it on this device failed. Recover on this device to finish. (\(error.localizedDescription))")
+            phase = .failed("Your admin key was rotated, but saving it on this device failed. Recover on this device to finish. (\(UserErrorText.of(error)))")
             return
         }
 
@@ -234,7 +234,7 @@ public final class RotateAdminRootViewModel {
             try await reEscrow(passphrase)
             phase = .rotated(newAdminRootPubHex: newPubHex)
         } catch {
-            recoveryUpdateError = error.localizedDescription
+            recoveryUpdateError = UserErrorText.of(error)
         }
     }
 

@@ -123,7 +123,7 @@ public enum AppAccessOrder {
         do {
             key = try await signer(reason)
         } catch {
-            throw Failure(message: "Couldn't access your account key: \(error.localizedDescription)")
+            throw Failure(message: "Couldn't access your account key: \(UserErrorText.of(error))")
         }
         let grant = AppAccessGrant(serverDomain: domain, serviceId: serviceId, list: normalized,
                                    issuedAt: Int64(now().timeIntervalSince1970 * 1000))
@@ -131,7 +131,7 @@ public enum AppAccessOrder {
         do {
             signature = try key.signature(for: grant.canonicalBytes())
         } catch {
-            throw Failure(message: "Couldn't sign the change: \(error.localizedDescription)")
+            throw Failure(message: "Couldn't sign the change: \(UserErrorText.of(error))")
         }
         let r = try await client.serviceAccessSet(
             serviceId: serviceId,

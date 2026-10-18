@@ -106,7 +106,7 @@ public final class DebugAccessViewModel {
             grant = try DebugAccess.makeGrant(serverDomain: serverDomain, rawKey: keyText,
                                               issuedAt: now(), duration: duration.ms)
         } catch {
-            self.error = error.localizedDescription
+            self.error = UserErrorText.of(error)
             return
         }
         busy = true

@@ -136,7 +136,7 @@ public final class AccountSecurityViewModel {
                 version: Keystore.currentIrkVersion()
             )
         } catch {
-            phase = .failed("Couldn't access your account keys: \(error.localizedDescription)")
+            phase = .failed("Couldn't access your account keys: \(UserErrorText.of(error))")
             return
         }
         let canonical = TotpEnrollBeginCanonical.bytes(username: user, issuedAt: issuedAt)
@@ -144,7 +144,7 @@ public final class AccountSecurityViewModel {
         do {
             signature = try irk.signature(for: canonical)
         } catch {
-            phase = .failed("Couldn't sign enroll-begin: \(error.localizedDescription)")
+            phase = .failed("Couldn't sign enroll-begin: \(UserErrorText.of(error))")
             return
         }
         do {
@@ -164,7 +164,7 @@ public final class AccountSecurityViewModel {
         } catch ScreensClientError.http(let status, _) where status == 503 {
             phase = .failed("Code protection isn't available on this server yet. Try again later.")
         } catch {
-            phase = .failed("Couldn't start enrollment: \(error.localizedDescription)")
+            phase = .failed("Couldn't start enrollment: \(UserErrorText.of(error))")
         }
     }
 
@@ -197,7 +197,7 @@ public final class AccountSecurityViewModel {
                 version: Keystore.currentIrkVersion()
             )
         } catch {
-            phase = .failed("Couldn't access your account keys: \(error.localizedDescription)")
+            phase = .failed("Couldn't access your account keys: \(UserErrorText.of(error))")
             return
         }
         let canonical = TotpEnrollConfirmCanonical.bytes(username: user, issuedAt: issuedAt)
@@ -205,7 +205,7 @@ public final class AccountSecurityViewModel {
         do {
             signature = try irk.signature(for: canonical)
         } catch {
-            phase = .failed("Couldn't sign enroll-confirm: \(error.localizedDescription)")
+            phase = .failed("Couldn't sign enroll-confirm: \(UserErrorText.of(error))")
             return
         }
         do {
@@ -234,7 +234,7 @@ public final class AccountSecurityViewModel {
             // the input.
             phase = .failed("That code didn't match. Try again with a fresh code from your authenticator.")
         } catch {
-            phase = .failed("Couldn't confirm: \(error.localizedDescription)")
+            phase = .failed("Couldn't confirm: \(UserErrorText.of(error))")
         }
     }
 
@@ -266,7 +266,7 @@ public final class AccountSecurityViewModel {
                 version: Keystore.currentIrkVersion()
             )
         } catch {
-            phase = .failed("Couldn't access your account keys: \(error.localizedDescription)")
+            phase = .failed("Couldn't access your account keys: \(UserErrorText.of(error))")
             return
         }
         let canonical = TotpDisableCanonical.bytes(username: user, issuedAt: issuedAt)
@@ -274,7 +274,7 @@ public final class AccountSecurityViewModel {
         do {
             signature = try irk.signature(for: canonical)
         } catch {
-            phase = .failed("Couldn't sign disable: \(error.localizedDescription)")
+            phase = .failed("Couldn't sign disable: \(UserErrorText.of(error))")
             return
         }
         do {
@@ -294,7 +294,7 @@ public final class AccountSecurityViewModel {
         } catch ScreensClientError.http(let status, _) where status == 409 {
             phase = .failed("Disable refused — other devices are still trusted on this account. Disconnect them first.")
         } catch {
-            phase = .failed("Couldn't disable: \(error.localizedDescription)")
+            phase = .failed("Couldn't disable: \(UserErrorText.of(error))")
         }
     }
 }

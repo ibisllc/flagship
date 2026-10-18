@@ -68,7 +68,7 @@ public final class PostRecoveryViewModel {
                 phase = .idle
             }
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserErrorText.of(error))
         }
     }
 }

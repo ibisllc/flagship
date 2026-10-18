@@ -88,7 +88,7 @@ public final class AccountDeletionViewModel {
         do {
             irk = try await signer("Delete your account")
         } catch {
-            phase = .failed("Couldn't access your account key: \(error.localizedDescription)")
+            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
             return
         }
 
@@ -98,7 +98,7 @@ public final class AccountDeletionViewModel {
         do {
             accountSig = try accountOrder.sign(with: irk)
         } catch {
-            phase = .failed("Couldn't sign: \(error.localizedDescription)")
+            phase = .failed("Couldn't sign: \(UserErrorText.of(error))")
             return
         }
 
@@ -109,7 +109,7 @@ public final class AccountDeletionViewModel {
             do {
                 serversSig = try serversOrder.sign(with: irk)
             } catch {
-                phase = .failed("Couldn't sign: \(error.localizedDescription)")
+                phase = .failed("Couldn't sign: \(UserErrorText.of(error))")
                 return
             }
             serversBundle = .init(

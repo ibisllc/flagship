@@ -129,7 +129,7 @@ struct SecretRequestsContainer: View {
                 verified.map { WatchProtocol.PendingApproval(secretRequest: $0.pending) }
             )
         } catch {
-            state = .failed(error.localizedDescription)
+            state = .failed(UserErrorText.of(error))
         }
     }
 
@@ -160,7 +160,7 @@ struct SecretRequestsContainer: View {
             toasts.success("Approved \(req.serverDomain). Your server will pick it up.")
             await reload()
         } catch {
-            toasts.error("Approval failed: \(error.localizedDescription)")
+            toasts.error("Approval failed: \(UserErrorText.of(error))")
         }
     }
 }

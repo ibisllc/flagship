@@ -72,7 +72,7 @@ public final class RevokeServerViewModel {
         do {
             irk = try await signer("Revoke server \(serverDomain)")
         } catch {
-            phase = .failed("Couldn't access your account key: \(error.localizedDescription)")
+            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
             return
         }
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
@@ -86,7 +86,7 @@ public final class RevokeServerViewModel {
         do {
             signature = try irk.signature(for: canonical)
         } catch {
-            phase = .failed("Couldn't sign: \(error.localizedDescription)")
+            phase = .failed("Couldn't sign: \(UserErrorText.of(error))")
             return
         }
 

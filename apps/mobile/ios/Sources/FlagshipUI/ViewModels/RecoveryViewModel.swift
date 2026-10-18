@@ -172,7 +172,7 @@ public final class RecoveryViewModel {
             ))
             phase = .registered(credentialId: credentialIdHex)
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserErrorText.of(error))
         }
     }
 
@@ -276,7 +276,7 @@ public final class RecoveryViewModel {
             phase = .recovered
             return seed
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserErrorText.of(error))
             return nil
         }
     }

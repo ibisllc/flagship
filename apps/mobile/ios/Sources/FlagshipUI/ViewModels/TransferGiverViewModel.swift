@@ -90,7 +90,7 @@ public final class TransferGiverViewModel {
         do {
             key = try await signer("Transfer \(serverDomain) to another account")
         } catch {
-            phase = .failed("Couldn't access your account key: \(error.localizedDescription)")
+            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
             return
         }
         irk = key
@@ -153,7 +153,7 @@ public final class TransferGiverViewModel {
                 try await client.postDiskKey(serverDomain: serverDomain, body: auth)
             }
         } catch {
-            phase = .failed("Ownership moved, but the disk key re-seal failed: \(error.localizedDescription). The new owner can retry from their device.")
+            phase = .failed("Ownership moved, but the disk key re-seal failed: \(UserErrorText.of(error)). The new owner can retry from their device.")
             return true
         }
         // §9.8 — hand off admin authority: the box only trusts a new admin root
@@ -179,7 +179,7 @@ public final class TransferGiverViewModel {
             } catch {
                 // Same shape as the re-seal failure: ownership already moved,
                 // so degrade to retryable completed-with-warning.
-                phase = .failed("Ownership moved, but the admin hand-off failed: \(error.localizedDescription). The new owner's server will wait for this hand-off before re-homing while it has a pinned admin key — retry the transfer hand-off from this device.")
+                phase = .failed("Ownership moved, but the admin hand-off failed: \(UserErrorText.of(error)). The new owner's server will wait for this hand-off before re-homing while it has a pinned admin key — retry the transfer hand-off from this device.")
                 return true
             }
         } else if let newDomain = claimed.newServerDomain {
@@ -196,7 +196,7 @@ public final class TransferGiverViewModel {
                 )
                 try await client.postRehomeAuth(serverDomain: serverDomain, body: body)
             } catch {
-                phase = .failed("Ownership moved, but the re-home authorization failed: \(error.localizedDescription). The new owner's server will wait for this authorization before re-homing — retry the transfer hand-off from this device.")
+                phase = .failed("Ownership moved, but the re-home authorization failed: \(UserErrorText.of(error)). The new owner's server will wait for this authorization before re-homing — retry the transfer hand-off from this device.")
                 return true
             }
         }

@@ -150,7 +150,7 @@ public final class UpdateServerViewModel {
                 issuedAt: issuedAt
             )
         } catch {
-            phase = .failed("Couldn't sign the update order: \(error.localizedDescription)")
+            phase = .failed("Couldn't sign the update order: \(UserErrorText.of(error))")
             return false
         }
 

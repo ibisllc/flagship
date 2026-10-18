@@ -48,7 +48,7 @@ public final class JournalViewModel {
         do {
             key = try await signer("Read the journal on \(serverDomain)")
         } catch {
-            phase = .failed("Couldn't access your account key: \(error.localizedDescription)")
+            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
             return
         }
 
@@ -58,7 +58,7 @@ public final class JournalViewModel {
         do {
             signature = try request.sign(with: key)
         } catch {
-            phase = .failed("Couldn't sign: \(error.localizedDescription)")
+            phase = .failed("Couldn't sign: \(UserErrorText.of(error))")
             return
         }
 

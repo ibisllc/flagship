@@ -125,7 +125,7 @@ public final class ServicesListViewModel {
             for (fqdn, c) in targets {
                 group.addTask {
                     do { return .listed(fqdn, try await c.appsList().apps) }
-                    catch { return .failed(fqdn, error.localizedDescription) }
+                    catch { return .failed(fqdn, UserErrorText.of(error)) }
                 }
             }
             for await answer in group {

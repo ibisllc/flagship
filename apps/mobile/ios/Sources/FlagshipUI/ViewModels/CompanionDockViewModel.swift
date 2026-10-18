@@ -97,7 +97,7 @@ public final class CompanionDockViewModel {
             let client = await clients.client(forFqdn: fqdn)
             state = .loaded(try await client.companionList())
         } catch {
-            state = .failed(error.localizedDescription)
+            state = .failed(UserErrorText.of(error))
         }
     }
 
@@ -126,7 +126,7 @@ public final class CompanionDockViewModel {
             }
         } catch {
             guard mine == session else { return }
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserErrorText.of(error))
             await relay.close()
         }
     }
@@ -157,7 +157,7 @@ public final class CompanionDockViewModel {
         } catch {
             guard mine == session else { return }
             aeadKey = nil
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserErrorText.of(error))
             await relay.close()
         }
     }
@@ -184,7 +184,7 @@ public final class CompanionDockViewModel {
                 )
             }
         } catch {
-            state = .failed(error.localizedDescription)
+            state = .failed(UserErrorText.of(error))
         }
     }
 }

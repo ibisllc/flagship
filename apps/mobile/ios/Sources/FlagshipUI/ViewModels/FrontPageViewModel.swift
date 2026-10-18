@@ -74,7 +74,7 @@ public final class FrontPageViewModel {
                 : "Set the front page of \(serverDomain) to \(label)"
             key = try await signer(reason)
         } catch {
-            phase = .failed("Couldn't access your account key: \(error.localizedDescription)")
+            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
             return
         }
 
@@ -83,7 +83,7 @@ public final class FrontPageViewModel {
         do {
             signature = try order.sign(with: key)
         } catch {
-            phase = .failed("Couldn't sign: \(error.localizedDescription)")
+            phase = .failed("Couldn't sign: \(UserErrorText.of(error))")
             return
         }
 

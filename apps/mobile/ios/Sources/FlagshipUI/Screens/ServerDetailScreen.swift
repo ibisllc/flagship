@@ -628,7 +628,7 @@ struct BootUnlockCard: View {
             self.leaseId = nil
             toasts.success("Auto-unlock disabled. This server will ask your phone on its next reboot.")
         } catch {
-            toasts.error("Couldn't disable auto-unlock: \(error.localizedDescription)")
+            toasts.error("Couldn't disable auto-unlock: \(UserErrorText.of(error))")
         }
     }
 }

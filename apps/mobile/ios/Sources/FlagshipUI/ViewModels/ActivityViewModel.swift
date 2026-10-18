@@ -97,7 +97,7 @@ public final class ActivityViewModel {
             feed.moreBoxEvents = feed.boxEvents.count >= limit
             state = .loaded(feed)
         } catch {
-            state = .failed(error.localizedDescription)
+            state = .failed(UserErrorText.of(error))
         }
     }
 

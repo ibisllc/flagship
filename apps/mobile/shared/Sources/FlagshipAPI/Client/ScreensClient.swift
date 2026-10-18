@@ -325,7 +325,7 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
         case .http(let s, let body):
             if let r = RateLimitedRefusal.from(status: s, body: body) { return r.message }
             if AddServerRefusal.matches(status: s, body: body) { return AddServerRefusal.message }
-            return Self.plainLanguage(forStatus: s)
+            return UserErrorText.forStatus(s, body: body)
         case .decoding:
             return "Something came back we couldn't read. Try again in a moment."
         case .notImplemented:
@@ -351,8 +351,7 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
         if let e = error as? ScreensClientError, let d = e.errorDescription {
             return d
         }
-        if let e = error as? FreeAiError, let d = e.errorDescription { return d }
-        return "Couldn't reach the server. Check your connection and try again."
+        return UserErrorText.of(error)
     }
 
     /// The box's own explanation (`{"error": "…"}`) of a refused request, for
@@ -398,7 +397,7 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
         case 500...599:
             return "Service temporarily unavailable. Try again in a few minutes."
         case 400...499:
-            return "That didn't work. Check your connection and try again."
+            return UserErrorText.refused
         default:
             return "Something went wrong. Try again in a moment."
         }

@@ -125,7 +125,7 @@ public final class ServiceDetailViewModel {
         do {
             key = try await egressSigner(reason)
         } catch {
-            egressPhase = .failed("Couldn't access your account key: \(error.localizedDescription)")
+            egressPhase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
             return false
         }
         let grant = AppEgressGrant(serverDomain: domain, serviceId: serviceId, hosts: hosts,
@@ -134,7 +134,7 @@ public final class ServiceDetailViewModel {
         do {
             signature = try key.signature(for: grant.canonicalBytes())
         } catch {
-            egressPhase = .failed("Couldn't sign the request: \(error.localizedDescription)")
+            egressPhase = .failed("Couldn't sign the request: \(UserErrorText.of(error))")
             return false
         }
         egressPhase = .posting
@@ -412,7 +412,7 @@ public final class ServiceDetailViewModel {
         do {
             irk = try await Keystore.deriveIRK(reason: "Rename service URL stem")
         } catch {
-            renamePhase = .failed("Couldn't access your account keys: \(error.localizedDescription)")
+            renamePhase = .failed("Couldn't access your account keys: \(UserErrorText.of(error))")
             return false
         }
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
@@ -426,7 +426,7 @@ public final class ServiceDetailViewModel {
         do {
             signature = try irk.signature(for: canonical)
         } catch {
-            renamePhase = .failed("Couldn't sign the rename: \(error.localizedDescription)")
+            renamePhase = .failed("Couldn't sign the rename: \(UserErrorText.of(error))")
             return false
         }
         renamePhase = .posting
@@ -476,7 +476,7 @@ public final class ServiceDetailViewModel {
             renamePhase = .failed("Sign-in is needed. Re-open the app and try again.")
             return false
         } catch {
-            renamePhase = .failed("Couldn't rename: \(error.localizedDescription)")
+            renamePhase = .failed("Couldn't rename: \(UserErrorText.of(error))")
             return false
         }
     }
@@ -524,7 +524,7 @@ public final class ServiceDetailViewModel {
         do {
             irk = try await irkSigner("Remove \(slug)")
         } catch {
-            removePhase = .failed("Couldn't access your account key: \(error.localizedDescription)")
+            removePhase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
             return false
         }
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
@@ -535,7 +535,7 @@ public final class ServiceDetailViewModel {
         do {
             signature = try order.sign(with: irk)
         } catch {
-            removePhase = .failed("Couldn't sign the request: \(error.localizedDescription)")
+            removePhase = .failed("Couldn't sign the request: \(UserErrorText.of(error))")
             return false
         }
 

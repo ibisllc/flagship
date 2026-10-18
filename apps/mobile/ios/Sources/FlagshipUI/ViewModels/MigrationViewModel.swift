@@ -225,7 +225,7 @@ public final class MigrationViewModel {
             errorMessage = e.errorDescription ?? "That didn't work. Try again in a moment."
             return
         } catch {
-            errorMessage = "Couldn't start the migration: \(error.localizedDescription)"
+            errorMessage = "Couldn't start the migration: \(UserErrorText.of(error))"
             return
         }
         // The SWK hold makes the NEXT added pod's SWK deposit migration-aware
@@ -279,7 +279,7 @@ public final class MigrationViewModel {
         } catch let e as ScreensClientError {
             errorMessage = e.errorDescription ?? "That didn't work. Try again in a moment."
         } catch {
-            errorMessage = "Couldn't hand off: \(error.localizedDescription)"
+            errorMessage = "Couldn't hand off: \(UserErrorText.of(error))"
         }
         // CUTOVER (client side of phase 6/7): after `takenOverAt` there is NO
         // client RCK re-point — no surface persists the RCK private key
@@ -318,7 +318,7 @@ public final class MigrationViewModel {
         } catch let e as ScreensClientError {
             errorMessage = e.errorDescription ?? "That didn't work. Try again in a moment."
         } catch {
-            errorMessage = "Couldn't abort: \(error.localizedDescription)"
+            errorMessage = "Couldn't abort: \(UserErrorText.of(error))"
         }
         await refresh()
     }

@@ -1199,7 +1199,7 @@ struct PairedSessionsContainer: View {
                 let r = try await client.pairedSessionsList()
                 state = .loaded(r.sessions)
             } catch {
-                state = .failed(error.localizedDescription)
+                state = .failed(UserErrorText.of(error))
             }
         }
     }

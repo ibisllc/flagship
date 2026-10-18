@@ -304,7 +304,7 @@ public struct SecureAccountScreen: View {
                 cloudError = msg
             }
         } catch {
-            cloudError = "Couldn't back up to iCloud: \(error.localizedDescription)"
+            cloudError = "Couldn't back up to iCloud: \(UserErrorText.of(error))"
         }
     }
 }
