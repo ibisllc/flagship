@@ -254,6 +254,20 @@ of the last check here: **not yet checked**.
 
 ### In flight
 
+- **Security notices (2026-10-18, `docs/security-notices.md`).** One
+  maintainer-signed notice, picked up from one anonymous `GET /api/notices`,
+  for (A) a dismissible "we will update on {date}" banner and (B) a full-screen
+  "Update required" lock, only for a security reason (an advisory id and reason
+  are in the signed bytes). Signed offline by the cold ca-track YubiKey with
+  `node scripts/security-notice.mjs <maintenance|advisory|required|clear> ...
+  --sign` (previews by default; refuses a lock without `--advisory` and
+  `--security-reason`), never by `.com`; apps verify against the baked pin and
+  fail open. On `main`: the envelope and vectors, the tool, the `.com` route
+  (committed notice `null`), the webapp (shell v144) and its gym scenarios.
+  **Phase 2 open:** iOS and Android ports from the doc's "Client behaviour
+  spec" (parity `security-notices`). Needs a `.com` deploy and a webapp deploy
+  to go live; nothing is signed. The version-window rule for protocol changes
+  is a design only (section 7: not built; window 0 for a security break).
 - **Per-app disk limits (2026-10-16, `appQuota/`, docs/app-runtimes.md §5.3).**
   Hold each app to its share of the backup policy's limit: a files folder is
   its own sparse ext4 image (ENOSPC for that app only; a lower limit is a
@@ -1248,7 +1262,7 @@ spec in `docs/`, the runbooks in `docs/runbooks/`, or — for architecture —
 
 ### Living design specs (index)
 - **Cert & addressing** — `per-user-cert-and-addressing.md`, `per-user-cert-worklist.md`, `multiplexing.md`, `service-addressing-double-dash.md`
-- **Recovery / multi-device / security** — `multi-device.md`, `lifecycle-spec.md`, `security-phone-as-unlock-endpoint.md`, `box-request-inbox.md`, `v1.2-security-cascade.md`, `revocation-ui.md`, `wipe-restart.md`, `watch-delegate-key-design.md`, `v2-device-addressing-and-real-ticket.md`, `account-deletion-and-name-reclaim.md`, `server-replacement-graceful-decommission.md`, `box-recipe-persistence-and-restore.md`, `multi-pod-liveness-session-leadership.md`
+- **Recovery / multi-device / security** — `multi-device.md`, `lifecycle-spec.md`, `security-phone-as-unlock-endpoint.md`, `box-request-inbox.md`, `v1.2-security-cascade.md`, `revocation-ui.md`, `security-notices.md`, `wipe-restart.md`, `watch-delegate-key-design.md`, `v2-device-addressing-and-real-ticket.md`, `account-deletion-and-name-reclaim.md`, `server-replacement-graceful-decommission.md`, `box-recipe-persistence-and-restore.md`, `multi-pod-liveness-session-leadership.md`
 - **Login / accounts / demo** — `login-and-account-redesign.md`, `naming-recovery-and-name-change.md`, `username-suggestion-queue.md`, `sample-users.md`
 - **Install / ISO / builder** — `studio-mac-app-store.md`, `recipe-schema-v2.md`, `installer-tiny.md`, `cloud-init-direct-provisioning.md`, `installation-real-usb.md`, `reproducible-iso-build.md`, `recipe-delivery-and-remote-install.md`
 - **NFC retail box** — `nfc-box-pairing.md`, `v1-operational-tasks.md § N`, `n-cloud-2-design-discussion.md`
