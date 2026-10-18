@@ -15,6 +15,7 @@
  *   npx tsx tools/live-e2e/dns-ent-experiment.ts [--cache-watch-seconds 150]
  *   npx tsx tools/live-e2e/dns-ent-experiment.ts --canary   # ~30 s, exit 1 if a challenge TXT darkens a name
  *   npx tsx tools/live-e2e/dns-ent-experiment.ts --matrix [--only f-A,f-TXT]   # which names lose a zone-level wildcard
+ *   npx tsx tools/live-e2e/dns-ent-experiment.ts --legacy-order   # delete a legacy account's records in the production order, back to back and then grouped with waits, polling every name at 100 ms
  *
  * `--canary` is the standing check behind the root-wildcard layout and its lack
  * of a challenge shield (docs/wildcard-dns.md "Live verification"): it writes NO
@@ -123,6 +124,7 @@ function ask(phase: string, names: string[], types = ["A", "AAAA"], only?: strin
 
 async function main(): Promise<void> {
   if (process.argv.includes("--matrix")) return matrix();
+  if (process.argv.includes("--legacy-order")) return legacyOrder();
   if (!TOKEN) throw new Error("GYM_DNS_TOKEN is required");
   writeFileSync(OUT, "");
   const zones = await cf("GET", `/zones?name=${ZONE_NAME}`);
@@ -333,6 +335,142 @@ async function matrix(): Promise<void> {
         }
       }
       for (const x of created.splice(0)) await cf("DELETE", `/zones/${zoneId}/dns_records/${x.id}`).then(() => log({ step: "delete", record: x.what }));
+    }
+  } finally {
+    for (const c of [...created]) {
+      await cf("DELETE", `/zones/${zoneId}/dns_records/${c.id}`).then(() => log({ step: "cleanup delete", record: c.what })).catch(() => log({ step: "CLEANUP FAILED", record: c.what }));
+    }
+  }
+  log({ step: "done" });
+}
+
+/**
+ * What clearLegacyAccountDns does to a legacy account, measured: seed the
+ * 8-record legacy set (CAA issue + issuewild at <user>, A + AAAA at `*.<user>`,
+ * `<box>.<user>` and `*.<box>.<user>`) under the gym apex's own wildcard, delete
+ * it in the production order (a) back to back, as the Worker does, and (b) one
+ * rank group at a time with a wait in between, as the reap CLI does, and poll
+ * four names on both Cloudflare name servers every 100 ms the whole time.
+ */
+async function legacyOrder(): Promise<void> {
+  if (!TOKEN) throw new Error("GYM_DNS_TOKEN is required");
+  const { Resolver: DnsResolver } = await import("node:dns");
+  const { legacyAccountRecords, legacyDeletionOrder } = await import("@flagship/services-zone");
+  writeFileSync(OUT, "");
+  const zones = await cf("GET", `/zones?name=${ZONE_NAME}`);
+  zoneId = zones[0]?.id;
+  if (!zoneId) throw new Error("zone not found");
+  const nsHosts = execFileSync("dig", ["+short", "NS", ZONE_NAME, "@1.1.1.1"], { encoding: "utf8" }).split("\n").filter(Boolean).map((h) => h.replace(/\.$/, "")).sort().slice(0, 2);
+  const servers = nsHosts.map((h) => ({ label: h.split(".")[0]!, ip: execFileSync("dig", ["+short", h, "@1.1.1.1"], { encoding: "utf8" }).split("\n").filter(Boolean)[0]! }));
+  const v4 = dig(servers[0]!.ip, `probe-${randomBytes(3).toString("hex")}.${SERVICES}`, "A", false).answer.split(",")[0]!;
+  const v6 = dig(servers[0]!.ip, `probe-${randomBytes(3).toString("hex")}.${SERVICES}`, "AAAA", false).answer.split(",")[0]!;
+  log({ step: "legacy-order start", servers, v4, v6 });
+
+  const run = async (variant: "back-to-back" | "grouped"): Promise<void> => {
+    const U = `zw${randomBytes(3).toString("hex")}.${SERVICES}`;
+    const user = U.split(".")[0]!;
+    const BOX = `home.${U}`;
+    await make("CAA", U, null, { flags: 0, tag: "issue", value: "letsencrypt.org" });
+    await make("CAA", U, null, { flags: 0, tag: "issuewild", value: "letsencrypt.org" });
+    for (const name of [`*.${U}`, BOX, `*.${BOX}`]) {
+      await make("A", name, v4);
+      await make("AAAA", name, v6);
+    }
+    // Everyone sees the whole set before the clock starts.
+    for (const sv of servers) {
+      const t0 = Date.now();
+      while (Date.now() - t0 < 60_000) {
+        const a = dig(sv.ip, U, "CAA", false);
+        const b = dig(sv.ip, `*.${BOX}`.replace("*", "probe"), "A", false);
+        if (a.answer !== "(none)" && b.rcode === "NOERROR") break;
+        await sleep(300);
+      }
+    }
+    await sleep(12_000);
+    const names = [BOX, `x.${BOX}`, `app.${U}`, `x.y.${U}`];
+    const lastState = new Map<string, string>();
+    const dark: Array<{ key: string; since: number; until: number | null; state: string }> = [];
+    const open = new Map<string, number>();
+    const t0 = Date.now();
+    let stop = false;
+    const resolvers = servers.map((sv) => {
+      const r = new DnsResolver({ timeout: 1500, tries: 1 });
+      r.setServers([sv.ip]);
+      return { sv, r };
+    });
+    const loop = (async () => {
+      while (!stop) {
+        const tick = Date.now();
+        await Promise.all(
+          resolvers.flatMap(({ sv, r }) =>
+            names.map(
+              (n) =>
+                new Promise<void>((resolve) => {
+                  r.resolve4(n, (err, ans) => {
+                    const state = err ? (err.code === "ENODATA" ? "NODATA" : err.code === "ENOTFOUND" ? "NXDOMAIN" : `ERROR(${err.code})`) : `A ${[...ans].sort().join(",")}`;
+                    const key = `${sv.label} ${n.replace(`.${U}`, ".<U>")}`;
+                    if (lastState.get(key) !== state) {
+                      lastState.set(key, state);
+                      log({ phase: `legacy-order ${variant}`, t: Date.now() - t0, key, state });
+                    }
+                    const isDark = state === "NODATA" || state === "NXDOMAIN";
+                    if (isDark && !open.has(key)) open.set(key, Date.now() - t0);
+                    if (!isDark && open.has(key)) {
+                      dark.push({ key, since: open.get(key)!, until: Date.now() - t0, state });
+                      open.delete(key);
+                    }
+                    resolve();
+                  });
+                }),
+            ),
+          ),
+        );
+        await sleep(Math.max(0, 100 - (Date.now() - tick)));
+      }
+    })();
+
+    await sleep(2000);
+    const tStart = Date.now() - t0;
+    // The production order, from the real function, so the experiment cannot drift from the code.
+    const live = (await cf("GET", `/zones/${zoneId}/dns_records?per_page=500&name=${encodeURIComponent(U)}`)).concat(
+      ...(await Promise.all([`*.${U}`, BOX, `*.${BOX}`].map((n) => cf("GET", `/zones/${zoneId}/dns_records?name=${encodeURIComponent(n)}`)))),
+    ) as Array<{ id: string; type: string; name: string; content: string }>;
+    const plan = legacyAccountRecords(live, SERVICES, { user });
+    log({ step: "plan", variant, order: plan.map((r) => `${r.type} ${r.name}`) });
+    let lastGroup: number | null = null;
+    for (const r of plan) {
+      const group = Math.floor(legacyDeletionOrder(r, SERVICES) / 10);
+      if (variant === "grouped" && lastGroup !== null && group > lastGroup) await sleep(15_000);
+      lastGroup = group;
+      await cf("DELETE", `/zones/${zoneId}/dns_records/${r.id}`);
+      const i = created.findIndex((c) => c.id === r.id);
+      if (i >= 0) created.splice(i, 1);
+      log({ step: "deleted", variant, t: Date.now() - t0, record: `${r.type} ${r.name}` });
+    }
+    const tEnd = Date.now() - t0;
+    await sleep(40_000);
+    stop = true;
+    await loop;
+    for (const [key, since] of open) dark.push({ key, since, until: null, state: lastState.get(key) ?? "?" });
+    log({
+      step: "result",
+      variant,
+      deletesStartedAtMs: tStart,
+      deletesDoneAtMs: tEnd,
+      darkIntervals: dark.map((d) => ({ ...d, lasted: d.until === null ? "still dark" : `${((d.until - d.since) / 1000).toFixed(1)} s` })),
+      darkNames: [...new Set(dark.map((d) => d.key))],
+    });
+    for (const c of [...created]) {
+      await cf("DELETE", `/zones/${zoneId}/dns_records/${c.id}`).catch(() => undefined);
+      created.splice(created.indexOf(c), 1);
+    }
+  };
+
+  try {
+    const trials = Number(arg("--trials", "1"));
+    const only = arg("--variants", "back-to-back,grouped").split(",");
+    for (let i = 0; i < trials; i++) {
+      for (const v of ["back-to-back", "grouped"] as const) if (only.includes(v)) await run(v);
     }
   } finally {
     for (const c of [...created]) {

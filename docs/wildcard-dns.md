@@ -276,6 +276,32 @@ absent at jade until 256.9 s. A stale answer like that is harmless to Let's
 Encrypt (any matching TXT validates), but a renewal started within about 35 s of
 the previous deletion can see the old value too.
 
+### 9.5 Deleting a legacy account's records: does the order hold?
+
+`clearLegacyAccountDns` deletes in a fixed order (the CAA at `<user>`, then the
+box names, then the box wildcards, last `*.<user>`), back to back, inside the
+Worker. That keeps every name answering only if each delete is seen by the
+name servers before the next, and 9.3 showed they lag each other by seconds. So
+the real function's order was run on the gym (`dns-ent-experiment.ts
+--legacy-order`): the 8-record legacy set of a throwaway account (CAA issue and
+issuewild at `<user>`, A and AAAA at `*.<user>`, `home.<user>` and
+`*.home.<user>`) under the gym's own wildcard, four names (`home.<U>`,
+`x.home.<U>`, `app.<U>`, `x.y.<U>`) polled every 100 ms at jade and mario.
+
+| variant | runs | result |
+|---|---|---|
+| back to back (the Worker: 8 deletes in 1.5 to 2 s) | 6 | no name stayed dark at either server; in one run `x.home.<U>` answered NXDOMAIN at both servers for 0.1 s, 7 s after the last delete, then the relay again |
+| one rank group at a time, 15 s between (the reap CLI: 49 s) | 1 | no dark answer |
+
+So the feared out-of-order window did not show for deletions (it did for
+creations: 9.2). The residual risk is a flicker of about 0.1 s for a legacy
+account, once, when it first registers a box after the deploy; a resolver that
+asks in exactly that instant keeps a 30-minute NXDOMAIN. The Worker does not
+wait between deletes (Free plan: ~10 ms CPU, ~50 subrequests), the reap CLI
+waits 15 s between groups, and the pre-GA scrub removes every legacy account
+except the protected store-review demo (`playstore-test-0725`), whose explicit
+records no code path deletes or trims (`PROTECTED_DNS_ACCOUNTS`).
+
 ## 10. What needs deploying, and the manual DNS step
 
 - **The one-time manual DNS step (owner, Cloudflare dashboard)**, before or after

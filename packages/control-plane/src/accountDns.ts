@@ -78,14 +78,16 @@ export function accountZoneOfServerDomain(serverDomain: string): string | null {
  * records exactly as they are).
  *
  * Caveat, by design: this runs inside the Worker (Free plan: ~10 ms CPU and ~50
- * subrequests), so it does not wait between deletions. Cloudflare shows a
- * deleted record to its two name servers up to ~15 s apart and not always in
- * order (measured, docs/wildcard-dns.md section 9.5), so for up to ~15 s after a
- * legacy account's first registration a name under it can answer NXDOMAIN at a
- * lagging server, and a resolver that asks then caches it for 30 minutes. It
- * happens once per legacy account (a new account owns no record), and the
- * pre-GA scrub removes every legacy account but the store-review demo. The reap
- * CLI, which can wait, deletes one rank group at a time instead.
+ * subrequests), so it does not wait between deletions. Cloudflare can show two
+ * records to its name servers seconds apart and out of order (new records
+ * lagged 3 to 8 s), which in theory lets a name answer NXDOMAIN for a moment
+ * (a resolver that asks then caches it for 30 minutes). Measured on the gym
+ * (docs/wildcard-dns.md section 9.5): in 6 back-to-back runs of the real order
+ * (8 records in 1.5 to 2 s, polled every 100 ms at both name servers) no name
+ * stayed dark and one 0.1 s flicker showed on both servers at once. It happens
+ * once per legacy account (a new account owns no record), and the pre-GA scrub
+ * removes every legacy account but the store-review demo. The reap CLI, which
+ * can wait, deletes one rank group at a time with a 15 s pause instead.
  */
 export async function clearLegacyAccountDns(
   deps: AccountDnsDeps,

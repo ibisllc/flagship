@@ -43,11 +43,13 @@ export const PLAN_MAX_AGE_MS = 24 * 3600 * 1000;
 export const RETRY_WAIT_MS = 30_000;
 export const MAX_ATTEMPTS = 6;
 /**
- * Cloudflare shows a deleted record to its two name servers up to ~15 s apart and
- * not always in order (docs/wildcard-dns.md section 9.5). The plan's order (the
- * record at <user> first, the account wildcard last) only keeps every name
- * answering if each group is gone everywhere before the next starts, so the
- * apply waits this long whenever the next record is in a later group.
+ * Cloudflare can show records to its two name servers seconds apart and not
+ * always in order (new records lagged 3 to 8 s; deletions were quick in the gym
+ * trials, docs/wildcard-dns.md section 9.5). The plan's order (the record at
+ * <user> first, the account wildcard last) only keeps every name answering if
+ * each group is gone everywhere before the next starts, so the apply waits this
+ * long whenever the next record is in a later group. A reap is rare and slow
+ * anyway, so the wait costs nothing.
  */
 export const GROUP_WAIT_MS = 15_000;
 
