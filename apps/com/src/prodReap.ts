@@ -459,6 +459,38 @@ export async function buildPlan(deps: ReapDeps): Promise<ReapPlan> {
   };
 }
 
+export interface ZoneHealthReport extends ZoneHealth {
+  generatedAt: string;
+  /** The relay the zone is checked against (from the Worker's configuration). */
+  relay: RelayAddress;
+}
+
+/**
+ * Read-only check that the zone is in the root-wildcard layout: `*.<apex>` A and
+ * AAAA at exactly the relay (DNS only), the apex CAA pair, and no record at any
+ * account or box name. `ok: false` lists each problem with its record id. The
+ * owner runs it after the manual DNS step and weekly (npm run zone-health).
+ */
+export async function buildZoneHealth(deps: ReapDeps): Promise<ZoneHealthReport> {
+  if (!deps.dns) {
+    throw new ReapRefusal(503, "dns-not-configured", "CLOUDFLARE_DNS_API_TOKEN and CLOUDFLARE_SERVICES_ZONE_ID are required.");
+  }
+  if (!deps.relay) {
+    throw new ReapRefusal(503, "relay-not-configured", "SERVICES_PASSTHROUGH_IPV4 is not set: the zone can't be checked against the relay.");
+  }
+  const known = await loadKnownAccounts(deps.db, deps.protectedAccounts, (deps.now ?? Date.now)());
+  const records = await deps.dns.listAll();
+  const now = (deps.now ?? Date.now)();
+  const health = evaluateZoneHealth(records, {
+    apex: deps.apex,
+    relay: deps.relay,
+    accounts: known.names,
+    skipUsers: deps.protectedAccounts,
+    now,
+  });
+  return { ...health, generatedAt: new Date(now).toISOString(), relay: deps.relay };
+}
+
 export interface DeleteOneBody {
   kind?: unknown;
   id?: unknown;
@@ -586,7 +618,7 @@ export async function handleReapRoute(
   if (auth) return json(auth.body, auth.status);
   const path = new URL(request.url).pathname.slice(REAP_PATH_PREFIX.length);
   const wantsPost = path === "delete-one";
-  if (path !== "list" && path !== "classify" && !wantsPost) return json({ error: "not found" }, 404);
+  if (path !== "list" && path !== "classify" && path !== "zone-health" && !wantsPost) return json({ error: "not found" }, 404);
   if (request.method !== (wantsPost ? "POST" : "GET")) return json({ error: "method not allowed" }, 405);
   if (!env.DB) return json({ error: "database unavailable" }, 503);
   const deps: ReapDeps = {
@@ -613,6 +645,7 @@ export async function handleReapRoute(
       return json({ apex: deps.apex, zoneRecords: dns.length, serversChecked: deps.cloud !== undefined, dns, servers }, 200);
     }
     if (path === "classify") return json(await buildPlan(deps), 200);
+    if (path === "zone-health") return json(await buildZoneHealth(deps), 200);
     let body: DeleteOneBody | undefined;
     try {
       body = (await request.json()) as DeleteOneBody;

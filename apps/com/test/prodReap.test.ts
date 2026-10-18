@@ -3,6 +3,7 @@ import type { D1Database } from "@flagship/storage";
 import { answerFor } from "@flagship/services-zone";
 import {
   buildPlan,
+  buildZoneHealth,
   classifyDnsRecord,
   classifyServer,
   deleteOne,
@@ -489,6 +490,42 @@ describe("buildPlan and deleteOne with the root-wildcard layout", () => {
   });
 });
 
+describe("buildZoneHealth", () => {
+  const clean = [
+    rec(hex(1), `*.${APEX}`, "A", RELAY.servicesIpv4),
+    rec(hex(2), APEX, "CAA", '0 issue "letsencrypt.org"'),
+    rec(hex(3), APEX, "CAA", '0 issuewild "letsencrypt.org"'),
+    rec(hex(4), `hub.${APEX}`, "A"),
+    rec(hex(5), `_acme-challenge.home.alice.${APEX}`, "TXT", "t"),
+  ];
+  const run = (recs: ReapDnsRecord[], over: Partial<ReapDeps> = {}) =>
+    buildZoneHealth({ db: fakeDb(newWorld()), dns: fakeDns(recs), cloud: undefined, apex: APEX, protectedAccounts: PROTECTED, relay: RELAY, ...over });
+
+  it("is ok for the at-rest zone with a challenge in flight", async () => {
+    const h = await run(clean);
+    expect(h).toMatchObject({ ok: true, problems: [], atRest: 3, challenges: 1, records: 5 });
+  });
+
+  it("fails on a missing or wrong wildcard and a missing CAA, and on any record at an account or box name", async () => {
+    expect((await run(clean.slice(1))).problems.map((p) => p.code)).toContain("wildcard");
+    expect((await run([clean[0]!])).problems.map((p) => p.code)).toEqual(["caa-missing", "caa-missing"]);
+    const dirty = await run([...clean, rec(hex(9), `alice.${APEX}`, "CAA", '0 issue "x"'), rec(hex(10), `home.alice.${APEX}`, "TXT", "x")]);
+    expect(dirty.ok).toBe(false);
+    expect(dirty.problems.filter((p) => p.code === "account-record").map((p) => p.id).sort()).toEqual([hex(9), hex(10)]);
+  });
+
+  it("downgrades the protected account's records to warnings", async () => {
+    const h = await run([...clean, rec(hex(9), `*.playstore-test-0725.${APEX}`, "A")]);
+    expect(h.ok).toBe(true);
+    expect(h.warnings.join(" ")).toMatch(/playstore-test-0725/);
+  });
+
+  it("needs DNS and a relay address", async () => {
+    await expect(run(clean, { dns: undefined })).rejects.toMatchObject({ status: 503, code: "dns-not-configured" });
+    await expect(run(clean, { relay: undefined })).rejects.toMatchObject({ status: 503, code: "relay-not-configured" });
+  });
+});
+
 describe("classifyServer", () => {
   it("orphans only an unlabelled-for-env demo server whose account is gone", async () => {
     const k = await known({ demoUsers: [{ username: "dave", active_server_id: S_POINTED }] });
@@ -687,6 +724,19 @@ describe("handleReapRoute", () => {
     const no = await call("delete-one", { method: "POST", body: JSON.stringify({ kind: "dns", id: hex(20), name: `playstore-test-0725.${APEX}`, type: "CAA" }) });
     expect(no.status).toBe(409);
     expect(dnsC.deleted).toEqual([hex(34)]);
+  });
+
+  it("zone-health reads only, needs the secret, and reports the layout", async () => {
+    expect((await call("zone-health", {}, null)).status).toBe(401);
+    const r = await call("zone-health");
+    expect(r.status).toBe(200);
+    const h = (await r.json()) as { ok: boolean; problems: { code: string }[]; relay: { servicesIpv4: string } };
+    expect(h.ok).toBe(false); // the fixture zone still holds alice's and others' account records
+    expect(h.problems.some((p) => p.code === "account-record")).toBe(true);
+    expect(h.relay.servicesIpv4).toBe("1.2.3.4");
+    expect((await call("zone-health", { method: "POST", body: "{}" })).status).toBe(405);
+    const noRelay = await call("zone-health", {}, SECRET, { ...env, SERVICES_PASSTHROUGH_IPV4: undefined as unknown as string });
+    expect(noRelay.status).toBe(503);
   });
 
   it("answers 503 when DNS is not configured", async () => {

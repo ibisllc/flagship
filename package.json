@@ -39,6 +39,7 @@
     "parity": "node scripts/parity-check.mjs",
     "rate-limits": "node scripts/rate-limit-report.mjs",
     "reap-orphans": "node scripts/reap-orphans.mjs",
+    "zone-health": "node scripts/dns-zone-health.mjs",
     "inference-settings": "node scripts/inference-settings.mjs",
     "ready": "node scripts/release-readiness.mjs"
   },
