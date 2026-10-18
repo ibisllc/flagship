@@ -277,7 +277,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/AddDeviceScreen.swift", "struct AddDeviceScreen"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ReplaceDeviceFinalizeScreen.swift", "struct "], ["apps/mobile/ios/Sources/FlagshipUI/Screens/SecuredSessionsScreen.swift", "struct "]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AddDeviceScreen.kt", "fun AddDeviceScreen"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ReplaceDeviceFinalizeScreen.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/TrustedDevicesScreen.kt", "fun "]] },
+        "android": { "status": "partial", "reason": "Replace, trusted devices and paired sessions are live. Add a device and Join an account have no live pairing relay yet (the webapp's /qr-pipe pairing exists): a release build says \"Adding a device from this phone isn't available yet. Use the web app or iOS.\"; the pairing flow itself runs only on the in-memory relay in the gym.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AddDeviceScreen.kt", "fun AddDeviceScreen"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ReplaceDeviceFinalizeScreen.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/TrustedDevicesScreen.kt", "fun "]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/add-device.js", "export"], ["apps/web/public/webapp/lib/replaceDeviceCeremony.js", "export"], ["apps/web/public/webapp/views/trusted-devices.js", "export"]] }
       }
     },

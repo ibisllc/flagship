@@ -293,7 +293,7 @@ class GymBackupsTest : GymBase() {
 
     private fun openImport() {
         launch(tab = "home", adminRoot = true)
-        composeRule.onNodeWithTag("home-add-server").performScrollTo().performClick()
+        tap("home-add-server")
         waitUntilExists("home-restore-backup")
         composeRule.onNodeWithTag("home-restore-backup").performClick()
         waitUntilExists("restore-source-file")

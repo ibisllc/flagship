@@ -314,8 +314,8 @@ fun HomeTab() {
             HomeScreen(
                 state = vm.state.collectAsState().value,
                 username = app.currentUser.collectAsState().value ?: "",
-                accountDisplayName = app.activeProfile?.accountDisplayName,
-                deviceDisplayName = app.activeProfile?.deviceDisplayName,
+                accountDisplayName = profiles.firstOrNull { it.cloudName == activeCloud }?.accountDisplayName,
+                deviceDisplayName = profiles.firstOrNull { it.cloudName == activeCloud }?.deviceDisplayName,
                 pods = orderedPods,
                 serverOrderIssuedAt = app.serverOrderIssuedAt.collectAsState().value,
                 serverOrderAcks = app.serverOrderAcks.collectAsState().value,

@@ -68,6 +68,10 @@ class AppState(
     activeCloudName: String? = null,
 ) {
     var onSignedOut: (() -> Unit)? = null
+
+    /** Where the names Home's header shows are kept across launches. */
+    var presentationNames: PresentationNameStore? = null
+
     private val _isPaired = MutableStateFlow(isPaired)
     val isPaired: StateFlow<Boolean> = _isPaired.asStateFlow()
 
@@ -410,8 +414,8 @@ class AppState(
                 cloudRootPubHex = "",
                 accountId = username,
                 deviceId = _deviceCapability.value?.deviceId ?: existing?.deviceId ?: AccountMetadata.generateDeviceId(),
-                accountDisplayName = existing?.accountDisplayName,
-                deviceDisplayName = existing?.deviceDisplayName,
+                accountDisplayName = existing?.accountDisplayName ?: presentationNames?.get(username)?.account,
+                deviceDisplayName = existing?.deviceDisplayName ?: presentationNames?.get(username)?.device,
                 deviceCapability = _deviceCapability.value,
                 demoServer = demoServer,
                 createdAt = System.currentTimeMillis(),
@@ -462,6 +466,7 @@ class AppState(
     }
 
     private fun upsertProfile(profile: Profile) {
+        presentationNames?.put(profile.cloudName, profile.accountDisplayName, profile.deviceDisplayName)
         val current = _profiles.value
         val idx = current.indexOfFirst { it.cloudName == profile.cloudName }
         _profiles.value = if (idx >= 0) {

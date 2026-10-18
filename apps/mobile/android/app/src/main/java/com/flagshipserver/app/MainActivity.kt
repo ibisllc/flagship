@@ -138,6 +138,9 @@ class MainActivity : FragmentActivity() {
         appState = AppState(
             requireBiometricAtLaunch = privacy.requireBiometricAtLaunch.value,
         )
+        appState.presentationNames = com.flagshipserver.app.core.PresentationNameStore.from(applicationContext)
+        // GYM: each smoke launch starts with no remembered names, as with the AI keys below.
+        if (savedInstanceState == null && com.flagshipserver.app.core.Variant.isGymLaunch(intent)) appState.presentationNames?.clear()
         // Restore a previously paired session: if the Keystore still holds
         // a UMK seed (a real identity that survives process death) and we
         // know which cloud was active, land on the gated shell instead of

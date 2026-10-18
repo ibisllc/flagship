@@ -66,7 +66,7 @@ class GymPeerBackupTest : GymBase() {
 
     private fun openRestoreFromPeers(vararg launchArgs: Pair<String, String>, podsVariant: String? = null, backups: String? = null) {
         launch(tab = "home", adminRoot = true, podsVariant = podsVariant, backups = backups)
-        composeRule.onNodeWithTag("home-add-server").performScrollTo().performClick()
+        tap("home-add-server")
         waitUntilExists("home-restore-backup")
         composeRule.onNodeWithTag("home-restore-backup").performClick()
         waitUntilExists("restore-source-peers")

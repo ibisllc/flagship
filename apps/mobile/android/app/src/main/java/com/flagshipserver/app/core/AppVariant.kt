@@ -121,4 +121,7 @@ class DevicePairingRelays(
 )
 
 /** Shown where device pairing would start while no live relay exists. */
-const val DEVICE_PAIRING_UNAVAILABLE = "Adding a device this way isn't available yet."
+const val DEVICE_PAIRING_UNAVAILABLE = "Adding a device from this phone isn't available yet. Use the web app or iOS."
+
+/** The same, for the new phone's side. */
+const val DEVICE_JOIN_UNAVAILABLE = "Joining an account from this phone isn't available yet. Use the web app or iOS."

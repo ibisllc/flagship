@@ -35,6 +35,9 @@ class GymDeviceBugsTest : GymBase() {
         }
     }
 
+    private fun addEnabled() = composeRule.onAllNodes(hasTestTag("home-add-server") and androidx.compose.ui.test.isEnabled())
+        .fetchSemanticsNodes().isNotEmpty()
+
     private fun subdomainField() =
         composeRule.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag("cs-name-field")))
 
@@ -240,4 +243,45 @@ class GymDeviceBugsTest : GymBase() {
         waitTextGone("The connection dropped", 20_000)
     }
 
+    // Device report 2026-10-18 (#6): Home's header said "Elated Iris > Pixel" and
+    // then just "elated-iris". It follows the names as they are learned (the
+    // header didn't recompose) and keeps them across a relaunch (the unit test
+    // PresentationNameStoreTest; a scenario's launch wipes saved settings).
+    @Test
+    fun homeShowsTheAccountAndDeviceNamesAsSoonAsTheyAreKnown() {
+        launch(tab = "home", adminRoot = true)
+        waitUntilExists("home-title")
+        composeRule.runOnUiThread {
+            com.flagshipserver.app.core.GymProbe.appState!!.cachePresentationNames("Elated Iris", "Pixel")
+        }
+        waitText("Elated Iris > Pixel")
+        gymShot("home-header-names")
+    }
+    // Device report 2026-10-18 (A-9): Add/Restore server sat where the card above
+    // it had been, so a tap right after the card went landed on something else.
+    // It waits for the layout to settle after the card appears or goes.
+    @Test
+    fun addServerWaitsForTheLayoutToSettleWhenTheCardAboveItGoes() {
+        launch(tab = "home", adminRoot = true)
+        waitUntilExists("home-add-server")
+        val app = com.flagshipserver.app.core.GymProbe.appState!!
+        // Let the first layout settle, then show the card above it and take it away.
+        eventually(5_000, "Add/Restore enabled once Home settled") { addEnabled() }
+        composeRule.runOnUiThread { app.setHasCloudRecovery(false) }
+        waitUntilExists("recovery-backup-banner")
+        eventually(5_000, "Add/Restore enabled again") { addEnabled() }
+        // The layout just moved: for a moment a tap would land where the card was.
+        composeRule.mainClock.autoAdvance = false
+        try {
+            composeRule.runOnUiThread { app.setHasCloudRecovery(true) }
+            composeRule.mainClock.advanceTimeByFrame()
+            composeRule.mainClock.advanceTimeBy(100)
+            assertTrue("Add/Restore takes no tap while the layout moves", !addEnabled())
+            composeRule.mainClock.advanceTimeBy(com.flagshipserver.app.ui.screens.ADD_SETTLE_MS + 100)
+            assertTrue("and works again once it settled", addEnabled())
+        } finally {
+            composeRule.mainClock.autoAdvance = true
+        }
+        gymShot("add-server-settled")
+    }
 }

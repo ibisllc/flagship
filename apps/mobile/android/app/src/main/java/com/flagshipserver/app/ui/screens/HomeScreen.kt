@@ -63,6 +63,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -253,6 +254,17 @@ fun HomeScreen(
         }
 
         val listLocked = statusPaused && pods.none { it.status != PodInfo.Status.PENDING }
+        // Add/Restore moves when the card above it appears or goes, and when the
+        // list first fills in (the empty-state button becomes the list's). A tap
+        // aimed at where it was landed on whatever moved there (device report
+        // 2026-10-18), so it waits for the layout to settle after each change.
+        val hasAnnouncement = accountWasReset || showRecoveryBackupBanner || showRecoveryNudge
+        var addSettled by remember { mutableStateOf(false) }
+        LaunchedEffect(hasAnnouncement, pods.isEmpty(), listLocked) {
+            addSettled = false
+            kotlinx.coroutines.delay(ADD_SETTLE_MS)
+            addSettled = true
+        }
         if (statusPaused && !listLocked) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Icon(
@@ -299,7 +311,7 @@ fun HomeScreen(
         if (listLocked) {
             LockedServerListCard(onShowServers = onShowServers)
         } else if (pods.isEmpty()) {
-            EmptyServerCard(canAddServers = canAddServers, onAddOrImport = { showAddOrImport = true })
+            EmptyServerCard(canAddServers = canAddServers, addEnabled = addSettled, onAddOrImport = { showAddOrImport = true })
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -311,7 +323,7 @@ fun HomeScreen(
                         modifier = Modifier.padding(end = FS.space.s4, top = FS.space.s2, bottom = FS.space.s1),
                     )
                 }
-                if (canAddServers) AddOrImportServerButton(onClick = { showAddOrImport = true })
+                if (canAddServers) AddOrImportServerButton(onClick = { showAddOrImport = true }, enabled = addSettled)
                 FSSearchField(
                     value = search,
                     onValueChange = { search = it },
@@ -535,13 +547,16 @@ private fun LockedServerListCard(onShowServers: () -> Unit) {
 fun showsAddServer(holdsAdminRoot: Boolean, isDemoAccount: Boolean): Boolean =
     com.flagshipserver.app.core.AddServerGate.allows(holdsAdminRoot, isDemoAccount)
 
+/** How long Add/Restore waits after the Home layout above it changes. */
+internal const val ADD_SETTLE_MS = 450L
+
 internal const val ADD_SERVERS_ADMIN_ONLY = com.flagshipserver.app.core.AddServerGate.ADMIN_ONLY
 
 /** "Add/Restore server": the one way to bring a server in (Create /
  *  Co-manage / Import), above the list or on the empty state. A tonal
  *  button with a plus, the Android form of iOS's tinted add row. */
 @Composable
-private fun AddOrImportServerButton(onClick: () -> Unit, primary: Boolean = false) {
+private fun AddOrImportServerButton(onClick: () -> Unit, primary: Boolean = false, enabled: Boolean = true) {
     val colors = if (primary) {
         ButtonDefaults.buttonColors(containerColor = FS.colors.fill, contentColor = FS.colors.onAccent)
     } else {
@@ -549,6 +564,7 @@ private fun AddOrImportServerButton(onClick: () -> Unit, primary: Boolean = fals
     }
     androidx.compose.material3.FilledTonalButton(
         onClick = onClick,
+        enabled = enabled,
         colors = colors,
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("home-add-server"),
     ) {
@@ -559,7 +575,7 @@ private fun AddOrImportServerButton(onClick: () -> Unit, primary: Boolean = fals
 }
 
 @Composable
-private fun EmptyServerCard(canAddServers: Boolean, onAddOrImport: () -> Unit) {
+private fun EmptyServerCard(canAddServers: Boolean, addEnabled: Boolean = true, onAddOrImport: () -> Unit) {
     FSEmptyState(
         title = if (canAddServers) "Your account is ready" else "No servers yet",
         message = if (canAddServers) "Add your first server to start running your own services." else ADD_SERVERS_ADMIN_ONLY,
@@ -567,7 +583,7 @@ private fun EmptyServerCard(canAddServers: Boolean, onAddOrImport: () -> Unit) {
         iconTint = if (canAddServers) FS.colors.success else null,
         modifier = Modifier.testTag("home-empty-state"),
         // The same button and sheet as a populated list.
-        action = if (canAddServers) ({ AddOrImportServerButton(onClick = onAddOrImport, primary = true) }) else null,
+        action = if (canAddServers) ({ AddOrImportServerButton(onClick = onAddOrImport, primary = true, enabled = addEnabled) }) else null,
     )
 }
 

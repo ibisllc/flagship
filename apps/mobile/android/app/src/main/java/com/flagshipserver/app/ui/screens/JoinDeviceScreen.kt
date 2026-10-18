@@ -90,7 +90,7 @@ fun JoinDeviceScreen(
     // Debug builds use the in-memory relay so the gym can drive it.
     val relays = remember { com.flagshipserver.app.core.Variant.devicePairingRelays() }
     if (relays == null) {
-        DevicePairingUnavailable(title = "Join an account", onCancel = onCancel)
+        DevicePairingUnavailable(title = "Join an account", onCancel = onCancel, message = com.flagshipserver.app.core.DEVICE_JOIN_UNAVAILABLE)
         return
     }
 

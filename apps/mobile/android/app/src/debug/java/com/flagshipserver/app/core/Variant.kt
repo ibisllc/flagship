@@ -27,6 +27,10 @@ object Variant : AppVariant {
 
     @Volatile private var mockRun = false
 
+    /** True once the app was launched against a real backend (a plain launch or
+     *  a live gym run). Unit tests never launch it, so they keep the mock relay. */
+    @Volatile private var realBackendLaunch = false
+
     /** Empty every saved-settings file but the key store's own (its keys are reset per run). */
     private fun freshInstall(context: android.content.Context) {
         val dir = java.io.File(context.applicationInfo.dataDir, "shared_prefs")
@@ -67,6 +71,7 @@ object Variant : AppVariant {
             // A normal launch in the same process as an earlier gym run (the
             // gym's cold-start checks) must not inherit its seams.
             mockRun = false
+            realBackendLaunch = true
             GymSeams.reset()
             PodDirect.transport = { OkHttpJsonTransport() }
             return null
@@ -85,6 +90,7 @@ object Variant : AppVariant {
         }
         val tab = SmokeMode.apply(config = cfg, appState = appState, operations = operations, trust = trust)
         mockRun = !cfg.live
+        realBackendLaunch = cfg.live
         if (cfg.live) return GymLaunch(tab, mocks = null)
 
         val screens = MockScreensClient()
@@ -200,6 +206,9 @@ object Variant : AppVariant {
     override fun credentialCalls(): com.flagshipserver.app.keystore.CredentialCalls? =
         if (GymSeams.fakePasskeysNoPrfOnCreate) com.flagshipserver.app.keystore.FakePasskeyApp() else null
 
-    override fun devicePairingRelays(): DevicePairingRelays =
-        MockDevicePairingRelay().let { DevicePairingRelays(it.admin, it.incoming) }
+    // Only a mock run (and the unit tests) pair over the in-memory relay. A debug
+    // build on a real backend has no live relay, exactly like a release build: it
+    // says so instead of failing with the mock's "hasn't sent hello yet".
+    override fun devicePairingRelays(): DevicePairingRelays? =
+        if (realBackendLaunch) null else MockDevicePairingRelay().let { DevicePairingRelays(it.admin, it.incoming) }
 }

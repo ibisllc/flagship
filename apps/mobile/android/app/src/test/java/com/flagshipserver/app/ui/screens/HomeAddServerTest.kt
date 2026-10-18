@@ -8,6 +8,8 @@
 package com.flagshipserver.app.ui.screens
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -54,6 +56,28 @@ class HomeAddServerTest {
                 )
             }
         }
+        settle()
+    }
+
+    /** Add/Restore waits for the layout to settle after Home first fills in. */
+    private fun settle() {
+        composeRule.mainClock.advanceTimeBy(ADD_SETTLE_MS + 50)
+        composeRule.waitForIdle()
+    }
+
+    @Test fun addWaitsForTheLayoutToSettleBeforeItTakesATap() {
+        composeRule.setContent {
+            FlagshipTheme {
+                HomeScreen(
+                    state = LoadingState.Loading, username = "harry", pods = onePod, onOpenPod = {},
+                    onAddServer = {}, onRestoreBackup = {}, onCoManage = {}, canAddServers = true,
+                    onMakeLeader = {}, onRefresh = {},
+                )
+            }
+        }
+        composeRule.onNodeWithTag("home-add-server").assertIsNotEnabled()
+        settle()
+        composeRule.onNodeWithTag("home-add-server").assertIsEnabled()
     }
 
     private val onePod = listOf(

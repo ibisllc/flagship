@@ -474,7 +474,7 @@ abstract class GymBase {
 
     /** Home's "Add/Restore server" asks which; pick "Create a server". */
     protected fun addNewServer() {
-        composeRule.onNodeWithTag("home-add-server").performScrollTo().performClick()
+        tap("home-add-server")
         waitUntilExists("home-add-new-server")
         composeRule.onNodeWithTag("home-add-new-server").performClick()
         composeRule.waitForIdle()

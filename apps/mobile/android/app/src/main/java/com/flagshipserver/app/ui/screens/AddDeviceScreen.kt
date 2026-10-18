@@ -350,7 +350,11 @@ internal fun formatSas(code: String): String =
 
 /** Where device pairing would start while no live relay exists. */
 @Composable
-internal fun DevicePairingUnavailable(title: String, onCancel: () -> Unit) {
+internal fun DevicePairingUnavailable(
+    title: String,
+    onCancel: () -> Unit,
+    message: String = com.flagshipserver.app.core.DEVICE_PAIRING_UNAVAILABLE,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -364,7 +368,7 @@ internal fun DevicePairingUnavailable(title: String, onCancel: () -> Unit) {
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
         )
         Text(
-            com.flagshipserver.app.core.DEVICE_PAIRING_UNAVAILABLE,
+            message,
             color = FS.colors.textMuted,
             style = MaterialTheme.typography.bodyLarge,
         )

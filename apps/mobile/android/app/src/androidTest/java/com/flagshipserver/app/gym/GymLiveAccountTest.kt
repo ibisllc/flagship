@@ -107,4 +107,18 @@ class GymLiveAccountTest : GymBase() {
         for (w in rawWords) assertTrue("Peer-backup shows \"$w\"", textCount(w) == 0)
     }
 
+    /** Device report 2026-10-18 (A-8): a build with no live pairing relay says
+     *  so plainly instead of failing with the in-memory relay's error. */
+    @Test
+    fun addADeviceSaysItIsNotAvailableYetWithoutALiveRelay() {
+        launchLive("settings")
+        waitUntilExists("settings-title")
+        tap("settings-trusted-devices")
+        waitUntilExistsDesc("trusted-devices-add", timeoutMs = 30_000)
+        tapDesc("trusted-devices-add")
+        waitUntilExistsDesc("device-pairing-unavailable")
+        waitText("Adding a device from this phone isn't available yet. Use the web app or iOS.")
+        assertTrue(textCount("MockDevicePairingRelay") == 0)
+        gymShot("add-device-unavailable")
+    }
 }
