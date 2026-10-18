@@ -178,8 +178,10 @@ final class GymSweepSettingsTests: GymSweepCase {
 
     // MARK: - Leaving: sign out, remove this device, delete account
 
+    /// A device without the admin root: the plain confirmation. (An admin
+    /// device gets the admin-key warning: GymAccountGoneTests.)
     func test_signOutAsksThenSignsOut() throws {
-        let app = launch(tab: "settings", ["-smoke-recovery-enrolled"])
+        let app = launch(tab: "settings", admin: false, ["-smoke-recovery-enrolled"])
         settings(app)
         let signOut = app.buttons["settings-sign-out-btn"]
         XCTAssertTrue(find(app, signOut))
@@ -197,7 +199,7 @@ final class GymSweepSettingsTests: GymSweepCase {
     }
 
     func test_removeThisDeviceAsksThenRemoves() throws {
-        let app = launch(tab: "settings", ["-smoke-recovery-enrolled"])
+        let app = launch(tab: "settings", admin: false, ["-smoke-recovery-enrolled"])
         settings(app)
         let remove = app.buttons["remove-from-account-btn"]
         XCTAssertTrue(find(app, remove))
