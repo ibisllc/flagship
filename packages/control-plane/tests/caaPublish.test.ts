@@ -30,7 +30,7 @@ class FakeCaaDns implements CaaUpsertClient {
 }
 
 describe("publishUserZoneCaa", () => {
-  it("publishes the exact CA-restriction rdata at the apex and the wildcard", async () => {
+  it("publishes issue + issuewild at the user-zone node only", async () => {
     const dns = new FakeCaaDns();
     const published = await publishUserZoneCaa({ client: dns, userZone: "alice.flagship.services" });
 
@@ -39,10 +39,6 @@ describe("publishUserZoneCaa", () => {
       [
         'alice.flagship.services :: 0 issue "letsencrypt.org"',
         'alice.flagship.services :: 0 issuewild "letsencrypt.org"',
-        'alice.flagship.services :: 0 iodef "mailto:security@flagshipserver.com"',
-        '*.alice.flagship.services :: 0 issue "letsencrypt.org"',
-        '*.alice.flagship.services :: 0 issuewild "letsencrypt.org"',
-        '*.alice.flagship.services :: 0 iodef "mailto:security@flagshipserver.com"',
       ].sort(),
     );
   });
@@ -65,8 +61,8 @@ describe("publishUserZoneCaa", () => {
     const afterFirst = dns.createCount;
     await publishUserZoneCaa({ client: dns, userZone: "alice.flagship.services" });
     expect(dns.createCount).toBe(afterFirst); // no new records created
-    expect(dns.records.size).toBe(6); // 3 tags × {apex, wildcard}
-    expect(dns.upsertCalls).toBe(12); // called both times, but second round all no-ops
+    expect(dns.records.size).toBe(2); // issue + issuewild
+    expect(dns.upsertCalls).toBe(4); // called both times, but second round all no-ops
   });
 
   it("threads custom CA domain / iodef through", async () => {
@@ -74,10 +70,10 @@ describe("publishUserZoneCaa", () => {
     const published = await publishUserZoneCaa({
       client: dns,
       userZone: "eve.flagship.services",
-      options: { caDomain: "pki.goog", iodef: "" },
+      options: { caDomain: "pki.goog", iodef: "mailto:abuse@example.com" },
     });
     expect(published.some((p) => p.rdata.includes("pki.goog"))).toBe(true);
-    expect(published.some((p) => p.rdata.includes("iodef"))).toBe(false);
-    expect(published).toHaveLength(4); // issue + issuewild × {apex, wildcard}
+    expect(published.some((p) => p.rdata.includes("iodef"))).toBe(true);
+    expect(published).toHaveLength(3); // issue + issuewild + the opted-in iodef
   });
 });

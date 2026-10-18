@@ -62,7 +62,7 @@ describe("authorizeAdmin", () => {
 });
 
 describe("handleRepublishServerDns", () => {
-  it("rewrites apex + wildcard A/AAAA for every active server", async () => {
+  it("rewrites each account's wildcard A/AAAA and CAA once for every active server", async () => {
     const storage = new InMemoryStorage();
     await storage.servers.put({
       serverDomain: "home.alice.flagship.services",
@@ -88,20 +88,21 @@ describe("handleRepublishServerDns", () => {
     expect(r.body.ok).toBe(2);
     expect(r.body.failed).toBe(0);
 
-    // PER-BOX DNS (cert model A′): each box gets its own pair.
-    // 2 boxes × (<server>.<user> + *.<server>.<user>) × (A + AAAA) = 8 upserts.
+    // One wildcard per account (docs/wildcard-dns.md): 2 accounts x (A + AAAA
+    // + CAA issue + CAA issuewild) = 8 upserts, and no per-box record.
     expect(dns.upserts.length).toBe(8);
     const names = dns.upserts.map((u) => `${u.type} ${u.name} ${u.content}`).sort();
-    expect(names).toContain("A home.alice.flagship.services 1.2.3.4");
-    expect(names).toContain("A *.home.alice.flagship.services 1.2.3.4");
-    expect(names).toContain("AAAA media.bob.flagship.services ::1");
-    expect(names).toContain("AAAA *.media.bob.flagship.services ::1");
-    // The model-C user-zone names must be gone.
-    expect(names).not.toContain("A alice.flagship.services 1.2.3.4");
-    expect(names).not.toContain("A *.alice.flagship.services 1.2.3.4");
+    expect(names).toContain("A *.alice.flagship.services 1.2.3.4");
+    expect(names).toContain("AAAA *.alice.flagship.services ::1");
+    expect(names).toContain("AAAA *.bob.flagship.services ::1");
+    expect(names).toContain('CAA alice.flagship.services 0 issue "letsencrypt.org"');
+    expect(names).toContain('CAA bob.flagship.services 0 issuewild "letsencrypt.org"');
+    expect(names.some((n) => n.includes("home.alice") || n.includes("media.bob"))).toBe(false);
+    // No CAA copy at the wildcard node.
+    expect(names.some((n) => n.startsWith("CAA *."))).toBe(false);
   });
 
-  it("publishes a distinct pair per box for multiple servers under one user (A′)", async () => {
+  it("publishes the account set ONCE however many servers the user has", async () => {
     const storage = new InMemoryStorage();
     await storage.servers.put({
       serverDomain: "home.alice.flagship.services",
@@ -124,14 +125,11 @@ describe("handleRepublishServerDns", () => {
     expect(r.status).toBe(200);
     expect(r.body.total).toBe(2); // both servers reported
     expect(r.body.ok).toBe(2);
-    // Each box publishes its own apex + wildcard, A only.
-    expect(dns.upserts.length).toBe(4);
-    const names = dns.upserts.map((u) => `${u.type} ${u.name}`).sort();
-    expect(names).toEqual([
-      "A *.home.alice.flagship.services",
-      "A *.media.alice.flagship.services",
-      "A home.alice.flagship.services",
-      "A media.alice.flagship.services",
+    // One wildcard A (no IPv6 configured) + the two CAA, once for the account.
+    expect(dns.upserts.map((u) => `${u.type} ${u.name}`).sort()).toEqual([
+      "A *.alice.flagship.services",
+      "CAA alice.flagship.services",
+      "CAA alice.flagship.services",
     ]);
   });
 
@@ -196,8 +194,8 @@ describe("handleRepublishServerDns", () => {
       // no servicesIpv6
     });
     expect(r.body.ok).toBe(1);
-    expect(dns.upserts.every((u) => u.type === "A")).toBe(true);
-    expect(dns.upserts.length).toBe(2); // apex + wildcard, A only
+    expect(dns.upserts.some((u) => u.type === "AAAA")).toBe(false);
+    expect(dns.upserts.filter((u) => u.type === "A")).toHaveLength(1); // the account wildcard, A only
   });
 });
 

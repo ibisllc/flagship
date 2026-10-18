@@ -132,11 +132,23 @@ export class CloudflareDnsClient {
       headers: this.headers(),
       body: JSON.stringify(createBody),
     });
-    const body = (await resp.json()) as { success: boolean; result?: CloudflareDnsRecord; errors?: unknown };
-    if (!body.success || !body.result) {
-      throw new Error(`Cloudflare DNS POST failed: ${JSON.stringify(body.errors ?? body)}`);
+    const body = (await resp.json()) as {
+      success: boolean;
+      result?: CloudflareDnsRecord;
+      errors?: Array<{ code?: number; message?: string }>;
+    };
+    if (body.success && body.result) return body.result;
+    // Two registrations of one account racing to create the same wildcard both
+    // see "absent" and POST; Cloudflare answers the loser 81058 ("an identical
+    // record already exists"). Present is all the caller wants, so resolve to
+    // the winner's record instead of failing the registration.
+    if (Array.isArray(body.errors) && body.errors.some((e) => e?.code === 81058)) {
+      const raced = (await this.list(opts.name, opts.type)).find(
+        (r) => r.content === opts.content,
+      );
+      if (raced) return raced;
     }
-    return body.result;
+    throw new Error(`Cloudflare DNS POST failed: ${JSON.stringify(body.errors ?? body)}`);
   }
 
   /**

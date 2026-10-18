@@ -102,6 +102,7 @@ describe("CloudflareDnsClient stale ACME TXT cleanup", () => {
         "_acme-challenge.flagship.services.",
         "_acme-challenge.home.openai-build.flagship.services",
       ],
+      shieldsReleased: 0,
     });
     expect(deleted).toEqual(["old-challenge", "apex-challenge"]);
   });

@@ -71,3 +71,33 @@ describe("CloudflareDnsClient.createTxt idempotency", () => {
     await expect(dns.createTxt({ name: NAME, value: VALUE })).rejects.toThrow(/createTxt failed/);
   });
 });
+
+describe("CloudflareDnsClient.upsert idempotency under a race", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("resolves to the winner's record when a concurrent create answers 81058", async () => {
+    const WILD = { id: "cf-wild", type: "A", name: "*.alice.flagship.services", content: "203.0.113.7", proxied: false, ttl: 60 };
+    let listed = 0;
+    vi.stubGlobal("fetch", async (_url: string, init?: { method?: string }) => {
+      if ((init?.method ?? "GET") === "POST") {
+        return new Response(JSON.stringify({ success: false, errors: [{ code: 81058, message: "An identical record already exists." }] }), { status: 400 });
+      }
+      listed += 1;
+      // first list: absent (we lost the race); second list: the winner's record
+      return new Response(JSON.stringify({ success: true, result: listed === 1 ? [] : [WILD] }), { status: 200 });
+    });
+    const dns = new CloudflareDnsClient({ apiToken: "t", zoneId: "z" });
+    const rec = await dns.upsert({ name: WILD.name, type: "A", content: WILD.content });
+    expect(rec.id).toBe("cf-wild");
+  });
+
+  it("still throws on any other create failure", async () => {
+    vi.stubGlobal("fetch", async (_url: string, init?: { method?: string }) =>
+      (init?.method ?? "GET") === "POST"
+        ? new Response(JSON.stringify({ success: false, errors: [{ code: 1004 }] }), { status: 400 })
+        : new Response(JSON.stringify({ success: true, result: [] }), { status: 200 }),
+    );
+    const dns = new CloudflareDnsClient({ apiToken: "t", zoneId: "z" });
+    await expect(dns.upsert({ name: "*.alice.flagship.services", type: "A", content: "203.0.113.7" })).rejects.toThrow(/POST failed/);
+  });
+});

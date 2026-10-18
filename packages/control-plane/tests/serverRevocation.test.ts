@@ -332,7 +332,7 @@ describe("POST /api/server-registry/revoke (IRK-signed user-initiated)", () => {
     ).toBe(false);
   });
 
-  it("DNS cleanup: deletes the per-box A/AAAA records (apex + wildcard), NOT the user-zone CAA", async () => {
+  it("DNS cleanup of the account's LAST server: its per-box records and the account's own set", async () => {
     const storage = await setUpClaimedHarry();
     await seedServer(storage);
     const dns = makeFakeDns();
@@ -341,18 +341,92 @@ describe("POST /api/server-registry/revoke (IRK-signed user-initiated)", () => {
     const r = await handleRevokeServer({ ...deps(storage), dns }, body);
     expect(r.status).toBe(200);
 
-    // Exactly the four per-box records: <serverDomain> + *.<serverDomain>,
-    // each A and AAAA. No CAA, no user-zone names (CAA is shared).
+    // The box's old per-box pair (A + AAAA at <serverDomain> and *.<serverDomain>)
+    // and, since nothing else of harry's is live, the account set: *.harry A,
+    // AAAA and CAA, and the CAA at harry.
     expect(dns.calls.sort()).toEqual(
       [
         [DOMAIN, "A"],
         [DOMAIN, "AAAA"],
         [`*.${DOMAIN}`, "A"],
         [`*.${DOMAIN}`, "AAAA"],
+        ["*.harry.flagship.services", "A"],
+        ["*.harry.flagship.services", "AAAA"],
+        ["*.harry.flagship.services", "CAA"],
+        ["harry.flagship.services", "CAA"],
       ].sort(),
     );
-    expect(dns.calls.some(([, type]) => type === "CAA")).toBe(false);
+    expect((r.body as { dnsRecordsDeleted: number }).dnsRecordsDeleted).toBe(8);
+  });
+
+  it("DNS cleanup keeps the account's set while another server of the account is live", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    await seedServer(storage, "media.harry.flagship.services");
+    const dns = makeFakeDns();
+
+    const r = await handleRevokeServer({ ...deps(storage), dns }, revokeBody().body);
+    expect(r.status).toBe(200);
+    expect(dns.calls.every(([name]) => name === DOMAIN || name === `*.${DOMAIN}`)).toBe(true);
     expect((r.body as { dnsRecordsDeleted: number }).dnsRecordsDeleted).toBe(4);
+  });
+
+  it("DNS cleanup keeps the account's set while an install is in flight", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    await storage.authCodes.put({
+      serial: "inflight1",
+      username: USERNAME,
+      serverName: "media",
+      serverDomain: "media.harry.flagship.services",
+      delegatedPubKeyHex: "aa".repeat(32),
+      userPubKeyHex: "bb".repeat(32),
+      userSignatureHex: "cc".repeat(64),
+      issuedAt: Date.now(),
+      expiresAt: Date.now() + 3_600_000,
+      status: "active",
+      recordedAt: Date.now(),
+    });
+    const dns = makeFakeDns();
+
+    const r = await handleRevokeServer({ ...deps(storage), dns, authCodes: storage.authCodes }, revokeBody().body);
+    expect(r.status).toBe(200);
+    expect(dns.calls.some(([name]) => name === "*.harry.flagship.services")).toBe(false);
+  });
+
+  it("a registration that races the account clean-up gets its records back", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    const dns = makeFakeDns();
+    const upserts: Array<[string, string]> = [];
+    const realDelete = dns.deleteByName.bind(dns);
+    dns.deleteByName = async (name: string, type: string) => {
+      // A second box registers while the first one's records are being deleted.
+      if (name === "*.harry.flagship.services" && type === "A") await seedServer(storage, "media.harry.flagship.services");
+      return realDelete(name, type);
+    };
+    const r = await handleRevokeServer(
+      {
+        ...deps(storage),
+        dns,
+        accountDns: {
+          client: {
+            async upsert(o: { name: string; type: string; content: string }) {
+              upserts.push([o.name, o.type]);
+              return { id: "x", type: o.type, name: o.name, content: o.content, proxied: false, ttl: 60 };
+            },
+          },
+          servicesIpv4: "1.2.3.4",
+          servicesIpv6: "::1",
+        },
+      },
+      revokeBody().body,
+    );
+    expect(r.status).toBe(200);
+    expect(upserts).toEqual([
+      ["*.harry.flagship.services", "A"],
+      ["*.harry.flagship.services", "AAAA"],
+    ]);
   });
 
   it("DNS cleanup is best-effort: a CF failure does NOT undo the revocation", async () => {
@@ -763,11 +837,10 @@ describe("POST /api/server-registry/unrevoke (owner-signed undo)", () => {
     const rec = await storage.servers.get(DOMAIN);
     expect(rec?.revokedAt).toBeUndefined();
     expect(rec?.identityPubKeyHex).toBe("11".repeat(32));
+    // The account's wildcard, not a per-box pair.
     expect(dns.calls).toEqual([
-      [DOMAIN, "A"],
-      [DOMAIN, "AAAA"],
-      [`*.${DOMAIN}`, "A"],
-      [`*.${DOMAIN}`, "AAAA"],
+      ["*.harry.flagship.services", "A"],
+      ["*.harry.flagship.services", "AAAA"],
     ]);
     const events = await storage.auditEvents.list(USERNAME, 0, 10);
     expect(events.map((e) => e.eventKind)).toContain("server-unrevoked");

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   ed,
   signAdminRootTransfer,
@@ -24,6 +24,9 @@ import {
   handlePostTransferRehomeAuth,
   type ServerTransferDeps,
 } from "../src/serverTransfer.js";
+import { ensureAccountDns } from "../src/accountDns.js";
+import { CloudflareDnsClient } from "../src/cloudflareDns.js";
+import { FakeCloudflare } from "./fakeCloudflare.js";
 
 // Transfer-a-box broker (docs/account-deletion-and-name-reclaim.md §4): the
 // giver deposits an offer, the acquirer claims it, and `.com` re-homes the
@@ -202,6 +205,44 @@ describe("transfer-a-box broker", () => {
     const bobFeed = await s.auditEvents.list("bob", 0, 50);
     expect(aliceFeed.some((e) => e.eventKind === "server-transfer-claimed")).toBe(true);
     expect(bobFeed.some((e) => e.eventKind === "server-transfer-claimed")).toBe(true);
+  });
+
+  it("DNS: the acquirer gets the account wildcard, the giver's old records go with its last box", async () => {
+    const cf = new FakeCloudflare();
+    cf.install();
+    try {
+      const dns = new CloudflareDnsClient({ apiToken: "t", zoneId: "z" });
+      const relay = { servicesIpv4: "203.0.113.7", servicesIpv6: "2001:db8::7" };
+      // alice's account set and the per-box pair an older build published for the box.
+      await ensureAccountDns({ client: dns, ...relay, caa: { client: dns } }, "alice.flagship.services");
+      cf.seed("A", HOST, relay.servicesIpv4);
+      cf.seed("A", `*.${HOST}`, relay.servicesIpv4);
+      const s = await setup();
+      const nonce = hex(rand(32));
+      await handlePostTransferOffer(deps(s), HOST, offerBody(aliceIrk, { nonce }));
+      const res = await handlePostTransferClaim(
+        {
+          ...deps(s),
+          dns: { client: dns, ...relay, caa: { client: dns } },
+          dnsCleanup: dns,
+          authCodes: s.authCodes,
+        },
+        HOST,
+        claimBody(bobIrk, "bob", nonce),
+      );
+      expect(res.status).toBe(200);
+      // bob: his four; alice: none (no per-box leftovers, no account set).
+      expect(cf.dump()).toEqual(
+        [
+          `A *.bob.flagship.services ${relay.servicesIpv4}`,
+          `AAAA *.bob.flagship.services ${relay.servicesIpv6}`,
+          'CAA bob.flagship.services 0 issue "letsencrypt.org"',
+          'CAA bob.flagship.services 0 issuewild "letsencrypt.org"',
+        ].sort(),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("rejects an offer signed by the wrong (non-owner) IRK", async () => {

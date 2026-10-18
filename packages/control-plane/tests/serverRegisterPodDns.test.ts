@@ -127,8 +127,8 @@ async function buildRegister(username: string, serverName: string) {
   };
 }
 
-describe("serverRegister — per-box DNS publishing (cert model A′)", () => {
-  it("publishes ONLY the box apex + box wildcard A records", async () => {
+describe("serverRegister — one wildcard per account (docs/wildcard-dns.md)", () => {
+  it("publishes ONLY the account wildcard A record, nothing per box", async () => {
     const usernames = new InMemoryUsernameStorage();
     const irk = makeKey();
     await usernames.put({
@@ -206,20 +206,12 @@ describe("serverRegister — per-box DNS publishing (cert model A′)", () => {
       },
     );
     expect(r.status).toBe(200);
-    // PER-BOX DNS (cert model A′): the box apex `home.alice` + its wildcard
-    // `*.home.alice` (resolves every `<service>.home.alice`), PLUS the per-USER
-    // wildcard `*.alice` for TIER-2 leader-routed service names (`<svc>.alice` is
-    // hardware-agnostic — no per-box wildcard covers it; it must resolve to the
-    // same hub IP so the hub can route it to the leader box). The user-zone APEX
-    // (`alice.flagship.services`, a NON-wildcard A) is still NOT published (the
-    // model-C user-zone box A record is gone — only the tier-2 wildcard is added).
+    // One wildcard per ACCOUNT: `*.alice` answers the box (`home.alice`),
+    // everything under it (`<service>.home.alice`, by closest-encloser
+    // synthesis) and the tier-2 `<svc>.alice` names. No per-box record, and
+    // no non-wildcard A at the user-zone apex either.
     const names = fakeDns.upserted.map((u) => u.name).sort();
-    expect(names).toEqual([
-      "*.alice.flagship.services",
-      "*.home.alice.flagship.services",
-      "home.alice.flagship.services",
-    ]);
-    expect(names).not.toContain("alice.flagship.services");
+    expect(names).toEqual(["*.alice.flagship.services"]);
     for (const u of fakeDns.upserted) {
       expect(u.type).toBe("A");
       expect(u.content).toBe("203.0.113.42");
@@ -244,21 +236,17 @@ describe("serverRegister — per-box DNS publishing (cert model A′)", () => {
       body,
     );
     expect(r.status).toBe(200);
-    // CAA stays at the USER zone even though A/AAAA + certs are per-box (A′):
-    // RFC 8659 tree-climbing makes the user-zone records cover every per-box
-    // and service name below them.
+    // CAA stays at the USER zone even though certs are per-box (A′): RFC 8659
+    // tree-climbing makes the two user-zone records cover every box and
+    // service name below them, so there is no copy at `*.alice` and no iodef.
     const caaSet = [...caaDns.caa.values()].map((v) => `${v.name} :: ${v.content}`).sort();
     expect(caaSet).toEqual(
       [
         'alice.flagship.services :: 0 issue "letsencrypt.org"',
         'alice.flagship.services :: 0 issuewild "letsencrypt.org"',
-        'alice.flagship.services :: 0 iodef "mailto:security@flagshipserver.com"',
-        '*.alice.flagship.services :: 0 issue "letsencrypt.org"',
-        '*.alice.flagship.services :: 0 issuewild "letsencrypt.org"',
-        '*.alice.flagship.services :: 0 iodef "mailto:security@flagshipserver.com"',
       ].sort(),
     );
-    expect((r.body as { caaPublished: unknown[] }).caaPublished).toHaveLength(6);
+    expect((r.body as { caaPublished: unknown[] }).caaPublished).toHaveLength(2);
   });
 
   it("does NOT duplicate CAA across a re-register of a second pod under the same user", async () => {
@@ -280,10 +268,10 @@ describe("serverRegister — per-box DNS publishing (cert model A′)", () => {
       );
       expect(r.status).toBe(200);
     }
-    // Two registrations, but only ONE user zone → 6 distinct CAA records, no dupes.
-    expect(caaDns.created).toBe(6);
-    expect(caaDns.caa.size).toBe(6);
-    expect(caaDns.calls).toBe(12); // 6 per register × 2, half no-ops
+    // Two registrations, but only ONE user zone → 2 distinct CAA records, no dupes.
+    expect(caaDns.created).toBe(2);
+    expect(caaDns.caa.size).toBe(2);
+    expect(caaDns.calls).toBe(4); // 2 per register × 2, half no-ops
   });
 
   it("skips CAA (no throw) when no caa client is configured", async () => {
