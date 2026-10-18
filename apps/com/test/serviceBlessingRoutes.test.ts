@@ -17,11 +17,11 @@ import {
   type ServiceBlessing,
 } from "@flagship/protocol";
 
-function stubDb(): D1Database {
+function stubDb(accountRow: Record<string, unknown> | null = null): D1Database {
   return {
     prepare: () => ({
       bind: () => ({
-        first: async () => null,
+        first: async () => accountRow,
         all: async () => ({ results: [], success: true, meta: {} }),
         run: async () => ({ success: true, meta: {} }),
       }),
@@ -31,6 +31,12 @@ function stubDb(): D1Database {
 }
 function env(extra: Partial<ControlPlaneEnv> = {}): ControlPlaneEnv {
   return { DB: stubDb(), SERVICES_CONTROL_SECRET: SECRET, ...extra };
+}
+/** A stub DB whose account lookups find a row, so own-account routes get past
+ *  the account-not-found check (docs/account-gone.md). */
+function envWithAccount(irkPub: Uint8Array): ControlPlaneEnv {
+  const irkPubHex = [...irkPub].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return { DB: stubDb({ username: "alice", irk_pub_hex: irkPubHex, claimed_at: 1 }), SERVICES_CONTROL_SECRET: SECRET };
 }
 const ORIGIN = "https://flagshipserver.com";
 const SECRET = "services-control-secret";
@@ -127,7 +133,7 @@ describe("trust-exception sync routes — dispatch", () => {
         method: "POST",
         body: JSON.stringify(exc),
       }),
-      env(),
+      envWithAccount(device.publicKey),
     );
     expect(r).not.toBeNull();
     expect(r!.status).toBe(200);
@@ -139,7 +145,7 @@ describe("trust-exception sync routes — dispatch", () => {
         method: "POST",
         body: JSON.stringify({ kind: "nope" }),
       }),
-      env(),
+      envWithAccount(device.publicKey),
     );
     expect(r!.status).toBe(400);
   });
@@ -149,7 +155,7 @@ describe("trust-exception sync routes — dispatch", () => {
       new Request(`${ORIGIN}/api/users/alice/trust-exceptions`, {
         method: "GET",
       }),
-      env(),
+      envWithAccount(device.publicKey),
     );
     expect(r).not.toBeNull();
     expect(r!.status).toBe(200);

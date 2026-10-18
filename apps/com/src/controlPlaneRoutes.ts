@@ -144,6 +144,7 @@ import {
   handleMintAccountReadToken,
   handleGetOrderHealth,
   requireAccountRead,
+  checkAccountExists,
   ACCOUNT_READ_HEADERS,
   handleUserStream,
   handleListOutstandingOrders,
@@ -771,6 +772,45 @@ const ROUTE_RE = {
 };
 
 /**
+ * The routes a signed-in client calls for ITS OWN account (docs/account-gone.md).
+ * For an account that does not exist each answers `404 account-not-found`
+ * before any auth check, so a client whose account was deleted learns so in
+ * one stable shape. Deliberately absent: lookups other accounts make about a
+ * name (pubkey-cert, account-key-attestation, share unlock/revoke, invite
+ * create-fetch/revoked-since) and the recovery, TOTP and admit ceremonies,
+ * which keep their own answers.
+ */
+const ACCOUNT_GONE_ROUTES: { re: RegExp; methods?: readonly string[] }[] = [
+  { re: ROUTE_RE.USER_PODS },
+  { re: ROUTE_RE.USER_STREAM },
+  { re: ROUTE_RE.USER_AUDIT },
+  { re: ROUTE_RE.USER_OUTSTANDING_ORDERS },
+  { re: ROUTE_RE.APP_ALIASES },
+  { re: ROUTE_RE.APP_LINKS },
+  { re: ROUTE_RE.APP_RENAME },
+  { re: ROUTE_RE.DEVICE_GRANTS_LIST },
+  { re: ROUTE_RE.DEVICE_GRANTS_REVOKE },
+  { re: ROUTE_RE.ACCOUNT_READ_TOKEN },
+  { re: ROUTE_RE.SERVER_ORDER },
+  { re: ROUTE_RE.ACCOUNT_PROFILE },
+  { re: ROUTE_RE.ACCOUNT_DIRECTORY },
+  { re: ROUTE_RE.DEVICE_SELF_PROFILE },
+  { re: ROUTE_RE.DEVICE_MANAGED_PROFILE },
+  { re: ROUTE_RE.DEVICE_DIRECTORY_KEY_GRANT },
+  { re: ROUTE_RE.ACCOUNT_DEVICE },
+  { re: ROUTE_RE.TRUST_EXCEPTIONS },
+  { re: ROUTE_RE.SERVICE_INVITES },
+  { re: ROUTE_RE.SERVER_SHARES },
+  { re: ROUTE_RE.SERVER_SHARES_LIST },
+  { re: ROUTE_RE.WATCH_DELEGATES_LIST },
+  { re: ROUTE_RE.WATCH_DELEGATES_REVOKE },
+  { re: ROUTE_RE.ACME_ACCOUNT_KEYS_LIST },
+  { re: ROUTE_RE.ADMIN_ROOT_ROTATIONS_LIST },
+  { re: ROUTE_RE.RE_PAIR_GET, methods: ["GET"] },
+  { re: /^\/api\/users\/([^/]+)$/, methods: ["GET"] },
+];
+
+/**
  * Serve the `/api/boot/*` contract on the identity plane itself
  * (boot.flagshipserver.com collapsed onto flagship-com — see
  * docs/boot-worker-consolidation.md). The hostname + every path/shape is
@@ -875,6 +915,23 @@ export async function tryControlPlane(
   };
 
   let m: RegExpMatchArray | null;
+
+  if (path.startsWith("/api/users/") || path.startsWith("/api/accounts/")) {
+    for (const route of ACCOUNT_GONE_ROUTES) {
+      const hit = path.match(route.re);
+      if (!hit || (route.methods && !route.methods.includes(method))) continue;
+      let name: string;
+      try {
+        name = decodeURIComponent(hit[1]!);
+      } catch {
+        break;
+      }
+      if (name === "check") break;
+      const gone = await checkAccountExists({ usernames: storage.usernames, demoUsers: storage.demoUsers }, name);
+      if (gone) return finishRead(gone);
+      break;
+    }
+  }
 
   // Usage metering (feat/metering) — the relay reports per-account egress
   // deltas and reads quota status. Shared-secret authed (x-usage-secret),
