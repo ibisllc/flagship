@@ -165,7 +165,11 @@ describe("POST /api/server/release (cancel the server / free the name)", () => {
     const storage = await setUpClaimedHarry();
     await seedRouting(storage, 1);
 
-    // Sanity: a DIFFERENT RCK is blocked before release (the bug).
+    // A box has taken the name over (it has a routing target).
+    await storage.routing.setTarget(DOMAIN, "aa".repeat(32), "01".repeat(8), Date.now());
+
+    // Sanity: a DIFFERENT RCK is blocked before release (the bug). Before a
+    // box activates the name the same account may replace it (retry path).
     const blocked = await seedRouting(storage, 2);
     expect(blocked.status).toBe(409);
 

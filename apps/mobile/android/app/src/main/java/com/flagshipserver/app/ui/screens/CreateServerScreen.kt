@@ -231,6 +231,7 @@ fun CreateServerScreen(
     var debugSshKey by rememberSaveable { mutableStateOf("") }
     val swkDepositStore = remember { PendingSwkDepositStore.from(context) }
     val pairingDepositStore = remember { PendingPairingDepositStore.from(context) }
+    val rckStore = remember { com.flagshipserver.app.core.PendingRckStore.from(context) }
     // Per-service leadership (Phase 6): the per-cloud CGK is NEVER embedded in the
     // recipe, so it is owed on EVERY created server and deposited post-registration.
     val cgkDepositStore = remember { com.flagshipserver.app.core.PendingCgkDepositStore.from(context) }
@@ -270,6 +271,7 @@ fun CreateServerScreen(
             swkDepositStore = swkDepositStore,
             cgkDepositStore = cgkDepositStore,
             pairingDepositStore = pairingDepositStore,
+            rckStore = rckStore,
             sessionStore = sessionStore,
             isDemoAccount = app.isDemoAccountNow(),
             restore = preset?.restore,
@@ -545,6 +547,7 @@ fun CreateServerScreen(
                                 debugSshKey = debugSshKey,
                                 swkDepositStore = swkDepositStore,
                                 pairingDepositStore = pairingDepositStore,
+                                rckStore = rckStore,
                                 cgkDepositStore = cgkDepositStore,
                                 // Secret-free pairing: build the order + persist the
                                 // session token now; the order is sealed + deposited
@@ -1241,6 +1244,8 @@ private suspend fun prepareDelivery(
     // Secret-free pairing: stashes the create-time order owed when embed-secrets
     // is OFF, so the Home reconcile seals + deposits it post-registration.
     pairingDepositStore: PendingPairingDepositStore? = null,
+    // A retry of the same pending name keeps the routing key `.com` already pinned.
+    rckStore: com.flagshipserver.app.core.PendingRckStore? = null,
     // Create-time pairing: optional so the unit tests' direct calls stay simple;
     // production passes the session store so the token-persist runs.
     mailbox: com.flagshipserver.app.api.SecretMailboxClient? = null,
@@ -1265,6 +1270,7 @@ private suspend fun prepareDelivery(
         swkDepositStore = swkDepositStore,
         cgkDepositStore = cgkDepositStore,
         pairingDepositStore = pairingDepositStore,
+        rckStore = rckStore,
         sessionStore = sessionStore,
         isDemoAccount = isDemoAccount,
         restore = restore,
@@ -1317,6 +1323,7 @@ internal suspend fun mintRecipeBundle(
     swkDepositStore: PendingSwkDepositStore? = null,
     cgkDepositStore: com.flagshipserver.app.core.PendingCgkDepositStore? = null,
     pairingDepositStore: PendingPairingDepositStore? = null,
+    rckStore: com.flagshipserver.app.core.PendingRckStore? = null,
     sessionStore: com.flagshipserver.app.api.SessionStoring? = null,
     isDemoAccount: Boolean = false,
     // Import a backup: sign a restore order for this server and attach it beside
@@ -1357,8 +1364,12 @@ internal suspend fun mintRecipeBundle(
     val delegated = Ed25519Sign.KeyPair.newKeyPair()
     val delegatedPubHex = HexUtil.encode(delegated.publicKey)
 
-    val rck = Ed25519Sign.KeyPair.newKeyPair()
-    val rckPubHex = HexUtil.encode(rck.publicKey)
+    // The phone keeps no RCK secret; only the public key is pinned on `.com`.
+    // A pending order for this name keeps its key, so a retry registers the
+    // same claim instead of a second one `.com` refuses.
+    val rckPubHex = rckStore?.reuseOrRecord(serverDomain, HexUtil.encode(Ed25519Sign.KeyPair.newKeyPair().publicKey))
+        ?: HexUtil.encode(Ed25519Sign.KeyPair.newKeyPair().publicKey)
+    val rckPubBytes = HexUtil.decode(rckPubHex) ?: error("corrupt routing key")
 
     // Slice D (D-1) — pin the account's ADMIN MASTER ROOT into the AuthCode so a
     // fresh box anchors it (signature-covered by the IRK below). Null only on a
@@ -1387,7 +1398,7 @@ internal suspend fun mintRecipeBundle(
         phoneDelegatedPubKey = delegated.publicKey,
         authCode = authCodeBytesObj,
         authCodeUserSignature = authCodeUserSig,
-        rckPubKey = rck.publicKey,
+        rckPubKey = rckPubBytes,
         bootUnlockMode = bootUnlockMode,
         diskEncryption = diskEncryption,
     )

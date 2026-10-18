@@ -167,6 +167,21 @@ export async function handleRegisterRck(
     return malformed(`invalid server label: ${labelV.reason}`);
   }
 
+  // A retry of the same pending order mints a new RCK (the phone keeps no
+  // RCK secret), so a claim that no box has activated yet may be replaced by
+  // the SAME account's fresh one. Nothing depends on the old key until
+  // setRoutingTargetFromRegistration or a signed SetRoutingTarget gives the
+  // name a target, and only the account's own admin authority got this far.
+  const existing = await deps.routing.get(r.subdomain);
+  if (
+    existing &&
+    existing.rckPubKeyHex !== r.rckPubKey &&
+    existing.username === r.username &&
+    existing.currentTargetHex === ""
+  ) {
+    await deps.routing.release(r.subdomain);
+  }
+
   const out = await deps.routing.register({
     subdomain: r.subdomain,
     username: r.username,

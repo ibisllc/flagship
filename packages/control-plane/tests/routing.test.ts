@@ -190,6 +190,74 @@ describe("POST /api/routing/register-rck", () => {
     );
     expect(r.status).toBe(400);
   });
+
+  async function registerRck(storage: InMemoryStorage, seed: number) {
+    const rck = freshKeypair(seed);
+    const claim: RegisterRck = {
+      username: "harry",
+      subdomain: "home.harry.flagship.services",
+      rckPubKey: rck.publicKey,
+      issuedAt: Date.now(),
+    };
+    const r = await handleRegisterRck(
+      { routing: storage.routing, usernames: storage.usernames },
+      {
+        request: {
+          username: claim.username,
+          subdomain: claim.subdomain,
+          rckPubKey: bytesToHex(claim.rckPubKey),
+          issuedAt: claim.issuedAt,
+        },
+        signature: bytesToHex(signRegisterRck(claim, harryAdmin)),
+      },
+    );
+    return { r, rck };
+  }
+
+  it("a retried order may replace the RCK of a name no box has activated", async () => {
+    const storage = await setUpClaimedHarry();
+    const first = await registerRck(storage, 21);
+    expect(first.r.status).toBe(200);
+    const second = await registerRck(storage, 22);
+    expect(second.r.status).toBe(200);
+    const rec = await storage.routing.get("home.harry.flagship.services");
+    expect(rec?.rckPubKeyHex).toBe(bytesToHex(second.rck.publicKey));
+  });
+
+  it("409 once a box is the name's target: a different RCK can no longer replace it", async () => {
+    const storage = await setUpClaimedHarry();
+    const first = await registerRck(storage, 21);
+    const target = freshKeypair(12);
+    const setReq: SetRoutingTarget = {
+      subdomain: "home.harry.flagship.services",
+      newTargetIdentityPubKey: target.publicKey,
+      issuedAt: Date.now(),
+      nonce: new Uint8Array(16).fill(7),
+    };
+    const set = await handleSetRoutingTarget(
+      { routing: storage.routing, usernames: storage.usernames },
+      {
+        request: {
+          subdomain: setReq.subdomain,
+          newTargetIdentityPubKey: bytesToHex(setReq.newTargetIdentityPubKey),
+          issuedAt: setReq.issuedAt,
+          nonce: bytesToHex(setReq.nonce),
+        },
+        signature: bytesToHex(signSetRoutingTarget(setReq, first.rck)),
+      },
+    );
+    expect(set.status).toBe(200);
+    const second = await registerRck(storage, 22);
+    expect(second.r.status).toBe(409);
+    const rec = await storage.routing.get("home.harry.flagship.services");
+    expect(rec?.rckPubKeyHex).toBe(bytesToHex(first.rck.publicKey));
+  });
+
+  it("the same RCK again stays idempotent", async () => {
+    const storage = await setUpClaimedHarry();
+    expect((await registerRck(storage, 21)).r.status).toBe(200);
+    expect((await registerRck(storage, 21)).r.status).toBe(200);
+  });
 });
 
 describe("POST /api/routing/set-target", () => {
