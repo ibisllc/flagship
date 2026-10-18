@@ -1384,6 +1384,9 @@ async function main(): Promise<void> {
         // turns the platform ON where those inputs exist.
         hostUsername: cfg?.userId,
         hostIrkPub: cfg?.irkPublicKey,
+        // The alias poll goes to the control plane this box registered with (the gym's
+        // included), not to the production default; a rename then reaches the box's routing.
+        aliasReconcilerComBase: env.controlPlaneBaseUrl,
         // Slice D (D-2) — the pinned admin master root; when present, service-
         // membership invite/mutation are admin-gated (absent ⇒ legacy owner-IRK).
         ...(cfg?.adminRootPub ? { hostAdminRootPub: cfg.adminRootPub } : {}),
