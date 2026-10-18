@@ -27,6 +27,8 @@ import {
 import { startDaemonStatusHeartbeat, type DaemonStatusHeartbeat } from "./daemonStatusHeartbeat.js";
 import { buildSignedLanHint, hostAddresses, lanPortFromEnv, leafCertSha256 } from "./lanDirect.js";
 import { buildRescue } from "./rescue/rescue.js";
+import { buildRescueAuthorize } from "./rescue/authority.js";
+import { DeviceRevocations } from "./deviceRevocations.js";
 import { makeRelayTrustExceptionResolver } from "./relayTrustExceptions.js";
 import { sendPushRelay, sendRelayTrustAlert } from "./relaySos.js";
 import { buildOwnerWake } from "./ownerWake.js";
@@ -245,6 +247,7 @@ import {
   AdminRootPinLostError,
   buildAdminRootRotationPoller,
   fileAdminRootPinStore,
+  applyDeliveredRotations,
   recoverLostAdminRootPin,
   resolvePinnedAdminRoot,
 } from "./adminRootRotationConsumer.js";
@@ -1051,6 +1054,18 @@ async function main(): Promise<void> {
   // Who a signing key is on this box (account devices, co-managers): the
   // device book is wired by wireOwnerHandlers, the shares by wireRuntimeSurfaces.
   const accessPrincipals = new AccessPrincipals(cfg?.ownerAidPub ? bytesToHexStr(cfg.ownerAidPub) : null);
+  // Device revocations the admin root delivered straight to this box: they apply at once and `.com`
+  // cannot bring a revoked device back by listing it again (docs/data-sovereignty.md).
+  if (cfg) {
+    const revocations = new DeviceRevocations({
+      path: `${dataDir}/data/flagship-access/device-revocations.json`,
+      username: cfg.userId,
+      adminRootPub: () => cfg?.adminRootPub,
+    });
+    await revocations.load();
+    revocations.subscribe((grantId) => void accessPrincipals.book?.dropGrant(grantId));
+    accessPrincipals.revocations = revocations;
+  }
   // One access list per app across the account's servers: the hand-over is
   // wired by wireOwnerHandlers, and learns where the app's other servers are
   // once gossip is up (below).
@@ -3293,15 +3308,24 @@ async function wireRuntimeSurfaces(deps: {
             serverFqdn: env.serverFqdn,
             signAsBox: (msg) => custodian.signAsBox(msg),
             certSha256: () => (liveCertPemRef.current ? leafCertSha256(liveCertPemRef.current) : null),
-            authorize: (order, signature) =>
-              authorizeSensitiveOrder({
-                ownerIrkPub: cfg.irkPublicKey,
-                ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+            authorize: buildRescueAuthorize({
+              irkPub: () => cfg.irkPublicKey,
+              adminRootPub: () => cfg.adminRootPub,
+              username: cfg.userId,
+              adminGrants: () => deps.accessPrincipals.book?.adminGrants() ?? [],
+            }),
+            revocations: deps.accessPrincipals.revocations,
+            rotations: async (entries) => {
+              const out = await applyDeliveredRotations({
                 username: cfg.userId,
-                order,
-                signature,
-                verify: verifyRescueSession,
-              }),
+                seedAdminRootHex: cfg.adminRootPub ? bytesToHexStr(cfg.adminRootPub) : null,
+                pinStore: fileAdminRootPinStore(`${dataDir}/admin-root-pin.json`),
+                entries,
+                restart: () => restarts.request("admin root rotated by the owner; restarting to re-bind the authority anchor"),
+                onLog: (m) => console.log(m),
+              });
+              return { rotated: out.rotated, ...(out.rotated ? {} : { reason: out.reason }) };
+            },
             archive: serverArchiveService,
             apps: () => (runtime.servicePlatform?.list() ?? []).map((a) => ({ serviceId: a.serviceId, name: a.manifest.name })),
             note: (kind, detail, ok) => deps.activityLog.note(kind, detail, { ok: ok ?? true }),
@@ -3685,6 +3709,7 @@ async function wireOwnerHandlers(deps: {
     username: cfg.userId,
     ownerIrkPub: () => cfg.irkPublicKey,
     adminRootPub: () => cfg.adminRootPub,
+    isRevoked: (grantId) => deps.accessPrincipals.revocations?.has(grantId) ?? false,
     ...(cfg.ownerAidPub ? { ownerAidHex: bytesToHexStr(cfg.ownerAidPub) } : {}),
     fetchGrants: async () => {
       const base = env.controlPlaneBaseUrl.replace(/\/+$/, "");
