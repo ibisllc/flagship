@@ -127,6 +127,20 @@ export const ANDROID_GONE: readonly Scenario[] = [
     },
   ),
   androidTotal(
+    "android-total-remove-device-no-admin-cancel",
+    "Remove this device in Settings on a device that is not an admin is the ordinary question and stops at Cancel.",
+    `${PKG}.GymSettingsTest#removeDeviceStopsAtCancelOnADeviceThatIsNotAnAdmin`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch smokeTab=settings." },
+        { kind: "tap", describe: "Remove this device from account.", handle: "settings-remove-device-btn" },
+      ],
+      assertions: [{ describe: "Settings stays", handle: "settings-title", expect: "present" }],
+      screenshots: [shot("remove-device-cancel", "Settings after Cancel.")],
+      dimension: "D4",
+    },
+  ),
+  androidTotal(
     "android-total-sign-out-no-admin-warning",
     "Sign out on a device that is not an admin has no admin-key warning.",
     `${PKG}.GymAccountGoneTest#signOutOnADeviceThatIsNotAnAdminHasNoAdminWarning`,

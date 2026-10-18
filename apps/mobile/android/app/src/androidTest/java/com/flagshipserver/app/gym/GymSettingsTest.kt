@@ -83,15 +83,31 @@ class GymSettingsTest : GymBase() {
     @Test
     fun removeDeviceAndDeleteAccountStopAtCancel() {
         settings(admin = true)
+        // An admin device holds the key that can still save its servers' data: the dialog says so and
+        // has no Cancel (Save my data first opens the key backup; only Remove anyway removes).
         tap("settings-remove-device-btn")
-        waitText("Remove this device from your account?")
-        tapText("Cancel")
-        waitTextGone("Remove this device from your account?")
+        waitText(com.flagshipserver.app.core.AdminKeyWarning.REMOVE_TITLE)
+        tap("settings-remove-save-first")
+        waitUntilExistsDesc("keyfile-export", 15_000)
+        Espresso.pressBack()
+        waitUntilExists("settings-title", 15_000)
         tap("settings-delete-account-btn")
         waitText("Delete", 15_000)
         gymShot("delete-account")
         tapText("Cancel")
         waitUntilExists("settings-title", 15_000)
+    }
+
+    /** A device that is not an admin holds no admin key: Remove this device is the ordinary question, with Cancel. */
+    @Test
+    fun removeDeviceStopsAtCancelOnADeviceThatIsNotAnAdmin() {
+        settings()
+        tap("settings-remove-device-btn")
+        waitText("Remove this device from your account?")
+        tapText("Cancel")
+        waitTextGone("Remove this device from your account?")
+        waitUntilExists("settings-title", 15_000)
+        gymShot("remove-device-cancel")
     }
 
     // ─── Devices and browsers ────────────────────────────────────────────────
