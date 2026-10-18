@@ -119,9 +119,14 @@ DISK_BYTES="$(blockdev --getsize64 "/dev/$ROOT_PARENT")"
 PART_BYTES="$(blockdev --getsize64 "$ROOT_LUKS_PART")"
 if [ $((DISK_BYTES - PART_BYTES)) -gt 1073741824 ]; then
     stage "Expanding the disk to $((DISK_BYTES / 1000000000)) GB"
-    growpart "/dev/$ROOT_PARENT" "$ROOT_PARTITION"
+    GROWPART_RC=0
+    growpart "/dev/$ROOT_PARENT" "$ROOT_PARTITION" || GROWPART_RC=$?
+    # 1 = NOCHANGE: a retry after an earlier run already grew the partition.
+    [ "$GROWPART_RC" -le 1 ] || exit "$GROWPART_RC"
     udevadm settle
-    cryptsetup resize "$ROOT_MAPPER"
+    # Without the key file cryptsetup asks for a passphrase on stdin, which a
+    # systemd service does not have ("Nothing to read on input").
+    cryptsetup resize --key-file /etc/flagship/appliance-build.key "$ROOT_MAPPER"
     resize2fs "$ROOT_SOURCE"
     echo "[appliance] cloned disk expansion complete"
 fi
