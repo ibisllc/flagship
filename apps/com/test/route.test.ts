@@ -2320,6 +2320,48 @@ describe("boot.flagshipserver.com — boot operations served by flagship-com", (
   });
 });
 
+describe("boot. and recovery. follow CONTROL_APEX (the gym, 2026-10-18)", () => {
+  // boot.gym. used to fall through to the .services proxy, which answered a
+  // Fastify 404 "Route POST:/api/boot/request not found", so a gym box could
+  // never post its unlock request.
+  const gym = () =>
+    makeEnv({ CONTROL_APEX: "gym.flagshipserver.com", SERVICES_APEX: "gym.flagship.services" });
+
+  it("boot.gym. serves the boot surface, never the proxy", async () => {
+    const r = await route(new Request("https://boot.gym.flagshipserver.com/api/health"), gym());
+    expect(r.status).toBe(200);
+    expect(((await r.json()) as { surface: string }).surface).toBe("boot");
+  });
+
+  it("a /api/boot/* path on boot.gym. reaches tryBootHost (503 with no DB), not a 404", async () => {
+    const r = await route(
+      new Request("https://boot.gym.flagshipserver.com/api/boot/request", { method: "POST", body: "{}" }),
+      gym(),
+    );
+    expect(r.status).toBe(503);
+  });
+
+  it("a non-boot path on boot.gym. 404s from the boot surface itself", async () => {
+    const r = await route(new Request("https://boot.gym.flagshipserver.com/faq.html"), gym());
+    expect(r.status).toBe(404);
+    expect(await r.json()).toEqual({ error: "not found" });
+  });
+
+  it("prod's boot host is not special on a gym env", async () => {
+    const r = await route(new Request("https://boot.flagshipserver.com/api/health"), gym());
+    expect(((await r.json().catch(() => ({}))) as { surface?: string }).surface).not.toBe("boot");
+  });
+
+  it("recovery.gym. serves the recovery page and /recovery on the gym apex redirects to it", async () => {
+    const page = await route(new Request("https://recovery.gym.flagshipserver.com/"), gym());
+    expect(page.status).toBe(200);
+    expect(await page.text()).toBe("asset:/recovery/");
+    const redir = await route(new Request("https://gym.flagshipserver.com/recovery/"), gym());
+    expect(redir.status).toBe(308);
+    expect(redir.headers.get("location")).toBe("https://recovery.gym.flagshipserver.com/");
+  });
+});
+
 describe("framing protection on every host (clickjacking report, 2026-10)", () => {
   const hosts = [
     "https://webapp.flagshipserver.com/",

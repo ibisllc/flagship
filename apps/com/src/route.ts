@@ -186,6 +186,18 @@ const RECOVERY_ORIGIN = `https://${RECOVERY_HOST}`;
  */
 const BOOT_HOST = "boot.flagshipserver.com";
 
+/** The boot host for THIS env: `boot.<CONTROL_APEX>` on a parallel env (the
+ *  gym), else prod's. A hard-coded prod name left `boot.gym.` falling through
+ *  to the `.services` proxy, which answered a Fastify 404 for /api/boot/*. */
+function bootHost(env: RouteEnv): string {
+  return env.CONTROL_APEX ? `boot.${env.CONTROL_APEX}` : BOOT_HOST;
+}
+
+/** The recovery host for THIS env, same rule as `bootHost`. */
+function recoveryHost(env: RouteEnv): string {
+  return env.CONTROL_APEX ? `recovery.${env.CONTROL_APEX}` : RECOVERY_HOST;
+}
+
 /**
  * CSP applied to every response served from `recovery.flagshipserver.com`.
  *
@@ -557,8 +569,8 @@ export async function route(
     if (lowered === webappHost(env) ||
         lowered === remoteHost(env) ||
         lowered === wwwHost(env) ||
-        lowered === RECOVERY_HOST ||
-        lowered === BOOT_HOST ||
+        lowered === recoveryHost(env) ||
+        lowered === bootHost(env) ||
         lowered === apexHost(env)) {
       url = new URL(
         `https://${lowered}${requestUrl.pathname}${requestUrl.search}${requestUrl.hash}`,
@@ -640,7 +652,7 @@ async function routeImpl(
   // response carries the strict CSP defined in RECOVERY_CSP plus a
   // X-Frame-Options: DENY belt-and-braces against legacy browsers that
   // ignore frame-ancestors. Disk path: apps/web/public/recovery/*.
-  if (url.hostname === RECOVERY_HOST) {
+  if (url.hostname === recoveryHost(env)) {
     return serveRecovery(request, url, env);
   }
 
@@ -651,7 +663,7 @@ async function routeImpl(
   // shape are byte-identical to the old standalone worker, so clients are
   // wire-transparent. A non-boot path on this host 404s (boot is a tiny,
   // single-purpose surface — never the marketing/webapp/proxy fallthrough).
-  if (url.hostname === BOOT_HOST) {
+  if (url.hostname === bootHost(env)) {
     const res = await tryBootHost(request, env as unknown as Parameters<typeof tryBootHost>[1]);
     return res ?? jsonResponse({ error: "not found" }, 404);
   }
@@ -791,7 +803,7 @@ async function routeImpl(
   // create a passkey scoped to the apex rpId — defeating the isolation.
   if (url.pathname === "/recovery" || url.pathname.startsWith("/recovery/")) {
     const tail = url.pathname.slice("/recovery".length); // "" or "/X"
-    const target = `${RECOVERY_ORIGIN}${tail || "/"}${url.search}`;
+    const target = `https://${recoveryHost(env)}${tail || "/"}${url.search}`;
     return new Response(null, {
       status: 308,
       headers: { location: target },
