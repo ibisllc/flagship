@@ -92,6 +92,12 @@ Known state at the time of writing (re-check, do not trust):
 
 ## 1. Cloudflare plan and DNS limits (do this first)
 
+> **Owner decision 2026-10-18: `.com` stays on the Workers Free plan at launch.**
+> Skip item 1 below (the Paid upgrade) unless section 14's signals appear, and do
+> step 1b instead: the two jobs that cannot run in a Free Worker (the D1 backup, the
+> model-table refresh) run in GitHub Actions, and they need the secrets and the
+> bucket of 1b before the first `.com` deploy.
+
 Why: the Workers **Free** plan gives a request 10 ms of CPU. A gym request was
 killed by it, and prod runs the same code, so any heavy handler can 1102 for
 real people. `.com` also uses Durable Objects (rate limits, relay sessions)
@@ -125,6 +131,59 @@ plan.
 
 Rollback: a plan change is reversible in the dashboard (downgrading puts the
 10 ms limit back, so don't, unless billing forces it).
+
+## 1b. Free-plan prerequisites: GitHub secrets, the backup bucket, the first backup
+
+Why: on Free a Worker cron may make 50 subrequests and spend 10 ms. The D1 backup made
+89 D1 calls and the model-table refresh spent 33 ms, so both moved to GitHub Actions
+(`.github/workflows/d1-backup.yml`, `model-capabilities.yml`). The `.com` deploy of step 7
+removes the Worker's backup (code and R2 binding), so **without this step there is no
+backup at all** (D1 Time Travel, 7 days on Free, is the only safety net). Nothing here is
+a secret in the repo; you add two values in GitHub.
+
+1. **Create the private R2 bucket and its retention rule** (no public access, no dev-url):
+
+   ```sh
+   npx wrangler r2 bucket create flagship-d1-backups
+   npx wrangler r2 bucket lifecycle add flagship-d1-backups expire-daily d1/daily/ --expire-days 30
+   npx wrangler r2 bucket lifecycle list flagship-d1-backups      # one rule, prefix d1/daily/
+   ```
+
+   `d1/monthly/` has no rule on purpose (the first backup of each month is kept).
+2. **Make a Cloudflare API token** (dashboard > My Profile > API Tokens > Create Custom
+   Token) restricted to this account with exactly `Account > D1 > Edit` and
+   `Account > Workers R2 Storage > Edit`. Not a deploy token. Copy the token and the
+   account id (dashboard > Workers & Pages > right column).
+3. **Add the two GitHub repository secrets** (repo > Settings > Secrets and variables >
+   Actions > New repository secret): `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+   Do not paste either into a file in the repo.
+4. **The backup is encrypted to the security@flagshipserver.com key** that is already
+   published (`apps/web/public/.well-known/pgp-key.txt`, fingerprint
+   `D96D 675D B03E 3F3B BC88 7030 2308 936D 2154 96D0`, expires 2028-10-07; the private
+   half stays on your two YubiKeys). Nothing to generate or replace. You need a YubiKey
+   and `gpg` only to restore. (We chose this over `age` because no new key has to be
+   created, stored or lost.)
+5. **Run the backup once and verify the object**: Actions > D1 backup > Run workflow
+   (leave "backup"). It exports, encrypts, uploads, reads the object back and checks the
+   result is fresh. Then:
+
+   ```sh
+   npx wrangler r2 object get flagship-d1-backups/latest.json --file - --remote
+   ```
+
+   shows `takenAt` just now, `tables` about 89, a `key` under `d1/daily/`. Optionally
+   rehearse the restore: `bash scripts/d1-restore-drill.sh` (local, throwaway key;
+   `docs/runbooks/d1-restore.md` has the real steps).
+6. **Run "Model capability table" once** (Actions > Model capability table > Run workflow);
+   `model_capabilities` then has about 350 rows (`GET /api/inference/capabilities`).
+7. The workflow also checks every six hours that the newest backup is under 36 hours old
+   and fails (GitHub emails you) when not. Confirm Actions email notifications are on for
+   your account, and that the repo's scheduled workflows are not disabled (GitHub turns
+   them off after 60 days without repository activity; a manual run re-enables).
+
+Check: the R2 object exists and `latest.json` is fresh; both workflows green.
+
+Rollback: none needed; the workflows only read D1 and write the new bucket.
 
 ## 2. Renew the CA lease (due 2026-11-05, and do it before anything that needs the CA)
 
@@ -431,18 +490,40 @@ to the prod zone):**
    steady state of 4 per account after each issuance: no `_acme-challenge` TXT
    older than an hour (the stale sweep removes them hourly).
 
-## 7. Deploy `.com`
+## 7. Deploy `.com` (two Workers)
+
+`.com` is now two Workers: `flagship-com` (the API, the marketing site, recovery., boot.,
+voi.ci, www.) and `flagship-webapp` (the static-only project that serves `webapp.` and
+`remote.flagshipserver.com`; `apps/webapp-static`). `npm run deploy` in `apps/com` deploys
+`flagship-com` and then builds and deploys `flagship-webapp` (`scripts/deploy-webapp-static.sh`).
 
 ```sh
 cd ~/flagship-deploy
 git fetch origin && git checkout --detach origin/main && npm ci && npx tsc -b
 cd apps/com
-npm run deploy        # predeploy: clean rebuild of the bundled packages, route-safety, dist freshness, orphaned output, prod-migration drift
+npm run deploy        # predeploy: clean rebuild of the bundled packages, route-safety, dist freshness, orphaned output, static-asset guard, prod-migration drift; then wrangler deploy; then the webapp Worker
 ```
 
-This deploy carries the root-wildcard logic (no address or CAA record is written
-for anybody; legacy records are cleared once the step 6a wildcard exists; the new
-reap rules and `zone-health`; the challenge shield is gone): it needs the step 6 gate green,
+**First time only: the move of `webapp.` and `remote.`.** `flagship-com` no longer lists
+those two custom domains and `flagship-webapp` does. Deploy `flagship-webapp` **first**:
+`bash scripts/deploy-webapp-static.sh` from the repo root (run it in a terminal: wrangler
+asks "Custom Domains already exist for these domains ... Update them to point to this
+script instead?"; answer yes). The two hostnames switch to the new Worker in one step,
+with no gap. Then `npm run deploy` as above. Doing it the other way round detaches the
+hostnames from `flagship-com` and leaves the webapp unreachable until `flagship-webapp`
+is deployed. After that, plain `npm run deploy` is enough every time.
+
+Rollback of the move: put the two `custom_domain` lines for `webapp.` and `remote.` back
+in the `routes` array of `apps/com/wrangler.toml` (git history has them) and deploy
+`flagship-com`; the Worker still holds the host-rewrite code and the webapp files, and it
+takes the hostnames back (answer yes at the prompt).
+
+This deploy carries: the cron regroup (`apps/com/src/cronPlan.ts`; the Worker's D1 backup
+and model refresh are gone, step 1b replaces them), `run_worker_first` narrowed to
+"everything except 46 listed static files" with a generated `_headers`, the root-wildcard
+logic from before (no address or CAA record is written for anybody; legacy records are
+cleared once the step 6a wildcard exists; the new reap rules and `zone-health`; the
+challenge shield is gone). It needs the step 6 gate green, step 1b done,
 **no D1 migration** and **no endorsed box release** (boxes only publish and
 delete their own `_acme-challenge` TXT through `.com`; they publish no A, AAAA or
 CAA). The hourly legacy sweep stays off until you set `DNS_LEGACY_SWEEP=1`. Do not use `--force` or set `FLAGSHIP_SKIP_*`. If the migration check says it
@@ -454,6 +535,9 @@ Check:
 curl -s -o /dev/null -w "%{http_code}\n" https://flagshipserver.com/api/health            # 200
 curl -s https://flagshipserver.com/api/health | head -c 300
 curl -s https://webapp.flagshipserver.com/service-worker.js | grep -m1 SHELL_VERSION        # = main's SHELL_VERSION (v150 at the RC pass)
+curl -sI https://webapp.flagshipserver.com/ | grep -i "content-security-policy\|x-frame-options\|referrer-policy"   # the shell CSP now comes from the static _headers
+curl -sI https://flagshipserver.com/docs/ | grep -i "x-frame-options\|strict-transport"                            # a listed static page: _headers, no Worker
+curl -s -o /dev/null -w "%{http_code}\n" https://webapp.flagshipserver.com/lib/no-such-file.js                       # 404 (the static-only Worker's guard), not 200 HTML
 curl -s -o /dev/null -w "%{http_code}\n" https://flagshipserver.com/status/
 curl -s https://flagshipserver.com/api/notices -o /dev/null -w "%{http_code}\n"             # 204 until a notice is signed (step 12)
 curl -sI https://flagshipserver.com/ | grep -i "x-frame-options\|strict-transport"
@@ -794,8 +878,28 @@ cold (about 7.5 ms). `apps/com/test/cpuBudget.test.ts` fails if one grows.
 
 How many accounts fit under 100,000 requests a day, one always-on box each: about 75
 (a box now asks about 1,200 times a day, down from about 4,470; a user in the
-foreground about 110). Alarm at 70,000, about 52 accounts. Webapp users add about 190
-requests each time the shell is released (every static file goes through the Worker).
+foreground about 110). Alarm at 70,000, about 52 accounts. Webapp users used to add
+about 190 requests each time the shell was released (every static file went through the
+Worker); they add none now (see the next table), so shell releases no longer move the
+daily total. The account's Worker requests are the sum of `flagship-com` and
+`flagship-webapp` (the latter only runs for a missing script or a non-GET: about none).
+
+Worker requests per page load, measured with `scripts/worker-request-count.ts` in local
+workerd (a request the assets layer answers by itself is free and unlimited):
+
+| Page load | before | after |
+| --- | --- | --- |
+| webapp first visit (205 requests) | 205 | 0 |
+| webapp, a new shell version (204 requests) | 204 | 0 |
+| webapp, same version (service-worker check) | 1 | 0 |
+| marketing page view of `/` (10 requests) | 10 | 1 |
+| `/docs/`, `/faq`, `/privacy`, `/status/`, `/security/` | 1 + subresources | 0 |
+
+Crons (10 ms CPU and 50 subrequests per invocation, 5 triggers per account; the gym uses
+two): the 6-hourly invocation made 230 to 247 subrequests and 36 to 71 ms. It is now
+split by `apps/com/src/cronPlan.ts` into ticks of at most 14 subrequests (measured) and about 5 ms
+(`apps/com/test/cronBudget.test.ts`); the D1 backup and the model-table refresh run in
+GitHub Actions (step 1b). Inventory in `workers-cpu-budget.md` "Crons".
 
 Upgrade to Workers Paid (USD 5 a month) when any of these shows:
 
@@ -805,7 +909,13 @@ Upgrade to Workers Paid (USD 5 a month) when any of these shows:
 - the Cloudflare dashboard (Workers > flagship-com > Metrics) shows requests above
   70,000 in a day, or any day reaching the 100,000 cap (Cloudflare then answers
   error 1027 until midnight UTC);
-- the 6-hourly D1 backup stops appearing in R2 `flagship-backups/hourly/`: it makes 89
-  D1 calls, over the 50-subrequest limit, so **on Free it does not run at all**. This is
-  the one that already needs a decision before the first deploy: take a manual
-  `wrangler d1 export` on a schedule (CI) or pay for the plan.
+- the D1 backup workflow is red or its newest backup is over 36 hours old (it runs in
+  GitHub Actions, so Free is not the cause; but if you would rather have it in the
+  platform, the Paid plan's 30-day Time Travel and a 30 s cron allow it);
+- the fleet grows: a cron plan that no longer fits (`cronBudget.test.ts`
+  red) or the CT rotation stretching past a day (the scan visits 4 users every 20 minutes);
+- any need for a webhook-style or per-write wake (the long-poll `/stream` needs a
+  Durable Object per account to be pushed).
+
+Time Travel (point-in-time restore) is available on Free for 7 days and on Paid for 30
+(Cloudflare docs, "D1 Time Travel"); `docs/runbooks/d1-restore.md` has both restore paths.

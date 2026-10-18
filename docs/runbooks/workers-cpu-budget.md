@@ -11,11 +11,12 @@ guard that keeps it fitting. The short version for a deploy is the last section 
 | --- | --- | --- |
 | CPU per request | 10 ms (a killed request is HTTP 503 `error code: 1102`) | hot routes 1-5 ms warm (below), first request of a young isolate about 1.6x that |
 | Requests per day, all Workers requests | 100,000 | boxes dominate: see "Requests a day" |
-| Subrequests per request (D1 calls count) | 50 | the held `/stream` made 130 and the 6-hourly backup makes 89: see "Not fixed" |
+| Subrequests per request (D1 calls count) | 50 | the held `/stream` made 130 (now 8); the 6-hourly cron made 230 (now at most 14 a tick): see "Crons" |
+| Cron triggers | 5 per account, 10 ms CPU and 50 subrequests per invocation | two schedules here, two in the gym Worker |
 | D1 rows written / read per day | 100,000 / 5,000,000 | a heartbeat writes one row; not the limit |
 | Durable Object requests per day | 100,000 | each rate-limited call is 1-3: not the limit |
 | Script size | 3 MB gzip | 434 KiB (`wrangler deploy --dry-run`) |
-| Static asset requests | free and unlimited **only when the Worker is not run for them** | `run_worker_first = ["/*"]` runs the Worker for every file: each counts (see "Requests a day") |
+| Static asset requests | free and unlimited **only when the Worker is not run for them** | listed static files and the whole webapp no longer run it: see "Static assets" |
 
 Wall time spent waiting for D1 or `fetch` is free; only JavaScript is billed.
 
@@ -136,7 +137,7 @@ Boxes poll `.com`; the apps hold one long-poll while they are in the foreground.
 | **A box before** | | **about 4,470** |
 | App or webapp in the foreground | `/stream` held 25 s | 144 per hour of use |
 | App launch (account read, directory, notices) | | about 3 to 5 each |
-| Webapp shell install or update (about 190 files, each through the Worker) | once per shell release per webapp user | about 190 |
+| Webapp shell install or update (about 190 files) | once per shell release per webapp user | 0 Worker requests since `webapp.` / `remote.` moved to a static-only project (it was about 190) |
 | **A user** (25 min of use over 6 launches) | | **about 110** |
 
 With the doorbell (below) a box asks only what its heartbeat reply says is waiting,
@@ -151,12 +152,9 @@ gated:
 
 Accounts that fit under 100,000 a day with one always-on box each:
 100,000 / (1,200 + 110 x the share active that day) is **about 75**. Before the
-doorbell it was 21. The alarm (70,000) is about 52 accounts. Webapp users add about
-190 requests each time the shell is released (the shell version has moved almost daily),
-because `run_worker_first = ["/*"]` in `apps/com/wrangler.toml` sends every static file
-through the Worker; serving `webapp.` and `remote.` from a static-only project
-(Cloudflare Pages) or narrowing that list would take them out of the count. The native
-apps do not load shell files.
+doorbell it was 21. The alarm (70,000) is about 52 accounts. Webapp users used to add
+about 190 requests each time the shell was released (the version moved almost daily);
+that is gone: see "Static assets". The native apps do not load shell files.
 
 ### The doorbell
 
@@ -182,15 +180,112 @@ day a box); both are cursor reads and want a "newest revoke / end" number in the
 doorbell and an "unchanged since your cursor" local answer. That would take the
 ceiling from about 75 to about 120 accounts.
 
+## Static assets: which requests run the Worker
+
+On Free, a request that **runs** the Worker counts against the 100,000 a day; a file
+the assets layer answers on its own is free and unlimited. `run_worker_first = ["/*"]`
+ran the Worker for every file. Measured with `scripts/worker-request-count.ts` against
+a local `wrangler dev` (miniflare records one span per Worker invocation and none for
+a file the assets layer answers):
+
+| Page load | Worker requests before | after |
+| --- | --- | --- |
+| Webapp, first visit (page, service worker, every precached file; 205 requests) | 205 | 0 |
+| Webapp, a new shell version (service worker + 204 precached files) | 204 | 0 |
+| Webapp, a visit at the same version (service-worker update check) | 1 | 0 |
+| Marketing page view of `/` (page + 9 stylesheets, scripts, fonts, icons) | 10 | 1 |
+| `/docs/`, `/faq`, `/privacy`, `/status/` and the other listed pages | 1 + subresources | 0 |
+
+How, and why in two parts:
+
+1. **`webapp.` and `remote.` are a separate static-only project** (`apps/webapp-static`,
+   Worker `flagship-webapp`). `run_worker_first` matches paths, not hosts, and these two
+   hosts serve their files at the root (`/app.js`, `/lib/api.js`, `/`), so no list on
+   flagship-com can free them without also freeing the marketing site's `/` the wrong
+   way. The new project's assets directory IS the webapp (`npx tsx scripts/static-assets.ts
+   build-webapp` copies `apps/web/public/webapp`, plus the site's `/fonts/` and
+   `qrEncoder.js` the shell imports, plus a generated `_headers` with the shell CSP,
+   `X-Frame-Options`, `nosniff`, `no-referrer` and HSTS from `apps/com/src/securityHeaders.ts`,
+   the same function the Worker uses). A tiny script runs only for what no file answers
+   and no navigation can be: a missing script or stylesheet gets a real 404 (not
+   `index.html`: the old deploy-flash guard) and non-GET methods get 405. A navigation to
+   a client route (`/join`) gets `index.html` from the assets layer, as before.
+2. **flagship-com** keeps `run_worker_first = ["/*", "!/file", ...]`: 46 static
+   files and folders (fonts, styles, scripts, images, the marketing pages, `/docs/`,
+   `/status/`, `/security/`, `/downloads/`, the public key files) are answered by the
+   assets layer, with their security headers from the generated
+   `apps/web/public/_headers`. Everything not listed still runs the Worker, so the list
+   fails safe: a new page works before anyone lists it, it just costs a request.
+
+What still runs the Worker and must keep doing so (the toml comment lists them too):
+`/api/*`, `/og`, `/qr-pipe/*`, `/builder-pipe/*`, `/build/iso/*`; the redirects
+(`/me`, `/recovery*`, `/webapp*`, `/how-to`, `/ready`, `/build`, `/download*`, `/studio/`);
+the app-link fallback page (`/join /share /transfer /remote /builder /access /invite
+/invite-accept /app/*`); `/studio` (served at the slash-less URL); the AASA file (served
+as JSON); `/` and `/index.html` (recovery.flagshipserver.com's page and the `www.`
+redirect arrive on the same paths); voi.ci short links (any one-segment path);
+recovery.'s own files (rewritten from `/recovery/`); and the coming-soon gate and
+`/wip_` previews, **which are off** (`SITE_PUBLIC = "1"`; files served directly skip the
+gate, so re-arming it means `run_worker_first = ["/*"]` alone; the guard refuses
+otherwise).
+
+Behaviour users could notice: none by design. Cache headers are the assets layer's
+(`public, max-age=0, must-revalidate`) either way, so a returning visitor revalidates
+and a new shell version is picked up exactly as before (the service worker still waits
+for tabs to close). Two small differences: a **non-navigation** fetch of a missing
+extensionless path on `webapp.` is a 404 now (it was `index.html`; nothing fetches one),
+and a direct static file no longer gets the Worker's `Vary`/CORS handling (the Worker only
+added CORS to `/api/*`).
+
+Not fixed by this: `/` still costs one Worker request per page view, and the gym Worker
+(`wrangler.gym.toml`) still runs first for everything and serves `webapp.gym.` itself, so
+the gym does not exercise the static-only path (the unit tests and a local `wrangler dev`
+smoke do).
+
+The guard: `scripts/static-assets.ts check` runs in `scripts/predeploy-com.sh` and
+`apps/com/test/staticAssets.test.ts` runs in CI. They fail when a negative pattern
+shadows any path the Worker must see (a list of 59), when a pattern matches no file,
+when `_headers` drifts from the list or the 100-rule limit is near, when a shared file
+(a favicon) differs between the site and `recovery/`, when the SPA fallback or `/*` is
+removed, when the gate would be armed, or when `webapp.` / `remote.` come back to
+flagship-com.
+
+## Crons
+
+Free allows 10 ms of CPU and 50 subrequests per cron invocation, and 5 cron triggers per
+account (the gym Worker has two). Everything a cron fired used to run in one invocation:
+the 6-hourly one made 230 subrequests and about 36 ms (247 and 71 ms on Monday 00:00 UTC
+with the adapter publish and model refresh), so on Free it never completed.
+`apps/com/src/cronPlan.ts` now decides what each tick runs; `apps/com/test/cronBudget.test.ts`
+walks a week of ticks over the real handlers (`scripts/cronHarness.ts`, 75 accounts) and
+fails when a plan needs more than 40 subrequests or about 5 ms of CPU. `npx tsx
+scripts/cron-profile.ts` prints the table.
+
+| Job | What it does | D1 / fetch / CPU (75 accounts) | Decision |
+| --- | --- | --- | --- |
+| D1 backup | dump every table (one call each) to R2 | 89 / 0 / 44.6 ms | **moved**: `.github/workflows/d1-backup.yml` (daily, encrypted), `docs/runbooks/d1-restore.md`; Worker code removed |
+| OpenRouter capability table | parse ~350 models, upsert them | 6 / 1 / 33.4 ms | **moved**: `.github/workflows/model-capabilities.yml` (same `refreshModelCapabilities`) |
+| CT monitoring | crt.sh, 2 queries per user, owner push on an unexpected certificate | 76 / 150 / 35.6 ms (grows with users) | **windowed**: 4 users per even 10-minute tick (14 subrequests, 2.9 ms), all users in about 6 h at 75 accounts |
+| Adapter publish (daily) | GitHub commit of the queued repo adapters | 10 / 0 / 4.6 ms idle, 25 subrequests with 4 new files | **alone at 00:30 UTC**, reads batched (idle 4 / 0 / 2.4 ms), at most 4 new files and 4 reviews a day (was 100 and 40) |
+| Adapter insight (Monday) | private weekly note on retired adapters | 0 idle (AI call when there is something) | alone, Monday 01:30 UTC |
+| Username suggestion refill | up to 64 candidate names, each a D1 read and a DoH lookup | 28 / 24 / 12.9 ms per 12 candidates | **capped**: 2 candidates a run, every 40 minutes (10 / 4 / 4.6 ms with its group) |
+| Demo provisioning poller | promote provisioned demo servers | 1 / 0 / 0.5 ms | fits: every tick |
+| Re-pair and quarantine alert ladders | schedule pushes at day/hour offsets | 1 + 1 / 0 / 1 ms | fits: every 40 minutes (was 10; thresholds are hours or days) |
+| Eviction GC | drop acked decommission rows | 1 / 0 / 0.5 ms | fits: every 40 minutes |
+| Stale ACME TXT sweep, legacy DNS sweep (off) | Cloudflare DNS API | 0 / 1 / 0 ms | fits: every 40 minutes (it removes records over an hour old) |
+| Custom-domain verification, CA lease warning, rate-limit log and late-log pruning | | 3 / 0 / 1.4; 0 / 0 / 1.2; 1 / 0 / 0.5; one R2 list | fits: the 6-hourly invocation, 4 / 0 / 1.8 ms together |
+
+Whole invocations after: `0 */6` 4 subrequests, 1.8 ms; `*/10` 4 to 14 subrequests,
+1.4 to 4.6 ms; 00:30 UTC 4 (busy 25); Monday 01:30 0. The first request of a young
+isolate is about 1.6x the CPU figures. A bigger fleet only lengthens the CT rotation
+(the test checks a window stays at 13 subrequests with 400 accounts).
+
+Not run in the Worker any more also means not visible in `wrangler tail`: the GitHub
+workflows email the owner on failure, and `d1-backup.yml` fails when the newest backup is
+over 36 hours old (it also notices a disabled schedule).
+
 ## Not fixed (cannot be, on the Free plan)
 
-- **The 6-hourly D1 backup** makes one D1 call per table (89 on an almost empty
-  database): over the 50-subrequest limit and, at 0.5 ms a call, over 10 ms of CPU
-  before it serialises a row. On Free it fails. It needs the paid plan, or to run
-  elsewhere (a nightly `wrangler d1 export` from CI would do).
-- The other crons (`*/10` demo and alert passes, CT monitor, model capability
-  refresh, adapter publish) are not measured here and make external `fetch`es; the
-  same 10 ms applies to them.
 - Cold starts: the first request of a young isolate costs up to 2x the figures
   above; the directory read, the heaviest, is about 4.7 ms in the Node cold measure,
   so about 7.5 in workerd. Anything that adds a signature check or a round trip to it

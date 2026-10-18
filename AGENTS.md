@@ -7,7 +7,8 @@ Personal-cloud ecosystem. The phone is the trust root; users run their own serve
 ## What's where
 
 ```
-apps/com/                  Cloudflare Worker — flagshipserver.com (identity + state) + webapp./remote.flagshipserver.com (host-rewrite)
+apps/com/                  Cloudflare Worker — flagshipserver.com (identity + state); its host-rewrite for webapp./remote. is kept for dev and the gym
+apps/webapp-static/        Static-only Worker `flagship-webapp`: webapp./remote.flagshipserver.com (assets generated from apps/web/public/webapp; zero Worker requests)
 apps/web/                  Fly app — flagship.services (stateless data plane) + the webapp static surface
 apps/web/public/           Static assets served by the Worker's [assets] binding
    studio/                 /studio — short desktop download + direct phone-pairing guide
@@ -64,7 +65,7 @@ npx vitest run                                  # everything (~3 min)
 npx tsc -b                                      # typecheck the whole tree
 
 # Deploy
-npx tsc -b && (cd apps/com && npm run deploy)   # Worker — it bundles the BUILT dist/ of the packages in scripts/com-bundled-packages.sh. Use `npm run deploy` (NOT `wrangler deploy` directly): its `predeploy` rebuilds those packages from an empty dist/ (scripts/clean-build-com.sh — `tsc -b` alone never deletes a removed module's output) and then runs the guard (scripts/predeploy-com.sh — route-safety + dist-freshness + orphaned-output + migration drift)
+npx tsc -b && (cd apps/com && npm run deploy)   # Worker — it bundles the BUILT dist/ of the packages in scripts/com-bundled-packages.sh. Use `npm run deploy` (NOT `wrangler deploy` directly): its `predeploy` rebuilds those packages from an empty dist/ (scripts/clean-build-com.sh — `tsc -b` alone never deletes a removed module's output) and then runs the guard (scripts/predeploy-com.sh — route-safety + dist-freshness + orphaned-output + static-asset list + migration drift), and after flagship-com deploys the webapp Worker (scripts/deploy-webapp-static.sh)
 export PATH="$HOME/.fly/bin:$PATH"
 flyctl deploy --remote-only --strategy=immediate --yes -a flagship-services
 
@@ -299,9 +300,25 @@ of the last check here: **not yet checked**.
   asks about 1,200 times a day, was 4,470: about 75 accounts fit under 100,000, was
   21). Needs a `.com` deploy first (shell v153), then an endorsed box release (an
   old box simply keeps polling), and iOS/Android store builds for the backoff.
-  **Does not fit Free and is not fixed**: the 6-hourly D1 backup (89 D1 calls, cap
-  50: it never runs), the other crons, and `run_worker_first = ["/*"]` (every static
-  file is a counted request: ~190 per webapp shell release per user). Next: gate the
+  **Static files and crons (2026-10-18, built on `main`, needs a `.com` deploy):**
+  `webapp.` / `remote.flagshipserver.com` moved to a static-only Worker
+  `flagship-webapp` (`apps/webapp-static`, assets built by `scripts/static-assets.ts
+  build-webapp`, headers from `apps/com/src/securityHeaders.ts`): a shell install or
+  update was ~190 Worker requests per user and is now 0; `flagship-com` runs
+  `run_worker_first = ["/*"]` minus 46 listed static files (a page view of `/` went
+  10 to 1), guarded by `scripts/predeploy-com.sh` and `apps/com/test/staticAssets.test.ts`.
+  **First deploy: run `bash scripts/deploy-webapp-static.sh` BEFORE `npm run deploy`**
+  (`npm run deploy` now runs both afterwards); `final-deploy.md` step 7. The Worker's
+  crons are split into budgeted ticks (`cronPlan.ts`, `cronBudget.test.ts`; the 6-hourly
+  one made 230 subrequests and 36 ms); the **D1 backup and the model-table refresh run in
+  GitHub Actions** (`d1-backup.yml`: daily, gpg-encrypted to the security@ key, R2
+  `flagship-d1-backups`, fails when over 36 h old; `docs/runbooks/d1-restore.md`;
+  `model-capabilities.yml`). **Owner, before the first deploy** (`final-deploy.md` step 1b):
+  create the bucket, add the repo secrets `CLOUDFLARE_API_TOKEN` and
+  `CLOUDFLARE_ACCOUNT_ID`, run the backup once. Without it the deploy removes the only
+  backup. Open: the adapter publish takes 4 new files a day on Free; the gym Worker
+  still serves everything itself (the static-only path is covered by tests and a local
+  workerd smoke, not the gym). Next: gate the
   invite-revocation and share-end polls on the doorbell (576 requests a day a box).
 - **Account gone (2026-10-18, N1, `docs/account-gone.md`).** After the pre-GA
   wipe a signed-in device must learn its account no longer exists. `.com`
