@@ -1,8 +1,8 @@
 # flagship-com-GYM — the isolated TEST control plane (docs/ui-test-gym.md §6.5,
 # §12-G6). This is a SEPARATE Worker from prod (`wrangler.toml`), served at the
 # `gym.flagshipserver.com` custom domain, with its OWN D1 / R2 / Durable Object /
-# rate-limit namespaces — zero shared state with prod. Isolation is by ZEROING
-# (its own DB, wiped between runs), not by secrecy (§4): the `gym.` apex is
+# rate-limit namespaces — zero shared state with prod. Isolation is a separate
+# backend (its own DB, unique account names, teardown), not secrecy (§4): the `gym.` apex is
 # public/knowable and that is fine.
 #
 # DEPLOY (turnkey runbook): docs/runbooks/gym-test-env.md.
@@ -92,13 +92,12 @@ crons = ["0 */6 * * *", "*/10 * * * *"]
 name = "RATE_LIMITS"
 class_name = "RateLimitCounter"
 
-# --- D1: the gym's OWN database (wiped between runs) ---------------------------
+# --- D1: the gym's OWN database (never wiped; runs use unique names) ---------------------------
 # PLACEHOLDER database_id — create the real DB once and paste its id here:
 #   cd apps/com && npx wrangler d1 create flagship-state-gym
 # then apply the SAME migrations dir prod uses (idempotent):
 #   npx wrangler d1 migrations apply flagship-state-gym --config wrangler.gym.toml --remote
-# Wipe between runs: scripts/wipe-all-users.sh after pointing it at this DB
-# (see the runbook's "wipe-between-runs" section).
+# No wipe between runs (owner 2026-10-18): see docs/runbooks/gym-test-env.md step 5.
 [[d1_databases]]
 binding = "DB"
 database_name = "flagship-state-gym"

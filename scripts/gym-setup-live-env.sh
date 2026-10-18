@@ -12,7 +12,7 @@
 # (flagship-{state,iso,iso-temp,backups}-gym, flagship-services-gym, the
 # gym.flagshipserver.com custom domains). It NEVER opens the prod wrangler.toml /
 # root fly.toml, so prod stays byte-identical. The gym apex is public/knowable;
-# isolation is by ZEROING its own DB between runs (§4), not secrecy.
+# isolation is its own DB + unique names + teardown (§4, no wipe), not secrecy.
 #
 # PREREQS (operator hand — see the runbook):
 #   - Cloudflare: `wrangler whoami` succeeds on the account owning the two zones.
@@ -231,7 +231,7 @@ ${c_green}Gym control plane is up.${c_off} Remaining manual steps (see docs/runb
       FLAGSHIP_ADMIN_SECRET="\$GYM_ADMIN_SECRET" FLAGSHIP_BASE_URL="https://gym.flagshipserver.com" \\
         node scripts/sample-user.mjs create gymdemo --account-name "Gym Demo"
       npm run gym -- live            # the live vertical slice (detects the env)
-  • Wipe between runs (isolation by zeroing): the gym-DB loop in the runbook
-    (names ${D1_NAME}, NEVER prod's flagship-state).
+  • No wipe between runs (owner 2026-10-18): unique account names, /api/gym/teardown
+    and the fleet sweep keep ${D1_NAME} usable (see the runbook, step 5).
 EOF
 ok "done"

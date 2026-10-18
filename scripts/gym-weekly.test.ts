@@ -59,7 +59,6 @@ describe("gym-weekly.sh — dry-run self-test", () => {
     expect(r.code).toBe(0);
     for (const marker of [
       "PHASE 0 — refresh the gym env",
-      "PHASE 0b — wipe the gym DB",
       "PHASE 0c — simulators",
       "PHASE 1 — gym:total",
       "WEEKLY REPORT",
@@ -98,27 +97,19 @@ describe("gym-weekly.sh — dry-run self-test", () => {
     expect(r.stdout).toMatch(/SKIPPED one .*FAILS the weekly run|skipped security check is not green/i);
   });
 
-  it("the wipe phase targets the GYM db through the guarded runner (one table list)", () => {
+  it("never zeroes the gym D1 or calls any wipe script (owner decision 2026-10-18)", () => {
     const r = run([], { GYM_WEEKLY_DRY_RUN: "1" });
-    expect(r.stdout).toContain("WIPE_ENV=gym");
-    expect(r.stdout).toContain("WIPE_D1=flagship-state-gym");
-    expect(r.stdout).toContain("wipe-all-users.sh --yes");
-    // It must never invoke the runner in prod posture.
-    expect(r.stdout).not.toContain("WIPE_ENV=prod");
+    expect(r.code).toBe(0);
+    expect(r.stdout).not.toContain("wipe-all-users");
+    expect(r.stdout).not.toContain("WIPE_");
+    expect(r.stdout).not.toContain("PHASE 0b");
   });
 
-  it("REFUSES to run with GYM_WIPE_D1 pointed at the prod DB", () => {
-    const r = run([], { GYM_WEEKLY_DRY_RUN: "1", GYM_WIPE_D1: "flagship-state" });
-    expect(r.code).toBe(1);
-    expect(r.stderr).toContain("must never be the prod DB");
-  });
-
-  it("--skip-sims / --skip-wipe / --no-scale-down are honored", () => {
-    const r = run(["--skip-sims", "--skip-wipe", "--no-scale-down"], { GYM_WEEKLY_DRY_RUN: "1" });
+  it("--skip-sims / --no-scale-down are honored", () => {
+    const r = run(["--skip-sims", "--no-scale-down"], { GYM_WEEKLY_DRY_RUN: "1" });
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("--skip-ios-sim");
     expect(r.stdout).toContain("--skip-avd");
-    expect(r.stdout).toContain("--skip-wipe");
     expect(r.stdout).toContain("--no-scale-down: leaving");
     expect(r.stdout).not.toContain("scaling flagship-services-gym back to 0");
   });

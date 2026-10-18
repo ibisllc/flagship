@@ -9,10 +9,9 @@
 #             apply the gym D1 migrations, check the gym Worker has every secret
 #             prod has, deploy the gym Worker (from the gym branch) and the gym
 #             Fly app (scaled to one machine), health-check both.
-#   Phase 0b  re-zero the gym D1 (flagship-state-gym) via the guarded
-#             wipe-all-users.sh runner (runbook step 5 — isolation by zeroing).
-#             The runner itself HARD-REFUSES a non-prod env pointed at prod's
-#             flagship-state, and this script never sets WIPE_ENV=prod.
+#             (The gym D1 is NOT zeroed any more — owner decision 2026-10-18:
+#             every run uses unique account names and tears its fleet down
+#             through /api/gym/teardown; phase 2 sweeps what is left.)
 #   Phase 0c  boot the simulators the native legs need: the newest available
 #             iPhone simulator (if none is booted) and the `flagship_gym` AVD
 #             headless (if no adb device is up).
@@ -35,14 +34,12 @@
 #   --skip-sims        both of the above
 #   --no-scale-down    leave the gym Fly app scaled up after the run
 #   --skip-refresh     don't run gym-refresh.sh (debugging reruns only)
-#   --skip-wipe        don't re-zero the gym D1 (debugging reruns only)
 #   --dry-run          walk every phase, execute NOTHING external (also
 #                      GYM_WEEKLY_DRY_RUN=1) — the CI-less self-test
 #
 # Env:
 #   GYM_FLY_APP        the gym Fly app (default flagship-services-gym)
 #   GYM_HEALTH_URL     gym Worker health (default https://gym.flagshipserver.com/api/health)
-#   GYM_WIPE_D1        the gym D1 to wipe (default flagship-state-gym)
 #   GYM_WEEKLY_DRY_RUN =1 for --dry-run
 #   + everything .gym-secrets.env provides (GYM_ADMIN_SECRET etc — required,
 #     because exit 3 fails weekly mode).
@@ -56,17 +53,15 @@ export PATH="$HOME/.fly/bin:$PATH"
 
 FLY_APP="${GYM_FLY_APP:-flagship-services-gym}"
 HEALTH_URL="${GYM_HEALTH_URL:-https://gym.flagshipserver.com/api/health}"
-WIPE_D1_NAME="${GYM_WIPE_D1:-flagship-state-gym}"
 DRY="${GYM_WEEKLY_DRY_RUN:-0}"
 
-skip_ios=0 skip_avd=0 scale_down=1 do_wipe=1 do_refresh=1
+skip_ios=0 skip_avd=0 scale_down=1 do_refresh=1
 for arg in "$@"; do
   case "$arg" in
     --skip-ios-sim) skip_ios=1 ;;
     --skip-avd) skip_avd=1 ;;
     --skip-sims) skip_ios=1; skip_avd=1 ;;
     --no-scale-down) scale_down=0 ;;
-    --skip-wipe) do_wipe=0 ;;
     --skip-refresh) do_refresh=0 ;;
     --dry-run) DRY=1 ;;
     -h|--help) sed -n '2,47p' "$0"; exit 0 ;;
@@ -130,22 +125,6 @@ elif [ "$DRY" = "1" ]; then
   bash scripts/gym-refresh.sh --dry-run
 else
   bash scripts/gym-refresh.sh || { echo "✗ gym-refresh failed" >&2; exit 1; }
-fi
-
-# ── Phase 0b — re-zero the gym D1 (runbook step 5) ──────────────────────────
-phase "PHASE 0b — wipe the gym DB ($WIPE_D1_NAME)"
-if [ "$do_wipe" -eq 0 ]; then
-  echo "▸ --skip-wipe: leaving $WIPE_D1_NAME as-is"
-elif [ "$WIPE_D1_NAME" = "flagship-state" ]; then
-  # Belt to the runner's braces: this script must never even ATTEMPT prod.
-  echo "✗ GYM_WIPE_D1 must never be the prod DB (flagship-state)" >&2
-  exit 1
-else
-  # ONE table list (parsed from the canonical .sql by the runner) — never
-  # duplicated here. The runner ALSO hard-refuses env≠prod + d1=flagship-state.
-  run env WIPE_ENV=gym WIPE_CONFIRM=gym WIPE_D1="$WIPE_D1_NAME" \
-    WIPE_WRANGLER_CONFIG=wrangler.gym.toml \
-    bash scripts/wipe-all-users.sh --yes
 fi
 
 # ── Phase 0c — boot the simulators the native legs need ─────────────────────

@@ -23,11 +23,9 @@
 >   two Cloudflare zones we already own. Test boxes are
 >   `<server>.<user>.gym.flagship.services`. This RETIRES the rev3 "hard
 >   prerequisite: a spare domain" — there is no new domain to acquire (§6.5, §11).
-> - **The `gym.` domain is public/knowable — isolation is by ZEROING the backend
->   between runs (D1 wipe), not by secrecy.** A knowable test apex is fine; the
->   test env runs against its OWN D1/R2 and is wiped clean between runs with the
->   existing wipe script, so there is no cross-run state and no real-user data in
->   it. Secrecy was never the isolation mechanism (§4, §6.5).
+> - **The `gym.` domain is public/knowable — isolation is a separate backend
+>   (own D1/R2, unique account names, teardown + sweep; no wipe), not secrecy.**
+>   A knowable test apex is fine; the test env holds no real-user data. Secrecy was never the isolation mechanism (§4, §6.5).
 > - **Ban the username `gym` (prod AND test).** One reserved-name ban closes BOTH
 >   the namespace collision (a prod user `gym` would own `gym.flagshipserver.com`'s
 >   identity / `gym.flagship.services`'s zone) AND the CT-monitor false-positive
@@ -73,7 +71,7 @@
 >   DEMO entities — so **no new production hooks are needed pre-GA** (§6, §7-A).
 > - **Post-GA, a dedicated internet-real isolated TEST environment** — rev4 puts
 >   it on **`gym.` subdomains of the existing zones** (`gym.flagshipserver.com` +
->   `gym.flagship.services`, its own D1/R2/Hetzner, wiped between runs); it carries
+>   `gym.flagship.services`, its own D1/R2/Hetzner); it carries
 >   the clean state-induction hooks, so the monthly GA-era gym never touches prod
 >   (§6.5).
 
@@ -372,14 +370,15 @@ The gym runs the **same scripts** in two backend postures. A tag/annotation on
 each test selects its tier. **Tier ≠ gym:** the every-merge gym is *all Tier-1*;
 the total gym is *Tier-1 breadth + a curated Tier-2 slice*.
 
-> **Isolation is by zeroing, not secrecy (rev4).** The Tier-2 backend — the
+> **Isolation is by a separate backend, not secrecy (rev4; no wipe since 2026-10-18).** The Tier-2 backend — the
 > `gym.flagshipserver.com` / `gym.flagship.services` test env (§6.5) — has a
 > **public, knowable domain**; that is fine. Isolation comes from the test env
-> running against its **own D1/R2** and being **wiped clean between runs** with the
-> existing wipe script (`scripts/wipe-all-users.sh` against the test D1), so there
-> is no cross-run state and no real-user data anywhere in it. The username `gym`
+> running against its **own D1/R2**, with **unique account names per run**, a fleet
+> teardown through `/api/gym/teardown` and a leftover sweep (owner decision
+> 2026-10-18: the D1 is not zeroed between runs and no wipe script exists), so
+> runs do not depend on each other and no real-user data is anywhere in it. The username `gym`
 > is banned in prod so the test apex can never collide with a real user's identity
-> or zone (§6.5). Don't reach for secrecy as a control — zeroing the backend is
+> or zone (§6.5). Don't reach for secrecy as a control — the separate backend is
 > the control.
 
 ### Tier 1 — demo-fixture mode (fast, $0 backend)
@@ -986,14 +985,15 @@ admin access at all.
 >    registered prod box's SAN set and can never trip a prod owner's alert. (Test
 >    certs DO still land in public CT — that is inherent to using a real LE cert on
 >    a real subdomain, and is harmless: they advertise only that test boxes exist
->    under `gym.`, which is already public/knowable. Isolation is by zeroing, §4,
->    not by hiding the names.)
+>    under `gym.`, which is already public/knowable. Isolation is a separate backend, §4,
+>    not hiding the names.)
 > 2. **DNS records → naturally namespaced under `gym.`.** Per-box A/AAAA for test
 >    boxes are published under `*.gym.flagship.services` (and the test Worker's
 >    routes/custom domains under `gym.flagshipserver.com`), so they never sit at the
 >    prod apex and never shadow a prod record.
-> 3. **State pollution → the test env has its OWN D1/R2** and is **wiped between
->    runs** (`scripts/wipe-all-users.sh` against the test D1), so prod data is never
+> 3. **State pollution → the test env has its OWN D1/R2**, uses unique
+>    account names per run and tears its fleet down (`/api/gym/teardown` + sweep; no
+>    wipe script since 2026-10-18), so prod data is never
 >    touched and there is no cross-run leakage.
 
 **Ban the username `gym` (prod AND test) — the single change that makes `gym.`
@@ -1014,7 +1014,7 @@ verified this survey):**
 | Plane / resource | Prod today (cite) | Test-env mirror needed |
 |---|---|---|
 | **`.com` Worker** | `apps/com/wrangler.toml` — `name = "flagship-com"`, `main = src/index.ts` | a SECOND Worker, e.g. `flagship-com-gym` (separate `wrangler.gym.toml` or `--name`), served at the **`gym.flagshipserver.com`** custom domain; its `[vars]` set the apex var to the `gym.` apex (§12-G1) |
-| **D1 database** | binding `DB` → `flagship-state` (`database_id = d6f3bc03-…`), `migrations_dir = ../../packages/storage/migrations` | its OWN D1 (`flagship-state-gym`, new `database_id`); apply the SAME migrations dir; **wiped between runs** (`scripts/wipe-all-users.sh` against this D1) |
+| **D1 database** | binding `DB` → `flagship-state` (`database_id = d6f3bc03-…`), `migrations_dir = ../../packages/storage/migrations` | its OWN D1 (`flagship-state-gym`, new `database_id`); apply the SAME migrations dir; not wiped between runs (unique account names, teardown + sweep; owner 2026-10-18) |
 | **R2 buckets** | three: `flagship-iso` (`ISO_BUCKET`), `flagship-iso-temp` (`ISO_TEMP_BUCKET`, public dev-url), `flagship-backups` (`BACKUPS_BUCKET`) | three test buckets (`-test` suffix); re-enable the temp bucket's public dev-url + re-pin `FLAGSHIP_R2_TEMP_PUBLIC_BASE` (the `pub-…r2.dev` host changes per bucket) |
 | **Durable Object** | `BUILD_RELAY` → `BuildRelaySession` (`new_sqlite_classes`) | same class, auto-created in the test Worker (no shared state) |
 | **Rate-limit namespaces** | `RATE_LIMITER` (ns 1001), `RATE_LIMITER_QR_PIPE` (ns 1002) | distinct namespace ids for the test Worker |
@@ -1037,10 +1037,10 @@ verified this survey):**
 > can own the apex label, so a test cert can never match a registered box — see the
 > three-point breakdown above); DNS records are **namespaced under `gym.`** and
 > never shadow prod; state pollution is impossible because the test env has its
-> **own D1/R2** and is **wiped between runs**. Test certs still appear in public CT
+> **own D1/R2** with unique per-run account names and a teardown. Test certs still appear in public CT
 > (inherent to a real cert on a real subdomain) but that is harmless — they reveal
 > only that `gym.` test boxes exist, which is already public/knowable, and
-> isolation is by zeroing the backend, not by hiding the names (§4). **No owner
+> isolation is a separate backend, not hiding the names (§4). **No owner
 > domain decision is needed.**
 
 **Effort & isolation — honest.** This is **bounded but real**: it is "deploy the
@@ -1052,7 +1052,7 @@ hooks** — once the apex is a variable, standing up the test env is "set the va
 `gym.` + deploy", and the SAME code runs in both places (the rev4 exact-same-code
 guarantee). The `Dockerfile`, the Worker source, and the migrations are all
 identical. The payoff: it **isolates cleanly from prod** (a separate Worker, DB,
-Fly app, and Hetzner project, on `gym.` subdomains, wiped between runs — zero risk
+Fly app, and Hetzner project, on `gym.` subdomains — zero risk
 to real users or their data, no shared blast radius) and makes a **sustainable
 monthly GA-era total-gym run** possible without ever pointing automation at
 production. **When to build it is an open decision (§11):** stand it up now (and
@@ -1332,8 +1332,8 @@ retired.*
   serves tests and users; only the test env sets it to `gym.`. Behavior-preserving,
   gated (full suite + canonical-byte vectors stay green); also fixes the latent
   fixed-depth SNI/zone misparse by parsing apex-relative (§6.5, §12-G1/G2).
-- **Isolation by zeroing, not secrecy.** The `gym.` domain is public/knowable;
-  isolation is the test env's own D1/R2 + a wipe between runs (§4, §6.5).
+- **Isolation by a separate backend, not secrecy.** The `gym.` domain is public/knowable;
+  isolation is the test env's own D1/R2 + unique account names + teardown (§4, §6.5).
 - **One-command-then-wait runner.** Each gym = a single command → pass/fail +
   screenshots; engine is the §2.1 deterministic gate + short-AI judge/navigator
   (§9, §12-G3).
@@ -1592,8 +1592,8 @@ demo-fixture, no backend); the live slice is G6.
   custom domains (wrangler self-provisions DNS+cert); per-box
   `<server>.<user>.gym.flagship.services` A/AAAA published by the test Worker into
   the existing services zone.
-- **Wipe-between-runs:** run `scripts/wipe-all-users.sh` against the **test** D1
-  before each run (isolation by zeroing — §4).
+- **No wipe between runs:** the **test** D1 is not zeroed; runs use unique
+  account names and tear down via `/api/gym/teardown` (§4; owner 2026-10-18).
 - **Deploy posture:** if Cloudflare/Fly/Hetzner tokens are present in the
   environment, deploy; **otherwise this phase ships the exact commands** (the
   `wrangler.gym.toml` / `fly.gym.toml` + the `wrangler deploy --name …` /

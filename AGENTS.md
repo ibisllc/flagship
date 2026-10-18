@@ -332,7 +332,10 @@ of the last check here: **not yet checked**.
   small files limit left an app 16 MiB less than its limit (ext4's reserve is
   never in bavail). Cloudflare rate-limits DNS deletes: if a sweep reports
   `dnsFailed`, wait 30 s and run `fleet-cli.ts sweep --destroy` again until the
-  zone is back to its base. Open: the `update` group can only move a gym box
+  zone is back to its base. The gym D1 is no longer zeroed between runs (owner,
+  2026-10-18; `gym-weekly.sh` has no wipe phase): runs use unique account
+  names, tear down through `/api/gym/teardown`, and the fleet sweep covers the
+  rest. Open: the `update` group can only move a gym box
   (unendorsed main HEAD) to an older endorsed release;
   `/api/dev/sample-user/<u>/order-update` assumes the prod apex.
   2026-10-18: `boot.gym.`/`recovery.gym.` fell through to the `.services`

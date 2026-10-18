@@ -8,8 +8,9 @@
 > Test boxes are UpCloud servers labelled `flagship-env=gym`, named
 > `<server>.<user>.gym.flagship.services`.
 >
-> **Isolation is by ZEROING, not secrecy** (§4): the `gym.` apex is
-> public/knowable; the env runs against its own DB and is **wiped between runs**.
+> **Isolation is by a separate backend, not secrecy** (§4): the `gym.` apex is
+> public/knowable; the env runs against its own DB, unique account names per
+> run, and a fleet teardown + sweep (no wipe between runs, owner 2026-10-18).
 > The username `gym` is banned (prod + test) so a test cert under
 > `*.gym.flagship.services` can never collide with a registered prod user or trip
 > the prod CT monitor (already enforced in `packages/control-plane/src/labels.ts` —
@@ -34,7 +35,7 @@
 
 ```sh
 bash scripts/gym-refresh.sh          # bring the env current (idempotent; run before every run)
-npm run gym:weekly                   # refresh → wipe → mock matrix → live run → sweep
+npm run gym:weekly                   # refresh → mock matrix → live run → sweep
 # or just the live half, on one shared fleet, torn down at the end:
 set -a; . ./.gym-secrets.env; set +a
 npx tsx tools/live-e2e/shared-run.ts                          # every group
@@ -259,40 +260,22 @@ node scripts/sample-user.mjs cleanup gymdemo --force   # tear the demo box down
 
 ---
 
-## Step 5 — wipe between runs (isolation by zeroing — §4)
+## Step 5 — no wipe between runs (owner decision 2026-10-18)
 
-Re-zero the gym D1 before each gym run so there is no cross-run state. The
-existing tolerant wipe runner targets a D1 binding; for the gym, run it against
-the gym DB. Two ways:
+The gym D1 (`flagship-state-gym`) is **not zeroed** between runs and no wipe
+script exists for it. Runs do not depend on an empty database:
 
-**A. One-off, by command (no script edit):**
-```sh
-cd /Users/harrywinner/flagship/apps/com
-# List the tables the canonical wipe .sql covers, then DELETE each independently
-# against the gym DB (skips tables absent in the gym, like the prod runner does):
-for t in $(grep -oiE 'DELETE FROM [a-z_]+' ../../scripts/wipe-all-users-prerelease-2026-06-02.sql \
-            | sed -E 's/DELETE FROM //I' | sort -u); do
-  npx wrangler d1 execute flagship-state-gym --config wrangler.gym.toml --remote \
-      --command "DELETE FROM $t;" </dev/null >/dev/null 2>&1 \
-    && echo "  wiped  $t" || echo "  skip   $t (absent in gym)"
-done
-```
+- every run uses **unique account names** (a run-stamped suffix), so a leftover
+  row from an earlier run can never collide with a new one;
+- every run tears its fleet down through the gym-only `/api/gym/teardown`
+  (UpCloud servers labelled `flagship-env=gym` plus the run's DNS records);
+- `gym:weekly` phase 2 (and `scripts/gym-refresh.sh`'s fleet sweep) destroys any
+  gym-labelled server and gym DNS record still left, as the safety net.
 
-**B. Via the guarded runner with the DB override** (the preferred path — ONE
-table list, parsed from the canonical .sql; no duplication):
-```sh
-cd /Users/harrywinner/flagship
-WIPE_ENV=gym WIPE_CONFIRM=gym WIPE_D1=flagship-state-gym \
-    WIPE_WRANGLER_CONFIG=wrangler.gym.toml \
-    bash scripts/wipe-all-users.sh --yes
-```
-The runner HARD-REFUSES a non-prod `WIPE_ENV` pointed at the prod
-`flagship-state` (even by default/omission), so the gym path is structurally
-incapable of wiping prod. PRESERVES `marketplace_listings` + CF/SQLite
-internals, same as prod.
-
-> NEVER run the prod `scripts/wipe-all-users.sh` (it targets `flagship-state`)
-> as part of a gym run — the gym wipe MUST name `flagship-state-gym`.
+Stale gym D1 rows are harmless (the gym DB is separate from prod and holds no
+real-user data). If the gym DB ever has to be emptied by hand, drop and
+re-create it (`wrangler d1 create flagship-state-gym`, then apply the
+migrations dir, Step 2) rather than reintroducing a bulk-delete script.
 
 ---
 
@@ -391,20 +374,18 @@ you added them in step 3) are the only DNS to remove by hand; the four
 ## The weekly unattended run — `npm run gym:weekly`
 
 `scripts/gym-weekly.sh` is the ONE command a weekly CI job runs. It wraps
-`gym:total` with the warm-up / wipe / simulator / cleanup ceremony this runbook
+`gym:total` with the warm-up / simulator / cleanup ceremony this runbook
 otherwise describes by hand:
 
 1. **Phase 0** — `scripts/gym-refresh.sh` (branch, build, D1, secrets, both
    deploys, Fly scaled to 1, health). `--skip-refresh` uses the env as deployed.
-2. **Phase 0b** — re-zero `flagship-state-gym` via the guarded
-   `wipe-all-users.sh` runner (step 5B above; the prod DB is hard-refused).
-3. **Phase 0c** — boot the newest available iPhone simulator (if none booted)
+2. **Phase 0c** — boot the newest available iPhone simulator (if none booted)
    and the `flagship_gym` AVD headless (if no adb device). Skippable:
    `--skip-ios-sim` / `--skip-avd` / `--skip-sims`.
-4. **Phase 1** — `scripts/gym-total.sh` (mock matrix → the live run on one
+3. **Phase 1** — `scripts/gym-total.sh` (mock matrix → the live run on one
    shared fleet). **Weekly means FULL**: gym-total's exit 3 ("cloud skipped") and
    a live run that SKIPPED a group both FAIL the weekly run.
-5. **Phase 2** (trap EXIT — always runs) — destroy every gym-labelled server and
+4. **Phase 2** (trap EXIT — always runs) — destroy every gym-labelled server and
    gym DNS record still left, scale the gym Fly app back to 0
    (`--no-scale-down` keeps it up), and shut the AVD down if the script booted it.
 
@@ -439,6 +420,6 @@ pinned by `scripts/gym-weekly.test.ts`.
    the gym Fly IPs by hand; per-box + `_acme-challenge` records are runtime-auto.
 5. **Verify**: `curl https://gym.flagshipserver.com/api/health` 200 +
    `curl https://flagship-services-gym.fly.dev:8443/api/health` 200.
-6. **Wipe between runs**: the gym-DB loop in step 5 (names `flagship-state-gym`).
+6. **No wipe between runs** (owner 2026-10-18): unique account names, `/api/gym/teardown`, the fleet sweep (step 5).
 7. **Run**: `npm run gym:total` (the live slice auto-detects + uses the env;
    skips cleanly if down). **Teardown** when idle (scale to 0 / destroy).
