@@ -202,6 +202,32 @@ that list of usernames is the only record of what to reap.**
    dry run and remove their records in the Cloudflare dashboard by hand, then
    confirm the zone count dropped. Never reap by pattern; reap by the saved list.
 
+## Final step: retire the wipe tooling (only after the run is verified)
+
+This is the last time users are ever scrubbed. Do this step **only after** the
+owner confirms the scrub happened **and** the verification in step 4 passed
+(only `playstore-test-0725` is left, four zero orphan counts, the review login
+signs in). Until then the tooling stays; after it, it must not exist.
+
+A ready commit is prepared on the local branch `chore/delete-wipe-tooling` in
+the worktree this runbook was written in (it was not pushed). It deletes the
+script, its table list, harness, fixture and tests, replaces the release-guard
+wipe checks with a rule that fails every build (dev included) if any
+`scripts/wipe-all-users*` file reappears, drops GA close-out item 1 from
+AGENTS.md and adds the rule "Accounts are never bulk-wiped after GA". To land it:
+
+```sh
+cd <that worktree>
+git fetch origin && git checkout chore/delete-wipe-tooling && git rebase origin/main
+npx tsc -b && npx vitest run scripts && RELEASE=1 bash scripts/release-guard.sh
+bash <scratchpad>/land-main.sh "retire wipe tooling" "npx tsc -b && npx vitest run scripts"
+# or, without that helper: git push origin chore/delete-wipe-tooling:main
+```
+
+Git history keeps the script (`git log --diff-filter=D -- scripts/wipe-all-users.sh`).
+The branch also needs the owner's decision on how the weekly gym zeroes its own
+database now that this script is gone; see the branch's commit message.
+
 ## If the dry run shows an unexpected account
 
 Do not run the real wipe. For the account in question:
