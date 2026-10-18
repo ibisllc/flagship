@@ -37,7 +37,7 @@ class PreseedEngineException(message: String, cause: Throwable? = null) :
     RuntimeException(message, cause)
 
 /**
- * Evaluates the canonical preseed-engine bundle and exposes its entry
+ * Evaluates the canonical preseed-engine bundle and exposes its two entry
  * points. Construct with the bundle source for testability (the golden-vector
  * test feeds it the on-disk bundle directly); use [fromAssets] in the app.
  */
@@ -76,6 +76,10 @@ class PreseedEngine(private val bundleSource: String) {
     /** Debian d-i preseed.cfg for [recipeJson] (signed recipe) + [burnOptsJson]. */
     fun buildPreseedFromRecipe(recipeJson: String, burnOptsJson: String = "{}"): String =
         invoke("buildPreseedFromRecipe", recipeJson, burnOptsJson)
+
+    /** Ubuntu autoinstall user-data for [recipeJson] + [burnOptsJson]. */
+    fun buildUserDataFromRecipe(recipeJson: String, burnOptsJson: String = "{}"): String =
+        invoke("buildUserDataFromRecipe", recipeJson, burnOptsJson)
 
     private fun invoke(method: String, recipeJson: String, burnOptsJson: String): String {
         val cx = RhinoContext.enter()

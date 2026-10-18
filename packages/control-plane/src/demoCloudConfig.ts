@@ -119,7 +119,8 @@ export function buildCloudConfigUserData(args: {
   // Validate git-ref shape inline (defense in depth — the operator
   // could only have set this via the Worker's wrangler.toml or
   // env-coded default, but the ref still gets shell-substituted in the
-  // bootstrap below). Same allowlist as the builder's preseed validator.
+  // bootstrap below). Same allowlist as installer-netboot's preseed
+  // validator.
   if (!/^[A-Za-z0-9._/-]+$/.test(args.installerGitRef)) {
     throw new Error("buildCloudConfigUserData: installerGitRef has disallowed characters");
   }
@@ -134,8 +135,8 @@ export function buildCloudConfigUserData(args: {
 # Flagship cloud-init-direct bootstrap (W13).
 #
 # Runs ONCE on the freshly-booted debian-12 VPS via cloud-init runcmd.
-# Does everything installer/install.sh does, minus the partman/d-i
-# scaffolding and the trailer parse. The
+# Does everything installer/install.sh + installer-netboot/late-command.sh
+# do, minus the partman/d-i scaffolding and the trailer parse. The
 # install-blob is already at /var/flagship/install-blob.json (written
 # by write_files above).
 #

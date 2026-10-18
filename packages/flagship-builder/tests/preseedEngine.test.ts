@@ -6,7 +6,7 @@
  *  1. evaluates the bundle in a BARE Node-free `vm` context (no Buffer / require /
  *     process / TextEncoder) — if it runs there, it runs on JSC + Rhino, and the
  *     per-platform tests (Swift/Kotlin) assert the same outputs;
- *  2. asserts the bundle's `buildPreseedFromRecipe` / `buildBootstrapFromRecipe`
+ *  2. asserts the bundle's `buildPreseedFromRecipe` / `buildUserDataFromRecipe`
  *     are byte-identical to the in-process generator across a recipe matrix
  *     (LUKS on/off × Wi-Fi × debug-grant × swk × pairing);
  *  3. ties the engine path to the canonical CLI path (loadBlobFromString →
@@ -27,7 +27,7 @@ import {
   type InstallBlob,
   type AuthCode,
 } from "@flagship/protocol";
-import { buildDebianPreseed } from "../src/index.js";
+import { buildDebianPreseed, buildAutoinstallUserData } from "../src/index.js";
 import { optionsFromRecipeJson } from "../src/preseedEngine.js";
 import { loadBlobFromString } from "../src/loadBlob.js";
 
@@ -121,6 +121,7 @@ function buildSignedRecipe(o: RecipeOpts = {}): string {
 /** A bare engine: a vm context with ECMAScript built-ins ONLY (no Node). */
 function makeBareEngine(): {
   buildPreseed: (recipe: string, burn?: string) => string;
+  buildUserData: (recipe: string, burn?: string) => string;
   buildInstallBlobJson: (recipe: string) => string;
 } {
   const src = readFileSync(BUNDLE_PATH, "utf8");
@@ -132,6 +133,7 @@ function makeBareEngine(): {
   if (!api) throw new Error("bundle did not install FlagshipPreseed global");
   return {
     buildPreseed: (recipe, burn) => api.buildPreseedFromRecipe(recipe, burn),
+    buildUserData: (recipe, burn) => api.buildUserDataFromRecipe(recipe, burn),
     buildInstallBlobJson: (recipe) => api.buildInstallBlobJsonFromRecipe(recipe),
   };
 }
@@ -171,6 +173,13 @@ describe("preseed engine bundle", () => {
       expect(viaEngine).toBe(direct);
       expect(viaEngine.length).toBeGreaterThan(100);
     });
+
+    it(`user-data byte-identical via bare engine — ${m.name}`, () => {
+      const recipe = buildSignedRecipe(m.recipe);
+      const burnJson = JSON.stringify(m.burn);
+      const direct = buildAutoinstallUserData(optionsFromRecipeJson(recipe, m.burn));
+      expect(engine.buildUserData(recipe, burnJson)).toBe(direct);
+    });
   }
 
   it("engine path matches the canonical CLI path (loadBlobFromString → buildDebianPreseed)", () => {
@@ -199,10 +208,11 @@ describe("preseed engine bundle", () => {
   it("reproduces every committed golden vector (the cross-engine contract)", () => {
     const fixture = JSON.parse(
       readFileSync(join(here, "..", "engine", "golden", "preseed-vectors.json"), "utf8"),
-    ) as { vectors: Array<{ name: string; recipeJson: string; burnOptsJson: string; expectedPreseed: string; expectedInstallBlobJson: string }> };
+    ) as { vectors: Array<{ name: string; recipeJson: string; burnOptsJson: string; expectedPreseed: string; expectedUserData: string; expectedInstallBlobJson: string }> };
     expect(fixture.vectors.length).toBeGreaterThanOrEqual(6);
     for (const v of fixture.vectors) {
       expect(engine.buildPreseed(v.recipeJson, v.burnOptsJson), `preseed ${v.name}`).toBe(v.expectedPreseed);
+      expect(engine.buildUserData(v.recipeJson, v.burnOptsJson), `user-data ${v.name}`).toBe(v.expectedUserData);
       expect(engine.buildInstallBlobJson(v.recipeJson), `install-blob ${v.name}`).toBe(v.expectedInstallBlobJson);
     }
   });

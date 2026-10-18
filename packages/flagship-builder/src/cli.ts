@@ -24,6 +24,7 @@ import {
   loadBlobFromFile,
   loadBlobFromStdin,
   BuilderLoadError,
+  buildAutoinstallUserData,
   buildDebianPreseed,
   verifyIsoHash,
   PINNED_DISTROS,
@@ -168,11 +169,16 @@ async function cmdUserData(rest: string[]): Promise<void> {
     wifiPassword: await resolveWifiPassword(rest),
     bootHost: bootHostForControlHost(process.env.FLAGSHIP_CONTROL_HOST),
   };
-  // Emit the Debian d-i preseed.cfg (this command is for inspection;
-  // `prepare`/`write` bake it into the ISO).
-  const out = buildDebianPreseed(genOpts);
+  // Emit a Debian d-i preseed.cfg with --debian (or --family debian); default
+  // stays the Ubuntu autoinstall user-data (this command is for inspection;
+  // `prepare`/`write` auto-detect the family from the ISO).
+  const family: IsoFamily =
+    rest.includes("--debian") || extractFlagValue(rest, "--family") === "debian"
+      ? "debian"
+      : "ubuntu";
+  const out = family === "debian" ? buildDebianPreseed(genOpts) : buildAutoinstallUserData(genOpts);
   await writeFile(outPath, out, { mode: 0o600 });
-  console.log(`wrote ${out.length} bytes to ${outPath} (debian preseed)`);
+  console.log(`wrote ${out.length} bytes to ${outPath} (${family})`);
   console.log(`server-domain: ${loaded.blob.serverDomain}`);
   console.log(`expires:       ${new Date(loaded.blob.authCode.expiresAt).toISOString()}`);
   // Auto-shred the recipe file after we've consumed it. The signed
@@ -190,7 +196,7 @@ async function cmdUserData(rest: string[]): Promise<void> {
 
 async function cmdPrepare(rest: string[]): Promise<void> {
   // `prepare` — take a Linux installer ISO + a signed recipe; produce a
-  // ready-to-flash unattended ISO. We do NOT verify the ISO against a
+  // ready-to-flash autoinstall ISO. We do NOT verify the ISO against a
   // pinned hash: the tool advises (see `distros` + the website) but the
   // user supplies whatever image they choose.
   const recipePath = rest[0];
@@ -224,13 +230,15 @@ async function cmdPrepare(rest: string[]): Promise<void> {
     wifiPassword: await resolveWifiPassword(rest),
     bootHost: bootHostForControlHost(process.env.FLAGSHIP_CONTROL_HOST),
   };
-  // Bake the d-i preseed into the ISO; anything but a Debian installer is
-  // refused. --family debian skips the detection (tests / overrides).
+  // Detect Ubuntu vs Debian from the ISO and bake the matching unattended
+  // mechanism (NoCloud autoinstall vs d-i preseed). --family overrides.
   const forced = extractFlagValue(rest, "--family");
-  const family: IsoFamily | undefined = forced === "debian" ? forced : undefined;
+  const family: IsoFamily | undefined =
+    forced === "debian" || forced === "ubuntu" ? forced : undefined;
   const used = await remasterIsoWithInstaller({
     srcIsoPath: isoPath,
     outIsoPath: outPath,
+    userDataYaml: buildAutoinstallUserData(genOpts),
     preseedCfg: buildDebianPreseed(genOpts),
     family,
   });
@@ -543,10 +551,10 @@ usage:
   flagship-build verify <recipe.json|->                     verify the signed blob
   flagship-build verify-iso <path>                          check ISO against pinned distros
   flagship-build user-data <recipe.json|-> <out>            emit the unattended install config
-                                                           (the Debian d-i preseed)
+                                                           (Ubuntu autoinstall by default; --debian for a d-i preseed)
                                                            (auto-shreds recipe; pass --keep-recipe to skip)
   flagship-build prepare <recipe.json|-> <iso> <out.iso>    bake a flashable unattended ISO
-                                                           (Debian installer ISOs only; --family debian skips detection)
+                                                           (auto-detects Ubuntu vs Debian; --family to force)
   flagship-build appliance-provision <recipe> <base.raw> <manifest.json> <disk.qcow2> <seed.img>
                                                            verify + create a thin hosted-VM specialization
                                                            [--arch amd64|arm64] [--disk-size bytes] [--qemu-img path]

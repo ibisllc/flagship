@@ -2,7 +2,7 @@ import XCTest
 @testable import FlagshipBuilderCore
 
 /// Proves the macOS builder's JavaScriptCore run of the SINGLE canonical
-/// preseed generator is byte-for-byte identical to Node, across the
+/// preseed / user-data generator is byte-for-byte identical to Node, across the
 /// shared golden vectors (`packages/flagship-builder/engine/golden/
 /// preseed-vectors.json`). This is the contract that REPLACES the deleted
 /// ~2,200-line Swift re-implementation of the generator + its per-string pin
@@ -15,6 +15,7 @@ final class PreseedEngineTests: XCTestCase {
         let recipeJson: String
         let burnOptsJson: String
         let expectedPreseed: String
+        let expectedUserData: String
         let expectedInstallBlobJson: String
     }
     private struct Golden: Decodable {
@@ -44,6 +45,9 @@ final class PreseedEngineTests: XCTestCase {
             let preseed = try engine.buildPreseedRaw(recipeJSON: recipe, burnOptsJson: v.burnOptsJson)
             XCTAssertEqual(preseed, v.expectedPreseed,
                            "preseed mismatch for vector '\(v.name)'")
+            let userData = try engine.buildUserDataRaw(recipeJSON: recipe, burnOptsJson: v.burnOptsJson)
+            XCTAssertEqual(userData, v.expectedUserData,
+                           "user-data mismatch for vector '\(v.name)'")
             // The appliance seed must carry the installer's install-blob.json.
             let blob = try engine.buildInstallBlobJSON(recipeJSON: recipe)
             XCTAssertEqual(String(data: blob, encoding: .utf8), v.expectedInstallBlobJson,
@@ -94,11 +98,11 @@ final class PreseedEngineTests: XCTestCase {
         // wifi vector — the façade marshals wifiSSID/wifiPassword into burnOpts.
         if let wifi = golden.vectors.first(where: { $0.name == "wifi" }) {
             let recipe = Data(wifi.recipeJson.utf8)
-            let preseed = try UserData.debianPreseed(recipeJSON: recipe,
-                                                     installerGitRef: "",
-                                                     wifiSSID: "myssid",
-                                                     wifiPassword: "p@ss w0rd")
-            XCTAssertEqual(preseed, wifi.expectedPreseed, "façade preseed diverged for wifi vector")
+            let yaml = try UserData.autoinstallYAML(recipeJSON: recipe,
+                                                    installerGitRef: "",
+                                                    wifiSSID: "myssid",
+                                                    wifiPassword: "p@ss w0rd")
+            XCTAssertEqual(yaml, wifi.expectedUserData, "façade user-data diverged for wifi vector")
         }
     }
 }

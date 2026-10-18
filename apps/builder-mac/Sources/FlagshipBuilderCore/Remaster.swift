@@ -1,23 +1,20 @@
 import Foundation
 
-/// Remaster a stock Debian netinst ISO into an unattended preseed ISO —
+/// Remaster a stock Ubuntu Server ISO into an unattended autoinstall ISO —
 /// pure-Swift port of packages/flagship-builder remasterIso.ts. Bakes the
-/// preseed.cfg at the ISO root and patches the boot configs, preserving boot
-/// via `xorriso -boot_image any replay` so the result is dd-able.
+/// NoCloud seed at /nocloud and patches grub for `autoinstall`, preserving
+/// boot via `xorriso -boot_image any replay` so the result is dd-able.
 
 public enum RemasterError: LocalizedError {
     case xorrisoNotFound
     case sourceTooSmall(Int)
     case commandFailed(String, Int32, String)
-    case notDebianInstaller
 
     public var errorDescription: String? {
         switch self {
         case .xorrisoNotFound:
             return "xorriso not found. Install it (brew install xorriso) or ship it in the app."
         case .sourceTooSmall(let n): return "Source ISO too small (\(n) bytes); not an ISO."
-        case .notDebianInstaller:
-            return "This is not a Debian installer image. Flagship installs from a Debian netinst ISO."
         case .commandFailed(let cmd, let code, let err):
             return "\(cmd) failed (exit \(code)): \(err)"
         }
@@ -25,6 +22,32 @@ public enum RemasterError: LocalizedError {
 }
 
 public enum Remaster {
+    /// Insert the autoinstall + nocloud cmdline into casper kernel lines and
+    /// shorten the menu timeout. Pure transform — unit-tested directly.
+    public static func editGrubCfg(_ cfg: String) -> String {
+        let seed = "autoinstall ds=nocloud\\;s=/cdrom/nocloud/"  // literal "\;" for grub
+        let linuxLine = try! NSRegularExpression(pattern: "^\\s*linux\\b")
+        let casperTok = try! NSRegularExpression(pattern: "/casper/vmlinuz\\S*")
+
+        let patched = cfg.components(separatedBy: "\n").map { line -> String in
+            let full = NSRange(line.startIndex..., in: line)
+            guard linuxLine.firstMatch(in: line, range: full) != nil,
+                  line.contains("/casper/vmlinuz") else { return line }
+            if line.contains("autoinstall") { return line }
+            guard let m = casperTok.firstMatch(in: line, range: full),
+                  let r = Range(m.range, in: line) else { return line }
+            var out = line
+            out.insert(contentsOf: " \(seed)", at: r.upperBound)
+            return out
+        }.joined(separator: "\n")
+
+        if patched.range(of: "set\\s+timeout=\\d+", options: .regularExpression) != nil {
+            return patched.replacingOccurrences(
+                of: "set\\s+timeout=\\d+", with: "set timeout=1", options: .regularExpression)
+        }
+        return "set timeout=1\n" + patched
+    }
+
     // MARK: - Debian (debian-installer / d-i) preseed remaster
 
     /// The d-i kernel cmdline that drives an unattended preseed install from a
@@ -104,9 +127,9 @@ public enum Remaster {
         return out
     }
 
-    /// Classify a volume id / directory listing as Debian's installer or
-    /// something else. Pure; mirrors remasterIso.ts classifyIsoText. Returns
-    /// "debian" | "other".
+    /// Classify a volume id / directory listing as ubuntu vs debian. Pure;
+    /// mirrors remasterIso.ts classifyIsoText. Defaults to the proven Ubuntu
+    /// path when ambiguous (the burn never refuses an ISO).
     public static func classifyIsoText(_ text: String) -> String {
         let t = text.lowercased()
         let hasDI = t.range(of: "install\\.amd|/d-i/|debian-installer|\\bdebian\\b",
@@ -114,20 +137,24 @@ public enum Remaster {
         if hasDI {
             let casperOnly = t.range(of: "\\bcasper\\b|\\bubuntu\\b", options: .regularExpression) != nil
                 && t.range(of: "install\\.amd|/d-i/", options: .regularExpression) == nil
-            return casperOnly ? "other" : "debian"
+            return casperOnly ? "ubuntu" : "debian"
         }
-        return "other"
+        if t.range(of: "\\bubuntu\\b|\\bcasper\\b|subiquity", options: .regularExpression) != nil {
+            return "ubuntu"
+        }
+        return "ubuntu"
     }
 
-    /// Detect whether a source ISO is Debian's installer (d-i). Reads the ISO
-    /// volume id; falls back to a directory probe. Mirrors remasterIso.ts
-    /// detectIsoFamily. Returns "debian" | "other".
+    /// Detect whether a source ISO is Ubuntu (subiquity) or Debian (d-i). Reads
+    /// the ISO volume id; falls back to a directory probe. Mirrors
+    /// remasterIso.ts detectIsoFamily. Returns "ubuntu" | "debian".
     public static func detectIsoFamily(srcISO: URL, xorrisoPath: String? = nil) -> String {
-        guard let xorriso = xorrisoPath ?? XorrisoLocator.resolve() else { return "other" }
+        guard let xorriso = xorrisoPath ?? XorrisoLocator.resolve() else { return "ubuntu" }
         let toc = (try? runCapture(xorriso, ["-indev", srcISO.path, "-toc"])) ?? ""
         if let m = toc.range(of: "Volume id\\s*:\\s*'([^']*)'", options: .regularExpression) {
             let vol = String(toc[m])
             if vol.range(of: "debian", options: .caseInsensitive) != nil { return "debian" }
+            if vol.range(of: "ubuntu", options: .caseInsensitive) != nil { return "ubuntu" }
         }
         let listing = (try? runCapture(
             xorriso, ["-indev", srcISO.path, "-find", "/", "-maxdepth", "2", "-type", "d"])) ?? ""
@@ -189,18 +216,75 @@ public enum Remaster {
                           "-map", preseedOut.path, "/preseed.cfg"] + mapArgs)
     }
 
-    /// Remaster a Debian installer ISO. Detects (or takes) the ISO family and
-    /// refuses anything that is not a Debian d-i image. Returns the family used.
+    /// Family-aware remaster. Detects (or takes) the ISO family and routes to
+    /// the Ubuntu autoinstall or Debian preseed path. Returns the family used.
     /// Mirrors remasterIso.ts remasterIsoWithInstaller.
     @discardableResult
     public static func remasterInstaller(srcISO: URL, outISO: URL,
-                                         preseedCfg: String,
+                                         userDataYAML: String? = nil,
+                                         preseedCfg: String? = nil,
                                          family forced: String? = nil,
                                          xorrisoPath: String? = nil) throws -> String {
         let family = forced ?? detectIsoFamily(srcISO: srcISO, xorrisoPath: xorrisoPath)
-        guard family == "debian" else { throw RemasterError.notDebianInstaller }
-        try remasterPreseed(srcISO: srcISO, outISO: outISO, preseedCfg: preseedCfg, xorrisoPath: xorrisoPath)
-        return "debian"
+        if family == "debian" {
+            guard let preseed = preseedCfg else {
+                throw RemasterError.commandFailed("preseed", 1, "Debian ISO detected but no preseedCfg provided")
+            }
+            try remasterPreseed(srcISO: srcISO, outISO: outISO, preseedCfg: preseed, xorrisoPath: xorrisoPath)
+            return "debian"
+        }
+        guard let yaml = userDataYAML else {
+            throw RemasterError.commandFailed("autoinstall", 1, "Ubuntu ISO detected but no userDataYAML provided")
+        }
+        try remaster(srcISO: srcISO, outISO: outISO, userDataYAML: yaml, xorrisoPath: xorrisoPath)
+        return "ubuntu"
+    }
+
+    /// Produce a flashable autoinstall ISO at `outISO` from `srcISO` + the
+    /// cloud-init `userDataYAML`.
+    public static func remaster(srcISO: URL, outISO: URL, userDataYAML: String,
+                                xorrisoPath: String? = nil) throws {
+        let st = try? FileManager.default.attributesOfItem(atPath: srcISO.path)
+        let size = (st?[.size] as? Int) ?? 0
+        if size < 1024 { throw RemasterError.sourceTooSmall(size) }
+
+        guard let xorriso = xorrisoPath ?? XorrisoLocator.resolve() else {
+            throw RemasterError.xorrisoNotFound
+        }
+
+        let work = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("flagship-remaster-\(UUID().uuidString)")
+        try? FileManager.default.removeItem(at: work)
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: work) }
+
+        // 1. Extract grub.cfg.
+        let grubOut = work.appendingPathComponent("grub.cfg")
+        try run(xorriso, ["-osirrox", "on", "-indev", srcISO.path,
+                          "-extract", "/boot/grub/grub.cfg", grubOut.path])
+        // 2. osirrox preserves the ISO's read-only (0444) mode — make it writable.
+        try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: grubOut.path)
+        // 3. Patch + write back.
+        let patched = editGrubCfg(try String(contentsOf: grubOut, encoding: .utf8))
+        try patched.write(to: grubOut, atomically: true, encoding: .utf8)
+
+        // 4. Build the NoCloud seed dir.
+        let seed = work.appendingPathComponent("nocloud")
+        try FileManager.default.createDirectory(at: seed, withIntermediateDirectories: true)
+        try userDataYAML.write(to: seed.appendingPathComponent("user-data"), atomically: true, encoding: .utf8)
+        try "instance-id: flagship-pod\nlocal-hostname: flagship\n"
+            .write(to: seed.appendingPathComponent("meta-data"), atomically: true, encoding: .utf8)
+        try "".write(to: seed.appendingPathComponent("vendor-data"), atomically: true, encoding: .utf8)
+
+        // 5. Repack: replay boot equipment, overlay seed + grub. xorriso
+        //    refuses to write when -indev differs from -outdev and the outdev
+        //    already holds data, so clear a stale output first (e.g. re-running
+        //    "save an ISO" over a previous <name>.flagship.iso).
+        try? FileManager.default.removeItem(at: outISO)
+        try run(xorriso, ["-indev", srcISO.path, "-outdev", outISO.path,
+                          "-boot_image", "any", "replay",
+                          "-map", seed.path, "/nocloud",
+                          "-map", grubOut.path, "/boot/grub/grub.cfg"])
     }
 
     /// Run a command and capture stdout+stderr (for ISO introspection). Never

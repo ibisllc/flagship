@@ -2,11 +2,11 @@
  * Builder: Debian d-i preseed.cfg generation.
  *
  * The Debian path exists for ONE reason — UEFI firmware that rejects NVRAM
- * boot-entry writes, which d-i can preseed around by forcing GRUB to the EFI
- * removable-media path. These tests
+ * boot-entry writes, which Ubuntu's subiquity fatally aborts on but d-i can
+ * preseed around by forcing GRUB to the EFI removable-media path. These tests
  * pin that key + the rest of the unattended contract (LUKS/ESP/bios_grub
  * layout, the shared first-boot bootstrap via late_command, Wi-Fi), and assert
- * the embedded recipe round-trips.
+ * the embedded recipe round-trips exactly like the Ubuntu generator's does.
  */
 import { describe, it, expect } from "vitest";
 import { createHash } from "node:crypto";
@@ -19,7 +19,7 @@ import {
   type InstallBlob,
 } from "@flagship/protocol";
 import { buildDebianPreseed } from "../src/preseed.js";
-import { DEFAULT_BOOT_HOST } from "../src/userdata.js";
+import { buildAutoinstallUserData, DEFAULT_BOOT_HOST } from "../src/userdata.js";
 
 function makeKeypair(seedByte: number) {
   const sk = new Uint8Array(32).fill(seedByte);
@@ -81,7 +81,7 @@ function extractBootstrap(cfg: string): string {
   return Buffer.from(m[1]!, "base64").toString("utf8");
 }
 
-describe("buildDebianPreseed — embedded recipe ", () => {
+describe("buildDebianPreseed — embedded recipe (same contract as Ubuntu)", () => {
   it("is a d-i preseed (not cloud-config)", () => {
     const { blob, blobSignatureHex } = signedBlob();
     const cfg = buildDebianPreseed({ blob, blobSignatureHex });
@@ -126,6 +126,18 @@ describe("buildDebianPreseed — embedded recipe ", () => {
     expect(extractEmbeddedBlob(buildDebianPreseed({ blob, blobSignatureHex })).blobSignatureHex)
       .toBe(blobSignatureHex);
   });
+
+  it("the embedded blob is byte-identical to the Ubuntu generator's (same recipe)", () => {
+    // Both generators embed installBlobToJson(blob, sig) — the daemon must read
+    // the SAME bytes whichever installer ran.
+    const { blob, blobSignatureHex } = signedBlob();
+    const deb = extractEmbeddedBlob(buildDebianPreseed({ blob, blobSignatureHex }));
+    // Ubuntu embeds via `echo "<b64>" | base64 -d > /var/flagship/install-blob.json`
+    const yaml = buildAutoinstallUserData({ blob, blobSignatureHex });
+    const m = yaml.match(/echo "([A-Za-z0-9+/=]+)" \| base64 -d > \/var\/flagship\/install-blob\.json/);
+    const ubuntu = JSON.parse(Buffer.from(m![1]!, "base64").toString("utf8"));
+    expect(deb).toEqual(ubuntu);
+  });
 });
 
 describe("buildDebianPreseed — THE NVRAM/removable-path fix (the whole point)", () => {
@@ -139,7 +151,7 @@ describe("buildDebianPreseed — THE NVRAM/removable-path fix (the whole point)"
     // The d-i grub-installer question…
     expect(c).toContain("d-i grub-installer/force-efi-extra-removable boolean true");
     // …AND the underlying grub-efi-amd64 package question (belt + suspenders,
-    // two NVRAM-skip mechanisms).
+    // same intent as the Ubuntu path setting two NVRAM-skip mechanisms).
     expect(c).toContain("grub-efi-amd64 grub2/force_efi_extra_removable boolean true");
     // And don't try to write NVRAM at all (firmware that rejects it aborts).
     expect(c).toContain("d-i grub-installer/update-nvram boolean false");
@@ -232,16 +244,16 @@ describe("buildDebianPreseed — storage (LVM-on-LUKS; ESP + bios_grub + /boot)"
 
   it("GPT layout: 1M bios_grub + a FAT32 ESP at /boot/efi + ext4 /boot, all labelled for boot-stage", () => {
     const c = cfg();
-    // reserved bios_grub (future BIOS variant).
+    // reserved bios_grub (future BIOS variant) — matches the Ubuntu curtin intent.
     expect(c).toContain("method{ biosgrub }");
     expect(c).toContain("$iflabel{ gpt }");
     // The canonical d-i ESP stanza.
     expect(c).toContain("method{ efi } format{ }");
-    // Unencrypted /boot, labelled FLAGSHIP_BOOT, mounted /boot.
+    // Unencrypted /boot, labelled FLAGSHIP_BOOT, mounted /boot (mirrors Ubuntu).
     expect(c).toContain("label{ FLAGSHIP_BOOT }");
     expect(c).toContain("mountpoint{ /boot }");
     // Encrypted root, labelled FLAGSHIP_ROOT, mounted / (the bootstrap +
-    // initramfs hook key off these labels).
+    // initramfs hook key off these labels, shared with the Ubuntu path).
     expect(c).toContain("label{ FLAGSHIP_ROOT }");
     expect(c).toContain("mountpoint{ / }");
   });
@@ -336,7 +348,7 @@ describe("buildDebianPreseed — storage (LVM-on-LUKS; ESP + bios_grub + /boot)"
   });
 });
 
-describe("buildDebianPreseed — first-boot bootstrap ", () => {
+describe("buildDebianPreseed — first-boot bootstrap (reused verbatim from Ubuntu)", () => {
   function bootstrap(opts: { encryptRoot?: boolean } = {}): string {
     const { blob, blobSignatureHex } = signedBlob();
     return extractBootstrap(buildDebianPreseed({ blob, blobSignatureHex, ...opts }));
@@ -352,7 +364,7 @@ describe("buildDebianPreseed — first-boot bootstrap ", () => {
     expect(c).toContain("/target/usr/local/sbin/flagship-bootstrap.sh");
   });
 
-  it("sets up the daemon (env, relay-fetched entitlements, units)", () => {
+  it("is the SAME daemon setup as Ubuntu (env, relay-fetched entitlements, units)", () => {
     const b = bootstrap();
     expect(b).toContain("cat > /etc/flagship/daemon.env");
     expect(b).toContain("FLAGSHIP_SUBDOMAIN=$SERVER_DOMAIN");
@@ -365,9 +377,20 @@ describe("buildDebianPreseed — first-boot bootstrap ", () => {
     expect(b).toContain("https://deb.nodesource.com/setup_20.x");
   });
 
+  it("the bootstrap is byte-identical to the Ubuntu generator's EXCEPT the LUKS unlock", () => {
+    // The plain (unencrypted) bootstrap is shared verbatim — prove it by
+    // comparing the debug-escape path to the Ubuntu debug-escape path.
+    const { blob, blobSignatureHex } = signedBlob();
+    const debPlain = extractBootstrap(buildDebianPreseed({ blob, blobSignatureHex, encryptRoot: false }));
+    const ubuntuYaml = buildAutoinstallUserData({ blob, blobSignatureHex, encryptRoot: false });
+    const m = ubuntuYaml.match(/echo "([A-Za-z0-9+/=]+)" \| base64 -d > \/usr\/local\/sbin\/flagship-bootstrap\.sh/);
+    const ubuntuPlain = Buffer.from(m![1]!, "base64").toString("utf8");
+    expect(debPlain).toBe(ubuntuPlain);
+  });
+
   it("the encrypted bootstrap re-keys + seals + adds an LVM-aware initramfs unlock", () => {
     const b = bootstrap();
-    // Re-key + seal + upload (install.sh pattern).
+    // Re-key + seal + upload (install.sh pattern) — shared with Ubuntu.
     expect(b).toContain("encryptRoot ON");
     expect(b).toContain('head -c 64 /dev/urandom > "$LUKS_KEY"');
     expect(b).toContain("install-helper.ts seal-for-bak");
@@ -387,7 +410,7 @@ describe("buildDebianPreseed — first-boot bootstrap ", () => {
     expect(b).not.toContain("flagship/consume-unlock-key/v1|");
   });
 
-  it("bakes the boot host + boot-unlock mode, override-capable", () => {
+  it("bakes the boot host + boot-unlock mode, override-capable (same as Ubuntu)", () => {
     const b = bootstrap();
     expect(b).toContain('echo "https://boot.flagshipserver.com" > /boot/flagship-boot-host');
     expect(b).toContain('echo "auto" > /boot/flagship-boot-unlock-mode');
@@ -439,9 +462,9 @@ describe("buildDebianPreseed — optional Wi-Fi (burn-time local input)", () => 
     return Buffer.from(m[1]!, "base64").toString("utf8");
   }
 
-  it("the runtime Wi-Fi script is BYTE-IDENTICAL across the builders (same sha256 pin)", () => {
-    // The Swift builder pins this SAME hash. The installed system must get the
-    // identical name-keyed config whichever builder ran.
+  it("the runtime Wi-Fi script is BYTE-IDENTICAL to the Ubuntu/Swift twin (same sha256 pin)", () => {
+    // The Ubuntu generator + the Swift builder pin this SAME hash. The installed
+    // system must get the identical name-keyed netplan whichever installer ran.
     const c = cfg({ wifiSSID: "Flagship Test AP", wifiPassword: "test-only-not-real" });
     const s = extractWifiScript(c);
     expect(createHash("sha256").update(s).digest("hex")).toBe(
@@ -458,7 +481,7 @@ describe("buildDebianPreseed — optional Wi-Fi (burn-time local input)", () => 
     expect(c).not.toContain("in-target bash /tmp/flagship-wifi.sh /target");
   });
 
-  it("the Debian bootstrap carries the first-boot Wi-Fi safety-net", () => {
+  it("the Debian bootstrap carries the SAME first-boot Wi-Fi safety-net as Ubuntu", () => {
     const { blob, blobSignatureHex } = signedBlob();
     const b = extractBootstrap(
       buildDebianPreseed({ blob, blobSignatureHex, wifiSSID: "HomeNet", wifiPassword: "s3cret" }),
@@ -682,7 +705,7 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
   });
 });
 
-describe("buildDebianPreseed — input validation ", () => {
+describe("buildDebianPreseed — input validation (parity with the Ubuntu generator)", () => {
   it("rejects an unsafe git ref", () => {
     const { blob, blobSignatureHex } = signedBlob();
     expect(() =>

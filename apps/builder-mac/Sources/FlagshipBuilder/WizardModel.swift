@@ -330,7 +330,7 @@ final class WizardModel: ObservableObject {
         beginPairing()
     }
     /// Simple = fetch a server-named Debian base ISO + remaster it with the
-    /// recipe (default). Advanced = remaster a stock Debian ISO the user
+    /// recipe (default). Advanced = remaster a stock Ubuntu/Debian ISO the user
     /// supplies. Both end in the same remaster+flash path.
     @Published var mode: BuilderMode = .simple
 
@@ -489,9 +489,11 @@ final class WizardModel: ObservableObject {
         }
     }
 
-    /// Read + verify the recipe and build the Debian d-i preseed for it (pure
-    /// string work; keeps the privilege-split flow simple).
-    private func installerPreseed(forRecipe recipe: URL) throws -> String {
+    /// Read + verify the recipe and build BOTH unattended configs for it — the
+    /// Ubuntu cloud-init user-data and the Debian d-i preseed. The remaster
+    /// picks the right one for the detected ISO family; building both is cheap
+    /// (pure string work) and keeps the privilege-split flow simple.
+    private func installerConfigs(forRecipe recipe: URL) throws -> (yaml: String, preseed: String) {
         // The phone delivers the FULL recipe with its Advanced choices already
         // baked in — including the unsigned `debugGrant` sibling (consent-as-
         // crypto, verified box-side against the owner IRK). The builder passes the
@@ -504,13 +506,19 @@ final class WizardModel: ObservableObject {
         // box LUKS-encrypts. The choice is in the signed canonical bytes, so a
         // tampered recipe can't downgrade it without failing verification.
         let encryptRoot = parsed.encryptsDisk
+        let yaml = try UserData.autoinstallYAML(recipeJSON: data,
+                                                installerGitRef: parsed.installerGitRef,
+                                                encryptRoot: encryptRoot,
+                                                bootUnlockMode: parsed.effectiveBootUnlockMode,
+                                                wifiSSID: wifiSSID.isEmpty ? nil : wifiSSID,
+                                                wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword)
         let preseed = try UserData.debianPreseed(recipeJSON: data,
                                                  installerGitRef: parsed.installerGitRef,
                                                  encryptRoot: encryptRoot,
                                                  bootUnlockMode: parsed.effectiveBootUnlockMode,
                                                  wifiSSID: wifiSSID.isEmpty ? nil : wifiSSID,
                                                  wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword)
-        return preseed
+        return (yaml, preseed)
     }
 
     /// Simple mode: ask the server which Debian base ISO to hold, download +
@@ -602,11 +610,11 @@ final class WizardModel: ObservableObject {
             .appendingPathComponent(iso.deletingPathExtension().lastPathComponent + ".flagship.iso")
         outIsoPath = outURL
         do {
-            let preseed = try installerPreseed(forRecipe: recipe)
+            let cfgs = try installerConfigs(forRecipe: recipe)
             appendLog(stream: .stdout, text: "+ remaster \(iso.lastPathComponent) → \(outURL.lastPathComponent)")
             let used = try await Task.detached(priority: .userInitiated) { () -> String in
                 try Remaster.remasterInstaller(srcISO: iso, outISO: outURL,
-                                               preseedCfg: preseed)
+                                               userDataYAML: cfgs.yaml, preseedCfg: cfgs.preseed)
             }.value
             appendLog(stream: .stdout, text: "+ installer family: \(used)")
             isFinished = true
@@ -672,11 +680,11 @@ final class WizardModel: ObservableObject {
         let preparedURL = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("flagship-prepared-\(UUID().uuidString).iso")
         do {
-            let preseed = try installerPreseed(forRecipe: recipe)
+            let cfgs = try installerConfigs(forRecipe: recipe)
             appendLog(stream: .stdout, text: "+ remaster \(srcISO.lastPathComponent) → prepared image")
             let used = try await Task.detached(priority: .userInitiated) { () -> String in
                 try Remaster.remasterInstaller(srcISO: srcISO, outISO: preparedURL,
-                                               preseedCfg: preseed)
+                                               userDataYAML: cfgs.yaml, preseedCfg: cfgs.preseed)
             }.value
             didRemasterForTest = true
             appendLog(stream: .stdout, text: "+ installer family: \(used)")
@@ -882,12 +890,12 @@ final class WizardModel: ObservableObject {
             return
         }
         do {
-            let preseed = try installerPreseed(forRecipe: recipe)
+            let cfgs = try installerConfigs(forRecipe: recipe)
             let outISO = vmManager.installerISOPath(for: config.name)
             appendLog(stream: .stdout, text: "+ remaster \(srcISO.lastPathComponent) → VM installer")
             let used = try await Task.detached(priority: .userInitiated) { () -> String in
                 try Remaster.remasterInstaller(srcISO: srcISO, outISO: outISO,
-                                               preseedCfg: preseed)
+                                               userDataYAML: cfgs.yaml, preseedCfg: cfgs.preseed)
             }.value
             try FileManager.default.setAttributes([.posixPermissions: 0o600],
                                                   ofItemAtPath: outISO.path)

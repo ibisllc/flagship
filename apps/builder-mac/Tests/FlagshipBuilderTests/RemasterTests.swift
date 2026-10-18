@@ -3,9 +3,50 @@ import XCTest
 
 /// ISO-surgery string transforms (Remaster). The xorriso round-trip + the raw
 /// disk write are exercised on real hardware (they need a device); these lock
-/// the cmdline/cfg edits. Remaster is NOT the generator (see PreseedEngineTests)
-/// and stays in Swift.
+/// the cmdline/cfg edits. Moved verbatim out of the former EngineTests when the
+/// Swift preseed/user-data generator was replaced by the JavaScriptCore engine
+/// (see PreseedEngineTests) — Remaster is NOT the generator and stays in Swift.
 final class RemasterTests: XCTestCase {
+    let grub = """
+    set timeout=30
+    menuentry "Try or Install Ubuntu Server" {
+    \tset gfxpayload=keep
+    \tlinux\t/casper/vmlinuz quiet ---
+    \tinitrd\t/casper/initrd
+    }
+    menuentry "Test memory" {
+    \tlinux16 /boot/memtest86+.bin
+    }
+    """
+
+    func testGrubInsertsAutoinstall() {
+        let out = Remaster.editGrubCfg(grub)
+        XCTAssertTrue(out.contains("/casper/vmlinuz autoinstall ds=nocloud\\;s=/cdrom/nocloud/ quiet ---"),
+                      "expected autoinstall cmdline after vmlinuz, got:\n\(out)")
+    }
+
+    func testGrubShortensTimeout() {
+        let out = Remaster.editGrubCfg(grub)
+        XCTAssertTrue(out.contains("set timeout=1"))
+        XCTAssertFalse(out.contains("set timeout=30"))
+    }
+
+    func testGrubLeavesMemtestAlone() {
+        XCTAssertTrue(Remaster.editGrubCfg(grub).contains("linux16 /boot/memtest86+.bin"))
+    }
+
+    func testGrubIdempotent() {
+        let once = Remaster.editGrubCfg(grub)
+        let twice = Remaster.editGrubCfg(once)
+        XCTAssertEqual(once, twice)
+        XCTAssertEqual(twice.components(separatedBy: "autoinstall").count - 1, 1)
+    }
+
+    func testGrubAddsTimeoutWhenMissing() {
+        let noTimeout = "menuentry \"x\" {\n\tlinux /casper/vmlinuz ---\n}\n"
+        XCTAssertTrue(Remaster.editGrubCfg(noTimeout).hasPrefix("set timeout=1\n"))
+    }
+
     func testEditGrubCfgForPreseed() {
         let grub = """
         set timeout=10
@@ -78,19 +119,10 @@ final class RemasterTests: XCTestCase {
     func testClassifyIsoText() {
         XCTAssertEqual(Remaster.classifyIsoText("Debian 13.5.0 amd64 1"), "debian")
         XCTAssertEqual(Remaster.classifyIsoText("/install.amd\n/boot\n/EFI"), "debian")
-        XCTAssertEqual(Remaster.classifyIsoText("Ubuntu-Server 22.04.5 LTS amd64"), "other")
-        XCTAssertEqual(Remaster.classifyIsoText("/casper\n/boot"), "other")
-        XCTAssertEqual(Remaster.classifyIsoText("ubuntu based on debian\n/casper"), "other")
-        XCTAssertEqual(Remaster.classifyIsoText("Some Custom Linux 1.0"), "other")
-        XCTAssertEqual(Remaster.classifyIsoText(""), "other")
-    }
-
-    func testRefusesAnImageThatIsNotADebianInstaller() {
-        let nowhere = URL(fileURLWithPath: "/nonexistent.iso")
-        XCTAssertThrowsError(try Remaster.remasterInstaller(
-            srcISO: nowhere, outISO: nowhere, preseedCfg: "x", family: "other")) { error in
-            XCTAssertEqual((error as? RemasterError)?.errorDescription,
-                           "This is not a Debian installer image. Flagship installs from a Debian netinst ISO.")
-        }
+        XCTAssertEqual(Remaster.classifyIsoText("Ubuntu-Server 22.04.5 LTS amd64"), "ubuntu")
+        XCTAssertEqual(Remaster.classifyIsoText("/casper\n/boot"), "ubuntu")
+        XCTAssertEqual(Remaster.classifyIsoText("ubuntu based on debian\n/casper"), "ubuntu")
+        XCTAssertEqual(Remaster.classifyIsoText("Some Custom Linux 1.0"), "ubuntu")
+        XCTAssertEqual(Remaster.classifyIsoText(""), "ubuntu")
     }
 }

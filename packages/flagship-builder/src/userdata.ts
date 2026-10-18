@@ -1,31 +1,47 @@
 /**
- * First-boot bootstrap + install-blob generator for the Builder.
+ * cloud-init `user-data` generator for the Builder.
  *
- * `buildBootstrapScript` is the script debian-installer runs in the target
- * chroot (preseed `late_command` -> `in-target`, see preseed.ts) to finish a
- * box: clone + build the daemon, mint the identity, register with `.com`, and
- * (the locked default) re-key the LUKS root to a random key sealed for the
- * phone, with the initramfs unlock hook that talks to the unlock relay.
+ * The generated user-data is written next to the Ubuntu Server ISO on
+ * the USB drive (as a CIDATA partition or as autoinstall files).
+ * Subiquity reads it on boot and runs our bootstrap unattended.
  *
+ * The bootstrap script here is a direct adaptation of the cloud-demo's
+ * flagship-bootstrap.sh (packages/control-plane/src/demoUsersAdminCloudInit.ts).
+ * Differences vs the demo path:
+ *   - No demo-IRK derivation — the real InstallBlob came from the
+ *     phone's real IRK.
+ *   - No Hetzner-specific package tweaks.
+ *   - We DO install Node 20 from NodeSource (Ubuntu 22.04 default is
+ *     nodejs 12 — too old for our protocol; same root cause as the
+ *     debian-12 path).
  *   - LUKS-encrypt-root is the DEFAULT (locked). Every burn produces an
  *     encrypted box keyed by the phone (the .com-blind relay path from
- *     docs/security-phone-as-unlock-endpoint.md) - it is NOT a user choice.
- *     An internal escape hatch (encryptRoot:false, NOT exposed in CLI/GUI)
- *     reproduces the unencrypted path for debugging only.
+ *     docs/security-phone-as-unlock-endpoint.md) — it is NOT a user choice.
+ *     EXPERIMENTAL — needs live validation (brick risk on first boot). An
+ *     internal escape hatch (encryptRoot:false, NOT exposed in CLI/GUI)
+ *     reproduces the proven unencrypted path for debugging only.
  *
- * EXECUTION CONTEXT. The bootstrap runs inside d-i's in-target CHROOT, where
- * systemd is NOT the running init - so `systemctl start` does nothing useful
- * and MUST NOT be relied on. We therefore only `systemctl enable` the units
- * (which works in a chroot - it just drops the symlink) and defer the daemon to
- * systemd units that fire on the first REAL boot.
+ * EXECUTION CONTEXT — the critical difference vs the demo. The demo's
+ * bootstrap runs at REAL boot (cloud-init runcmd on multi-user.target),
+ * so it can `systemctl start` the daemon immediately. The Builder runs
+ * THIS bootstrap inside curtin's in-target CHROOT during the autoinstall
+ * (`late-commands` → `curtin in-target … flagship-bootstrap.sh`), where
+ * systemd is NOT the running init — so `systemctl start` does nothing
+ * useful and MUST NOT be relied on. We therefore only `systemctl enable`
+ * the units (which works in a chroot — it just drops the symlink) and
+ * defer both registration AND the daemon to systemd oneshot/simple units
+ * that fire on the first REAL boot. We do NOT register inline in the
+ * chroot (no guarantee of network during install; the demo's inline
+ * register is a boot-time optimisation we can't safely copy here).
  */
 import type { InstallBlob } from "@flagship/protocol";
 import { utf8ToBase64 } from "./base64.js";
 
 /**
- * Options for the install config generators. The InstallBlob is embedded
- * base64-encoded in the preseed; the bootstrap script reads it back, never
- * re-fetches over the network.
+ * Build the autoinstall user-data YAML.
+ *
+ * The InstallBlob is embedded base64-encoded inside `write_files`; the
+ * bootstrap script reads it back, never re-fetches over the network.
  */
 export interface UserDataOptions {
   blob: InstallBlob;
@@ -42,8 +58,8 @@ export interface UserDataOptions {
    *
    * DEFAULT (locked): undefined or true → encrypted. LUKS is a day-1 promise,
    * not a user choice — neither the CLI nor the GUI exposes a toggle. The
-   * preseed gets a partman-crypto LVM-on-LUKS root, the bootstrap re-keys it to
-   * a random key (install.sh's pattern), seals that
+   * autoinstall gets a curtin custom-storage layout with a LUKS-encrypted root
+   * keyed by a random key-file (install.sh's pattern), the bootstrap seals that
    * key for the phone + uploads it to `.com`, builds the `/boot/flagship-unseal`
    * helper, and installs an initramfs hook that lifts boot-stage.sh's
    * unlock_via_relay() (POST SecretRequest → poll → unseal → cryptsetup
@@ -78,10 +94,11 @@ export interface UserDataOptions {
   bootHost?: string;
   /**
    * Optional Wi-Fi for a box with no Ethernet. A burn-time local input — NEVER
-   * part of the signed InstallBlob. When an SSID is given, d-i joins the AP for
-   * the install and the installed system gets a networkd + wpa_supplicant config
-   * (and `wpasupplicant`) so it can drive the radio on the first real boot.
-   * Empty ⇒ the default wired-DHCP behaviour, byte-identical to before.
+   * part of the signed InstallBlob. When an SSID is given, the autoinstall gets
+   * a netplan that DHCPs any wired NIC AND joins this Wi-Fi (both `optional`, so
+   * a missing NIC never blocks boot), and `wpasupplicant` is added so the
+   * installed system can drive the radio on the first real boot. Empty ⇒ the
+   * default subiquity wired-DHCP behaviour, byte-identical to before.
    */
   wifiSSID?: string;
   wifiPassword?: string;
@@ -148,10 +165,26 @@ export function bootHostForControlHost(controlHost: string | undefined): string 
 export type BootUnlockMode = "auto" | "approve";
 
 /**
+ * Which installer the bootstrap is being baked for. Ubuntu (subiquity/curtin)
+ * is the original path; "debian" (debian-installer / d-i) is the added path.
+ *
+ * The non-LUKS bootstrap body is BYTE-IDENTICAL across both families (the
+ * daemon clone/build/register logic doesn't care which installer ran). Only
+ * two things differ, and ONLY on the encrypted path:
+ *   - Node 20 install comment (cosmetic — same NodeSource one-liner).
+ *   - The LUKS layout. Ubuntu/curtin gives a PLAIN LUKS root; Debian's
+ *     partman-crypto preseed only reliably supports LVM-on-LUKS, so the
+ *     Debian initramfs unlock hook must `vgchange -ay` after luksOpen and
+ *     discover the raw LUKS partition by type (not by the fs label, which
+ *     lives on the LV inside the container). See buildLuksBootstrapBlock.
+ */
+export type InstallerFamily = "ubuntu" | "debian";
+
+/**
  * The validated, defaulted inputs both generators derive from UserDataOptions.
- * Centralised so the preseed and the engine's bootstrap/blob entry points can
- * never drift on the git-ref/repo/bootHost validation or the
- * encryptRoot/bootUnlockMode defaults. The bootHost default (boot.flagshipserver.com) is overridable by an
+ * Centralised so the Ubuntu autoinstall + the Debian preseed can never drift on
+ * the git-ref/repo/bootHost validation or the encryptRoot/bootUnlockMode
+ * defaults. The bootHost default (boot.flagshipserver.com) is overridable by an
  * enterprise clone; encryptRoot is the locked default (false = internal debug
  * escape only); bootUnlockMode is phone-signed in the blob (absent ⇒ "auto").
  */
@@ -202,13 +235,191 @@ export function resolveBootstrapInputs(opts: UserDataOptions): ResolvedBootstrap
   };
 }
 
+export function buildAutoinstallUserData(opts: UserDataOptions): string {
+  const { blobB64, ref, repo, bootHost, encryptRoot, bootUnlockMode } =
+    resolveBootstrapInputs(opts);
+  const bootstrap = buildBootstrapScript({
+    ref,
+    repoUrl: repo,
+    encryptRoot,
+    bootUnlockMode,
+    bootHost,
+    wifiSSID: opts.wifiSSID,
+    wifiPassword: opts.wifiPassword,
+    // Thread the debug SSH key so the Ubuntu path honors a debug grant too (the
+    // Debian preseed already passes it). Absent ⇒ undefined ⇒ the normal
+    // provisioning bootstrap, byte-identical to before.
+    debugSshAuthorizedKey: opts.debugSshAuthorizedKey,
+  });
+  const bootstrapB64 = utf8ToBase64(bootstrap);
+  // The LUKS storage block is emitted ONLY when encryptRoot is on. When off,
+  // this is the empty string and the YAML is byte-identical to the working
+  // unencrypted path (subiquity falls back to its default direct/whole-disk
+  // layout). EXPERIMENTAL — needs live validation.
+  //
+  // The install-time passphrase is NOT a constant: an early-command generates a
+  // random one per install into LUKS_BURN_STAGING_PATH (installer RAM), curtin
+  // formats the LUKS volume with that key file, a late-command copies it onto the
+  // target, and the bootstrap (root already open in the in-target chroot)
+  // generates a fresh random key, adds it as a new key slot, seals it for the
+  // phone, removes the install-time slot and asserts a single slot (same
+  // bootstrap as the Debian path). UNTESTED on this branch: see
+  // OTHER-OS-INSTALLERS.md.
+  const storageBlock = encryptRoot ? luksStorageBlock() : "";
+  // Pairs with storage.grub.update_nvram:false (luksStorageBlock): since we skip
+  // the EFI NVRAM entry, copy curtin's SIGNED shim+grub to the removable
+  // /EFI/BOOT/BOOTX64.EFI fallback path, which firmware boots with no NVRAM
+  // entry (and stays Secure-Boot-valid — same signed bytes).
+  const efiFallbackBlock = encryptRoot
+    ? `    - curtin in-target --target=/target -- bash -c 'D=/boot/efi/EFI; mkdir -p "$D/BOOT"; cp "$D/ubuntu/shimx64.efi" "$D/BOOT/BOOTX64.EFI"; cp "$D/ubuntu/grubx64.efi" "$D/BOOT/grubx64.efi"; cp "$D/ubuntu/mmx64.efi" "$D/BOOT/" 2>/dev/null; true'\n`
+    : "";
+  // Wi-Fi is a burn-time local input (NOT in the signed blob). networkd REJECTS
+  // `match:` for wifis (only ethernet), so we can't bake a Wi-Fi glob — the
+  // interface name isn't known at burn time. Instead: (1) the `network:` key
+  // carries only the optional wired fallback (ethernet match IS allowed), and
+  // (2) an early-command (live installer, so the install can download) plus a
+  // late-command (writes /target, so first boot is online) detect the real wifi
+  // interface NAME at runtime. Empty SSID ⇒ all "" → byte-identical wired burn.
+  const ssid = (opts.wifiSSID ?? "").trim();
+  const hasWifi = ssid.length > 0;
+  const wifiScript64 = hasWifi
+    ? utf8ToBase64(wifiSetupScript(ssid, opts.wifiPassword ?? ""))
+    : "";
+  const networkBlock = hasWifi ? wifiEthernetBlock() : "";
+  const earlyCommands: string[] = [];
+  if (encryptRoot) {
+    earlyCommands.push(
+      `umask 077; tr -dc A-Za-z0-9 </dev/urandom | head -c ${LUKS_BURN_PASSPHRASE_LENGTH} > ${LUKS_BURN_STAGING_PATH}`,
+    );
+  }
+  if (hasWifi) {
+    earlyCommands.push(`echo ${wifiScript64} | base64 -d > /tmp/flagship-wifi.sh && bash /tmp/flagship-wifi.sh`);
+  }
+  const earlyCommandsBlock = earlyCommands.length
+    ? `  early-commands:\n${earlyCommands.map((c) => `    - "${c}"\n`).join("")}`
+    : "";
+  const burnKeyLateCommand = encryptRoot
+    ? `    - install -D -m 600 ${LUKS_BURN_STAGING_PATH} /target${LUKS_BURN_KEYFILE}\n`
+    : "";
+  const wifiLateCommandBlock = hasWifi
+    ? `    - "echo ${wifiScript64} | base64 -d > /tmp/flagship-wifi.sh && bash /tmp/flagship-wifi.sh /target"\n`
+    : "";
+  const wifiPackagesBlock = hasWifi ? "    - wpasupplicant\n" : "";
+  return `#cloud-config
+# Flagship Studio — autoinstall user-data
+# Generated at burn time. Don't edit by hand.
+autoinstall:
+  version: 1
+  debconf-selections: |
+    grub-pc grub2/update_nvram boolean false
+    grub-efi-amd64 grub2/update_nvram boolean false
+${networkBlock}${earlyCommandsBlock}  identity:
+    hostname: flagship-pod
+    username: flagship
+    # LOCKED password (no committed crypt). "*" is the conventional /etc/shadow
+    # "no valid password — login disabled" marker (no hashed input can match it),
+    # so the flagship admin account exists (for its sudo membership + the dev SSH
+    # stub) but CANNOT be logged into by password. Production installs no
+    # authorized_keys for it either ⇒ no interactive login by any path. The
+    # sanctioned debug path is 100% runtime + owner-grant-gated (the daemon's
+    # debugAccessGate creates + passwords its OWN 'debug' user on a verified
+    # owner-IRK grant); it is unaffected by this lock.
+    password: "*"
+  ssh:
+    install-server: true
+    allow-pw: false
+  packages:
+    - git
+    - curl
+    - jq
+    - ca-certificates
+    - xxd
+    - cryptsetup
+    - lvm2
+    - gnupg
+${wifiPackagesBlock}${storageBlock}  late-commands:
+${efiFallbackBlock}${wifiLateCommandBlock}${burnKeyLateCommand}    - curtin in-target --target=/target -- bash -c 'mkdir -p /var/flagship && echo "${blobB64}" | base64 -d > /var/flagship/install-blob.json && chmod 600 /var/flagship/install-blob.json'
+    - curtin in-target --target=/target -- bash -c 'echo "${bootstrapB64}" | base64 -d > /usr/local/sbin/flagship-bootstrap.sh && chmod +x /usr/local/sbin/flagship-bootstrap.sh'
+    - curtin in-target --target=/target -- /usr/local/sbin/flagship-bootstrap.sh
+`;
+}
+
+/**
+ * curtin custom-storage layout for the OPT-IN LUKS path (encryptRoot=true).
+ *
+ * EXPERIMENTAL — needs live validation on real hardware (brick risk).
+ *
+ * Ports install.sh's partitioning into subiquity/curtin: a small unencrypted
+ * /boot (kernel + initramfs + identity + /boot/flagship-unseal + the unlock
+ * hook) plus a LUKS2-encrypted root. curtin formats the LUKS volume with the
+ * per-install key file an early-command generated (LUKS_BURN_STAGING_PATH, no
+ * constant); the bootstrap then re-keys it to a fresh `head -c 64 /dev/urandom`
+ * random key (install.sh's pattern), removing the install-time key, so the only
+ * recoverable key is the one sealed for the phone.
+ *
+ * Emitted with a leading two-space indent so it nests under `autoinstall:` and
+ * a trailing newline so `late-commands:` follows cleanly. Returns "" when off.
+ */
+function luksStorageBlock(): string {
+  return `  # EXPERIMENTAL LUKS-on-root (opt-in; default OFF). Needs live validation.
+  # UEFI GPT layout (the common case): a FAT32 ESP flagged \`boot\` carries
+  # grub_device so curtin does a UEFI install — the SIGNED shim + grub chain
+  # Secure Boot trusts. grub_device is OFF on the disk on purpose: setting it
+  # makes curtin install BIOS grub-pc, leaving an UNSIGNED EFI grub that Secure
+  # Boot rejects ("Secure Boot Violation: invalid signature"). A reserved 1M
+  # bios_grub partition is kept for a future BIOS variant. subiquity also
+  # rejects a UEFI layout with no ESP ("did not create needed bootloader
+  # partition").
+  # grub.update_nvram:false — many boxes' firmware reject EFI NVRAM writes
+  # ("failed to register the EFI boot entry: Invalid argument"), which ABORTS
+  # the install; skip the NVRAM write (a late-command then copies the signed
+  # shim+grub to the removable /EFI/BOOT path, which firmware boots with no
+  # NVRAM entry). Unencrypted /boot + LUKS root. Byte-identical to the Swift
+  # port (UserData.luksStorageBlock).
+  storage:
+    grub:
+      update_nvram: false
+    config:
+      - {id: disk0, type: disk, ptable: gpt, match: {size: largest}, wipe: superblock-recursive, grub_device: false, preserve: false}
+      - {id: bios_grub, type: partition, device: disk0, size: 1M, flag: bios_grub, preserve: false}
+      - {id: esp_part, type: partition, device: disk0, size: 512M, flag: boot, grub_device: true, preserve: false}
+      - {id: esp_fs, type: format, fstype: fat32, volume: esp_part, preserve: false}
+      - {id: boot_part, type: partition, device: disk0, size: 512M, preserve: false}
+      - {id: root_part, type: partition, device: disk0, size: -1, preserve: false}
+      - {id: boot_fs, type: format, fstype: ext4, volume: boot_part, label: FLAGSHIP_BOOT, preserve: false}
+      - {id: root_crypt, type: dm_crypt, volume: root_part, dm_name: flagship_root, keyfile: ${LUKS_BURN_STAGING_PATH}, preserve: false}
+      - {id: root_fs, type: format, fstype: ext4, volume: root_crypt, label: FLAGSHIP_ROOT, preserve: false}
+      - {id: root_mount, type: mount, device: root_fs, path: /}
+      - {id: boot_mount, type: mount, device: boot_fs, path: /boot}
+      - {id: esp_mount, type: mount, device: esp_fs, path: /boot/efi}
+`;
+}
+
+/**
+ * The optional wired-DHCP fallback emitted on the Wi-Fi path. networkd DOES
+ * support `match:` for ethernet, and `optional: true` means a box with no cable
+ * never blocks the install. Wi-Fi itself is added at runtime by wifiSetupScript
+ * (networkd won't take a wifi `match:`). Two-space indent so it nests under
+ * `autoinstall:`. Byte-identical to the Swift port (UserData.wifiEthernetBlock).
+ */
+function wifiEthernetBlock(): string {
+  return `  network:
+    version: 2
+    ethernets:
+      flagship-eth:
+        match: {name: "en*"}
+        dhcp4: true
+        optional: true
+`;
+}
+
 /**
  * Runtime Wi-Fi setup, run IN-TARGET (chroot for the installed system; the live
- * env too). networkd rejects `match:` for wifis ("only by interface
+ * env too on Ubuntu). networkd rejects `match:` for wifis ("only by interface
  * name") and the name (wlan0 / wlp2s0 / wlo1 …) isn't known at burn time, so we
  * detect it at runtime. `$1` = root prefix: "" when run inside the target (the
- * live installer, and the d-i in-target chroot), "/target" when run from the
- * installer host instead of chrooted.
+ * live installer, and the Debian d-i in-target chroot), "/target" for Ubuntu's
+ * curtin late-command (which runs in the installer host, not chrooted).
  *
  * DISTRO BRANCH (the whole point of this rewrite). The config is written for the
  * network stack actually present in the target:
@@ -223,7 +434,7 @@ export function resolveBootstrapInputs(opts: UserDataOptions): ResolvedBootstrap
  *     whether or not systemd is the running init.
  *
  * base64-embedded into the early/late commands, so this body needs no
- * YAML/shell escaping; the SSID/password sit in quoted heredocs, so
+ * autoinstall-YAML/shell escaping; the SSID/password sit in quoted heredocs, so
  * only double-quoted-scalar escaping (yamlEscape — same rules for netplan YAML
  * and wpa_supplicant's quoted strings) applies. Byte-identical to the Swift port
  * (UserData.wifiSetupScript) — keep the two in lockstep (cross-language sha pin).
@@ -431,6 +642,13 @@ export interface BootstrapTemplateArgs {
   /** Boot worker host baked to /boot/flagship-boot-host (default boot.flagshipserver.com). */
   bootHost: string;
   /**
+   * The installer family the bootstrap runs under. Defaults to "ubuntu" so the
+   * existing Ubuntu output (and its cross-language sha256 pins) stay
+   * byte-identical. "debian" only changes the encrypted-path LUKS block (the
+   * LVM-on-LUKS unlock); the plain bootstrap body is identical either way.
+   */
+  family?: InstallerFamily;
+  /**
    * Burn-time Wi-Fi (never in the signed blob). When an SSID is given, the
    * bootstrap bakes a first-boot Wi-Fi SAFETY-NET unit + adds wpasupplicant to
    * its apt line. Absent (the wired case) ⇒ no safety-net, no apt change, so the
@@ -445,10 +663,10 @@ export interface BootstrapTemplateArgs {
 }
 
 /**
- * Build the first-boot bootstrap, run by the Debian preseed's d-i late_command in
- * the in-target chroot at install time (and by the VM appliance's first-boot
- * specialization). Exported so preseed.ts and the engine reuse the exact same
- * script.
+ * Build the first-boot bootstrap. Shared verbatim between the Ubuntu autoinstall
+ * (curtin in-target) and the Debian preseed (d-i late_command) — both run it in
+ * an in-target chroot at install time. Exported so preseed.ts reuses the exact
+ * same script (no drift between the two installers' downstream setup).
  */
 export function buildBootstrapScript(args: BootstrapTemplateArgs): string {
   // The sshd remote-access stub is its own dev-only debug mechanism (never
@@ -531,7 +749,7 @@ function buildBootstrapScriptPlain(args: BootstrapTemplateArgs): string {
   const wifiSafetyNet = buildWifiSafetyNetBlock(args.wifiSSID ?? "", args.wifiPassword ?? "");
   return `#!/bin/bash
 # Flagship first-boot bootstrap.
-# Runs once at install time under d-i's in-target chroot. Idempotent.
+# Runs once at first boot under curtin's in-target chroot. Idempotent.
 set -uo pipefail
 exec >>/var/log/flagship-bootstrap.log 2>&1
 date
@@ -714,7 +932,7 @@ FLAGSHIP_IDENTITY_PRIV_HEX=$SERVER_IDENTITY_PRIV_HEX
 ENVEOF
 chmod 600 /etc/flagship/daemon.env
 
-# Write systemd units. We run inside d-i's in-target chroot where
+# Write systemd units. We run inside curtin's in-target chroot where
 # systemd is NOT running, so we ENABLE (drops the symlink, takes effect
 # on first real boot) and never rely on \`systemctl start\`. Two units:
 #   flagship-first-boot-register — oneshot, POSTs /api/server/register
@@ -1394,6 +1612,7 @@ echo "[flagship-bootstrap] done"
   const luks = buildLuksBootstrapBlock(
     args.bootUnlockMode,
     args.bootHost,
+    args.family ?? "ubuntu",
     args.wifiSSID ?? "",
     args.wifiPassword ?? "",
   );
@@ -1419,6 +1638,7 @@ echo "[flagship-bootstrap] done"
 function buildLuksBootstrapBlock(
   mode: BootUnlockMode,
   bootHost: string,
+  family: InstallerFamily,
   wifiSSID: string = "",
   wifiPassword: string = "",
 ): string {
@@ -1426,16 +1646,26 @@ function buildLuksBootstrapBlock(
   // update-initramfs so the hook + premount land in the rebuilt initrd. Empty on
   // a wired encrypted burn ⇒ the LUKS block is byte-identical to before.
   const initramfsWifi = buildInitramfsWifiBlock(wifiSSID, wifiPassword);
-  // Debian's partman-crypto preseed only reliably supports LVM-on-LUKS, so the
-  // initramfs must stage `lvm` and, after luksOpen, activate the VG before the
-  // LV (FLAGSHIP_ROOT) appears.
-  const lvmCopyExec = `copy_exec /sbin/cryptsetup /sbin/cryptsetup 2>/dev/null || copy_exec /usr/sbin/cryptsetup /sbin/cryptsetup
-copy_exec /sbin/lvm /sbin/lvm 2>/dev/null || copy_exec /usr/sbin/lvm /sbin/lvm`;
-  // Terminal unlock step: open the raw LUKS container discovered by type (the
-  // LV's FLAGSHIP_ROOT label is INSIDE the container, invisible pre-open), then
-  // `vgchange -ay` surfaces /dev/disk/by-label/FLAGSHIP_ROOT for the normal
-  // mount that follows.
-  const terminalUnlock = `ROOT_LUKS_PART="$(blkid -t TYPE=crypto_LUKS -o device | head -n1)"
+  // The ONLY family-specific lines in this block (everything else — the
+  // re-key, the seal+upload, the relay/box-lease functions lifted from
+  // boot-stage.sh, the dispatch — is byte-identical). Ubuntu/curtin gives a
+  // PLAIN LUKS root; Debian's partman-crypto preseed only reliably supports
+  // LVM-on-LUKS, so on Debian the initramfs must stage `lvm` and, after
+  // luksOpen, activate the VG before the LV (FLAGSHIP_ROOT) appears. The
+  // Ubuntu values below are byte-for-byte the original literals (so the
+  // cross-language sha256 pins are unchanged).
+  const lvmCopyExec =
+    family === "debian"
+      ? `copy_exec /sbin/cryptsetup /sbin/cryptsetup 2>/dev/null || copy_exec /usr/sbin/cryptsetup /sbin/cryptsetup
+copy_exec /sbin/lvm /sbin/lvm 2>/dev/null || copy_exec /usr/sbin/lvm /sbin/lvm`
+      : `copy_exec /sbin/cryptsetup /sbin/cryptsetup 2>/dev/null || copy_exec /usr/sbin/cryptsetup /sbin/cryptsetup`;
+  // Terminal unlock step. Ubuntu opens the labelled root directly. Debian
+  // opens the raw LUKS container discovered by type (the LV's FLAGSHIP_ROOT
+  // label is INSIDE the container, invisible pre-open), then `vgchange -ay`
+  // surfaces /dev/disk/by-label/FLAGSHIP_ROOT for the normal mount that follows.
+  const terminalUnlock =
+    family === "debian"
+      ? `ROOT_LUKS_PART="$(blkid -t TYPE=crypto_LUKS -o device | head -n1)"
 # Open under the CRYPTTAB target name (the installer named it e.g. sda4_crypt).
 # Debian's local-top/cryptroot runs after us (its prereqs() lists every other
 # local-top script) and skips an already-active target — but only under ITS
@@ -1445,6 +1675,9 @@ CRYPT_NAME="$(sed -n 's/^[[:space:]]*\\([^#][^[:space:]]*\\)[[:space:]].*/\\1/p'
 [ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root
 xxd -r -p "$OUT_UNLOCK" | cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"
 lvm vgchange -ay 2>/dev/null || vgchange -ay 2>/dev/null || true
+shred -u "$OUT_UNLOCK" 2>/dev/null || rm -f "$OUT_UNLOCK"`
+      : `ROOT_PART=/dev/disk/by-label/FLAGSHIP_ROOT
+xxd -r -p "$OUT_UNLOCK" | cryptsetup luksOpen --key-file - "$ROOT_PART" flagship_root
 shred -u "$OUT_UNLOCK" 2>/dev/null || rm -f "$OUT_UNLOCK"`;
   return `
 # ── EXPERIMENTAL: LUKS-on-root, phone-gated unlock (encryptRoot) ─────────
@@ -1501,7 +1734,7 @@ fi
 LUKS_KEY=/run/flagship-luks.key
 head -c 64 /dev/urandom > "$LUKS_KEY"
 chmod 600 "$LUKS_KEY"
-# The encrypted root partition (partman labelled the filesystem FLAGSHIP_ROOT;
+# The encrypted root partition (curtin labelled the filesystem FLAGSHIP_ROOT;
 # the underlying LUKS container is its parent block device).
 ROOT_LUKS_PART="$(blkid -t TYPE=crypto_LUKS -o device | head -n1)"
 if [ -z "$ROOT_LUKS_PART" ]; then
@@ -1568,7 +1801,7 @@ echo "${mode}" > /boot/flagship-boot-unlock-mode
 
 # C1. BAKE the unseal helper to /boot/flagship-unseal. Build-at-install from
 #     the cloned source (auditable; no committed binary). golang-go from the
-#     Debian archive can build the CGO-free static helper (one dep, pinned).
+#     Ubuntu archive can build the CGO-free static helper (one dep, pinned).
 echo "[flagship-bootstrap] building flagship-unseal from source"
 if [ "\${FLAGSHIP_APPLIANCE_PREINSTALLED:-0}" = "1" ]; then
     [ -x /usr/local/lib/flagship-appliance/flagship-unseal ] || { echo "[flagship-bootstrap] FATAL: prebuilt unseal helper missing"; exit 1; }

@@ -1,25 +1,37 @@
 /**
- * debian-installer (d-i) `preseed.cfg` generator for the Builder.
+ * debian-installer (d-i) `preseed.cfg` generator for the Builder — the Debian
+ * twin of userdata.ts `buildAutoinstallUserData`.
  *
- * WHY DEBIAN. debian-installer can be preseeded with a single key that forces
+ * WHY DEBIAN EXISTS. Ubuntu's subiquity treats a UEFI box whose firmware
+ * REJECTS NVRAM boot-entry writes as a FATAL install error
+ * (`grub-install: error: failed to register the EFI boot entry: Invalid
+ * argument`), and the documented opt-out (`storage.grub.update_nvram:false` +
+ * the `grub2/update_nvram` debconf preseed) is IGNORED by the shipped
+ * subiquity. debian-installer handles exactly this: a single preseed key forces
  * GRUB to the EFI removable-media path (`/EFI/BOOT/BOOTX64.EFI`), which every
- * UEFI box boots with no NVRAM entry; many boxes' firmware REJECTS NVRAM
- * boot-entry writes. See https://wiki.debian.org/UEFI and the d-i
- * grub-installer templates.
+ * UEFI box boots with no NVRAM entry. That is the whole reason for the Debian
+ * path. See https://wiki.debian.org/UEFI and the d-i grub-installer templates.
  *
- * REUSE. The first-boot bootstrap (clone + build daemon + identity + register +
- * LUKS re-key/seal/initramfs-hook) is buildBootstrapScript() from userdata.ts,
- * run from d-i's preseed/late_command (target at /target; `in-target` chroots
- * into it). The runtime Wi-Fi script (wifiSetupScript) is detected at runtime
- * because networkd rejects a wifi `match:`, so the installed-system Wi-Fi is
- * keyed by the interface name found then.
+ * REUSE. Everything downstream of the installer is shared verbatim with the
+ * Ubuntu path:
+ *   - the first-boot bootstrap (clone + build daemon + identity + register +
+ *     LUKS re-key/seal/initramfs-hook) is buildBootstrapScript() from
+ *     userdata.ts, run from d-i's preseed/late_command (target at /target,
+ *     exactly like curtin's in-target). `family:"debian"` only adapts the
+ *     LVM-on-LUKS unlock step inside that script.
+ *   - the runtime Wi-Fi script (wifiSetupScript) is byte-identical to Ubuntu's
+ *     (same cross-language sha256 pin) — networkd still rejects a wifi `match:`,
+ *     so the installed-system Wi-Fi is keyed by the interface name detected at
+ *     runtime.
  *
  * STORAGE. partman-crypto's only reliably-preseedable encrypted mode is
  * LVM-on-LUKS (`partman-auto/method string crypto`): an unencrypted ESP + an
  * unencrypted /boot + a LUKS container holding one LVM volume group with a
  * single root LV. (Plain LUKS-without-LVM is not reliably preseedable across
- * d-i.) The labels (FLAGSHIP_BOOT / FLAGSHIP_ROOT) are fixed, and the
- * bootstrap's `blkid -t TYPE=crypto_LUKS` re-key step is name-agnostic.
+ * d-i.) curtin's Ubuntu layout is plain-LUKS; the labels (FLAGSHIP_BOOT /
+ * FLAGSHIP_ROOT) and the burn-time passphrase (re-keyed away on first boot)
+ * are mirrored, and the bootstrap's `blkid -t TYPE=crypto_LUKS` re-key step
+ * works unchanged on both.
  */
 import {
   buildBootstrapScript,
@@ -51,8 +63,10 @@ export type ProvisionStatusPhase =
   | "error";
 
 /**
- * Build the Debian d-i preseed.cfg. The InstallBlob is embedded base64 verbatim
- * and read back by the bootstrap.
+ * Build the Debian d-i preseed.cfg. Same options as the Ubuntu generator
+ * (UserDataOptions) so the two are drop-in interchangeable behind a
+ * family switch — the InstallBlob is embedded base64 verbatim and read back
+ * by the bootstrap; the recipe never carries Debian-vs-Ubuntu choices.
  */
 export function buildDebianPreseed(opts: UserDataOptions): string {
   // Validated/defaulted inputs (shared with the engine's bootstrap entry point
@@ -98,12 +112,15 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
   // real boot → `live`). Emitted on the success branch ONLY (the failure branch
   // just exits 1, never this).
   const installedBeacon = debianBeaconCommand("installed", beaconSerial);
+  // The exact same first-boot bootstrap as Ubuntu — only the LUKS unlock step
+  // adapts to Debian's LVM-on-LUKS (family:"debian").
   const bootstrap = buildBootstrapScript({
     ref,
     repoUrl: repo,
     encryptRoot,
     bootUnlockMode,
     bootHost,
+    family: "debian",
     wifiSSID: opts.wifiSSID,
     wifiPassword: opts.wifiPassword,
     debugSshAuthorizedKey: opts.debugSshAuthorizedKey,
@@ -131,8 +148,8 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
 
   // Wi-Fi (burn-time local input; never in the signed recipe). d-i's netcfg
   // takes WPA directly at install time (unlike networkd, netcfg keys wireless
-  // by ESSID), AND the installed system gets the runtime-detected Wi-Fi config
-  // from wifiSetupScript.
+  // by ESSID), AND the installed system gets the same runtime-detected netplan
+  // the Ubuntu path uses (the body is byte-identical — same sha256 pin).
   const ssid = (opts.wifiSSID ?? "").trim();
   const hasWifi = ssid.length > 0;
   const wifiScript64 = hasWifi
@@ -142,7 +159,7 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
     ? debianWifiNetcfgBlock(ssid, opts.wifiPassword ?? "")
     : "";
   // wpasupplicant in the installed system so the radio comes up on first boot
-  // (the runtime-detected Wi-Fi config needs it). PLUS the
+  // (the runtime-detected netplan needs it) — matches the Ubuntu path. PLUS the
   // non-free Wi-Fi firmware: the Debian INSTALLER ships firmware (so Wi-Fi works
   // during install), but unless we explicitly install it into the target the
   // installed system + the initramfs boot with NO radio firmware — the box then
@@ -158,14 +175,15 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
   // script's ROOT arg is EMPTY — its `/` already IS the target (passing /target
   // here would write to /target/target). Running chrooted is also what lets the
   // script's `systemctl enable`-style symlinks land in the installed system.
-  // The script is pinned by sha256 across the builders.
+  // Byte-identical script to Ubuntu (same cross-language sha pin).
   const wifiLateCommand = hasWifi
     ? `echo '${wifiScript64}' | base64 -d > /target/tmp/flagship-wifi.sh && in-target bash /tmp/flagship-wifi.sh; `
     : "";
 
   // The preseed/late_command. d-i runs it with the target at /target; `in-target`
-  // chroots into it. We write the install-blob + bootstrap into the target and
-  // run the bootstrap there.
+  // chroots into it (the d-i equivalent of curtin's `in-target`). We write the
+  // install-blob + bootstrap into the target and run the bootstrap there — the
+  // exact same two artifacts the Ubuntu late-commands write.
   const lateCommand =
     // Beacon B — network is guaranteed up by late_command; ping home that the
     // installer is running, before the blob-decode + bootstrap. Best-effort.
@@ -229,7 +247,8 @@ d-i mirror/http/hostname string deb.debian.org
 d-i mirror/http/directory string /debian
 d-i mirror/http/proxy string
 
-### Account setup. Root login disabled; one admin user. Its password is LOCKED — "*" is the conventional
+### Account setup. Root login disabled; one admin user (matches Ubuntu's
+### autoinstall identity). Its password is LOCKED — "*" is the conventional
 ### /etc/shadow "no valid password, login disabled" marker (d-i writes the crypt
 ### field verbatim and no hashed input can ever match it). There is NO committed
 ### crypt hash on the image, so the flagship account exists (for its sudo
@@ -268,7 +287,7 @@ d-i apt-setup/cdrom/set-failed boolean false
 d-i cdrom-detect/eject boolean false
 
 ### Packages. Debian names for the bootstrap's deps (Node 20 itself comes from
-### the bootstrap's NodeSource one-liner).
+### the bootstrap's NodeSource one-liner, reused verbatim from the Ubuntu path).
 tasksel tasksel/first multiselect standard, ssh-server
 d-i pkgsel/include string git curl jq ca-certificates xxd cryptsetup cryptsetup-initramfs lvm2 gnupg openssl${wifiPackagesBlock}
 d-i pkgsel/upgrade select none
@@ -284,10 +303,11 @@ d-i grub-installer/only_debian boolean true
 d-i grub-installer/with_other_os boolean false
 d-i grub-installer/bootdev string default
 # Many boxes' UEFI firmware REJECT NVRAM boot-entry writes
-# ("failed to register the EFI boot entry: Invalid argument"), which aborts the
-# install. d-i instead installs an extra GRUB copy at the EFI
+# ("failed to register the EFI boot entry: Invalid argument"), which aborts a
+# subiquity install. d-i instead installs an extra GRUB copy at the EFI
 # removable-media path (/EFI/BOOT/BOOTX64.EFI), which boots with NO NVRAM entry.
-# Two keys, two owners, set together (belt + suspenders):
+# Two keys, two owners, set together (belt + suspenders — same intent as the
+# Ubuntu path setting both storage.grub.update_nvram AND the debconf key):
 #   - grub-installer/force-efi-extra-removable  → the d-i question
 #   - grub-efi-amd64 grub2/force_efi_extra_removable → the grub-efi pkg question
 # https://wiki.debian.org/UEFI
@@ -311,8 +331,8 @@ d-i finish-install/keep-consoles boolean true
 d-i finish-install/reboot_in_progress note
 d-i debian-installer/exit/poweroff boolean true
 
-### First-boot bootstrap — the install-blob + bootstrap, run in the installed
-### target (d-i in-target).
+### First-boot bootstrap — the same install-blob + bootstrap the Ubuntu path
+### writes, run in the installed target (d-i in-target == curtin in-target).
 d-i preseed/late_command string ${lateCommand}
 `;
 }
@@ -364,7 +384,8 @@ const luksBurnKeyCommand =
  * medium is tiny relative to a real disk, and removable media is excluded
  * outright. `/sys/block/<name>/removable` is 1 for removable media; `/size` is
  * in 512-byte sectors. Falls back to the old first-enumerated pick only if the
- * scan finds nothing (degenerate single-disk case).
+ * scan finds nothing (degenerate single-disk case). The Ubuntu/curtin path
+ * already selects `match: {size: largest}`, so this brings d-i to parity.
  */
 const resolveTargetDisk =
   `DISK=""; _best=0; ` +

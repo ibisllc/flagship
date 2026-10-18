@@ -226,7 +226,7 @@ public partial class MainWindow : Window
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Pick a Debian installer ISO",
+            Title = "Pick Ubuntu Server ISO",
             Filter = "ISO image (*.iso)|*.iso|All files|*.*",
             CheckFileExists = true,
         };

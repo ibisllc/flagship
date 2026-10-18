@@ -91,7 +91,7 @@ Boot flow (each step `report_phase`s to `/api/order/<serial>/status`):
 
 1. **booting** — live OS up; verify tools; **verify the recipe signature** with
    the baked genesis pubkey before trusting any field (port
-   `parse-trailer.sh` on branch `feat/other-os-installers`, openssl Ed25519). Refuse on
+   `packages/installer-netboot/parse-trailer.sh`, openssl Ed25519). Refuse on
    failure.
 2. **downloading** — bring up network (wired DHCP, else baked Wi-Fi via
    `wpa_supplicant`); `setup-apkrepos -1` + enable community; `apk add` the
@@ -237,7 +237,7 @@ unit (also needs node + live `.com`).
 ## 4. Build plan (remaining work)
 
 1. **Recipe signature verify** (security-critical, do first). Port
-   `parse-trailer.sh`'s openssl Ed25519 verify (branch `feat/other-os-installers`) into
+   `packages/installer-netboot/parse-trailer.sh`'s openssl Ed25519 verify into
    `phase_boot`; fail closed. Add a vitest that feeds a tampered blob.
 2. **apk --root base lay-down + GRUB**. Exercise `apk --root /mnt --initdb add
    alpine-base linux-lts ...` + `grub-install` (BIOS+UEFI) in QEMU; boot the

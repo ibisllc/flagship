@@ -42,8 +42,7 @@ API (attached to the global scope by the bundle):
 
 ```
 FlagshipPreseed.buildPreseedFromRecipe(recipeJson: string, burnOptsJson?: string): string
-FlagshipPreseed.buildBootstrapFromRecipe(recipeJson: string, burnOptsJson?: string): string
-FlagshipPreseed.buildInstallBlobJsonFromRecipe(recipeJson: string): string
+FlagshipPreseed.buildUserDataFromRecipe(recipeJson: string, burnOptsJson?: string): string
 ```
 
 `recipeJson` = the signed recipe (the builder has already verified the phone's
