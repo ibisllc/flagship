@@ -1,0 +1,2033 @@
+{
+  "about": "flagship/security-notice/v1 (docs/security-notices.md). canonical: the exact signed string. positive: notices that parse and verify under keys.authorityPubHex. reject: notices that must not be accepted, with the reason (malformed = fails the rules before any signature check; signature-invalid; unauthorized-signer). unsignable: bodies that break a rule, so no canonical string exists (code = the first rule broken, checked in the order the spec lists). outcomes: what a verified notice shows for a client at a clock (none/banner/lock). accept: how a stored state absorbs a fetched candidate (anti-rollback, fail open); expect.seq is the seq of the notice kept, or null. Seeds are raw Ed25519 seeds. All times are epoch ms; T0 = 1792000000000.",
+  "keys": {
+    "authoritySeedHex": "7777777777777777777777777777777777777777777777777777777777777777",
+    "authorityPubHex": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+    "otherSeedHex": "7878787878787878787878787878787878787878787878787878787878787878",
+    "otherPubHex": "ee31f83c88a71219a6fcf9bee0da9bc22620588f5a15a6145553504df9649e5c"
+  },
+  "t0": 1792000000000,
+  "positive": [
+    {
+      "name": "maintenance",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 1,
+        "kind": "maintenance",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 1792604800000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "We will update on {date}. Flagship may be briefly unavailable.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "053e8101986411f8d992a2e02b1821eb87a706ea37eb6f3aa1e0054c1d006e6391d95de613d95891341ca064147dcaa2eb0e002b42343d7440643f42c4c42e01"
+      },
+      "canonical": "flagship/security-notice/v1|c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7|1|maintenance|1792000000000|1792691200000|1792604800000|0|||0||We will update on {date}. Flagship may be briefly unavailable."
+    },
+    {
+      "name": "update-advisory",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 2,
+        "kind": "update-advisory",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 0,
+        "lockFrom": 0,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 0
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 0
+          }
+        },
+        "advisoryId": "FSA-2026-000",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "A new version is available with security fixes. Please update.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "733596e9d3c71478aa007ef301f872adf901a0e06bbf631901b3d40913b6b90629ce7de6c54b28f2a71baac7b83bf2eab01a494283198c7c4e7363e0ba6df00e"
+      },
+      "canonical": "flagship/security-notice/v1|c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7|2|update-advisory|1792000000000|1792691200000|0|0|android:40:0,ios:12:0|FSA-2026-000|0||A new version is available with security fixes. Please update."
+    },
+    {
+      "name": "update-required with a grace window",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "canonical": "flagship/security-notice/v1|c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7|3|update-required|1792000000000|1794592000000|1793209600000|1793209600000|android:40:2,ios:12:2,web:150:2|FSA-2026-001|1|A flaw in how a signed message is checked lets an attacker act as you.|You must update Flagship by {date}. Older versions will stop working."
+    },
+    {
+      "name": "update-required with no window",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 4,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 0,
+        "lockFrom": 1792000000000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship now. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "7c264f2825fca955e2a5eb97160f176c34c81811bf880feb9d1f0211a615e952708ad636b65763c332e9c010c646fa1f34e23fc5f88f0f22782ffeb3645ccb09"
+      },
+      "canonical": "flagship/security-notice/v1|c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7|4|update-required|1792000000000|1794592000000|0|1792000000000|android:40:2,ios:12:2,web:150:2|FSA-2026-001|1|A flaw in how a signed message is checked lets an attacker act as you.|You must update Flagship now. Older versions will stop working."
+    },
+    {
+      "name": "none (all clear)",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 5,
+        "kind": "none",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 0,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "304f617d94b2a8dcc4ac7af2162f8ed2387867b306f82676fc552be52787781225d936df5c61978b090e736bf47477fb789ab7f7e4034d413de151c1e2fb6803"
+      },
+      "canonical": "flagship/security-notice/v1|c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7|5|none|1792000000000|1792691200000|0|0|||0||"
+    }
+  ],
+  "reject": [
+    {
+      "name": "a changed message",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop. ",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "expect": "signature-invalid"
+    },
+    {
+      "name": "a lowered minimum build",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "ios": {
+            "minBuild": 99,
+            "minProtocol": 2
+          },
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "expect": "signature-invalid"
+    },
+    {
+      "name": "a later lockFrom",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793728000000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "expect": "signature-invalid"
+    },
+    {
+      "name": "a longer window than 30 days",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794678400000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "expect": "malformed"
+    },
+    {
+      "name": "update-required without an advisory id",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "expect": "malformed"
+    },
+    {
+      "name": "a signature of the wrong length",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "expect": "malformed"
+    },
+    {
+      "name": "signed by a key that is not the authority",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "ee31f83c88a71219a6fcf9bee0da9bc22620588f5a15a6145553504df9649e5c",
+        "signature": "51f122a95d6a5088e124fd17dc74586c8eaff03033cbbda5bcbf778e7d7b21e01441e226afe2a969dab05de6c1d23926d4e5d92b5138599996c10344bce6b502"
+      },
+      "expect": "unauthorized-signer"
+    },
+    {
+      "name": "a wrong envelope version",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 2,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "expect": "malformed"
+    },
+    {
+      "name": "an unknown platform",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "desktop": {
+            "minBuild": 1,
+            "minProtocol": 0
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "expect": "malformed"
+    }
+  ],
+  "unsignable": [
+    {
+      "name": "a window of 31 days",
+      "body": {
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794678400000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working."
+      },
+      "code": "window-too-long"
+    },
+    {
+      "name": "a window that ends before it starts",
+      "body": {
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1791999999999,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working."
+      },
+      "code": "window-order"
+    },
+    {
+      "name": "update-required without an advisory id",
+      "body": {
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working."
+      },
+      "code": "advisory-required"
+    },
+    {
+      "name": "update-required without a reason",
+      "body": {
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "",
+        "message": "You must update Flagship by {date}. Older versions will stop working."
+      },
+      "code": "reason-required"
+    },
+    {
+      "name": "update-required without platforms",
+      "body": {
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {},
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working."
+      },
+      "code": "platforms-required"
+    },
+    {
+      "name": "update-required whose lock starts before it is valid",
+      "body": {
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1791999999999,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working."
+      },
+      "code": "bad-lock-from"
+    },
+    {
+      "name": "update-required whose lock starts after it ends",
+      "body": {
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1794592000000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working."
+      },
+      "code": "bad-lock-from"
+    },
+    {
+      "name": "a deprecation the minimum protocol does not enforce",
+      "body": {
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 2,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working."
+      },
+      "code": "deprecates-not-enforced"
+    },
+    {
+      "name": "a maintenance notice with a lock",
+      "body": {
+        "seq": 1,
+        "kind": "maintenance",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 1792604800000,
+        "lockFrom": 1792086400000,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "We will update on {date}. Flagship may be briefly unavailable."
+      },
+      "code": "lock-from-not-allowed"
+    },
+    {
+      "name": "a maintenance notice with a minimum",
+      "body": {
+        "seq": 1,
+        "kind": "maintenance",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 1792604800000,
+        "lockFrom": 0,
+        "platforms": {
+          "ios": {
+            "minBuild": 5,
+            "minProtocol": 0
+          }
+        },
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "We will update on {date}. Flagship may be briefly unavailable."
+      },
+      "code": "minimum-not-allowed"
+    },
+    {
+      "name": "an advisory with no minimum",
+      "body": {
+        "seq": 1,
+        "kind": "update-advisory",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 0,
+        "lockFrom": 0,
+        "platforms": {
+          "ios": {
+            "minBuild": 0,
+            "minProtocol": 0
+          }
+        },
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "Please update."
+      },
+      "code": "minimum-required"
+    },
+    {
+      "name": "a message with a link",
+      "body": {
+        "seq": 1,
+        "kind": "maintenance",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 1792604800000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "Update at https://example.com now"
+      },
+      "code": "message-has-link"
+    },
+    {
+      "name": "a message with a pipe",
+      "body": {
+        "seq": 1,
+        "kind": "maintenance",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 1792604800000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "a|b"
+      },
+      "code": "bad-message"
+    },
+    {
+      "name": "a message over 280 characters",
+      "body": {
+        "seq": 1,
+        "kind": "maintenance",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 1792604800000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      "code": "bad-message"
+    },
+    {
+      "name": "a {date} with no event",
+      "body": {
+        "seq": 1,
+        "kind": "maintenance",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 0,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "We will update on {date}. Flagship may be briefly unavailable."
+      },
+      "code": "date-token-needs-event"
+    },
+    {
+      "name": "an event outside the window",
+      "body": {
+        "seq": 1,
+        "kind": "maintenance",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 1792777600000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "We will update on {date}. Flagship may be briefly unavailable."
+      },
+      "code": "bad-event-at"
+    },
+    {
+      "name": "an empty message",
+      "body": {
+        "seq": 1,
+        "kind": "maintenance",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 1792604800000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": ""
+      },
+      "code": "message-required"
+    },
+    {
+      "name": "seq 0",
+      "body": {
+        "seq": 0,
+        "kind": "maintenance",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 1792604800000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "We will update on {date}. Flagship may be briefly unavailable."
+      },
+      "code": "bad-seq"
+    },
+    {
+      "name": "an unsafe integer",
+      "body": {
+        "seq": 1,
+        "kind": "maintenance",
+        "validFrom": 1152921504606847000,
+        "validUntil": 1152921504606847000,
+        "eventAt": 1792604800000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "We will update on {date}. Flagship may be briefly unavailable."
+      },
+      "code": "bad-time"
+    }
+  ],
+  "outcomes": [
+    {
+      "name": "maintenance shows to everyone",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 1,
+        "kind": "maintenance",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 1792604800000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "We will update on {date}. Flagship may be briefly unavailable.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "053e8101986411f8d992a2e02b1821eb87a706ea37eb6f3aa1e0054c1d006e6391d95de613d95891341ca064147dcaa2eb0e002b42343d7440643f42c4c42e01"
+      },
+      "client": {
+        "platform": "ios",
+        "build": 1,
+        "protocol": 1
+      },
+      "now": 1792086400000,
+      "expect": {
+        "action": "banner",
+        "style": "maintenance"
+      }
+    },
+    {
+      "name": "maintenance is not yet valid",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 1,
+        "kind": "maintenance",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 1792604800000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "We will update on {date}. Flagship may be briefly unavailable.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "053e8101986411f8d992a2e02b1821eb87a706ea37eb6f3aa1e0054c1d006e6391d95de613d95891341ca064147dcaa2eb0e002b42343d7440643f42c4c42e01"
+      },
+      "client": {
+        "platform": "ios",
+        "build": 1,
+        "protocol": 1
+      },
+      "now": 1791999999999,
+      "expect": {
+        "action": "none",
+        "why": "not-yet"
+      }
+    },
+    {
+      "name": "maintenance shows at validFrom",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 1,
+        "kind": "maintenance",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 1792604800000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "We will update on {date}. Flagship may be briefly unavailable.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "053e8101986411f8d992a2e02b1821eb87a706ea37eb6f3aa1e0054c1d006e6391d95de613d95891341ca064147dcaa2eb0e002b42343d7440643f42c4c42e01"
+      },
+      "client": {
+        "platform": "ios",
+        "build": 1,
+        "protocol": 1
+      },
+      "now": 1792000000000,
+      "expect": {
+        "action": "banner",
+        "style": "maintenance"
+      }
+    },
+    {
+      "name": "maintenance has expired at validUntil",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 1,
+        "kind": "maintenance",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 1792604800000,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "We will update on {date}. Flagship may be briefly unavailable.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "053e8101986411f8d992a2e02b1821eb87a706ea37eb6f3aa1e0054c1d006e6391d95de613d95891341ca064147dcaa2eb0e002b42343d7440643f42c4c42e01"
+      },
+      "client": {
+        "platform": "ios",
+        "build": 1,
+        "protocol": 1
+      },
+      "now": 1792691200000,
+      "expect": {
+        "action": "none",
+        "why": "expired"
+      }
+    },
+    {
+      "name": "advisory nags a build below the minimum",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 2,
+        "kind": "update-advisory",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 0,
+        "lockFrom": 0,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 0
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 0
+          }
+        },
+        "advisoryId": "FSA-2026-000",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "A new version is available with security fixes. Please update.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "733596e9d3c71478aa007ef301f872adf901a0e06bbf631901b3d40913b6b90629ce7de6c54b28f2a71baac7b83bf2eab01a494283198c7c4e7363e0ba6df00e"
+      },
+      "client": {
+        "platform": "ios",
+        "build": 11,
+        "protocol": 1
+      },
+      "now": 1792086400000,
+      "expect": {
+        "action": "banner",
+        "style": "update"
+      }
+    },
+    {
+      "name": "advisory is silent for the minimum build",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 2,
+        "kind": "update-advisory",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 0,
+        "lockFrom": 0,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 0
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 0
+          }
+        },
+        "advisoryId": "FSA-2026-000",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "A new version is available with security fixes. Please update.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "733596e9d3c71478aa007ef301f872adf901a0e06bbf631901b3d40913b6b90629ce7de6c54b28f2a71baac7b83bf2eab01a494283198c7c4e7363e0ba6df00e"
+      },
+      "client": {
+        "platform": "ios",
+        "build": 12,
+        "protocol": 1
+      },
+      "now": 1792086400000,
+      "expect": {
+        "action": "none",
+        "why": "up-to-date"
+      }
+    },
+    {
+      "name": "advisory is silent for another platform",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 2,
+        "kind": "update-advisory",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 0,
+        "lockFrom": 0,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 0
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 0
+          }
+        },
+        "advisoryId": "FSA-2026-000",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "A new version is available with security fixes. Please update.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "733596e9d3c71478aa007ef301f872adf901a0e06bbf631901b3d40913b6b90629ce7de6c54b28f2a71baac7b83bf2eab01a494283198c7c4e7363e0ba6df00e"
+      },
+      "client": {
+        "platform": "web",
+        "build": 1,
+        "protocol": 1
+      },
+      "now": 1792086400000,
+      "expect": {
+        "action": "none",
+        "why": "other-platform"
+      }
+    },
+    {
+      "name": "update-required nags during the grace window",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "client": {
+        "platform": "ios",
+        "build": 11,
+        "protocol": 1
+      },
+      "now": 1792086400000,
+      "expect": {
+        "action": "banner",
+        "style": "update"
+      }
+    },
+    {
+      "name": "update-required locks at lockFrom",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "client": {
+        "platform": "ios",
+        "build": 11,
+        "protocol": 1
+      },
+      "now": 1793209600000,
+      "expect": {
+        "action": "lock"
+      }
+    },
+    {
+      "name": "update-required locks after lockFrom for a low protocol only",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "client": {
+        "platform": "ios",
+        "build": 50,
+        "protocol": 1
+      },
+      "now": 1793296000000,
+      "expect": {
+        "action": "lock"
+      }
+    },
+    {
+      "name": "update-required spares a client at the minimum",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "client": {
+        "platform": "ios",
+        "build": 12,
+        "protocol": 2
+      },
+      "now": 1793296000000,
+      "expect": {
+        "action": "none",
+        "why": "up-to-date"
+      }
+    },
+    {
+      "name": "update-required spares a client above the minimum",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "client": {
+        "platform": "ios",
+        "build": 13,
+        "protocol": 3
+      },
+      "now": 1793296000000,
+      "expect": {
+        "action": "none",
+        "why": "up-to-date"
+      }
+    },
+    {
+      "name": "update-required is silent for another platform when unlisted",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "975017f68828fea837446da96249be403b6b8bcc5bf56843952df3dc8eb448b6d8dcbdeb6cefc76cc3482db2bb49353d8c74df55d07a1e8f7752a4f667f23e08"
+      },
+      "client": {
+        "platform": "android",
+        "build": 1,
+        "protocol": 1
+      },
+      "now": 1793296000000,
+      "expect": {
+        "action": "none",
+        "why": "other-platform"
+      }
+    },
+    {
+      "name": "update-required never locks past validUntil",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "client": {
+        "platform": "ios",
+        "build": 11,
+        "protocol": 1
+      },
+      "now": 1794592000000,
+      "expect": {
+        "action": "none",
+        "why": "expired"
+      }
+    },
+    {
+      "name": "update-required locks the web shell below its minimum",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "client": {
+        "platform": "web",
+        "build": 149,
+        "protocol": 2
+      },
+      "now": 1793296000000,
+      "expect": {
+        "action": "lock"
+      }
+    },
+    {
+      "name": "update-required with no window locks at once",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 4,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 0,
+        "lockFrom": 1792000000000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship now. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "7c264f2825fca955e2a5eb97160f176c34c81811bf880feb9d1f0211a615e952708ad636b65763c332e9c010c646fa1f34e23fc5f88f0f22782ffeb3645ccb09"
+      },
+      "client": {
+        "platform": "ios",
+        "build": 11,
+        "protocol": 1
+      },
+      "now": 1792000000001,
+      "expect": {
+        "action": "lock"
+      }
+    },
+    {
+      "name": "update-required is not yet valid",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "client": {
+        "platform": "ios",
+        "build": 11,
+        "protocol": 1
+      },
+      "now": 1791999999999,
+      "expect": {
+        "action": "none",
+        "why": "not-yet"
+      }
+    },
+    {
+      "name": "none shows nothing",
+      "notice": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 5,
+        "kind": "none",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 0,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "304f617d94b2a8dcc4ac7af2162f8ed2387867b306f82676fc552be52787781225d936df5c61978b090e736bf47477fb789ab7f7e4034d413de151c1e2fb6803"
+      },
+      "client": {
+        "platform": "ios",
+        "build": 1,
+        "protocol": 1
+      },
+      "now": 1792086400000,
+      "expect": {
+        "action": "none",
+        "why": "kind-none"
+      }
+    }
+  ],
+  "accept": [
+    {
+      "name": "the first notice is stored",
+      "store": {
+        "highestSeq": 0,
+        "notice": null
+      },
+      "candidate": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "authorityKeys": [
+        "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7"
+      ],
+      "expect": {
+        "highestSeq": 3,
+        "seq": 3,
+        "refused": null
+      }
+    },
+    {
+      "name": "a newer notice replaces the stored one",
+      "store": {
+        "highestSeq": 3,
+        "notice": {
+          "type": "SecurityNotice",
+          "version": 1,
+          "seq": 3,
+          "kind": "update-required",
+          "validFrom": 1792000000000,
+          "validUntil": 1794592000000,
+          "eventAt": 1793209600000,
+          "lockFrom": 1793209600000,
+          "platforms": {
+            "android": {
+              "minBuild": 40,
+              "minProtocol": 2
+            },
+            "ios": {
+              "minBuild": 12,
+              "minProtocol": 2
+            },
+            "web": {
+              "minBuild": 150,
+              "minProtocol": 2
+            }
+          },
+          "advisoryId": "FSA-2026-001",
+          "deprecatesProtocol": 1,
+          "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+          "message": "You must update Flagship by {date}. Older versions will stop working.",
+          "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+          "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+        }
+      },
+      "candidate": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 5,
+        "kind": "none",
+        "validFrom": 1792000000000,
+        "validUntil": 1792691200000,
+        "eventAt": 0,
+        "lockFrom": 0,
+        "platforms": {},
+        "advisoryId": "",
+        "deprecatesProtocol": 0,
+        "reason": "",
+        "message": "",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "304f617d94b2a8dcc4ac7af2162f8ed2387867b306f82676fc552be52787781225d936df5c61978b090e736bf47477fb789ab7f7e4034d413de151c1e2fb6803"
+      },
+      "authorityKeys": [
+        "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7"
+      ],
+      "expect": {
+        "highestSeq": 5,
+        "seq": 5,
+        "refused": null
+      }
+    },
+    {
+      "name": "an older notice is refused as a rollback",
+      "store": {
+        "highestSeq": 5,
+        "notice": {
+          "type": "SecurityNotice",
+          "version": 1,
+          "seq": 5,
+          "kind": "none",
+          "validFrom": 1792000000000,
+          "validUntil": 1792691200000,
+          "eventAt": 0,
+          "lockFrom": 0,
+          "platforms": {},
+          "advisoryId": "",
+          "deprecatesProtocol": 0,
+          "reason": "",
+          "message": "",
+          "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+          "signature": "304f617d94b2a8dcc4ac7af2162f8ed2387867b306f82676fc552be52787781225d936df5c61978b090e736bf47477fb789ab7f7e4034d413de151c1e2fb6803"
+        }
+      },
+      "candidate": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "authorityKeys": [
+        "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7"
+      ],
+      "expect": {
+        "highestSeq": 5,
+        "seq": 5,
+        "refused": "stale"
+      }
+    },
+    {
+      "name": "the same seq again changes nothing",
+      "store": {
+        "highestSeq": 3,
+        "notice": {
+          "type": "SecurityNotice",
+          "version": 1,
+          "seq": 3,
+          "kind": "update-required",
+          "validFrom": 1792000000000,
+          "validUntil": 1794592000000,
+          "eventAt": 1793209600000,
+          "lockFrom": 1793209600000,
+          "platforms": {
+            "android": {
+              "minBuild": 40,
+              "minProtocol": 2
+            },
+            "ios": {
+              "minBuild": 12,
+              "minProtocol": 2
+            },
+            "web": {
+              "minBuild": 150,
+              "minProtocol": 2
+            }
+          },
+          "advisoryId": "FSA-2026-001",
+          "deprecatesProtocol": 1,
+          "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+          "message": "You must update Flagship by {date}. Older versions will stop working.",
+          "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+          "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+        }
+      },
+      "candidate": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "authorityKeys": [
+        "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7"
+      ],
+      "expect": {
+        "highestSeq": 3,
+        "seq": 3,
+        "refused": "stale"
+      }
+    },
+    {
+      "name": "a notice from the wrong signer is refused",
+      "store": {
+        "highestSeq": 0,
+        "notice": null
+      },
+      "candidate": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "ee31f83c88a71219a6fcf9bee0da9bc22620588f5a15a6145553504df9649e5c",
+        "signature": "51f122a95d6a5088e124fd17dc74586c8eaff03033cbbda5bcbf778e7d7b21e01441e226afe2a969dab05de6c1d23926d4e5d92b5138599996c10344bce6b502"
+      },
+      "authorityKeys": [
+        "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7"
+      ],
+      "expect": {
+        "highestSeq": 0,
+        "seq": null,
+        "refused": "unauthorized-signer"
+      }
+    },
+    {
+      "name": "no authority keys refuses everything",
+      "store": {
+        "highestSeq": 0,
+        "notice": null
+      },
+      "candidate": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "authorityKeys": [],
+      "expect": {
+        "highestSeq": 0,
+        "seq": null,
+        "refused": "unauthorized-signer"
+      }
+    },
+    {
+      "name": "an empty response changes nothing",
+      "store": {
+        "highestSeq": 3,
+        "notice": {
+          "type": "SecurityNotice",
+          "version": 1,
+          "seq": 3,
+          "kind": "update-required",
+          "validFrom": 1792000000000,
+          "validUntil": 1794592000000,
+          "eventAt": 1793209600000,
+          "lockFrom": 1793209600000,
+          "platforms": {
+            "android": {
+              "minBuild": 40,
+              "minProtocol": 2
+            },
+            "ios": {
+              "minBuild": 12,
+              "minProtocol": 2
+            },
+            "web": {
+              "minBuild": 150,
+              "minProtocol": 2
+            }
+          },
+          "advisoryId": "FSA-2026-001",
+          "deprecatesProtocol": 1,
+          "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+          "message": "You must update Flagship by {date}. Older versions will stop working.",
+          "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+          "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+        }
+      },
+      "candidate": null,
+      "authorityKeys": [
+        "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7"
+      ],
+      "expect": {
+        "highestSeq": 3,
+        "seq": 3,
+        "refused": null
+      }
+    },
+    {
+      "name": "garbage changes nothing",
+      "store": {
+        "highestSeq": 3,
+        "notice": {
+          "type": "SecurityNotice",
+          "version": 1,
+          "seq": 3,
+          "kind": "update-required",
+          "validFrom": 1792000000000,
+          "validUntil": 1794592000000,
+          "eventAt": 1793209600000,
+          "lockFrom": 1793209600000,
+          "platforms": {
+            "android": {
+              "minBuild": 40,
+              "minProtocol": 2
+            },
+            "ios": {
+              "minBuild": 12,
+              "minProtocol": 2
+            },
+            "web": {
+              "minBuild": 150,
+              "minProtocol": 2
+            }
+          },
+          "advisoryId": "FSA-2026-001",
+          "deprecatesProtocol": 1,
+          "reason": "A flaw in how a signed message is checked lets an attacker act as you.",
+          "message": "You must update Flagship by {date}. Older versions will stop working.",
+          "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+          "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+        }
+      },
+      "candidate": {
+        "type": "SecurityNotice"
+      },
+      "authorityKeys": [
+        "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7"
+      ],
+      "expect": {
+        "highestSeq": 3,
+        "seq": 3,
+        "refused": "malformed"
+      }
+    },
+    {
+      "name": "a tampered notice is refused",
+      "store": {
+        "highestSeq": 0,
+        "notice": null
+      },
+      "candidate": {
+        "type": "SecurityNotice",
+        "version": 1,
+        "seq": 3,
+        "kind": "update-required",
+        "validFrom": 1792000000000,
+        "validUntil": 1794592000000,
+        "eventAt": 1793209600000,
+        "lockFrom": 1793209600000,
+        "platforms": {
+          "android": {
+            "minBuild": 40,
+            "minProtocol": 2
+          },
+          "ios": {
+            "minBuild": 12,
+            "minProtocol": 2
+          },
+          "web": {
+            "minBuild": 150,
+            "minProtocol": 2
+          }
+        },
+        "advisoryId": "FSA-2026-001",
+        "deprecatesProtocol": 1,
+        "reason": "x",
+        "message": "You must update Flagship by {date}. Older versions will stop working.",
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "a9366cca5ef616731c025836cd8ef77fc0fad6b24f5cba192d9cfba9f2e52a046c1c537d53cc2bc815838db08491bdaa5b09b8669d03b0702dc14a1a5276da03"
+      },
+      "authorityKeys": [
+        "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7"
+      ],
+      "expect": {
+        "highestSeq": 0,
+        "seq": null,
+        "refused": "signature-invalid"
+      }
+    }
+  ]
+}
