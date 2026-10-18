@@ -3,8 +3,12 @@
 Status: phase 1 built on `main` (2026-10-18): the envelope and vectors in
 TypeScript, the maintainers' tool, `GET /api/notices` on `.com`, the webapp
 client and its gym scenarios. Phase 2 (owner request): the iOS and Android
-ports from the spec in "Client behaviour" below. Nothing is deployed or
-signed yet: the committed notice is `null`.
+ports from the spec in "Client behaviour" below, built on `main` 2026-10-18
+(iOS: `SecurityNotice.swift`, `SecurityNoticeCenter.swift`, `UpdateLock.swift`,
+`Notices/NoticeViews.swift`, gym `GymNoticeTests`; the lock is its own window
+above every sheet, so the backup runs in a sheet of that window, and a
+build that cannot read its `CFBundleVersion` never locks by build). Nothing is
+deployed or signed yet: the committed notice is `null`.
 
 Two features ride one signed document.
 

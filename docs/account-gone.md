@@ -173,7 +173,7 @@ Rules:
 
 ## Native notes
 
-- iOS: one place sees every answer (the `FlagshipServerClient` request path);
+- iOS (built 2026-10-18): the one place that sees every answer is `URLSession.gatedData` (`UpdateLock.swift`), which every API client calls; `AccountGone.swift` holds the detector, `Notices/AccountGoneViews.swift` the screen (its own window above every sheet), `AdminKeyWarning.swift` the exact strings. Original note: one place sees every answer (the `FlagshipServerClient` request path);
   put the check there, publish the state on the app model, and stop the
   `liveSync`/status tasks from it. The Release build has no mock clients, so
   the mock-gym scenario goes behind the same `#if DEBUG` seam as the others.

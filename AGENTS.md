@@ -269,8 +269,15 @@ of the last check here: **not yet checked**.
   admin key (also Settings Sign out and Remove this device; "Save my account
   key first" opens the key export); the 404 is metered on the `account-resolve` budget and the
   read-token mint has its own. Gym `gym-gone.spec.ts`, parity row
-  `account-gone`. Needs a `.com` deploy (and the shell with it); iOS and
-  Android implement the same contract next (docs "Native notes").
+  `account-gone`. Needs a `.com` deploy (and the shell with it). iOS (and
+  Android) do the same on `main`: the one request gate (`gatedData`) sees every
+  answer, later calls for the gone account are answered locally, a window
+  above everything shows the screen, and Settings Sign out / Remove this
+  device and the screen's Create / Remove warn first when the device holds an
+  admin root or a server session (gym `GymAccountGoneTests`). "Save my
+  servers' data" stays disabled ("Coming soon") until the rescue flow registers
+  itself (`RescueFlowRegistry`); "Save my data first" opens the account-key
+  backup meanwhile. Needs iOS/Android store builds.
 - **Security notices (2026-10-18, `docs/security-notices.md`).** One
   maintainer-signed notice, picked up from one anonymous `GET /api/notices`,
   for (A) a dismissible "we will update on {date}" banner and (B) a full-screen
@@ -281,9 +288,12 @@ of the last check here: **not yet checked**.
   `--security-reason`), never by `.com`; apps verify against the baked pin and
   fail open. On `main`: the envelope and vectors, the tool, the `.com` route
   (committed notice `null`), the webapp (shell v144) and its gym scenarios.
-  **Phase 2 open:** iOS and Android ports from the doc's "Client behaviour
-  spec" (parity `security-notices`). Needs a `.com` deploy and a webapp deploy
-  to go live; nothing is signed. The version-window rule for protocol changes
+  The iOS port is on `main` (`SecurityNotice.swift`, the shared vectors,
+  one anonymous fetch on its own session, the banner, and the lock in its own
+  window above every sheet; while locked every API request goes through
+  `gatedData`, which refuses writes and box calls; gym `GymNoticeTests`), and
+  Android's port too: both need store builds. Needs a `.com` deploy and a
+  webapp deploy to go live; nothing is signed. The version-window rule for protocol changes
   is a design only (section 7: not built; window 0 for a security break).
 - **Per-app disk limits (2026-10-16, `appQuota/`, docs/app-runtimes.md §5.3).**
   Hold each app to its share of the backup policy's limit: a files folder is
