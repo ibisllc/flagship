@@ -218,9 +218,9 @@ fun SettingsScreen(nav: NavController) {
                     iconTint = if (accountType == "multi") FS.colors.success else null,
                     title = "Account security",
                     subtitle = when (accountType) {
-                        "multi" -> "Multi-device + 2FA — recovery needs a code."
+                        "multi" -> "Code protection on — recovery needs a code."
                         "single" -> "Single-device — recovery is a 3-day wait."
-                        else -> "Single-device or multi-device + 2FA."
+                        else -> "Single-device, or code protection on."
                     },
                     onClick = { nav.navigate("account-security") },
                     testTag = "settings-open-account-security",

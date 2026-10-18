@@ -57,7 +57,7 @@ fun auditEventLabel(kind: String): String = when (kind) {
     "re-pair-initiated"   -> "Started device replacement"
     "re-pair-expired"     -> "Device replacement expired"
     "re-pair-refused-no-credential" -> "Refused a device replacement"
-    "account-type-changed-single-to-multi" -> "Switched to multi-device"
+    "account-type-changed-single-to-multi" -> "Turned on code protection"
     "account-type-changed-multi-to-single" -> "Switched to single-device"
     "ct-unexpected-cert"  -> "Unexpected certificate observed"
     "invite-created"      -> "Someone was invited to an app"

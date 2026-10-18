@@ -35,7 +35,7 @@ import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import com.flagshipserver.app.ui.components.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -419,6 +419,14 @@ fun AppDbQueryScreen(nav: NavController, serviceId: String, store: String) {
 }
 
 private val CELL_WIDTH = 160.dp
+
+/** Wide enough that a few columns fill the card (many columns scroll sideways at the minimum). */
+@androidx.compose.runtime.Composable
+private fun cellWidthFor(columns: Int): androidx.compose.ui.unit.Dp {
+    val screen = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp
+    val card = screen.coerceAtMost(com.flagshipserver.app.ui.theme.FSLayout.readingMaxWidth) - FS.space.s4 * 3f
+    return ((card - NUMBER_WIDTH) / columns.coerceAtLeast(1).toFloat()).coerceAtLeast(CELL_WIDTH)
+}
 private val NUMBER_WIDTH = 48.dp
 private const val CELL_MAX_CHARS = 300
 
@@ -430,6 +438,7 @@ private fun LazyListScope.resultRows(
     firstRowNumber: Int,
 ) {
     item(key = "db-header") {
+        val cellWidth = cellWidthFor(columns.size)
         Row(
             Modifier
                 .fillMaxWidth()
@@ -441,7 +450,7 @@ private fun LazyListScope.resultRows(
         ) {
             Spacer(Modifier.width(NUMBER_WIDTH))
             columns.forEach { c ->
-                Column(Modifier.width(CELL_WIDTH).padding(end = FS.space.s2)) {
+                Column(Modifier.width(cellWidth).padding(end = FS.space.s2)) {
                     Text(
                         c.name,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -461,6 +470,7 @@ private fun LazyListScope.resultRows(
         }
     }
     itemsIndexed(rows) { i, row ->
+        val cellWidth = cellWidthFor(columns.size)
         Row(
             Modifier
                 .fillMaxWidth()
@@ -483,7 +493,7 @@ private fun LazyListScope.resultRows(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                    modifier = Modifier.width(CELL_WIDTH).padding(end = FS.space.s2),
+                    modifier = Modifier.width(cellWidth).padding(end = FS.space.s2),
                 )
             }
         }

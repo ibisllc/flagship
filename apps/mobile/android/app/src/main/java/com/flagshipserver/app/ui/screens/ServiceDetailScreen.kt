@@ -34,7 +34,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import com.flagshipserver.app.ui.components.OutlinedTextField
 import androidx.compose.material3.Text
 import com.flagshipserver.app.ui.components.TextButton
 import androidx.compose.runtime.Composable
@@ -712,17 +712,15 @@ private fun Header(app: AppSummary) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyLarge,
             )
-            // `id:` is the IMMUTABLE composite package id (`<creator>--<slug>`, double
-            // dash). It never changes — Replace only rotates the user-facing URL stem.
-            Text(
-                text = buildString {
-                    app.version?.let { append("ver: ").append(it).append("  ·  ") }
-                    append("id: ").append(app.serviceId)
-                },
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.semantics { testTag = "app-detail-package-id" },
-            )
+            // The package id stays out of the page; the version is the only technical line.
+            app.version?.takeIf { it.isNotBlank() }?.let { v ->
+                Text(
+                    text = "Version $v",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.semantics { testTag = "app-detail-version" },
+                )
+            }
             app.summary?.takeIf { it.isNotEmpty() }?.let {
                 Text(
                     it,

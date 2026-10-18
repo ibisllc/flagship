@@ -89,7 +89,7 @@ class AccountSecurityViewModel(
 
         val issuedAt = System.currentTimeMillis()
         val signature = try {
-            val signer = Keystore.deriveIRK("Enable multi-device + 2FA", Keystore.currentIrkVersion())
+            val signer = Keystore.deriveIRK("Turn on code protection", Keystore.currentIrkVersion())
             signer.sign(canonicalEnrollBegin(user, issuedAt))
         } catch (e: Throwable) {
             _phase.value = AccountSecurityPhase.Failed("Couldn't sign enroll-begin: ${e.message}")
@@ -113,7 +113,7 @@ class AccountSecurityViewModel(
         } catch (e: Throwable) {
             val msg = e.message.orEmpty()
             val friendly = com.flagshipserver.app.core.RateLimitedException.messageOf(e) ?: if (msg.contains("503")) {
-                "Multi-device + 2FA isn't configured on this server yet. Try again later."
+                "Code protection isn't available on this server yet. Try again later."
             } else {
                 "Couldn't start enrollment: $msg"
             }
@@ -191,7 +191,7 @@ class AccountSecurityViewModel(
         _phase.value = AccountSecurityPhase.Disabling
         val issuedAt = System.currentTimeMillis()
         val signature = try {
-            val signer = Keystore.deriveIRK("Disable multi-device + 2FA", Keystore.currentIrkVersion())
+            val signer = Keystore.deriveIRK("Turn off code protection", Keystore.currentIrkVersion())
             signer.sign(canonicalDisable(user, issuedAt))
         } catch (e: Throwable) {
             _phase.value = AccountSecurityPhase.Failed("Couldn't sign disable: ${e.message}")

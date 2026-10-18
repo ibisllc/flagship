@@ -6,6 +6,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -147,11 +148,8 @@ private fun InitiateMode(vm: MigrationViewModel) {
     val errorMessage by vm.errorMessage.collectAsState()
     val scope = rememberCoroutineScope()
 
-    Text(
-        "Migrate ${vm.serverFqdn}",
-        color = MaterialTheme.colorScheme.onSurface,
-        style = MaterialTheme.typography.titleLarge,
-    )
+    Text("Migrate to a new server", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
+    Text(vm.serverFqdn, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
     if (vm.backupMissing) {
         MigrateCallout(
             "No backup is set up for this server. The migration moves data through backup, so turn backup on first.",
@@ -199,15 +197,12 @@ private fun ProgressMode(vm: MigrationViewModel) {
     val errorMessage by vm.errorMessage.collectAsState()
     val scope = rememberCoroutineScope()
 
-    Text(
-        "Migrating ${vm.serverFqdn}",
-        color = MaterialTheme.colorScheme.onSurface,
-        style = MaterialTheme.typography.titleLarge,
-    )
+    Text("Moving to a new server", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
+    Text(vm.serverFqdn, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
 
     if (session?.phase == "initiated") {
         MigrateCallout(
-            "Next: add the NEW server with Add a server (any name: it becomes ${vm.serverFqdn} at take-over). It attaches here by itself once it's online.",
+            "Next: add the new server with Add/Restore server (any name: it becomes ${vm.serverFqdn} when it takes over). It attaches here by itself once it's online.",
             FS.colors.primary,
         )
     }
@@ -265,11 +260,16 @@ private fun ProgressMode(vm: MigrationViewModel) {
         // Secondary, not danger — aborting is the SAFE exit (mirrors the
         // webapp): the old server stays active with all its data.
         FSSecondaryButton(
-            label = if (working) "Working…" else "Stop the migration (the old server keeps all its data)",
+            label = if (working) "Working…" else "Stop the migration",
             onClick = { if (!working) scope.launch { vm.abort() } },
             enabled = !working,
             block = true,
             modifier = Modifier.semantics { contentDescription = "migrate-abort" },
+        )
+        Text(
+            "Safe to stop: the old server keeps all its data.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
         )
     }
 }
@@ -290,14 +290,14 @@ private fun MigrateStepRow(step: ServerMigrationTimeline.Step) {
             .padding(horizontal = FS.space.s4, vertical = FS.space.s1)
             .semantics { contentDescription = "migrate-step-${step.key}-$stateName" },
     ) {
-        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
             when (step.state) {
                 ServerMigrationTimeline.StepState.DONE ->
-                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = FS.colors.success)
+                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = FS.colors.success, modifier = Modifier.size(28.dp))
                 ServerMigrationTimeline.StepState.ACTIVE ->
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
+                    CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.5.dp, color = MaterialTheme.colorScheme.primary)
                 ServerMigrationTimeline.StepState.PENDING ->
-                    Icon(Icons.Outlined.RadioButtonUnchecked, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
+                    Icon(Icons.Outlined.RadioButtonUnchecked, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(28.dp))
             }
         }
         Text(

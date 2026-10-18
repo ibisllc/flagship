@@ -502,7 +502,8 @@ fun FSListRow(
                 .padding(horizontal = FS.space.s4, vertical = FS.space.s3)
                 .heightIn(min = 48.dp),
         ) {
-            when (leading) {
+            // At accessibility text sizes the tile gives its width to the words.
+            if (androidx.compose.ui.platform.LocalDensity.current.fontScale < 1.8f) when (leading) {
                 is FSListLeading.Icon -> Box(
                     modifier = Modifier
                         .size(40.dp)

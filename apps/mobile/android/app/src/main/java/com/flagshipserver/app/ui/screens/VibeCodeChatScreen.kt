@@ -7,6 +7,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.semantics.contentDescription
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -27,7 +28,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import com.flagshipserver.app.ui.components.OutlinedTextField
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -448,13 +449,6 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                     .verticalScroll(scroll),
                 verticalArrangement = Arrangement.spacedBy(FS.space.s3),
             ) {
-                Text(
-                    listOfNotNull(s.appId?.let { "app: $it" }, "session: ${s.id}").joinToString(" · "),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(horizontal = FS.space.s1),
-                )
-
                 FSCard {
                     Column {
                         Text(
@@ -631,7 +625,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                             singleLine = true,
                             visualTransformation = PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
+                            textStyle = MaterialTheme.typography.bodyLarge,
                             shape = MaterialTheme.shapes.small,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -792,26 +786,42 @@ internal fun GroupedChatModelBar(
     }
 }
 
-/** One turn: who said it, what, any attachments, and a Flagship reply's cost. */
+/** One turn as a message bubble: yours on the right in the teal, the AI's on the left, in the
+ *  normal type; attachments sit in the bubble and a Flagship reply's cost under it. */
 @Composable
 internal fun ChatMessage(msg: com.flagshipserver.app.api.VibeCodeSessionMessage) {
-    Text(
-        if (msg.role == "user") "You" else "AI",
-        color = if (msg.role == "user") MaterialTheme.colorScheme.onSurfaceVariant else FS.colors.accentText,
-        style = MaterialTheme.typography.labelMedium,
+    val mine = msg.role == "user"
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(
+        topStart = 16.dp, topEnd = 16.dp,
+        bottomStart = if (mine) 16.dp else 4.dp, bottomEnd = if (mine) 4.dp else 16.dp,
     )
-    Text(msg.text, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
-    val attached = msg.attachments.orEmpty()
-    if (attached.isNotEmpty()) {
-        Spacer(Modifier.height(FS.space.s1))
-        AttachmentChips(attached)
+    Column(
+        Modifier.fillMaxWidth().padding(bottom = FS.space.s3),
+        horizontalAlignment = if (mine) Alignment.End else Alignment.Start,
+    ) {
+        androidx.compose.material3.Surface(
+            shape = shape,
+            color = if (mine) FS.colors.fill else MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = if (mine) FS.colors.onAccent else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier
+                .fillMaxWidth(0.88f)
+                .semantics { contentDescription = if (mine) "You" else "AI" },
+        ) {
+            Column(Modifier.padding(horizontal = FS.space.s3, vertical = FS.space.s2)) {
+                Text(msg.text, style = MaterialTheme.typography.bodyLarge)
+                val attached = msg.attachments.orEmpty()
+                if (attached.isNotEmpty()) {
+                    Spacer(Modifier.height(FS.space.s1))
+                    AttachmentChips(attached)
+                }
+            }
+        }
+        val credits = msg.credits
+        if (!mine && credits != null) {
+            Spacer(Modifier.height(2.dp))
+            CreditsLine(credits)
+        }
     }
-    val credits = msg.credits
-    if (msg.role == "assistant" && credits != null) {
-        Spacer(Modifier.height(2.dp))
-        CreditsLine(credits)
-    }
-    Spacer(Modifier.height(FS.space.s3))
 }
 
 /** Attach buttons (and an optional [trailing] control, the composer's Send),

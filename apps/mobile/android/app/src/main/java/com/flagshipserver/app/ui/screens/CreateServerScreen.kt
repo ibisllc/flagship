@@ -870,7 +870,7 @@ private fun DiskEncryptionPicker(
     BootUnlockOption(
         selected = encryptDisk,
         title = "Encrypt the disk (recommended)",
-        subtitle = "Full-disk LUKS encryption. The server fetches its unlock key at boot, so it needs a network connection to come back up after a power cut.",
+        subtitle = "The whole disk is encrypted. The server fetches its unlock key at boot, so it needs a network connection to come back up after a power cut.",
         onClick = { onEncryptDisk(true) },
     )
     Spacer(Modifier.height(FS.space.s2))

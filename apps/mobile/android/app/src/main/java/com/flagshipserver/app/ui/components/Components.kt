@@ -19,7 +19,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import com.flagshipserver.app.ui.components.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import com.flagshipserver.app.ui.components.TextButton
@@ -221,7 +221,6 @@ fun FSField(
         onValueChange = onValueChange,
         label = { Text(label) },
         placeholder = if (placeholder.isNotEmpty()) ({ Text(placeholder) }) else null,
-        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(focusedLabelColor = FS.colors.accentText),
         supportingText = if (sub != null) ({ Text(sub) }) else null,
         isError = error != null,
         singleLine = true,
@@ -238,7 +237,6 @@ fun FSField(
         shape = MaterialTheme.shapes.small,
         modifier = Modifier
             .fillMaxWidth()
-            .fsFocusRing(8.dp)
             .then(if (fieldTag != null) Modifier.testTag(fieldTag) else Modifier),
     )
     }
@@ -369,3 +367,58 @@ fun RadioButton(
     enabled = enabled,
     colors = colors,
 )
+
+/** The one text-input look: a sunken fill with no outline at rest, 8 dp corners, the brand
+ *  teal ring when focused (and the error colour when refused). Same parameters as Material's,
+ *  imported in its place, so every field in the app reads the same. */
+@Composable
+fun OutlinedTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    readOnly: Boolean = false,
+    textStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyLarge,
+    label: (@Composable () -> Unit)? = null,
+    placeholder: (@Composable () -> Unit)? = null,
+    supportingText: (@Composable () -> Unit)? = null,
+    isError: Boolean = false,
+    visualTransformation: androidx.compose.ui.text.input.VisualTransformation = androidx.compose.ui.text.input.VisualTransformation.None,
+    keyboardOptions: androidx.compose.foundation.text.KeyboardOptions = androidx.compose.foundation.text.KeyboardOptions.Default,
+    singleLine: Boolean = false,
+    maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
+    minLines: Int = 1,
+    shape: androidx.compose.ui.graphics.Shape = MaterialTheme.shapes.small,
+    colors: androidx.compose.material3.TextFieldColors = fsFieldColors(),
+) = androidx.compose.material3.OutlinedTextField(
+    value = value,
+    onValueChange = onValueChange,
+    modifier = modifier.heightIn(min = 48.dp).fsFocusRing(8.dp),
+    enabled = enabled,
+    readOnly = readOnly,
+    textStyle = textStyle,
+    label = label,
+    placeholder = placeholder,
+    supportingText = supportingText,
+    isError = isError,
+    visualTransformation = visualTransformation,
+    keyboardOptions = keyboardOptions,
+    singleLine = singleLine,
+    maxLines = maxLines,
+    minLines = minLines,
+    shape = shape,
+    colors = colors,
+)
+
+@Composable
+fun fsFieldColors(): androidx.compose.material3.TextFieldColors =
+    androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+        focusedContainerColor = FS.colors.surfaceSunken,
+        unfocusedContainerColor = FS.colors.surfaceSunken,
+        disabledContainerColor = FS.colors.surfaceSunken,
+        errorContainerColor = FS.colors.surfaceSunken,
+        unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+        disabledBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+        focusedBorderColor = FS.colors.accent,
+        focusedLabelColor = FS.colors.accentText,
+    )

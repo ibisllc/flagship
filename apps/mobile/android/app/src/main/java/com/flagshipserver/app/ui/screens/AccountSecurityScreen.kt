@@ -24,7 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedTextField
+import com.flagshipserver.app.ui.components.OutlinedTextField
 import androidx.compose.material3.Text
 import com.flagshipserver.app.ui.components.TextButton
 import androidx.compose.runtime.Composable
@@ -115,13 +115,13 @@ fun AccountSecurityScreen(nav: NavController) {
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        if (multi) "Multi-device + 2FA" else "Single-device account",
+                        if (multi) "Code protection is on" else "Single-device account",
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.semantics { contentDescription = "account-security-badge" },
                     )
                     Text(
                         if (multi)
-                            "Recovery requires a 6-digit TOTP code (or a recovery code) plus a 24-hour grace window."
+                            "Recovery needs your 6-digit code (or a recovery code) and a 24-hour wait."
                         else
                             "Recovery needs a recovery credential and then waits 3 days. Your other devices are alerted during the wait, but can't cancel it.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -150,14 +150,14 @@ fun AccountSecurityScreen(nav: NavController) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             if (multi) {
                 FSDangerButton(
-                    label = "Disable multi-device + 2FA",
+                    label = "Turn off code protection",
                     onClick = { showDisableDialog = true },
                     block = true,
                     modifier = Modifier.semantics { contentDescription = "account-security-disable-btn" },
                 )
             } else {
                 FSPrimaryButton(
-                    label = "Enable multi-device + 2FA",
+                    label = "Turn on code protection",
                     onClick = { showEnableSheet = true },
                     block = true,
                     large = true,
@@ -196,7 +196,7 @@ fun AccountSecurityScreen(nav: NavController) {
     if (showDisableDialog) {
         AlertDialog(
             onDismissRequest = { showDisableDialog = false },
-            title = { Text("Disable multi-device + 2FA?") },
+            title = { Text("Turn off code protection?") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                     Text(
@@ -466,7 +466,7 @@ private fun AccountSecurityEnableSheet(
                 onDone()
             }
         },
-        title = { Text("Enable multi-device + 2FA") },
+        title = { Text("Turn on code protection") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 when (phase) {
@@ -538,8 +538,7 @@ private fun Step1(beginning: Boolean) {
             "We'll show a QR code and a manual key — scan or paste either one.",
     )
     Text(
-        "After 2FA is on, account recovery becomes a 24-hour grace window that requires " +
-            "your 6-digit code (or a recovery code) instead of the 3-day waiting period.",
+        "With code protection on, recovery needs your 6-digit code (or a recovery code) and a 24-hour wait instead of the 3-day wait.",
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.bodyMedium,
     )
