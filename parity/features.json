@@ -683,6 +683,16 @@
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/provisionProgress.js", "export function renderSetupStopped"], ["apps/web/public/webapp/lib/provisionProgress.js", "export function failureDetail"], ["apps/web/e2e/gym/gym-archive.spec.ts", "a stopped install shows Setup stopped"]] },
         "ios": { "status": "missing", "reason": "iOS shows the box's failure text as is on the install timeline; no Setup stopped card, no line-number strip, no Contact us.", "anchors": [] }
       }
+    },
+    {
+      "id": "studio-unlock-from-health-report",
+      "title": "Studio: a sealed hosted server counts as unlocked only from its own signed health report (never a lookup of its name before it reported in; that seeds a 30 minute NXDOMAIN cache on home routers), and the sealed-guest copy never promises \"nothing to approve\"",
+      "ref": "mac",
+      "surfaces": {
+        "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilderCore/VM/UnlockWatch.swift", "provesBoxIsUp"], ["apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMInventoryStore.swift", "AwaitingUnlockCopy"], ["apps/builder-mac/Tests/FlagshipBuilderTests/UnlockWatchTests.swift", "NoNameLookup"]] },
+        "win": { "status": "present", "anchors": [["apps/builder-windows/src/VM/UnlockWatch.cs", "ProvesBoxIsUp"], ["apps/builder-windows/src/VM/VMManager.cs", "AwaitingUnlockOnItsOwn"], ["apps/builder-windows/tests/UnlockWatchTests.cs", "NoNameLookup"]] },
+        "linux": { "status": "present", "anchors": [["apps/builder-linux/vm/manager.py", "proves_box_is_up"], ["apps/builder-linux/vm/manager.py", "AWAITING_UNLOCK_ON_ITS_OWN"], ["apps/builder-linux/tests/test_vm_manager.py", "never_looks_up_the_name"]] }
+      }
     }
   ]
 }

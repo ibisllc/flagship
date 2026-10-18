@@ -210,6 +210,38 @@ public class VMCoreVectorTests
         Assert.True(count >= 5, "vector file must actually contain health cases");
     }
 
+    [Fact]
+    public void BootEvidenceMatchesVectors()
+    {
+        var section = Vectors.GetProperty("bootEvidence");
+        int count = 0;
+        foreach (var c in section.GetProperty("cases").EnumerateArray())
+        {
+            var name = c.GetProperty("name").GetString();
+            var report = new VMServerHealth(
+                UptimeS: c.GetProperty("uptimeS").GetInt64(), MemTotalMB: 3900, MemAvailMB: 800, OomKills: 0,
+                DaemonState: c.GetProperty("daemonState").GetString()!, DaemonRestarts: 0, DaemonLastExit: 0,
+                Tunnel: c.GetProperty("tunnel").GetBoolean(), DiskUsedPct: 10,
+                ReceivedAtMs: c.GetProperty("receivedAtMs").GetInt64());
+            var got = report.ProvesBoxIsUp(
+                DateTimeOffset.FromUnixTimeMilliseconds(c.GetProperty("poweredOnAtMs").GetInt64()),
+                DateTimeOffset.FromUnixTimeMilliseconds(c.GetProperty("nowMs").GetInt64()));
+            Assert.True(c.GetProperty("provesBoxIsUp").GetBoolean() == got, name);
+            count++;
+        }
+        Assert.True(count >= 6, "vector file must actually contain boot-evidence cases");
+    }
+
+    [Fact]
+    public void AwaitingUnlockCopyMatchesVectors()
+    {
+        var section = Vectors.GetProperty("awaitingUnlockCopy");
+        Assert.Equal(section.GetProperty("stalled").GetString(), HostedServer.AwaitingUnlockStalled);
+        Assert.Equal(section.GetProperty("unlocksOnItsOwn").GetString(), HostedServer.AwaitingUnlockOnItsOwn);
+        Assert.Equal(section.GetProperty("firstBoot").GetString(), HostedServer.AwaitingUnlockFirstBoot);
+        Assert.Equal(section.GetProperty("approveEveryBoot").GetString(), HostedServer.AwaitingUnlockApproveEveryBoot);
+    }
+
     // ---- disk durability ----
 
     [Fact]

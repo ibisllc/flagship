@@ -232,4 +232,38 @@ final class VMCoreVectorTests: XCTestCase {
             XCTAssertEqual(v.lines, expected["lines"] as? [String], name)
         }
     }
+
+    // MARK: - Boot evidence
+
+    func testBootEvidenceMatchesVectors() throws {
+        let vectors = try loadVectors()
+        let section = vectors["bootEvidence"] as! [String: Any]
+        let cases = section["cases"] as! [[String: Any]]
+        XCTAssertGreaterThanOrEqual(cases.count, 6)
+        for c in cases {
+            let name = c["name"] as! String
+            let json = """
+            {"serverDomain":"home.u-x.flagship.services","health":{"v":1,"uptimeS":\(c["uptimeS"] as! Int),\
+            "memTotalMB":3900,"memAvailMB":800,"oomKills":0,"daemon":{"state":"\(c["daemonState"] as! String)",\
+            "restarts":0,"lastExit":0},"tunnel":\(c["tunnel"] as! Bool),"diskUsedPct":10,\
+            "receivedAt":\((c["receivedAtMs"] as! NSNumber).int64Value)}}
+            """
+            let health = try XCTUnwrap(
+                VMServerHealth.fromOrderHealth(Data(json.utf8), serverDomain: "home.u-x.flagship.services"), name)
+            let poweredOn = Date(timeIntervalSince1970: (c["poweredOnAtMs"] as! NSNumber).doubleValue / 1000)
+            let now = Date(timeIntervalSince1970: (c["nowMs"] as! NSNumber).doubleValue / 1000)
+            XCTAssertEqual(health.provesBoxIsUp(poweredOnAt: poweredOn, now: now),
+                           c["provesBoxIsUp"] as? Bool, name)
+        }
+    }
+
+    // MARK: - Awaiting-unlock copy
+
+    func testAwaitingUnlockCopyMatchesVectors() throws {
+        let section = try loadVectors()["awaitingUnlockCopy"] as! [String: Any]
+        XCTAssertEqual(VMRecord.AwaitingUnlockCopy.stalled, section["stalled"] as? String)
+        XCTAssertEqual(VMRecord.AwaitingUnlockCopy.unlocksOnItsOwn, section["unlocksOnItsOwn"] as? String)
+        XCTAssertEqual(VMRecord.AwaitingUnlockCopy.firstBoot, section["firstBoot"] as? String)
+        XCTAssertEqual(VMRecord.AwaitingUnlockCopy.approveEveryBoot, section["approveEveryBoot"] as? String)
+    }
 }

@@ -221,11 +221,13 @@ public sealed class VMManagerTests : IDisposable
         s.Record = s.Record with { State = VMState.AwaitingPhoneUnlock, StateChangedAt = DateTimeOffset.UtcNow };
         Assert.Equal(VMState.AwaitingPhoneUnlock.Label, s.StateLabel);
         Assert.Contains("approve the first unlock", s.StatusSubtitle);
+        Assert.Contains("if your phone asks again", s.StatusSubtitle);
         Assert.Equal("Not connected yet", s.LastConnectedText);
 
         s.Record = s.Record with { LastConnectedAt = DateTimeOffset.FromUnixTimeSeconds(1_800_000_000) };
         Assert.Equal("Unlocking…", s.StateLabel);
-        Assert.Contains("Nothing to approve", s.StatusSubtitle);
+        Assert.DoesNotContain("Nothing to approve", s.StatusSubtitle);
+        Assert.Contains("If your phone asks", s.StatusSubtitle);
         Assert.StartsWith("Last connected ", s.LastConnectedText);
 
         s.Record = s.Record with { Config = s.Record.Config with { BootUnlockMode = "approve" } };

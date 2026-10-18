@@ -166,7 +166,7 @@ struct HostedServersSidebar: View {
                 if VMLifecycle.comingUpIsStalled(
                     state: server.record.state,
                     elapsed: context.date.timeIntervalSince(since)) {
-                    Text("Taking longer than expected — check it reached the network")
+                    Text("Taking longer than expected — check the network or approve on your phone")
                         .font(FB.Font.caption())
                         .foregroundStyle(FB.Colors.warning)
                 } else {
@@ -449,14 +449,9 @@ struct VMDetailView: View {
         case .awaitingPhoneUnlock:
             let since = server.record.stateChangedAt ?? server.record.createdAt
             if VMLifecycle.comingUpIsStalled(state: server.record.state, elapsed: now.timeIntervalSince(since)) {
-                return "Taking longer than expected — the box may not have reached the network. Check that it's online, or power off and retry."
+                return VMRecord.AwaitingUnlockCopy.stalled
             }
-            if server.record.unlocksOnItsOwn {
-                return "Unlocking its disk with the key your phone left it. Nothing to approve."
-            }
-            return server.record.config.bootUnlockMode == "approve"
-                ? "The disk is sealed — approve the unlock on your phone."
-                : "The disk is sealed — approve the first unlock on your phone. After that it unlocks on its own."
+            return server.record.awaitingUnlockSubtitle
         case .installing:
             let start = server.record.stateChangedAt ?? server.record.createdAt
             let elapsed = max(0, Int(now.timeIntervalSince(start)) / 60)

@@ -4,7 +4,9 @@ poll, and the HostedServer display mapping. No QEMU is ever spawned (the host
 is a fake). Mirrors apps/builder-windows/tests/VMManagerTests.cs."""
 from __future__ import annotations
 
+import json
 import threading
+import time
 
 import pytest
 
@@ -354,6 +356,110 @@ def test_unlock_poll_fires_guest_unlocked_on_first_http_response(store):
     assert probed[0] == "https://s.h.flagship.services/"
 
 
+SERIAL = "AB12cd34ef56"
+
+
+def seed_with_serial(store, name):
+    store.create(
+        VMRecord(
+            config=config(name, provision_status_serial=SERIAL),
+            state=VMState.stopped(),
+            created_at=1.0,
+        )
+    )
+
+
+def health_body(domain, received_at_ms, uptime_s=40, daemon="active", tunnel=True):
+    return json.dumps(
+        {
+            "serverDomain": domain,
+            "health": {
+                "v": 1, "domain": domain, "at": 1, "uptimeS": uptime_s,
+                "memTotalMB": 3900, "memAvailMB": 800, "swapUsedMB": 0, "oomKills": 0,
+                "daemon": {"state": daemon, "restarts": 0, "lastExit": 0},
+                "tunnel": tunnel, "diskUsedPct": 5, "receivedAt": received_at_ms,
+            },
+        }
+    ).encode()
+
+
+def test_unlock_poll_never_looks_up_the_name_when_the_order_can_be_asked(store):
+    """A lookup of the server's name before the box registered it is cached as
+    NXDOMAIN by home routers (30 min on Windows, 2026-10-18). With an order
+    serial Studio asks .com for the box's own health report instead, and the
+    name is not fetched before the first report, nor after it."""
+    domain = "s.h.flagship.services"
+    seed_with_serial(store, domain)
+    clock = {"t": 1_000.0}
+    reports: list = []
+    fetched: list[str] = []
+    probed: list[str] = []
+    asked_twice = threading.Event()
+
+    def health(url):
+        fetched.append(url)
+        if len(fetched) >= 2:
+            asked_twice.set()
+        return reports[-1] if reports else None
+
+    m = VMManager(
+        store, TOOLCHAIN, host_factory=lambda: FakeHost(), clock=lambda: clock["t"],
+        unlock_probe=lambda url: probed.append(url) or True, unlock_interval=0.01,
+        health_fetch=health, health_interval=60.0,
+    )
+    m.power_on(domain)
+    # The box has not reported in: the poll keeps asking .com and never the name.
+    assert asked_twice.wait(timeout=5.0)
+    assert probed == []
+    assert m.server(domain).state_kind == VMStateKind.AWAITING_PHONE_UNLOCK
+    assert all(u.endswith(f"/api/order/{SERIAL}/health") for u in fetched)
+
+    # A report from the previous boot (received before power-on) proves nothing.
+    reports.append(health_body(domain, 1_000_000 - 5_000, uptime_s=900))
+    fetched.clear()
+    asked_twice.clear()
+    assert asked_twice.wait(timeout=5.0)
+    assert m.server(domain).state_kind == VMStateKind.AWAITING_PHONE_UNLOCK
+    assert probed == []
+
+    # The box reports in after this boot began: Running, still no name lookup.
+    clock["t"] = 1_060.0
+    reports.append(health_body(domain, 1_050_000, uptime_s=45))
+    deadline = time.time() + 5.0
+    while time.time() < deadline and m.server(domain).state_kind != VMStateKind.RUNNING:
+        time.sleep(0.01)
+    assert m.server(domain).state_kind == VMStateKind.RUNNING
+    assert probed == []
+    # The promotion is persisted from the poll thread; let it finish before the
+    # temp directory goes away.
+    while time.time() < deadline and store.load(domain).state.kind != VMStateKind.RUNNING:
+        time.sleep(0.01)
+    m.power_off(domain)
+
+
+def test_unlock_poll_ignores_a_report_whose_daemon_or_tunnel_is_down(store):
+    domain = "s.h.flagship.services"
+    seed_with_serial(store, domain)
+    seen = threading.Event()
+    calls = []
+
+    def health(url):
+        calls.append(url)
+        if len(calls) >= 3:
+            seen.set()
+        return health_body(domain, 1_000_000 + 10_000, uptime_s=10, tunnel=False)
+
+    m = VMManager(
+        store, TOOLCHAIN, host_factory=lambda: FakeHost(), clock=lambda: 1_020.0,
+        unlock_probe=lambda url: True, unlock_interval=0.01,
+        health_fetch=health, health_interval=60.0,
+    )
+    m.power_on(domain)
+    assert seen.wait(timeout=5.0)
+    assert m.server(domain).state_kind == VMStateKind.AWAITING_PHONE_UNLOCK
+    m.power_off(domain)
+
+
 def test_unlock_poll_is_cancelled_on_power_off(store):
     host = FakeHost()
     m = manager(store, host=host)
@@ -400,6 +506,7 @@ def test_status_subtitles_follow_state_and_unlock_mode():
         VMRecord(config=base, state=VMState.awaiting_phone_unlock(), created_at=1.0)
     )
     assert "approve the first unlock" in sealed.status_subtitle
+    assert "if your phone asks again" in sealed.status_subtitle
     assert sealed.state_label == "Waiting for you to unlock"
     ran_before = HostedServer(
         VMRecord(
@@ -410,7 +517,8 @@ def test_status_subtitles_follow_state_and_unlock_mode():
         )
     )
     assert ran_before.state_label == "Unlocking…"
-    assert "Nothing to approve" in ran_before.status_subtitle
+    assert "Nothing to approve" not in ran_before.status_subtitle
+    assert "If your phone asks" in ran_before.status_subtitle
     approve_cfg = VMConfig(**{**base.__dict__, "boot_unlock_mode": "approve"})
     approve = HostedServer(
         VMRecord(config=approve_cfg, state=VMState.awaiting_phone_unlock(), created_at=1.0)
@@ -551,7 +659,7 @@ def test_quit_waits_for_a_stop_already_in_flight(store):
 
 def _health_body(received_ms: int) -> bytes:
     return (
-        '{"serverDomain":"a.h.flagship.services","health":{"uptimeS":120,"memTotalMB":3900,'
+        '{"serverDomain":"a.h.flagship.services","health":{"uptimeS":30,"memTotalMB":3900,'
         '"memAvailMB":800,"oomKills":0,"daemon":{"state":"active","restarts":0,"lastExit":0},'
         '"tunnel":true,"diskUsedPct":31,"receivedAt":%d}}' % received_ms
     ).encode()

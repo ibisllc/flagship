@@ -222,5 +222,97 @@
       "a\\b",
       "héllo"
     ]
+  },
+  "bootEvidence": {
+    "notes": "Studio decides a sealed guest has unlocked ONLY from the box's own signed health report on .com, never by fetching https://<server domain>/ from the host: the name does not exist until the box registers it, and a lookup before then is cached as NXDOMAIN by home routers for the zone's negative TTL (30 min seen on Windows 2026-10-18), leaving Studio on 'Waiting for you to unlock' on a healthy box. provesBoxIsUp = the daemon is active, the relay tunnel is up, the report was received after this boot began (receivedAtMs >= poweredOnAtMs), the guest's uptime fits inside the time since this boot began (+60 s slack, so a previous boot's report is never taken), and it is under 5 minutes old at nowMs. A server without an order serial has no health report and falls back to probing its name.",
+    "cases": [
+      {
+        "name": "fresh healthy report from this boot",
+        "uptimeS": 60,
+        "daemonState": "active",
+        "tunnel": true,
+        "receivedAtMs": 1799999980000,
+        "poweredOnAtMs": 1799999880000,
+        "nowMs": 1800000000000,
+        "provesBoxIsUp": true
+      },
+      {
+        "name": "report from the previous boot with long uptime",
+        "uptimeS": 3000,
+        "daemonState": "active",
+        "tunnel": true,
+        "receivedAtMs": 1799999800000,
+        "poweredOnAtMs": 1799999880000,
+        "nowMs": 1800000000000,
+        "provesBoxIsUp": false
+      },
+      {
+        "name": "previous boot with short uptime, received before power-on",
+        "uptimeS": 100,
+        "daemonState": "active",
+        "tunnel": true,
+        "receivedAtMs": 1799999870000,
+        "poweredOnAtMs": 1799999880000,
+        "nowMs": 1800000000000,
+        "provesBoxIsUp": false
+      },
+      {
+        "name": "uptime longer than this boot has been running",
+        "uptimeS": 900,
+        "daemonState": "active",
+        "tunnel": true,
+        "receivedAtMs": 1799999980000,
+        "poweredOnAtMs": 1799999880000,
+        "nowMs": 1800000000000,
+        "provesBoxIsUp": false
+      },
+      {
+        "name": "daemon not active yet",
+        "uptimeS": 60,
+        "daemonState": "activating",
+        "tunnel": true,
+        "receivedAtMs": 1799999980000,
+        "poweredOnAtMs": 1799999880000,
+        "nowMs": 1800000000000,
+        "provesBoxIsUp": false
+      },
+      {
+        "name": "relay tunnel not up yet",
+        "uptimeS": 60,
+        "daemonState": "active",
+        "tunnel": false,
+        "receivedAtMs": 1799999980000,
+        "poweredOnAtMs": 1799999880000,
+        "nowMs": 1800000000000,
+        "provesBoxIsUp": false
+      },
+      {
+        "name": "report older than 5 minutes",
+        "uptimeS": 60,
+        "daemonState": "active",
+        "tunnel": true,
+        "receivedAtMs": 1799999699000,
+        "poweredOnAtMs": 1799999600000,
+        "nowMs": 1800000000000,
+        "provesBoxIsUp": false
+      },
+      {
+        "name": "report just inside the uptime slack",
+        "uptimeS": 170,
+        "daemonState": "active",
+        "tunnel": true,
+        "receivedAtMs": 1799999990000,
+        "poweredOnAtMs": 1799999880000,
+        "nowMs": 1800000000000,
+        "provesBoxIsUp": true
+      }
+    ]
+  },
+  "awaitingUnlockCopy": {
+    "notes": "The sidebar/detail copy while a guest is sealed, identical on all three Studios. The phone, not Studio, decides whether a restart needs an approval: the key the phone leaves at its first approval can be missing (on Windows 2026-10-18 a restart still asked the phone while Studio said 'Nothing to approve'), so no line promises that nobody has to act.",
+    "stalled": "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry.",
+    "unlocksOnItsOwn": "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there.",
+    "firstBoot": "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.",
+    "approveEveryBoot": "The disk is sealed — approve the unlock on your phone."
   }
 }

@@ -338,22 +338,29 @@ final class VMManager: ObservableObject {
             unlockPolls[name] = nil
             return
         }
-        guard unlockPolls[name] == nil,
-              let url = URL(string: "https://\(config.serverDomain)/") else { return }
+        guard unlockPolls[name] == nil else { return }
+        let domain = config.serverDomain
+        let healthURL = config.provisionStatusSerial.flatMap { VMServerHealth.orderHealthURL(serial: $0) }
+        let poweredOnAt = Date()
         unlockPolls[name] = Task { [weak self] in
             let session = URLSession(configuration: {
                 let c = URLSessionConfiguration.ephemeral
                 c.timeoutIntervalForRequest = 10
                 return c
             }())
-            while !Task.isCancelled {
-                if let (_, response) = try? await session.data(from: url),
-                   response is HTTPURLResponse {
-                    await self?.apply(.guestUnlocked, to: name)
-                    return
-                }
-                try? await Task.sleep(nanoseconds: 15_000_000_000)
-            }
+            let unlocked = await UnlockWatch.run(
+                serverDomain: domain, healthURL: healthURL, poweredOnAt: poweredOnAt,
+                fetchHealth: { url in
+                    guard let (data, response) = try? await session.data(from: url),
+                          (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+                    return data
+                },
+                probeName: { url in
+                    if let (_, response) = try? await session.data(from: url),
+                       response is HTTPURLResponse { return true }
+                    return false
+                })
+            if unlocked, !Task.isCancelled { await self?.apply(.guestUnlocked, to: name) }
         }
     }
 

@@ -84,6 +84,22 @@ class VMServerHealth:
         except (ValueError, KeyError, TypeError):
             return None
 
+    def proves_box_is_up(self, powered_on_at_ms: int, now_ms: int) -> bool:
+        """True when this report shows the guest unlocked and serving after
+        THIS boot began. Studio takes it, not a fetch of the server's own
+        name, as the sign a sealed guest came up: the name does not exist until
+        the box registers it, and a lookup before then is cached as NXDOMAIN
+        by home routers for the zone's negative TTL. A report from an earlier
+        boot (received before power-on, or with more uptime than this boot has
+        had) never counts. Pinned by vm-core-vectors.json "bootEvidence"."""
+        return (
+            self.daemon_state == "active"
+            and self.tunnel
+            and self.received_at_ms >= powered_on_at_ms
+            and self.uptime_s * 1000 <= (now_ms - powered_on_at_ms) + 60_000
+            and now_ms - self.received_at_ms < 300_000
+        )
+
     def verdict(self, now_ms: int) -> HealthVerdict:
         stale_min = int((now_ms - self.received_at_ms) / 60_000)
         if stale_min >= 5:

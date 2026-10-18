@@ -53,6 +53,25 @@ _SERIAL_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 STOP_GRACE_SECONDS = 60.0
 
 
+# The copy while a guest is sealed, identical on the Mac and Windows Studios
+# (vm-core-vectors.json "awaitingUnlockCopy"). The phone, not Studio, decides
+# whether a restart needs an approval, so no line promises nobody has to act.
+AWAITING_UNLOCK_STALLED = (
+    "Taking longer than expected — the box may not have reached the network, or it "
+    "may be waiting for you to approve the unlock on your phone. Check that it's "
+    "online, or power off and retry."
+)
+AWAITING_UNLOCK_ON_ITS_OWN = (
+    "Unlocking its disk with the key your phone left it. If your phone asks you to "
+    "approve, approve it there."
+)
+AWAITING_UNLOCK_FIRST_BOOT = (
+    "The disk is sealed — approve the first unlock on your phone. After that it "
+    "should unlock on its own; if your phone asks again, approve it there."
+)
+AWAITING_UNLOCK_APPROVE_EVERY_BOOT = "The disk is sealed — approve the unlock on your phone."
+
+
 class InstallObservation:
     def __init__(self, phase: str, detail: Optional[str], updated_at: float) -> None:
         self.phase = phase
@@ -124,13 +143,10 @@ class HostedServer:
         c = self.record.config
         if s.kind == VMStateKind.AWAITING_PHONE_UNLOCK:
             if self.record.unlocks_on_its_own:
-                return "Unlocking its disk with the key your phone left it. Nothing to approve."
+                return AWAITING_UNLOCK_ON_ITS_OWN
             if c.boot_unlock_mode == "approve":
-                return "The disk is sealed — approve the unlock on your phone."
-            return (
-                "The disk is sealed — approve the first unlock on your phone. "
-                "After that it unlocks on its own."
-            )
+                return AWAITING_UNLOCK_APPROVE_EVERY_BOOT
+            return AWAITING_UNLOCK_FIRST_BOOT
         if s.kind == VMStateKind.INSTALLING:
             observation = self.install_observation
             if observation is None:
@@ -160,10 +176,7 @@ class HostedServer:
         """status_subtitle, but returns the stall advisory once a sealed guest
         has waited too long to come online."""
         if self.coming_up_stalled(now):
-            return (
-                "Taking longer than expected — the box may not have reached the "
-                "network. Check that it's online, or power off and retry."
-            )
+            return AWAITING_UNLOCK_STALLED
         return self.status_subtitle
 
     @property
@@ -714,10 +727,17 @@ class VMManager:
     # ---- unlock detection ----
 
     def _sync_unlock_poll(self, config: VMConfig) -> None:
-        """While a guest sits sealed, poll its public FQDN. Any HTTP response
-        proves the unlock completed and the tunnel serves — real evidence, not
-        a timer. The host app is not in the unlock loop and never holds a
-        key."""
+        """While a guest sits sealed, wait for proof that it unlocked and
+        serves. With an order serial the proof is the box's own signed health
+        report from .com (received after this boot began, daemon active,
+        tunnel up). The server's name is NEVER looked up in that case: it does
+        not exist until the box registers it, and a lookup before then is
+        cached as NXDOMAIN by home routers for the zone's negative TTL (30
+        minutes seen on Windows), leaving a healthy box stuck on "Waiting for
+        you to unlock". Only a server without a serial (nothing to ask .com)
+        falls back to fetching its public name; TLS ends ON THE BOX, so any
+        HTTP response proves the unlock. The host app is not in the unlock
+        loop and never holds a key."""
         name = config.name
         if self._current_state_kind(name) != VMStateKind.AWAITING_PHONE_UNLOCK:
             self._cancel_unlock_poll(name)
@@ -727,10 +747,21 @@ class VMManager:
         stop = threading.Event()
         self._unlock_polls[name] = stop
         url = f"https://{config.server_domain}/"
+        health_url = VMServerHealth.order_health_url(config.provision_status_serial or "")
+        domain = config.server_domain
+        powered_on_at_ms = int(self._clock() * 1000)
+
+        def unlocked_by_report() -> bool:
+            body = self._health_fetch(health_url)  # type: ignore[arg-type]
+            health = VMServerHealth.from_order_health(body, domain) if body is not None else None
+            return health is not None and health.proves_box_is_up(
+                powered_on_at_ms, int(self._clock() * 1000)
+            )
 
         def poll() -> None:
             while not stop.is_set():
-                if self._unlock_probe(url):
+                came_up = unlocked_by_report() if health_url is not None else self._unlock_probe(url)
+                if came_up:
                     if not stop.is_set():
                         self._apply(VMEvent.guest_unlocked(), name)
                     return

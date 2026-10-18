@@ -191,3 +191,29 @@ def test_server_health_matches_vectors():
         assert health is not None, c["name"]
         v = health.verdict(section["nowMs"])
         assert (v.ok, v.lines) == (c["verdict"]["ok"], c["verdict"]["lines"]), c["name"]
+
+
+def test_boot_evidence_matches_vectors():
+    from vm.server_health import VMServerHealth
+
+    section = VECTORS["bootEvidence"]
+    assert len(section["cases"]) >= 6
+    for c in section["cases"]:
+        report = VMServerHealth(
+            uptime_s=c["uptimeS"], mem_total_mb=3900, mem_avail_mb=800, oom_kills=0,
+            daemon_state=c["daemonState"], daemon_restarts=0, daemon_last_exit=0,
+            tunnel=c["tunnel"], disk_used_pct=10, received_at_ms=c["receivedAtMs"],
+        )
+        got = report.proves_box_is_up(c["poweredOnAtMs"], c["nowMs"])
+        assert got == c["provesBoxIsUp"], c["name"]
+
+
+def test_awaiting_unlock_copy_matches_vectors():
+    from vm import manager
+
+    section = VECTORS["awaitingUnlockCopy"]
+    assert manager.AWAITING_UNLOCK_STALLED == section["stalled"]
+    assert manager.AWAITING_UNLOCK_ON_ITS_OWN == section["unlocksOnItsOwn"]
+    assert manager.AWAITING_UNLOCK_FIRST_BOOT == section["firstBoot"]
+    assert manager.AWAITING_UNLOCK_APPROVE_EVERY_BOOT == section["approveEveryBoot"]
+    assert all("Nothing to approve" not in v for k, v in section.items() if k != "notes")

@@ -30,6 +30,25 @@ public struct VMRecord: Codable, Sendable, Equatable {
         config.bootUnlockMode != "approve" && lastConnectedAt != nil
     }
 
+    /// The copy while a guest is sealed, identical on the Windows and Linux
+    /// Studios (vm-core-vectors.json "awaitingUnlockCopy"). The phone, not
+    /// Studio, decides whether a restart needs an approval, so no line promises
+    /// nobody has to act.
+    public enum AwaitingUnlockCopy {
+        public static let stalled = "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry."
+        public static let unlocksOnItsOwn = "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there."
+        public static let firstBoot = "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there."
+        public static let approveEveryBoot = "The disk is sealed — approve the unlock on your phone."
+    }
+
+    /// What the detail pane says while this server's disk is sealed.
+    public var awaitingUnlockSubtitle: String {
+        if unlocksOnItsOwn { return AwaitingUnlockCopy.unlocksOnItsOwn }
+        return config.bootUnlockMode == "approve"
+            ? AwaitingUnlockCopy.approveEveryBoot
+            : AwaitingUnlockCopy.firstBoot
+    }
+
     /// `state.label`, except a sealed boot that needs no one reads as unlocking.
     public var stateLabel: String {
         if case .awaitingPhoneUnlock = state, unlocksOnItsOwn { return "Unlocking…" }

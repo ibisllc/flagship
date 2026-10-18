@@ -2025,7 +2025,7 @@ def build_window(application, model: Optional[WizardModel] = None):
             name_label.set_selectable(True)
             col.append(name_label)
             if server.coming_up_stalled(time.time()):
-                _state_text = "⚠ Taking longer than expected — check the network"
+                _state_text = "⚠ Taking longer than expected — check the network or approve on your phone"
             elif server.state_kind == VMStateKind.INSTALLING and server.install_observation:
                 observation = server.install_observation
                 if observation.is_stale(time.time()):

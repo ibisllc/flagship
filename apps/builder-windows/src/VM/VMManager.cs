@@ -86,19 +86,32 @@ public sealed class HostedServer : INotifyPropertyChanged
             : observation.Summary
         : HealthVerdict is { Ok: false } health ? health.Lines[0] : StateLabel;
 
+    // The copy while a guest is sealed, identical on the Mac and Linux Studios
+    // (vm-core-vectors.json "awaitingUnlockCopy"). The phone, not Studio,
+    // decides whether a restart needs an approval, so no line promises nobody
+    // has to act.
+    public const string AwaitingUnlockStalled =
+        "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry.";
+    public const string AwaitingUnlockOnItsOwn =
+        "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there.";
+    public const string AwaitingUnlockFirstBoot =
+        "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.";
+    public const string AwaitingUnlockApproveEveryBoot =
+        "The disk is sealed — approve the unlock on your phone.";
+
     public string StatusSubtitle
     {
         get
         {
             if (ComingUpStalled)
-                return "Taking longer than expected — the box may not have reached the network. Check that it's online, or power off and retry.";
+                return AwaitingUnlockStalled;
             return _record.State.Kind switch
             {
                 VMStateKind.AwaitingPhoneUnlock => _record.UnlocksOnItsOwn
-                    ? "Unlocking its disk with the key your phone left it. Nothing to approve."
+                    ? AwaitingUnlockOnItsOwn
                     : _record.Config.BootUnlockMode == "approve"
-                        ? "The disk is sealed — approve the unlock on your phone."
-                        : "The disk is sealed — approve the first unlock on your phone. After that it unlocks on its own.",
+                        ? AwaitingUnlockApproveEveryBoot
+                        : AwaitingUnlockFirstBoot,
                 VMStateKind.Installing => InstallObservation is null
                     ? "Waiting for the first guest checkpoint."
                     : InstallObservation.IsStale(DateTimeOffset.UtcNow)
@@ -192,6 +205,8 @@ public sealed class VMManager
     private readonly Dictionary<string, CancellationTokenSource> _healthPolls = new();
     private readonly Func<string, CancellationToken, Task<string?>> _healthFetch;
     private readonly TimeSpan _healthInterval;
+    private readonly Func<string, CancellationToken, Task<bool>> _unlockProbe;
+    private readonly TimeSpan _unlockInterval;
     private readonly HashSet<string> _installStallLogged = new();
     private readonly SynchronizationContext? _sync;
     private readonly Func<DateTimeOffset> _clock;
@@ -208,7 +223,9 @@ public sealed class VMManager
     public VMManager(VMInventoryStore store, QemuToolchain? toolchain, string? toolchainError = null,
                      Func<DateTimeOffset>? clock = null,
                      Func<string, CancellationToken, Task<string?>>? healthFetch = null,
-                     TimeSpan? healthInterval = null)
+                     TimeSpan? healthInterval = null,
+                     Func<string, CancellationToken, Task<bool>>? unlockProbe = null,
+                     TimeSpan? unlockInterval = null)
     {
         Store = store;
         _toolchain = toolchain;
@@ -216,6 +233,8 @@ public sealed class VMManager
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
         _healthFetch = healthFetch ?? FetchHealthAsync;
         _healthInterval = healthInterval ?? TimeSpan.FromMinutes(1);
+        _unlockProbe = unlockProbe ?? ProbeNameAsync;
+        _unlockInterval = unlockInterval ?? TimeSpan.FromSeconds(15);
         _sync = SynchronizationContext.Current;
         LoadAndNormalize();
     }
@@ -625,29 +644,21 @@ public sealed class VMManager
         if (_unlockPolls.ContainsKey(name)) return;
         var cts = new CancellationTokenSource();
         _unlockPolls[name] = cts;
+        var domain = config.ServerDomain;
+        var healthUrl = VMServerHealth.OrderHealthUrl(config.ProvisionStatusSerial);
+        var poweredOnAt = _clock();
         _ = Task.Run(async () =>
         {
-            var url = $"https://{config.ServerDomain}/";
-            while (!cts.IsCancellationRequested)
-            {
-                try
-                {
-                    using var response = await UnlockProbe.GetAsync(url, cts.Token);
-                    OnUi(() => _ = ApplyAsync(VMEvent.GuestUnlocked, name));
-                    return;
-                }
-                catch (OperationCanceledException) when (cts.IsCancellationRequested)
-                {
-                    return;
-                }
-                catch
-                {
-                    // Not up yet (TLS handshake fails while sealed) — keep waiting.
-                }
-                try { await Task.Delay(TimeSpan.FromSeconds(15), cts.Token); }
-                catch (OperationCanceledException) { return; }
-            }
+            if (await UnlockWatch.RunAsync(domain, healthUrl, poweredOnAt, _clock, _healthFetch,
+                    _unlockProbe, _unlockInterval, cts.Token) && !cts.IsCancellationRequested)
+                OnUi(() => _ = ApplyAsync(VMEvent.GuestUnlocked, name));
         });
+    }
+
+    private static async Task<bool> ProbeNameAsync(string url, CancellationToken ct)
+    {
+        using var response = await UnlockProbe.GetAsync(url, ct);
+        return true;
     }
 
     // ---- Privacy-safe install checkpoints ----

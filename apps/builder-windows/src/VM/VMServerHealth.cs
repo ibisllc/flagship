@@ -76,6 +76,24 @@ public sealed record VMServerHealth(
         return n;
     }
 
+    /// <summary>True when this report shows the guest unlocked and serving
+    /// after THIS boot began: the daemon is active, the relay tunnel is up,
+    /// the report was received after power-on, the guest's uptime fits inside
+    /// the time since power-on (+60 s slack, so an earlier boot's report never
+    /// counts) and it is under 5 minutes old. Studio takes this, not a fetch
+    /// of the server's own name, as the sign a sealed guest came up (see
+    /// UnlockWatch). Pinned by vm-core-vectors.json "bootEvidence".</summary>
+    public bool ProvesBoxIsUp(DateTimeOffset poweredOnAt, DateTimeOffset now)
+    {
+        var poweredOnMs = poweredOnAt.ToUnixTimeMilliseconds();
+        var nowMs = now.ToUnixTimeMilliseconds();
+        return DaemonState == "active"
+            && Tunnel
+            && ReceivedAtMs >= poweredOnMs
+            && UptimeS * 1000 <= (nowMs - poweredOnMs) + 60_000
+            && nowMs - ReceivedAtMs < 300_000;
+    }
+
     public HealthVerdict Verdict(DateTimeOffset now)
     {
         var staleMin = (now.ToUnixTimeMilliseconds() - ReceivedAtMs) / 60_000;

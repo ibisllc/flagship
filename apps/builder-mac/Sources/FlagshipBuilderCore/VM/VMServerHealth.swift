@@ -29,6 +29,23 @@ public struct VMServerHealth: Codable, Sendable, Equatable {
         public let lines: [String]
     }
 
+    /// True when this report shows the guest unlocked and serving after THIS
+    /// boot began: the daemon is active, the relay tunnel is up, the report
+    /// was received after power-on, the guest's uptime fits inside the time
+    /// since power-on (+60 s slack, so an earlier boot's report never counts)
+    /// and it is under 5 minutes old. Studio takes this, not a fetch of the
+    /// server's own name, as the sign a sealed guest came up (`UnlockWatch`).
+    /// Pinned by vm-core-vectors.json "bootEvidence".
+    public func provesBoxIsUp(poweredOnAt: Date, now: Date) -> Bool {
+        let poweredOnMs = Int64(poweredOnAt.timeIntervalSince1970 * 1000)
+        let nowMs = Int64(now.timeIntervalSince1970 * 1000)
+        return daemon.state == "active"
+            && tunnel
+            && receivedAt >= poweredOnMs
+            && uptimeS * 1000 <= (nowMs - poweredOnMs) + 60_000
+            && nowMs - receivedAt < 300_000
+    }
+
     public func verdict(at now: Date) -> Verdict {
         let staleMin = (Int64(now.timeIntervalSince1970 * 1000) - receivedAt) / 60_000
         if staleMin >= 5 {
