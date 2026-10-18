@@ -284,6 +284,25 @@ of the last check here: **not yet checked**.
 
 ### In flight
 
+- **`.com` on the Workers Free plan (owner, 2026-10-18; 10 ms CPU a request, 100,000
+  requests a day, 50 subrequests).** `docs/runbooks/workers-cpu-budget.md` has the
+  limits, the measurements and what each cache is keyed on. Done on `main`: reads
+  started together leave as one D1 batch and are remembered until a write
+  (`RequestD1`), native Ed25519 first plus a memory of verified triples, a
+  light held `/stream` (130 D1 calls to 8), noble's 20 ms table built at startup;
+  the directory read went from 16 D1 calls and about 9 ms to 4 and 4.7 (net of the
+  dev floor 6.7 to 1.9). `scripts/cpu-profile.ts` / `cpu-workerd.ts` measure;
+  `apps/com/test/cpuBudget.test.ts` is the guard. Clients back off while `.com`
+  fails (webapp shell v153, iOS and Android live-sync loops). **The box doorbell**:
+  the heartbeat reply says which lanes hold something and carries a digest of
+  aliases, device grants and rotations; a box skips polls it says are empty (a box
+  asks about 1,200 times a day, was 4,470: about 75 accounts fit under 100,000, was
+  21). Needs a `.com` deploy first (shell v153), then an endorsed box release (an
+  old box simply keeps polling), and iOS/Android store builds for the backoff.
+  **Does not fit Free and is not fixed**: the 6-hourly D1 backup (89 D1 calls, cap
+  50: it never runs), the other crons, and `run_worker_first = ["/*"]` (every static
+  file is a counted request: ~190 per webapp shell release per user). Next: gate the
+  invite-revocation and share-end polls on the doorbell (576 requests a day a box).
 - **Account gone (2026-10-18, N1, `docs/account-gone.md`).** After the pre-GA
   wipe a signed-in device must learn its account no longer exists. `.com`
   answers `404 { error, code: "account-not-found" }` before any auth check on
