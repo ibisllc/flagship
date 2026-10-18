@@ -256,7 +256,9 @@ public struct ServerDetailScreen: View {
                         }
                         ServerAppsSection(controller: apps, onOpenApp: onOpenApp, onCreate: onCreateApp)
                     }
-                    MonitoringPane(health: health, metrics: metrics, cert: certificate(d))
+                    if !offline {
+                        MonitoringPane(health: health, metrics: metrics, cert: certificate(d))
+                    }
                     BootUnlockCard(serverDomain: d.serverFqdn)
                     ServerOrderCard(serverDomain: d.serverFqdn)
                     ShareServerCard(serverDomain: d.serverFqdn)
@@ -275,7 +277,7 @@ public struct ServerDetailScreen: View {
                 }
                 // The health report comes from the directory, not the box, so
                 // it still shows when the box's own detail can't load.
-                if !isLoaded, health != nil {
+                if !isLoaded, !offline, health != nil {
                     MonitoringPane(health: health, metrics: nil, cert: nil)
                 }
                 // Outside the state switch: none of these need the box, so an
@@ -412,6 +414,10 @@ public struct ServerDetailScreen: View {
         .accessibilityIdentifier("server-detail-revoked")
     }
 
+    /// The whole offline banner (web: "This server has gone offline. Check again"
+    /// with a button, as it has no pull gesture; Android says the same as iOS).
+    static let offlineBanner = "This server has gone offline. Pull down to re-check"
+
     /// HONEST LIVENESS (Fix B) — the honest copy for an `offline` (was live,
     /// now stale) or `comingUp` (registered, awaiting first heartbeat) box.
     /// Neither is the transient "Connecting…" nor the terminal "never came
@@ -425,18 +431,15 @@ public struct ServerDetailScreen: View {
                         Image(systemName: "wifi.slash")
                             .imageScale(.large)
                             .foregroundColor(c.textMuted)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(lastSeen.map { "Offline — last seen \($0)" } ?? "Offline")
-                                .font(FS.font.scaled(17, weight: .semibold))
-                                .foregroundColor(c.text)
-                            Text("This server has gone offline — its software isn't checking in right now. Its data is safe; it'll reconnect when the server is back online. Pull down to re-check.")
-                                .font(FS.font.bodySm())
-                                .foregroundColor(c.textMuted)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
+                        Text(Self.offlineBanner)
+                            .font(FS.font.scaled(17, weight: .semibold))
+                            .foregroundColor(c.text)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("server-detail-offline-text")
                     }
                 }
             }
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("server-detail-offline")
         } else {
             FSCard {

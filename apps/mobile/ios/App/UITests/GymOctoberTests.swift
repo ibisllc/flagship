@@ -568,6 +568,16 @@ final class GymOctoberTests: XCTestCase {
         let offline = app.descendants(matching: .any)["server-detail-offline"]
         XCTAssertTrue(offline.waitForExistence(timeout: 20), "An offline server's page says it's offline.")
         XCTAssertFalse(app.staticTexts["Connecting…"].exists)
+        // The whole banner is this one line; no "last seen", no long body.
+        XCTAssertEqual(app.staticTexts["server-detail-offline-text"].label, "This server has gone offline. Pull down to re-check")
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "last seen")).firstMatch.exists)
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "software isn't checking in")).firstMatch.exists)
+        XCTAssertFalse(app.descendants(matching: .any)["sd-monitoring"].exists, "No Monitoring section while offline.")
+        // Pull down re-checks; the page stays as it was (no spinner loop).
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+        start.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)))
+        XCTAssertTrue(offline.waitForExistence(timeout: 10), "Still offline after a re-check.")
+        XCTAssertEqual(app.progressIndicators.count, 0, "Nothing spins on an offline page.")
         XCTAssertTrue(reveal(app, app.buttons["sd-revoke-server"]), "It can still be revoked.")
         gymShot(app, "server-offline")
     }
