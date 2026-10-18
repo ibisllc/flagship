@@ -258,6 +258,21 @@ about a new record for several seconds, which is why deletions are ordered so
 that every intermediate state still answers (section 5) rather than relying on
 atomicity.
 
+### 9.4 The full gym run with the shield off (2026-10-18, relay v18, gym Worker with `2963833d7`)
+
+All 23 groups plus the fleet: **248 checks, 0 failed**, 57 min, 4 boxes at peak,
+torn down through `/api/gym/teardown`. The zone went from 166 records to 178 at
+peak and back to **166**, with 0 gym records and servers left; releasing a box
+deleted 0 DNS records (nothing per box). The first box's issuance, polled every
+200 ms for about 5 minutes (1,726 to 1,728 answers per target and resolver): the
+box name (A and AAAA) and a never-asked label under it answered the relay at
+jade, 1.1.1.1 and 8.8.8.8 every time; no NODATA, no NXDOMAIN; the only errors
+were 3 timeouts at 8.8.8.8. The challenge TXTs reached jade 6.4 s after they were
+created and, after they were deleted (224.4 s), flapped between present and
+absent at jade until 256.9 s. A stale answer like that is harmless to Let's
+Encrypt (any matching TXT validates), but a renewal started within about 35 s of
+the previous deletion can see the old value too.
+
 ## 10. What needs deploying, and the manual DNS step
 
 - **The one-time manual DNS step (owner, Cloudflare dashboard)**, before or after

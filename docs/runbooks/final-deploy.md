@@ -336,6 +336,38 @@ Rollback of the whole step: delete the wildcard pair. Accounts that still hold
 their own records keep resolving; ones already trimmed go dark until it is back,
 so do not roll back after the trim.
 
+**Gate result (2026-10-18, gym Worker with `2963833d7`, relay v18):** full run
+248 checks, 0 failed; the first box's issuance, polled 1,700 times per target and
+resolver, never answered NODATA or NXDOMAIN for the box name or a label under it
+(`docs/wildcard-dns.md` section 11.6); zone back to its base.
+
+**What the prod deploy must verify live (read-only on prod; nothing below writes
+to the prod zone):**
+
+1. Before step 7, the gate above is green on the commit you will deploy, and
+   `npx tsx tools/live-e2e/dns-ent-experiment.ts --canary` (gym, 30 s, exit 0)
+   passes again on the same day: it proves Cloudflare still keeps the wildcard
+   under a TXT. Re-run it after any change of Cloudflare plan or zone settings.
+   Do not run it against prod (it creates throwaway records).
+2. After step 7 (`.com`), a new prod account's names resolve before its box
+   registers: `dig +short @jade.ns.cloudflare.com anything.<new-account>.flagship.services`
+   and `@1.1.1.1` return the relay address (`149.248.216.86`); the zone holds
+   exactly `*.<new-account>` A + AAAA and two CAA at `<new-account>`
+   (the reap tool's dry run lists it as KEEP, no `trim` rows).
+3. During the first new prod box's certificate issuance, watch it from outside
+   (the box name and a label under it must keep answering, 5 per second is enough):
+   `for i in $(seq 1 1500); do dig +short @jade.ns.cloudflare.com home.<acct>.flagship.services; dig +short @jade.ns.cloudflare.com probe$i.home.<acct>.flagship.services; sleep 0.2; done | sort | uniq -c`
+   must show only the relay address (an empty line is a dark answer: stop, set nothing,
+   and tell the maintainer; do NOT set `DNS_CHALLENGE_SHIELD`).
+4. After step 8 (`.services`), an unregistered name under an account with an
+   online box and one under an unknown account both get no TLS answer and close
+   after the same wait (the gym core group's check, by hand:
+   `openssl s_client -connect <relay-ip>:443 -servername ghost.<account>.flagship.services`
+   twice; the two close within 1.5 s of each other and neither prints a certificate).
+5. The zone count (`GET /api/admin/reap/list` or the dashboard) is back to the
+   steady state of 4 per account after each issuance: no `_acme-challenge` TXT
+   older than an hour (the stale sweep removes them hourly).
+
 ## 7. Deploy `.com`
 
 ```sh
