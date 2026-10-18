@@ -117,7 +117,7 @@ class GymLiveAccountTest : GymBase() {
         waitUntilExistsDesc("trusted-devices-add", timeoutMs = 30_000)
         tapDesc("trusted-devices-add")
         waitUntilExistsDesc("device-pairing-unavailable")
-        waitText("Adding a device from this phone isn't available yet. Use the web app or iOS.")
+        waitText("Adding a device from this phone isn't available yet. Use the web app.")
         assertTrue(textCount("MockDevicePairingRelay") == 0)
         gymShot("add-device-unavailable")
     }
