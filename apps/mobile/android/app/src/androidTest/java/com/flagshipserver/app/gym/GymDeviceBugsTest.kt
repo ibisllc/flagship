@@ -125,4 +125,21 @@ class GymDeviceBugsTest : GymBase() {
         gymShot("key-backup-ready")
         composeRule.onNode(create).performScrollTo().assertIsEnabled()
     }
+
+    // Device report 2026-10-18 (A-2): a pending order beside a ghost row
+    // ("server.<apex>", no account part, holding the real order's number)
+    // shows only the real order once Home has read the account's orders.
+    @Test
+    fun aGhostRowWithNoAccountPartNeverStaysOnHome() {
+        launch(tab = "home", adminRoot = true, podsVariant = "pending-ghost")
+        waitText("Home2", 20_000)
+        fun fqdns() = com.flagshipserver.app.core.GymProbe.appState!!.pods.value.map { it.fqdn }
+        // The ghost is seeded first; only the reconcile that reads the account's
+        // orders can remove it, so waiting for it to go proves the fix.
+        composeRule.waitUntil(20_000) { "server.flagship.services" !in fqdns() }
+        gymShot("pending-order-no-ghost")
+        assertTrue("the real order stays: ${fqdns()}", fqdns().any { it.startsWith("home2.") })
+        composeRule.onAllNodes(androidx.compose.ui.test.hasText("server.", substring = true))
+            .fetchSemanticsNodes().let { assertTrue("no ghost row", it.isEmpty()) }
+    }
 }

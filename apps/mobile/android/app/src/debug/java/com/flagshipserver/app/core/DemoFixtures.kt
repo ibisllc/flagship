@@ -72,4 +72,28 @@ object DemoFixtures {
             registeredAt = System.currentTimeMillis() - 24L * 60L * 60L * 1000L,
             awaitingUnlock = false,
         )
+
+    /** The serial of the pending order [samplePodsWithPendingGhost] makes. */
+    const val GHOST_ORDER_SERIAL = "GYMSERIAL0002"
+
+    /** GYM, device report 2026-10-18 (A-2): a real pending order "Home2" and the
+     *  ghost row an old install-progress exit made beside it ("server.<apex>",
+     *  holding Home2's order number). Home must show only the real one. */
+    fun samplePodsWithPendingGhost(username: String): List<PodInfo> =
+        samplePods(username) + listOf(
+            PodInfo(
+                podId = PodInfo.podId("home2.$username.flagship.services"),
+                name = "Home2",
+                fqdn = "home2.$username.flagship.services",
+                status = PodInfo.Status.PENDING,
+                pendingAuthCodeSerial = GHOST_ORDER_SERIAL,
+            ),
+            PodInfo(
+                podId = PodInfo.podId("server.flagship.services"),
+                name = "",
+                fqdn = "server.flagship.services",
+                status = PodInfo.Status.PENDING,
+                pendingAuthCodeSerial = GHOST_ORDER_SERIAL,
+            ),
+        )
 }

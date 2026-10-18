@@ -196,6 +196,14 @@ class PendingServerReconciler(
         for (pod in app.pods.value) {
             if (pod.status != PodInfo.Status.PENDING) continue
             if (pod.demoServer != null) continue
+            // A pending row that names no `<server>.<user>` (an older build
+            // guessed "server.<apex>" and gave it another order's number)
+            // cannot be a real order: it can't be cancelled and never goes
+            // away while that other order is outstanding.
+            if (pod.fqdn.isNotEmpty() && !InstallFinishTarget.isWellFormed(pod.fqdn)) {
+                app.removePod(pod.podId)
+                continue
+            }
             val registered = liveFqdns.contains(pod.fqdn.lowercase())
             val serial = pod.pendingAuthCodeSerial
             val stillOutstanding = if (serial != null) {

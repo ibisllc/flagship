@@ -123,6 +123,18 @@ object Variant : AppVariant {
         val relay = MockQrRelayClient()
         val transfer = MockServerTransferClient()
         val mailbox = MockSecretMailboxClient()
+        if (cfg.podsVariant == "pending-ghost") {
+            // Same `.com` answer a real account gives: Home2 is an open order.
+            mailbox.pendingOrders = listOf(
+                com.flagshipserver.app.api.PendingPodEntry(
+                    orderRef = OrderRef.compute(DemoFixtures.GHOST_ORDER_SERIAL),
+                    serverName = "Home2",
+                    fqdn = "home2.${cfg.username}.flagship.services",
+                    phase = "installing",
+                    createdAt = System.currentTimeMillis(),
+                ),
+            )
+        }
         // The instrumented scenario (same process) checks what a button sent.
         GymProbe.appState = appState
         GymProbe.screens = screens

@@ -607,7 +607,14 @@ fun HomeTab() {
                 onCancel = { nav.popBackStack() },
             )
         }
-        composable("install-progress/{serial}") { entry ->
+        composable(
+            route = "install-progress/{serial}?name={name}&fqdn={fqdn}",
+            arguments = listOf(
+                navArgument("serial") { type = NavType.StringType },
+                navArgument("name") { type = NavType.StringType; defaultValue = "" },
+                navArgument("fqdn") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { entry ->
             val serial = entry.arguments?.getString("serial") ?: return@composable
             val name = URLDecoder.decode(entry.arguments?.getString("name") ?: "", "UTF-8")
             val fqdn = URLDecoder.decode(entry.arguments?.getString("fqdn") ?: "", "UTF-8")
@@ -621,14 +628,18 @@ fun HomeTab() {
                     // canonical `live` flips it; "Run in background" keeps
                     // it pending (no more fake-ONLINE random-id pod) and
                     // the reconciler flips it when the box registers.
-                    val final = (resolvedFqdn ?: fqdn).ifEmpty {
-                        com.flagshipserver.app.core.SlugUtil.slugify(name) +
-                            ".${com.flagshipserver.app.core.Endpoints.dataApex}"
-                    }
-                    if (live) {
-                        app.upsertRegisteredPod(fqdn = final, name = name)
-                    } else {
-                        app.upsertPendingPod(name = name, fqdn = final, serial = serial)
+                    val final = com.flagshipserver.app.core.InstallFinishTarget.fqdn(
+                        resolved = resolvedFqdn,
+                        fromRoute = fqdn,
+                        serial = serial,
+                        pods = app.pods.value,
+                    )
+                    if (final != null) {
+                        if (live) {
+                            app.upsertRegisteredPod(fqdn = final, name = name)
+                        } else {
+                            app.upsertPendingPod(name = name, fqdn = final, serial = serial)
+                        }
                     }
                     nav.popBackStack(route = "home-root", inclusive = false)
                 },

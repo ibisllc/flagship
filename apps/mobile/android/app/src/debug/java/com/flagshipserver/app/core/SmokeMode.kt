@@ -156,6 +156,7 @@ object SmokeMode {
                 "awaiting-unlock" -> DemoFixtures.samplePodsWithAwaitingUnlock(user)
                 "dead" -> DemoFixtures.samplePodsWithDeadServer(user)
                 "none" -> emptyList()
+                "pending-ghost" -> DemoFixtures.samplePodsWithPendingGhost(user)
                 else -> DemoFixtures.samplePods(user)
             }.mapIndexed { i, pod ->
                 // Real boxes carry their STK; the server order names servers by

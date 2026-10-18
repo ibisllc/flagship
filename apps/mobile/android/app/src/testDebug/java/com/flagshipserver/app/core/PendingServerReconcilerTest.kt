@@ -255,6 +255,29 @@ class PendingServerReconcilerTest {
         assertTrue(app.pods.value.isEmpty())
     }
 
+    // The ghost an old install-progress exit made: "server.<apex>" holding a
+    // real order's number. It is dropped even while that order is outstanding,
+    // and the real row stays.
+    @Test fun ghostWithoutAccountSegment_isDroppedWhileItsOrderIsOutstanding() = runTest {
+        val app = signedInApp()
+        app.upsertPendingPod(name = "home2", fqdn = "home2.harry.flagship.services", serial = "S-2")
+        app.addPod(
+            PodInfo(
+                podId = PodInfo.podId("server.${Endpoints.dataApex}"),
+                name = "",
+                fqdn = "server.${Endpoints.dataApex}",
+                status = PodInfo.Status.PENDING,
+                pendingAuthCodeSerial = "S-2",
+            ),
+        )
+        val mailbox = MockSecretMailboxClient().apply {
+            pendingOrders = listOf(order("S-2", "home2", "home2.harry.flagship.services"))
+        }
+        PendingServerReconciler(app, mailbox).reconcile()
+
+        assertEquals(listOf("home2.harry.flagship.services"), app.pods.value.map { it.fqdn })
+    }
+
     // Backward-compatible: a pre-#56 response with no `pending` key still
     // surfaces registered servers (the default keeps `pending` empty).
     @Test fun backwardCompatible_responseWithoutPending() = runTest {
