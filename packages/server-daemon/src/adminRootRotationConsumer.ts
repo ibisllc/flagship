@@ -337,44 +337,6 @@ async function fetchRotationChainOrNull(
 }
 
 /**
- * Apply rotation proofs the owner's phone delivered STRAIGHT to the box (no
- * `.com`): replay them from the box's effective pinned root exactly as a polled
- * chain is replayed, persist the new pin and restart. A proof that doesn't
- * chain from the pinned root and verify under it changes nothing, whoever sent
- * it. Never throws.
- */
-export async function applyDeliveredRotations(opts: {
-  username: string;
-  seedAdminRootHex: string | null;
-  pinStore: AdminRootPinStore;
-  entries: readonly RotationChainEntry[];
-  restart: () => void;
-  now?: () => number;
-  onLog?: (m: string) => void;
-}): Promise<AdminRootRotationOutcome> {
-  const log = opts.onLog ?? (() => {});
-  let current: string | null;
-  try {
-    current = await resolvePinnedAdminRoot(opts.seedAdminRootHex, opts.pinStore);
-  } catch {
-    return { rotated: false, reason: "error" };
-  }
-  if (!current) return { rotated: false, reason: "no-admin-root" };
-  const chain = [...opts.entries].sort((a, b) => a.seq - b.seq);
-  const result = applyRotationChain({ pinnedHex: current, username: opts.username.toLowerCase(), chain });
-  if (result.applied === 0 || result.pinnedHex === current) return { rotated: false, reason: "no-rotation" };
-  try {
-    await opts.pinStore.write({ adminRootPubHex: result.pinnedHex, seq: result.lastSeq, updatedAt: (opts.now ?? (() => Date.now()))() });
-  } catch (e) {
-    log(`[admin-root-rotation] persist failed (${(e as Error).message})`);
-    return { rotated: false, reason: "error" };
-  }
-  log(`[admin-root-rotation] delivered by the owner: re-pin ${current.slice(0, 12)} → ${result.pinnedHex.slice(0, 12)} (${result.applied} hop(s)); restarting`);
-  opts.restart();
-  return { rotated: true, from: current, to: result.pinnedHex, applied: result.applied, seq: result.lastSeq };
-}
-
-/**
  * One poll: fetch the chain, replay it from the box's effective pinned root, and
  * (on a verified advance) persist the new pin + restart. Never throws.
  */

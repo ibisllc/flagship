@@ -26,18 +26,12 @@ import {
   signRescueHello,
   type Bytes,
   type RescueExchange,
-  type RevokeDeviceCapabilityGrant,
 } from "@flagship/protocol";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import { ARCHIVE_PATH } from "../serverArchive/service.js";
 
 export const RESCUE_PATH = "/api/rescue";
 export const RESCUE_SESSION_TTL_MS = 60 * 60_000;
-/** A device that became an admin by a grant (not by holding the admin root) may not open a rescue session until its grant is this old. */
-export const RESCUE_NEW_ADMIN_COOLING_MS = 24 * 60 * 60_000;
-
-/** Who signed a rescue order: the admin root itself, or an admin device by its own key and grant. */
-export type RescueSigner = { kind: "root" } | { kind: "device"; grantId: string; deviceId: string; grantIssuedAt: number };
 /**
  * Everything on the local network reaches the app as one loopback source, so
  * there is no per-caller limit to be had. A guess cannot succeed (a signature
@@ -67,17 +61,8 @@ export interface RescueDeps {
   signAsBox: (msg: Bytes) => Bytes;
   /** SHA-256 of the leaf certificate this box is presenting, or null if it has none. */
   certSha256: () => string | null;
-  /** Who signed this order under the box's pinned authority (the admin root, an admin device with a grant, or the IRK on a box that pins none), or null. */
-  authorize: (order: RescueExchange, signature: Uint8Array) => RescueSigner | null;
-  /** Default 24 h; 0 turns the cooling period off. Applies to device signers only. */
-  coolingMs?: number;
-  /** Root-signed device revocations delivered straight to this box (deviceRevocations.ts). */
-  revocations?: {
-    accept: (r: RevokeDeviceCapabilityGrant, sig: Uint8Array) => Promise<string | null>;
-    subscribe: (fn: (grantId: string) => void) => void;
-  } | null;
-  /** Rotation proofs delivered straight to this box (adminRootRotationConsumer.applyDeliveredRotations). */
-  rotations?: ((entries: RotationEntry[]) => Promise<{ rotated: boolean; reason?: string }>) | null;
+  /** Is this order signed by the sensitive-order key (admin root, else IRK)? */
+  authorize: (order: RescueExchange, signature: Uint8Array) => boolean;
   /** The backup routes (serverArchive.handle). */
   archive: {
     handle: (path: string, method: string, req: HttpRequest, ctx: { companion: boolean }) => Promise<HttpResponse | null>;
@@ -88,14 +73,6 @@ export interface RescueDeps {
   now?: () => number;
   random?: (n: number) => Buffer;
   log?: (m: string) => void;
-}
-
-export interface RotationEntry {
-  seq: number;
-  oldAdminRootPub: string;
-  newAdminRootPub: string;
-  issuedAt: number;
-  signatureHex: string;
 }
 
 const J = { "content-type": "application/json", "cache-control": "no-store", "x-content-type-options": "nosniff" } as const;
@@ -122,19 +99,15 @@ export function buildRescue(deps: RescueDeps) {
 
   /** boxNonce -> the client nonce it was issued for, until it is spent or ages out. */
   const nonces = new Map<string, { clientNonce: string; issuedAt: number }>();
-  /** sha256(token) -> expiry and who opened it. */
-  const sessions = new Map<string, { exp: number; signer: RescueSigner }>();
-  const cooling = deps.coolingMs ?? RESCUE_NEW_ADMIN_COOLING_MS;
-  deps.revocations?.subscribe((grantId) => {
-    for (const [k, v] of sessions) if (v.signer.kind === "device" && v.signer.grantId === grantId) sessions.delete(k);
-  });
+  /** sha256(token) -> expiry. */
+  const sessions = new Map<string, number>();
   let hellos: number[] = [];
   let lastRefusalNote = -Infinity;
 
   const sweep = () => {
     const t = now();
     for (const [k, v] of nonces) if (t - v.issuedAt > RESCUE_HELLO_TTL_MS) nonces.delete(k);
-    for (const [k, v] of sessions) if (v.exp <= t) sessions.delete(k);
+    for (const [k, exp] of sessions) if (exp <= t) sessions.delete(k);
     hellos = hellos.filter((x) => t - x < WINDOW_MS);
   };
 
@@ -160,12 +133,12 @@ export function buildRescue(deps: RescueDeps) {
     return json(200, { hello: h, signatureHex: Buffer.from(signRescueHello(h, deps.signAsBox)).toString("hex") });
   }
 
-  function refuse(why: string, status = 403, code = "rescue-refused"): HttpResponse {
+  function refuse(why: string, status = 403): HttpResponse {
     if (now() - lastRefusalNote >= NOTE_REFUSALS_EVERY_MS) {
       lastRefusalNote = now();
       note("server.rescue.refused", `A rescue session was refused: ${why}.`, false);
     }
-    return err(status, `the rescue session was refused: ${why}`, code);
+    return err(status, `the rescue session was refused: ${why}`, "rescue-refused");
   }
 
   function session(req: HttpRequest): HttpResponse {
@@ -187,79 +160,17 @@ export function buildRescue(deps: RescueDeps) {
     const cert = deps.certSha256();
     if (!cert || order.certSha256 !== cert) return refuse("another certificate");
     if (Math.abs(now() - order.issuedAt) > RESCUE_HELLO_TTL_MS) return refuse("stale");
-    const signer = deps.authorize(order, Buffer.from(b.signatureHex, "hex"));
-    if (!signer) return refuse("not signed by this server's owner key");
-    if (signer.kind === "device" && cooling > 0 && now() - signer.grantIssuedAt < cooling) {
-      const hours = Math.ceil((signer.grantIssuedAt + cooling - now()) / 3_600_000);
-      return refuse(
-        `this device became an admin less than ${Math.round(cooling / 3_600_000)} hours ago and may take a backup in about ${hours} more; the admin key itself can take one now`,
-        403,
-        "admin-too-new",
-      );
-    }
+    if (!deps.authorize(order, Buffer.from(b.signatureHex, "hex"))) return refuse("not signed by this server's owner key");
     if (sessions.size >= MAX_SESSIONS) {
-      const oldest = [...sessions.entries()].sort((a, c) => a[1].exp - c[1].exp)[0];
+      const oldest = [...sessions.entries()].sort((a, c) => a[1] - c[1])[0];
       if (oldest) sessions.delete(oldest[0]);
     }
     const token = random(32).toString("hex");
     const expiresAt = now() + RESCUE_SESSION_TTL_MS;
-    sessions.set(sha(token), { exp: expiresAt, signer });
-    const who = signer.kind === "root" ? "the admin key" : `admin device ${signer.deviceId.slice(0, 8)}`;
-    note("server.rescue.opened", `A rescue session was opened with ${who}: it can make and download a backup of this server.`);
+    sessions.set(sha(token), expiresAt);
+    note("server.rescue.opened", "The owner opened a rescue session on this server.");
     log("[rescue] session opened");
     return json(200, { token, expiresAt });
-  }
-
-  /** Both intake routes are self-authenticating (a signature under the pinned admin root) and only ever remove authority. */
-  function intakeAllowed(): boolean {
-    if (hellos.length >= MAX_HELLOS_PER_WINDOW) return false;
-    hellos.push(now());
-    return true;
-  }
-
-  async function revoke(req: HttpRequest): Promise<HttpResponse> {
-    if (!deps.revocations) return err(404, "not available");
-    if (!intakeAllowed()) return err(429, "too many tries: wait a minute", "rate-limited");
-    let b: { revoke?: Partial<RevokeDeviceCapabilityGrant>; signatureHex?: unknown };
-    try {
-      b = JSON.parse(req.body.toString("utf8")) as typeof b;
-    } catch {
-      return err(400, "invalid json");
-    }
-    const r = b.revoke;
-    if (!r || typeof r.grantId !== "string" || typeof r.username !== "string" || typeof r.reason !== "string" || typeof r.issuedAt !== "number" || typeof b.signatureHex !== "string" || !/^[0-9a-f]{128}$/.test(b.signatureHex)) {
-      return err(400, "malformed revocation");
-    }
-    let why: string | null;
-    try {
-      why = await deps.revocations.accept(r as RevokeDeviceCapabilityGrant, Buffer.from(b.signatureHex, "hex"));
-    } catch {
-      why = "that revocation couldn't be read";
-    }
-    if (why) return err(403, why, "revocation-refused");
-    note("server.device.revoked", "A device of the account was revoked by the admin key, and this server stopped trusting it.");
-    return json(200, { ok: true });
-  }
-
-  async function rotate(req: HttpRequest): Promise<HttpResponse> {
-    if (!deps.rotations) return err(404, "not available");
-    if (!intakeAllowed()) return err(429, "too many tries: wait a minute", "rate-limited");
-    let b: { rotations?: Array<Partial<RotationEntry>> };
-    try {
-      b = JSON.parse(req.body.toString("utf8")) as typeof b;
-    } catch {
-      return err(400, "invalid json");
-    }
-    if (!Array.isArray(b.rotations) || b.rotations.length === 0 || b.rotations.length > 16) return err(400, "malformed rotation");
-    const entries: RotationEntry[] = [];
-    for (const [i, r] of b.rotations.entries()) {
-      if (typeof r.oldAdminRootPub !== "string" || typeof r.newAdminRootPub !== "string" || typeof r.signatureHex !== "string" || typeof r.issuedAt !== "number") return err(400, "malformed rotation");
-      entries.push({ seq: typeof r.seq === "number" ? r.seq : i + 1, oldAdminRootPub: r.oldAdminRootPub, newAdminRootPub: r.newAdminRootPub, issuedAt: r.issuedAt, signatureHex: r.signatureHex });
-    }
-    const out = await deps.rotations(entries);
-    if (!out.rotated) return err(403, "that doesn't continue the admin key this server trusts", "rotation-refused");
-    note("server.admin.rotated", "The account's admin key was replaced, and this server now trusts the new one. The old key can no longer act here.");
-    return json(200, { ok: true, restarting: true });
   }
 
   function tokenOf(req: HttpRequest): string | null {
@@ -270,9 +181,9 @@ export function buildRescue(deps: RescueDeps) {
   function authed(req: HttpRequest): boolean {
     const t = tokenOf(req);
     if (!t) return false;
-    const row = sessions.get(sha(t));
+    const exp = sessions.get(sha(t));
     // The map is keyed by a hash of the token, so the lookup leaks nothing a guess could use.
-    return row !== undefined && row.exp > now();
+    return exp !== undefined && exp > now();
   }
 
   return {
@@ -285,11 +196,9 @@ export function buildRescue(deps: RescueDeps) {
       const rest = path.slice(RESCUE_PATH.length).replace(/^\//, "");
       if (method === "POST" && rest === "hello") return hello(req);
       if (method === "POST" && rest === "session") return session(req);
-      if (method === "POST" && rest === "revoke") return revoke(req);
-      if (method === "POST" && rest === "admin-root-rotation") return rotate(req);
       if (!authed(req)) return err(401, "open a rescue session first", "rescue-session-required");
       if (method === "GET" && rest === "server") {
-        return json(200, { serverDomain: deps.serverFqdn, apps: deps.apps(), sessionEndsAt: sessions.get(sha(tokenOf(req)!))?.exp });
+        return json(200, { serverDomain: deps.serverFqdn, apps: deps.apps(), sessionEndsAt: sessions.get(sha(tokenOf(req)!)) });
       }
       if (rest === "archive" || rest.startsWith("archive/")) {
         const sub = rest === "archive" ? "" : rest.slice("archive/".length);
