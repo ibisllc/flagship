@@ -44,6 +44,35 @@ export function describeAnswer(err: NodeJS.ErrnoException | null, answers: unkno
   return `${type} ${rows.map((r) => r.address).sort().join(",")}`;
 }
 
+const BOX_TARGETS = new Set(["box A", "box AAAA", "random label under box A"]);
+const DARK = new Set(["NODATA", "NXDOMAIN"]);
+
+/**
+ * The stretches in [fromT, toT] where the box name, or a label under it, was
+ * answered with NODATA or NXDOMAIN by any resolver. An event is a CHANGE of
+ * answer, so a state lasts until the next event for the same target and
+ * resolver. Empty = the box never went dark.
+ */
+export function darkDuringIssuance(events: readonly ProbeEvent[], fromT: number, toT: number): string[] {
+  const out: string[] = [];
+  const byKey = new Map<string, ProbeEvent[]>();
+  for (const e of events) {
+    if (!BOX_TARGETS.has(e.target)) continue;
+    const k = `${e.via}|${e.target}`;
+    byKey.set(k, [...(byKey.get(k) ?? []), e]);
+  }
+  for (const [k, list] of byKey) {
+    list.sort((a, b) => a.t - b.t);
+    list.forEach((e, i) => {
+      const end = list[i + 1]?.t ?? Number.POSITIVE_INFINITY;
+      if (!DARK.has(e.state) || end <= fromT || e.t >= toT) return;
+      const until = Number.isFinite(end) ? `${((end - e.t) / 1000).toFixed(1)} s` : "to the end";
+      out.push(`${k.replace("|", " / ")}: ${e.state} at ${(e.t / 1000).toFixed(1)} s for ${until}`);
+    });
+  }
+  return out.sort();
+}
+
 export interface ProbeTargets {
   /** `<server>.<user>.<apex>` */
   box: string;
@@ -171,6 +200,27 @@ export class DnsProbe {
     appendFileSync(this.file, JSON.stringify(ev) + "\n");
   }
 
+  private issuanceEnd: number | null = null;
+
+  /** When the account wildcard first showed in the zone (+3 s for it to reach the name servers); null if it never did. */
+  issuanceStart(): number | null {
+    const e = this.events.find((x) => x.via === "cloudflare API" && x.state === `+ A *.${this.targets.account}`);
+    return e ? e.t + 3000 : null;
+  }
+
+  /** The box has its certificate, or the run is about to tear it down: what happens after is not issuance. */
+  endIssuance(): void {
+    if (this.issuanceEnd === null) this.issuanceEnd = Date.now() - this.t0;
+    this.stopIssuance();
+  }
+
+  /** Dark stretches of the box name between the wildcard appearing and the end of issuance. */
+  dark(): string[] {
+    const from = this.issuanceStart();
+    if (from === null) return ["the account wildcard never showed in the zone, so there was nothing to check"];
+    return darkDuringIssuance(this.events, from, this.issuanceEnd ?? Date.now() - this.t0);
+  }
+
   /** The box has its certificate: stop the 200 ms pollers (the slow account ones go on until {@link stop}). */
   stopIssuance(): void {
     this.issuanceStopped = true;
@@ -187,7 +237,7 @@ export class DnsProbe {
     const bad = [...this.counts.entries()]
       .filter(([k]) => /box A|box AAAA|random label under box A/.test(k) && !k.includes("TXT"))
       .flatMap(([k, v]) => Object.entries(v).filter(([s]) => s === "NODATA" || s === "NXDOMAIN").map(([s, n]) => `${k}: ${s} x${n}`));
-    return { startedAt: new Date(this.t0).toISOString(), events: this.events.length, boxNameDarkAnswers: bad, counts };
+    return { startedAt: new Date(this.t0).toISOString(), events: this.events.length, darkDuringIssuance: this.dark(), boxNameDarkAnswers: bad, counts };
   }
 }
 

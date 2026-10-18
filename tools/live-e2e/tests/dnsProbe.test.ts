@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeAnswer } from "../lib/dnsProbe.js";
+import { darkDuringIssuance, describeAnswer } from "../lib/dnsProbe.js";
 
 const err = (code: string): NodeJS.ErrnoException => Object.assign(new Error(code), { code });
 
@@ -21,5 +21,29 @@ describe("DNS probe answer states", () => {
   it("counts TXT records (a box challenge has two at once)", () => {
     expect(describeAnswer(null, [["x"], ["y"]], "TXT")).toBe("TXT x2");
     expect(describeAnswer(null, [], "TXT")).toBe("NODATA");
+  });
+});
+
+describe("dark stretches during issuance", () => {
+  const ev = (t: number, target: string, state: string, via = "authoritative") => ({ t, at: "", target, via, state });
+  it("is empty while the box and the labels under it keep answering", () => {
+    const events = [ev(0, "box A", "A 1.1.1.1"), ev(1000, "random label under box A", "A 1.1.1.1"), ev(2000, "challenge TXT", "NXDOMAIN")];
+    expect(darkDuringIssuance(events, 0, 10_000)).toEqual([]);
+  });
+  it("reports a label under the box that went NXDOMAIN, with how long", () => {
+    const events = [ev(0, "random label under box A", "A 1.1.1.1", "8.8.8.8"), ev(5000, "random label under box A", "NXDOMAIN", "8.8.8.8"), ev(10_100, "random label under box A", "A 1.1.1.1", "8.8.8.8")];
+    expect(darkDuringIssuance(events, 0, 20_000)).toEqual(["8.8.8.8 / random label under box A: NXDOMAIN at 5.0 s for 5.1 s"]);
+  });
+  it("counts a dark state that began before the window and is still there", () => {
+    const events = [ev(0, "box A", "NXDOMAIN")];
+    expect(darkDuringIssuance(events, 3000, 9000)).toHaveLength(1);
+  });
+  it("ignores darkness after issuance ended (teardown removes records one by one)", () => {
+    const events = [ev(0, "box A", "A 1.1.1.1"), ev(9500, "box A", "NXDOMAIN")];
+    expect(darkDuringIssuance(events, 0, 9000)).toEqual([]);
+  });
+  it("does not blame the challenge TXT or the account name", () => {
+    const events = [ev(0, "challenge TXT", "NXDOMAIN"), ev(0, "account A", "NODATA")];
+    expect(darkDuringIssuance(events, 0, 9000)).toEqual([]);
   });
 });

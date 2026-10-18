@@ -243,6 +243,7 @@ import { createDemoCreateSettings, createDemoServerRouter, demoCreateMissingConf
 import { createUpCloudClient, parseUpCloudLabels } from "./upcloud.js";
 import { handleGymTeardown, type GymTeardownBody } from "./gymCloud.js";
 import { loadInferenceSettings } from "./inferenceModelRoutes.js";
+import { challengeShieldFor } from "./challengeShield.js";
 
 export interface ControlPlaneEnv {
   DB?: D1Database;
@@ -273,6 +274,8 @@ export interface ControlPlaneEnv {
    * token. This is the production posture as of Task #13.
    */
   DNS_BROKER_URL?: string;
+  /** "1" puts a shield beside each DNS-01 challenge TXT (direct mode only). Default off: see challengeShield.ts. */
+  DNS_CHALLENGE_SHIELD?: string;
   /**
    * Legacy direct-CF mode. Kept only for the local-dev / test path
    * where running the broker is overkill. PRODUCTION MUST USE THE
@@ -1648,8 +1651,9 @@ export async function tryControlPlane(
         usernames: storage.usernames,
         dns,
         apex: env.SERVICES_APEX,
-        // Keep the box's names answering while its challenge TXT exists.
-        ...(relayAddressOf(env) ? { shield: relayAddressOf(env)! } : {}),
+        // Off by default: Cloudflare keeps the wildcard answering under a TXT,
+        // and the shield opened a window of its own (challengeShield.ts).
+        ...challengeShieldFor(env, relayAddressOf(env)),
       },
       await readJson(request),
     );

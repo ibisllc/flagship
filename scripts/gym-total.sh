@@ -71,6 +71,16 @@ fi
 # ── Phase 2: the live run on one shared UpCloud fleet (always torn down) ────────
 # Exit 0 = every group green · 1 = a check failed (a control bypassed counts) ·
 # 3 = nothing failed but something was SKIPPED (inconclusive, never a pass).
+# DNS canary first (30 s, throwaway names): a challenge TXT must not darken a name
+# (docs/wildcard-dns.md "Live verification"). Needs GYM_DNS_TOKEN; skipped without it.
+if [ -n "${GYM_DNS_TOKEN:-}" ]; then
+  if npx tsx tools/live-e2e/dns-ent-experiment.ts --canary >/dev/null; then
+    echo "✓ DNS canary: a challenge TXT leaves the box's names answering"
+  else
+    echo "✗ DNS canary FAILED: a challenge TXT darkened a name (docs/wildcard-dns.md section 11)"
+    fail=1
+  fi
+fi
 phase "PHASE 2/2 — live run on a shared UpCloud fleet (provision → every group → teardown)"
 npx tsx tools/live-e2e/shared-run.ts ${GYM_LIVE_GROUPS:+--groups "$GYM_LIVE_GROUPS"}
 live_rc=$?

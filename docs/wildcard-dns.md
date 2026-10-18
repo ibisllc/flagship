@@ -35,12 +35,13 @@ any record below it** (an empty non-terminal, ENT).
   not block it: `<user>` is the closest encloser, and `*.<user>` is its child.
   A wildcard at `*.flagship.services` would be blocked by `<user>` the moment
   `<user>` owns a CAA, so it is not an option while CAA lives at `<user>`.
-- **Anything under `home.alice` blocks the wildcard for `home.alice` and all
-  its descendants.** The ACME DNS-01 challenge `_acme-challenge.home.alice`
-  TXT does exactly that for as long as it exists: `home.alice` answers NODATA
-  and `app.home.alice` NXDOMAIN, and resolvers keep that for the SOA minimum
-  (30 minutes). This is real, and it is the one place the wildcard alone is
-  not enough (section 3).
+- **RFC 4592 says anything under `home.alice` blocks the wildcard** for
+  `home.alice` and its descendants (an empty non-terminal). **Cloudflare does
+  not do that**, measured live (section 11): a challenge TXT at
+  `_acme-challenge.home.alice` leaves `home.alice`, `x.home.alice` and every
+  sibling answering from `*.alice`. What does block it on Cloudflare is a record
+  OWNED BY the name itself (section 11.4). This section and sections 3, 4 and
+  10 were written from the RFC before the measurement; read them with section 11.
 - CAA is looked up with tree climbing (RFC 8659) on the name with a leading
   `*.` removed. For `home.alice` the CA asks `home.alice CAA`; the wildcard
   answers NODATA (the name exists, it has no CAA), so the CA climbs to
@@ -82,12 +83,19 @@ names too. What the relay did on such an SNI (`sniRouter.ts`, `registry.ts`):
 | Cache poisoning | None added. The answers are the same records the zone already served, from the same authoritative servers; the wildcard removes a class of cached NXDOMAINs rather than adding one. |
 | Certificates | Unchanged. Cert model A' (per-box `[X, *.X]`) stays; DNS-01 still validates at `_acme-challenge.X`. CAA stays at `<user>` and is found by tree climbing. A CA that misread NODATA-at-the-wildcard would fail closed (no certificate), never open. The live gym issues certificates, so it exercises this before prod. |
 | Cost / abuse | Random labels bypass resolver caches, but Cloudflare does not bill queries and the relay drops them. No more exposure than a scan of the relay's IP. |
-| ENT blocking | Real, handled (section 4): without it every certificate issuance and renewal would make the box's names unresolvable for up to 30 minutes for anyone who asked while the challenge TXT existed. |
+| ENT blocking | Not real on Cloudflare (section 11): a descendant-only name keeps its wildcard answer. The shield written against it was the one thing that opened a window (a literal A at the box name reached the name servers seconds before its `*.<box>` sibling, and every name under the box answered NXDOMAIN, cached 30 minutes). The shield is off by default now. |
 
 Verdict: **no security issue found; implemented.** The one availability hole
 (ENT) and the relay timing oracle are fixed in the same change.
 
-## 4. The challenge shield (ENT)
+## 4. The challenge shield (ENT) - OFF by default since 2026-10-18
+
+> **Measured wrong, switched off.** The live gym showed a TXT under a name does
+> not stop the wildcard from answering for it, and that the shield itself opened
+> a 5 s NXDOMAIN window under the box (section 11). `DNS_CHALLENGE_SHIELD=1`
+> on `.com` brings it back (`apps/com/src/challengeShield.ts`); nothing sets it.
+> The release path in the stale-challenge sweep stays, so shields written by an
+> earlier build are still removed. The text below is the original design.
 
 A DNS-01 challenge needs `_acme-challenge.X` TXT, where `X` is the box
 (`<server>.<user>`, validating `X` and `*.X`: two TXTs at once) or a tier-2
@@ -114,7 +122,7 @@ At most, per box being issued: 2 TXT + 4 shield records, all gone minutes
 later. Over a whole zone the steady state is zero, so reserve about 20 records
 of headroom for concurrent issuances.
 
-**Verification status.** Verified live (2026-10-18, Cloudflare's authoritative
+**Verification status (original, superseded by section 11).** Verified live (2026-10-18, Cloudflare's authoritative
 servers): `x.y.<user>` is synthesised from `*.<user>` (multi-label), and the
 zone's SOA minimum is 1800 s. NOT verified: that Cloudflare treats a name with
 only a descendant (`_acme-challenge.X` TXT) as an empty non-terminal and so
@@ -319,3 +327,121 @@ is go first: the shield is the only thing between a challenge and a
 rather than a box, so it wants the live proof described in section 4 before
 the blast radius grows.
 
+
+## 11. Live verification (gym, 2026-10-18)
+
+Everything here ran against the live gym zone `gym.flagship.services`
+(Cloudflare, free plan, the same zone as prod) with throwaway names, through
+`tools/live-e2e/dns-ent-experiment.ts` (the experiment, `--matrix`, and a
+30 s `--canary`) and `tools/live-e2e/lib/dnsProbe.ts` (the 200 ms timeline
+during a real issuance). Raw data: `gym-results/` of the run, saved copies in the
+session scratchpad. Resolvers: `jade.ns.cloudflare.com` and
+`mario.ns.cloudflare.com` queried directly with no recursion, and the public
+resolvers 1.1.1.1 and 8.8.8.8. Every name was asked once per resolver (a
+random or never-asked name), so no answer came from a cache. The gym apex has
+its own `*.gym.flagship.services` wildcard, which stands in for a zone-level
+wildcard in 11.3 and 11.4.
+
+### 11.1 Does a challenge TXT stop the wildcard? No.
+
+Account set (CAA + `*.<U>` A/AAAA), then a TXT at `_acme-challenge.box.<U>`
+with no shield, asked once it was visible on the name server:
+
+| query | jade (auth) | 1.1.1.1 | 8.8.8.8 |
+|---|---|---|---|
+| `box.<U>` A / AAAA | NOERROR relay, TTL 60 | same | same |
+| `x.box.<U>` A / AAAA | NOERROR relay, TTL 60 | same | same |
+| `y.<U>` (sibling) A / AAAA | NOERROR relay, TTL 60 | same | same |
+
+After the TXT was deleted, 150 s of watching at both resolvers (every 30 s)
+showed no negative answer cached. With a shield (marker address 192.0.2.1 so
+it can be told from the wildcard), `box3.<U>`, `x.box3.<U>` and `y.z.box3.<U>`
+answer the marker everywhere: the shield works, it is just not needed. SOA
+negative TTL as returned: 1800 s (the zone's SOA minimum).
+
+### 11.2 The real issuance (probe, 200 ms)
+
+`home.gae7l15d5a`, first box of a fresh demo account, shield on (as deployed
+then):
+
+| time | what |
+|---|---|
+| 192.7 s | `*.<U>` A + AAAA in the zone (sweep), CAA at 194.4 s |
+| 219.7 s | box A/AAAA, `*.box` A/AAAA (shield) and the two TXTs in one sweep |
+| 221.3 to 226.4 s | **a random label under the box answers NXDOMAIN at jade, 1.1.1.1 and 8.8.8.8, for 5.1 s**; the TXT itself is NXDOMAIN at jade for the same 5.1 s, then `TXT x2` |
+| 249.8 to 252.8 s | TXTs, then shield removed; the TXT answer flaps between present and absent at jade until 265.5 s (deletion reaches the edge unevenly) |
+
+The box name itself never went dark. The label under it did, because the
+shield's literal A at the box name was visible before its `*.box` sibling, and
+a name that owns a record does block the wildcard for its descendants
+(11.4). Any name asked in that window is cached as NXDOMAIN for 1800 s.
+Without the shield there is nothing to be out of order: the TXT alone changes
+no answer.
+
+### 11.3 Propagation is uneven (this is what makes any two-record dance unsafe)
+
+Time until a newly created record was visible on each name server, same
+second, same zone:
+
+| record | jade | mario |
+|---|---|---|
+| CAA at the account | 3.2 s | 22 ms |
+| A at another.<U> | 3.3 s | 21 to 27 ms |
+| TXT | 5.9 to 7.4 s | 29 ms |
+| CAA at a box | 8.4 s | 24 ms |
+| `*.box` A | 3.1 s | 26 ms |
+| A at the box (shield) | 7.9 s | not measured |
+
+So the two name servers disagree about a new record for up to ~8 s, and
+which one a resolver asks is its choice. Deleting is quicker on the first
+node (50 to 300 ms) but flaps for up to ~14 s at the other (11.2, and the
+teardown at the end of the probe run).
+
+### 11.4 Which names lose a zone-level wildcard (matrix)
+
+One throwaway account per row, no per-account wildcard, so the answers come
+from the gym apex's `*.gym.flagship.services`. Identical at jade, mario,
+1.1.1.1 and 8.8.8.8 in every cell.
+
+| a record owned by `N` (= `other.<U>`) | `<U>` | `box.<U>`, `x.box.<U>` (siblings) | `N` itself | `c.N`, `g.c.N` (below N) |
+|---|---|---|---|---|
+| none (baseline) | wildcard | wildcard | wildcard | wildcard |
+| TXT at N | wildcard | wildcard | A: NODATA; TXT: its value | **NXDOMAIN** |
+| CAA at N | wildcard | wildcard | A: NODATA; CAA: its value | **NXDOMAIN** |
+| A at N | wildcard | wildcard | its own A | **NXDOMAIN** |
+| only `*.N` A (no record at N) | wildcard | wildcard | wildcard (not NODATA) | the `*.N` value |
+| only a TXT at `_acme-challenge.N` | wildcard | wildcard | wildcard | wildcard |
+| CAA (issue + issuewild) at `<U>` only | **NODATA** for A | **NXDOMAIN** | NXDOMAIN | NXDOMAIN |
+
+Rules, as Cloudflare applies them: a name that OWNS a record blocks the
+wildcard for everything below it, and for its own other types answers NODATA
+(it is not an RFC "empty non-terminal" rule: a name that only has records
+below it is never blocked). Siblings and parents are never affected.
+
+### 11.5 What it means
+
+- **Per-account wildcard (built):** safe without the shield; the 4-record set
+  stands. A record at a box name (a leftover per-box A) is what breaks names
+  under it, so the reap tool's `superseded` class matters.
+- **Zone-level `*.flagship.services` (not built, not recommended yet):** the
+  challenge TXTs are harmless, but the per-account CAA at `<U>` kills it for the
+  whole account (last row), as does any stale record at a box name for the
+  names below it. It needs the CAA to move to the apex (losing the future
+  per-account `accounturi` pin) and every legacy per-box record gone first. It
+  also leaves one-label names under the apex to the wildcard. Decision stays
+  with section 10.5.
+- **Caveat that matters:** this relies on Cloudflare NOT applying the RFC 4592
+  empty-non-terminal rule. If it ever starts (plan change, zone setting,
+  provider change), a challenge TXT would darken the box for up to 30 minutes
+  and the shield (`DNS_CHALLENGE_SHIELD=1`) would have to come back, with its
+  ordering fixed. Two standing checks watch for that: every `shared-run.ts`
+  run records the first box's issuance and FAILS "the box name and every label
+  under it kept answering through issuance" on any NODATA or NXDOMAIN, and
+  `npx tsx tools/live-e2e/dns-ent-experiment.ts --canary` (30 s, throwaway
+  names, exit 1 on any dark answer at jade, mario, 1.1.1.1 or 8.8.8.8) runs in
+  the weekly gym. Re-run the canary after any change of Cloudflare plan or
+  zone.
+- **The Fly relay's first-party drop timing** (section 2) was also checked live
+  by the gym core group: an unregistered name under an account with an online
+  box closed after 4193 ms against 4096 ms for an unknown account, and
+  neither completed a TLS handshake.

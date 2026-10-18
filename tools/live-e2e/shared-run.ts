@@ -19,7 +19,7 @@
  *   npx tsx tools/live-e2e/shared-run.ts --keep                # leave the fleet up (prints --reuse)
  *   npx tsx tools/live-e2e/shared-run.ts --reuse gym-results/<run>/fleet.json
  *   npx tsx tools/live-e2e/shared-run.ts --teardown --reuse gym-results/<run>/fleet.json   # tear a kept fleet down
- *   npx tsx tools/live-e2e/shared-run.ts --dns-probe --groups core   # also write the DNS timeline of the first box's issuance (docs/wildcard-dns.md)
+ *   npx tsx tools/live-e2e/shared-run.ts --no-dns-probe        # skip the DNS timeline of the first box's issuance (and its "never went dark" check, docs/wildcard-dns.md)
  *   npx tsx tools/live-e2e/shared-run.ts --list
  *   npx tsx tools/live-e2e/shared-run.ts --all-boxes --keep    # provision the whole fleet whatever the groups need
  *
@@ -226,7 +226,7 @@ async function main(): Promise<number> {
         } else {
           const username = freshUsername(letter === "A" ? "ga" : "gb");
           // Before the account exists, so the probe sees the box name from its first answer.
-          if (letter === "A" && flag("--dns-probe")) {
+          if (letter === "A" && !flag("--no-dns-probe")) {
             dnsProbe = await startDnsProbe({ box: `home.${username}.${SERVICES}`, account: `${username}.${SERVICES}`, apex: SERVICES }, dir).catch((e) => {
               log(`dns probe not started: ${e instanceof Error ? e.message : String(e)}`);
               return undefined;
@@ -267,7 +267,7 @@ async function main(): Promise<number> {
         await fleetRec.check(`${b.serverName}.${b.account} online + serving (≤20 min)`, async () => {
           try {
             const r = await waitOnline(b, 20, (m) => fleetRec.log(m));
-            if (dnsProbe && s === "A1") setTimeout(() => dnsProbe?.stopIssuance(), 120_000);
+            if (dnsProbe && s === "A1") setTimeout(() => dnsProbe?.endIssuance(), 120_000);
             if (!b.serverId) b.serverId = await demoServerId(b.account).catch(() => null);
             saveFleet(dir, accounts);
             return r;
@@ -360,6 +360,15 @@ async function main(): Promise<number> {
       }
     }
   } finally {
+    if (dnsProbe) {
+      // Issuance is over (or the run is ending): nothing after this counts, and a teardown removes records one by one.
+      dnsProbe.endIssuance();
+      await fleetRec.check("DNS: the box name and every label under it kept answering through issuance", async () => {
+        const dark = dnsProbe!.dark();
+        if (dark.length) throw new Error(dark.slice(0, 6).join("; "));
+        return "no NODATA or NXDOMAIN on the box name or a random label under it (authoritative, 1.1.1.1, 8.8.8.8)";
+      });
+    }
     writeJson(dir, "fleet-checks.json", fleetRec.results);
     summary.fleet = { pass: fleetRec.passed, fail: fleetRec.failed, skip: fleetRec.skipped };
     await doTeardown("end of run");

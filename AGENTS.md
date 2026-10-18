@@ -252,10 +252,12 @@ of the last check here: **not yet checked**.
   (issue, issuewild): **4 records per account whatever its server count**
   (was 12, 16, 20 for 1, 2, 3 servers), nothing per box, so 200 records hold
   ~45 accounts and a box name never sits in a 30-minute negative cache. Each
-  box's DNS-01 challenge briefly adds 2 TXT + 4 shield records (A/AAAA at the
-  box and `*.box`, so the wildcard keeps answering while the TXT makes the box
-  an empty non-terminal); all are removed after issuance (sweep: TXT older than
-  an hour), so reserve ~20 of headroom. The relay now closes every unmatched
+  box's DNS-01 challenge briefly adds 2 TXT (the 4-record shield is OFF since
+  2026-10-18: measured live, Cloudflare keeps the wildcard answering under a
+  challenge TXT and the shield opened a 5 s NXDOMAIN window; `docs/wildcard-dns.md`
+  section 11, `DNS_CHALLENGE_SHIELD=1` brings it back; every gym run and
+  `dns-ent-experiment.ts --canary` check it); removed after issuance (sweep: TXT
+  older than an hour), so reserve ~10 of headroom. The relay now closes every unmatched
   first-party SNI after the same wait. **To do (owner):** deploy `.com`
   (`apps/com`; nothing on the box changes, so no endorsed release) and
   `.services` (relay timing only); run the live gym (core group checks the
@@ -275,7 +277,8 @@ of the last check here: **not yet checked**.
   owner: a paid Cloudflare plan (higher cap), the gym on its own registered
   domain (also frees the shared Let's Encrypt budget: `flagship.services`
   isn't on the PSL yet, so gym and prod certificates share 50 a week), a
-  zone-level wildcard (0 per account but drops per-account CAA), dropping
+  zone-level wildcard (0 per account; measured: a CAA at `<user>` or any stale
+  record at a box name kills it for the names below, section 11.4), dropping
   `issuewild` (3 per account). The live gym refuses to start when its fleet
   won't fit.
 
