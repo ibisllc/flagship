@@ -45,6 +45,26 @@ struct FlagshipApp: App {
         Self.applySmokeOnboardingIfRequested()
         #endif
         let state = AppState()
+        #if DEBUG
+        // The mock gym starts every launch from nothing; `-smoke-persist-names`
+        // keeps the real store so a relaunch can be checked.
+        let keepNames = !ProcessInfo.processInfo.arguments.contains("-smoke-mode")
+            || ProcessInfo.processInfo.arguments.contains("-smoke-persist-names")
+        #else
+        let keepNames = true
+        #endif
+        if keepNames { state.presentationNames = PresentationNameStore() }
+        #if DEBUG
+        // The mock gym taps the moment a button exists, so it has no quiet
+        // period, unless a scenario is about it (`-smoke-tap-settle <seconds>`).
+        do {
+            let args = ProcessInfo.processInfo.arguments
+            if args.contains(where: { $0.hasPrefix("-smoke-") }) {
+                let i = args.firstIndex(of: "-smoke-tap-settle")
+                TapSettle.quietPeriod = i.flatMap { $0 + 1 < args.count ? Double(args[$0 + 1]) : nil } ?? 0
+            }
+        }
+        #endif
         _appState = State(initialValue: state)
         _notices = State(initialValue: Self.makeNoticeCenter())
         // `.com` serves the account's servers, devices and app names only

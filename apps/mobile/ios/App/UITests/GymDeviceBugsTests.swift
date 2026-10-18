@@ -75,4 +75,43 @@ final class GymDeviceBugsTests: GymSweepCase {
         XCTAssertTrue(app.buttons["home-add-server"].waitForExistence(timeout: 15), "Cancelling returns to Home.")
         waitGone(podRow(app, named: "Shed"))
     }
+
+    // MARK: Home header
+
+    /// The names Settings learned are kept: after the app is reopened Home's
+    /// header still reads "Elated Iris > Pixel", not just the handle.
+    func test_homeHeaderKeepsTheNamesAfterARelaunch() throws {
+        var app = launch(tab: "home", admin: true,
+                         ["-smoke-persist-names", "-smoke-cache-names", "Elated Iris|Pixel"], username: "elated-iris")
+        XCTAssertTrue(text(app, containing: "Elated Iris > Pixel").waitForExistence(timeout: 20),
+                      "Home shows both names once they are known.")
+        app = launch(tab: "home", admin: true, ["-smoke-persist-names"], username: "elated-iris")
+        XCTAssertTrue(text(app, containing: "Elated Iris > Pixel").waitForExistence(timeout: 20),
+                      "Home shows both names after a relaunch, with no visit to Settings.")
+        XCTAssertFalse(app.staticTexts["elated-iris"].exists, "Not just the handle.")
+        shot(app, "home-header-after-relaunch")
+    }
+
+    // MARK: Add/Restore holds still
+
+    /// Add/Restore takes no tap just after Home's layout moved (the paused-status
+    /// row went away), then works.
+    func test_addRestoreIgnoresATapRightAfterTheLayoutMoves() throws {
+        let app = launch(tab: "home", admin: true, ["-smoke-status-paused", "-smoke-tap-settle", "3"])
+        let unlock = app.buttons["status-paused-unlock"]
+        XCTAssertTrue(unlock.waitForExistence(timeout: 20))
+        // Past the first layout's quiet period.
+        Thread.sleep(forTimeInterval: 3.2)
+        let add = app.buttons["home-add-server"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        unlock.tap()
+        waitGone(any(app, "status-paused"), timeout: 10)
+        add.tap()
+        XCTAssertFalse(app.buttons.matching(identifier: "home-add-new-server").firstMatch.waitForExistence(timeout: 1.0),
+                       "A tap while Home is still moving is ignored.")
+        Thread.sleep(forTimeInterval: 3.2)
+        add.tap()
+        XCTAssertTrue(app.buttons.matching(identifier: "home-add-new-server").firstMatch.waitForExistence(timeout: 10),
+                      "Once Home holds still, Add/Restore opens.")
+    }
 }

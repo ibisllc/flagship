@@ -44,6 +44,14 @@ extension GymSweepSeams {
             }
         }
 
+        // `-smoke-cache-names "Account|Device"`: Settings learned the two names
+        // (the same call it makes), so Home's header shows them and, with
+        // `-smoke-persist-names`, the phone keeps them for the next launch.
+        if let raw = value(args, "-smoke-cache-names") {
+            let parts = raw.split(separator: "|", maxSplits: 1).map(String.init)
+            app.cachePresentationNames(accountDisplayName: parts.first ?? "", deviceDisplayName: parts.count > 1 ? parts[1] : nil)
+        }
+
         // `.com` refuses this device's status reads until it unlocks once:
         // Home says status is paused; unlocking reads again.
         if args.contains("-smoke-status-paused") {
