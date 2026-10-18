@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -183,7 +184,25 @@ describe("appliance specializer progress", () => {
   it("resizes the encrypted root with the build key and tolerates a partition already grown", () => {
     expect(script).toContain('cryptsetup resize --key-file /etc/flagship/appliance-build.key "$ROOT_MAPPER"');
     expect(script).toContain('growpart "/dev/$ROOT_PARENT" "$ROOT_PARTITION" || GROWPART_RC=$?');
-    expect(script).toContain('[ "$GROWPART_RC" -le 1 ] || exit "$GROWPART_RC"');
+    expect(script).toContain('if [ "$GROWPART_RC" -gt 1 ]; then (exit "$GROWPART_RC"); fi');
+  });
+
+  it("captures the bootstrap exit code without set +e, which does not stop the ERR trap", () => {
+    expect(script).toContain("flagship-bootstrap.sh || BOOTSTRAP_RC=$?");
+    expect(script).not.toContain("set +e");
+    expect(script).toContain("tail -n 25 /var/log/flagship-bootstrap.log");
+  });
+
+  it("shows owners a plain sentence with the step, never a shell line number", () => {
+    expect(script).toContain('report error "Setup stopped while $STEP"');
+    expect(script).not.toMatch(/report error "[^"]*\$LINENO/);
+    expect(script).toContain("specialization failed line=$LINENO rc=$rc");
+  });
+
+  it("is valid shell", () => {
+    const r = spawnSync("bash", ["-n"], { input: script, encoding: "utf8" });
+    expect(r.stderr).toBe("");
+    expect(r.status).toBe(0);
   });
 
   it("only reports to a well-formed serial and registration URL", () => {

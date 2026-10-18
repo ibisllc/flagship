@@ -81,7 +81,7 @@ report() {
         --data "$(jq -cn --arg p "$1" --arg d "$2" '{phase:$p,detail:$d}')" "$STATUS_URL" >/dev/null 2>&1 || true
 }
 stage() { STEP="$1"; echo "[appliance] $1"; report installing "$1"; }
-trap 'rc=$?; echo "[appliance] specialization failed line=$LINENO rc=$rc"; report error "Setup stopped while $STEP (line $LINENO)"; exit "$rc"' ERR
+trap 'rc=$?; echo "[appliance] specialization failed line=$LINENO rc=$rc"; report error "Setup stopped while $STEP"; exit "$rc"' ERR
 echo "[appliance] specialization start"
 [ -f /etc/flagship/appliance-ready ] || { echo "[appliance] generalized base readiness marker missing"; exit 1; }
 echo "[appliance] generalized base verified"
@@ -135,11 +135,12 @@ if [ $((DISK_BYTES - PART_BYTES)) -gt 1073741824 ]; then
     GROWPART_RC=0
     growpart "/dev/$ROOT_PARENT" "$ROOT_PARTITION" || GROWPART_RC=$?
     # 1 = NOCHANGE: a retry after an earlier run already grew the partition.
-    [ "$GROWPART_RC" -le 1 ] || exit "$GROWPART_RC"
+    # (exit "$rc") in a subshell is a failing command, so the ERR trap reports it; a bare exit would not.
+    if [ "$GROWPART_RC" -gt 1 ]; then (exit "$GROWPART_RC"); fi
     udevadm settle
     # Without the key file cryptsetup asks for a passphrase on stdin, which a
     # systemd service does not have ("Nothing to read on input").
-    cryptsetup resize --key-file /etc/flagship/appliance-build.key "$ROOT_MAPPER"
+    cryptsetup resize --key-file ${APPLIANCE_BUILD_KEYFILE} "$ROOT_MAPPER"
     resize2fs "$ROOT_SOURCE"
     echo "[appliance] cloned disk expansion complete"
 fi
