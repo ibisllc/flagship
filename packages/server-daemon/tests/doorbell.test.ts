@@ -8,7 +8,7 @@ import { Doorbell } from "../src/doorbell.js";
 
 const HOST = "home.alice.flagship.services";
 const BASE = "https://flagshipserver.com";
-const stamps = { aliases: "a1", rotations: "r1" };
+const stamps = { aliases: "a1", grants: "g1", rotations: "r1" };
 const ring = (lanes: string[] = [], over: Partial<typeof stamps> = {}) => ({ v: 1, lanes, stamps: { ...stamps, ...over } });
 
 function setup(opts: { safetyMs?: number; freshMs?: number } = {}) {

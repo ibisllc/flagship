@@ -47,6 +47,8 @@ async function world(over: Partial<Pick<BoxDoorbellDeps, "serverMigrations" | "s
     serverTransfers: over.serverTransfers ?? s.serverTransfers,
     serverEvictions: over.serverEvictions ?? s.serverEvictions,
     userServiceAliases: s.userServiceAliases,
+    grants: s.deviceCapabilityGrants,
+    identities: s.deviceIdentities,
     usernames: s.usernames,
     rotations: s.adminRootRotations,
     now: () => NOW,
@@ -191,6 +193,25 @@ describe("stamps: a list a box reads changes its stamp when its contents change"
     expect(b).not.toBe(a);
     await s.userServiceAliases.upsert({ username: U, serviceId: "blog", displayLabel: "journal", createdAt: 1, updatedAt: 2 });
     expect((await ring()).stamps.aliases).not.toBe(b);
+  });
+
+  it("device grants: a new grant, a revoked device each change it; a quiet device does not", async () => {
+    const { s, ring } = await world();
+    const base = (await ring()).stamps.grants;
+    const device = { accountId: U, deviceId: DEV, devicePubHex: "ab".repeat(32), platformClass: "ios" as const, createdAt: 1, lastSeenAt: 1, revokedAt: null };
+    await s.deviceIdentities.put(device);
+    await s.deviceCapabilityGrants.put({
+      grantId: "g1", username: U, deviceId: DEV, devicePubHex: device.devicePubHex,
+      scopesJson: JSON.stringify(["view-directory"]), issuedAt: 1, expiresAt: NOW + 1e9,
+      signatureHex: "cd".repeat(64), revokedAt: null, signerRoot: "membership",
+    });
+    const withGrant = (await ring()).stamps.grants;
+    expect(withGrant).not.toBe(base);
+    // A device just being seen again changes nothing a box reads.
+    await s.deviceIdentities.put({ ...device, lastSeenAt: 99 });
+    expect((await ring()).stamps.grants).toBe(withGrant);
+    await s.deviceIdentities.revoke(U, DEV, NOW);
+    expect((await ring()).stamps.grants).toBe(base);
   });
 
   it("admin-root rotations", async () => {

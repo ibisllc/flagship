@@ -2724,6 +2724,8 @@ export async function tryControlPlane(
                 serverTransfers: storage.serverTransfers,
                 serverEvictions: storage.serverEvictions,
                 userServiceAliases: storage.userServiceAliases,
+                grants: storage.deviceCapabilityGrants,
+                identities: storage.deviceIdentities,
                 usernames: storage.usernames,
                 rotations: storage.adminRootRotations,
               },

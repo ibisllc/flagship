@@ -14,14 +14,14 @@ async function beat(w: Awaited<ReturnType<typeof buildWorld>>) {
 }
 
 describe("daemon-status reply", () => {
-  it("carries a doorbell: empty lanes and two digests", async () => {
+  it("carries a doorbell: empty lanes and three digests", async () => {
     const w = await buildWorld();
     try {
       const body = await beat(w);
       expect(body.ok).toBe(true);
       expect(body.doorbell?.v).toBe(1);
       expect(body.doorbell?.lanes).toEqual([]);
-      expect(Object.keys(body.doorbell!.stamps).sort()).toEqual(["aliases", "rotations"]);
+      expect(Object.keys(body.doorbell!.stamps).sort()).toEqual(["aliases", "grants", "rotations"]);
     } finally {
       w.close();
     }

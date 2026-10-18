@@ -300,7 +300,7 @@ const doorbellRef: { current: Doorbell | null } = { current: null };
 const bellFetch = (): { fetchImpl?: typeof fetch } =>
   doorbellRef.current ? { fetchImpl: doorbellRef.current.fetch } : {};
 /** Poll a consumer the moment its lane starts to ring. */
-const onRing = (lane: DoorbellLane | "aliases" | "rotations", poll: () => Promise<unknown>): void =>
+const onRing = (lane: DoorbellLane | "aliases" | "rotations" | "grants", poll: () => Promise<unknown>): void =>
   doorbellRef.current?.onRing(lane, () => void poll().catch(() => {}));
 
 
@@ -3695,15 +3695,26 @@ async function wireOwnerHandlers(deps: {
     boxPublicKey: () => identityKeypair.publicKey,
     signAsBox: (msg) => ed.sign(msg, identityKeypair.privateKey),
   });
+  const deviceBookPeriodicReader = new BoxReadToken({
+    comBaseUrl: env.controlPlaneBaseUrl,
+    username: cfg.userId,
+    serverFqdn: env.serverFqdn,
+    boxPublicKey: () => identityKeypair.publicKey,
+    signAsBox: (msg) => ed.sign(msg, identityKeypair.privateKey),
+    ...bellFetch(),
+  });
   const deviceBook = new AccountDeviceBook({
     path: `${accessDataDir}/account-devices.json`,
     username: cfg.userId,
     ownerIrkPub: () => cfg.irkPublicKey,
     adminRootPub: () => cfg.adminRootPub,
     ...(cfg.ownerAidPub ? { ownerAidHex: bytesToHexStr(cfg.ownerAidPub) } : {}),
-    fetchGrants: async () => {
+    // The periodic refresh may be answered by the doorbell; one a person is
+    // waiting on (an unknown key signed, the members screen) always asks `.com`.
+    fetchGrants: async ({ live }) => {
       const base = env.controlPlaneBaseUrl.replace(/\/+$/, "");
-      const r = await deviceBookReader.fetch(`${base}/api/users/${encodeURIComponent(cfg.userId)}/device-grants`);
+      const reader = live ? deviceBookReader : deviceBookPeriodicReader;
+      const r = await reader.fetch(`${base}/api/users/${encodeURIComponent(cfg.userId)}/device-grants`);
       return r.ok ? await r.json() : null;
     },
     log: (m) => console.warn(m),
@@ -3714,6 +3725,7 @@ async function wireOwnerHandlers(deps: {
   {
     const t = setInterval(() => void deviceBook.refresh(), 5 * 60_000);
     if (typeof t.unref === "function") t.unref();
+    onRing("grants", () => deviceBook.refresh());
   }
   const accessStore = new ServiceAccessStore(`${accessDataDir}/data/flagship-access/service-access.json`, {
     legacyPath: "/var/flagship/service-access.json",

@@ -15,7 +15,7 @@
  *           would answer the box's poll with a 404 (nothing to collect), by the
  *           same rule the lane's own handler applies.
  *   stamps  A short digest of the body a list endpoint would return right now
- *           (aliases, admin-root rotations). The digest is of the
+ *           (aliases, device grants, admin-root rotations). The digest is of the
  *           real handler's own answer, so anything that changes what the box
  *           would read changes the stamp. A box refetches only when its stamp
  *           differs from the one it fetched under.
@@ -29,6 +29,8 @@
 import { sha256 } from "@noble/hashes/sha256";
 import type {
   AdminRootRotationStorage,
+  DeviceCapabilityGrantStorage,
+  DeviceIdentityStorage,
   SecretMailboxStorage,
   ServerEvictionStorage,
   ServerMigrationStorage,
@@ -39,6 +41,7 @@ import type {
 } from "@flagship/storage";
 import { bytesToHex } from "./hex.js";
 import { handleListAdminRootRotations } from "./adminRootRotation.js";
+import { handleListAccountDeviceGrants } from "./deviceCapabilityGrants.js";
 import { handleListAppAliases } from "./serviceRename.js";
 import { findMigrationAssignment } from "./serverMigration.js";
 import { isRehomeReady } from "./serverTransfer.js";
@@ -48,7 +51,7 @@ export interface BoxDoorbell {
   /** Lanes with something waiting: any of `swk`, `cgk`, `pairing`, `entitlement-deposit`,
    *  `update`, `self-delete`, `rehome`, `migration`, `decommission`. */
   lanes: string[];
-  stamps: { aliases: string; rotations: string };
+  stamps: { aliases: string; grants: string; rotations: string };
 }
 
 export interface BoxDoorbellDeps {
@@ -57,6 +60,8 @@ export interface BoxDoorbellDeps {
   serverTransfers: Pick<ServerTransferStorage, "getOffer">;
   serverEvictions: Pick<ServerEvictionStorage, "getEviction">;
   userServiceAliases: UserServiceAliasStorage;
+  grants: DeviceCapabilityGrantStorage;
+  identities: DeviceIdentityStorage;
   usernames: UsernameStorage;
   rotations: AdminRootRotationStorage;
   now?: () => number;
@@ -75,12 +80,13 @@ export async function buildBoxDoorbell(
   const now = (deps.now ?? (() => Date.now()))();
   const host = server.serverDomain.toLowerCase();
   const user = server.username.toLowerCase();
-  const [purposes, sessions, transfer, eviction, aliases, rotations] = await Promise.all([
+  const [purposes, sessions, transfer, eviction, aliases, grants, rotations] = await Promise.all([
     deps.secretMailbox.pendingDepositPurposes(server.serverDomain, now),
     deps.serverMigrations.listForUser(server.username),
     deps.serverTransfers.getOffer(server.serverDomain, now),
     deps.serverEvictions.getEviction(host, server.identityPubKeyHex.toLowerCase()),
     handleListAppAliases({ userServiceAliases: deps.userServiceAliases }, user),
+    handleListAccountDeviceGrants({ storage: deps.grants, identities: deps.identities, usernames: deps.usernames }, user),
     handleListAdminRootRotations({ usernames: deps.usernames, rotations: deps.rotations }, user),
   ]);
   const lanes = new Set<string>(purposes);
@@ -92,6 +98,7 @@ export async function buildBoxDoorbell(
     lanes: [...lanes].sort(),
     stamps: {
       aliases: stampOf(aliases.body),
+      grants: stampOf(grants.body),
       rotations: stampOf(rotations.body),
     },
   };

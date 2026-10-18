@@ -38,7 +38,7 @@ export type DoorbellLane =
   | "migration"
   | "decommission";
 
-type StampKey = "aliases" | "rotations";
+type StampKey = "aliases" | "rotations" | "grants";
 
 interface Rung {
   receivedAt: number;
@@ -74,6 +74,7 @@ const LANE_PATHS: [string, DoorbellLane][] = [
 
 const STAMP_PATHS: [string, StampKey][] = [
   ["apps/aliases", "aliases"],
+  ["device-grants", "grants"],
   ["admin-root-rotations", "rotations"],
 ];
 
@@ -82,11 +83,11 @@ function parseRung(raw: unknown, now: number): Rung | null {
   const r = raw as { v?: unknown; lanes?: unknown; stamps?: unknown };
   if (r.v !== 1 || !Array.isArray(r.lanes) || r.lanes.some((l) => typeof l !== "string")) return null;
   const s = r.stamps as Partial<Record<StampKey, unknown>> | null | undefined;
-  if (!s || typeof s.aliases !== "string" || typeof s.rotations !== "string") return null;
+  if (!s || typeof s.aliases !== "string" || typeof s.rotations !== "string" || typeof s.grants !== "string") return null;
   return {
     receivedAt: now,
     lanes: new Set(r.lanes as string[]),
-    stamps: { aliases: s.aliases, rotations: s.rotations },
+    stamps: { aliases: s.aliases, rotations: s.rotations, grants: s.grants },
   };
 }
 
@@ -124,7 +125,7 @@ export class Doorbell {
     this.rung = next;
     const rang: string[] = [];
     for (const lane of next.lanes) if (!before || !before.lanes.has(lane)) rang.push(lane);
-    for (const key of ["aliases", "rotations"] as const) {
+    for (const key of ["aliases", "rotations", "grants"] as const) {
       if (before && before.stamps[key] !== next.stamps[key]) rang.push(key);
     }
     for (const name of rang) {

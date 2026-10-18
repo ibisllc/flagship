@@ -58,7 +58,8 @@ const BUDGETS: Record<string, Budget> = {
   notices: { d1: 0, ratio: DEFAULT_RATIO },
   "edge-account-resolve": { d1: 3, ratio: DEFAULT_RATIO },
   "ratelimit-counter": { d1: 0, ratio: DEFAULT_RATIO },
-  "daemon-status": { d1: 4, ratio: DEFAULT_RATIO },
+  // reads, then writes the beat, then reads the order and the doorbell together
+  "daemon-status": { d1: 5, ratio: DEFAULT_RATIO },
   "edge-pods": { d1: 3, ratio: DEFAULT_RATIO },
   "edge-directory": { d1: 4, ratio: DEFAULT_RATIO },
 };

@@ -79,8 +79,11 @@ export interface AccountDeviceBookOptions {
   ownerIrkPub: () => Uint8Array;
   adminRootPub: () => Uint8Array | undefined;
   ownerAidHex?: string;
-  /** `.com`'s list of the account's grants (`{grants:[…]}`), or null when unreachable. */
-  fetchGrants?: () => Promise<unknown>;
+  /** `.com`'s list of the account's grants (`{grants:[…]}`), or null when unreachable.
+   *  `live` is set when a person is waiting on the answer (an unknown key signed,
+   *  the members screen): that read must not be satisfied by the doorbell's
+   *  "unchanged since the last beat" (doorbell.ts), which is up to one heartbeat old. */
+  fetchGrants?: (opts: { live: boolean }) => Promise<unknown>;
   now?: () => number;
   /** Least time between two refreshes asked for by an unknown key. Default 30 s. */
   minRefreshMs?: number;
@@ -94,6 +97,7 @@ export class AccountDeviceBook {
   private byPub = new Map<string, BookDevice>();
   private lastRefresh = 0;
   private refreshing: Promise<void> | null = null;
+  private refreshingLive = false;
   private readonly now: () => number;
 
   constructor(private readonly opts: AccountDeviceBookOptions) {
@@ -110,12 +114,17 @@ export class AccountDeviceBook {
   }
 
   /** Verify and take `.com`'s list; persist it. Keeps the old book when `.com` is unreachable. */
-  async refresh(): Promise<void> {
+  async refresh(opts: { live?: boolean } = {}): Promise<void> {
     if (!this.opts.fetchGrants) return;
+    const live = opts.live === true;
+    // A live read never joins a periodic one already in flight: that one may be
+    // the doorbell's replay of the last beat.
+    if (live && this.refreshing && !this.refreshingLive) await this.refreshing.catch(() => {});
+    this.refreshingLive = this.refreshing ? this.refreshingLive : live;
     this.refreshing ??= (async () => {
       this.lastRefresh = this.now();
       try {
-        const body = (await this.opts.fetchGrants!()) as { grants?: unknown } | null;
+        const body = (await this.opts.fetchGrants!({ live })) as { grants?: unknown } | null;
         if (!body || !Array.isArray(body.grants)) return;
         this.adopt(body.grants);
         await this.persist();
@@ -133,7 +142,7 @@ export class AccountDeviceBook {
     const pub = pubHex.toLowerCase();
     if (this.byPub.has(pub) || pub === this.opts.ownerAidHex?.toLowerCase()) return;
     if (this.now() - this.lastRefresh < (this.opts.minRefreshMs ?? 30_000)) return;
-    await this.refresh();
+    await this.refresh({ live: true });
   }
 
   classify(pubHex: string): Extract<Principal, { kind: "device" }> | null {
