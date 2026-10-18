@@ -1731,6 +1731,20 @@ export class D1SecretMailboxStorage implements SecretMailboxStorage {
     }
   }
 
+  async pendingDepositPurposes(serverDomain: string, now: number): Promise<string[]> {
+    const r = await this.db
+      .prepare(
+        `SELECT DISTINCT purpose FROM secret_mailbox
+         WHERE server_domain = ?1
+           AND purpose IN ('pairing','entitlement-deposit','swk','cgk','update','self-delete')
+           AND expires_at > ?2 AND response_sealed_hex IS NOT NULL
+           AND (consumed_at IS NULL OR purpose = 'self-delete')`,
+      )
+      .bind(serverDomain, now)
+      .all<{ purpose: string }>();
+    return r.results.map((x) => x.purpose).sort();
+  }
+
   async consumeSwkDeposit(serverDomain: string, now: number) {
     // GC expired swk rows for this domain first (best-effort).
     await this.db

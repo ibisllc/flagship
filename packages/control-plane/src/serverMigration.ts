@@ -311,6 +311,19 @@ export async function handleGetMigration(
  * the account's migration session it should serve — either one already
  * attached to it, or an unattached `initiated` session awaiting a new box.
  */
+/** The migration session that names `me` as its new box, if any. */
+export function findMigrationAssignment<
+  S extends { serverDomain: string; phase: string; newServerDomain: string | null },
+>(sessions: readonly S[], me: string): S | undefined {
+  return sessions.find(
+    (s) =>
+      s.serverDomain !== me &&
+      s.phase !== "aborted" &&
+      (s.newServerDomain === me ||
+        (s.newServerDomain === null && s.phase === "initiated")),
+  );
+}
+
 export async function handleGetMigrationAssignment(
   deps: ServerMigrationDeps,
   newBoxDomain: string,
@@ -319,13 +332,7 @@ export async function handleGetMigrationAssignment(
   const reg = await deps.servers.get(me);
   if (!reg) return notFound("unknown server");
   const sessions = await deps.serverMigrations.listForUser(reg.username);
-  const mine = sessions.find(
-    (s) =>
-      s.serverDomain !== me &&
-      s.phase !== "aborted" &&
-      (s.newServerDomain === me ||
-        (s.newServerDomain === null && s.phase === "initiated")),
-  );
+  const mine = findMigrationAssignment(sessions, me);
   if (!mine) return notFound("no migration assignment");
   return ok(await sessionStatusBody(deps, mine));
 }

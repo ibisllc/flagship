@@ -147,6 +147,7 @@ import {
   handleGetOrderHealth,
   requireAccountRead,
   peekAccountReadToken,
+  buildBoxDoorbell,
   checkAccountExists,
   ACCOUNT_READ_HEADERS,
   handleUserStream,
@@ -2715,6 +2716,19 @@ export async function tryControlPlane(
           // 0058 — coarse "account in use" bump for the username-reclaim tool.
           usernames: storage.usernames,
           serverOrders: storage.serverOrders,
+          doorbell: (server) =>
+            buildBoxDoorbell(
+              {
+                secretMailbox: storage.secretMailbox,
+                serverMigrations: storage.serverMigrations,
+                serverTransfers: storage.serverTransfers,
+                serverEvictions: storage.serverEvictions,
+                userServiceAliases: storage.userServiceAliases,
+                usernames: storage.usernames,
+                rotations: storage.adminRootRotations,
+              },
+              server,
+            ),
         },
         await readJson(request),
       ),

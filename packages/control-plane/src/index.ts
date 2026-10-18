@@ -63,6 +63,7 @@ export * from "./totp.js";
 export * from "./deviceCapabilityGrants.js";
 export * from "./accountDirectory.js";
 export * from "./accountReadToken.js";
+export * from "./boxDoorbell.js";
 export * from "./accountGone.js";
 export * from "./serverOrder.js";
 export * from "./accountBootstrap.js";

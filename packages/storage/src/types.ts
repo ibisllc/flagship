@@ -1025,6 +1025,15 @@ export interface SecretMailboxStorage {
    */
   consumeSwkDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
   /**
+   * Which deposit lanes hold something a box could collect right now, without
+   * collecting it: the purposes among `pairing`, `entitlement-deposit`, `swk`, `cgk`,
+   * `update` and `self-delete` that have a live, answered row for `serverDomain`
+   * by the same rules their consume calls use (the self-delete order is read
+   * without being consumed, so a consumed one still counts). It is the box
+   * doorbell's answer to "is any poll worth making?" (docs/runbooks/workers-cpu-budget.md).
+   */
+  pendingDepositPurposes(serverDomain: string, now: number): Promise<string[]>;
+  /**
    * Cloud Gossip Key (CGK) delivery (Phase 6) — the PHONE seals the per-cloud CGK
    * to the box's identity (generated at first boot) and IRK-signs the wrapper, then
    * deposits it here so the box claims it post-boot and turns on per-service

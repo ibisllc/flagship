@@ -85,6 +85,11 @@ export interface PodInventoryDeps {
   /** The owner's server order (docs/server-order.md): relayed on `/pods` and
    *  in the daemon-status reply; the apps and boxes verify it themselves. */
   serverOrders?: ServerOrderStorage;
+  /** What the box would find if it polled `.com` now (boxDoorbell.ts); rides the
+   *  heartbeat reply so the box can skip polls that would come back empty. A
+   *  failure to compute it leaves it out of the reply and the box polls as it
+   *  always did. */
+  doorbell?: (server: { serverDomain: string; username: string; identityPubKeyHex: string }) => Promise<unknown>;
   now?: () => number;
 }
 
@@ -717,8 +722,11 @@ export async function handlePostDaemonStatus(
 
   // The owner's server order rides back to the box (docs/server-order.md); the
   // box re-verifies it under its pinned authority before using it.
-  const serverOrder = deps.serverOrders
-    ? await readServerOrder(deps.serverOrders, server.username).catch(() => null)
-    : null;
-  return ok({ ok: true, serverOrder });
+  const [serverOrder, doorbell] = await Promise.all([
+    deps.serverOrders
+      ? readServerOrder(deps.serverOrders, server.username).catch(() => null)
+      : Promise.resolve(null),
+    deps.doorbell ? deps.doorbell(server).catch(() => undefined) : Promise.resolve(undefined),
+  ]);
+  return ok({ ok: true, serverOrder, ...(doorbell ? { doorbell } : {}) });
 }

@@ -1184,6 +1184,18 @@ export class InMemorySecretMailboxStorage implements SecretMailboxStorage {
     return { ok: true as const };
   }
 
+  async pendingDepositPurposes(serverDomain: string, now: number): Promise<string[]> {
+    const lanes = new Set(["pairing", "entitlement-deposit", "swk", "cgk", "update", "self-delete"]);
+    const out = new Set<string>();
+    for (const r of this.rows.values()) {
+      if (r.serverDomain !== serverDomain || !lanes.has(r.purpose)) continue;
+      if (r.expiresAt <= now || r.responseSealedHex === null) continue;
+      if (r.consumedAt !== null && r.purpose !== "self-delete") continue;
+      out.add(r.purpose);
+    }
+    return [...out].sort();
+  }
+
   async consumeSwkDeposit(serverDomain: string, now: number) {
     let bestKey: string | undefined;
     let best: SecretMailboxRecord | undefined;

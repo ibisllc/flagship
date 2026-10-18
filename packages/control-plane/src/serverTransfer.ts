@@ -627,13 +627,20 @@ export async function handleGetTransferClaim(
 // box was never transferred (the common case) so the poller stays cheap.
 // ──────────────────────────────────────────────────────────────────────
 
+/** True for a transfer offer that has been claimed, so the box should re-home. */
+export function isRehomeReady(
+  row: { claimedAt: number | null; acquirerUsername: string | null; acquirerIrkPubHex: string | null } | null | undefined,
+): boolean {
+  return !!row && row.claimedAt !== null && !!row.acquirerUsername && !!row.acquirerIrkPubHex;
+}
+
 export async function handleGetTransferRehome(
   deps: ServerTransferDeps,
   host: string,
 ): Promise<HandlerResponseWithHeaders> {
   const now = deps.now ?? (() => Date.now());
   const row = await deps.serverTransfers.getOffer(host, now());
-  if (!row || row.claimedAt === null || !row.acquirerUsername || !row.acquirerIrkPubHex) {
+  if (!row || !isRehomeReady(row) || !row.acquirerUsername || !row.acquirerIrkPubHex || row.claimedAt === null) {
     return notFound("no completed transfer for this server");
   }
   const apex = deps.apex ?? "flagship.services";
