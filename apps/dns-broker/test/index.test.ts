@@ -216,98 +216,31 @@ describe("dns-broker Worker entry", () => {
     expect(JSON.stringify(resp)).not.toContain(SECRET_TOKEN);
   });
 
-  it("publishARecord refuses arbitrary IPs even if the pod is registered", async () => {
-    const podKey = kp(50);
-    const serverId = `home.dave.${APEX}`;
-    serverLookups.set(serverId, { identityPubKey: toHex(podKey.publicKey), revoked: null });
-    const body = {
-      kind: "publishARecord",
-      serverId,
-      recordType: "A",
-      targetIp: "192.0.2.5", // not the allowlisted anycast IP
-      recordName: "pod-apex",
-    };
-    const r = await handler.fetch(
-      new Request("https://b/rpc", { method: "POST", body: JSON.stringify(body) }),
-      makeEnv(),
-    );
-    expect(r.status).toBe(403);
-    const cfCalls = calls.filter((c) => c.url.startsWith("https://api.cloudflare.com/"));
-    expect(cfCalls.length).toBe(0);
-  });
-
-  it("publishARecord refuses if the pod is unknown (registration proof fails)", async () => {
-    const body = {
-      kind: "publishARecord",
-      serverId: `home.ghost.${APEX}`,
-      recordType: "A",
-      targetIp: IPV4,
-      recordName: "pod-apex",
-    };
-    const r = await handler.fetch(
-      new Request("https://b/rpc", { method: "POST", body: JSON.stringify(body) }),
-      makeEnv(),
-    );
-    expect(r.status).toBe(403);
-    const cfCalls = calls.filter((c) => c.url.startsWith("https://api.cloudflare.com/"));
-    expect(cfCalls.length).toBe(0);
-  });
-
-  it("publishARecord with the allowlisted IP succeeds and yields a recordId", async () => {
+  it("publishARecord is refused for a registered pod with the allowlisted IP: no Cloudflare call", async () => {
     const podKey = kp(51);
     const serverId = `home.dave.${APEX}`;
     serverLookups.set(serverId, { identityPubKey: toHex(podKey.publicKey), revoked: null });
-    const body = {
-      kind: "publishARecord",
-      serverId,
-      recordType: "A",
-      targetIp: IPV4,
-      recordName: "pod-apex",
-    };
-    // List by name returns empty (no existing record), then create succeeds.
-    cfNextResponse.push(
-      new Response(JSON.stringify({ success: true, result: [] }), { status: 200 }),
-      new Response(
-        JSON.stringify({ success: true, result: { id: "cf-A-rec-NEW" } }),
-        { status: 200 },
-      ),
-    );
+    const body = { kind: "publishARecord", serverId, recordType: "A", targetIp: IPV4, recordName: "pod-apex" };
     const r = await handler.fetch(
       new Request("https://b/rpc", { method: "POST", body: JSON.stringify(body) }),
       makeEnv(),
     );
-    expect(r.status).toBe(200);
-    const resp = (await r.json()) as { ok: boolean; recordId?: string };
-    expect(resp.ok).toBe(true);
-    expect(resp.recordId).toBe("cf-A-rec-NEW");
+    expect(r.status).toBe(403);
+    expect(calls.filter((c) => c.url.startsWith("https://api.cloudflare.com/")).length).toBe(0);
   });
 
-  it("publishARecord refuses to overwrite an existing record with a different content", async () => {
-    const podKey = kp(52);
-    const serverId = `home.f.${APEX}`;
-    serverLookups.set(serverId, { identityPubKey: toHex(podKey.publicKey), revoked: null });
-    const body = {
-      kind: "publishARecord",
-      serverId,
-      recordType: "A",
-      targetIp: IPV4,
-      recordName: "pod-apex",
-    };
-    // List returns an existing record pointing at a different IP.
-    cfNextResponse.push(
-      new Response(
-        JSON.stringify({
-          success: true,
-          result: [{ id: "existing", content: "1.2.3.4" }],
-        }),
-        { status: 200 },
-      ),
-    );
-    const r = await handler.fetch(
-      new Request("https://b/rpc", { method: "POST", body: JSON.stringify(body) }),
-      makeEnv(),
-    );
-    expect(r.status).toBe(502);
+  it("publishARecord is refused for an unknown pod and for arbitrary IPs", async () => {
+    for (const body of [
+      { kind: "publishARecord", serverId: `home.ghost.${APEX}`, recordType: "A", targetIp: IPV4, recordName: "pod-apex" },
+      { kind: "publishARecord", serverId: `home.dave.${APEX}`, recordType: "A", targetIp: "192.0.2.5", recordName: "pod-apex" },
+    ]) {
+      const r = await handler.fetch(
+        new Request("https://b/rpc", { method: "POST", body: JSON.stringify(body) }),
+        makeEnv(),
+      );
+      expect(r.status).toBe(403);
+    }
+    expect(calls.filter((c) => c.url.startsWith("https://api.cloudflare.com/")).length).toBe(0);
   });
 
   it("rate-limits a single IP after the burst is exhausted", async () => {

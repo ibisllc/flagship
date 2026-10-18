@@ -602,7 +602,15 @@ async function verifyUserzoneGrantPublish(
 
 // ---- publishARecord ----
 
+/** Refuse publishARecord outright (see verifyPublishA). */
+const ROOT_WILDCARD_LAYOUT = true;
+
 async function verifyPublishA(b: PublishARecordBody, env: PolicyEnv): Promise<VerifyOutcome> {
+  // Root-wildcard layout (docs/wildcard-dns.md): a record at `<server>.<user>`
+  // or `*.<server>.<user>` stops the zone wildcard for every name below it
+  // (measured on Cloudflare), so nobody may write one. The rest of this
+  // function is kept for the day the layout changes.
+  if (ROOT_WILDCARD_LAYOUT) return deny("per-box records are not published under the root wildcard");
   if (
     typeof b.serverId !== "string" ||
     typeof b.targetIp !== "string" ||

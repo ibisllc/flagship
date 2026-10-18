@@ -20,7 +20,7 @@ business logic beyond "verify a signature, call CF".
 | `kind`                | Authority                                                                                       | Effect                                                  |
 |-----------------------|-------------------------------------------------------------------------------------------------|---------------------------------------------------------|
 | `publishTxtChallenge` | Pod daemon signature for pod-namespace ACME; AppGrant or IRK signature for user-zone ACME       | Creates a TXT record at `_acme-challenge.<host>`         |
-| `publishARecord`      | Pod daemon signature over `(serverId\|targetIp\|recordType\|issuedAt)`; target IP allowlisted    | Creates an A or AAAA record; refuses to overwrite        |
+| `publishARecord`      | Pod daemon signature over `(serverId\|targetIp\|recordType\|issuedAt)`; target IP allowlisted    | REFUSED under the root-wildcard layout (a record at a box name stops the zone wildcard below it) |
 | `deleteRecord`        | Same authority that created the record (pod daemon for ACME or pod-A; IRK for user-zone records) | Deletes by id after asserting name + type match the authority's scope |
 
 All RPC envelopes are time-windowed (default 5 minutes) and verified

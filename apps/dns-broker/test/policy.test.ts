@@ -425,92 +425,26 @@ describe("publishTxtChallenge — user-zone ServiceGrant authority", () => {
 describe("publishARecord", () => {
   const podKey = kp(10);
   const serverId = `home.dave.${APEX}`;
+  const REFUSAL = "per-box records are not published under the root wildcard";
 
-  function body(
-    targetIp: string,
-    recordType: "A" | "AAAA",
-    recordName: PublishARecordBody["recordName"] = "pod-apex",
-  ): PublishARecordBody {
-    return { kind: "publishARecord", serverId, recordType, targetIp, recordName };
-  }
-
-  it("accepts an A record at the pod apex with the allowlisted IPv4", async () => {
+  it("refuses every per-box record, even the allowlisted address of a registered pod", async () => {
     const state = freshState();
     state.pods[serverId] = podKey.publicKey;
-    const r = await verifyRpc(body(IPV4, "A", "pod-apex"), makeEnv(state));
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      expect(r.effect).toEqual({
-        kind: "createA",
-        recordName: serverId,
-        recordType: "A",
-        targetIp: IPV4,
-      });
+    for (const [targetIp, recordType] of [[IPV4, "A"], [IPV6, "AAAA"]] as const) {
+      for (const recordName of ["pod-apex", "pod-wildcard"] as const) {
+        const r = await verifyRpc({ kind: "publishARecord", serverId, recordType, targetIp, recordName }, makeEnv(state));
+        expect(r.ok).toBe(false);
+        if (!r.ok) expect(r.reason).toBe(REFUSAL);
+      }
     }
   });
 
-  it("accepts the two per-box name variants (A′)", async () => {
+  it("still refuses malformed and foreign requests", async () => {
     const state = freshState();
     state.pods[serverId] = podKey.publicKey;
-    const variants: Array<[PublishARecordBody["recordName"], string]> = [
-      ["pod-apex", serverId],
-      ["pod-wildcard", `*.${serverId}`],
-    ];
-    for (const [v, expected] of variants) {
-      const r = await verifyRpc(body(IPV4, "A", v), makeEnv(state));
-      expect(r.ok).toBe(true);
-      if (r.ok && r.effect.kind === "createA") expect(r.effect.recordName).toBe(expected);
-    }
-  });
-
-  it("refuses the retired model-C user-zone variants", async () => {
-    const state = freshState();
-    state.pods[serverId] = podKey.publicKey;
-    for (const v of ["user-zone-apex", "user-zone-wildcard"]) {
-      const r = await verifyRpc(body(IPV4, "A", v as PublishARecordBody["recordName"]), makeEnv(state));
-      expect(r.ok).toBe(false);
-    }
-  });
-
-  it("accepts an AAAA record with the allowlisted IPv6", async () => {
-    const state = freshState();
-    state.pods[serverId] = podKey.publicKey;
-    const r = await verifyRpc(body(IPV6, "AAAA"), makeEnv(state));
-    expect(r.ok).toBe(true);
-  });
-
-  it("rejects an A record pointing at an arbitrary IP", async () => {
-    const state = freshState();
-    state.pods[serverId] = podKey.publicKey;
-    const r = await verifyRpc(body("1.2.3.4", "A"), makeEnv(state));
-    expect(r.ok).toBe(false);
-  });
-
-  it("rejects when the pod is not registered (registration proof fails)", async () => {
-    const state = freshState();
-    const r = await verifyRpc(body(IPV4, "A"), makeEnv(state));
-    expect(r.ok).toBe(false);
-  });
-
-  it("rejects serverId outside the managed apex", async () => {
-    const state = freshState();
-    const otherId = "evil.dave.example.com";
-    state.pods[otherId] = podKey.publicKey;
-    const r = await verifyRpc(
-      { kind: "publishARecord", serverId: otherId, recordType: "A", targetIp: IPV4, recordName: "pod-apex" },
-      makeEnv(state),
-    );
-    expect(r.ok).toBe(false);
-  });
-
-  it("rejects malformed recordName variant", async () => {
-    const state = freshState();
-    state.pods[serverId] = podKey.publicKey;
-    const r = await verifyRpc(
-      { kind: "publishARecord", serverId, recordType: "A", targetIp: IPV4, recordName: "bogus" },
-      makeEnv(state),
-    );
-    expect(r.ok).toBe(false);
+    expect((await verifyRpc({ kind: "publishARecord", serverId, recordType: "A", targetIp: "1.2.3.4", recordName: "pod-apex" }, makeEnv(state))).ok).toBe(false);
+    expect((await verifyRpc({ kind: "publishARecord", serverId: "evil.dave.example.com", recordType: "A", targetIp: IPV4, recordName: "pod-apex" }, makeEnv(state))).ok).toBe(false);
+    expect((await verifyRpc({ kind: "publishARecord", serverId, recordType: "A", targetIp: IPV4, recordName: "bogus" } as never, makeEnv(state))).ok).toBe(false);
   });
 });
 
