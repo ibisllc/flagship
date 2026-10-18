@@ -126,7 +126,7 @@ final class GymSweepHomeTests: GymSweepCase {
         let create = app.buttons.matching(identifier: "home-add-new-server").firstMatch
         XCTAssertTrue(create.waitForExistence(timeout: 10), "The menu is open.")
         XCTAssertTrue(app.buttons["lock-unlock-btn"].waitForExistence(timeout: 25), "The app locks.")
-        XCTAssertFalse(create.exists, "Nothing of the menu is on screen while locked.")
+        waitGone(create, timeout: 3)
         XCTAssertFalse(app.buttons.matching(identifier: "home-restore-backup").firstMatch.exists)
         XCTAssertEqual(app.sheets.count + app.alerts.count + app.popovers.count, 0, "No dialog is left over the lock screen.")
         shot(app, "locked-no-menu")

@@ -280,6 +280,8 @@ final class PolishShotsTests: GymSweepCase {
         if row.exists { row.tap() }
         sleep(2)
         lines.append("nav bars: \(app.navigationBars.allElementsBoundByIndex.map { $0.identifier })")
+        lines.append("static texts: \(app.staticTexts.allElementsBoundByIndex.map { "\($0.label)@\(Int($0.frame.minX)),\(Int($0.frame.minY))" })")
+        lines.append("buttons: \(app.buttons.allElementsBoundByIndex.prefix(40).map { "\($0.label)|\($0.identifier)" })")
         lines.append(app.debugDescription)
         let a = XCTAttachment(string: lines.joined(separator: "\n")); a.lifetime = .keepAlways; add(a)
         try? lines.joined(separator: "\n").write(toFile: (outDir?.path ?? "/tmp") + "/sidebar-debug.txt", atomically: true, encoding: .utf8)
