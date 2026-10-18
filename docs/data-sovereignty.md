@@ -1,6 +1,6 @@
 # Data sovereignty: the user keeps their data if we cannot serve them
 
-> **Status: phase 1 (2026-10-18).** The threat model, an honest inventory,
+> **Status: phase 1 (2026-10-18), owner decisions of the same day applied.** The threat model, an honest inventory,
 > the "Rescue my data" design, and the box/protocol slice of it are on
 > `main` (section 5). The phone screens, the webapp, gym scenarios and the
 > live-gym lane are phase 2 (section 7). Nothing here is deployed: boxes need
@@ -135,7 +135,15 @@ A **Settings → Rescue my data** entry that exists always: signed in or not,
 account present or removed, network or not. It also appears as a third button,
 **Save my servers' data**, on the N1 screen ("This account was removed",
 `scratchpad/WORKLIST.md` N1), beside "Create a new account" and "Remove from
-this device". It needs the account key on the device and nothing else.
+this device".
+
+**It starts from what is stored on the device, and from nothing `.com`
+gives.** (Owner requirement, 2026-10-18: it must work even if `.com` does not
+recognise the app or the account at all, as long as the app still holds the
+admin key.) It must not read a `.com` session, an account read token, a device
+grant, a profile, `/pods` or a push registration, and a 404 `account-not-found`
+from `.com` (the N1 state) must neither stop it nor be waited for. Section 4.9
+lists the local records it needs.
 
 Flow: pick the server (from the phone's local copy of its servers; or type
 the name; or scan/see it on the local network) → "Looking for your server on
@@ -166,6 +174,11 @@ own sentence on refusal.
    The phone accepts the id as a hint and still verifies by key. Needs an
    `/etc/issue.d/` drop-in written by the daemon and the appliance's getty;
    small but OS-level, so left to phase 2 (it needs the appliance rebuilt).
+
+All three paths need the server's **name**, which nothing else can
+reconstruct, so the phone keeps its own copy of the server list (4.9). With
+no list (a fresh install without the v2 account key file, 4.11) the user types
+the name, or reads it off the box's console line.
 
 Studio-hosted VMs sit behind NAT and cannot be found by a phone on the Wi-Fi
 (`lan-direct.md`); for those, rescue runs from the Mac itself (Studio phase,
@@ -212,9 +225,12 @@ Which existing endpoints accept an owner with no `.com`, and what changed:
 | `/api/rescue/*` (**new, built**) | a signed order, below | No | The rescue gate |
 
 The new gate, `flagship/rescue-session/v1|<server>|<clientNonce>|<boxNonce>|<certSha256>|<issuedAt>`,
-is signed by the **sensitive-order key: the admin root on a box that pins one
-(an IRK signature is refused), the IRK on a box that pins none** (the same
-`authorizeSensitiveOrder` every destructive order uses). It names a nonce the
+is signed by the **sensitive-order key**: on a box that pins an admin root,
+either the **admin root** itself or an **admin device by its own key** under a
+root-signed grant in the box's verified device book (an IRK signature is
+refused); on a box that pins none, the IRK. This is the same authority every
+destructive order uses (`authorizeSensitiveOrder`, `requireMasterAdmin`), and
+section 4.12 explains why the two kinds of admin differ. It names a nonce the
 box issued seconds ago and spends it on first use (right or wrong), names the
 certificate hash of this very connection, and is good for 2 minutes. So it
 cannot be replayed, relayed to another connection, or reused. It returns a
@@ -295,6 +311,232 @@ profiles) deletes the UMK. After it, rescue is impossible. The button must say
 so ("This also erases the keys that open your server's backup on this phone.
 Save your servers' data first.") and N1's third button should come first.
 
+### 4.9 What the rescue flow needs on the device (and where it comes from today)
+
+| Record | Where it lives now | Today's source | Needed for rescue? |
+|---|---|---|---|
+| **Admin root seed** (32 bytes, random, not UMK-derived) | device-local secret store: iOS Keychain `.deviceLocal`, Android encrypted prefs, webapp IndexedDB (`device-admin-tier-spec.md` §1.2) | made on the first device; copied to another admin device by promote-at-add; escrowed under the passkey recovery credential **at `.com`** | **Yes.** On every real account the boxes pin it; the IRK is refused |
+| **UMK seed** | Keychain/Keystore (iCloud-synced on iOS) | account creation | **Yes**: derives each box's STK (to verify the hello) and the account slot of the backup key |
+| **Server list** (names) | **not stored as a list**: the app learns its servers from `/pods`, which needs a `.com` read token | `.com` | **Yes, and this is the gap.** With `.com` gone there is nothing to start from |
+| Last-seen LAN addresses, last leaf-cert hash per server | the app's LAN-direct registry (hints are fetched over the relay and kept per network) | the box, over the relay | Helpful, never trusted (the hello decides) |
+| A paired-session token per server | per-pod session store | the box, at pairing | **Not used**: the rescue session replaces it |
+| `.com` session, read token, device grant, profile, push token | various | `.com` | **Never read** |
+
+So the phone needs one new local record, written whenever `/pods` or a
+rescue/LAN discovery succeeds, and read by the rescue flow before anything
+else:
+
+```
+rescue-servers  (device-local, next to the admin root, same protection)
+  [{ domain, lan?: ["10.0.0.5:443", ...] (newest first, max 8), seenAt }]
+```
+
+It is the same shape the v2 account key file carries (`KeyfileServer`,
+4.11), so a restore puts it back. It holds names, not secrets, and is kept
+even when `.com` says the account is gone: the N1 screen must not clear it.
+The server list in the box's own screens is not enough: a box only knows its
+own name.
+
+### 4.10 Signing out an admin device
+
+Admin devices should **never sign out** (owner, 2026-10-18). The admin root
+lives only on the device (and, for recovery, escrowed at `.com`, which a
+hostile `.com` can simply refuse to serve), so the key on the device is the
+only reliable copy. Consequences for the apps (phase 2 builds them; the
+warning copy on the account-gone screens is being written by that stream and
+this section only fixes the meaning):
+
+- **Sign out / Remove from this device / Wipe on an admin device** must say:
+  *"Signing out removes this device's admin key. Without it you can no longer
+  save your servers' data, change who can reach them, or remove them. If this
+  is your only admin device, save your account key first."* The confirmation
+  names what is erased: the admin key, the saved server list and the account
+  key on this device. It offers **Back up my account key** (4.11) before the
+  destructive button, and for the last admin device makes that the default
+  action.
+- On a **non-admin** device the existing sign-out is unchanged (nothing there
+  is irreplaceable).
+- A sign-out on the N1 screen follows the same rule: "Remove from this
+  device" is the last button and carries the same sentence.
+- **Nudge.** An admin device with no account key backup made (or one older
+  than the last time the admin root or the server list changed) shows a
+  dismissible card on Home and in Settings: *"Back up your account key. It is
+  the only thing that can save your servers' data if this phone is lost or
+  Flagship can no longer help you."* The backup file is only ever written by
+  an explicit action (never auto-synced anywhere, per `keyfile.ts`).
+
+### 4.11 The account key backup, and what a fresh install can do without `.com`
+
+A `.flagshipkey` v1 wrapped only the UMK seed. The UMK cannot rebuild the
+admin root (it is random, device-local), so **a fresh install restored from a
+v1 file cannot take a backup from any box that pins an admin key**: the IRK is
+refused. Tested (`rescue.test.ts`, "the account key alone is refused").
+
+Phase 1 adds **`.flagshipkey` v2** (`wrapAccountToKeyfile` /
+`unwrapAccountFromKeyfile`, `packages/protocol/src/keyfile.ts`): the same
+Argon2id + AES-256-GCM wrapper, with a plaintext of the UMK seed, the admin
+root seed (when the exporting device holds it) and the server records
+(`KeyfileServer`: name and last-seen LAN addresses). Version 1 files still
+open (no admin root, no servers); a v2 file opens with the old reader as a UMK.
+
+What a fresh install plus a v2 file can do with `.com` unreachable or hostile:
+
+| Can | Because |
+|---|---|
+| Find and verify its boxes | server names are in the file; the STK derives from the UMK + name |
+| Open a rescue session and download a backup | the admin root is in the file; the hello is verified by key |
+| Open its own backups | the account slot key derives from the UMK |
+| Revoke a stolen device, or rotate the admin key, **at a box it can reach** | the admin root signs; the box applies it locally (4.12) |
+| **Not** sign in to `.com`, see `/pods`, get push, create a new server, or restore into a new account | all need `.com` (limit 2) |
+
+A v1-file owner of an account with no admin pin (demo accounts) is unaffected.
+The export asks for the passphrase rules of the existing key file (and the
+suggested generated passphrase), and its warning is the existing "this file
+is the keys to the kingdom" one plus: *"This file also contains your server
+admin key."* An admin device exporting must include the admin root by default
+and say so; a non-admin device writes a file without one.
+
+### 4.12 Admins: who can take a copy, and what we do about it
+
+The coordinator's analysis (2026-10-18) was checked against the code, and the
+owner approved all of it. The facts it rests on:
+
+- **Admin keying today.** There is **one** admin root per account (random
+  Ed25519, not UMK-derived). Promote-at-add (`crossDevicePairing.js`) seals
+  **that same private seed** to the new device (`wrappedAdminRoot`) and also
+  mints a root-signed `admin` grant for the device's own key. Sensitive orders
+  are signed with the bare root. So the box sees one signature for every admin
+  device and **cannot tell them apart**.
+- **Two kinds of admin, in the code already.** `requireMasterAdmin` accepts the
+  bare root *or* a device key holding a root-signed, unexpired, unrevoked
+  `admin` grant (`adminAuthorityLocal.ts`). The box's verified device book
+  (`accessPrincipals.ts`, `adminGrants()`) already feeds it, but only **one**
+  of the box's ~31 `authorizeSensitiveOrder` call sites passes the grants
+  today; the rest accept the bare root only.
+- **Revoking an admin today.** For a grant-holding device: `.com` writes
+  `revoked_at` and the box's 5-minute refresh drops it. **`.com` can drop a
+  device from the list but cannot be made to keep a revoked one off it**: a
+  stale or hostile list, or a failed refresh, brings it back (the book keeps
+  the last list it verified). For a bare-root holder: there is no revoke;
+  removing one is **rotating the admin root** (old root signs old to new, the
+  box replays the chain from its pin, `adminRootRotationConsumer.ts`), and the
+  chain reaches the box only by polling `.com`.
+- **A shared root cannot be revoked against a determined holder.** The device
+  being removed holds the same key, so it can sign a competing rotation
+  old to evil. The box follows the first chain that continues its pin; the
+  race is won by whoever reaches each box first. A grant-holding device does
+  not have this problem: it never holds the root, so it cannot contest.
+
+**Decisions (owner, 2026-10-18):**
+
+1. **Admins stay revocable.** Irrevocable admins were rejected: a stolen or
+   coerced admin phone could then never be cut off; lost-phone recovery is
+   rotation; and it breaks the rank rules ("only admins change ranks", "Three
+   ranks"). Revocation protects the future, not the past: a revoked admin
+   keeps whatever they already copied, and a backup was always one tap away
+   for any admin. The "rush a dump before leaving" window adds no capability.
+2. **Warn when adding an admin** (copy below).
+3. **Every export is logged on the box and told to the other admin devices**
+   (alert spec below).
+4. **A cooling period for newly added admins: 24 hours before an admin
+   *device* can use the direct export path.** The admin root itself, which
+   the original device holds, always works at once.
+5. **Revocation and rotation apply locally, without `.com`.**
+
+**Making the cooling period real needs a per-device admin identity.** The box
+can enforce an age only on something it can tell apart and that is dated by
+the root, not by `.com`: a grant's `issuedAt` is inside the root's signature,
+so `.com` cannot make a new admin look old. The smallest design that gives it:
+
+- A new admin is promoted by a **root-signed `admin` grant for its own device
+  key, and does not receive the root seed.** (The grant mechanism already
+  exists; the change is that promote-at-add stops sealing `wrappedAdminRoot`.)
+- The box accepts a rescue order from such a device only when
+  `now - grant.issuedAt >= 24 h` (built: `RESCUE_NEW_ADMIN_COOLING_MS`; the
+  refusal is `403 admin-too-new` with a sentence saying how long is left).
+- The root holder (the first device, and any device the owner chooses to give
+  the root to) is never held back and is the one who can promote, rotate and
+  renew grants.
+
+*Cost:* (a) the other ~30 box-side `authorizeSensitiveOrder` call sites must
+pass the device book's admin grants, or a grant-only admin can export but not,
+say, uninstall; (b) grants expire (90 days, a refresh horizon), and renewal
+needs the root, so a grant-only admin's authority lapses unless the root
+device renews it and the renewal reaches the box (via `.com` today; a direct
+route like `/api/rescue/revoke` is the same shape and is phase 2); (c) a
+grant-only admin cannot rotate the root or mint admins (intended); (d) the
+recovery-credential escrow still protects the root only, so losing every
+root-holding device while keeping a grant-only admin needs the recovery
+credential to re-mint. Until promote-at-add changes, existing admins hold the
+root and the cooling period binds nobody: the box mechanism is built and
+tested, the client change is phase 2.
+
+**Revocation and rotation, locally (built).** Two self-authenticating routes,
+answered before any session gate, each only ever *removing* authority:
+
+- `POST /api/rescue/revoke {revoke, signatureHex}`: a
+  `flagship/revoke-device-capability-grant/v1` signed by the **pinned admin
+  root** (not by a delegated admin: a device being revoked must not be able to
+  revoke the others first). The box keeps a tombstone
+  (`data/flagship-access/device-revocations.json`, durable, survives
+  restarts), drops the device from its book at once, and kills every open
+  rescue session that device opened. Whatever `.com` lists afterwards, the
+  tombstone wins. A replay is harmless; a box that pins no admin root refuses.
+- `POST /api/rescue/admin-root-rotation {rotations}`: the rotation proofs
+  (`flagship/admin-root-rotation/v1`, old root signs old to new) are replayed
+  from the pin exactly as a polled chain is; only a proof that continues the
+  pin and verifies changes anything; the box persists the new pin and
+  restarts (which also ends every in-memory rescue session). The old root can
+  then do nothing on this box.
+
+The owner's phone sends both to each box it can reach (LAN or relay) in
+addition to `.com`. **Residual, stated plainly:** a revocation or rotation
+takes effect on a box when that box receives it. A box the owner cannot
+reach keeps trusting the revoked admin; a bare-root holder can race the
+rotation on boxes the owner cannot reach first (the shared-root problem
+above, which only the per-device identity removes); and a session or export
+completed before the order arrived is not recalled. A request made just before
+the order is served in full, the next one is refused: the race is the delivery
+time, not a window the box leaves open.
+
+**Warning copy when adding an admin** (shown on the Add a device screen where
+"also make this device an admin" is offered, which stays default-off and only
+on the synchronous ceremony, `device-admin-tier-spec.md` D-4):
+
+> **Make this an admin device?**
+> An admin can copy all of this server's data at any time, change who can
+> reach it, and delete it. You can remove an admin later, but you can't take
+> back what they already copied. Only do this for a device that is yours and
+> that you control.
+> *[Make admin]* *[Not now]*
+
+and, on the same screen, once the per-device identity ships: *"It will be able
+to take a direct copy of your data 24 hours after you add it."*
+
+**Alert spec when a copy is taken** (box built; screens phase 2):
+
+| Event | Activity entry (box, durable) | Alert to admin devices |
+|---|---|---|
+| Rescue session opened | `server.rescue.opened`: "A rescue session was opened with the admin key / admin device 1a2b3c4d: it can make and download a backup of this server." | `backup-exported` stage `rescue-opened`, `by` = "the admin key" or "admin device 1a2b3c4d", `ref` = the acting phone's own nonce |
+| Backup download finished (phone or rescue) | `server.backup.downloaded` | stage `downloaded` |
+| Browser download approved | `server.backup.download-approved` | stage `browser-approved` |
+| A rescue session refused | `server.rescue.refused` (at most one every 10 s) | none (an attack is not an export) |
+| Device revoked / admin root replaced | `server.device.revoked`, `server.admin.rotated` | none (the Activity tab shows them) |
+
+The alert rides the box's phone AlertInbox (`PhoneAlert` `backup-exported`,
+deduplicated by stage, `by` and `ref`) and a **content-free push**: category
+`generic`, an opaque body, at most once a minute (the same wake the storage
+alerts use). Nothing that leaves the box says what was copied, by whom or
+from where. A hostile `.com` that drops the push only delays the news: the
+Activity line is authoritative and the AlertInbox is read on the next connect.
+Client rules: an admin device shows *"A copy of this server's data was
+taken"* (and, for `rescue-opened`, *"with the admin key"* or *"with admin
+device 1a2b3c4d. If that wasn't you, remove it."*) and opens the server's
+Activity; the phone that made the export drops the alert whose `ref` it
+generated, and, for a normal download, any alert arriving within a minute of
+its own. Push is the wake and the Activity entry is the record: the alert is
+never the only trace.
+
 ## 5. What is built in phase 1 (on `main`)
 
 ### 5.1 Protocol (`packages/protocol/src/rescue.ts`)
@@ -324,6 +566,20 @@ Activity: `server.rescue.opened` and `server.rescue.refused`.
   (`shouldServeStaleCert`, `onCertFallback`). The daemon uses it only to know
   which certificate the phone will see; it does not report "live".
 
+### 5.3b Admin devices, revocation, alerts, account key (phase 1, later in the day)
+
+- `rescue/authority.ts`: who may open a session (admin root, admin device with
+  a root-signed grant in the verified book, IRK only where none is pinned);
+  `rescue.ts`: the 24 h cooling period for device signers, session to signer
+  tracking, `/api/rescue/revoke`, `/api/rescue/admin-root-rotation`.
+- `deviceRevocations.ts`: the box's own tombstones; `AccountDeviceBook` honours
+  them (`isRevoked`, `dropGrant`) whatever `.com` lists.
+- `adminRootRotationConsumer.applyDeliveredRotations`: rotation proofs the
+  phone delivered directly, replayed from the pin like a polled chain.
+- `rescue/exportNotice.ts` + `PhoneAlert` `backup-exported` + the archive
+  service's `onExport`: the alert and the content-free wake.
+- `keyfile.ts` v2 (`wrapAccountToKeyfile`): UMK + admin root + server records.
+
 ### 5.4 Tests
 
 - `packages/protocol/tests/rescue.test.ts`: vectors, tag separation, every
@@ -338,6 +594,20 @@ Activity: `server.rescue.opened` and `server.rescue.refused`.
   token scope (no paired-session route, no link/approve/restore/saved route);
   passcode still mandatory; expiry and eviction; no lock-out under refusals;
   flood handling.
+- Same file, admin section: a device admin opens a session only once its grant
+  is 24 h old while the admin key never waits; a member-scope grant gets
+  nothing; a revocation applies at once, kills that device's open sessions and
+  survives `.com` listing the grant again and a restart; only the pinned admin
+  root can revoke (not a device, not the IRK, not a forged, misdirected or
+  future-dated order; a box with no pin refuses); a rotation re-pins and
+  restarts, a proof that does not continue the pin changes nothing; the export
+  alert names who opened a session and carries the acting phone's nonce; the
+  download raises a second alert; `exportNotice` rate-limits the wake and a
+  failing push loses nothing; a fresh install restored from a v2 key file
+  rescues a box, and one restored from the account key alone is refused.
+- `packages/protocol/tests/keyfile.test.ts`: v2 round trip (admin root and
+  servers, no plaintext leak), v1 still opens, v1 reader opens v2, tamper and
+  wrong passphrase, malformed server records.
 - `sovereigntyBoot.test.ts`: the bounded relay wait; stale-cert serving.
 - `lanDiscovery.test.ts`: the DNS codec, what is and is not announced, a real
   UDP round trip, LAN-only sources, port-in-use.
@@ -345,7 +615,16 @@ Activity: `server.rescue.opened` and `server.rescue.refused`.
 Not run: a real box, a real phone, multicast on a real network, `startDaemonRuntime`
 itself (its two changes are tested as the extracted pure functions).
 
-## 6. Findings that need decisions (owner)
+## 6. Decisions
+
+**Decided (owner, 2026-10-18):** admins stay revocable (irrevocable admins:
+no); warning when adding an admin; every export logged on the box and told to
+the other admin devices; 24 h cooling period for newly added admin devices
+(needs the per-device identity of 4.12); revocation and rotation apply locally
+without `.com`; admin devices never sign out; the rescue export depends on
+nothing but the local admin key (4.9).
+
+**Still open:**
 
 - **D1. A control plane the user can reach when `.com` is gone.** Without one,
   "import into another account" is impossible under T4/T5. Options: a published
@@ -355,10 +634,11 @@ itself (its two changes are tested as the extracted pure functions).
 - **D2. Offline unlock.** Unlock needs `.com` on every boot, and the one
   offline path (the public burn passphrase) is slated for removal at GA.
   Options: an owner-held **recovery key** (a LUKS slot whose key the phone
-  shows once and includes sealed in every backup); a LAN approval to the
-  initramfs (the phone sends the re-sealed key straight to the box, verified
-  against the pinned admin root; needs a small listener in the initramfs); or
-  a cached lease on the boot partition. Recommend the recovery key first.
+  shows once and includes sealed in every backup and in the v2 account key
+  file); a LAN approval to the initramfs (the phone sends the re-sealed key
+  straight to the box, verified against the pinned admin root; needs a small
+  listener in the initramfs); or a cached lease on the boot partition.
+  Recommend the recovery key first.
 - **D3. Rescue must be possible before a reboot.** Consider telling the owner
   (N1, and a banner when `/pods` is 404) "do not restart your server until you
   have saved its data".
@@ -374,6 +654,12 @@ itself (its two changes are tested as the extracted pure functions).
   console line.
 - **D8. Restoring into another account** (4.7): treat restored apps as the new
   host's own; ship before promising the import.
+- **D9. Promote-at-add stops sealing the root** (4.12): the change that makes
+  the cooling period bind. Recommend yes, with the root kept on one or two
+  devices the owner chooses. Needs the other ~30 box call sites to take
+  grants and a direct grant-renewal route.
+- **D10. The cooling length.** 24 h is the target; the box setting
+  (`coolingMs`) is per box. Recommend 24 h for family accounts and no lower.
 
 ## 7. Phase 2 plan
 
@@ -388,6 +674,10 @@ itself (its two changes are tested as the extracted pure functions).
 | Gym scenarios (mock): found, not found, wrong passcode, expired cert, interrupted download resumes, N1 → rescue → import into a second mock account | 2 days across apps | owner rule: every test a gym test |
 | **Live-gym lane `sovereignty`** | 3 days | below |
 | Offline unlock (D2): recovery key | 4 to 6 days | owner decision first |
+| Account key backup v2 UI (admin root + server list included), the "Back up my account key" nudge, the sign-out warning on admin devices, the local `rescue-servers` record | 3 days per app | 4.9 to 4.11 |
+| Promote-at-add issues a grant and stops sealing the root; the ~30 box call sites take the device book's grants; a direct grant-renewal route | 4 to 5 days | D9; makes the cooling period bind |
+| Send revocations and rotations straight to every reachable box, plus the alert screens (`backup-exported`, the activity lines, the warning copy) | 3 days per app | 4.12 |
+| Swift, Kotlin, webapp ports of the rescue vectors and of keyfile v2 | 1 to 2 days | |
 | Timeout on `BoxReadToken`, self-delete freshness, re-pair signature (D5) | 2 days | small box fixes |
 
 **Live-gym lane.** After the usual fleet is up (account A `home`, account B
