@@ -26,11 +26,79 @@ Deploy-consequence codes: **[COM]** deploy `.com`; **[SVC]** deploy `.services`;
 VM appliances; **[D1:nnnn]** D1 migration; **[SEC]** new Worker secret; **[OWN]** a manual
 owner step.
 
-Nothing in this report was deployed, signed, or run against production by me. The only
-production contact was a handful of public DNS lookups (section 7).
+Nothing in this report was deployed or signed by me. Production contact was a handful of
+public DNS lookups (section 7) and, in revision 2 only, one read-only `SELECT` on prod's D1
+migration ledger that the coordinator asked for (section 0.1).
 
-Baseline: `origin/main` = `9b5210992`. One commit, `a365def74` (a live-gym group for the Free
-plan), landed while I was writing; it is mentioned only in T23/T24 and not counted in section 1.
+Baseline of sections 1-8: `origin/main` = `9b5210992`. Revision 2 (below) was added later the
+same day against `eb449c357` and corrects some statements of revision 1 in place; where a theme
+text and section 0.1 disagree, section 0.1 is newer.
+
+### 0.1 Revision 2 (2026-10-18, later): landings since the baseline and what changed in this report
+
+**Landings since `9b5210992`** (`git log 9b5210992..origin/main`, 6 commits, all [V] by `git log`):
+
+| commit | what |
+|---|---|
+| `a365def74` | live-gym group `freePlan`, a Worker-tail CPU watch in `shared-run.ts`, doorbell budgets on the `update` and `decommission` checks. **Not run** [N]. |
+| `df4fab56c` | `scripts/release.sh`: an interactive release runner (1,851 lines now), `scripts/release.test.ts`, section "Run it with the script" in `final-deploy.md`, a line in AGENTS. |
+| `d274d8b00` | this report. |
+| `9ed418ce3` | `release.sh` reorder: `.services`, then the manual DNS step (wildcard + apex CAA, checked with `dig`), then `.com` with `zone-health` as its post-check; parsers tested against 10 captured-output fixtures in `scripts/release-fixtures/`; checked under macOS bash 3.2. |
+| `40195ab9f` | doc fixes for D1-D7 (below). |
+| `eb449c357` | doc fix: the wildcard comes before the `.com` deploy (below). |
+
+**Phase A / Phase B release split** (`release.sh --list`, [V] by running it): 27 steps. **Phase A,
+steps 1-16, deploys the real state before the Windows test**: preflight, plan acknowledgement, CA
+lease, endorsement (YubiKey), VM appliance builds kicked off, secrets (names only), the gym gate
+(the owner types `verified`), D1 backup prerequisites, migrations, `.services`, the manual DNS
+step, `.com`, a 60-second `exceededCpu` tail, publish the appliances that are ready, redeploy
+`.com` for the manifests, and write `device-results/DEPLOYED-FINAL-<date>.md` for the Windows
+agent. **Phase B, steps 17-27, runs after the Windows results**: maintenance notice, pre-GA scrub,
+reap + `zone-health`, retire the wipe tooling, Studio Windows/Linux, Studio Mac, arm64 appliance,
+`.com` redeploy, iOS, Android, final verification. Phase B refuses to start until phase A is
+recorded finished (typed `windows-ok` before the scrub). It pins one commit, builds from its own
+clean worktree, asks before every outward step, never force-pushes and keeps state in
+`~/.flagship-release/state.json`. What I verified: `scripts/release.test.ts` passes (22 tests; I ran
+it as the land check for `40195ab9f`). **Not verified: any real run of the script** (it needs a
+terminal, a YubiKey and prod logins), that its `dig` and `zone-health` gates behave on real DNS,
+and that its step order equals what the owner wants to do by hand. The Studio and store builds in
+phase B still depend on what phase A endorses.
+
+**DNS before `.com` (decision, and a correction of this report).** The new `.com` writes no address
+record for a box that registers, so deploying it before the wildcard exists leaves a new box's names
+unresolvable, and resolvers cache that for 30 minutes. The order is therefore `.services`, wildcard
++ apex CAA by hand, then `.com`. The wildcard is harmless to existing accounts (their own records
+keep answering until the guarded trim). My revision 1 repeated the older docs' claim that "deploying
+`.com` first is safe and a no-op" (T21 Consequences, section 4.2 item 1); both were wrong for *new*
+boxes and are corrected below. The docs said the same (`docs/wildcard-dns.md` s.5 and s.10, runbook
+s.6a, ".services: nothing for this change") and are fixed in `eb449c357`.
+
+**Android relay-fallback finding (R3, T12).** Public DNS gives the apex `flagship.services`
+Cloudflare edge addresses (172.67.185.244, 104.21.32.109), not the relay `149.248.216.86`, so
+`RelayFallbackDns` (`638bce32f`) would send the box's SNI to Cloudflare instead of the relay. The
+coordinator says a fix is being made; **as of `eb449c357` no commit has touched
+`apps/mobile/android/.../core/RelayFallback.kt` since `638bce32f`** [V `git log`], so it is not
+fixed on `main`. I have not tested the handshake.
+
+**Prod D1 ledger (D1).** On the coordinator's request I ran one read-only
+`SELECT version FROM schema_version ORDER BY version DESC LIMIT 6` against prod D1 with
+`wrangler d1 execute flagship-state --remote`: **0105, 0104, 0103, 0102, 0101, 0100** [V]. So 0104 and
+0105 are applied and "0104 pending" in AGENTS was stale. The ledger says nothing about the three
+peer-backup secrets or about which `.com` code is deployed [N]; I did not re-measure the live shell
+version.
+
+**Doc fixes landed (`40195ab9f`, `eb449c357`), each checked against the code or state first:**
+D1 AGENTS and `final-deploy.md` s.4 now state the ledger above; D2 s.1 says Free for launch with the
+upgrade signals in s.14 and Paid as the fallback; D3 s.3 says the endorsement **is** required for this
+release (`bc59534d4`, `fbff4df7e`, plus `edSync.ts`/`nonceStore.ts` box paths changed after `e07f6ba7`;
+`release.sh` computes the same diff); D4 AGENTS no longer says the Android lease signer is unfixed;
+D5 the 248-check run is labelled as the per-account layout in the runbook and `wildcard-dns.md` s.9.4
+and no longer called the gate (the gate is a fresh run on the commit to deploy); D6 s.13's not-run
+list matches the 10-17/10-18 runs; D7 AGENTS: last-updated date, vitest time (~3 min), the
+nonexistent `feat/share-server` branch. Also fixed: a dead reference (`wildcard-dns.md` s.11.6 ->
+s.9.4). Not fixed, because out of scope for a docs-only contradiction pass: the Android relay
+fallback itself, the `release.sh` test coverage of real tools, and everything in section 5 other
+than D1-D7.
 
 ## 1. Scope, baselines and size
 
@@ -695,8 +763,8 @@ quality; T18-T24 release, infrastructure and DNS; T25 the pre-10-15 product work
 - **Not covered.** Linux Studio has never run on a real Linux desktop; Windows: installer-ISO
   fallback, USB burn + metal boot, webapp + Remote walks, backup import, Restart as administrator,
   the *published* (not CI) appliance, and all Android fixes landed after `eb08dcdc4` [C AGENTS].
-  The AGENTS paragraph still lists the auto-unlock lease as "not yet fixed" although `64df9098c`
-  fixed it (T20) [V] - stale.
+  The AGENTS paragraph listed the auto-unlock lease as "not yet fixed" although `64df9098c` fixed
+  it (T20); corrected in `40195ab9f`.
 - **Consequences.** **[STU]** (all three; version 0.2.0 via `studio-release.yml`, then update
   `INSTALLER_DOWNLOADS` in `apps/com/src/route.ts` and **[COM]**), **[APP]** (rebuild and publish
   both arches: until then "Host on this PC" stalls on every Studio, AGENTS), **[OWN]** publish
@@ -817,7 +885,11 @@ AAAA `2606:4700:...`), **no apex CAA**, **no `*.flagship.services` record** (que
 **Consequences.** **[COM]** (no D1, **no endorsed box release**, no client change), **[SVC]** for the
 uniform drop timing, **[OWN]** the manual wildcard + CAA step, then dry-run reap, then `--apply`,
 then `npm run zone-health` (`final-deploy.md` s.6a, s.8, s.12). Nothing is deleted before the
-wildcard exists and equals the relay address, so deploying `.com` first is safe and a no-op.
+wildcard exists and equals the relay address; that protects *existing* accounts only. **Order
+(revision 2): `.services`, then the manual wildcard + apex CAA, then `.com`**, because the new
+`.com` writes no per-box address records and a new box registering before the wildcard exists gets
+names that do not resolve (cached 30 minutes). The first version of this report said `.com` first is
+safe; that was wrong for new boxes (section 0.1).
 
 ### T22. Data sovereignty (parked) and the boot hardening that stayed
 
@@ -894,9 +966,9 @@ wildcard exists and equals the relay address, so deploying `.com` first is safe 
   a counted request (~190 per webapp shell release per user; the shell moved v114 -> v153 in about
   two days (10-16 to 10-18)); invite-revocation and share-end polls (576 requests/day/box) are not gated; `/stream` stays a
   polling long-poll.
-- **Contradiction.** `final-deploy.md` s.1 still says "Workers & Pages -> Plans -> **Workers Paid
-  ($5/month)**" as the first step while s.14 and AGENTS say Free [V `grep`]. s.14 also says the D1
-  backup "already needs a decision before the first deploy".
+- **Contradiction (fixed in `40195ab9f`).** `final-deploy.md` s.1 said "Workers Paid ($5/month)" as
+  the first step while s.14 and AGENTS say Free; s.1 now says Free for launch with Paid as the
+  fallback. s.14 still says the D1 backup "already needs a decision before the first deploy" (open).
 - **Consequences.** **[COM]** first (shell v153), then **[END]** (the doorbell; "an old box simply
   keeps polling"), **[iOS][AND]** for back-off. The ~75-account ceiling only applies once boxes run
   the endorsed doorbell build; until then ~21.
@@ -1024,16 +1096,18 @@ were validated only by unit tests, mock gyms and (from 10-15) the live gym.
 
 Cross-cutting: **[END] needs the owner's YubiKey** (`node scripts/endorse-release.mjs ... --sign`,
 newest endorsement is `e07f6ba7`; box-path commits after it include the doorbell [V], so the
-runbook's "no new endorsement needed" is stale, D3 below). **CA lease renewal due before
+runbook's "no new endorsement needed" was stale; fixed in `40195ab9f`, D3 below). **CA lease renewal due before
 2026-11-05** (every CA-chain check fails closed after it: app trust checks, relay blessing, share
 acceptance, the box's own bootstrap).
 
 ### 4.2 Ordering constraints a deployer can get wrong
 
 1. CA lease renewal first (it is baked into the `.com` bundle); then endorsement (YubiKey); then
-   appliance rebuild (bakes the newest *endorsed* release, not `main`); then `.com`; then `.services`.
+   appliance rebuild (bakes the newest *endorsed* release, not `main`); then the gym gate and
+   migrations; then `.services`, the manual DNS wildcard + apex CAA, and only then `.com`
+   (`release.sh` steps 10-12; revision 1 had `.com` before `.services`, which was wrong, see 0.1).
 2. D1 0104 and 0105 **before** `npm run deploy` (the script refuses on migration drift, so a
-   forgotten one fails closed). The repo says prod has them [C runbook]; AGENTS says 0104 pending.
+   forgotten one fails closed). Prod's ledger reads 0105 newest [V, section 0.1]: nothing is pending.
 3. Store builds **before** `.com` for T1 (current builds cannot create a server afterwards) - but
    store builds before `.com` also means new clients talk to an old `.com` for a while (T7 and T8 should degrade gracefully, a missing route or no 404 [inference]; T20 is client-only).
 4. The root-wildcard manual DNS step must exist before any legacy record is trimmed; do not
@@ -1053,7 +1127,8 @@ Numbered so the questions below can point at them.
   canary and a per-run probe. The old shield was the wrong answer.
 - **R3. Relay fallback assumption is wrong on today's DNS.** Android `RelayFallbackDns` uses the
   apex's addresses as the relay; the apex is Cloudflare-proxied (public DNS: 172.67.x/104.21.x)
-  [V]. iOS has retry only. Its test uses a fake resolver [C].
+  [V]. iOS has retry only. Its test uses a fake resolver [C]. A fix is reported as in progress; not
+  on `main` at `eb449c357` [V] (section 0.1).
 - **R4. Workers Free ceiling.** ~75 always-on accounts under 100,000 requests/day only with the
   doorbell endorsed (21 without); `run_worker_first = ["/*"]` makes every shell release cost ~190
   requests per user; the D1 backup cron cannot run (89 D1 calls, cap 50); other crons unmeasured;
@@ -1099,22 +1174,22 @@ Numbered so the questions below can point at them.
 - **R20. Flagship Inference** is "built, not live" and unrun end to end; allowances and the model
   lineup are owner settings in D1 (`inference_settings`), changed without a deploy.
 
-### Document drift (docs on `main` that disagree with each other or the code)
+### Document drift (docs on `main` that disagreed with each other or the code; D1-D7 fixed in revision 2)
 
 - **D1.** Prod D1/shell state: AGENTS "0104 pending, shell v114" vs `final-deploy.md` s.4 "prod has
-  0105 applied".
-- **D2.** `final-deploy.md` s.1 (Workers Paid first) vs s.14 and AGENTS (Free) [V `grep`].
+  0105 applied". **FIXED**: ledger read, 0105 newest (0.1).
+- **D2.** `final-deploy.md` s.1 (Workers Paid first) vs s.14 and AGENTS (Free) [V `grep`]. **FIXED**.
 - **D3.** `final-deploy.md` s.3 says the only box-path change after endorsement `e07f6ba7` is a test
   vector; `git log e07f6ba7..origin/main -- packages/server-daemon/src` shows the doorbell commits
-  `bc59534d4` and `fbff4df7e` [V].
-- **D4.** AGENTS "Desktop Studio" says the Android lease signer is "not yet fixed"; `64df9098c` fixed it [V].
+  `bc59534d4` and `fbff4df7e` [V]. **FIXED**.
+- **D4.** AGENTS "Desktop Studio" says the Android lease signer is "not yet fixed"; `64df9098c` fixed it [V]. **FIXED**.
 - **D5.** `final-deploy.md` s.6 "Gate result ... 248 checks" is for `2963833d7`, yet the same section
-  says the core group checks zero account records, which landed in `257755719` [V].
+  says the core group checks zero account records, which landed in `257755719` [V]. **FIXED** (relabelled; a fresh gym run is still needed).
 - **D6.** `final-deploy.md` s.13 "Not run by anyone yet: live gym groups quota, share" vs AGENTS
-  (22 groups green on 10-17 including them) and the 10-18 23-group run.
+  (22 groups green on 10-17 including them) and the 10-18 23-group run. **FIXED**.
 - **D7.** AGENTS "Last updated 2026-10-16" and `vitest ... (~30s)`; the full run is 179 s [V] and the
   file has 10-18 entries. AGENTS still names a nonexistent branch `feat/share-server` [V
-  `git branch -r`] although share shipped on `main`.
+  `git branch -r`] although share shipped on `main`. **FIXED**.
 
 ## 6. Questions for the reviewer
 
@@ -1189,7 +1264,9 @@ tools/live-e2e/dns-ent-experiment.ts --canary`; zone check: `npm run zone-health
 | WCAG ratios recomputed from the committed hex values | matches `themeContrast.test.ts` and the iOS floors (2.3 / 2.1) |
 | `gh run list/view` (read-only) | CI table in T24; vm-appliance runs `39158345483`, `39160505562` green |
 | Public DNS: A/AAAA/CAA of `flagship.services`, an arbitrary one-label name, `*` | apex = Cloudflare edge; no CAA; no wildcard |
+| Revision 2: `wrangler d1 execute ... --remote` read-only `SELECT` of the ledger (at the coordinator's request); `release.sh --list`; `scripts/release.test.ts` | 0105..0100; 27 steps, 16 + 11; 22 tests pass |
 | `git merge-base --is-ancestor 2963833d7 272ce0c7d`; `git log e07f6ba7..origin/main -- ...` | R1 and D3 |
 | **Not run by me** | any iOS build, any Gradle build or emulator gym, any Swift/C#/Python Studio test, workerd CPU harness, any live gym, anything against production |
 
-I added no tests and changed no code; this file is documentation only.
+I added no tests and changed no code. Revision 1 added only this file; revision 2 also edited
+`AGENTS.md`, `docs/runbooks/final-deploy.md` and `docs/wildcard-dns.md` (documentation only).
