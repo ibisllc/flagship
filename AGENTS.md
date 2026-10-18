@@ -1202,6 +1202,8 @@ first update after it (`docs/anonymous-vouchers.md`, $1 voucher unit). Detail: `
    default target, env must match the database, a prod wipe needs a person
    typing `flagship-state` at a terminal; `release-guard.sh` fails if a guard
    goes). Keep its table list in step with migrations (a test enforces it).
+   Still to run: the last pre-GA scrub, keeping only `playstore-test-0725`
+   (`docs/runbooks/pre-ga-scrub.md`); update this item after the run.
 2. Remove the burn-time LUKS passphrase
    (`flagship-build-time-luks-rekey-me-immediately`) and re-enable the
    `luksRemoveKey` guard. `release-guard.sh` stays red on release tags until then.
