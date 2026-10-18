@@ -763,6 +763,7 @@ class AppState(
         // preference itself stays so a future re-pair re-arms.
         _isUnlocked.value = true
         AccountReadTokens.shared?.clear()
+        AccountGone.clear()
         onSignedOut?.invoke()
     }
 

@@ -181,6 +181,7 @@ Rules:
   put the check there, publish the state on the app model, and stop the
   `liveSync`/status tasks from it. The Release build has no mock clients, so
   the mock-gym scenario goes behind the same `#if DEBUG` seam as the others.
+- Android (built 2026-10-18): `core/AccountGone.kt` (state, an OkHttp interceptor installed second on the shared client after the update lock's gate, the words), `ui/shell/AccountGoneScreen.kt` (the overlay; the warning stands in place of the buttons), the warning in Settings Remove this device and Sign out, and `KeyBackupStore` for the key-file state. `Save my servers' data` is disabled (`Coming soon`) until the rescue exists on Android; `Save my data first` opens the account-key export meanwhile. Gym `GymAccountGoneTest`, unit `AccountGoneTest`.
 - Android: the same in the shared HTTP client; the state lives in the app
   scope; stop the polling coroutines; also clear the Keystore alias and the
   encrypted prefs.

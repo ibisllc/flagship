@@ -29,6 +29,8 @@ object HttpClientFactory {
             // FIRST: while a security notice has the app locked, nothing but
             // reads from the control apex leaves the phone (docs/security-notices.md 6.3).
             .addInterceptor(UpdateLockInterceptor())
+            // A removed account answers 404 account-not-found: note it once, then answer locally.
+            .addInterceptor(AccountGoneInterceptor())
             // No static control-apex cert pin — standard system CA trust (see
             // the header note). Box cert-fingerprint pinning (A′ phase 4,
             // hard-fail) stays, on two seams: the hostname verifier runs on

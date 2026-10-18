@@ -197,6 +197,10 @@ class MainActivity : FragmentActivity() {
         // Security notices: decide from the stored notice now and poll shortly
         // after launch (after a gym launch has reset the previous run's state).
         com.flagshipserver.app.core.SecurityNoticeCenter.install(applicationContext)
+        // Which names are this device's own account, for the account-removed screen.
+        com.flagshipserver.app.core.AccountGone.ownNames = {
+            listOfNotNull(appState.currentUser.value, appState.activeCloudName.value)
+        }
 
         // The leader becomes the current server only when this device can
         // talk to it (docs/app-placement.md §1). A gym run on mocks needs no session.
@@ -363,7 +367,7 @@ class MainActivity : FragmentActivity() {
                 com.flagshipserver.app.core.AiChatAlertPoller(
                     operations = operations,
                     client = livePhoneAlerts,
-                    isActiveGate = { appState.isPaired.value && appState.isUnlocked.value && !com.flagshipserver.app.core.UpdateLock.isLocked },
+                    isActiveGate = { appState.isPaired.value && appState.isUnlocked.value && !com.flagshipserver.app.core.UpdateLock.isLocked && !com.flagshipserver.app.core.AccountGone.isGone },
                     notify = { sessionId, request, server ->
                         FlagshipFcmService.showAiChatNotification(
                             appContext,
@@ -452,6 +456,7 @@ class MainActivity : FragmentActivity() {
                     isActiveGate = {
                         foreground.value && appState.isPaired.value && appState.isUnlocked.value &&
                             !com.flagshipserver.app.core.UpdateLock.isLocked &&
+                            !com.flagshipserver.app.core.AccountGone.isGone &&
                             !appState.isRestrictedDevice() &&
                             // Allow / Deny is an admin order: other devices see
                             // the requests on each app's page, read-only.
@@ -556,7 +561,7 @@ class MainActivity : FragmentActivity() {
                 com.flagshipserver.app.core.LiveSyncCoordinator(
                     app = appState,
                     mailbox = effectiveMailbox,
-                    isActiveGate = { appState.isPaired.value && appState.isUnlocked.value && !com.flagshipserver.app.core.UpdateLock.isLocked },
+                    isActiveGate = { appState.isPaired.value && appState.isUnlocked.value && !com.flagshipserver.app.core.UpdateLock.isLocked && !com.flagshipserver.app.core.AccountGone.isGone },
                     makeReconciler = {
                         // Same reconcile path Home uses, incl. the secret-free
                         // SWK/pairing deposit for newly-registered boxes
@@ -763,6 +768,10 @@ private fun AppRoot(
     }
     val showUpdateLock = updateLock != null && !stepAsideToUnlock
 
+    // docs/account-gone.md: .com says this device's own account no longer exists.
+    val goneName by com.flagshipserver.app.core.AccountGone.gone.collectAsState()
+    val showAccountGone = goneName != null && isPaired && isUnlocked
+
     // Keep the global operations sliver's deploy feeder in sync with the pod
     // list (mirror of iOS ContentView's syncDeployOperations on every pod
     // change). Cleared to empty while unpaired so a sign-out drops the sliver.
@@ -826,13 +835,13 @@ private fun AppRoot(
     ) {
         // Sheets, dialogs and menus (their own windows) draw nothing while locked.
         androidx.compose.runtime.CompositionLocalProvider(
-            com.flagshipserver.app.ui.components.LocalAppLocked provides ((isPaired && !isUnlocked) || showUpdateLock),
+            com.flagshipserver.app.ui.components.LocalAppLocked provides ((isPaired && !isUnlocked) || showUpdateLock || showAccountGone),
         ) {
         // Under the update lock nothing behind it is reachable by TalkBack or a test.
         Box(
             Modifier
                 .fillMaxSize()
-                .then(if (showUpdateLock) Modifier.clearAndSetSemantics { } else Modifier),
+                .then(if (showUpdateLock || showAccountGone) Modifier.clearAndSetSemantics { } else Modifier),
         ) {
         if (isPaired) {
             // The teal sliver sits ABOVE the shell in a Column so revealing it
@@ -880,7 +889,7 @@ private fun AppRoot(
         // the lock screen. "View access list" opens the app's list on its box.
         val accessCenter = com.flagshipserver.app.core.LocalAccessRequestCenter.current
         val deepLinker = LocalDeepLinker.current
-        if (isPaired && isUnlocked && !showUpdateLock && accessCenter != null) {
+        if (isPaired && isUnlocked && !showUpdateLock && !showAccountGone && accessCenter != null) {
             com.flagshipserver.app.ui.screens.AccessRequestDialogHost(accessCenter) { alert ->
                 deepLinker.enqueue(
                     DeepLink.AccessList(alert.request.serviceId, draft = alert.isDraft, podId = alert.box.podId),
@@ -888,11 +897,14 @@ private fun AppRoot(
             }
         }
         // The watch's Approve reached a session without its biometric yet.
-        if (isPaired && isUnlocked && !showUpdateLock) {
+        if (isPaired && isUnlocked && !showUpdateLock && !showAccountGone) {
             com.flagshipserver.app.ui.shell.WatchWaitingDialog()
         }
         if (isPaired && !isUnlocked && !showUpdateLock) {
             com.flagshipserver.app.ui.shell.BiometricLockScreen()
+        }
+        if (showAccountGone && !showUpdateLock) {
+            goneName?.let { com.flagshipserver.app.ui.shell.AccountGoneScreen(it) }
         }
         if (showUpdateLock && updateLock != null) {
             com.flagshipserver.app.ui.shell.UpdateLockScreen(

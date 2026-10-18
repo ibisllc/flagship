@@ -82,7 +82,7 @@ fun KeyfileExportScreen(
         if (uri != null && text != null) {
             runCatching {
                 ctx.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
-            }
+            }.onSuccess { com.flagshipserver.app.core.KeyBackupStore.markWritten(ctx, username) }
             saved = true
         }
         pendingText = null

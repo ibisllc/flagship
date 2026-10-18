@@ -52,6 +52,10 @@ import java.net.URLEncoder
 fun OnboardingFlow(onFinished: () -> Unit) {
     val nav = rememberNavController()
     val deepLinker = LocalDeepLinker.current
+    // "Create a new account" on the account-removed screen lands on the create step.
+    LaunchedEffect(Unit) {
+        if (com.flagshipserver.app.core.AccountGone.consumeCreateNext()) nav.navigate("username")
+    }
     val pending by deepLinker.pending.collectAsState()
     // Phase 3b — a JoinDevice deeplink (the collaborator followed the
     // admin's https://flagshipserver.com/join App Link via their native camera).

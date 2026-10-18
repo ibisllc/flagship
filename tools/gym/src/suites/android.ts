@@ -17,6 +17,7 @@
 import type { Dimension, Scenario } from "../scenario.js";
 import { android, androidTotal, shot } from "./helpers.js";
 import { ANDROID_NOTICES } from "./androidNotices.js";
+import { ANDROID_GONE } from "./androidGone.js";
 
 const PKG = "com.flagshipserver.app.gym";
 
@@ -1519,4 +1520,5 @@ export const ANDROID_GYM_SCENARIOS: readonly Scenario[] = [
   ...SETTINGS_SWEEP,
   ...ACTIVITY_SWEEP,
   ...ANDROID_NOTICES,
+  ...ANDROID_GONE,
 ];

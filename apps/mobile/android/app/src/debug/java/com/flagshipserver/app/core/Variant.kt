@@ -60,6 +60,8 @@ object Variant : AppVariant {
         GymSeams.noticeClockOffsetMs = 0
         GymSeams.noticeFetcher = null
         SecurityNoticeCenter.shared?.reset()
+        AccountGone.clear()
+        AccountGone.createNext = false
         val cfg = SmokeModeConfig.from(intent)
         if (cfg == null) {
             // A normal launch in the same process as an earlier gym run (the

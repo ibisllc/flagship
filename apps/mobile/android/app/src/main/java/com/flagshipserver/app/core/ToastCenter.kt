@@ -40,6 +40,8 @@ class ToastCenter(
     }
 
     private fun publish(toast: Toast) {
+        // A removed account makes every call fail the same way: the screen says so once, the toasts stay quiet.
+        if (AccountGone.isGone && (toast.kind == Toast.Kind.ERROR || toast.kind == Toast.Kind.WARNING)) return
         if (_queue.value.any { it.kind == toast.kind && it.message == toast.message }) return
         _queue.value = _queue.value + toast
         scope.launch {

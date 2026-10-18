@@ -522,8 +522,15 @@ fun SettingsScreen(nav: NavController) {
         }
 
         if (showRemoveConfirm) {
+            // A device that holds the admin key or a server session says what removing it costs, first
+            // (docs/account-gone.md); dismissing that dialog is never a choice.
+            val removeSessions = com.flagshipserver.app.core.LocalSessionStore.current
+            val removalWarning = com.flagshipserver.app.core.AdminKeyWarning.needsRemovalWarning(
+                holdsAdminRoot = com.flagshipserver.app.core.Variant.forceAdminRoot || Keystore.hasAdminRoot(),
+                holdsServerSession = removeSessions.podTokenIds().isNotEmpty(),
+            )
             AlertDialog(
-                onDismissRequest = { showRemoveConfirm = false },
+                onDismissRequest = { if (!removalWarning) showRemoveConfirm = false },
                 confirmButton = {
                     TextButton(onClick = {
                         showRemoveConfirm = false
@@ -552,23 +559,36 @@ fun SettingsScreen(nav: NavController) {
                             app.signOut()
                         }
                     }) {
-                        Text("Remove this device", color = FS.colors.danger)
+                        Text(
+                            if (removalWarning) com.flagshipserver.app.core.AdminKeyWarning.REMOVE_ANYWAY else "Remove this device",
+                            color = FS.colors.danger,
+                            modifier = Modifier.testTag("settings-remove-confirm"),
+                        )
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showRemoveConfirm = false }) {
-                        Text("Cancel")
+                    if (removalWarning) {
+                        TextButton(
+                            onClick = { showRemoveConfirm = false; nav.navigate("keyfile-export") },
+                            modifier = Modifier.testTag("settings-remove-save-first"),
+                        ) { Text(com.flagshipserver.app.core.AdminKeyWarning.SAVE_FIRST) }
+                    } else {
+                        TextButton(onClick = { showRemoveConfirm = false }) {
+                            Text("Cancel")
+                        }
                     }
                 },
                 title = {
                     Text(
-                        if (hasRecovery) "Remove this device from your account?"
+                        if (removalWarning) com.flagshipserver.app.core.AdminKeyWarning.REMOVE_TITLE
+                        else if (hasRecovery) "Remove this device from your account?"
                         else "Permanently remove this device?",
                     )
                 },
                 text = {
                     Text(
-                        if (hasRecovery)
+                        if (removalWarning) com.flagshipserver.app.core.AdminKeyWarning.REMOVE_MESSAGE
+                        else if (hasRecovery)
                             "We'll revoke this device's notification access and erase its local keys. " +
                                 "Use your recovery passkey to sign in again later."
                         else
@@ -584,50 +604,82 @@ fun SettingsScreen(nav: NavController) {
             // Only reachable when recovery is enrolled (or in demo mode) —
             // the "Sign out" button is greyed and routes to a
             // toast otherwise.
+            val keyFileWritten = com.flagshipserver.app.core.KeyBackupStore.isWritten(ctx, username)
+            val adminWarning = com.flagshipserver.app.core.AdminKeyWarning.signOut(
+                isAdminDevice = com.flagshipserver.app.core.Variant.forceAdminRoot || Keystore.hasAdminRoot(),
+                keyFileWritten = keyFileWritten,
+            )
+            val doSignOut = {
+                showSignOutConfirm = false
+                // Tier 2 — SIGN OUT. Erase this device's local key
+                // material from the Keystore (snoop-hardening at
+                // rest) but DO NOT revoke server-side: the device
+                // stays a valid account member, so signing back in
+                // via recovery restores the SAME IRK and re-pairs
+                // instantly. Deliberately NO push-token revoke —
+                // that's a server mutation reserved for the
+                // danger-zone eviction below.
+                //
+                // #52 — ACTION-LAYER gate (not just UI): re-evaluate
+                // the policy at wipe time so no code path can erase
+                // the only copy of the identity key. Demo/mock
+                // sessions are exempt (they never wrap a real UMK).
+                if (SignOutPolicy.evaluate(
+                        hasCloudRecovery = hasRecovery,
+                        isDemoAccount = isDemoAccount,
+                        isLastDevice = isLastDevice,
+                    ) == SignOutPolicy.ALLOWED
+                ) {
+                    Keystore.wipe()
+                    app.signOut()
+                }
+            }
+            val notBackedUp = adminWarning == com.flagshipserver.app.core.AdminKeyWarning.SignOutWarning.NotBackedUp
+            // An admin device that has not written its key file is told to save first; dismissing
+            // the dialog is never a choice there (docs/account-gone.md).
             AlertDialog(
-                onDismissRequest = { showSignOutConfirm = false },
+                onDismissRequest = { if (!notBackedUp) showSignOutConfirm = false },
                 confirmButton = {
-                    TextButton(onClick = {
-                        showSignOutConfirm = false
-                        // Tier 2 — SIGN OUT. Erase this device's local key
-                        // material from the Keystore (snoop-hardening at
-                        // rest) but DO NOT revoke server-side: the device
-                        // stays a valid account member, so signing back in
-                        // via recovery restores the SAME IRK and re-pairs
-                        // instantly. Deliberately NO push-token revoke —
-                        // that's a server mutation reserved for the
-                        // danger-zone eviction below.
-                        //
-                        // #52 — ACTION-LAYER gate (not just UI): re-evaluate
-                        // the policy at wipe time so no code path can erase
-                        // the only copy of the identity key. Demo/mock
-                        // sessions are exempt (they never wrap a real UMK).
-                        if (SignOutPolicy.evaluate(
-                                hasCloudRecovery = hasRecovery,
-                                isDemoAccount = isDemoAccount,
-                                isLastDevice = isLastDevice,
-                            ) == SignOutPolicy.ALLOWED
-                        ) {
-                            Keystore.wipe()
-                            app.signOut()
-                        }
-                    }) {
-                        Text("Sign out", color = FS.colors.danger)
+                    TextButton(
+                        onClick = doSignOut,
+                        modifier = Modifier.testTag("settings-sign-out-confirm"),
+                    ) {
+                        Text(
+                            if (notBackedUp) com.flagshipserver.app.core.AdminKeyWarning.SIGN_OUT_ANYWAY else "Sign out",
+                            color = FS.colors.danger,
+                        )
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showSignOutConfirm = false }) {
-                        Text("Cancel")
+                    if (notBackedUp) {
+                        TextButton(
+                            onClick = { showSignOutConfirm = false; nav.navigate("keyfile-export") },
+                            modifier = Modifier.testTag("settings-sign-out-save-first"),
+                        ) { Text(com.flagshipserver.app.core.AdminKeyWarning.SAVE_FIRST) }
+                    } else {
+                        TextButton(onClick = { showSignOutConfirm = false }) { Text("Cancel") }
                     }
                 },
-                title = { Text("Sign out?") },
+                title = { Text(com.flagshipserver.app.core.AdminKeyWarning.SIGN_OUT_TITLE) },
                 text = {
-                    Text(
-                        "This erases this device's account key and data so nothing " +
-                            "sensitive is left at rest. Your account and your servers are " +
-                            "untouched — sign back in with your recovery passkey and the " +
-                            "same key is restored, no re-pair.",
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                        when (adminWarning) {
+                            null -> Text(
+                                "This erases this device's account key and data so nothing " +
+                                    "sensitive is left at rest. Your account and your servers are " +
+                                    "untouched — sign back in with your recovery passkey and the " +
+                                    "same key is restored, no re-pair.",
+                            )
+                            com.flagshipserver.app.core.AdminKeyWarning.SignOutWarning.NotBackedUp -> Text(
+                                com.flagshipserver.app.core.AdminKeyWarning.SIGN_OUT_NOT_BACKED_UP,
+                                modifier = Modifier.testTag("settings-sign-out-admin-warning"),
+                            )
+                            com.flagshipserver.app.core.AdminKeyWarning.SignOutWarning.BackedUp -> Text(
+                                com.flagshipserver.app.core.AdminKeyWarning.SIGN_OUT_BACKED_UP,
+                                modifier = Modifier.testTag("settings-sign-out-admin-warning"),
+                            )
+                        }
+                    }
                 },
             )
         }
