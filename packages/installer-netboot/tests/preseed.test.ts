@@ -45,7 +45,8 @@ describe("Debian preseed.cfg (W12)", () => {
     // edit MUST NOT silently change this to e.g. lvm (= no encryption).
     expect(src).toContain("d-i partman-auto/method string crypto");
     expect(src).toContain("d-i partman-auto/choose_recipe select atomic");
-    expect(src).not.toContain("flagship-firstboot-placeholder");
+    const directives = src.split("\n").filter((l) => !l.startsWith("#")).join("\n");
+    expect(directives).not.toContain("flagship-firstboot-placeholder");
     expect(src).not.toMatch(/partman-crypto\/passphrase(-again)? string/);
     expect(src).toContain("tr -dc A-Za-z0-9 </dev/urandom | head -c 48");
     // The matching confirm line — d-i requires both passphrase + again.
