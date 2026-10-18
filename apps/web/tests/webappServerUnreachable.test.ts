@@ -63,8 +63,30 @@ describe("the page for each state", () => {
     }
   });
 
-  it("says when an offline box was last seen", () => {
-    expect(page("offline", { pod: { lastReported: NOW - 3 * 60 * MIN } })).toContain("Offline — last seen 3 h ago");
+  it("an offline server says only that, offers Check again, and hides Monitoring", () => {
+    const html: string = page("offline", { pod: { lastReported: NOW - 3 * 60 * MIN } });
+    expect(html).toContain('<div class="card-title">This server has gone offline.</div>');
+    expect(html).not.toMatch(/last seen|data-detail-unreachable|Refresh to re-check|software isn't checking in/);
+    expect(html).toContain('id="sd-check-again"');
+    expect(html).toContain("Check again");
+    expect(html).not.toContain("monitor-section");
+    expect(html).not.toContain("Monitoring");
+    expect(html).toContain('id="delete-server-btn"');
+  });
+
+  it("every other unreachable state keeps its Monitoring section and has no Check again", () => {
+    for (const kind of ["coming-up", "never-online", "connecting", "revoked", "not-paired"]) {
+      const html: string = page(kind);
+      expect(html, kind).toContain("monitor-section");
+      expect(html, kind).not.toContain("sd-check-again");
+    }
+  });
+
+  it("Check again re-runs the same load as opening the page", () => {
+    const fn = VIEW.slice(VIEW.indexOf("function wireCheckAgain"));
+    const body = fn.slice(0, fn.indexOf("\n}\n"));
+    expect(body).toContain("renderServerDetail()");
+    expect(VIEW).toContain("wireCheckAgain();");
   });
 
   it("only the not-paired card offers Pair this server", () => {

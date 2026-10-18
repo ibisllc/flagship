@@ -280,9 +280,9 @@ export function unreachableCopy(kind, { message = "", lastSeen = "" } = {}) {
     case "offline":
       return {
         id: "server-detail-offline",
-        title: lastSeen ? `Offline — last seen ${lastSeen}` : "Offline",
-        status: "This server has gone offline: its software isn't checking in right now. Its data is safe; it'll reconnect when the box is back online.",
-        note: "Refresh to re-check. You can still revoke or delete it below.",
+        title: "This server has gone offline.",
+        status: "",
+        note: "",
       };
     case "coming-up":
       return {
@@ -324,16 +324,39 @@ export function renderUnreachableDetail({ serverFqdn, username, revoked, message
   const pairButton = k === "not-paired"
     ? '<button class="primary full-width mt-3" id="sd-pair-server" type="button">Pair this server</button>'
     : "";
+  // An offline server says only that, with a way to look again (the web has no
+  // pull gesture); its Monitoring has nothing to show until a re-check finds it.
+  const offline = k === "offline";
+  const checkAgain = offline
+    ? '<button class="secondary full-width mt-3" id="sd-check-again" type="button">Check again</button>'
+    : "";
   return `
       <div class="card" id="${copy.id}" data-unreachable-kind="${escapeHtml(k)}">
         <div class="card-title">${escapeHtml(copy.title)}</div>
         <div class="row mt-2"><span class="label">FQDN</span><span class="value">${escapeHtml(serverFqdn)}</span></div>
-        <p class="note mt-2" data-detail-unreachable>${escapeHtml(copy.status)}</p>
+        ${copy.status ? `<p class="note mt-2" data-detail-unreachable>${escapeHtml(copy.status)}</p>` : ""}
         ${copy.note ? `<p class="faint-sm mt-1">${escapeHtml(copy.note)}</p>` : ""}
         ${pairButton}
+        ${checkAgain}
       </div>
-      ${renderMonitoringSection()}
+      ${offline ? "" : renderMonitoringSection()}
       ${renderDangerZoneCard({ serverFqdn, username, revoked })}`;
+}
+
+/** "Check again" on an offline server: run the same load as opening the page. */
+function wireCheckAgain() {
+  const btn = $("sd-check-again");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    btn.disabled = true;
+    btn.textContent = "Checking…";
+    renderServerDetail().catch((e) => {
+      console.error(e);
+      btn.disabled = false;
+      btn.textContent = "Check again";
+      toast(humanError(e), "err");
+    });
+  });
 }
 
 /** "Pair this server": sign the same add-paired-session order auto-pair signs
@@ -436,6 +459,7 @@ export async function renderServerDetail() {
       message: e instanceof ScreensError ? e.message : humanError(e),
     });
     wirePairServer(knownFqdn, pod);
+    wireCheckAgain();
     wireDangerZone(knownFqdn, username, { revoked, pod });
     wireMonitoringPane(root);
     applyServerAdminOnly(root);

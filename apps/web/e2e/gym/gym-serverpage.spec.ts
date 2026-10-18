@@ -467,6 +467,27 @@ test.describe("gym webapp server page and Home leftovers", () => {
     await expect(pair).toHaveText("Pair this server");
   });
 
+  test("gym serverpage an offline server says so, hides Monitoring, and Check again brings the page back", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin", servers: [HOME] });
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", { pods: [offlinePod(HOME)] });
+    await renderHome(page);
+    await card(page, HOME).click();
+    const box = page.locator('[data-unreachable-kind="offline"]');
+    await expect(box).toContainText("This server has gone offline.", { timeout: 10_000 });
+    await expect(box).not.toContainText(/last seen|software isn't checking in/);
+    await expect(page.locator("#monitor-section")).toHaveCount(0);
+    await expect(page.locator("#view-server-detail")).not.toContainText("Monitoring");
+    await expect(page.locator("#delete-server-btn")).toBeVisible();
+    await shot(page, testInfo, "server-offline");
+    // The box is back: Check again reloads the page with its Monitoring.
+    m.first("GET", "/api/users/smoketest/pods", () => ({ json: { pods: [livePod(HOME)] } }));
+    m.first("GET", `${HOME}/api/screens/server-detail`, () => ({ json: serverDetail(HOME, { currentCommit: COMMIT_RUNNING }) }));
+    await page.click("#sd-check-again");
+    await expect(page.locator('[data-unreachable-kind="offline"]')).toHaveCount(0, { timeout: 10_000 });
+    await expect(page.locator("#view-server-detail")).toContainText("Monitoring", { timeout: 10_000 });
+  });
+
   // Auto-pair used to read `pod.fqdn`, which /pods rows don't carry, so no
   // registered box was ever paired and Pair this server always failed.
   test("gym serverpage Pair this server pairs a server this browser has no session for", async ({ page }, testInfo) => {

@@ -343,7 +343,10 @@
 //       (lib/provisionProgress.js); Home keeps the account > device names across
 //       a reload (lib/homeIdentity.js) and Add/Restore server takes no tap right
 //       after the layout above it moved (lib/settleGuard.js).
-const SHELL_VERSION = "v148";
+//  v149: an offline server's page says "This server has gone offline." with a
+//       Check again button and hides its Monitoring section until a re-check
+//       finds it online (views/server-detail.js).
+const SHELL_VERSION = "v149";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
