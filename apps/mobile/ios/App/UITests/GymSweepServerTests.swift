@@ -192,6 +192,9 @@ final class GymSweepServerTests: GymSweepCase {
         XCTAssertTrue(reveal(app, memory))
         memory.tap()
         XCTAssertTrue(text(app, containing: "in use").waitForExistence(timeout: 10), "Memory opens its chart.")
+        // Opening Memory pushes CPU's row up under the nav bar: bring it back before tapping.
+        XCTAssertTrue(revealUp(app, cpu))
+        bringToMiddle(app, cpu)
         cpu.tap()
         waitGone(text(app, containing: "Load "))
         shot(app, "monitoring")
