@@ -1,0 +1,230 @@
+// The Server approvals list, drawn inside Activity's accordion section.
+// Kotlin mirror of the iPhone's inline approvals: pending boot/unlock requests
+// with their one-tap confirm (the existing biometric flow), "Nothing waiting for
+// you", a loading skeleton, "Try again" on a failed load, and a bounded scroll
+// area so a long list never pushes the other titles off screen.
+//
+// Each request is RE-VERIFIED against the box's STK as independently resolved
+// from the directory before it shows (SecretRequestCoordinator), so what is
+// listed is what the box really asked. For "auto" servers an approval also
+// deposits a box-sealed self-unlock lease (its id is kept per server for the
+// kill switch).
+
+package com.flagshipserver.app.ui.screens
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
+import com.flagshipserver.app.api.DeviceInfoHint
+import com.flagshipserver.app.core.LocalAppState
+import com.flagshipserver.app.core.LocalSecretMailboxClient
+import com.flagshipserver.app.core.LocalToastCenter
+import com.flagshipserver.app.core.SecretPurpose
+import com.flagshipserver.app.core.SecretRequestCoordinator
+import com.flagshipserver.app.core.ServerSettingsStore
+import com.flagshipserver.app.core.UserErrorText
+import com.flagshipserver.app.keystore.Keystore
+import com.flagshipserver.app.keystore.KeystoreIrkAccess
+import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.theme.FS
+import com.flagshipserver.app.viewmodels.ApprovalsModel
+import com.flagshipserver.app.viewmodels.LoadingState
+
+/** The words for an empty list. */
+internal const val APPROVALS_EMPTY = "Nothing waiting for you"
+
+/** The model for this phone's pending approvals; null until an account is signed in. */
+@Composable
+internal fun rememberApprovals(): ApprovalsModel<SecretRequestCoordinator.VerifiedRequest> {
+    val mailbox = LocalSecretMailboxClient.current
+    val app = LocalAppState.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val username by app.currentUser.collectAsState()
+    val store = remember { ServerSettingsStore.from(context) }
+    return remember(username, mailbox) {
+        // Slice D — the entitlement/lease orders minted in the ceremony sign
+        // with the admin master root when this device holds one (transport
+        // envelopes stay IRK).
+        val coordinator = username?.let {
+            SecretRequestCoordinator(
+                mailbox = mailbox,
+                username = it,
+                irk = KeystoreIrkAccess(),
+                adminSigner = { r -> if (Keystore.hasAdminRoot()) Keystore.adminRootKey(r) else null },
+            )
+        }
+        ApprovalsModel(
+            scope = scope,
+            idOf = { it.id },
+            fetch = { coordinator?.fetchVerifiedRequests() ?: error("Sign in to approve a server.") },
+            respond = { req ->
+                // "auto" servers (default; absent ⇒ auto) also get a box-sealed
+                // self-unlock lease. The returned id is the kill-switch handle.
+                val deposit = store.effectiveMode(req.serverDomain) == ServerSettingsStore.Mode.AUTO
+                val leaseId = (coordinator ?: error("Sign in to approve a server."))
+                    .confirmAndRespond(req, depositAutoLease = deposit)
+                if (leaseId != null) store.setLeaseId(req.serverDomain, leaseId)
+            },
+            loadFailure = { UserErrorText.of(it, "Couldn't load requests") },
+            answerFailure = { req, t -> "Couldn't approve ${req.serverDomain}. ${UserErrorText.of(t)}" },
+        )
+    }
+}
+
+@Composable
+internal fun ApprovalsList(model: ApprovalsModel<SecretRequestCoordinator.VerifiedRequest>) {
+    val app = LocalAppState.current
+    val toasts = LocalToastCenter.current
+    val pods by app.pods.collectAsState()
+    val state by model.state.collectAsState()
+    val inFlightId by model.inFlightId.collectAsState()
+
+    Column(Modifier.fillMaxWidth().testTag("activity-approvals-list")) {
+        when (val s = state) {
+            LoadingState.Idle, LoadingState.Loading -> {
+                ServerCardSkeleton()
+            }
+            is LoadingState.Failed -> ErrorCard(s.message, onRetry = { model.reload() })
+            is LoadingState.Loaded -> {
+                if (s.value.isEmpty()) {
+                    Text(
+                        APPROVALS_EMPTY,
+                        color = FS.colors.textMuted,
+                        modifier = Modifier.testTag("activity-approvals-empty"),
+                    )
+                } else {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = ACTIVITY_LIST_MAX_HEIGHT)
+                            .verticalScroll(rememberScrollState())
+                            .testTag("activity-approvals-scroll"),
+                        verticalArrangement = Arrangement.spacedBy(FS.space.s3),
+                    ) {
+                        s.value.forEach { req ->
+                            // First boot vs established reboot: a box that has never
+                            // come online is on its FIRST boot, where this approval
+                            // also authorizes serving, so it gets the fuller copy.
+                            // Unknown (pod not in the list yet) = first boot.
+                            val isFirstBoot = pods
+                                .firstOrNull { it.fqdn.equals(req.serverDomain, ignoreCase = true) }
+                                ?.cameOnline?.not() ?: true
+                            SecretRequestCard(
+                                req = req,
+                                isFirstBoot = isFirstBoot,
+                                inFlight = inFlightId == req.id,
+                                onApprove = {
+                                    model.approve(req) { out ->
+                                        when (out) {
+                                            ApprovalsModel.Outcome.Approved ->
+                                                toasts.success("Approved ${req.serverDomain}. Your server will pick it up.")
+                                            // Answered already: the card just goes.
+                                            ApprovalsModel.Outcome.AlreadyAnswered -> Unit
+                                            is ApprovalsModel.Outcome.Failed -> toasts.error(out.message)
+                                        }
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SecretRequestCard(
+    req: SecretRequestCoordinator.VerifiedRequest,
+    /** The box behind this request has never come online — its FIRST boot. */
+    isFirstBoot: Boolean,
+    inFlight: Boolean,
+    onApprove: () -> Unit,
+) {
+    // On a FIRST boot the unlock approval ALSO deposits the box's entitlement
+    // (consent to boot ⇒ consent to serve); on an established reboot it is purely
+    // a disk unlock. (The deposit still fires on every approval; this is copy only.)
+    val purposeLabel = when (req.purpose) {
+        SecretPurpose.UNLOCK_KEY ->
+            if (isFirstBoot) "Unlock device and authorize it to join your cloud"
+            else "Unlock device"
+        SecretPurpose.ENTITLEMENT -> "Authorize device to join your cloud"
+        null -> "Boot secret"
+    }
+    FSCard(modifier = Modifier.testTag("secret-request-card")) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                req.serverDomain,
+                style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
+            )
+            Text(
+                purposeLabel,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            req.deviceInfo?.let { info -> DeviceInfoRows(info) }
+            Text(
+                "Is this the machine in front of you? Only approve if you recognise it.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.height(FS.space.s1))
+            FSPrimaryButton(
+                label = if (inFlight) "Signing…" else "Yes, this is my server",
+                onClick = onApprove,
+                enabled = !inFlight,
+                block = true,
+                large = true,
+                modifier = Modifier.testTag("secret-request-approve"),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DeviceInfoRows(info: DeviceInfoHint) {
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1), modifier = Modifier.padding(top = FS.space.s1)) {
+        info.ip?.let { InfoRow("IP", it) }
+        info.region?.let { InfoRow("Region", it) }
+        info.os?.let { InfoRow("OS", it) }
+        info.hostname?.let { InfoRow("Host", it) }
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row {
+        Text(
+            label,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.width(56.dp),
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+        )
+    }
+}

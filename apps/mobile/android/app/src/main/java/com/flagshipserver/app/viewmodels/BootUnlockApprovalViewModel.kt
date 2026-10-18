@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /** The narrow capability the VM needs from the boot-secret relay. Production
  *  backs this with [SecretRequestCoordinator] (built from the live mailbox +
- *  IRK, exactly as SecretRequestsScreen does); tests back it with a fake so the
+ *  IRK, exactly as the Server approvals section does); tests back it with a fake so the
  *  VM drives without network or biometric. Mirror of iOS `ApprovalSource`. */
 interface ApprovalSource {
     /** One-tap approval for the directory-driven server card: fetch + verify

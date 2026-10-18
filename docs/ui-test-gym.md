@@ -573,7 +573,7 @@ Mirrors iOS cluster-for-cluster: `WelcomeScreen`, `ChooseUsernameScreen`,
 (`AiKeyStep` + `AiKeysManager`); `SettingsScreen`, `AccountSecurityScreen`,
 `ProvidersScreen`, `PairedSessionsScreen`, `PrivacyScreen`, `DeveloperScreen`;
 `AddDeviceScreen` + `JoinDeviceScreen` + `AddControlDeviceScreen` (SAS),
-`ReplaceDeviceFinalizeScreen`; `ActivityScreen`, `SecretRequestsScreen`,
+`ReplaceDeviceFinalizeScreen`; `ActivityScreen` (with its Server approvals section),
 `AuditLogScreen`; `CompanionDockScreen`, `CompanionRequestsScreen`,
 `PeerBackupScreen`, `TrustedDevicesScreen`, `ProfilesScreen`,
 `InviteIssue/ManageScreen`, `BrowserTabs/ViewerScreen`, `QRScanner`,

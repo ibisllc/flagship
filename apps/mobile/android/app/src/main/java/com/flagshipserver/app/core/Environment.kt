@@ -29,7 +29,7 @@ val LocalQrRelayClient = staticCompositionLocalOf<QrRelayClient> { Variant.defau
 
 /** Boot-secret RELAY mailbox client. Production wires the live client
  *  (OkHttp transport) in MainActivity; previews + tests get the in-memory
- *  Mock. The SecretRequestsScreen builds a SecretRequestCoordinator over this. */
+ *  Mock. The Server approvals section builds a SecretRequestCoordinator over this. */
 val LocalSecretMailboxClient = staticCompositionLocalOf<SecretMailboxClient> { Variant.defaultMailbox() }
 
 /** Transfer-a-box broker client (`.com`): deposits the giver's offer, polls for

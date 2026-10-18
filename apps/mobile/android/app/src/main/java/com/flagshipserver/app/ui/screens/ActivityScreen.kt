@@ -77,7 +77,11 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun ActivityScreen(nav: NavController) {
+fun ActivityScreen(
+    nav: NavController,
+    /** Bumped each time a push or link asks for the approvals: the section opens. */
+    openApprovalsSignal: Int = 0,
+) {
     val client = LocalScreensClient.current
     val server = com.flagshipserver.app.core.LocalFlagshipServerClient.current
     val app = com.flagshipserver.app.core.LocalAppState.current
@@ -91,6 +95,11 @@ fun ActivityScreen(nav: NavController) {
     val state by vm.state.collectAsState()
 
     LaunchedEffect(Unit) { vm.load() }
+    // Server approvals live in their section, so the count is known while it is closed.
+    val approvals = rememberApprovals()
+    LaunchedEffect(approvals) { approvals.reload() }
+    val approvalsState by approvals.state.collectAsState()
+    val approvalsCount = (approvalsState as? LoadingState.Loaded)?.value?.size ?: 0
 
     // Server filter (the PodSwitcher). null == "All servers".
     val pods by app.pods.collectAsState()
@@ -106,13 +115,20 @@ fun ActivityScreen(nav: NavController) {
     var open by rememberSaveable { mutableStateOf<ActivitySection?>(null) }
     // A wide window always has a section open on the right.
     LaunchedEffect(wide) { if (wide && open == null) open = ActivitySection.Server }
+    // A push or link for an approval lands here with the section open and the list fresh.
+    LaunchedEffect(openApprovalsSignal) {
+        if (openApprovalsSignal > 0) {
+            open = ActivitySection.Approvals
+            approvals.reload()
+        }
+    }
     FSScreen(
         title = "Activity",
         titleTag = "activity-title",
         spacing = 0.dp,
         maxContentWidth = if (wide) 1120.dp else com.flagshipserver.app.ui.theme.FSLayout.readingMaxWidth,
         actions = {
-            com.flagshipserver.app.ui.components.TextButton(onClick = { vm.load() }) { Text("Refresh") }
+            com.flagshipserver.app.ui.components.TextButton(onClick = { vm.load(); approvals.reload() }) { Text("Refresh") }
         },
     ) {
         val list: @Composable () -> Unit = {
@@ -145,7 +161,9 @@ fun ActivityScreen(nav: NavController) {
             hint = "Servers waiting for you to start them",
             isOpen = open == ActivitySection.Approvals,
             onToggle = { toggle(ActivitySection.Approvals) },
-        ) { ApprovalsEntryCard(nav) }
+            count = approvalsCount,
+            badge = true,
+        ) { ApprovalsList(approvals) }
 
         val serverTitle = activityServerTitle(pods, effectiveServerFilter)
         when (val s = state) {
@@ -260,6 +278,8 @@ private fun Accordion(
     isOpen: Boolean,
     onToggle: () -> Unit,
     count: Int? = null,
+    /** Draw the count as a badge (something waits for the owner) instead of a plain number. */
+    badge: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val tag = "activity-section-${section.name.lowercase()}"
@@ -297,7 +317,11 @@ private fun Accordion(
                     Text(hint, color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall)
                 }
                 if (count != null && count > 0) {
-                    Text("$count", color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall)
+                    if (badge) {
+                        FSPill("$count", kind = FSPillKind.Pending, modifier = Modifier.testTag("$tag-count"))
+                    } else {
+                        Text("$count", color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall)
+                    }
                     Spacer(Modifier.width(FS.space.s2))
                 }
                 if (pane != null) {
@@ -405,24 +429,5 @@ private fun PostRecoveryCard(nav: NavController) {
             style = MaterialTheme.typography.bodySmall,
         )
         FSGhostButton(label = "View report", onClick = { nav.navigate("post-recovery") })
-    }
-}
-
-@Composable
-private fun ApprovalsEntryCard(nav: NavController) {
-    // The in-app way to reach the relay approval list — ALWAYS available, since a
-    // box waiting on an unlock/entitlement approval can't load its BFF feed.
-    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-        Text(
-            "Approve a server's boot",
-            color = FS.colors.text,
-            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-        )
-        Text(
-            "Servers set to ask on every boot wait here for you to release their disk key.",
-            color = FS.colors.textMuted,
-            style = MaterialTheme.typography.bodySmall,
-        )
-        FSGhostButton(label = "Open approvals", onClick = { nav.navigate("secret-requests") })
     }
 }

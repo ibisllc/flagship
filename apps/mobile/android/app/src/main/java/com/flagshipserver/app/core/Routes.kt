@@ -38,7 +38,7 @@ sealed interface AppsRoute {
 }
 
 sealed interface ActivityRoute {
-    /** The sealed-key RELAY approval surface (SecretRequestsScreen). */
+    /** The sealed-key RELAY approval surface (Activity's Server approvals section). */
     data object SecretRequests : ActivityRoute
     data class InstallProgress(val serial: String) : ActivityRoute
     /** P5 — the dedicated full-page audit-log viewer, reached from the

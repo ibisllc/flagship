@@ -102,8 +102,27 @@ class GymActivityTest : GymBase() {
         launch(tab = "activity", username = "bright-maple", podsVariant = "awaiting-unlock")
         waitUntilExists("activity-title", 20_000)
         openSection("approvals")
-        tapText("Open approvals", 15_000)
-        composeRule.waitUntil(15_000) { textCount("Open approvals") == 0 }
+        // The list is in the section itself: no button to a separate page.
+        waitUntilExists("activity-approvals-list", 15_000)
+        assertTrue("No Open approvals button", textCount("Open approvals") == 0)
+        assertTrue("No separate Approve server page", textCount("Approve server") == 0)
+        // Settled: the requests, "Nothing waiting for you", or a plain failure with Try again.
+        composeRule.waitUntil(20_000) {
+            textCount("Nothing waiting for you") > 0 || textCount("Try again") > 0 ||
+                composeRule.onAllNodesWithTag("secret-request-card").fetchSemanticsNodes().isNotEmpty()
+        }
         gymShot("approvals")
+    }
+
+    /** An approval notification's link lands on Activity with Server approvals open. */
+    @Test
+    fun approvalLinkOpensTheSectionOnActivity() {
+        launch(tab = "home", username = "bright-maple", podsVariant = "awaiting-unlock",
+            deepLink = "https://flagshipserver.com/app/secret-requests")
+        waitUntilExists("activity-title", 30_000)
+        waitUntilExists("activity-section-approvals-body", 15_000)
+        waitUntilExists("activity-approvals-list", 15_000)
+        assertTrue("No separate Approve server page", textCount("Approve server") == 0)
+        gymShot("approvals-link")
     }
 }
