@@ -155,6 +155,12 @@ export interface LineageResolverLike {
 
 export interface ScreensHttpDeps {
   gate: PairedSessionGate;
+  /**
+   * Rescue session (rescue/rescue.ts, docs/data-sovereignty.md): `/api/rescue/*`,
+   * answered BEFORE the paired-session gate because it has its own proof (a
+   * signed order bound to this box's certificate) and its own narrow token.
+   */
+  rescue?: { handle: (req: HttpRequest) => Promise<HttpResponse | null> } | null;
   /** Share this server (shares/sharesHttp.ts). */
   shares?: ScreensSharesLike | null;
   /**
@@ -482,6 +488,10 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
 
   return async function handle(req: HttpRequest): Promise<HttpResponse | null> {
     const rawPath = req.path.split("?")[0]!;
+
+    if (deps.rescue && (rawPath === "/api/rescue" || rawPath.startsWith("/api/rescue/"))) {
+      return deps.rescue.handle(req);
+    }
 
     // ---- P14 PUBLIC /api/companion/redeem ----
     //
