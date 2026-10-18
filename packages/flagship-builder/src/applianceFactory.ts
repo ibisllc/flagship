@@ -1,6 +1,6 @@
-import { BURN_PASSPHRASE, type UserDataOptions } from "./userdata.js";
+import type { UserDataOptions } from "./userdata.js";
 import { buildDebianPreseed } from "./preseed.js";
-import { buildAppliancePrepareScript } from "./appliance.js";
+import { APPLIANCE_FACTORY_KEY, buildAppliancePrepareScript } from "./appliance.js";
 import { utf8ToBase64 } from "./base64.js";
 
 /** Build a secret-free Debian installer that creates the generalized base.
@@ -146,7 +146,7 @@ udevadm settle
 factory_stage "target partitioned"
 
 FACTORY_KEY=/run/flagship-appliance-factory.key
-printf '%s' '${BURN_PASSPHRASE}' > "$FACTORY_KEY"
+printf '%s' '${APPLIANCE_FACTORY_KEY}' > "$FACTORY_KEY"
 chmod 600 "$FACTORY_KEY"
 cryptsetup luksFormat --type luks2 --batch-mode --key-file="$FACTORY_KEY" "$TARGET_DEV"3
 factory_stage "LUKS header formatted"

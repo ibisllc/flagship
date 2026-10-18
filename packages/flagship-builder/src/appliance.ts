@@ -1,6 +1,19 @@
 import { createHash } from "node:crypto";
 import { open } from "node:fs/promises";
-import { BOX_NPM_SCOPE, BOX_TSC_BUILD, BURN_PASSPHRASE } from "./userdata.js";
+import {
+  APPLIANCE_BUILD_KEYFILE,
+  BOX_NPM_SCOPE,
+  BOX_TSC_BUILD,
+  LUKS_ASSERT_SINGLE_SLOT_FN,
+} from "./userdata.js";
+
+/**
+ * The factory key of a generalized VM appliance. It is published on purpose: the
+ * image holds no owner data, and first-boot specialization replaces it with the
+ * phone-sealed key, removes this slot and verifies exactly one slot remains. It
+ * is not the installer path's passphrase (that one is generated per install).
+ */
+export const APPLIANCE_FACTORY_KEY = "flagship-appliance-factory-key-public-replaced-on-first-boot";
 
 export const APPLIANCE_SEED_MAGIC = "FLSHSD01";
 export const APPLIANCE_SEED_HEADER_BYTES = 80;
@@ -143,8 +156,14 @@ fi
 stage "Removing the factory disk key"
 ROOT_LUKS_PART="$(blkid -t TYPE=crypto_LUKS -o device | head -n1)"
 [ -b "$ROOT_LUKS_PART" ] || { echo "[appliance] encrypted root disappeared after specialization"; exit 1; }
-cryptsetup luksRemoveKey "$ROOT_LUKS_PART" /etc/flagship/appliance-build.key
-rm -f /etc/flagship/appliance-build.key
+LUKS_NEW_KEY=/run/flagship-luks.key
+[ -s "$LUKS_NEW_KEY" ] || { echo "[appliance] the new disk key is missing; refusing to remove the factory key"; exit 1; }
+${LUKS_ASSERT_SINGLE_SLOT_FN}
+cryptsetup open --test-passphrase --key-file "$LUKS_NEW_KEY" "$ROOT_LUKS_PART" >/dev/null 2>&1 || { echo "[appliance] the new disk key does not open the disk; refusing to remove the factory key"; exit 1; }
+cryptsetup luksRemoveKey "$ROOT_LUKS_PART" ${APPLIANCE_BUILD_KEYFILE}
+flagship_assert_single_luks_slot "$ROOT_LUKS_PART" ${APPLIANCE_BUILD_KEYFILE} "$LUKS_NEW_KEY"
+shred -u "$LUKS_NEW_KEY" 2>/dev/null || rm -f "$LUKS_NEW_KEY"
+rm -f ${APPLIANCE_BUILD_KEYFILE}
 sed -i -E 's|^(flagship_root[[:space:]]+[^[:space:]]+)[[:space:]]+[^[:space:]]+|\\1 none|' /etc/crypttab
 rm -f /etc/cryptsetup-initramfs/conf-hook
 update-initramfs -u
@@ -236,7 +255,7 @@ rm -rf /usr/share/doc/* /usr/share/man/* /usr/share/info/* /usr/share/groff/* /u
 find /usr/share/locale -mindepth 1 -maxdepth 1 -type d ! -name 'C' ! -name 'C.UTF-8' ! -name 'en' ! -name 'en_US' -exec rm -rf {} + 2>/dev/null || true
 
 mkdir -p /etc/flagship /var/flagship
-printf '%s' '${BURN_PASSPHRASE}' > /etc/flagship/appliance-build.key
+printf '%s' '${APPLIANCE_FACTORY_KEY}' > /etc/flagship/appliance-build.key
 chmod 600 /etc/flagship/appliance-build.key
 ROOT_LUKS_PART="$(blkid -t TYPE=crypto_LUKS -o device | head -n1)"
 [ -n "$ROOT_LUKS_PART" ] || { echo "[appliance-factory] no LUKS root found"; exit 1; }

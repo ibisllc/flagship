@@ -4,18 +4,16 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// Self-test for the Bucket-C release guard (CLAUDE.md → "GA close-out TODO"
-// item 4). The guard FAILS a RELEASE build while the burn-time-LUKS passphrase
-// or the `debug:flagship` console-user backdoor is still present in source, and
-// passes the normal dev/PR build (so dev/gym stay green WITH the constants).
+// Self-test for the release guard (AGENTS.md -> GA close-out). It FAILS a RELEASE
+// build while a dev-mode bring-up backdoor is present in source, and ALWAYS (dev
+// too) fails on a debug password or on any regression of the LUKS install-time
+// key handling: a constant passphrase, a disabled removal, or a missing
+// single-slot proof (docs/luks-burn-passphrase-removal.md).
 //
 // Two halves:
-//   1. Against the REAL repo (today, backdoors present): dev path exits 0 +
-//      reports; RELEASE=1 exits 1 + reports — and it does NOT flag the
-//      stripDebugFeatures() machinery or the strip-assertion tests.
-//   2. Against a synthetic CLEAN tree via RELEASE_GUARD_ROOT (the post-GA state,
-//      backdoors removed): both dev and RELEASE=1 exit 0 — proving the gate
-//      goes green once the owner disarms items 2+3.
+//   1. Against the REAL repo: both the dev and the RELEASE=1 build are clean.
+//   2. Against synthetic trees via RELEASE_GUARD_ROOT: every reintroduction
+//      fails.
 
 const SCRIPT = join(__dirname, "release-guard.sh");
 
@@ -26,45 +24,31 @@ function run(
   return { code: r.status ?? -1, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
 }
 
-describe("release-guard.sh — against the real repo (backdoors present in dev)", () => {
-  it("dev build (RELEASE unset): reports the backdoors but exits 0", () => {
+describe("release-guard.sh — against the real repo", () => {
+  it("dev build (RELEASE unset): clean, exits 0", () => {
     const r = run({ RELEASE: "" });
     expect(r.code).toBe(0);
-    // It found the live definition...
-    expect(r.stderr).toContain("burn-time LUKS passphrase");
-    // ...and explained that dev is expected to carry it. The debug console
-    // user is NOT a finding anymore — grant-gated debug access ships in v1
-    // (owner decision 2026-07-05) from debugAccessGate.ts, which is exempt.
-    expect(r.stderr).not.toContain("debug console user");
-    expect(r.stderr).toMatch(/dev\/PR build/);
+    expect(r.stdout).toContain("OK");
+    expect(r.stderr).not.toContain("LUKS");
   });
 
-  it("RELEASE build (RELEASE=1): fails with an actionable error", () => {
+  it("RELEASE build (RELEASE=1): green, the burn-time LUKS passphrase is gone", () => {
     const r = run({ RELEASE: "1" });
-    expect(r.code).toBe(1);
-    expect(r.stderr).toContain("BURN_PASSPHRASE");
-    expect(r.stderr).toMatch(/GA close-out TODO/);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("OK");
   });
 
-  it("RELEASE=true is also enforced (boolean form)", () => {
-    const r = run({ RELEASE: "true" });
-    expect(r.code).toBe(1);
+  it("RELEASE=true is also enforced (boolean form) and green", () => {
+    expect(run({ RELEASE: "true" }).code).toBe(0);
   });
 
-  it("flags exactly the load-bearing definitions, not the strip machinery, tests, or the sanctioned gate", () => {
-    // The output lists each finding as a file:line. Descriptive mentions of the
-    // `debug:flagship` marker, the *.test.* assertions, and the SANCTIONED
-    // grant-gated home (debugAccessGate.ts — a shipping v1 feature since the
-    // 2026-07-05 owner decision) must NOT appear — only the real
-    // BURN_PASSPHRASE assignment (in src and the generated engine copies).
+  it("does not flag the strip machinery, tests, or the sanctioned debug gate", () => {
     const r = run({ RELEASE: "" });
     expect(r.stderr).not.toMatch(/\.test\.ts:/);
-    expect(r.stderr).not.toMatch(/preseed\.test/);
-    expect(r.stderr).not.toMatch(/EngineTests\.swift/);
     expect(r.stderr).not.toMatch(/debugAccessGate\.ts/);
     expect(r.stderr).not.toMatch(/chpasswd/);
     expect(r.stderr).not.toContain("debug password");
-    expect(r.stderr).toMatch(/userdata\.ts:\d+:export const BURN_PASSPHRASE/);
+    expect(r.stderr).not.toContain("debug console user");
   });
 });
 
@@ -79,8 +63,8 @@ describe("release-guard.sh — against a clean tree (post-GA, backdoors removed)
     const d = mkdtempSync(join(tmpdir(), "release-guard-clean-"));
     const builderSrc = join(d, "packages", "flagship-builder", "src");
     mkdirSync(builderSrc, { recursive: true });
-    // A builder source file that has done the GA disarm: NO BURN_PASSPHRASE, NO
-    // debug user. It may still carry the stripDebugFeatures defense + a
+    // A builder source file that has done the GA disarm: no passphrase constant,
+    // no debug user. It may still carry the stripDebugFeatures defense + a
     // descriptive comment mentioning the marker, which must NOT trip the gate.
     writeFileSync(
       join(builderSrc, "userdata.ts"),
@@ -113,16 +97,82 @@ describe("release-guard.sh — against a clean tree (post-GA, backdoors removed)
     expect(r.stdout).toContain("OK");
   });
 
-  it("a clean tree with a reintroduced backdoor fails RELEASE again", () => {
+  it("a reintroduced install-time passphrase constant fails EVERY build, dev included", () => {
+    for (const bad of [
+      'export const BURN_PASSPHRASE = "something-public";\n',
+      'export const X = "flagship-build-time-luks-rekey-me-immediately";\n',
+      'const burnPassphrase = "anything"\n',
+    ]) {
+      dir = makeCleanTree();
+      writeFileSync(join(dir, "packages", "flagship-builder", "src", "regression.ts"), bad);
+      for (const release of ["", "1"]) {
+        const r = run({ RELEASE: release, RELEASE_GUARD_ROOT: dir });
+        expect(r.code, `${bad} release=${release}`).toBe(1);
+        expect(r.stderr).toContain("install-time LUKS passphrase constant");
+      }
+      rmSync(dir, { recursive: true, force: true });
+    }
+    dir = "";
+  });
+
+  it("the appliance's published FACTORY key is not a finding", () => {
     dir = makeCleanTree();
-    // Simulate a careless re-add of the passphrase constant.
     writeFileSync(
-      join(dir, "packages", "flagship-builder", "src", "regression.ts"),
-      'export const BURN_PASSPHRASE = "flagship-build-time-luks-rekey-me-immediately";\n',
+      join(dir, "packages", "flagship-builder", "src", "appliance.ts"),
+      'export const APPLIANCE_FACTORY_KEY = "flagship-appliance-factory-key-public-replaced-on-first-boot";\n',
     );
+    expect(run({ RELEASE: "1", RELEASE_GUARD_ROOT: dir }).code).toBe(0);
+  });
+
+  function writeBootstrap(d: string, body: string): void {
+    writeFileSync(join(d, "packages", "flagship-builder", "src", "userdata.ts"), body);
+  }
+  const GOOD_BOOTSTRAP = [
+    "const luks = `",
+    'cryptsetup luksAddKey "$ROOT_LUKS_PART" "$LUKS_KEY" --key-file "$LUKS_BURN_KEYFILE"',
+    'cryptsetup luksRemoveKey "$ROOT_LUKS_PART" --key-file "$LUKS_BURN_KEYFILE"',
+    'flagship_assert_single_luks_slot "$ROOT_LUKS_PART" "$LUKS_BURN_KEYFILE" "$LUKS_KEY"',
+    "`;",
+    "",
+  ].join("\n");
+
+  it("a bootstrap that removes the key and proves one slot passes", () => {
+    dir = makeCleanTree();
+    writeBootstrap(dir, GOOD_BOOTSTRAP);
     const r = run({ RELEASE: "1", RELEASE_GUARD_ROOT: dir });
+    expect(r.code).toBe(0);
+  });
+
+  it("a disabled removal (`if false; then`) fails every build", () => {
+    dir = makeCleanTree();
+    writeBootstrap(dir, `${GOOD_BOOTSTRAP}// if false; then\n`);
+    for (const release of ["", "1"]) {
+      const r = run({ RELEASE: release, RELEASE_GUARD_ROOT: dir });
+      expect(r.code).toBe(1);
+      expect(r.stderr).toContain("LUKS key removal disabled");
+    }
+  });
+
+  it("adding a LUKS key without ever removing the old one fails every build", () => {
+    dir = makeCleanTree();
+    writeBootstrap(dir, GOOD_BOOTSTRAP.split("cryptsetup luksRemoveKey").join("cryptsetup luksNothing"));
+    const r = run({ RELEASE: "", RELEASE_GUARD_ROOT: dir });
     expect(r.code).toBe(1);
-    expect(r.stderr).toContain("burn-time LUKS passphrase");
+    expect(r.stderr).toContain("LUKS key removal missing");
+  });
+
+  it("a removal with no single-slot proof after it fails every build", () => {
+    dir = makeCleanTree();
+    const noProof = GOOD_BOOTSTRAP.split("flagship_assert_single_luks_slot").join("flagship_something_else");
+    writeBootstrap(dir, noProof);
+    const r = run({ RELEASE: "", RELEASE_GUARD_ROOT: dir });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("LUKS single-slot proof missing");
+    // The proof placed BEFORE the removal does not count either.
+    const lines = GOOD_BOOTSTRAP.split("\n");
+    const swapped = [lines[0], lines[1], lines[3], lines[2], ...lines.slice(4)].join("\n");
+    writeBootstrap(dir, swapped);
+    expect(run({ RELEASE: "", RELEASE_GUARD_ROOT: dir }).code).toBe(1);
   });
 
   it("a debug user OUTSIDE the sanctioned gate still fails RELEASE (inline-bake regression)", () => {

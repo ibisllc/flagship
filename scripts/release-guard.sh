@@ -3,14 +3,24 @@
 # present in the shipping source.
 #
 # WHY THIS EXISTS (CLAUDE.md → "GA close-out TODO" Bucket-C item 4):
-# We are still in dev, so a known backdoor is LEFT ENABLED for hardware
-# bring-up and MUST be removed before GA (Bucket-C item 3):
-#   1. the burn-time LUKS recovery passphrase BURN_PASSPHRASE
-#      (`flagship-build-time-luks-rekey-me-immediately`), a kept known constant in
-#      packages/flagship-builder/src/userdata.ts + the Swift UserData.swift mirror.
-# A forgotten backdoor must never silently ship. This gate makes a RELEASE build
-# FAIL while it is still live in source; the normal dev / PR / gym path stays
-# GREEN with the constants present (it only runs under RELEASE=1).
+# A forgotten backdoor must never silently ship. This gate makes a build FAIL
+# while one is live in source.
+#
+# The burn-time LUKS passphrase (GA close-out item 2) is GONE: the installer
+# generates a random one per install, the bootstrap removes it and fails the
+# install unless exactly one key slot remains. So, in EVERY build (dev too),
+# this guard fails if:
+#   (L1) a constant install-time passphrase is defined or a
+#        `flagship-build-time-luks...` / `flagship-burn-time-luks...` string
+#        returns anywhere in shipping source;
+#   (L2) the key removal is disabled again (`if false; then` anywhere in
+#        packages/flagship-builder/src);
+#   (L3) the bootstrap in userdata.ts adds a LUKS key but no longer removes the
+#        old one, or no longer calls flagship_assert_single_luks_slot after
+#        `cryptsetup luksRemoveKey`.
+# The VM appliance's published FACTORY key (APPLIANCE_FACTORY_KEY in
+# appliance.ts) is a different thing: the image holds no owner data and the
+# specializer removes and verifies that slot.
 #
 # Owner debug access (the `debug` user) is NOT a backdoor — it is a SHIPPING
 # feature (owner decisions 2026-07-05 and 2026-10-16): an owner can let their
@@ -29,7 +39,7 @@
 #       `AuthenticationMethods publickey`, `PasswordAuthentication no`,
 #       `expiry-time=`), so weakening it fails.
 #
-# DESIGN — what it flags vs. what it tolerates:
+# DESIGN — what it flags vs. what it tolerates (dev-mode bring-up markers):
 # The builder already carries a `stripDebugFeatures()` defense (userdata.ts /
 # UserData.swift) that REMOVES the debug account + banner from every production
 # image and throws if a marker survives. That function — and the tests that prove
@@ -37,18 +47,15 @@
 # assertion) even though they are the defense, not the backdoor. So this gate does
 # NOT just grep for the bare string everywhere; it targets the LOAD-BEARING
 # definitions that constitute an actually-shippable backdoor:
-#   - the literal BURN_PASSPHRASE assignment, and
 #   - a `useradd … debug` outside the gate, which bakes the account into a
 #     real image,
-# and it explicitly skips test files + the documented strip machinery. When the
-# owner does Bucket-C items 2+3 (delete BURN_PASSPHRASE, re-enable the
-# luksRemoveKey guard), this gate goes green under RELEASE=1.
+# and it explicitly skips test files + the documented strip machinery.
 #
 # HOW THE RELEASE PATH IS TRIGGERED:
 #   RELEASE=1 bash scripts/release-guard.sh
 # In dev / PR / gym (RELEASE unset or != 1) it prints what it found and exits 0
-# (advisory), except for a debug-password finding (header (a)/(c)), which
-# always exits 1. In CI it is wired as a separate `release-guard` job that only runs
+# (advisory), except for a debug-password finding (header (a)/(c)) and a LUKS
+# finding (L1-L3), which always exit 1. In CI it is wired as a separate `release-guard` job that only runs
 # on a release trigger (a `release` tag, or the manual workflow_dispatch with
 # release=true) — see .github/workflows/release-guard.yml. There is a self-test
 # at scripts/release-guard.test.ts.
@@ -108,11 +115,32 @@ scan() {
       "$root" 2>/dev/null)
 }
 
-# Backdoor 1 — the burn-time LUKS recovery passphrase, as an actual definition.
-# Matches the TS `BURN_PASSPHRASE = "...immediately"` and the Swift
-# `burnPassphrase = "...immediately"` literal assignments.
-scan "burn-time LUKS passphrase" \
-  '(BURN_PASSPHRASE|burnPassphrase)[[:space:]]*=[[:space:]]*"flagship-build-time-luks-rekey-me-immediately"'
+# (L1) No constant install-time LUKS passphrase, in any form. Fails every run.
+luks_start=${#findings[@]}
+scan "install-time LUKS passphrase constant" \
+  'flagship-(build|burn)-time-luks|(BURN_PASSPHRASE|burnPassphrase)[[:space:]]*(:[^=]*)?=[[:space:]]*["'"'"'`]'
+
+# (L2) The key removal must never be switched off again.
+if [ -d "$root/packages/flagship-builder/src" ]; then
+  while IFS= read -r hit; do
+    [ -z "$hit" ] && continue
+    findings+=("LUKS key removal disabled"$'\t'"$hit")
+  done < <(grep -rInE 'if false; then' --include="*.ts" "$root/packages/flagship-builder/src" 2>/dev/null)
+fi
+
+# (L3) userdata.ts: a bootstrap that adds a LUKS key must remove the old one and
+# prove a single slot after it.
+LUKS_BOOTSTRAP_REL="packages/flagship-builder/src/userdata.ts"
+if [ -f "$root/$LUKS_BOOTSTRAP_REL" ] && grep -qF 'cryptsetup luksAddKey' "$root/$LUKS_BOOTSTRAP_REL"; then
+  remove_line="$(grep -nF 'cryptsetup luksRemoveKey' "$root/$LUKS_BOOTSTRAP_REL" | head -n1 | cut -d: -f1)"
+  assert_line="$(grep -nF 'flagship_assert_single_luks_slot "$ROOT_LUKS_PART"' "$root/$LUKS_BOOTSTRAP_REL" | head -n1 | cut -d: -f1)"
+  if [ -z "$remove_line" ]; then
+    findings+=("LUKS key removal missing"$'\t'"$LUKS_BOOTSTRAP_REL: adds a LUKS key but never runs 'cryptsetup luksRemoveKey'")
+  elif [ -z "$assert_line" ] || [ "$assert_line" -le "$remove_line" ]; then
+    findings+=("LUKS single-slot proof missing"$'\t'"$LUKS_BOOTSTRAP_REL: 'flagship_assert_single_luks_slot' is not called after 'cryptsetup luksRemoveKey'")
+  fi
+fi
+luks_count=$(( ${#findings[@]} - luks_start ))
 
 # Debug access is SSH-key only. A debug password anywhere — the gate included —
 # is a regression that fails every run, dev too (header (a)).
@@ -179,6 +207,15 @@ if [ "$debug_count" -gt 0 ]; then
   exit 1
 fi
 
+if [ "$luks_count" -gt 0 ]; then
+  echo >&2
+  echo "::error::The install-time LUKS key must be random per install, removed by the bootstrap" >&2
+  echo "and proven gone (flagship_assert_single_luks_slot). A constant passphrase, a disabled" >&2
+  echo "removal or a missing single-slot proof fails every build, dev included" >&2
+  echo "(docs/luks-burn-passphrase-removal.md)." >&2
+  exit 1
+fi
+
 if [ "$wipe_count" -gt 0 ]; then
   echo >&2
   echo "::error::scripts/wipe-all-users.sh lost a guard. It can delete every user in prod;" >&2
@@ -189,9 +226,7 @@ fi
 release="${RELEASE:-}"
 if [ "$release" = "1" ] || [ "$release" = "true" ]; then
   echo >&2
-  echo "::error::RELEASE build but a dev-mode backdoor is still present. Disarm Bucket-C" >&2
-  echo "item 3 before release: delete BURN_PASSPHRASE (+ regenerate the engine bundle and" >&2
-  echo "its vendored copies) and re-enable the luksRemoveKey guard (CLAUDE.md → GA close-out TODO)." >&2
+  echo "::error::RELEASE build but a dev-mode backdoor is still present (AGENTS.md → GA close-out)." >&2
   echo "A debug user outside debugAccessGate.ts is a regression: owner debug access" >&2
   echo "ships ONLY from that file." >&2
   exit 1

@@ -915,8 +915,8 @@ describe("first-boot Wi-Fi safety-net — the headless-box backstop", () => {
 // (the initramfs auto-configures wired DHCP) but NOT on Wi-Fi, where early boot
 // brings up no radio. A headless Wi-Fi-only box installed + bootstrapped fine,
 // then HANGED at the LUKS unlock on every reboot. These tests pin the fix: the
-// initramfs Wi-Fi hook/premount + the kept burn-time recovery slot.
-describe("BRING-UP SAFETY NET — burn-time recovery slot kept (remove before GA)", () => {
+// initramfs Wi-Fi hook/premount.
+describe("install-time LUKS key — random per install, removed and verified before the install ends", () => {
   function encBootstrap(opts: Record<string, unknown> = {}): string {
     const { blob, blobSignatureHex } = signedBlob();
     return extractBootstrap(
@@ -924,22 +924,73 @@ describe("BRING-UP SAFETY NET — burn-time recovery slot kept (remove before GA
     );
   }
 
-  it("does NOT remove the burn-time passphrase (the luksRemoveKey is guarded off)", () => {
+  it("has no constant passphrase and no disabled removal anywhere in the bootstrap", () => {
     const b = encBootstrap();
-    // The re-key + seal/upload still happen.
-    expect(b).toContain("cryptsetup luksAddKey");
-    // The luksRemoveKey command is still present in the text (so a GA cut is a
-    // one-line flip) but guarded by `if false; then` so it NEVER runs.
-    expect(b).toContain("cryptsetup luksRemoveKey");
-    const removeIdx = b.indexOf("cryptsetup luksRemoveKey");
-    const guardIdx = b.lastIndexOf("if false; then", removeIdx);
-    const fiIdx = b.indexOf("\nfi\n", removeIdx);
-    expect(guardIdx).toBeGreaterThanOrEqual(0);
-    expect(guardIdx).toBeLessThan(removeIdx);
-    expect(fiIdx).toBeGreaterThan(removeIdx); // closes after the removeKey
-    // The bring-up rationale is spelled out (and flags the GA removal).
-    expect(b).toContain("BRING-UP SAFETY NET");
-    expect(b).toContain("recovery slot");
+    expect(b).not.toContain("flagship-build-time-luks");
+    expect(b).not.toContain("LUKS_BURN_PASSPHRASE");
+    expect(b).not.toContain("if false; then");
+    expect(b).not.toContain("BRING-UP SAFETY NET");
+  });
+
+  it("reads the per-install key FILE (appliances: the factory key file) with --key-file", () => {
+    const b = encBootstrap();
+    expect(b).toContain("LUKS_BURN_KEYFILE=/var/flagship/luks-burn.key");
+    expect(b).toContain("LUKS_BURN_KEYFILE=/etc/flagship/appliance-build.key");
+    expect(b).toContain('cryptsetup luksAddKey "$ROOT_LUKS_PART" "$LUKS_KEY" --key-file "$LUKS_BURN_KEYFILE"');
+    expect(b).toContain('cryptsetup luksRemoveKey "$ROOT_LUKS_PART" --key-file "$LUKS_BURN_KEYFILE"');
+    // A missing key file stops the re-key before anything destructive.
+    expect(b).toContain("FATAL: no install-time LUKS key file");
+  });
+
+  it("orders add key < seal + upload < remove < assert < shred", () => {
+    const b = encBootstrap();
+    const add = b.indexOf("cryptsetup luksAddKey");
+    const seal = b.indexOf("install-helper.ts seal-for-bak");
+    const upload = b.indexOf("/sealed-luks-key");
+    const preCheck = b.indexOf('cryptsetup open --test-passphrase --key-file "$LUKS_KEY"');
+    const remove = b.indexOf("cryptsetup luksRemoveKey");
+    const assertCall = b.indexOf('flagship_assert_single_luks_slot "$ROOT_LUKS_PART"');
+    const shredBurn = b.indexOf('shred -u "$LUKS_BURN_KEYFILE"');
+    const shredKey = b.indexOf('shred -u "$LUKS_KEY"');
+    for (const i of [add, seal, upload, preCheck, remove, assertCall, shredBurn, shredKey]) {
+      expect(i).toBeGreaterThan(0);
+    }
+    expect(add).toBeLessThan(seal);
+    expect(seal).toBeLessThan(upload);
+    expect(upload).toBeLessThan(preCheck);
+    expect(preCheck).toBeLessThan(remove);
+    expect(remove).toBeLessThan(assertCall);
+    expect(assertCall).toBeLessThan(shredBurn);
+    expect(assertCall).toBeLessThan(shredKey);
+  });
+
+  it("a failed removal or a failed verification exits the bootstrap (the install ends failed)", () => {
+    const b = encBootstrap();
+    expect(b).toMatch(/if ! cryptsetup luksRemoveKey [^\n]*; then\n[^\n]*FATAL[^\n]*\n\s+exit 1/);
+    const fn = b.slice(b.indexOf("flagship_assert_single_luks_slot() {"));
+    const body = fn.slice(0, fn.indexOf("\n}\n"));
+    expect((body.match(/FATAL/g) ?? []).length).toBe(4);
+    expect((body.match(/exit 1/g) ?? []).length).toBe(4);
+  });
+
+  it("reports the verified one-slot state on the install timeline", () => {
+    const b = encBootstrap();
+    expect(b).toContain('report_phase sealing "Disk key secured: one unlock key slot, install key removed"');
+  });
+
+  it("a VM appliance leaves its factory key removal to the specializer (and keeps the new key for it)", () => {
+    const b = encBootstrap();
+    expect(b).toContain('if [ "${FLAGSHIP_APPLIANCE_PREINSTALLED:-0}" = "1" ]; then\n    # The appliance specializer owns the removal');
+    const applianceBranch = b.slice(b.indexOf("The appliance specializer owns"), b.indexOf("else\n    if ! cryptsetup luksRemoveKey"));
+    expect(applianceBranch).not.toContain("luksRemoveKey");
+    expect(applianceBranch).not.toContain("shred -u");
+  });
+
+  it("the plain (unencrypted) bootstrap has no LUKS key handling at all", () => {
+    const b = encBootstrap({ encryptRoot: false });
+    expect(b).not.toContain("LUKS_BURN_KEYFILE");
+    expect(b).not.toContain("luks-burn.key");
+    expect(b).not.toContain("flagship_assert_single_luks_slot");
   });
 });
 
@@ -1108,7 +1159,7 @@ describe("INITRAMFS Wi-Fi (phone-gated unlock needs network in early boot)", () 
     // Every native builder runs the bundled engine, so this one pin covers them.
     const s = buildInitramfsWifiBlock("Flagship Test AP", "test-only-not-real");
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "a756ad78c3fe9ab9243f5f25475c75ffa79902362c378fe89b726071c0887394",
+      "388df3fc10c93306f834438bace935e0c2eab77154c9c5680b547a29007f7b96",
     );
   });
 });
@@ -1228,13 +1279,15 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     expect(createHash("sha256").update(s).digest("hex")).toBe(
       // Re-pinned 2026-10-18: comments name d-i, not curtin/Ubuntu (autoinstall
       // path removed; Debian is the only installer family).
+      // Re-pinned 2026-10-18: the install-time LUKS key is a per-install file
+      // (no constant); the key slot is removed and verified (single-slot assert).
       // Re-pinned 2026-10-10: daemon-only install scope.
       // Re-pinned 2026-07-20: initramfs hook stages virtio NIC drivers + the
       // wired premount persists flagship-unlock.log (see the wired pin above).
       // Prior: 2026-07-19 daemon Restart=always.
       // Same appliance-only preinstalled helper reuse as the wired twin above.
       // Re-pinned 2026-10-12: retried data-services unit (see the wired pin above).
-      "d1c422d6ea58528dcd061b9383ee1603b333a7902ac7300426e83f6838c8fb04",
+      "e1af8105301217b26b5c03b947018fbcb1d333ce8f549b60a086237d2144f996",
     );
   });
 

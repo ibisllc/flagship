@@ -25,7 +25,9 @@ import {
   buildBootstrapScript,
   resolveBootstrapInputs,
   wifiSetupScript,
-  BURN_PASSPHRASE,
+  LUKS_BURN_KEYFILE,
+  LUKS_BURN_STAGING_PATH,
+  LUKS_BURN_PASSPHRASE_LENGTH,
   type UserDataOptions,
 } from "./userdata.js";
 import { utf8ToBase64 } from "./base64.js";
@@ -55,8 +57,11 @@ export type ProvisionStatusPhase =
 export function buildDebianPreseed(opts: UserDataOptions): string {
   // Validated/defaulted inputs (shared with the engine's bootstrap entry point
   // so they can't drift on validation or the encryptRoot/bootUnlockMode defaults).
-  const { blobB64, ref, repo, bootHost, encryptRoot, bootUnlockMode } =
-    resolveBootstrapInputs(opts);
+  const resolved = resolveBootstrapInputs(opts);
+  const { blobB64, ref, repo, bootHost, bootUnlockMode } = resolved;
+  // A debug image (dev-only SSH stub) never re-keys the disk, so an encrypted one
+  // would be a brick after the first reboot: it is built plain.
+  const encryptRoot = resolved.encryptRoot && !opts.debugSshAuthorizedKey;
   // Phone-home beacons. The serial is known at generation time; we inline it
   // (never parse the blob at runtime in early_command). It's sanitized to an
   // injection-proof set so it can sit unquoted in the URL. The beacon carries
@@ -111,6 +116,18 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
   const storageBlock = encryptRoot
     ? debianCryptoStorageBlock(partitionBeacon, installingDrop)
     : debianPlainStorageBlock(partitionBeacon, installingDrop);
+  // The install-time LUKS passphrase was generated inside the installer (see
+  // luksBurnKeyCommand) and lives in d-i RAM only: hand it to the bootstrap as a
+  // file on the target, which is already the freshly formatted LUKS volume.
+  const burnKeyHandoff = encryptRoot
+    ? `cp ${LUKS_BURN_STAGING_PATH} /target${LUKS_BURN_KEYFILE}; ` +
+      `chmod 600 /target${LUKS_BURN_KEYFILE}; `
+    : "";
+  const installFailedHold =
+    `( grep -E 'FATAL|ERROR' /target/var/log/flagship-bootstrap.log 2>/dev/null | tail -n 3 > /dev/console 2>&1; ` +
+    `echo '*** FLAGSHIP INSTALL FAILED: this machine was NOT set up. Check your phone, then power it off. ***' > /dev/console 2>&1; ` +
+    `while :; do sleep 3600; done )`;
+  const burnKeyCleanup = encryptRoot ? `rm -f ${LUKS_BURN_STAGING_PATH} && ` : "";
 
   // Wi-Fi (burn-time local input; never in the signed recipe). d-i's netcfg
   // takes WPA directly at install time (unlike networkd, netcfg keys wireless
@@ -156,17 +173,26 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
     `mkdir -p /target/var/flagship; ` +
     `echo '${blobB64}' | base64 -d > /target/var/flagship/install-blob.json; ` +
     `chmod 600 /target/var/flagship/install-blob.json; ` +
+    burnKeyHandoff +
     `echo '${bootstrapB64}' | base64 -d > /target/usr/local/sbin/flagship-bootstrap.sh; ` +
     `chmod +x /target/usr/local/sbin/flagship-bootstrap.sh; ` +
     wifiLateCommand +
     // Run the first-boot bootstrap capturing its output to a log on the target
     // (/var/log/flagship-bootstrap.log). On SUCCESS, fire the `installed` beacon
     // (best-effort `|| true`, so it never blocks the imminent poweroff and never
-    // trips the failure branch). On FAILURE, exit non-zero so d-i still flags the
-    // failure; the log stays on the target for the owner's debug access.
+    // trips the failure branch). On FAILURE the installer must NOT power off as if
+    // it were done (d-i does not stop on a failed late_command — proved in QEMU,
+    // text and newt frontends — and this preseed powers off at the end): print
+    // why on the console and hold here for good. The phone already shows the
+    // `error` phase (the bootstrap's exit trap) and never gets `installed`; the
+    // log stays on the target for the owner's debug access.
     `( in-target /usr/local/sbin/flagship-bootstrap.sh > /target/var/log/flagship-bootstrap.log 2>&1 ) && ` +
-    `${installedBeacon} || ` +
-    `( exit 1 )`;
+    burnKeyCleanup +
+    // The beacon carries its own `|| true`; grouping it keeps that from also
+    // swallowing a failed bootstrap (`A && B || true || hold` never reached hold,
+    // so a failed install used to look exactly like a finished one).
+    `( ${installedBeacon} ) || ` +
+    installFailedHold;
 
   return `# Flagship Studio — debian-installer preseed
 # Generated at burn time. Don't edit by hand.
@@ -286,6 +312,28 @@ d-i preseed/late_command string ${lateCommand}
 }
 
 /**
+ * Generates the install-time LUKS passphrase INSIDE the installer, per install:
+ * 48 random alphanumerics from the kernel's CSPRNG, written 0600 to d-i's RAM
+ * disk and handed to partman-crypto through debconf. Nothing about it is in the
+ * preseed or anywhere on the stick; it exists only until the bootstrap adds the
+ * phone-sealed key and removes it. If the generator yields anything but the
+ * full length the command exits non-zero, which fails the install at once.
+ *
+ * `debconf-set` alone is not enough: partman-crypto still asks for the
+ * passphrase at critical priority unless the questions are marked seen (proved
+ * in a QEMU d-i run), so the seen flags are set through d-i's
+ * debconf-set-selections (the file holds no secret).
+ */
+const luksBurnKeyCommand =
+  `BURN=$(tr -dc A-Za-z0-9 </dev/urandom | head -c ${LUKS_BURN_PASSPHRASE_LENGTH}); ` +
+  `[ "\${#BURN}" -eq ${LUKS_BURN_PASSPHRASE_LENGTH} ] || exit 1; ` +
+  `( umask 077; printf '%s' "$BURN" > ${LUKS_BURN_STAGING_PATH} ); ` +
+  `debconf-set partman-crypto/passphrase "$BURN"; debconf-set partman-crypto/passphrase-again "$BURN"; ` +
+  `unset BURN; ` +
+  `printf 'd-i partman-crypto/passphrase seen true\\nd-i partman-crypto/passphrase-again seen true\\n' > /tmp/flagship-luks-seen; ` +
+  `debconf-set-selections /tmp/flagship-luks-seen; rm -f /tmp/flagship-luks-seen`;
+
+/**
  * Unconditional wipe of the resolved target disk, run inside partman/early_command
  * right after DISK is chosen and BEFORE partman probes it. Zeroing the GPT (the
  * front 16 MB primary header/table + the 8192-sector backup header at the tail)
@@ -338,10 +386,15 @@ const wipeTargetDisk =
  * The preseed `\`-continuation
  * style is kept (each logical step on its own line).
  */
-function partmanEarlyCommand(partitionBeacon: string, installingDrop: string): string {
+function partmanEarlyCommand(
+  partitionBeacon: string,
+  installingDrop: string,
+  withBurnKey: boolean,
+): string {
   return (
     `d-i partman/early_command string \\\n` +
     `  ${resolveTargetDisk}; debconf-set partman-auto/disk "$DISK"; debconf-set grub-installer/bootdev "$DISK"; \\\n` +
+    (withBurnKey ? `  ${luksBurnKeyCommand}; \\\n` : "") +
     `  ${partitionBeacon}; \\\n` +
     `  ${wipeTargetDisk}; \\\n` +
     `  ${installingDrop}`
@@ -431,9 +484,10 @@ done
  * Layout (GPT): 1M bios_grub (reserved for a future BIOS variant) + a FAT32 ESP
  * at /boot/efi + an unencrypted ext4 /boot + the rest as a LUKS container whose
  * single LVM volume group `flagship` holds one root LV (ext4, /). The LUKS
- * volume is formatted with the fixed BURN_PASSPHRASE; the first-boot bootstrap
- * re-keys it to a phone-sealed random key and removes the passphrase, so the
- * burn-time constant never survives to the box being exposed.
+ * volume is formatted with a passphrase generated inside the installer for this
+ * install alone (partmanEarlyCommand); the bootstrap re-keys it to a
+ * phone-sealed random key, removes the passphrase and fails the install unless
+ * exactly one key slot is left.
  *
  * CRITICAL: under `partman-auto/method crypto`, partman builds the encrypted
  * LVM ITSELF from a PLAIN recipe (partitions with mountpoints only). Hand-
@@ -453,14 +507,14 @@ function debianCryptoStorageBlock(partitionBeacon: string, installingDrop: strin
 # then a LUKS container holding one VG (flagship) with a single root LV.
 d-i partman-auto/method string crypto
 d-i partman-auto/disk string /dev/sda /dev/vda /dev/nvme0n1
-${partmanEarlyCommand(partitionBeacon, installingDrop)}
+${partmanEarlyCommand(partitionBeacon, installingDrop, true)}
 d-i partman-lvm/device_remove_lvm boolean true
 d-i partman-md/device_remove_md boolean true
 d-i partman-auto-lvm/new_vg_name string flagship
-# The fixed burn-time LUKS passphrase. The bootstrap re-keys it to a
-# phone-sealed random key on first boot, then removes this slot.
-d-i partman-crypto/passphrase password ${BURN_PASSPHRASE}
-d-i partman-crypto/passphrase-again password ${BURN_PASSPHRASE}
+# No passphrase is written here: partman/early_command above generates a random
+# one inside the installer and hands it to partman-crypto through debconf. The
+# bootstrap adds the phone-sealed key and removes that slot before the install
+# ends, and fails the install unless exactly one key slot is left.
 d-i partman-crypto/weak_passphrase boolean true
 d-i partman-auto/choose_recipe select flagship-crypto
 d-i partman-auto/expert_recipe string \\
@@ -515,7 +569,7 @@ function debianPlainStorageBlock(partitionBeacon: string, installingDrop: string
 # Not exposed in the CLI/GUI; reproduces a known-good non-LUKS baseline.
 d-i partman-auto/method string regular
 d-i partman-auto/disk string /dev/sda /dev/vda /dev/nvme0n1
-${partmanEarlyCommand(partitionBeacon, installingDrop)}
+${partmanEarlyCommand(partitionBeacon, installingDrop, false)}
 d-i partman-lvm/device_remove_lvm boolean true
 d-i partman-md/device_remove_md boolean true
 d-i partman-auto/choose_recipe select flagship-plain

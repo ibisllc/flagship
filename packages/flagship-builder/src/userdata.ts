@@ -60,7 +60,8 @@ export interface UserDataOptions {
    * DEBUG-ONLY (never set by the CLI/GUI): when present, the bootstrap is
    * replaced by a minimal remote-access stub (sshd + this authorized key + the
    * Wi-Fi safety-net; NO provisioning, NO LUKS re-key) so provisioning can be
-   * iterated over SSH instead of blind in-target. The burn passphrase is kept.
+   * iterated over SSH instead of blind in-target. The preseed builds such an
+   * image UNENCRYPTED (nothing would ever re-key it).
    */
   debugSshAuthorizedKey?: string;
   /**
@@ -302,14 +303,99 @@ export function yamlEscape(s: string): string {
 }
 
 /**
- * Fixed burn-time LUKS passphrase used ONLY between curtin's luksFormat and the
- * bootstrap's re-key step. It never reaches first boot: the bootstrap adds a
- * random key slot and `luksRemoveKey`s this constant before sealing. A constant
- * is safe because the window it's live in is the install itself (the same trust
- * boundary as the rest of the autoinstall), and it's destroyed before the box
- * is ever exposed. Kept identical in TS + Swift.
+ * The install-time LUKS passphrase is never a constant. The debian-installer
+ * generates a fresh random one inside the installer on every install (see
+ * preseed.ts) and keeps it only in installer RAM; late_command copies it into
+ * the target root (itself the freshly formatted LUKS volume) at this path so
+ * the bootstrap can authorize `luksAddKey` of the phone-sealed key, and
+ * `luksRemoveKey` it again. The VM appliance's factory key file is separate
+ * (appliance.ts).
  */
-export const BURN_PASSPHRASE = "flagship-build-time-luks-rekey-me-immediately";
+export const LUKS_BURN_KEYFILE = "/var/flagship/luks-burn.key";
+/** Where the installer keeps the generated passphrase (d-i RAM disk only). */
+export const LUKS_BURN_STAGING_PATH = "/tmp/flagship-luks-burn";
+/** Length of the generated install-time passphrase (alphanumerics). */
+export const LUKS_BURN_PASSPHRASE_LENGTH = 48;
+/** The key file a generalized VM appliance is unlocked with until it specializes. */
+export const APPLIANCE_BUILD_KEYFILE = "/etc/flagship/appliance-build.key";
+
+/**
+ * Shell function installed into the bootstrap (and the appliance specializer)
+ * that proves the LUKS root ends with exactly one usable key slot and that it is
+ * the phone-sealed key. Any failure prints `[flagship-bootstrap] FATAL: ...` and
+ * exits 1, which fails the install loudly.
+ *
+ *   flagship_assert_single_luks_slot <luks device> <removed key file> <real key file>
+ *
+ * Checks, in order: the removed key no longer opens the device; the real key
+ * does; `cryptsetup luksDump` can be read and shows exactly one enabled key
+ * slot (LUKS2 `N: luks2` lines under `Keyslots:`; LUKS1 `Key Slot N: ENABLED`).
+ */
+export const LUKS_ASSERT_SINGLE_SLOT_FN = `flagship_luks_enabled_slots() {
+    local dump
+    dump="$(cryptsetup luksDump "$1" 2>/dev/null)" || return 1
+    [ -n "$dump" ] || return 1
+    if grep -q '^Version:[[:space:]]*1[[:space:]]*$' <<<"$dump"; then
+        grep -c '^Key Slot [0-9]*: ENABLED' <<<"$dump" || true
+    else
+        awk '/^Keyslots:/{f=1;next} /^[A-Za-z]/{f=0} f && /^[[:space:]]+[0-9]+:[[:space:]]*luks2/{n++} END{print n+0}' <<<"$dump"
+    fi
+}
+flagship_assert_single_luks_slot() {
+    local dev="$1" removed="$2" real="$3" slots
+    if cryptsetup open --test-passphrase --key-file "$removed" "$dev" >/dev/null 2>&1; then
+        echo "[flagship-bootstrap] FATAL: the install-time LUKS key still opens $dev after removal"
+        exit 1
+    fi
+    if ! cryptsetup open --test-passphrase --key-file "$real" "$dev" >/dev/null 2>&1; then
+        echo "[flagship-bootstrap] FATAL: the phone-sealed LUKS key does not open $dev"
+        exit 1
+    fi
+    if ! slots="$(flagship_luks_enabled_slots "$dev")"; then
+        echo "[flagship-bootstrap] FATAL: cannot read the LUKS header of $dev to count key slots"
+        exit 1
+    fi
+    if [ "$slots" != "1" ]; then
+        echo "[flagship-bootstrap] FATAL: $dev has $slots enabled LUKS key slots, expected exactly 1"
+        exit 1
+    fi
+    echo "[flagship-bootstrap] LUKS verified: exactly 1 enabled key slot on $dev, the install-time key is gone"
+}`;
+
+/**
+ * Step C of the LUKS re-key: remove the install-time key and prove the result.
+ * Runs only after the random key is added (A) and sealed + uploaded (B), so
+ * every earlier failure stays recoverable. Needs ROOT_LUKS_PART,
+ * LUKS_BURN_KEYFILE and LUKS_KEY set. Exported so the tests can run the real
+ * text against a stub cryptsetup.
+ */
+export function buildLuksBurnSlotRemovalBlock(): string {
+  return `# C. The phone-sealed key is safely stored. Remove the install-time key so the
+#    phone is the ONLY unlock, then PROVE it: the removed key must no longer open
+#    the disk, the sealed key must, and exactly one key slot may remain. Any
+#    failure here aborts the install (a box that still opens with a key nobody
+#    sealed must never look finished).
+${LUKS_ASSERT_SINGLE_SLOT_FN}
+if ! cryptsetup open --test-passphrase --key-file "$LUKS_KEY" "$ROOT_LUKS_PART" >/dev/null 2>&1; then
+    echo "[flagship-bootstrap] FATAL: the new LUKS key does not open $ROOT_LUKS_PART — refusing to remove the install-time key"
+    exit 1
+fi
+if [ "\${FLAGSHIP_APPLIANCE_PREINSTALLED:-0}" = "1" ]; then
+    # The appliance specializer owns the removal of its factory key (and the
+    # crypttab/initramfs changes that go with it), verifies it the same way and
+    # then shreds the new key (it lives on /run, a RAM disk).
+    echo "[flagship-bootstrap] appliance: factory key removal is left to the specializer"
+else
+    if ! cryptsetup luksRemoveKey "$ROOT_LUKS_PART" --key-file "$LUKS_BURN_KEYFILE"; then
+        echo "[flagship-bootstrap] FATAL: could not remove the install-time LUKS key from $ROOT_LUKS_PART"
+        exit 1
+    fi
+    flagship_assert_single_luks_slot "$ROOT_LUKS_PART" "$LUKS_BURN_KEYFILE" "$LUKS_KEY"
+    report_phase sealing "Disk key secured: one unlock key slot, install key removed"
+    shred -u "$LUKS_BURN_KEYFILE" 2>/dev/null || rm -f "$LUKS_BURN_KEYFILE"
+    shred -u "$LUKS_KEY" 2>/dev/null || rm -f "$LUKS_KEY"
+fi`;
+}
 
 /**
  * A box installs and compiles only the daemon, never the whole monorepo. One
@@ -373,7 +459,8 @@ export function buildBootstrapScript(args: BootstrapTemplateArgs): string {
  * re-key) can be run + iterated over SSH and then baked back into the production
  * bootstrap. It installs sshd + the dev's authorized key + the Wi-Fi safety-net,
  * drops the install-blob, and does NOTHING else — crucially NO LUKS re-key, so
- * the burn passphrase still unlocks the disk and the box actually boots.
+ * the disk keeps whatever key it was built with (a plain disk for an installer
+ * image, the factory key file for a VM appliance) and the box actually boots.
  */
 function buildBootstrapScriptDebug(args: BootstrapTemplateArgs): string {
   const wpaPkg = (args.wifiSSID ?? "").trim().length ? " wpasupplicant" : "";
@@ -387,7 +474,7 @@ function buildBootstrapScriptDebug(args: BootstrapTemplateArgs): string {
 set -uo pipefail
 exec >>/var/log/flagship-debug-bootstrap.log 2>&1
 date
-echo "[flagship-debug] sshd + key + wifi; burn passphrase kept (no re-key)"
+echo "[flagship-debug] sshd + key + wifi; no LUKS re-key"
 export DEBIAN_FRONTEND=noninteractive
 apt-get install -y --no-install-recommends openssh-server ca-certificates curl jq xxd cryptsetup lvm2${wpaPkg}
 
@@ -1112,8 +1199,8 @@ cat > /etc/initramfs-tools/scripts/init-premount/flagship-wifi <<WIFIPREMOUNT
 #!/bin/sh
 # Boot-time: bring the baked Wi-Fi up BEFORE local-top/flagship-unlock curls the
 # relay. Fully best-effort + wall-clock bounded — it can NEVER hang the boot. If
-# the radio doesn't come up it falls through (Ethernet / box-lease / the kept
-# burn-time recovery passphrase still unlock the box). Creds embedded single-
+# the radio doesn't come up it falls through (Ethernet / box-lease still
+# unlock the box). Creds embedded single-
 # quote-escaped (they're on the unencrypted /boot initramfs regardless).
 #
 # OBSERVABILITY (no logic change): every stage tees a timestamped line to BOTH a
@@ -1264,7 +1351,7 @@ echo "[flagship-bootstrap] initramfs Wi-Fi hook + premount installed (runs befor
  * spliced in just before the final `installed.flag`:
  *
  *   A. RE-KEY: generate a fresh `head -c 64 /dev/urandom` LUKS key (install.sh's
- *      pattern), add it as a new key slot, remove the burn-time passphrase.
+ *      pattern), add it as a new key slot, remove the install-time key.
  *   B. SEAL + UPLOAD: seal the random key for the phone (seal-for-bak, exactly
  *      as install.sh) and POST it to `.com`'s sealed-luks-key endpoint, so the
  *      phone can authorize future boots and `.com` only ever holds ciphertext.
@@ -1352,7 +1439,7 @@ shred -u "$OUT_UNLOCK" 2>/dev/null || rm -f "$OUT_UNLOCK"`;
 # default unencrypted path. docs/security-phone-as-unlock-endpoint.md.
 echo "[flagship-bootstrap] encryptRoot ON — configuring phone-gated LUKS unlock"
 
-# Fail-closed: the re-key below is DESTRUCTIVE (it removes the burn passphrase
+# Fail-closed: the re-key below is DESTRUCTIVE (it removes the install-time key
 # and shreds the only plaintext key). Refuse unless the recipe actually parsed —
 # empty values once sealed a disk to nothing and bricked a box (jq was missing).
 if [ -z "$SERVER_DOMAIN" ] || [ "$SERVER_DOMAIN" = "null" ] || [ -z "$PHONE_DELEGATED_PUBKEY" ] || [ "$PHONE_DELEGATED_PUBKEY" = "null" ]; then
@@ -1366,7 +1453,7 @@ fi
 # single-use, so we write registered.flag and the deferred first-boot register
 # service (guarded by !registered.flag) skips. Network is up here (apt + git +
 # npm already used it). Fail-closed: a failure aborts BEFORE the destructive
-# re-key, so the burn passphrase still opens the disk (recoverable).
+# re-key, so the install-time key still opens the disk (recoverable).
 # NOTE (design): docs/security-phone-as-unlock-endpoint.md describes first-boot
 # registration, but the seal/upload runs in-target — so registration must run
 # in-target too, before it. Keeping register+seal together is the invariant.
@@ -1378,16 +1465,26 @@ npx tsx scripts/install-helper.ts sign-server-register \\
     > /run/register-payload.json
 if ! curl -fsS -X POST -H 'content-type: application/json' \\
     --data @/run/register-payload.json "$REGISTRATION_URL"; then
-    echo "[flagship-bootstrap] FATAL: registration failed — keeping burn passphrase (recoverable), aborting"
+    echo "[flagship-bootstrap] FATAL: registration failed — keeping the install-time key (recoverable), aborting"
     exit 1
 fi
 date > /var/flagship/registered.flag
 echo "[flagship-bootstrap] registered with .com"
 
 # A. ADD a fresh random key (install.sh's head -c 64 /dev/urandom pattern),
-#    authorized by the burn-time passphrase. NON-destructive: the burn passphrase
-#    still opens the disk until step C, so any failure below stays recoverable.
-LUKS_BURN_PASSPHRASE='${BURN_PASSPHRASE}'
+#    authorized by the install-time key. NON-destructive: that key still opens the
+#    disk until step C, so any failure below stays recoverable. It is NOT a
+#    constant: the installer generated it for this install alone and copied it
+#    to a file on the target (a VM appliance uses its factory key file instead).
+if [ "\${FLAGSHIP_APPLIANCE_PREINSTALLED:-0}" = "1" ]; then
+    LUKS_BURN_KEYFILE=${APPLIANCE_BUILD_KEYFILE}
+else
+    LUKS_BURN_KEYFILE=${LUKS_BURN_KEYFILE}
+fi
+if [ ! -s "$LUKS_BURN_KEYFILE" ]; then
+    echo "[flagship-bootstrap] FATAL: no install-time LUKS key file at $LUKS_BURN_KEYFILE — cannot re-key"
+    exit 1
+fi
 LUKS_KEY=/run/flagship-luks.key
 head -c 64 /dev/urandom > "$LUKS_KEY"
 chmod 600 "$LUKS_KEY"
@@ -1399,11 +1496,10 @@ if [ -z "$ROOT_LUKS_PART" ]; then
     exit 1
 fi
 echo "[flagship-bootstrap] adding random LUKS key on $ROOT_LUKS_PART"
-printf '%s' "$LUKS_BURN_PASSPHRASE" | \\
-    cryptsetup luksAddKey "$ROOT_LUKS_PART" "$LUKS_KEY" --key-file=-
+cryptsetup luksAddKey "$ROOT_LUKS_PART" "$LUKS_KEY" --key-file "$LUKS_BURN_KEYFILE"
 
 # B. SEAL the random key for the phone + upload to .com — BEFORE removing the
-#    burn passphrase, so a seal/upload failure leaves the box still openable
+#    install-time key, so a seal/upload failure leaves the box still openable
 #    (recoverable) instead of bricked. .com stores ciphertext only.
 #
 #    Seal to the account IRK (the blob's authCode.userPubKey) — a key the phone
@@ -1418,7 +1514,7 @@ SEALED_LUKS_KEY_HEX="$(npx tsx scripts/install-helper.ts seal-for-bak \\
     --bak-ed25519-pub "$USER_PUB_HEX" \\
     --in "$LUKS_KEY" | tr -d '\\n')"
 if [ -z "$SEALED_LUKS_KEY_HEX" ]; then
-    echo "[flagship-bootstrap] FATAL: seal-for-bak produced nothing — keeping burn passphrase + plaintext key (recoverable), aborting"
+    echo "[flagship-bootstrap] FATAL: seal-for-bak produced nothing — keeping the install-time key + plaintext key (recoverable), aborting"
     exit 1
 fi
 NOW_MS=$(date +%s%3N)
@@ -1432,24 +1528,11 @@ CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||'
 if ! curl -fsS -X POST -H 'content-type: application/json' \\
     --data @/run/sealed-key-payload.json \\
     "\${CONTROL_PLANE_BASE}/api/server/\${SERVER_DOMAIN}/sealed-luks-key"; then
-    echo "[flagship-bootstrap] FATAL: sealed-key upload failed — keeping burn passphrase (recoverable), aborting"
+    echo "[flagship-bootstrap] FATAL: sealed-key upload failed — keeping the install-time key (recoverable), aborting"
     exit 1
 fi
 
-# C. The phone-sealed key is safely stored. Normally we'd now remove the burn
-#    passphrase so the phone is the ONLY unlock.
-#
-#    BRING-UP SAFETY NET: keep the burn-time passphrase slot so a box whose
-#    phone/WiFi auto-unlock doesn't engage can still be unlocked by hand. REMOVE
-#    before GA (it's a known constant). The luksRemoveKey is guarded off (the
-#    \`if false\` never runs) rather than deleted, so the GA cut is a one-line flip.
-if false; then
-    printf '%s' "$LUKS_BURN_PASSPHRASE" | \\
-        cryptsetup luksRemoveKey "$ROOT_LUKS_PART" --key-file=-
-    echo "[flagship-bootstrap] LUKS re-keyed; burn-time passphrase removed"
-fi
-echo "[flagship-bootstrap] phone-sealed key stored; burn-time passphrase KEPT as a bring-up recovery slot (remove before GA)"
-shred -u "$LUKS_KEY" 2>/dev/null || rm -f "$LUKS_KEY"
+${buildLuksBurnSlotRemovalBlock()}
 
 # /boot facts the initramfs unlock hook reads on every boot (mirrors the
 # files boot-stage.sh expects: server-domain, identity.pem, boot host).

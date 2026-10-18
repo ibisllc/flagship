@@ -1239,12 +1239,15 @@ first update after it (`docs/anonymous-vouchers.md`, $1 voucher unit). Detail: `
    goes). Keep its table list in step with migrations (a test enforces it).
    Still to run: the last pre-GA scrub, keeping only `playstore-test-0725`
    (`docs/runbooks/pre-ga-scrub.md`); update this item after the run.
-2. Remove the burn-time LUKS passphrase
-   (`flagship-build-time-luks-rekey-me-immediately`) and re-enable the
-   `luksRemoveKey` guard. `release-guard.sh` stays red on release tags until then.
-   **Designed 2026-10-17, not built** (`docs/luks-burn-passphrase-removal.md`):
-   the gym's boxes have no LUKS, so it cannot be verified live there; the doc has
-   the design, the test plan and the lane the owner would need to approve.
+2. ~~Remove the burn-time LUKS passphrase~~ done 2026-10-18 for the USB/ISO
+   installer (`docs/luks-burn-passphrase-removal.md`): a random passphrase per
+   install is generated inside d-i, the bootstrap removes it and fails the install
+   (console banner, no poweroff) unless exactly one key slot remains;
+   `release-guard.sh` is green under `RELEASE=1` and fails every build if the
+   constant, a disabled removal or the single-slot proof regresses. Proved in a
+   real d-i run in QEMU (`tools/luks-di-qemu/`). Needs new Studio/phone builds and
+   republished VM appliances (the appliance specializer verifies its factory-key
+   removal too); installed boxes keep their old slot until reburned (not scrubbed).
 3. Remove the demo/dev flips (demo mode, any remaining hidden toggles). **iOS and webapp done 2026-10-16:** Release iOS builds carry no mock clients, fixtures, gym seams or developer mode (all `#if DEBUG`; `scripts/ios-release-clean.mjs`, `--build` checks a built app), the webapp has no `?debug=1` tools. Demo accounts stay (real `.com` accounts). iOS Add a device / Join an account had only the in-process mock relay, so Release now refuses with a sentence until the `/qr-pipe` pairing transport exists. **Rest done 2026-10-17:** the public `/dev/create-server` phone simulator is gone; `scripts/release-clean-sources.test.ts` scans the webapp, the site, Android's main source sets and `.com`'s `/api/dev` surface (only the demo `sample-user` routes remain) in plain vitest; Android's built-APK check is `apps/mobile/android/scripts/check-release-clean.sh`. Open: Studio's `FLAGSHIP_CONTROL_INSECURE` (Windows pairing over plain ws) and the box's `FLAGSHIP_MAINTAINER_PIN_OVERRIDE` seam are env-only and root-gated, left for the owner to decide.
 4. Fill the `pro.html` payment placeholders (on `feat/marketplace`).
 5. ~~`DEV_LATE_LOG` / W12 debug endpoints~~ removed 2026-10-17 (late-log, Hetzner

@@ -73,6 +73,16 @@ describe("generalized VM appliance", () => {
       script.indexOf("rm -f /etc/flagship/appliance-build.key"),
     );
     expect(script).toContain('cryptsetup luksRemoveKey "$ROOT_LUKS_PART" /etc/flagship/appliance-build.key');
+    // Removal is verified: the new key must open first, exactly one slot must
+    // remain after, and only then is the factory key file deleted.
+    const proveNew = script.indexOf('cryptsetup open --test-passphrase --key-file "$LUKS_NEW_KEY"');
+    const remove = script.indexOf("cryptsetup luksRemoveKey");
+    const assertCall = script.indexOf('flagship_assert_single_luks_slot "$ROOT_LUKS_PART"');
+    expect(proveNew).toBeGreaterThan(0);
+    expect(proveNew).toBeLessThan(remove);
+    expect(remove).toBeLessThan(assertCall);
+    expect(assertCall).toBeLessThan(script.indexOf("rm -f /etc/flagship/appliance-build.key"));
+    expect(script).toContain("flagship_assert_single_luks_slot() {");
     expect(script).toContain("systemctl poweroff");
   });
 

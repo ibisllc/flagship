@@ -187,11 +187,47 @@ describe("buildDebianPreseed — storage (LVM-on-LUKS; ESP + bios_grub + /boot)"
     expect(c).not.toContain("lv_name{");
     expect(c).toContain("$lvmok{ }");
     expect(c).toContain("d-i partman-auto-lvm/new_vg_name string flagship");
-    // The burn-time passphrase the bootstrap re-keys away (preseeded so the
-    // install is unattended; weak-passphrase warning suppressed).
-    expect(c).toContain("d-i partman-crypto/passphrase password flagship-build-time-luks-rekey-me-immediately");
-    expect(c).toContain("d-i partman-crypto/passphrase-again password flagship-build-time-luks-rekey-me-immediately");
+    // No passphrase (and no constant) is written into the preseed.
+    expect(c).not.toMatch(/partman-crypto\/passphrase(-again)? password/);
+    expect(c).not.toContain("flagship-build-time-luks");
     expect(c).toContain("d-i partman-crypto/weak_passphrase boolean true");
+  });
+
+  it("generates the install-time LUKS passphrase INSIDE the installer and feeds partman-crypto", () => {
+    const c = cfg();
+    const early = c.slice(c.indexOf("d-i partman/early_command"), c.indexOf("d-i partman-lvm/device_remove_lvm"));
+    // 48 random alphanumerics from the kernel CSPRNG, length-checked, 0600.
+    expect(early).toContain("BURN=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 48)");
+    expect(early).toContain('[ "${#BURN}" -eq 48 ] || exit 1');
+    expect(early).toContain("( umask 077; printf '%s' \"$BURN\" > /tmp/flagship-luks-burn )");
+    expect(early).toContain('debconf-set partman-crypto/passphrase "$BURN"');
+    expect(early).toContain('debconf-set partman-crypto/passphrase-again "$BURN"');
+    // Marked seen, or partman-crypto still prompts for it.
+    expect(early).toContain("d-i partman-crypto/passphrase seen true");
+    expect(early).toContain("d-i partman-crypto/passphrase-again seen true");
+    expect(early).toContain("debconf-set-selections /tmp/flagship-luks-seen");
+    // It is generated before the wipe and the partitioning.
+    expect(early.indexOf("BURN=$(")).toBeLessThan(early.indexOf("dmsetup remove_all"));
+  });
+
+  it("late_command copies the generated key onto the target BEFORE the bootstrap, then forgets it", () => {
+    const c = cfg();
+    const late = c.slice(c.indexOf("d-i preseed/late_command"));
+    const cp = late.indexOf("cp /tmp/flagship-luks-burn /target/var/flagship/luks-burn.key");
+    expect(cp).toBeGreaterThan(0);
+    expect(late).toContain("chmod 600 /target/var/flagship/luks-burn.key");
+    expect(cp).toBeLessThan(late.indexOf("in-target /usr/local/sbin/flagship-bootstrap.sh"));
+    expect(late.indexOf("rm -f /tmp/flagship-luks-burn")).toBeGreaterThan(late.indexOf("flagship-bootstrap.log 2>&1 ) &&"));
+  });
+
+  it("the unencrypted layout and a debug image generate no passphrase", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    for (const o of [{ encryptRoot: false }, { debugSshAuthorizedKey: "ssh-ed25519 AAAA dev@x" }]) {
+      const c = buildDebianPreseed({ blob, blobSignatureHex, ...o });
+      expect(c).toContain("d-i partman-auto/method string regular");
+      expect(c).not.toContain("flagship-luks-burn");
+      expect(c).not.toContain("partman-crypto/passphrase");
+    }
   });
 
   it("GPT layout: 1M bios_grub + a FAT32 ESP at /boot/efi + ext4 /boot, all labelled for boot-stage", () => {
@@ -579,12 +615,22 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
 
   it("Beacon D — late_command POSTs 'installed' on the bootstrap SUCCESS path only, before poweroff", () => {
     const c = cfg();
-    // The success path: bootstrap `&&` the installed beacon, THEN `||` a bare
-    // failure exit (no log leaves the box).
+    // The success path: bootstrap `&&` the installed beacon, THEN `||` the
+    // failure hold (it prints why on the console and never powers off).
     expect(c).toContain(
       `( in-target /usr/local/sbin/flagship-bootstrap.sh > /target/var/log/flagship-bootstrap.log 2>&1 ) && ` +
-        `${INSTALLED_BEACON} || ( exit 1 )`,
+        `rm -f /tmp/flagship-luks-burn && ( ${INSTALLED_BEACON} ) || ( grep -E 'FATAL|ERROR'`,
     );
+    const failure = c.slice(c.lastIndexOf("|| ( grep -E 'FATAL|ERROR'"));
+    expect(failure).toContain("FLAGSHIP INSTALL FAILED");
+    expect(failure).toContain("while :; do sleep 3600; done )");
+    expect(failure).not.toContain("exit 1");
+    // Nothing between the bootstrap and the hold may succeed on its own: the
+    // beacon's `|| true` must sit inside a group, or a failed bootstrap falls
+    // through `A && B || true || hold` and the install looks finished.
+    const chain = c.slice(c.indexOf("flagship-bootstrap.log 2>&1 ) &&"), c.lastIndexOf("|| ( grep -E"));
+    expect(chain.replace(/\( echo '\{"phase":"installed"\}'[^)]*\) \|\| true/, "BEACON")).not.toMatch(/\|\| true\s*$/);
+    expect(chain).toContain("&& ( ( echo '{\"phase\":\"installed\"}'");
     expect(c.indexOf('"phase":"installed"')).toBeGreaterThan(
       c.indexOf("flagship-bootstrap.log 2>&1 ) &&"),
     );
