@@ -1,6 +1,6 @@
 # MVP work list (coordinator, 2026-10-16 evening)
 
-Rule from now on: at most TWO worker agents at once, one per build lock:
+Rule from now on (2026-10-17: raised to THREE slots): at most THREE worker agents at once: one per build lock (Android, iOS) plus one web/box-only agent that takes no build lock:
 an ANDROID stream (owns android-build.lock) and an iOS stream (owns native-build.lock).
 Each stream works through its list in order: rebase a wip branch → build → unit tests → mock gym → land → next.
 Web/box-only items run in whichever stream is idle on native builds, or by the coordinator.
@@ -53,3 +53,11 @@ E2. Harry's Windows PC + Chromebook runs (docs/runbooks/device-test-agent.md).
 ## Also saved
 - Auto-backups of other worktrees: wip/auto-<agentid>-2026-10-16 (a079b83 build-chat-model-switch, a25bff, a31d97, a85a0ff, abb758 = debug-access Android fork incl. untracked files; already salvaged into 310ba149f).
 - Every agent is paused or stopped; no locks held after the Android gym agent's lock is released.
+
+## Added 2026-10-17 (owner)
+F1. GitHub CI on main: make every workflow green (CI tsc+vitest, e2e Playwright+pod-sim, android unit tests+debug APK, iOS, parity, others). List the latest failing run per workflow with `gh run list --branch main`, read the logs (`gh run view --log-failed`), fix the cause (not by skipping tests), land, repeat until green. Web/box slot, no native lock. Land checks must be unpiped.
+F2. Debate (no code): should free users get one custom domain, or is routing your own domain(s) to your box a free feature? Write a short for/against with a recommendation into decisions.md; owner decides. Today: custom domains are a Pro feature on feat/custom-domains (1 domain at Pro, unlimited at Pro Max); main refuses new orders.
+F3. iOS Activity tab: accordion sections (one open at a time, inner scroll when long), account events with "load more" (no separate audit-log entry), server section named after the server, absolute date+time stamps, more event kinds labelled. Coordinator, branch coord-activity; pushed to the owner's iPhone.
+F4. Android Activity tab: port F3 in spirit (Material 3 expandable sections, same wording and event labels). Standing rule: every approved iOS UX change gets an Android port (decisions.md 2026-10-17).
+P1. iOS UI polish pass to native state of the art (every screen: spacing, type scale, hierarchy, empty/loading/error states, dark mode, Dynamic Type, iPad layout, animations, haptics; no sloppy copy). Screenshot every screen on iPhone + iPad simulators, critique against Apple HIG, fix, re-shoot. Owner: not optional for GA.
+P2. Android UI polish pass to Material 3 state of the art (same method, emulator phone + tablet, dark/light, dynamic type/font scale, predictive back, edge-to-edge, motion).

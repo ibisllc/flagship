@@ -146,3 +146,33 @@ branch deployed to the gym; the permission system blocked D1/R2/SSH steps there,
 2. Should `a62f73b2b` have shipped with a cross-platform golden vector (TS/Swift/Kotlin) for the recipe wire shape instead of an Android-only JSON test?
 3. Is moving the ownership of the IRK seed cache key into one place worth doing before store builds?
 4. Was handing the owner a `sudo` copy script the lowest-privilege way to verify the stick?
+
+---
+# Part 3 (2026-10-17, day): parity, gym, polish, GA close-out
+
+Rules as before. 8 agents in parallel (Android, iOS, web/box, live gym), coordinator verifies and relays. Everything below is on `origin/main`; nothing was deployed by an agent (prod deploys are owner-run; the permission classifier blocks them).
+
+## 15. What landed (by theme)
+- **Native ports at parity** (iOS/Android/web): co-manager invites, admin-only share acceptance, debug access v2, env-sign, backups (policy, scheduled, one `.flagship` file, phone copy, per-app storage limits + alert), peer backup v2 status + restore from other servers, admin-only Add device, one "Connect to an existing account" page. Parity check: 43 reds -> 1 (real gap: webapp ACME key grant). 14 signed-tag allowlist entries were added with one-line reasons (review them).
+- **Live gym on UpCloud:** 22 groups / 244 checks green (runs 7, 8 consecutive; run 5 earlier). Bugs found and fixed: saved/migrate backup ENOENT on a box with no on-demand archive; per-app ballast ate 16 MiB of every limit (ext4 reserve); gVisor retry after 10 min; gym boxes cloned main's prod trust pin; update group needed a box on main.
+- **CI on GitHub:** green except Android release-clean (fixed after); causes were a duplicate import breaking all web gym scenarios, two stale e2e specs, a 30 min timeout vs a 35 min tier (now 60), and a stale test file clobbered by a squashed commit.
+- **Polish (owner: not optional):** iOS Dynamic Type (807+268 call sites previously ignored it), haptics, motion, accessibility labels, input look, chat bubbles, Settings as native List; Android Material 3 (type scale, compact bars, tonal cards, motion, predictive back, haptics, tablet rail, list/detail Activity, focus ring); webapp/site contrast system with tests. Owner decisions: brand teal is the light #14B8A6 (graphics/fills); deep #0F766E only for inline text links; labels ink + teal marker; focus = teal ring + ink inner ring; status text deepened.
+- **Owner UX:** Add/Restore server menu (Create, Co-manage, Restore from backup: file / other servers / this phone); backup step in Create server has no default; locking the app now dismisses every dialog/sheet/menu on all three clients (real bug: they stayed above the lock screen).
+- **GA close-out (owner-approved, demo accounts kept):** prod-wipe script guarded (env + typed target, TTY only); W12/late-log debug endpoints removed; dev flips scanned out of release paths (+ /dev/create-server page deleted); gVisor mirror list (R2 then upstream, SHA-512 pinned). LUKS passphrase removal NOT built: design + 9-step test plan in docs/luks-burn-passphrase-removal.md (gym boxes are unencrypted cloud boxes, so no live proof there).
+- **Floors:** Android minSdk 33 (Wear OS 4), macOS 15 (Sonoma stopped getting fixes; one source only, verify on Apple's page), iOS 18/watchOS 11 unchanged.
+- **Website:** ghost button border (a reset removed border-bottom), em dashes removed from all public pages (+ a test).
+
+## 16. Process failures worth a critic's eye
+1. A squashed iOS commit (e4c9c4e82, 100 files) was built from a stale tree and silently reverted others' landed work (iOS Activity redesign, a web test fix, Android parts); found by me from an Android agent's note, repaired in 080522ff6 and 568bd5218. Rule added to the agent brief ("never clobber landed work"). Nothing automated prevents a repeat.
+2. main was red for minutes after an agent piped its land check through `tail`; rule: land checks unpiped.
+3. I relayed an unverified claim ("iOS says Software update") from an agent report; caught by the next agent. Verify before relaying.
+4. Disk hit 100% twice; agents lowered the brief's 5 GB floor on their own once.
+5. My first teal split kept too much dark teal; history showed the light teal had been the brand for a month, darkened only 2 days earlier by an agent-driven commit. Contrast needs vs owner taste: bright teal graphics are 2.3:1 on paper (below WCAG 1.4.11's 3:1), accepted for labelled/decorative graphics and enforced by tests (icon-only controls must carry labels).
+6. Several gym tests are timing-flaky under load (load average ~25 from the owner's hosted VM); waits were added, root causes unproven for two.
+
+## 17. Open / for the critic
+- Is the 2.3:1 graphic teal an acceptable accessibility trade-off?
+- Is a removal-by-design for the LUKS slot right (random per-install passphrase) vs sealing the slot with the TPM-less phone key?
+- 14 allowlisted signed-tag differences: any that hide a real gap?
+- Release readiness: server-side changes since endorsement 91ec31931 (gym fixes, gVisor mirror, wipe guard, installer log removal) need another endorsement + .com deploy; store builds wait for that.
+- Free AI: shim deployed with keys on 10-14 but no public host (route landed a1df5e106, deploy is owner-run); never run end to end.
