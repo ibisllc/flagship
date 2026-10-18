@@ -82,11 +82,11 @@ export const WEB_ARCHIVE: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-archive-import-create",
-    "Import a backup (Add/Import → Import): the backup file opens with this account's key and asks for its data file; the data file is checked; the name step refuses a taken and a malformed name and shows the address and saved settings; Create mints the recipe (RCK and restore order under the admin root, the AuthCode with the admin root's approval), then uploads the data file to the waiting server, commits the key and lists each app's outcome; Close.",
+    "Import a backup (Add/Restore → Restore from backup → From a file): the backup file opens with this account's key and asks for its data file; the data file is checked; the name step refuses a taken and a malformed name and shows the address and saved settings; Create mints the recipe (RCK and restore order under the admin root, the AuthCode with the admin root's approval), then uploads the data file to the waiting server, commits the key and lists each app's outcome; Close.",
     "gym archive import a backup creates a server that waits for it and sends it",
     {
       steps: [
-        { kind: "tap", describe: "Add/Import → Import a backup.", handle: "[data-choice-import]" },
+        { kind: "tap", describe: "Add/Restore → Restore from backup → From a file.", handle: "[data-restore-file]" },
         { kind: "type", describe: "Pick the backup file, then the data file.", handle: "[data-imp-file]" },
         { kind: "type", describe: "Name: home (taken), Bad_Name, attic.", handle: "#imp-server-name" },
         { kind: "tap", describe: "Create the server.", handle: "[data-imp-create]" },
@@ -102,11 +102,11 @@ export const WEB_ARCHIVE: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-archive-restore-from-peers",
-    "Restore from other servers (Add/Import → Restore from other servers): the lost server is pre-filled; Find its backup has a running server read the record with the PBK the account makes (never the key itself), shows how many servers hold the pieces and the restore-by date, opens the backup with the account key; the name step creates the server (restore order under the admin root); the new server is told to fetch the pieces (from-peers with the PBK), commit follows and each app's outcome is listed.",
+    "Restore from other servers (Add/Restore → Restore from backup → From other servers): the lost server is pre-filled; Find its backup has a running server read the record with the PBK the account makes (never the key itself), shows how many servers hold the pieces and the restore-by date, opens the backup with the account key; the name step creates the server (restore order under the admin root); the new server is told to fetch the pieces (from-peers with the PBK), commit follows and each app's outcome is listed.",
     "gym archive restore from other servers finds the lost server's record, creates a server and has it fetch the pieces",
     {
       steps: [
-        { kind: "tap", describe: "Add/Import → Restore from other servers.", handle: "[data-choice-peers]" },
+        { kind: "tap", describe: "Add/Restore → Restore from backup → From other servers.", handle: "[data-restore-peers]" },
         { kind: "tap", describe: "Find its backup.", handle: "[data-pr-find]" },
         { kind: "type", describe: "Name: attic.", handle: "#pr-server-name" },
         { kind: "tap", describe: "Create the server.", handle: "[data-pr-create]" },
@@ -125,7 +125,7 @@ export const WEB_ARCHIVE: readonly Scenario[] = [
     "gym archive restore from other servers with no server running reads the sealed record from .com",
     {
       steps: [
-        { kind: "tap", describe: "Add/Import → Restore from other servers, Find its backup.", handle: "[data-pr-find]" },
+        { kind: "tap", describe: "Add/Restore → Restore from backup → From other servers, Find its backup.", handle: "[data-pr-find]" },
       ],
       assertions: [{ describe: "Name step", handle: "[data-pr-name]", expect: "present" }],
       screenshots: [shot("peers-from-com", "The record read from .com.")],
@@ -188,7 +188,7 @@ export const WEB_ARCHIVE: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-archive-import-non-admin",
-    "A non-admin device has no Add/Import, and its waiting server's Send the backup says only an admin device can add servers; no import opens.",
+    "A non-admin device has no Add/Restore, and its waiting server's Send the backup says only an admin device can add servers; no import opens.",
     "gym archive a non-admin device can't import a backup",
     {
       steps: [{ kind: "tap", describe: "Send the backup on a waiting server.", handle: ".js-send-backup" }],

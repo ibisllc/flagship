@@ -60,7 +60,7 @@ import {
   serverOrderOf,
 } from "../lib/serverOrder.js";
 import { preferLeaderAsCurrent } from "../lib/appPlacement.js";
-import { ADD_IMPORT_LABEL, openAddOrImport } from "./import-backup.js";
+import { ADD_IMPORT_LABEL, openAddOrRestore } from "./import-backup.js";
 
 registerView("view-home", { tab: "home" });
 
@@ -611,11 +611,11 @@ export { canAddServers, ADD_SERVERS_ADMIN_ONLY };
 
 const TAKE_OVER_LINK = "Someone handing you a box? Take over →";
 
-/** Home's one way to bring a server in: "Add/Import a server" opens the
- *  Create / Co-manage / Import menu, whether or not the account has servers. */
+/** Home's one way to bring a server in: "Add/Restore server" opens the
+ *  Create / Co-manage / Restore menu, whether or not the account has servers. */
 function wireAddServer(root) {
   root.querySelector("#home-add-server")?.addEventListener("click", () => {
-    openAddOrImport({
+    openAddOrRestore({
       onAdd: async () => {
         const { enterCreateServer } = await import("./create-server.js");
         await enterCreateServer();
@@ -646,7 +646,7 @@ function wireTakeOver(root) {
  *
  *  An account is an IDENTITY, not a server (docs/login-and-account-redesign.md):
  *  once it is open (a username is claimed + bound to this device key), zero
- *  servers is the normal state. An admin device gets the same "Add/Import a
+ *  servers is the normal state. An admin device gets the same "Add/Restore
  *  server" button as a populated list; any other device of the account is
  *  told only an admin device can add one. With no account yet (no username /
  *  mid-pair), "Create a server" opens the account first.
@@ -1229,8 +1229,8 @@ function renderServerCards() {
  * old nodes + their listeners, so re-binding can't stack handlers).
  */
 function wireHomeListControls(list) {
-  // "+ Add/Import a server" (admin devices only): create a brand-new box,
-  // co-manage someone else's server from their share link, or import a backup.
+  // "+ Add/Restore server" (admin devices only): create a server, co-manage
+  // someone else's server from their share link, or restore from a backup.
   wireAddServer(list);
   // Tap a registered server card → open its detail screen. Clicks that
   // land on an inner control (approve / delete / links) are ignored so the

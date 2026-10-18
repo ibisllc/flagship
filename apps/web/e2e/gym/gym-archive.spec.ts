@@ -476,7 +476,8 @@ test.describe("gym webapp archive", () => {
     await renderHome(page);
 
     await page.click("#home-add-server");
-    await page.locator('dialog[aria-label="Add or import a server"] [data-choice-import]').click();
+    await page.locator('dialog[aria-label="Add or restore a server"] [data-choice-restore]').click();
+    await page.locator('dialog[aria-label="Restore from backup"] [data-restore-file]').click();
     const dlg = page.locator('dialog[aria-label="Import a backup"]');
     await expect(dlg.locator("[data-imp-intro]")).toContainText("Pick the backup (its .flagship file)");
     await expect(dlg.locator("[data-imp-file]")).toHaveAttribute("accept", ".flagship,application/octet-stream");
@@ -579,7 +580,8 @@ test.describe("gym webapp archive", () => {
     await renderHome(page);
 
     await page.click("#home-add-server");
-    await page.locator('dialog[aria-label="Add or import a server"] [data-choice-peers]').click();
+    await page.locator('dialog[aria-label="Add or restore a server"] [data-choice-restore]').click();
+    await page.locator('dialog[aria-label="Restore from backup"] [data-restore-peers]').click();
     const dlg = page.locator('dialog[aria-label="Restore from other servers"]');
     await expect(dlg.locator("[data-pr-lost]")).toHaveValue(HOME);
     await shot(page, testInfo, "peers-pick");
@@ -627,7 +629,8 @@ test.describe("gym webapp archive", () => {
     m.get((u) => u.pathname === `/api/peer-backup/root/${HOME}`, () => ({ json: sealed }));
     await renderHome(page);
     await page.click("#home-add-server");
-    await page.locator('dialog[aria-label="Add or import a server"] [data-choice-peers]').click();
+    await page.locator('dialog[aria-label="Add or restore a server"] [data-choice-restore]').click();
+    await page.locator('dialog[aria-label="Restore from backup"] [data-restore-peers]').click();
     const dlg = page.locator('dialog[aria-label="Restore from other servers"]');
     await dlg.locator("[data-pr-find]").click();
     await expect(dlg.locator("[data-pr-summary]")).toContainText("1 server hold its pieces", { timeout: 15_000 });
@@ -642,7 +645,8 @@ test.describe("gym webapp archive", () => {
     m.post(at(OFFICE, "/api/screens/peer-backup/root"), () => ({ status: 404, json: { error: "No peer backup of that server was found." } }));
     await renderHome(page);
     await page.click("#home-add-server");
-    await page.locator('dialog[aria-label="Add or import a server"] [data-choice-peers]').click();
+    await page.locator('dialog[aria-label="Add or restore a server"] [data-choice-restore]').click();
+    await page.locator('dialog[aria-label="Restore from backup"] [data-restore-peers]').click();
     const dlg = page.locator('dialog[aria-label="Restore from other servers"]');
     await dlg.locator("[data-pr-find]").click();
     await expect(dlg.locator("[data-pr-error]")).toContainText("No peer backup of that server was found", { timeout: 15_000 });

@@ -57,7 +57,7 @@ build, then:
 
 1. **Webapp in Edge and Chrome.** Open `https://webapp.flagshipserver.com/`,
    sign in (Harry's phone approves), install it as an app (Edge: ⋯ → Apps →
-   Install). Walk: Home (server list, drag to reorder, Make leader, Add/Import a
+   Install). Walk: Home (server list, drag to reorder, Make leader, Add/Restore
    server menu), a server page (Health, Backup / Migrate card, Activity,
    Diagnostics, Settings), an app page (Access control, Members, Runs on, API
    keys, Database, Backup now), Settings (Lock the app, Sign out, Browser
@@ -68,8 +68,8 @@ build, then:
    server's page.
 3. **Backup to this PC.** On a disposable server: Backups → Back up now (a
    passcode is required; the app says why) → download the single `.flagship`
-   file to the PC. Then Add/Import a server →
-   Import a backup onto a new server hosted by Studio on this PC. Pass = the
+   file to the PC. Then Add/Restore server →
+   Restore from backup → From a file onto a new server hosted by Studio on this PC. Pass = the
    apps come back and open.
 4. **USB burn + metal boot.** Section 2.7: burn a stick with Wi-Fi, boot a spare
    machine from it, approve the unlock on the phone, green padlock.

@@ -13,7 +13,7 @@
     },
     {
       "id": "home-server-order",
-      "title": "Home: drag server order (server-order/v1), leader badge, Add/Import a server",
+      "title": "Home: drag server order (server-order/v1), leader badge, Add/Restore server (Create a server, Co-manage a running server, Restore from backup)",
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerOrder.swift", "flagship/server-order/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerOrderCard.swift", "Make leader"]] },
@@ -566,7 +566,7 @@
     },
     {
       "id": "backup-clone-server",
-      "title": "Backup/clone server: two files (passcode + account slots), and Import a backup onto a new server that waits for it",
+      "title": "Backup/clone server: two files (passcode + account slots), and Restore from backup → From a file onto a new server that waits for it",
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerBackupFormat.swift", "flagship/server-restore/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "Backup/clone server"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "struct ImportBackupScreen"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "isDemoAccount: app.isDemoAccount"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift", "Add/Import a server"], ["apps/mobile/shared/Sources/FlagshipAPI/Models/ServerArchiveModels.swift", "flagship/archive-download/v1"]] },
@@ -636,7 +636,7 @@
     },
     {
       "id": "peer-backup-v2",
-      "title": "Peer backup between accounts (docs/peer-backup.md): v2 status page (state, Server 1..n holders, restore-by, what the server keeps for others) and Add/Import a server → Restore from other servers (PBK from the account key, the lost server's record read by a running server or from .com, the waiting server fetches the pieces)",
+      "title": "Peer backup between accounts (docs/peer-backup.md): v2 status page (state, Server 1..n holders, restore-by, what the server keeps for others) and Add/Restore server → Restore from backup → From other servers (PBK from the account key, the lost server's record read by a running server or from .com, the waiting server fetches the pieces)",
       "ref": "web",
       "surfaces": {
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/peerBackup.js", "flagship/peer-backup-key/v1"], ["apps/web/public/webapp/views/peer-backup.js", "peer-backup/status"], ["apps/web/public/webapp/views/import-backup.js", "openRestoreFromPeers"]] },

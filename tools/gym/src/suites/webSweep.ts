@@ -23,7 +23,7 @@ const sweep = (id: string, goal: string, title: string, root: string): Scenario 
 export const WEB_SWEEP: readonly Scenario[] = [
   sweep(
     "web-total-sweep-home",
-    "Every control on Home (Add/Import, Take over, search, filter chips, Move up/down, server cards, Advanced), Activity and the Services list is pressed with no page error.",
+    "Every control on Home (Add/Restore, Take over, search, filter chips, Move up/down, server cards, Advanced), Activity and the Services list is pressed with no page error.",
     "gym sweep presses every control on Home, Activity and the Services list",
     "#view-home",
   ),

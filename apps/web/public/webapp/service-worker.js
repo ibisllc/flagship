@@ -320,7 +320,10 @@
 //       or cream (dark) inner ring, 3:1 on any surface.
 //  v142: the server page says "Software update" and "Migrate to a new server",
 //       as the phone apps do.
-const SHELL_VERSION = "v142";
+//  v143: Home's button is Add/Restore server (Create a server, Co-manage a
+//       running server, Restore from backup: From a file / From other servers);
+//       locking closes every menu, dialog and sheet.
+const SHELL_VERSION = "v143";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -448,6 +451,7 @@ const OPTIONAL_SHELL = [
   "/lib/loginTakeover.js",
   "/lib/maintainerTrust.js",
   "/lib/modal.js",
+  "/lib/lockSweep.js",
   "/lib/openAccount.js",
   "/lib/operationsBar.js",
   "/lib/pairingDeposit.js",

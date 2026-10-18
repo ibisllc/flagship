@@ -1315,21 +1315,21 @@ const TOTAL: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-home-add-import-admin",
-    "Home's Add/Import a server (docs/service-access-gating.md 'Account members'): on an admin device (it holds the admin root) it sits above the list and opens Create a new server / Co-manage a running server / Import a backup. Mirrors iOS and Android home-add-server / home-add-new-server / home-co-manage / home-import-backup.",
-    "gym servers home shows Add or Import a server above the list on an admin device only",
+    "Home's Add/Restore server (docs/service-access-gating.md 'Account members'): on an admin device (it holds the admin root) it sits above the list and opens Create a server / Co-manage a running server / Restore from backup. Mirrors iOS and Android home-add-server / home-add-new-server / home-co-manage / home-restore-backup.",
+    "gym servers home shows Add or Restore server above the list on an admin device only",
     {
       steps: [
         { kind: "launch", describe: "Reach Home with two servers; seed the session's admin root." },
-        { kind: "assert", describe: "Add/Import a server above the list.", handle: "#home-add-server" },
+        { kind: "assert", describe: "Add/Restore server above the list.", handle: "#home-add-server" },
         { kind: "tap", describe: "Open the menu.", handle: "#home-add-server" },
       ],
       assertions: [
-        { describe: "Add/Import a server", handle: "#home-add-server", expect: "text", text: "Add/Import a server" },
-        { describe: "Create a new server", handle: "[data-choice-add]", expect: "present" },
+        { describe: "Add/Restore server", handle: "#home-add-server", expect: "text", text: "Add/Restore server" },
+        { describe: "Create a server", handle: "[data-choice-add]", expect: "text", text: "Create a server" },
         { describe: "Co-manage a running server", handle: "[data-choice-co-manage]", expect: "present" },
-        { describe: "Import a backup", handle: "[data-choice-import]", expect: "present" },
+        { describe: "Restore from backup", handle: "[data-choice-restore]", expect: "text", text: "Restore from backup" },
       ],
-      screenshots: [shot("home-add-import-menu", "The Add/Import a server menu.")],
+      screenshots: [shot("home-add-import-menu", "The Add/Restore server menu.")],
       dimension: "D1",
     },
   ),

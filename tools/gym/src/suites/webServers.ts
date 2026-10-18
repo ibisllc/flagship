@@ -13,12 +13,12 @@ import { webTotal, shot } from "./helpers.js";
 export const WEB_SERVERS: readonly Scenario[] = [
   webTotal(
     "web-total-server-order-non-admin",
-    "A non-admin device of an admin-pinned account sees the server order and the Leader badge but no drag handles, no Add/Import, and a disabled Make leader that says only an admin device can change the order (.com refuses the IRK it would sign with).",
+    "A non-admin device of an admin-pinned account sees the server order and the Leader badge but no drag handles, no Add/Restore, and a disabled Make leader that says only an admin device can change the order (.com refuses the IRK it would sign with).",
     "gym servers a non-admin device sees the server order but can't change it or Make leader",
     {
       steps: [
         { kind: "launch", describe: "Reach Home as a non-admin device with two servers." },
-        { kind: "assert", describe: "No handles, not reorderable, no Add/Import.", handle: "#servers-list .js-order-handle" },
+        { kind: "assert", describe: "No handles, not reorderable, no Add/Restore.", handle: "#servers-list .js-order-handle" },
         { kind: "tap", describe: "Open office from its Home card.", handle: "[data-open-fqdn]" },
         { kind: "assert", describe: "Make leader disabled with the reason.", handle: "[data-leader-admin-only]" },
       ],
@@ -33,13 +33,13 @@ export const WEB_SERVERS: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-home-demo-account",
-    "A demo account (operator-run, no admin root) shows its demo server and still offers Add/Import a server, the apps' demo exception.",
+    "A demo account (operator-run, no admin root) shows its demo server and still offers Add/Restore server, the apps' demo exception.",
     "gym servers a demo account shows its demo server and may add servers without an admin root",
     {
       steps: [
         { kind: "launch", describe: "Reach Home as a demo account." },
-        { kind: "assert", describe: "The demo server card and Add/Import.", handle: "#home-add-server" },
-        { kind: "tap", describe: "Open Add/Import.", handle: "#home-add-server" },
+        { kind: "assert", describe: "The demo server card and Add/Restore.", handle: "#home-add-server" },
+        { kind: "tap", describe: "Open Add/Restore.", handle: "#home-add-server" },
       ],
       assertions: [{ describe: "Create choice", handle: "[data-choice-add]", expect: "present" }],
       screenshots: [shot("home-demo", "A demo account's Home.")],
@@ -48,14 +48,14 @@ export const WEB_SERVERS: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-home-add-import-choices",
-    "Add/Import a server: Cancel closes the menu; Co-manage asks for the owner's share link and refuses anything else; Import a backup opens its picker; Create a new server opens the create form.",
-    "gym servers each Add or Import choice opens its flow and Cancel closes the menu",
+    "Add/Restore server: Cancel closes the menu; Co-manage asks for the owner's share link and refuses anything else; Restore from backup opens the chooser (From a file, From other servers; no From this device in a browser) and From a file opens its picker; Create a server opens the create form.",
+    "gym servers each Add or Restore choice opens its flow and Cancel closes the menu",
     {
       steps: [
-        { kind: "tap", describe: "Add/Import → Cancel.", handle: "[data-choice-cancel]" },
-        { kind: "tap", describe: "Add/Import → Co-manage → paste a non-share link.", handle: "[data-choice-co-manage]" },
-        { kind: "tap", describe: "Add/Import → Import a backup.", handle: "[data-choice-import]" },
-        { kind: "tap", describe: "Add/Import → Create a new server.", handle: "[data-choice-add]" },
+        { kind: "tap", describe: "Add/Restore → Cancel.", handle: "[data-choice-cancel]" },
+        { kind: "tap", describe: "Add/Restore → Co-manage → paste a non-share link.", handle: "[data-choice-co-manage]" },
+        { kind: "tap", describe: "Add/Restore → Restore from backup → From a file.", handle: "[data-restore-file]" },
+        { kind: "tap", describe: "Add/Restore → Create a server.", handle: "[data-choice-add]" },
       ],
       assertions: [
         { describe: "Share-link refusal", handle: "[data-modal-error]", expect: "text", text: "That isn't a share link." },
@@ -71,14 +71,32 @@ export const WEB_SERVERS: readonly Scenario[] = [
     },
   ),
   webTotal(
+    "web-total-home-lock-closes-menus",
+    "Locking the app with the Add/Restore menu, the Restore from backup chooser or a prompt open leaves none of it on screen: no dialog or sheet is visible, focusable or holding focus over the lock screen, by either lock button.",
+    "gym servers locking the app with a menu or dialog open leaves none of it on screen",
+    {
+      steps: [
+        { kind: "tap", describe: "Open Add/Restore server.", handle: "#home-add-server" },
+        { kind: "tap", describe: "Lock the app (PIN lock).", handle: "#settings-pin-lock" },
+        { kind: "tap", describe: "Unlock, open Restore from backup and a prompt, lock again.", handle: "#home-add-server" },
+      ],
+      assertions: [
+        { describe: "Lock screen", handle: "#view-pin-unlock", expect: "present" },
+        { describe: "No dialog left", handle: "dialog", expect: "absent" },
+      ],
+      screenshots: [shot("home-locked-no-menu", "The lock screen with no menu over it.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
     "web-total-home-empty-non-admin",
-    "A non-admin device with no servers sees 'No servers yet' and that only an admin device can add servers, with no Add/Import button.",
+    "A non-admin device with no servers sees 'No servers yet' and that only an admin device can add servers, with no Add/Restore button.",
     "gym servers a non-admin device with no servers is told only an admin device can add one",
     {
       steps: [{ kind: "launch", describe: "Reach Home as a non-admin device; /pods is empty." }],
       assertions: [
         { describe: "Non-admin empty card", handle: "[data-home-empty-non-admin]", expect: "text", text: "Only an admin device of this account can add servers." },
-        { describe: "No Add/Import", handle: "#home-add-server", expect: "absent" },
+        { describe: "No Add/Restore", handle: "#home-add-server", expect: "absent" },
       ],
       screenshots: [shot("home-empty-non-admin", "The non-admin empty state.")],
       dimension: "D4",
@@ -86,8 +104,8 @@ export const WEB_SERVERS: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-home-empty-admin",
-    "An admin device with no servers gets Add/Import a server and 'Take over' (which opens the take-over dialog).",
-    "gym servers an admin device with no servers gets Add or Import and Take over",
+    "An admin device with no servers gets Add/Restore server and 'Take over' (which opens the take-over dialog).",
+    "gym servers an admin device with no servers gets Add or Restore and Take over",
     {
       steps: [
         { kind: "launch", describe: "Reach Home as an admin device; /pods is empty." },

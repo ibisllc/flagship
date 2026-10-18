@@ -1723,6 +1723,23 @@ body.no-tabs .tab-bar { display: none; }
 }
 .modal-ack input[type="checkbox"] { margin-top: 2px; flex: 0 0 auto; }
 body.modal-open { overflow: hidden; }
+button.choice-source {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  height: auto;
+  padding-block: 10px;
+}
+.choice-source-desc {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-muted);
+}
 @keyframes modal-fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }

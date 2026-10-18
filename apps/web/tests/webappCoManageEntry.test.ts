@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { buildServer } from "../src/server.js";
 
-/** Opening someone else's share link lives only in Home's Add/Import a server menu. */
+/** Opening someone else's share link lives only in Home's Add/Restore server menu. */
 describe("co-manage entry", () => {
   const get = async (url: string) => (await buildServer().inject({ method: "GET", url })).body;
 
-  it("the Add/Import menu offers it, wired to the share-link prompt", async () => {
+  it("the Add/Restore menu offers it, wired to the share-link prompt", async () => {
     const menu = await get("/webapp/views/import-backup.js");
-    expect(menu).toContain("data-choice-add>Create a new server<");
+    expect(menu).toContain("data-choice-add>Create a server<");
     expect(menu).toContain("data-choice-co-manage>Co-manage a running server<");
     expect(menu).not.toContain("Add a new server");
     expect(menu).not.toContain("To clone a server under a new name");

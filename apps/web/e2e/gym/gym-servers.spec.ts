@@ -2,7 +2,7 @@
  * Servers (docs/server-order.md, the update lane, reversible revoke): the
  * webapp's server surfaces with no backend. Home's server order (drag + the
  * keyboard steps, the Leader badge that stays gray until the leader holds the
- * order), Add/Import a server, the server page's Make leader and update card
+ * order), Add/Restore server, the server page's Make leader and update card
  * (last-update verdict, the release list, ordering an update and the pending
  * state it leaves), and a revoked server's Un-revoke and Delete.
  *
@@ -27,9 +27,11 @@ import {
   reachHome,
   renderHome,
   sensitive,
+  seedSession,
   serverDetail,
   shot,
   signer,
+  unlock,
   type Keys,
 } from "./gymKit.js";
 
@@ -195,13 +197,13 @@ test.describe("gym webapp servers", () => {
     await expect(page.locator("[data-choice-add]")).toBeVisible();
   });
 
-  test("gym servers home shows Add or Import a server above the list on an admin device only", async ({ page }, testInfo) => {
+  test("gym servers home shows Add or Restore server above the list on an admin device only", async ({ page }, testInfo) => {
     await reachHome(page, { kind: "admin", servers: [HOME, OFFICE] });
     const m = await mock(page);
     m.get("/api/users/smoketest/pods", { pods: [livePod(HOME), livePod(OFFICE)] });
     await renderHome(page);
-    // "Add/Import a server" sits above the list (iOS/Android: home-add-server).
-    await expect(page.locator("#home-add-server")).toHaveText("+ Add/Import a server");
+    // "Add/Restore server" sits above the list (iOS/Android: home-add-server).
+    await expect(page.locator("#home-add-server")).toHaveText("+ Add/Restore server");
     const addAbove = await page.evaluate(() => {
       const add = document.getElementById("home-add-server");
       const cards = document.querySelector("#servers-list [data-server-cards]");
@@ -209,18 +211,21 @@ test.describe("gym webapp servers", () => {
     });
     expect(addAbove).toBe(true);
     await page.click("#home-add-server");
-    await expect(page.locator("[data-choice-add]")).toHaveText("Create a new server");
-    await expect(page.locator("[data-choice-co-manage]")).toHaveText("Co-manage a running server");
-    await expect(page.locator("[data-choice-import]")).toHaveText("Import a backup");
+    await expect(page.locator("dialog[open] .modal-title")).toHaveText("Add/Restore server");
+    await expect(page.locator("dialog[open] button:not([data-choice-cancel])")).toHaveText([
+      "Create a server",
+      "Co-manage a running server",
+      "Restore from backup",
+    ]);
     await shot(page, testInfo, "home-add-import-menu");
   });
 
-  test("gym servers each Add or Import choice opens its flow and Cancel closes the menu", async ({ page }, testInfo) => {
+  test("gym servers each Add or Restore choice opens its flow and Cancel closes the menu", async ({ page }, testInfo) => {
     await reachHome(page, { kind: "admin", servers: [HOME] });
     const m = await mock(page);
     m.get("/api/users/smoketest/pods", { pods: [livePod(HOME)] });
     await renderHome(page);
-    const menu = page.locator('dialog[aria-label="Add or import a server"]');
+    const menu = page.locator('dialog[aria-label="Add or restore a server"]');
 
     // Cancel: the menu closes and Home stays.
     await page.click("#home-add-server");
@@ -240,9 +245,20 @@ test.describe("gym webapp servers", () => {
     await page.click("[data-modal-cancel]");
     await expect(page.locator(".modal-title")).toHaveCount(0);
 
-    // Import a backup: its picker dialog opens.
+    // Restore from backup: the chooser lists the sources (no "From this device" in a browser);
+    // From a file opens the picker dialog.
     await page.click("#home-add-server");
-    await menu.locator("[data-choice-import]").click();
+    await menu.locator("[data-choice-restore]").click();
+    const chooser = page.locator('dialog[aria-label="Restore from backup"]');
+    await expect(chooser.locator("button.choice-source .choice-source-title")).toHaveText(["From a file", "From other servers"]);
+    await expect(chooser.locator("[data-restore-file] .choice-source-desc")).toHaveText("Pick a .flagship backup file.");
+    await expect(chooser.locator("[data-restore-peers] .choice-source-desc")).toHaveText("Rebuild a lost server from pieces other servers keep.");
+    await shot(page, testInfo, "add-restore-chooser");
+    await chooser.locator("[data-restore-cancel]").click();
+    await expect(chooser).toHaveCount(0);
+    await page.click("#home-add-server");
+    await menu.locator("[data-choice-restore]").click();
+    await chooser.locator("[data-restore-file]").click();
     const imp = page.locator('dialog[aria-label="Import a backup"]');
     await expect(imp).toBeVisible({ timeout: 10_000 });
     await expect(imp.locator("[data-imp-file]")).toBeAttached();
@@ -252,9 +268,57 @@ test.describe("gym webapp servers", () => {
     // Create a new server: the create form.
     await renderHome(page);
     await page.click("#home-add-server");
-    await page.locator('dialog[aria-label="Add or import a server"] [data-choice-add]').click();
+    await page.locator('dialog[aria-label="Add or restore a server"] [data-choice-add]').click();
     await expect(page.locator("#view-create-server")).toBeVisible({ timeout: 10_000 });
     await shot(page, testInfo, "add-create-form");
+  });
+
+  test("gym servers locking the app with a menu or dialog open leaves none of it on screen", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin", servers: [HOME] });
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", { pods: [livePod(HOME)] });
+    await renderHome(page);
+    const visibleOverlays = () =>
+      page.evaluate(() => {
+        const shown = (el: Element) => {
+          const r = (el as HTMLElement).getBoundingClientRect();
+          const cs = getComputedStyle(el);
+          return r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none";
+        };
+        const open = [...document.querySelectorAll("dialog[open], .modal-overlay")].filter(shown).length;
+        const focusable = [...document.querySelectorAll("dialog button, .modal-overlay button")].filter(shown).length;
+        return { open, focusable, active: document.activeElement?.closest("dialog, .modal-overlay") !== null };
+      });
+
+    // The Add/Restore menu open, then Lock.
+    await page.click("#home-add-server");
+    await expect(page.locator('dialog[aria-label="Add or restore a server"]')).toBeVisible();
+    await page.evaluate(async () => {
+      const { lockToPin } = await import("/views/pinLock.js");
+      lockToPin();
+    });
+    await expect(page.locator("#view-pin-unlock")).toBeVisible();
+    expect(await visibleOverlays()).toEqual({ open: 0, focusable: 0, active: false });
+    await expect(page.locator("dialog")).toHaveCount(0);
+    await shot(page, testInfo, "home-locked-no-menu");
+
+    // The restore chooser (a second layer) and a prompt, then the other lock path.
+    await unlock(page, "home");
+    await seedSession(page, { kind: "admin", servers: [HOME] });
+    await renderHome(page);
+    await page.click("#home-add-server");
+    await page.locator("[data-choice-restore]").click();
+    await expect(page.locator('dialog[aria-label="Restore from backup"]')).toBeVisible();
+    await page.evaluate(async () => {
+      const { inlinePrompt } = await import("/lib/modal.js");
+      void inlinePrompt({ title: "Open a share link", message: "x" });
+    });
+    await page.evaluate(async () => {
+      const { lockToPin } = await import("/views/pinLock.js");
+      lockToPin();
+    });
+    expect(await visibleOverlays()).toEqual({ open: 0, focusable: 0, active: false });
+    await expect(page.locator(".modal-overlay")).toHaveCount(0);
   });
 
   test("gym servers a non-admin device with no servers is told only an admin device can add one", async ({ page }, testInfo) => {
@@ -269,7 +333,7 @@ test.describe("gym webapp servers", () => {
     await shot(page, testInfo, "home-empty-non-admin");
   });
 
-  test("gym servers an admin device with no servers gets Add or Import and Take over", async ({ page }, testInfo) => {
+  test("gym servers an admin device with no servers gets Add or Restore and Take over", async ({ page }, testInfo) => {
     await reachHome(page, { kind: "admin", servers: [HOME] });
     const m = await mock(page);
     m.get("/api/users/smoketest/pods", { pods: [] });

@@ -1,5 +1,5 @@
-// Home's "Add/Import a server" is the one way to bring a server into the
-// account (Create / Co-manage / Import), with or without servers, and only an
+// Home's "Add/Restore server" is the one way to bring a server into the
+// account (Create / Co-manage / Restore), with or without servers, and only an
 // admin device of the account sees it (docs/service-access-gating.md
 // "Account members"). Mirrors iOS HomeAddServerTests and Android
 // HomeAddServerTest.
@@ -22,7 +22,7 @@ function fakeRoot() {
   };
 }
 
-describe("who sees Add/Import a server", () => {
+describe("who sees Add/Restore server", () => {
   it("a device holding the admin root does", () => {
     expect(canAddServers({ adminRootSeed: new Uint8Array(32) }, {})).toBe(true);
   });
@@ -38,11 +38,11 @@ describe("who sees Add/Import a server", () => {
 });
 
 describe("the empty Home", () => {
-  it("offers an admin device the same Add/Import a server button, wired to the menu", () => {
+  it("offers an admin device the same Add/Restore server button, wired to the menu", () => {
     const root = fakeRoot();
     renderEmptyServersList(root, { reason: "no-servers", username: "plucky-avocet", canAdd: true });
     expect(root.innerHTML).toContain("Your account is ready");
-    expect(root.innerHTML).toContain('id="home-add-server">+ Add/Import a server<');
+    expect(root.innerHTML).toContain('id="home-add-server">+ Add/Restore server<');
     expect(root.innerHTML).not.toContain("empty-create-server");
     expect(root.innerHTML).not.toContain("empty-co-manage");
     expect(root.innerHTML).not.toContain("Co-manage a running server");
@@ -69,7 +69,7 @@ describe("the empty Home", () => {
 });
 
 describe("the populated list", () => {
-  it("shows Add/Import a server and Take over only to an admin device", () => {
+  it("shows Add/Restore server and Take over only to an admin device", () => {
     expect(VIEW).toMatch(
       /\$\{canAddServers\(\) \? `<button class="secondary" id="home-add-server">\$\{escapeHtml\(ADD_IMPORT_LABEL\)\}<\/button>\s*<button class="linklike mt-1" id="home-take-over">/,
     );
@@ -78,7 +78,7 @@ describe("the populated list", () => {
   it("both states open the one menu: Create, Co-manage, Import", () => {
     const wire = VIEW.slice(VIEW.indexOf("function wireAddServer"));
     const body = wire.slice(0, wire.indexOf("\n}\n"));
-    expect(body).toContain("openAddOrImport({");
+    expect(body).toContain("openAddOrRestore({");
     expect(body).toContain("enterCreateServer");
     expect(body).toContain("promptShareLink");
     expect(VIEW.match(/wireAddServer\((root|list)\);/g)).toEqual(["wireAddServer(root);", "wireAddServer(list);"]);

@@ -9,6 +9,8 @@
 // The router also exposes `parseViewQuery()` so app.js can route a
 // `?view=…` deep-link (Web Push notificationclick) at boot.
 
+import { dismissOverlays, isLockView } from "./lockSweep.js";
+
 const VIEWS = new Set();
 const VIEW_TABS = new Map(); // view-id → tab id ("home" | "apps" | "activity" | "settings")
 let currentView = null;
@@ -28,6 +30,8 @@ export function setViewTab(viewId, tab) {
 }
 
 export function show(id) {
+  // The lock surfaces never sit under a menu, dialog or sheet.
+  if (isLockView(id)) dismissOverlays();
   currentView = id;
   for (const v of VIEWS) {
     const el = document.getElementById(v);

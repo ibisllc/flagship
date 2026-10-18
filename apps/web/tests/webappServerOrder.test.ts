@@ -467,7 +467,7 @@ describe("the server page's order card", () => {
 });
 
 describe("Home's layout", () => {
-  it("puts Add/Import a server under the heading, above the filters, with no reorder hint", () => {
+  it("puts Add/Restore server under the heading, above the filters, with no reorder hint", () => {
     const src = readFileSync(resolve(__dirname, "../public/webapp/views/home.js"), "utf8");
     const add = src.indexOf('class="secondary" id="home-add-server">${escapeHtml(ADD_IMPORT_LABEL)}');
     expect(add).toBeGreaterThan(src.indexOf("data-home-title>Servers</h2>"));

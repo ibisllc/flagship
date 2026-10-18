@@ -1,8 +1,11 @@
-// Home → "+ Add/Import a server". Three doors: create a brand-new server (the
-// existing create flow), co-manage a server someone else runs (their share
-// link), or import a backup: pick its .flagship file, pick a name, burn or host the
-// new server as usual, and this page sends it the backup once it is up
-// (docs/server-backup-and-clone.md, "Restore a backup").
+// Home → "+ Add/Restore server". Three doors: create a server (the existing
+// create flow), co-manage a server someone else runs (their share link), or
+// restore from a backup, which opens a chooser of sources: a .flagship file
+// (pick it, pick a name, burn or host the new server as usual, and this page
+// sends it the backup once it is up; docs/server-backup-and-clone.md,
+// "Restore a backup") or the pieces other servers keep (docs/peer-backup.md).
+// A third source, "From this device", exists only where the device holds a
+// saved copy (the phone apps); a browser holds none, so it is omitted here.
 
 import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
@@ -38,7 +41,7 @@ import { createServerForRestore, isValidServerName } from "./create-server.js";
 import { canAddServers, refuseAddServer } from "../lib/addServerGate.js";
 import { describePeerRoot, startPeerRestore, waitForPeerData, rootLines } from "../lib/peerBackup.js";
 
-export const ADD_IMPORT_LABEL = "+ Add/Import a server";
+export const ADD_IMPORT_LABEL = "+ Add/Restore server";
 
 function openDialog(label, html) {
   const dlg = document.createElement("dialog");
@@ -54,16 +57,15 @@ function openDialog(label, html) {
   return { dlg, close };
 }
 
-/** The chooser Home's button opens. */
-export function openAddOrImport({ onAdd, onCoManage }) {
+/** The menu Home's button opens. */
+export function openAddOrRestore({ onAdd, onCoManage }) {
   const { dlg, close } = openDialog(
-    "Add or import a server",
+    "Add or restore a server",
     `
-    <h3 class="modal-title">Add/Import a server</h3>
-    <button class="full-width" data-choice-add>Create a new server</button>
+    <h3 class="modal-title">Add/Restore server</h3>
+    <button class="full-width" data-choice-add>Create a server</button>
     <button class="secondary full-width mt-2" data-choice-co-manage>Co-manage a running server</button>
-    <button class="secondary full-width mt-2" data-choice-import>Import a backup</button>
-    <button class="secondary full-width mt-2" data-choice-peers>Restore from other servers</button>
+    <button class="secondary full-width mt-2" data-choice-restore>Restore from backup</button>
     <div class="row-2 mt-3"><button class="secondary" data-choice-cancel>Cancel</button></div>
   `,
   );
@@ -76,17 +78,44 @@ export function openAddOrImport({ onAdd, onCoManage }) {
     close();
     onCoManage();
   });
-  dlg.querySelector("[data-choice-import]").addEventListener("click", () => {
+  dlg.querySelector("[data-choice-restore]").addEventListener("click", () => {
     close();
-    openImportBackup().catch((e) => {
-      if (e?.code !== "cancelled") toast(archiveErrorText(e), "err");
-    });
+    openRestoreChooser();
   });
-  dlg.querySelector("[data-choice-peers]").addEventListener("click", () => {
+}
+
+export const RESTORE_SOURCES = Object.freeze({
+  file: { title: "From a file", description: "Pick a .flagship backup file." },
+  peers: { title: "From other servers", description: "Rebuild a lost server from pieces other servers keep." },
+});
+
+/** Restore from backup: where the backup comes from. */
+export function openRestoreChooser() {
+  if (!canAddServers(getSession())) return refuseAddServer();
+  const source = (key) => `<button class="secondary full-width mt-2 choice-source" data-restore-${key}>
+      <span class="choice-source-title">${escapeHtml(RESTORE_SOURCES[key].title)}</span>
+      <span class="choice-source-desc">${escapeHtml(RESTORE_SOURCES[key].description)}</span>
+    </button>`;
+  const { dlg, close } = openDialog(
+    "Restore from backup",
+    `
+    <h3 class="modal-title">Restore from backup</h3>
+    ${source("file")}
+    ${source("peers")}
+    <div class="row-2 mt-3"><button class="secondary" data-restore-cancel>Cancel</button></div>
+  `,
+  );
+  const fail = (e) => {
+    if (e?.code !== "cancelled") toast(archiveErrorText(e), "err");
+  };
+  dlg.querySelector("[data-restore-cancel]").addEventListener("click", close);
+  dlg.querySelector("[data-restore-file]").addEventListener("click", () => {
     close();
-    openRestoreFromPeers().catch((e) => {
-      if (e?.code !== "cancelled") toast(archiveErrorText(e), "err");
-    });
+    openImportBackup().catch(fail);
+  });
+  dlg.querySelector("[data-restore-peers]").addEventListener("click", () => {
+    close();
+    openRestoreFromPeers().catch(fail);
   });
 }
 
@@ -152,7 +181,7 @@ async function loadInventory(username) {
 }
 
 /**
- * Home → Add/Import a server → Import a backup, or a waiting server's "Send
+ * Home → Add/Restore server → Restore from backup → From a file, or a waiting server's "Send
  * the backup" (`targetFqdn`). One dialog that walks the whole restore.
  */
 export async function openImportBackup({ targetFqdn = null } = {}) {
@@ -485,7 +514,7 @@ export function lostServerChoices(pods) {
 }
 
 /**
- * Add/Import a server → Restore from other servers: the lost server's backup
+ * Add/Restore server → Restore from backup → From other servers: the lost server's backup
  * comes back from the pieces other accounts' servers keep (docs/peer-backup.md
  * §9). Nothing is read from the lost server.
  */
@@ -716,7 +745,7 @@ export async function openRestoreFromPeers() {
     } catch (e) {
       show(el.bar, false);
       if (e?.code === "cancelled") return;
-      status("The server keeps waiting for its backup. Start again from Add/Import a server, or delete the server on Home.");
+      status("The server keeps waiting for its backup. Start again from Add/Restore server, or delete the server on Home.");
       fail(e);
     }
   }

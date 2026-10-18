@@ -355,7 +355,7 @@ existing rule):
 2. The root names the archive (id, size, SHA-256, created) and carries its
    small backup file. The device opens the account slot with the UMK and
    signs the usual restore order. Nothing comes from the dead box.
-3. The new server (waiting for a backup, as in "Import a backup") gets the
+3. The new server (waiting for a backup, as in Restore from backup → From a file) gets the
    PBK from the device over the owner session. It runs `restoreFromPeers`:
    it fetches the index bricks, then each segment's bricks from the stripe
    (any `k`, checked against their Merkle roots, a bad or missing one replaced

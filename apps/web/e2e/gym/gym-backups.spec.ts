@@ -330,7 +330,7 @@ test.describe("gym webapp backups", () => {
     m.post("/api/routing/register-rck", sensitive(page, keys, rckCanon, (b) => ({ arg: b.request, sig: b.signature }), () => ({ json: { ok: true } })));
     await page.evaluate(async () => (await import("/views/home.js")).renderHome());
     await page.click("#home-add-server");
-    await page.locator('dialog[aria-label="Add or import a server"] [data-choice-add]').click();
+    await page.locator('dialog[aria-label="Add or restore a server"] [data-choice-add]').click();
     await expect(page.locator("#view-create-server")).toBeVisible({ timeout: 10_000 });
     // Nothing is preselected; Create stays off until the owner picks, and the three choices come in order.
     for (const v of ["none", "phone-only", "peer"]) await expect(page.locator(`input[name="cs-backup-policy"][value="${v}"]`)).not.toBeChecked();

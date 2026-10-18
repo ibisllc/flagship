@@ -826,7 +826,7 @@ test.describe("gym webapp misc", () => {
     m.post("/api/routing/register-rck", sensitive(page, keys, rckCanon, (b) => ({ arg: b.request, sig: b.signature }), () => ({ json: { ok: true } })));
     await page.evaluate(async () => (await import("/views/home.js")).renderHome());
     await page.click("#home-add-server");
-    await page.locator('dialog[aria-label="Add or import a server"] [data-choice-add]').click();
+    await page.locator('dialog[aria-label="Add or restore a server"] [data-choice-add]').click();
     await expect(page.locator("#view-create-server")).toBeVisible({ timeout: 10_000 });
     await page.fill("#cs-server-name", "attic");
     await page.check('input[name="cs-backup-policy"][value="none"]');

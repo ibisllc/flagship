@@ -4,8 +4,8 @@
 
 One button on a server's page makes a backup of all of its apps and their
 data: two files the user keeps anywhere (a USB drive, a cloud folder, another
-computer). Restoring is one step from Home (**Add/Import a server → Import a
-backup**): pick the two files, pick a name (the saved server's name is filled
+computer). Restoring is one step from Home (**Add/Restore server → Restore from
+backup → From a file**): pick the two files, pick a name (the saved server's name is filled
 in when the account has no server called that), and burn or host the new
 server with the usual screen. Every other setting is copied from the saved
 server. The new server boots with one job: wait for the app to reach it and
@@ -295,7 +295,7 @@ the file names carry the time (`home-2026-10-16-0300.flagship-backup`).
 
 ## Restore a backup
 
-1. **Pick the files.** Home → Add/Import a server → Import a backup. The user
+1. **Pick the files.** Home → Add/Restore server → Restore from backup → From a file. The user
    picks the `.flagship-backup` and its `.flagship-data` (together, or one at
    a time; the app says which is still missing). The app reads them where they
    are (Files, a USB drive, a cloud folder) and never copies the data file in.
