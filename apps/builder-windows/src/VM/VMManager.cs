@@ -669,7 +669,7 @@ public sealed class VMManager
         _installPolls[name] = cts;
         _ = Task.Run(async () =>
         {
-            var url = $"https://flagshipserver.com/api/order/{serial}/status";
+            var url = $"https://{Environment.GetEnvironmentVariable("FLAGSHIP_CONTROL_HOST") ?? "flagshipserver.com"}/api/order/{serial}/status";
             while (!cts.IsCancellationRequested)
             {
                 try

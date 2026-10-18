@@ -33,7 +33,7 @@ public sealed record VMServerHealth(
 
     public static string? OrderHealthUrl(string? serial)
         => serial is not null && Serial.IsMatch(serial)
-            ? $"https://flagshipserver.com/api/order/{serial}/health"
+            ? $"https://{Environment.GetEnvironmentVariable("FLAGSHIP_CONTROL_HOST") ?? "flagshipserver.com"}/api/order/{serial}/health"
             : null;
 
     /// <summary>The report out of an order-health response; null when the
