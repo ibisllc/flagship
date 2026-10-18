@@ -1,5 +1,13 @@
 # Data sovereignty: the user keeps their data if we cannot serve them
 
+> **Parked, not needed at launch, decisions approved 2026-10-18.** This
+> feature lives only on the branch `feat/data-sovereignty`; `main` does not
+> carry it. The launch promise is smaller: if we are legally forced to cut
+> an account off, its owner can move their data to another account through
+> the existing backup options (see `docs/server-backup-and-clone.md`, "If we
+> are ever forced to cut you off"). There is no self-hosting path: the owner
+> wants everyone on `.com`, so D1 is closed as "no".
+
 > **Status: phase 1 (2026-10-18), owner decisions of the same day applied.** The threat model, an honest inventory,
 > the "Rescue my data" design, and the box/protocol slice of it are on
 > `main` (section 5). The phone screens, the webapp, gym scenarios and the
@@ -624,42 +632,29 @@ the other admin devices; 24 h cooling period for newly added admin devices
 without `.com`; admin devices never sign out; the rescue export depends on
 nothing but the local admin key (4.9).
 
-**Still open:**
+**Approved with the park (owner, 2026-10-18), the plan if this branch is revived:**
 
-- **D1. A control plane the user can reach when `.com` is gone.** Without one,
-  "import into another account" is impossible under T4/T5. Options: a published
-  self-hostable control plane (the Worker is already open-source-shaped, BUSL);
-  a second operator; or accept that the promise is "your file survives" and
-  not "your service restarts".
-- **D2. Offline unlock.** Unlock needs `.com` on every boot, and the one
-  offline path (the public burn passphrase) is slated for removal at GA.
-  Options: an owner-held **recovery key** (a LUKS slot whose key the phone
-  shows once and includes sealed in every backup and in the v2 account key
-  file); a LAN approval to the initramfs (the phone sends the re-sealed key
-  straight to the box, verified against the pinned admin root; needs a small
-  listener in the initramfs); or a cached lease on the boot partition.
-  Recommend the recovery key first.
-- **D3. Rescue must be possible before a reboot.** Consider telling the owner
-  (N1, and a banner when `/pods` is 404) "do not restart your server until you
-  have saved its data".
-- **D4. Fallback certificate.** Recommend **no**: the phone authenticates by
-  key; a self-signed fallback helps no one.
-- **D5. Re-pair watcher trusts unsigned `.com` JSON** and can swap the owner
-  IRK on a box with no pinned admin root. Under this threat model `.com` is the
-  adversary. Chain it from the pinned key like `adminRootRotationConsumer`.
-- **D6. Studio-hosted VMs** are behind NAT. Rescue from the Mac itself (a
-  host-side path into the VM) or a bridged mode.
-- **D7. Second discovery path.** mDNS is built. Add the console line/QR
-  (needs an appliance rebuild) and BLE later (`lan-direct.md`). Recommend the
-  console line.
-- **D8. Restoring into another account** (4.7): treat restored apps as the new
-  host's own; ship before promising the import.
-- **D9. Promote-at-add stops sealing the root** (4.12): the change that makes
-  the cooling period bind. Recommend yes, with the root kept on one or two
-  devices the owner chooses. Needs the other ~30 box call sites to take
-  grants and a direct grant-renewal route.
-- **D10. The cooling length.** 24 h is the target; the box setting
-  (`coolingMs`) is per box. Recommend 24 h for family accounts and no lower.
+- **D1. Closed: no self-hosting path.** The owner wants everyone on `.com`.
+  The promise is "your data moves to another account", not "your service
+  restarts without us".
+- **D2. Offline unlock: an owner-held recovery key.** A LUKS slot whose key
+  the phone shows once and includes sealed in every backup and in the v2
+  account key file.
+- **D7. Second discovery path: the box console line** (`/etc/issue.d`, needs
+  an appliance rebuild). BLE later.
+- **D9. Promote-at-add stops sealing the root** (4.12): the root is kept on
+  one or two devices the owner chooses; the ~30 box call sites take the
+  device book's grants; a direct grant-renewal route is added.
+- **D10. Cooling period: 24 h**, per-box `coolingMs`, no lower for family
+  accounts.
+
+**Decided to ship on `main` separately** (independent of rescue): D5 (the
+re-pair watcher verifies a chain from the pinned key), D8 (a restored backup's
+apps become the new host's own), a timeout on `BoxReadToken.fetch`, and the
+boot hardening (bounded relay wait, serve a stale certificate while renewing).
+
+**Not taken up now:** D3 (warn "do not restart" until saved), D4 (no fallback
+certificate: recommend no), D6 (Studio VMs behind NAT).
 
 ## 7. Phase 2 plan
 
