@@ -2,10 +2,11 @@
 // locally, downloads it, and the user opens that file in Flagship Studio.
 
 import { $, registerView, show } from "../lib/router.js";
-import { humanError } from "../lib/humanError.js";
+import { boxErrorText, humanError } from "../lib/humanError.js";
 import { getSession, ensureUsername } from "../lib/state.js";
 import {
   bytesToHex,
+  hexToBytes,
   signWithIrk,
   deriveSwkFromSeed,
   adminRootPubHex as ksAdminRootPubHex,
@@ -29,6 +30,7 @@ import { releaseServerName, serverDomainOf } from "../lib/releaseServer.js";
 import { controlApex, serverFqdn } from "../lib/apex.js";
 import { buildPairingOrder } from "../lib/bootApproval.js";
 import { markSwkDepositPending, clearSwkDeposit } from "../lib/swkDeposit.js";
+import { clearPendingRck, reuseOrRecordRck } from "../lib/pendingRck.js";
 import { markPairingDepositPending, clearPairingDeposit } from "../lib/pairingDeposit.js";
 import { setSessionToken, setSessionTokenForPod } from "../lib/api.js";
 import { attachRestoreOrder } from "../lib/serverBackupFormat.js";
@@ -212,6 +214,7 @@ async function cancelServer(id) {
       if (result.outcome === "approved") {
         if (d.code) await revokeAuthCodeBestEffort(d.code, username).catch(() => {});
         await deleteDraft(id);
+        clearPendingRck(serverDomain);
         toast(`Server "${d.serverName}" cancelled — the name is free again`, "ok");
         await refreshDrafts();
         return;
@@ -227,10 +230,13 @@ async function cancelServer(id) {
       await revokeAuthCodeBestEffort(d.code, username).catch(() => {});
     }
     await deleteDraft(id);
+    clearPendingRck(serverDomain);
     toast(`Server "${d.serverName}" cancelled — the name is free again`, "ok");
     await refreshDrafts();
   } catch (e) {
-    toast(`Cancel failed: ${e.message ?? e}`, "err");
+    // The name stays reserved and the draft stays, so the button still retries.
+    console.error("cancel server failed", e);
+    toast(`Couldn't cancel — the name is still reserved. ${boxErrorText(e)}`, "err");
   }
 }
 
@@ -720,10 +726,13 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
     throw new Error(`auth-code/issue failed (${issueResp.status})`);
   }
 
-  const rck = await genEd25519();
+  // The browser keeps no RCK secret, only the public key `.com` pins. A pending
+  // order for this name keeps its key, so a retry registers the same claim
+  // instead of a second one `.com` refuses.
+  const rckPubHex = reuseOrRecordRck(code.serverDomain, bytesToHex((await genEd25519()).publicKey));
   const rckRegIssuedAt = Date.now();
   const rckRegMsg = canonical([
-    TAG_RCK_REGISTER, username, code.serverDomain, bytesToHex(rck.publicKey), rckRegIssuedAt,
+    TAG_RCK_REGISTER, username, code.serverDomain, rckPubHex, rckRegIssuedAt,
   ]);
   const rckRegSig = await sensitiveSigner()(session.umk, rckRegMsg);
   // Absolute control-plane URL — same reason as the auth-code/issue call above:
@@ -732,7 +741,7 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      request: { username, subdomain: code.serverDomain, rckPubKey: bytesToHex(rck.publicKey), issuedAt: rckRegIssuedAt },
+      request: { username, subdomain: code.serverDomain, rckPubKey: rckPubHex, issuedAt: rckRegIssuedAt },
       signature: bytesToHex(rckRegSig),
     }),
   });
@@ -754,7 +763,7 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
     authCode: code,
     authCodeUserSignature: acSig,
     installerGitRef: "main",
-    rckPubKey: rck.publicKey,
+    rckPubKey: hexToBytes(rckPubHex),
   };
   // §7a.1: carry the field ONLY for "approve". "auto" is the absent-field
   // default, so an auto recipe signs/serialises byte-identically to a legacy

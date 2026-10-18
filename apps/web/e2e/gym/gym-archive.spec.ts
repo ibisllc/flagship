@@ -1014,5 +1014,60 @@ test.describe("gym webapp archive", () => {
     expect(JSON.parse(left as string)).toEqual([]);
     await expect(page.locator("#view-home")).toBeVisible();
   });
+
+  test("gym archive pending server cancel that fails says why and the same button tries again", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", { pods: [livePod(HOME)] });
+    m.get("/api/order/SER-GYM-2/status", { phase: "installing" });
+    const release = sensitive(page, keys, (r: { username: string; serverDomain: string; issuedAt: number }) => `flagship/release-server-name/v1|${r.username}|${r.serverDomain}|${r.issuedAt}`, (b) => ({ arg: b.request, sig: b.signature }), () => ({ json: { ok: true } }));
+    let attempts = 0;
+    m.post("/api/server/release", async (call) => (++attempts === 1 ? { raw: "error code: 1102", contentType: "text/plain", status: 503 } : release(call)));
+    const order = { serial: "SER-GYM-2", name: "garage", fqdn: "garage.smoketest.flagship.services", username: USER };
+    await page.evaluate(async (order) => {
+      (await import("/lib/profilesStore.js")).set("pendingOrders", JSON.stringify([order]));
+      (await import("/views/pending-server.js")).enterPendingServer(order);
+    }, order);
+    await expect(page.locator("#pending-server-note")).toHaveText("Installing", { timeout: 10_000 });
+    page.on("dialog", (d) => void d.accept());
+    await page.click("#pending-server-cancel");
+    await sawToast(page, "Couldn't cancel the order — the name is still reserved. Our service is briefly unavailable");
+    const shown = await page.evaluate(() => ((window as unknown as { __gymToasts?: string[] }).__gymToasts ?? []).join("\n"));
+    expect(shown).not.toMatch(/release failed|1102|503/);
+    await expect(page.locator("#pending-server-cancel")).toBeEnabled();
+    await expect(page.locator("#pending-server-cancel")).toHaveText("Cancel order");
+    await shot(page, testInfo, "pending-cancel-failed");
+    // The same button tries again.
+    await page.click("#pending-server-cancel");
+    await sawToast(page, `Deleted — "${order.fqdn}" is free again`);
+    await expect(page.locator("#view-home")).toBeVisible();
+  });
+
+  test("gym archive a stopped install shows Setup stopped with a way out, and starting again frees the name", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", { pods: [livePod(HOME)] });
+    m.get("/api/order/SER-GYM-3/status", { phase: "error", detail: "Setup stopped while Expanding the disk to 68 GB (line 66)" });
+    m.post(
+      "/api/server/release",
+      sensitive(page, keys, (r: { username: string; serverDomain: string; issuedAt: number }) => `flagship/release-server-name/v1|${r.username}|${r.serverDomain}|${r.issuedAt}`, (b) => ({ arg: b.request, sig: b.signature }), () => ({ json: { ok: true } })),
+    );
+    const order = { serial: "SER-GYM-3", name: "garage", fqdn: "garage.smoketest.flagship.services", username: USER };
+    await page.evaluate(async (order) => {
+      (await import("/lib/profilesStore.js")).set("pendingOrders", JSON.stringify([order]));
+      (await import("/views/pending-server.js")).enterPendingServer(order);
+    }, order);
+    await expect(page.locator("#pending-server-note")).toHaveText("Setup stopped", { timeout: 10_000 });
+    await expect(page.locator("#setup-stopped")).toBeVisible();
+    await expect(page.locator("#view-pending-server")).not.toContainText("line 66");
+    await expect(page.locator("#view-pending-server")).toContainText("Setup stopped while Expanding the disk to 68 GB");
+    await expect(page.locator("#setup-stopped-contact")).toHaveAttribute("href", /^mailto:support@flagshipserver\.com\?subject=Server%20setup%20stopped&body=.*SER-GYM-3/);
+    await shot(page, testInfo, "pending-setup-stopped");
+    page.once("dialog", (d) => void d.accept());
+    await page.click("#setup-stopped-start-again");
+    await sawToast(page, `Deleted — "${order.fqdn}" is free again`);
+    expect(m.last("/api/server/release")!.body.request.serverDomain).toBe(order.fqdn);
+    await expect(page.locator("#view-create-server")).toBeVisible({ timeout: 10_000 });
+  });
 });
 

@@ -28,6 +28,8 @@ const COPY = {
   network: "Network error — check your internet connection.",
   auth: "Your session expired — sign in again.",
   request: "That request didn't work — check your connection and try again.",
+  dropped: "The connection dropped — try again.",
+  timeout: "That took too long — check your connection and try again.",
   generic: "That didn't work. Please try again.",
 };
 
@@ -42,7 +44,40 @@ function statusOf(e) {
       return parseInt(e.code, 10);
     }
   }
+  return statusInText(e);
+}
+
+/** A status a thrown message spells out ("HTTP 503: error code: 1102",
+ *  "release failed (409): …"), for errors that carry no `.status`. A
+ *  Cloudflare "error code: 1xxx" page is the edge failing: a server problem. */
+function statusInText(e) {
+  if (!e || typeof e !== "object" || typeof e.message !== "string") return null;
+  const m = e.message;
+  const http = /^\s*HTTP\s*(\d{3})\b/i.exec(m) ?? /\bfailed \((\d{3})\)/i.exec(m);
+  if (http) return parseInt(http[1], 10);
+  if (/\berror code:?\s*1\d{3}\b/i.test(m)) return 502;
   return null;
+}
+
+/** True when a transport error says the connection broke mid-request. */
+function isDropped(e) {
+  const m = String(e?.message ?? e).toLowerCase();
+  return (
+    m.includes("connection closed") ||
+    m.includes("connection reset") ||
+    m.includes("econnreset") ||
+    m.includes("socket hang up") ||
+    m.includes("unexpected end of") ||
+    m.includes("broken pipe") ||
+    m === "eof"
+  );
+}
+
+/** True when a transport error says the request ran out of time. */
+function isTimeout(e) {
+  if (e && typeof e === "object" && (e.name === "TimeoutError" || e.name === "AbortError")) return true;
+  const m = String(e?.message ?? e).toLowerCase();
+  return m.includes("timed out") || m.includes("timeout");
 }
 
 /** True when the thrown thing looks like a transport / offline failure. */
@@ -82,6 +117,8 @@ export function humanError(e, opts = {}) {
   const status = statusOf(e);
 
   if (status == null && isNetwork(e)) return COPY.network;
+  if (status == null && isDropped(e)) return COPY.dropped;
+  if (status == null && isTimeout(e)) return COPY.timeout;
 
   if (status != null) {
     if (status === 0) {
@@ -90,6 +127,7 @@ export function humanError(e, opts = {}) {
       return COPY.network;
     }
     if (status >= 500) return COPY.server;
+    if (status === 408) return COPY.timeout;
     if (status === 401 || status === 403) {
       return opts.signExpired ? COPY.auth : COPY.generic;
     }
@@ -105,6 +143,22 @@ export const HUMAN_ERROR_COPY = COPY;
 /** An Error whose message is written for the person, so humanError shows it as is. */
 export function userError(message, props = {}) {
   return Object.assign(new Error(message), props, { userMessage: message });
+}
+
+/** `.com` reasons written for developers, and what to say instead. */
+const KNOWN_REASONS = [
+  [/subdomain already controlled by a different rck/i,
+    "That name is still held by an earlier, unfinished order. Cancel that order from Home, or choose another name."],
+  [/^stale request/i, "This device's clock looks off. Check the date and time, then try again."],
+  [/^invalid signature/i, "Your account key didn't match. Try again, or sign in again."],
+  [/^not authorized/i, "This device isn't allowed to do that."],
+];
+
+/** The sentence for a `.com` reason we know, else null. */
+export function knownReasonText(reason) {
+  const r = String(reason ?? "").trim();
+  for (const [re, sentence] of KNOWN_REASONS) if (re.test(r)) return sentence;
+  return null;
 }
 
 /** A box's terse reason ("this server is waiting for a different backup") as a sentence. */
@@ -126,7 +180,7 @@ export function boxErrorText(e, opts = {}) {
   const status = statusOf(e);
   const reason = e && typeof e === "object" && e.body && typeof e.body === "object" ? e.body.error : null;
   if (status != null && status >= 400 && status <= 599 && typeof reason === "string" && reason.trim()) {
-    return asSentence(reason);
+    return knownReasonText(reason) ?? asSentence(reason);
   }
   return humanError(e, opts);
 }

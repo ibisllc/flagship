@@ -16,7 +16,8 @@ import { getSession } from "../lib/state.js";
 import { humanError } from "../lib/humanError.js";
 import { toast } from "../lib/toast.js";
 import { get as profileGet, set as profileSet } from "../lib/profilesStore.js";
-import { PROVISION_PHASE_TITLES, renderProgressDetail } from "../lib/provisionProgress.js";
+import { PROVISION_PHASE_TITLES, renderProgressDetail, renderSetupStopped } from "../lib/provisionProgress.js";
+import { clearPendingRck } from "../lib/pendingRck.js";
 import { controlApex } from "../lib/apex.js";
 
 registerView("view-pending-server", { tab: "home" });
@@ -58,6 +59,7 @@ export function rememberPendingOrder({ serial, fqdn, name }) {
 }
 
 function forgetPendingOrder(fqdn) {
+  clearPendingRck(fqdn);
   profileSet("pendingOrders", JSON.stringify(rememberedOrders().filter((o) => !sameFqdn(o.fqdn, fqdn))));
 }
 
@@ -89,16 +91,21 @@ function paint(phase, detail) {
   const note = $("pending-server-note");
   if (note) {
     note.textContent = phase
-      ? phase === "error" && detail
-        ? `${PROVISION_PHASE_TITLES.error}: ${detail}`
+      ? phase === "error"
+        ? "Setup stopped"
         : PROVISION_PHASE_TITLES[phase] || phase
       : "Waiting for the server to start. Write the recipe to a USB stick with Flagship Studio, then boot the server from it.";
   }
   const progress = $("pending-server-progress");
   if (progress) {
-    progress.innerHTML = renderProgressDetail({
-      phase,
-      lastError: phase === "error" ? detail || "" : undefined,
+    progress.innerHTML =
+      renderProgressDetail({
+        phase,
+        lastError: phase === "error" ? detail || "" : undefined,
+      }) +
+      (phase === "error" ? renderSetupStopped({ serial: currentOrder?.serial, step: detail }) : "");
+    $("setup-stopped-start-again")?.addEventListener("click", () => {
+      runCancel({ startAgain: true }).catch((e) => toast(humanError(e), "err"));
     });
   }
 }
@@ -150,7 +157,7 @@ async function poll(order) {
   statusTimer = setTimeout(() => void poll(order), POLL_INTERVAL_MS);
 }
 
-async function runCancel() {
+async function runCancel({ startAgain = false } = {}) {
   const order = currentOrder;
   if (!order?.fqdn) return;
   const { deleteDeadServer } = await import("./home.js");
@@ -159,6 +166,11 @@ async function runCancel() {
   forgetPendingOrder(order.fqdn);
   clearStatusPoll();
   currentOrder = null;
+  if (startAgain) {
+    const { enterCreateServer } = await import("./create-server.js");
+    await enterCreateServer();
+    return;
+  }
   show("view-home");
 }
 

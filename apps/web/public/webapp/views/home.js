@@ -36,7 +36,10 @@ import {
   isRecentlyDeleted,
   openDeleteServerDialog,
 } from "../lib/deleteServer.js";
-import { humanError } from "../lib/humanError.js";
+import { boxErrorText, humanError } from "../lib/humanError.js";
+import { clearPendingRck } from "../lib/pendingRck.js";
+import { cachedHomeIdentity, rememberHomeIdentity } from "../lib/homeIdentity.js";
+import { createSettleGuard } from "../lib/settleGuard.js";
 import { depositSwkIfNeeded } from "../lib/swkDeposit.js";
 import { depositCgkIfNeeded } from "../lib/cgkDeposit.js";
 import { depositPairingIfNeeded } from "../lib/pairingDeposit.js";
@@ -613,8 +616,34 @@ const TAKE_OVER_LINK = "Someone handing you a box? Take over →";
 
 /** Home's one way to bring a server in: "Add/Restore server" opens the
  *  Create / Co-manage / Restore menu, whether or not the account has servers. */
+const addServerSettle = createSettleGuard();
+let addServerSettleObserver = null;
+
+/** Banners and the paused-status line arrive above the button after Home
+ *  paints; the button takes no tap for a moment after any of them moves it. */
+function watchLayoutAboveAddServer() {
+  if (addServerSettleObserver || typeof MutationObserver === "undefined") return;
+  const view = document.getElementById("view-home");
+  if (!view) return;
+  addServerSettleObserver = new MutationObserver((records) => {
+    for (const r of records) {
+      if (r.type === "attributes" || [...r.addedNodes, ...r.removedNodes].some((n) => n.nodeType === 1)) {
+        addServerSettle.note();
+        return;
+      }
+    }
+  });
+  // Direct children of the view (banners are inserted beside #servers-list)
+  // and the paused line's class; not the list's own cards, which sit below.
+  addServerSettleObserver.observe(view, { childList: true });
+  const paused = document.getElementById("home-status-paused");
+  if (paused) addServerSettleObserver.observe(paused, { attributes: true, attributeFilter: ["class"] });
+}
+
 function wireAddServer(root) {
+  watchLayoutAboveAddServer();
   root.querySelector("#home-add-server")?.addEventListener("click", () => {
+    if (!addServerSettle.ready()) return;
     openAddOrRestore({
       onAdd: async () => {
         const { enterCreateServer } = await import("./create-server.js");
@@ -1589,6 +1618,8 @@ export async function renderHome() {
       // seal the SWK to. No-ops unless a deposit is owed (idempotent via
       // swkDeposit.js); best-effort + non-blocking so it never delays a render.
       if (pod?.identityPubKey && !s.revoked) {
+        // The box registered: its order's routing key is no longer pending.
+        clearPendingRck(String(s.serverId));
         depositSwkIfNeeded({
           serverDomain: String(s.serverId),
           identityPubKeyHex: String(pod.identityPubKey),
@@ -1817,13 +1848,18 @@ export async function deleteDeadServer(serverDomain, btn, { label = "Delete serv
         return false;
       }
     }
+    clearPendingRck(serverDomain);
     toast(`Deleted — "${serverDomain}" is free again`);
-    await renderHome();
+    // The name is free either way; a list that fails to repaint is not a failed cancel.
+    await renderHome().catch((e) => console.error("home repaint after release failed", e));
     return true;
   } catch (e) {
     // Keep the card: the name is still reserved, so re-render would just hide
-    // a name the user can't reuse. Surface the error + re-enable the button.
-    toast(`Delete failed: ${e.message ?? e}`, "err");
+    // a name the user can't reuse. Say why in plain words and re-enable the
+    // button, so the same tap tries again.
+    console.error("release server name failed", e);
+    const what = label === "Cancel order" ? "cancel the order" : "delete the server";
+    toast(`Couldn't ${what} — the name is still reserved. ${boxErrorText(e)}`, "err");
     if (btn) { btn.disabled = false; btn.textContent = label; }
     return false;
   }
@@ -2009,12 +2045,18 @@ export function homeIdentityLine({ accountDisplayName, username, deviceDisplayNa
 async function renderWelcomeHierarchy(session) {
   const welcome = $("home-welcome");
   if (!welcome) return;
-  welcome.textContent = homeIdentityLine({ username: session?.username });
+  // The names this browser saw last stand in until the directory answers (or
+  // when it can't: locked, offline), so a reload never drops back to the handle.
+  welcome.textContent = homeIdentityLine({
+    username: session?.username,
+    ...(cachedHomeIdentity(session?.username) ?? {}),
+  });
   try {
     const directory = await fetchDecryptedDirectory();
     const account = directory?.accountDisplayName;
     const self = (directory?.devices ?? []).find((d) => d.isCurrent);
     const deviceName = self?.displayName;
+    rememberHomeIdentity(session?.username, { accountDisplayName: account, deviceDisplayName: deviceName });
     welcome.textContent = homeIdentityLine({
       accountDisplayName: account,
       username: session?.username,

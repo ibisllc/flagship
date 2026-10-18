@@ -82,3 +82,59 @@ describe("humanError — thrown-error mapping", () => {
     }
   });
 });
+
+describe("humanError — messages that carry no status", () => {
+  it("a dropped connection reads as dropped, not the raw text", async () => {
+    const { humanError } = await load();
+    for (const m of ["connection closed", "Connection reset by peer", "read ECONNRESET", "socket hang up", "unexpected end of stream"]) {
+      const out = humanError(new Error(m));
+      expect(out).toMatch(/connection dropped/i);
+      expect(out).not.toContain(m);
+    }
+  });
+
+  it("a timeout reads as taking too long", async () => {
+    const { humanError } = await load();
+    expect(humanError(new Error("request timed out"))).toMatch(/took too long/i);
+    expect(humanError(Object.assign(new Error("aborted"), { name: "TimeoutError" }))).toMatch(/took too long/i);
+    expect(humanError(408)).toMatch(/took too long/i);
+  });
+
+  it("'HTTP 503: error code: 1102' reads as a temporary problem", async () => {
+    const { humanError } = await load();
+    for (const m of ["HTTP 503: error code: 1102", "HTTP 502", "error code: 1102", "Worker exceeded resources. error code: 1102"]) {
+      const out = humanError(new Error(m));
+      expect(out).toMatch(/briefly unavailable/i);
+      expect(out).not.toMatch(/HTTP|1102/);
+    }
+  });
+
+  it("a status spelled in a message ('release failed (409): …') counts as a refusal", async () => {
+    const { humanError } = await load();
+    const out = humanError(new Error("release failed (409): subdomain already controlled by a different RCK"));
+    expect(out).toMatch(/didn't work/i);
+    expect(out).not.toMatch(/RCK|409/);
+  });
+});
+
+describe("boxErrorText — known .com reasons", () => {
+  it("rewrites developer reasons into sentences", async () => {
+    const { boxErrorText, knownReasonText } = await load();
+    const e = Object.assign(new Error("register failed"), {
+      status: 409,
+      body: { error: "subdomain already controlled by a different RCK" },
+    });
+    expect(boxErrorText(e)).toBe(
+      "That name is still held by an earlier, unfinished order. Cancel that order from Home, or choose another name.",
+    );
+    expect(knownReasonText("stale request")).toMatch(/clock/i);
+    expect(knownReasonText("invalid signature")).toMatch(/account key/i);
+    expect(knownReasonText("something else")).toBeNull();
+  });
+
+  it("a reason already written as a sentence passes through", async () => {
+    const { boxErrorText } = await load();
+    const e = Object.assign(new Error("x"), { status: 403, body: { error: "Only an admin device of this account can add servers." } });
+    expect(boxErrorText(e)).toBe("Only an admin device of this account can add servers.");
+  });
+});

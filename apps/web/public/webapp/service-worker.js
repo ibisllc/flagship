@@ -337,7 +337,13 @@
 //       says a saved backup can be restored into a new account. Removing the
 //       account, Sign out and Remove this device warn on an admin device with
 //       "Save my account key first" (lib/adminKeyWarning.js).
-const SHELL_VERSION = "v147";
+//  v148: a retry of a pending order keeps its routing key (lib/pendingRck.js);
+//       a failed Cancel order says why in plain words; a stopped install shows
+//       "Setup stopped" with Cancel order and start again / Contact us
+//       (lib/provisionProgress.js); Home keeps the account > device names across
+//       a reload (lib/homeIdentity.js) and Add/Restore server takes no tap right
+//       after the layout above it moved (lib/settleGuard.js).
+const SHELL_VERSION = "v148";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -486,6 +492,9 @@ const OPTIONAL_SHELL = [
   "/lib/rateLimited.js",
   "/lib/relayTrust.js",
   "/lib/releaseServer.js",
+  "/lib/pendingRck.js",
+  "/lib/homeIdentity.js",
+  "/lib/settleGuard.js",
   "/lib/replaceDeviceCeremony.js",
   "/lib/revokeServer.js",
   "/lib/securedSessions.js",

@@ -277,7 +277,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/AddDeviceScreen.swift", "struct AddDeviceScreen"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ReplaceDeviceFinalizeScreen.swift", "struct "], ["apps/mobile/ios/Sources/FlagshipUI/Screens/SecuredSessionsScreen.swift", "struct "]] },
-        "android": { "status": "partial", "reason": "Replace, trusted devices and paired sessions are live. Add a device and Join an account have no live pairing relay yet (the webapp's /qr-pipe pairing exists): a release build says \"Adding a device from this phone isn't available yet. Use the web app or iOS.\"; the pairing flow itself runs only on the in-memory relay in the gym.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AddDeviceScreen.kt", "fun AddDeviceScreen"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ReplaceDeviceFinalizeScreen.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/TrustedDevicesScreen.kt", "fun "]] },
+        "android": { "status": "partial", "reason": "Replace, trusted devices and paired sessions are live. Add a device and Join an account have no live pairing relay yet (the webapp's /qr-pipe pairing exists): a release build says \"Adding a device from this phone isn't available yet. Use the web app.\"; the pairing flow itself runs only on the in-memory relay in the gym.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AddDeviceScreen.kt", "fun AddDeviceScreen"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ReplaceDeviceFinalizeScreen.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/TrustedDevicesScreen.kt", "fun "]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/add-device.js", "export"], ["apps/web/public/webapp/lib/replaceDeviceCeremony.js", "export"], ["apps/web/public/webapp/views/trusted-devices.js", "export"]] }
       }
     },
@@ -662,6 +662,26 @@
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/accountGone.js", "account-not-found"], ["apps/web/public/webapp/lib/accountGoneUi.js", "This account was removed"], ["apps/web/public/webapp/lib/comFetch.js", "noteAccountGoneResponse"], ["apps/web/public/webapp/lib/adminKeyWarning.js", "Remove anyway"], ["apps/web/e2e/gym/gym-gone.spec.ts", "gym account-gone"]] },
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Client/AccountGone.swift", "account-not-found"], ["apps/mobile/ios/Sources/FlagshipUI/Notices/AccountGoneViews.swift", "This account was removed"], ["apps/mobile/shared/Sources/FlagshipCore/AdminKeyWarning.swift", "Save my account key first"], ["apps/mobile/ios/App/UITests/GymAccountGoneTests.swift", "test_removedAccountShowsTheScreenAndClosesWhatWasOpen"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AccountGone.kt", "account-not-found"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AccountGone.kt", "This account was removed"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/HttpClientFactory.kt", "AccountGoneInterceptor"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/shell/AccountGoneScreen.kt", "account-gone-remove"]] }
+      }
+    },
+    {
+      "id": "pending-order-keeps-routing-key",
+      "title": "A retry of a pending server order registers the same routing key (RCK) for 24 hours, forgotten on cancel or when the server registers; .com also lets the same admin replace the key while no box has activated the name",
+      "ref": "web",
+      "surfaces": {
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/pendingRck.js", "export function reuseOrRecordRck"], ["apps/web/public/webapp/views/create-server.js", "reuseOrRecordRck\\(code\\.serverDomain"], ["apps/web/e2e/gym/gym-misc.spec.ts", "retried recipe registers the same routing key"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/PendingRckStore.kt", "class PendingRckStore"], ["apps/mobile/android/app/src/test/java/com/flagshipserver/app/core/CreateServerRckReuseTest.kt", "class "]] },
+        "ios": { "status": "partial", "reason": "iOS mints a new routing key on every recipe, so a retry for the same name relies on .com's replace-while-unactivated rule instead of reusing the key.", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/CreateServerViewModel.swift", "let rck = Curve25519\\.Signing\\.PrivateKey\\(\\)"]] }
+      }
+    },
+    {
+      "id": "setup-stopped-way-out",
+      "title": "A stopped install says \"Setup stopped\" (no shell line number) with Cancel order and start again and Contact us (a mailto with the order number)",
+      "ref": "android",
+      "surfaces": {
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/InstallProgressScreen.kt", "fun SetupStoppedCard"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/provisionProgress.js", "export function renderSetupStopped"], ["apps/web/public/webapp/lib/provisionProgress.js", "export function failureDetail"], ["apps/web/e2e/gym/gym-archive.spec.ts", "a stopped install shows Setup stopped"]] },
+        "ios": { "status": "missing", "reason": "iOS shows the box's failure text as is on the install timeline; no Setup stopped card, no line-number strip, no Contact us.", "anchors": [] }
       }
     }
   ]

@@ -15,6 +15,8 @@ import {
   shouldShowProgressBar,
   renderListProgressBar,
   renderProgressDetail,
+  renderSetupStopped,
+  failureDetail,
 } from "../public/webapp/lib/provisionProgress.js";
 
 import { checkUsername } from "../public/webapp/lib/usersCheck.js";
@@ -168,9 +170,48 @@ describe("webapp render helpers", () => {
     expect(html).toContain("Securing (TLS certificate)");
     expect(html).toContain("1.2.3.4");
     expect(html).toContain("debian-12");
-    expect(html).toContain("retrying");
+    expect(html).not.toContain("retrying");
     expect(html).toContain("&lt;bad&gt;");
     expect(html).not.toContain("<bad>");
+  });
+});
+
+describe("a stopped install reads as a sentence with a way out", () => {
+  it("failureDetail drops the shell line number and keeps the step", () => {
+    expect(failureDetail("Setup stopped while Expanding the disk to 68 GB (line 66)")).toBe(
+      "Setup stopped while Expanding the disk to 68 GB",
+    );
+    expect(failureDetail("Setup stopped while Setting up this server's identity (line 78)")).toBe(
+      "Setup stopped while Setting up this server's identity",
+    );
+    expect(failureDetail("failed at line 12, ")).toBe("failed");
+    expect(failureDetail("Setup stopped while Installing the headline 3 packages")).toContain("headline 3");
+    expect(failureDetail("")).toBe("Setup hit a problem");
+    expect(failureDetail(null)).toBe("Setup hit a problem");
+    expect(failureDetail(" (line 3)")).toBe("Setup hit a problem");
+  });
+
+  it("the failed step shows the stripped text, never the line number", () => {
+    const states = provisionStepStates("error", "Setup stopped while Expanding the disk to 68 GB (line 66)", "installing");
+    expect(states.find((s) => s.state === "failed")?.detail).toBe("Setup stopped while Expanding the disk to 68 GB");
+    expect(renderProgressDetail({ phase: "error", lastError: "boom (line 9)" })).not.toContain("line 9");
+  });
+
+  it("the card offers Cancel order and start again, and Contact us with the order number", () => {
+    const html = renderSetupStopped({ serial: "ORD-123", step: "Setup stopped while Sealing (line 4)" });
+    expect(html).toContain("Setup stopped");
+    expect(html).toContain('id="setup-stopped-start-again"');
+    expect(html).toContain("Cancel order and start again");
+    expect(html).toContain("Contact us");
+    expect(html).toContain("mailto:support@flagshipserver.com?subject=Server%20setup%20stopped");
+    expect(html).toContain(encodeURIComponent("Order: ORD-123"));
+    expect(html).not.toContain("line 4");
+    expect(html).toContain("Setup stopped while Sealing");
+  });
+
+  it("escapes what the box sent", () => {
+    const html = renderSetupStopped({ serial: "x", step: "<img src=x onerror=1>" });
+    expect(html).not.toContain("<img");
   });
 });
 

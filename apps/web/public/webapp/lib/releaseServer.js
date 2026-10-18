@@ -105,7 +105,11 @@ export async function releaseServerName(args, deps = {}) {
   });
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
-    throw new Error(`release failed (${resp.status}): ${text}`);
+    let body = null;
+    try { body = JSON.parse(text); } catch { /* not JSON: an edge page */ }
+    // `status` and `body` let a caller show the reason in plain words
+    // (humanError.js boxErrorText) while the message keeps the raw text for logs.
+    throw Object.assign(new Error(`release failed (${resp.status}): ${text}`), { status: resp.status, body });
   }
   return { ok: true, body: await resp.json().catch(() => ({})) };
 }

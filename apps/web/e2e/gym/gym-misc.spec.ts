@@ -865,6 +865,46 @@ test.describe("gym webapp misc", () => {
     await expect(page.locator("#pending-server-fqdn")).toHaveText("attic.smoketest.flagship.services");
     await expect(page.locator("#pending-server-note")).toHaveText("Booting up", { timeout: 10_000 });
   });
+  test("gym misc a retried recipe registers the same routing key until the order is cancelled", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
+    const m = await mock(page);
+    basePods(m);
+    m.post("/api/auth-code/issue", { ok: true });
+    const rckCanon = (r: { username: string; subdomain: string; rckPubKey: string; issuedAt: number }) =>
+      `flagship/rck-register/v1|${r.username}|${r.subdomain}|${r.rckPubKey}|${r.issuedAt}`;
+    m.post("/api/routing/register-rck", sensitive(page, keys, rckCanon, (b) => ({ arg: b.request, sig: b.signature }), () => ({ json: { ok: true } })));
+    await page.evaluate(async () => (await import("/views/home.js")).renderHome());
+    await page.click("#home-add-server");
+    await page.locator('dialog[aria-label="Add or restore a server"] [data-choice-add]').click();
+    await expect(page.locator("#view-create-server")).toBeVisible({ timeout: 10_000 });
+    await page.fill("#cs-server-name", "attic");
+    await page.check('input[name="cs-backup-policy"][value="none"]');
+    const mint = async (n: number) => {
+      await Promise.all([page.waitForEvent("download"), page.click("#cs-download-recipe")]);
+      await expect.poll(() => m.sent("/api/routing/register-rck").length, { timeout: 15_000 }).toBe(n);
+      return m.sent("/api/routing/register-rck")[n - 1]!.body.request.rckPubKey as string;
+    };
+    // A second tap on the same pending order (a retry, a reconnect) is the same claim.
+    const first = await mint(1);
+    expect(await mint(2)).toBe(first);
+    await shot(page, testInfo, "create-server-retry-same-rck");
+    // Cancelling the order forgets the key: the next order is a new claim.
+    await page.evaluate(async () => (await import("/lib/pendingRck.js")).clearPendingRck("attic.smoketest.flagship.services"));
+    expect(await mint(3)).not.toBe(first);
+  });
+
+  test("gym misc Home keeps the account and device names across a reload when the directory can't be read", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin", servers: [HOME] });
+    const m = await mock(page);
+    basePods(m);
+    await page.evaluate(() =>
+      localStorage.setItem("flagship.homeIdentity.smoketest", JSON.stringify({ accountDisplayName: "Elated Iris", deviceDisplayName: "Chrome" })),
+    );
+    await page.evaluate(async () => (await import("/views/home.js")).renderHome());
+    await expect(page.locator("#home-welcome")).toHaveText("Elated Iris > Chrome");
+    await shot(page, testInfo, "home-names-kept");
+  });
+
   test("gym misc a second browser joins the account through Add a device, opens it, and unlocks it after a reload", async ({ page, browser }, testInfo) => {
     test.setTimeout(150_000);
     // One relay for both browsers, playing `.com`'s qr-pipe (apps/com/src/buildRelay.ts).

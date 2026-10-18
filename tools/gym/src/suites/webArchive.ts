@@ -270,6 +270,31 @@ export const WEB_ARCHIVE: readonly Scenario[] = [
     },
   ),
   webTotal(
+    "web-total-archive-pending-cancel-fails",
+    "A Cancel order that fails keeps the order and says why in plain words ('Couldn't cancel the order — the name is still reserved. Our service is briefly unavailable…'), never the raw error; the same button tries again and frees the name.",
+    "gym archive pending server cancel that fails says why and the same button tries again",
+    {
+      steps: [
+        { kind: "tap", describe: "Cancel order (accept the confirm); the release fails.", handle: "#pending-server-cancel" },
+        { kind: "tap", describe: "Cancel order again.", handle: "#pending-server-cancel" },
+      ],
+      assertions: [{ describe: "Home", handle: "#view-home", expect: "present" }],
+      screenshots: [shot("pending-cancel-failed", "The plain-words failure.")],
+      dimension: "D3",
+    },
+  ),
+  webTotal(
+    "web-total-archive-pending-setup-stopped",
+    "A stopped install shows 'Setup stopped' without the shell line number, with Cancel order and start again and Contact us (a mailto with the order number); starting again releases the name and opens Create a server.",
+    "gym archive a stopped install shows Setup stopped with a way out, and starting again frees the name",
+    {
+      steps: [{ kind: "tap", describe: "Cancel order and start again (accept the confirm).", handle: "#setup-stopped-start-again" }],
+      assertions: [{ describe: "Create a server", handle: "#view-create-server", expect: "present" }],
+      screenshots: [shot("pending-setup-stopped", "Setup stopped.")],
+      dimension: "D3",
+    },
+  ),
+  webTotal(
     "web-total-archive-restore-one-app-fails",
     "A restore where one app fails tries every app, then ends: 'Restored 1 app. 1 couldn't be restored; the server works with the rest.' and the failed app named with the box's reason.",
     "gym archive a restore where one app fails names it with the box's reason and ends",

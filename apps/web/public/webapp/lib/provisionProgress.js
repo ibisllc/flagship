@@ -68,6 +68,20 @@ export const PROVISION_STEP_GROUPS = Object.freeze([
 export const INSTALLED_DONE_DETAIL =
   "Install complete. If it ran from a USB stick, unplug it and power the server back on.";
 
+/** The box's failure text for a person: "Setup stopped while Expanding the
+ *  disk (line 66)" loses the shell line number; empty becomes the title.
+ *  MIRRORS: Android ProvisionProgress.failureDetail.
+ *  @param {string|null|undefined} lastError
+ *  @returns {string} */
+export function failureDetail(lastError) {
+  const stripped = String(lastError ?? "")
+    .replace(/\s*[(\[]?\b(?:at )?lines? ?\d+[)\]]?/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .replace(/[,:;]+$/, "");
+  return stripped.length > 0 ? stripped : PROVISION_PHASE_TITLES.error;
+}
+
 /** @param {string} phase */
 function isLadderPhase(phase) {
   return PROVISION_LADDER.includes(phase);
@@ -121,7 +135,7 @@ export function provisionStepStates(phase, lastError, prevPhase) {
           key: g.key,
           label: g.label,
           state: "failed",
-          detail: lastError && lastError.length > 0 ? lastError : PROVISION_PHASE_TITLES.error,
+          detail: failureDetail(lastError),
         };
       }
       return { key: g.key, label: g.label, state: "pending", detail: null };
@@ -211,17 +225,13 @@ export function renderProgressDetail(block) {
       const detail = s.detail
         ? `<div class="demo-step-detail">${esc(s.detail)}</div>`
         : "";
-      // For the failed group the daemon retries — surface that, not a dead end.
-      const retry =
-        s.state === "failed"
-          ? `<div class="demo-step-retry">retrying — last error: ${esc(s.detail || "")}</div>`
-          : "";
+      // A stopped step is not retrying on its own: the detail says where it
+      // stopped, and the pending view offers the way out (renderSetupStopped).
       return (
         `<li class="demo-step demo-step-${s.state}">` +
         `<span class="demo-step-icon">${icon}</span>` +
         `<span class="demo-step-label">${esc(s.label)}</span>` +
         detail +
-        retry +
         `</li>`
       );
     })
@@ -239,5 +249,29 @@ export function renderProgressDetail(block) {
     `<div class="demo-progress-fill" style="width:${pct}%"></div></div>` +
     `<ol class="demo-step-list">${rows}</ol>` +
     (info ? `<div class="demo-device-info">${info}</div>` : "")
+  );
+}
+
+/** The way out of a stopped install: cancel the order and start again, or
+ *  write to support with the order number. The caller wires
+ *  `#setup-stopped-start-again`. MIRRORS: Android SetupStoppedCard.
+ *  @param {{ serial?: string|null, step?: string|null }} [args]
+ *  @returns {string} */
+export function renderSetupStopped({ serial, step } = {}) {
+  const where = failureDetail(step);
+  const note = where === PROVISION_PHASE_TITLES.error ? "" : `. ${where.replace(/[.!?]+$/, "")}`;
+  const body =
+    `My server's setup stopped.\nOrder: ${serial || "unknown"}\nStep: ${step ? failureDetail(step) : ""}\n`;
+  const mailto =
+    `mailto:support@flagshipserver.com?subject=${encodeURIComponent("Server setup stopped")}` +
+    `&body=${encodeURIComponent(body)}`;
+  return (
+    `<div class="card" id="setup-stopped">` +
+    `<h3>Setup stopped</h3>` +
+    `<p class="note mt-2">${esc(`This server didn't finish installing${note}. Cancel this order to free the name and create the server again, or contact us and we'll look at it.`)}</p>` +
+    `<div class="row-2 mt-2">` +
+    `<button class="danger" id="setup-stopped-start-again">Cancel order and start again</button>` +
+    `<a class="secondary" id="setup-stopped-contact" href="${esc(mailto)}">Contact us</a>` +
+    `</div></div>`
   );
 }
