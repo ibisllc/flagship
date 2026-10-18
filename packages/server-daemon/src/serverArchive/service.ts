@@ -114,6 +114,8 @@ export interface ServerArchiveServiceOptions {
   serverSettings?: () => Promise<{ bootUnlockMode: "auto" | "approve"; diskEncryption: "luks" | "none" }>;
   /** Whether this server waits for a backup; absent ⇒ it never accepts one. */
   wait?: RestoreWait | null;
+  /** Told when a copy of the server's data leaves it: a download finished, or a browser download was approved. */
+  onExport?: (e: { stage: "downloaded" | "browser-approved" }) => void;
   /** Activity feed: kind, one readable line, ok. */
   note?: (kind: string, detail: string, ok?: boolean) => void;
   freeBytes?: (dir: string) => Promise<number>;
@@ -583,6 +585,11 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
   function noteDownloaded(d: Downloadable): void {
     if (downloadedNoted.has(d.archiveId)) return;
     downloadedNoted.add(d.archiveId);
+    try {
+      opts.onExport?.({ stage: "downloaded" });
+    } catch {
+      /* an alert never fails a download */
+    }
     note("server.backup.downloaded", d.expiresAt === null ? "A saved backup was downloaded." : "The backup was downloaded.");
   }
 
@@ -633,6 +640,11 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     if (Math.abs(now() - a.issuedAt) > 5 * 60_000) return err(403, "the approval is stale: approve again");
     if (!opts.authorizeDownload || !opts.authorizeDownload(a, Buffer.from(b.signature, "hex"))) return err(403, "invalid signature");
     l.approved.add(a.requestId);
+    try {
+      opts.onExport?.({ stage: "browser-approved" });
+    } catch {
+      /* an alert never fails an approval */
+    }
     note("server.backup.download-approved", "A browser download of the backup was approved.");
     return json(200, { ok: true });
   }

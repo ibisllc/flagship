@@ -126,5 +126,8 @@ function sameIdentity(a: PhoneAlert, b: PhoneAlert): boolean {
   if (a.kind === "app-storage-full" && b.kind === "app-storage-full") {
     return a.store === b.store;
   }
+  if (a.kind === "backup-exported" && b.kind === "backup-exported") {
+    return a.stage === b.stage && a.ref === b.ref && a.by === b.by;
+  }
   return false;
 }
