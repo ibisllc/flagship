@@ -217,6 +217,15 @@ after. Windows/Linux Studio ship as "preview". **Share this server** (another
 account can view or co-manage a server, never destroy it) is in the MVP
 (`docs/share-a-server.md`, branch `feat/share-server`).
 
+**One product version, 0.2 Beta (owner, 2026-10-18).** The homepage badge, the
+webapp, iOS, Android and every Studio show the same product version, `0.2`
+labelled Beta, from `release/version.json` (the only file to edit; then
+`node scripts/check-versions.mjs --write`; `npm run parity` fails on drift).
+The stores keep their own numbers: iOS 1.1 build 5 (1.0 is approved; the store
+version must climb), Android versionCode 9 (wear +1,000,000), Studio 0.2.0.
+About reads "Flagship 0.2 Beta (iOS 1.1, build 5)" / "(build 9)". Protocol
+levels and the webapp shell number are separate and unchanged.
+
 **Release readiness (2026-10-15):** `npm run ready` is the scoreboard to re-run
 after each batch of fixes (branch drift, tsc, vitest, e2e, locked gym, cross-
 client parity; `-- --native --live` before a release candidate). Loop and

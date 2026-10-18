@@ -351,7 +351,9 @@
 //       area); the separate Approve page is gone and ?view=boot-approval opens
 //       Activity at the section. An approval another device already answered
 //       (409) counts as done (views/boot-approval.js).
-const SHELL_VERSION = "v151";
+//  v152: About shows the one product version, "Flagship 0.2 Beta (web build
+//       152)" (lib/buildInfo.js; release/version.json).
+const SHELL_VERSION = "v152";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

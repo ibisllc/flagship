@@ -15,6 +15,11 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// One product version for every Flagship surface lives in release/version.json
+// (scripts/check-versions.mjs fails on drift). The store's versionCode only
+// ever climbs; versionName is the product version, About adds the label.
+val releaseVersion = (groovy.json.JsonSlurper().parse(rootProject.file("../../../release/version.json")) as Map<*, *>)
+
 val keystoreProps = Properties().apply {
     val f = rootProject.file("keystore/keystore.properties")
     if (f.exists()) f.inputStream().use { load(it) }
@@ -30,8 +35,8 @@ android {
         targetSdk = 36
         // Play needs every APK/bundle of one app to have its own version code:
         // the watch build is the phone's plus 1,000,000.
-        versionCode = 1_000_008
-        versionName = "0.0.8"
+        versionCode = 1_000_000 + (releaseVersion["androidVersionCode"] as Number).toInt()
+        versionName = releaseVersion["product"] as String
         resourceConfigurations += setOf("en")
     }
 

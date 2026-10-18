@@ -162,7 +162,7 @@ public partial class MainWindow : Window
 
     private void MenuAbout_Click(object sender, RoutedEventArgs e)
         => MessageBox.Show(this,
-            $"Flagship Studio {StudioVersion.Current}\n\nBuild and host your own Flagship server.\nhttps://flagshipserver.com",
+            $"Flagship Studio {StudioVersion.CurrentDisplay}\n\nBuild and host your own Flagship server.\nhttps://flagshipserver.com",
             "About Flagship Studio", MessageBoxButton.OK, MessageBoxImage.Information);
 
     private static void OpenUrl(string url)

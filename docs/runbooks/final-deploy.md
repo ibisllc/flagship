@@ -420,14 +420,16 @@ bad image are deleted and recreated.
 **Windows and Linux** (`studio-release.yml`, on demand):
 
 ```sh
-gh workflow run studio-release.yml --ref main -f version=0.1.4 -f publish=true
+gh workflow run studio-release.yml --ref main -f publish=true
 ```
 
-Next version is 0.1.4 (0.1.3 is the latest GitHub release, 2026-10-16). The
-workflow stamps the version into both apps and fails if the built exe or
-AppImage reports a different one. Then update the two URLs in
+The version is `studio` in `release/version.json` (0.2.0, the product version
+0.2 Beta; 0.1.3 is the latest GitHub release, 2026-10-16); leave `-f version`
+off (a typed one that disagrees fails the run). The workflow stamps the
+version into both apps and fails if the built exe or AppImage reports a
+different one. Then update the two URLs in
 `apps/com/src/route.ts` (`INSTALLER_DOWNLOADS.windows` / `.linux`, they pin
-`studio-v0.1.3`), land, and redeploy `.com` (step 7). They ship marked
+`studio-v0.1.3`, to `studio-v0.2.0` and the `0.2.0` file names), land, and redeploy `.com` (step 7). They ship marked
 "preview"; neither has been run on a real Windows PC or Linux desktop beyond the
 2026-10-18 Windows run recorded in AGENTS.md.
 
@@ -440,11 +442,9 @@ bash scripts/release-studio.sh              # builds, signs, notarizes, staples;
 bash scripts/release-studio.sh --publish    # commits the DMG to main, pushes, runs tsc and `npm run deploy`
 ```
 
-Version-stamping caveat, **not fixed**: `apps/builder-mac/Info.plist` still says
-`CFBundleShortVersionString` 0.1.0 / `CFBundleVersion` 1 and nothing in the
-`Makefile` or `release-studio.sh` stamps it, so the Mac app reports 0.1.0 while
-Windows and Linux are 0.1.3. Edit those two values to match the release by hand
-before running the script. Also note `--publish` pushes straight to `main` and
+Version stamping: `make package-app` writes `studio` from `release/version.json`
+(0.2.0) into the app's `CFBundleShortVersionString`, so the Mac app, Windows
+and Linux all report 0.2.0 (About: "0.2 Beta"). Nothing to edit by hand. Also note `--publish` pushes straight to `main` and
 deploys from whatever checkout you ran it in: run it from `~/flagship-deploy`
 after step 7 so the deploy is the same commit.
 
@@ -463,12 +463,15 @@ build in particular must be new: the auto-unlock lease signing fix (`64df9098c`,
 "sign the auto-unlock lease with the IRK, not the admin root") is client code,
 so the version 8 Play build fails to unlock auto-unlock servers correctly**.
 
-**iOS** (`apps/mobile/ios/App/project.yml`): `CURRENT_PROJECT_VERSION` is `"4"`,
-`MARKETING_VERSION` `"1.0"` (build 4 is approved on the App Store). Bump
-`CURRENT_PROJECT_VERSION` to `"5"` (every upload needs a higher build number;
-keep `MARKETING_VERSION` unless you are shipping 1.1), run `xcodegen generate`
-(the `.xcodeproj` is checked in and carries the number too, so commit both),
-check with the Release-clean scan, archive and upload:
+**iOS** (`apps/mobile/ios/App/project.yml`): `CURRENT_PROJECT_VERSION` is `"5"`,
+`MARKETING_VERSION` `"1.1"` (1.0 build 4 is approved on the App Store; the store
+version must climb, so the product version 0.2 Beta shows in About as
+"Flagship 0.2 Beta (iOS 1.1, build 5)"). Both numbers come from
+`release/version.json` and are already set: nothing to bump for this release (the
+next upload needs a higher build: edit the file, run
+`node scripts/check-versions.mjs --write`; the `.xcodeproj` is checked in and
+carries the numbers too, so commit it), check with the Release-clean scan,
+archive and upload:
 
 ```sh
 node scripts/ios-release-clean.mjs --build          # a Release build for a generic device, scanned for mocks and gym seams
@@ -482,12 +485,13 @@ Still to confirm in App Store Connect: the export-compliance answer (the app
 does its own X25519 / AES-GCM / Ed25519 sealing) and whether "iPhone and iPad
 apps on Apple Silicon Macs" is on.
 
-**Android** (`apps/mobile/android/app/build.gradle.kts`): `versionCode = 8`,
-`versionName "0.0.8"`; the Wear app is `versionCode = 1_000_008` (phone + 1,000,000,
+**Android** (`apps/mobile/android/app/build.gradle.kts`): `versionCode` 9 and
+`versionName "0.2"` come from `release/version.json` (About: "Flagship 0.2 Beta
+(build 9)"); the Wear app is `versionCode = 1_000_009` (phone + 1,000,000,
 same applicationId and signing key). Version codes are burned by any upload:
-read the highest in Play Console -> App bundle explorer, set the phone to one
-above it, and the Wear module to that + 1,000,000 (the owner sets the code at
-upload time; don't bump it in a commit that is not the release). Needs
+read the highest in Play Console -> App bundle explorer; if it is 9 or more, raise
+`androidVersionCode` in `release/version.json` to one above it and run
+`node scripts/check-versions.mjs --write` (the Wear code follows). Needs
 `apps/mobile/android/keystore/keystore.properties` with the upload key (without
 it the release falls back to the debug key and Play rejects it).
 
@@ -588,7 +592,7 @@ list exactly what went.
   Apple Silicon hosting gets the 2026-10-13 image, which stops at first boot.
 - Windows and Linux Studio have not run end to end on real hardware; ship them
   as preview (already the plan).
-- Mac Studio reports version 0.1.0 (step 10).
+- Mac Studio reports version 0.2.0 (step 10; stamped from `release/version.json`).
 - Not run by anyone yet, per AGENTS.md: the whole server restore, docker
   save/load and pg_dump/restore against a real box and the live gym groups
   `quota`, `share` (account-key accept) and the group list newer than the last

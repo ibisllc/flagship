@@ -556,12 +556,26 @@
     },
     {
       "id": "studio-version",
-      "title": "Studio: version stamped from the release",
+      "title": "Studio: version stamped from release/version.json, About shows the product version and Beta label",
       "ref": "mac",
       "surfaces": {
-        "mac": { "status": "partial", "reason": "Info.plist hard-codes 0.1.0 and release-studio.sh does not stamp the release version, so the shipped Mac app reports 0.1.0.", "anchors": [["apps/builder-mac/Info.plist", "CFBundleShortVersionString"]] },
+        "mac": { "status": "present", "anchors": [["apps/builder-mac/Info.plist", "CFBundleShortVersionString"], ["apps/builder-mac/Makefile", "release/version.json"]] },
         "win": { "status": "present", "anchors": [["apps/builder-windows/FlagshipBuilder.csproj", "<Version>\\$\\(StudioVersion\\)</Version>"]] },
         "linux": { "status": "present", "anchors": [["apps/builder-linux/wizard.py", "BUILDER_VERSION = VERSION"], ["apps/builder-linux/appimage/build.sh", "FLAGSHIP_STUDIO_VERSION"]] }
+      }
+    },
+    {
+      "id": "product-version-about",
+      "title": "About shows the one product version with its label (release/version.json: 0.2 Beta)",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Shell/ProductVersion.swift", "aboutLine"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ProductVersion.kt", "productAboutLine"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/buildInfo.js", "aboutVersionLine"]] },
+        "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilderCore/StudioVersion.swift", "display\\(bundleVersion"]] },
+        "win": { "status": "present", "anchors": [["apps/builder-windows/src/StudioVersion.cs", "CurrentDisplay"]] },
+        "linux": { "status": "present", "anchors": [["apps/builder-linux/version.py", "def display_version"]] },
+        "watch": { "status": "na", "reason": "The watch apps have no About screen." }
       }
     },
     {

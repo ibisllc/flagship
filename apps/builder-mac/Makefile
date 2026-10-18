@@ -28,6 +28,10 @@ APP_NAME = Flagship Studio
 BUILD_DIR = .build/release
 APP_BUNDLE = $(BUILD_DIR)/$(APP_NAME).app
 PRESEED_ENGINE = $(BUILD_DIR)/FlagshipBuilder_FlagshipBuilderCore.bundle/preseed-engine.js
+# The Studio release number comes from release/version.json (the one product
+# version; scripts/check-versions.mjs fails on drift). The committed Info.plist
+# carries it too, and package-app re-stamps it so a release can never ship stale.
+STUDIO_VERSION := $(shell node -p "require('../../release/version.json').studio")
 ZIP_FILE = $(BUILD_DIR)/$(BIN).zip
 DMG_FILE = $(BUILD_DIR)/$(BIN).dmg
 
@@ -72,6 +76,7 @@ package-app: build-release
 	cp "$(BUILD_DIR)/FlagshipBuilderHelper" "$(APP_BUNDLE)/Contents/MacOS/FlagshipBuilderHelper"
 	cp "$(PRESEED_ENGINE)" "$(APP_BUNDLE)/Contents/Resources/preseed-engine.js"
 	cp Info.plist "$(APP_BUNDLE)/Contents/Info.plist"
+	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(STUDIO_VERSION)" "$(APP_BUNDLE)/Contents/Info.plist"
 	cp HelperDaemon.plist "$(APP_BUNDLE)/Contents/Library/LaunchDaemons/com.flagshipserver.Builder.helper.plist"
 	cp AppIcon.icns "$(APP_BUNDLE)/Contents/Resources/AppIcon.icns"
 	cp menubar.png "$(APP_BUNDLE)/Contents/Resources/menubar.png"

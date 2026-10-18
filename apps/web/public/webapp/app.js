@@ -10,6 +10,7 @@
 // `lib/state.js`'s closure — never on `window`, never logged.
 
 import "./lib/frameGuard.js";
+import { aboutVersionLine } from "./lib/buildInfo.js";
 import {
   bootstrapNewIdentity,
   hasWrappedUmk,
@@ -327,6 +328,8 @@ function wireSettingsTabEntries() {
   wire("appearance-back", () => show("view-settings-tab"));
   wire("privacy-back", () => show("view-settings-tab"));
   wire("about-back", () => show("view-settings-tab"));
+  const aboutVersion = $("about-version");
+  if (aboutVersion) aboutVersion.textContent = aboutVersionLine();
   // Danger zone — Delete account. "Remove this device" (settings-reset) and
   // the session buttons are wired in views/settings.js.
   wire("settings-tab-account-delete", enterAccountDelete);

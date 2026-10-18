@@ -407,7 +407,7 @@ fun SettingsScreen(nav: NavController) {
                     FSSettingsRowData(
                         icon = Icons.Outlined.Info,
                         title = "About Flagship",
-                        subtitle = "v${BuildConfig.VERSION_NAME} · BUSL-1.1 · Patent Pending",
+                        subtitle = "${productAboutLine(BuildConfig.VERSION_NAME, BuildConfig.PRODUCT_LABEL, BuildConfig.VERSION_CODE)} · BUSL-1.1 · Patent Pending",
                         showsChevron = false,
                         onClick = {},
                     ),

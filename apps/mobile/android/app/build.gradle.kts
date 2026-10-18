@@ -13,6 +13,11 @@ if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
 }
 
+// One product version for every Flagship surface lives in release/version.json
+// (scripts/check-versions.mjs fails on drift). The store's versionCode only
+// ever climbs; versionName is the product version, About adds the label.
+val releaseVersion = (groovy.json.JsonSlurper().parse(rootProject.file("../../../release/version.json")) as Map<*, *>)
+
 // Read the signing keystore credentials from a gitignored file so we
 // can produce signed APKs locally without leaking secrets into the
 // repo. The release variant falls back to debug signing if the file
@@ -30,8 +35,9 @@ android {
         applicationId = "com.flagshipserver.app"
         minSdk = 33
         targetSdk = 36
-        versionCode = 8
-        versionName = "0.0.8"
+        versionCode = (releaseVersion["androidVersionCode"] as Number).toInt()
+        versionName = releaseVersion["product"] as String
+        buildConfigField("String", "PRODUCT_LABEL", "\"${releaseVersion["label"]}\"")
         vectorDrawables { useSupportLibrary = true }
         // Keep APK lean (English only); reproducible-build prerequisite.
         resourceConfigurations += setOf("en")

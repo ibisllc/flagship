@@ -17,6 +17,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { checkVersions } from "./check-versions.mjs";
 
 const SKIP_DIRS = new Set([
   "node_modules", "build", ".build", "dist", "DerivedData", ".gradle", "vendor",
@@ -759,7 +760,7 @@ function checkTestVectors(repo) {
   return { id: "test-vectors", title: "Test-vector consumption (protocol sets, desktop golden, CI filters)", findings, data: { matrix, desktop } };
 }
 
-export const CHECKS = [checkAppLinks, checkPushCategories, checkDeepLinks, checkSignedTags, checkScreensBff, checkTestVectors];
+export const CHECKS = [checkAppLinks, checkPushCategories, checkDeepLinks, checkSignedTags, checkScreensBff, checkTestVectors, checkVersions];
 
 // ---------------------------------------------------------------------------
 // Feature manifest

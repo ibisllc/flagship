@@ -28,6 +28,7 @@
          + pre-open guards run on any host. -->
     <Compile Include="..\src\DiskEnumerator.cs" />
     <Compile Include="..\src\VerifyResult.cs" />
+    <Compile Include="..\src\StudioVersion.cs" />
     <Compile Include="..\src\Recipe.cs" />
     <Compile Include="..\src\Ed25519Verify.cs" />
     <Compile Include="..\src\DiskWrite.cs" />

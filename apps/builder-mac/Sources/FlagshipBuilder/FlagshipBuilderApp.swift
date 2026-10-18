@@ -72,6 +72,14 @@ struct BuilderCommands: Commands {
     @AppStorage("builder.theme") private var theme = ""
 
     var body: some Commands {
+        CommandGroup(replacing: .appInfo) {
+            Button("About Flagship Studio") {
+                NSApp.orderFrontStandardAboutPanel(options: [
+                    .applicationVersion: StudioVersion.current,
+                    .version: "",
+                ])
+            }
+        }
         CommandGroup(replacing: .newItem) {
             Button("New Server") { model.selectedHostedServer = nil }
                 .keyboardShortcut("n", modifiers: .command)

@@ -891,9 +891,10 @@ struct AboutStub: View {
 
     private var appVersion: String {
         let info = Bundle.main.infoDictionary
-        let short = info?["CFBundleShortVersionString"] as? String ?? "—"
-        guard let build = info?["CFBundleVersion"] as? String else { return short }
-        return "\(short) (\(build))"
+        return ProductVersion.aboutLine(
+            short: info?["CFBundleShortVersionString"] as? String,
+            build: info?["CFBundleVersion"] as? String
+        )
     }
 
     private func labeled(_ label: String, _ value: String, c: FSColors, mono: Bool = false) -> some View {
