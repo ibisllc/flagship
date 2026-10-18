@@ -47,7 +47,6 @@ export * from "./serverOrder.js";
 export * from "./appApiKey.js";
 export * from "./appCopy.js";
 export * from "./archiveDownload.js";
-export * from "./rescue.js";
 export * from "./archiveKeys.js";
 export * from "./backupPolicy.js";
 export * from "./serviceEnvChange.js";

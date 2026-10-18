@@ -11,7 +11,6 @@ import {
   signServerRevokeBySelf,
   verifyRootEntitlement,
   verifyArchiveDownloadApproval,
-  verifyRescueSession,
   verifyArchiveKeysDeposit,
   verifyBackupPolicy,
   verifyServerShareGrant,
@@ -25,8 +24,7 @@ import {
   buildAlertInboxHandlers,
 } from "./alertInboxHttp.js";
 import { startDaemonStatusHeartbeat, type DaemonStatusHeartbeat } from "./daemonStatusHeartbeat.js";
-import { buildSignedLanHint, hostAddresses, lanPortFromEnv, leafCertSha256 } from "./lanDirect.js";
-import { buildRescue } from "./rescue/rescue.js";
+import { buildSignedLanHint, hostAddresses, lanPortFromEnv } from "./lanDirect.js";
 import { makeRelayTrustExceptionResolver } from "./relayTrustExceptions.js";
 import { sendPushRelay, sendRelayTrustAlert } from "./relaySos.js";
 import { buildOwnerWake } from "./ownerWake.js";
@@ -3285,29 +3283,6 @@ async function wireRuntimeSurfaces(deps: {
     appEgress: runtime.egress.appEgress,
     appCopy: appCopyTarget,
     serverArchive: serverArchiveService,
-    // The owner's way in when `.com` is gone (docs/data-sovereignty.md): proven by
-    // a signed order bound to this box's own certificate, no call to anyone.
-    rescue:
-      cfg && env.serverFqdn
-        ? buildRescue({
-            serverFqdn: env.serverFqdn,
-            signAsBox: (msg) => custodian.signAsBox(msg),
-            certSha256: () => (liveCertPemRef.current ? leafCertSha256(liveCertPemRef.current) : null),
-            authorize: (order, signature) =>
-              authorizeSensitiveOrder({
-                ownerIrkPub: cfg.irkPublicKey,
-                ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
-                username: cfg.userId,
-                order,
-                signature,
-                verify: verifyRescueSession,
-              }),
-            archive: serverArchiveService,
-            apps: () => (runtime.servicePlatform?.list() ?? []).map((a) => ({ serviceId: a.serviceId, name: a.manifest.name })),
-            note: (kind, detail, ok) => deps.activityLog.note(kind, detail, { ok: ok ?? true }),
-            log: (m) => console.log(m),
-          })
-        : null,
     backupPolicy: backupPolicyHttp,
     // The status pill (docs/app-placement.md §6): one `docker ps` for every
     // app, and what's deploying or being edited here.

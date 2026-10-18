@@ -5,13 +5,13 @@ import { X509CertificateGenerator, SubjectAlternativeNameExtension, cryptoProvid
 cryptoProvider.set(webcrypto as unknown as Crypto);
 
 /** A self-signed cert for `name`; pass `cert` as the client's `ca` to trust it. */
-export async function selfSigned(name: string, opts: { expired?: boolean } = {}): Promise<{ cert: string; key: string }> {
+export async function selfSigned(name: string): Promise<{ cert: string; key: string }> {
   const keys = (await webcrypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"])) as CryptoKeyPair;
   const cert = await X509CertificateGenerator.createSelfSigned({
     serialNumber: "01",
     name: `CN=${name}`,
-    notBefore: new Date(Date.now() - (opts.expired ? 90 * 86_400_000 : 60_000)),
-    notAfter: new Date(Date.now() + (opts.expired ? -86_400_000 : 3_600_000)),
+    notBefore: new Date(Date.now() - 60_000),
+    notAfter: new Date(Date.now() + 3_600_000),
     signingAlgorithm: { name: "ECDSA", hash: "SHA-256" },
     keys,
     extensions: [new SubjectAlternativeNameExtension([{ type: "dns", value: name }])],
