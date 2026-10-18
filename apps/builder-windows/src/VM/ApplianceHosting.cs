@@ -57,8 +57,12 @@ public static class ApplianceHosting
             vm.Log($"+ verified appliance {basePath} sha256={manifest.Sha256}");
             var json = Encoding.UTF8.GetString(recipeJson);
             var installBlob = Encoding.UTF8.GetBytes(engine.BuildInstallBlobJson(json));
+            // A Studio pointed at another control plane (FLAGSHIP_CONTROL_HOST, e.g. the
+            // gym) must also bake that plane's boot worker, or the sealed disk asks prod.
+            var controlHost = Environment.GetEnvironmentVariable("FLAGSHIP_CONTROL_HOST");
+            var bootHost = string.IsNullOrEmpty(controlHost) ? null : $"https://boot.{controlHost}";
             var bootstrap = engine.BuildBootstrap(json, new NativePreseedEngine.BurnOptions(
-                EncryptRoot: recipe.EncryptsDisk, InstallerGitRef: installerGitRef));
+                EncryptRoot: recipe.EncryptsDisk, InstallerGitRef: installerGitRef, BootHost: bootHost));
             await ApplianceProvisioner.ProvisionAsync(config, vm.Store.Layout, basePath, manifest,
                                                       installBlob, bootstrap, runQemuImg, ct);
             vm.Log("+ created the server's disk on the prebuilt image and wrote its one-use setup seed");
