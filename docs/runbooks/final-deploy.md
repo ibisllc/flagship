@@ -703,3 +703,42 @@ account. The plan file and its `.log.jsonl` list exactly what went.
   save/load and pg_dump/restore against a real box and the live gym groups
   `quota`, `share` (account-key accept) and the group list newer than the last
   live run on 2026-10-15/16.
+
+## 14. Free vs Paid (Workers plan)
+
+`.com` runs on the Workers Free plan (owner, 2026-10-18): 10 ms of CPU a request,
+100,000 requests a day, 50 subrequests a request (every D1 call is one). Full
+numbers, the caches and the guard test are in `docs/runbooks/workers-cpu-budget.md`.
+
+CPU after the changes (real workerd, `scripts/cpu-workerd.ts`; first number the
+request, second the same net of the dev server's floor; a young isolate's first
+request is about 1.6 times that):
+
+| Route | D1 calls | ms (net) |
+| --- | --- | --- |
+| Trusted devices (account directory) | 16 to 4 | 4.7 (1.9) |
+| `/pods`, `/stream` first connect | 13 to 3 | 3.6 to 3.9 (0.8 to 1.1) |
+| `/stream` held 25 s | 130 to 8 | 6.5 (4.0) |
+| `/audit`, device grants | 5 to 2, 7 to 2 | 3.5, 3.6 (0.7, 0.8) |
+| box heartbeat (two signatures, doorbell) | 4 to 5 | 4.8 (2.0) |
+
+Every hot route is under 7 ms warm; the directory read is the one that comes closest
+cold (about 7.5 ms). `apps/com/test/cpuBudget.test.ts` fails if one grows.
+
+How many accounts fit under 100,000 requests a day, one always-on box each: about 75
+(a box now asks about 1,200 times a day, down from about 4,470; a user in the
+foreground about 110). Alarm at 70,000, about 52 accounts. Webapp users add about 190
+requests each time the shell is released (every static file goes through the Worker).
+
+Upgrade to Workers Paid (USD 5 a month) when any of these shows:
+
+- `wrangler tail flagship-com --format json` shows `outcome: "exceededCpu"` (or the
+  clients show "The service is briefly unavailable" with `error code: 1102` in the
+  request log): the 10 ms limit is being hit;
+- the Cloudflare dashboard (Workers > flagship-com > Metrics) shows requests above
+  70,000 in a day, or any day reaching the 100,000 cap (Cloudflare then answers
+  error 1027 until midnight UTC);
+- the 6-hourly D1 backup stops appearing in R2 `flagship-backups/hourly/`: it makes 89
+  D1 calls, over the 50-subrequest limit, so **on Free it does not run at all**. This is
+  the one that already needs a decision before the first deploy: take a manual
+  `wrangler d1 export` on a schedule (CI) or pay for the plan.
