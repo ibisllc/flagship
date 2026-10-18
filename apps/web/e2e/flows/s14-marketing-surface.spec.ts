@@ -92,7 +92,10 @@ test.describe("S14 — unified design system on the marketing surface", () => {
     // saturated green (#4ad295), and the old amber (#B26016/#D38347)
     // from prior identities must be gone.
     expect(body).toMatch(/--teal:\s+#14B8A6/);
-    expect(body).toMatch(/--accent:\s+var\(--teal\)/);
+    // The brand teal is the fill and the graphic accent; --accent itself is the
+    // deeper text-link step (tokens.css, 2026-10-17: 4.5:1 on paper).
+    expect(body).toMatch(/--primary:\s+var\(--teal\)/);
+    expect(body).toMatch(/--accent-graphic:\s+#14B8A6/);
     expect(body).not.toMatch(/#B26016/i);
     expect(body).not.toMatch(/#D38347/i);
     expect(body).not.toMatch(/--primary:\s+#3B5BFF/);
