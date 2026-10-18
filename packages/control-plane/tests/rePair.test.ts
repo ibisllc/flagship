@@ -2746,6 +2746,35 @@ describe("registered-key credential (key-file / device-pair recovery)", () => {
     ).toBe("registered-key");
   });
 
+  it("serves both signatures on GET so a box can verify the re-pair itself", async () => {
+    const { storage, oldIrk, newIrk } = await bare();
+    const depsAt = depsFor(storage, { now: () => T0 });
+    const body = withOldIrkProof(
+      initBody({ newIrk, oldIrk, issuedAt: T0, totpProof: null }),
+      oldIrk,
+      { newIrk, issuedAt: T0 },
+    );
+    expect((await handleInitiateRePair(depsAt, USERNAME, body)).status).toBe(200);
+    const got = await handleGetRePair(depsAt, USERNAME);
+    const proof = (got.body as { pending: { proof?: { issuedAt: number; newIrkSignature: string; oldIrkSignature?: string } } })
+      .pending.proof;
+    expect(proof?.issuedAt).toBe(T0);
+    expect(proof?.newIrkSignature).toBe((body as { signature: string }).signature);
+    expect(proof?.oldIrkSignature).toBe(body.oldIrkSignature);
+  });
+
+  it("a credential-route initiate serves no old-key signature", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "single" });
+    const depsAt = depsFor(storage);
+    await handleInitiateRePair(depsAt, USERNAME, initBody({ newIrk, oldIrk, totpProof: null }));
+    const got = await handleGetRePair(depsAt, USERNAME);
+    const proof = (got.body as { pending: { proof?: { oldIrkSignature?: string } } }).pending.proof;
+    expect(proof).toBeDefined();
+    expect(proof?.oldIrkSignature).toBeUndefined();
+  });
+
   it("rejects a proof signed by a key that is NOT the registered one", async () => {
     const { storage, oldIrk, newIrk } = await bare();
     const impostor = makeKey();

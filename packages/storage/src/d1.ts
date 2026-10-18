@@ -2612,8 +2612,8 @@ export class D1PendingRePairStorage implements PendingRePairStorage {
              (username, new_irk_pub_hex, old_irk_pub_hex,
               initiated_at, completes_at, objected_at,
               grace_seconds, totp_required, totp_proof_consumed,
-              alerts_fired_bitmap)
-           VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
+              alerts_fired_bitmap, proof_json)
+           VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)`,
         )
         .bind(
           key,
@@ -2625,6 +2625,7 @@ export class D1PendingRePairStorage implements PendingRePairStorage {
           rec.totpRequired ? 1 : 0,
           rec.totpProofConsumed ? 1 : 0,
           rec.alertsFiredBitmap ?? 0,
+          rec.proof ? JSON.stringify(rec.proof) : null,
         )
         .run();
       return { ok: true as const };
@@ -2707,6 +2708,22 @@ interface RawPendingRePairRow {
   totp_required?: number | null;
   totp_proof_consumed?: number | null;
   alerts_fired_bitmap?: number | null;
+  proof_json?: string | null;
+}
+
+function parseRePairProof(raw: string | null | undefined): PendingRePairRecord["proof"] | undefined {
+  if (!raw) return undefined;
+  try {
+    const p = JSON.parse(raw) as Record<string, unknown>;
+    if (typeof p.issuedAt !== "number" || typeof p.newIrkSignature !== "string") return undefined;
+    return {
+      issuedAt: p.issuedAt,
+      newIrkSignature: p.newIrkSignature,
+      ...(typeof p.oldIrkSignature === "string" ? { oldIrkSignature: p.oldIrkSignature } : {}),
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 function rawPendingRePairToRecord(r: RawPendingRePairRow): PendingRePairRecord {
@@ -2721,6 +2738,7 @@ function rawPendingRePairToRecord(r: RawPendingRePairRow): PendingRePairRecord {
     totpRequired: r.totp_required === 1,
     totpProofConsumed: r.totp_proof_consumed === 1,
     alertsFiredBitmap: r.alerts_fired_bitmap ?? 0,
+    ...(parseRePairProof(r.proof_json) ? { proof: parseRePairProof(r.proof_json)! } : {}),
   };
 }
 

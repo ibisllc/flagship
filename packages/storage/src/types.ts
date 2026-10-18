@@ -724,6 +724,12 @@ export interface PendingRePairRecord {
    * rePairAlerts.ts.
    */
   alertsFiredBitmap?: number;
+  /**
+   * The signatures the initiate carried, served to the account's boxes so
+   * they can verify the re-pair themselves instead of trusting `.com`.
+   * `oldIrkSignature` exists only for the registered-key routes.
+   */
+  proof?: { issuedAt: number; newIrkSignature: string; oldIrkSignature?: string };
 }
 
 export interface PendingRePairStorage {

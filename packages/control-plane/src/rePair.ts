@@ -802,6 +802,14 @@ export async function handleInitiateRePair(
     // own catch-up still fires T+0 if push fan-out wasn't wired
     // here, because the bit isn't stamped if push fan-out failed.)
     alertsFiredBitmap: ALERT_BIT_T0,
+    // Kept so the account's boxes can check the re-pair themselves.
+    proof: {
+      issuedAt: r.issuedAt,
+      newIrkSignature: b.signature,
+      ...(registeredKeyProven && typeof b.oldIrkSignature === "string"
+        ? { oldIrkSignature: b.oldIrkSignature }
+        : {}),
+    },
   });
   if (!insert.ok) return conflict(insert.reason);
 
@@ -1468,6 +1476,7 @@ export async function handleGetRePair(
         initiatedAt: pending.initiatedAt,
         completesAt: pending.completesAt,
         objectedAt: pending.objectedAt ?? null,
+        ...(pending.proof ? { proof: pending.proof } : {}),
       },
     },
   };

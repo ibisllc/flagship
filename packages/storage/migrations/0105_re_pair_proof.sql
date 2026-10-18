@@ -1,0 +1,11 @@
+-- Re-pair proof (security review 2026-10-18, D5): a box no longer takes `.com`'s
+-- word that a re-pair completed. `.com` keeps the signatures the initiate
+-- carried and serves them on `GET /api/users/<u>/re-pair`, so the box can check
+-- them against the IRK it already trusts.
+--
+--   proof_json  {"issuedAt":<ms>,"newIrkSignature":"<hex>","oldIrkSignature":"<hex>"?}
+--               oldIrkSignature is present only when the initiate was made with
+--               the account's registered key (the key-file / device-pair routes).
+--
+-- NULL on rows started before this file. Apply-once (bare ADD COLUMN): see README.md.
+ALTER TABLE pending_re_pairs ADD COLUMN proof_json TEXT;
