@@ -323,7 +323,10 @@
 //  v143: Home's button is Add/Restore server (Create a server, Co-manage a
 //       running server, Restore from backup: From a file / From other servers);
 //       locking closes every menu, dialog and sheet.
-const SHELL_VERSION = "v143";
+//  v144: security notices: a signed "we will update" banner, and the full-screen
+//       "Update required" lock for a security reason (lib/securityNotice.js,
+//       lib/noticeUi.js, lib/updateLock.js, lib/buildInfo.js).
+const SHELL_VERSION = "v144";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -452,6 +455,10 @@ const OPTIONAL_SHELL = [
   "/lib/maintainerTrust.js",
   "/lib/modal.js",
   "/lib/lockSweep.js",
+  "/lib/securityNotice.js",
+  "/lib/noticeUi.js",
+  "/lib/updateLock.js",
+  "/lib/buildInfo.js",
   "/lib/openAccount.js",
   "/lib/operationsBar.js",
   "/lib/pairingDeposit.js",

@@ -34,6 +34,8 @@ import {
 } from "./lib/aiChatAlerts.js";
 import { currentPodFqdn, getPodBaseUrl } from "./lib/api.js";
 import { installComFetchGuard } from "./lib/comFetch.js";
+import { initNoticeUi } from "./lib/noticeUi.js";
+import { startSecurityNoticePoller } from "./lib/securityNotice.js";
 import { applyCompanionUiRestrictions, installCompanionUiRestrictions } from "./lib/companionGuard.js";
 import { applyDemoSettingsRestrictions, isDemoProfile } from "./lib/demoAccount.js";
 import { liveSync } from "./lib/liveSync.js";
@@ -487,6 +489,11 @@ async function boot() {
   // trusted, so this never bricks a normal boot.) The blessing probe is exempt.
   try { installComFetchGuard(); } catch { /* best-effort */ }
   try { installCompanionUiRestrictions(); } catch { /* best-effort */ }
+  // Maintainer-signed notices (docs/security-notices.md): a banner for a
+  // maintenance or update notice, the "Update required" lock for a security
+  // reason. Mounted before anything else can render, on every surface; it
+  // fails open, so a failure here never stops the app.
+  try { initNoticeUi(); startSecurityNoticePoller(); } catch { /* best-effort */ }
   // P12 — auto-migrate legacy single-profile localStorage into the new
   // per-profile namespace. Idempotent; gated by `flagship.profiles.migrated.v2`.
   try { migrateProfilesStore(); } catch { /* swallow — best-effort */ }

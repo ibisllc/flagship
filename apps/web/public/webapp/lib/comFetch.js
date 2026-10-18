@@ -20,6 +20,7 @@
 import { serverTrust } from "./serverTrust.js";
 import { controlApex, controlHost } from "./apex.js";
 import { throwIfRateLimited } from "./rateLimited.js";
+import { UpdateRequiredError, isUpdateLocked, updateLockAllows } from "./updateLock.js";
 
 // Back-compat re-export: the control apex used to be a baked literal here.
 // It is now derived (lib/apex.js — origin-driven, prod-default), so this
@@ -85,10 +86,23 @@ function isComHost(url) {
   }
 }
 
+function lockRequest(input, init, url, controlHost) {
+  let sameOrigin = false;
+  try {
+    sameOrigin = new URL(url, globalThis.location?.href).origin === globalThis.location?.origin;
+  } catch {
+    sameOrigin = false;
+  }
+  const method = init?.method ?? (input && typeof input === "object" ? input.method : undefined);
+  return { url, method, sameOrigin, controlHost };
+}
+
 /**
  * Install a GLOBAL guard over `globalThis.fetch` so that EVERY call to the
  * `.com` control server is short-circuited while untrusted — no matter which
- * lib made it. This is the true single chokepoint: it catches the existing
+ * lib made it. The same guard enforces the "update required" lock
+ * (lib/updateLock.js): while a signed security notice has the app locked,
+ * nothing leaves the page except the webapp's own files and reads from `.com`. This is the true single chokepoint: it catches the existing
  * per-file call-sites (lib/leases.js, recovery.js, …) and any future one
  * without each having to import comFetch. The blessing probe is exempt so
  * trust can always be (re)established. A rate-limited `.com` answer rejects
@@ -109,6 +123,9 @@ export function installComFetchGuard() {
     const com = isComHost(url);
     if (com && !isBlessingUrl(url) && !serverTrust.isServerTrusted()) {
       throw new ServerUntrustedError();
+    }
+    if (isUpdateLocked() && !updateLockAllows(lockRequest(input, init, url, com))) {
+      throw new UpdateRequiredError();
     }
     const resp = await real(input, init);
     if (com) await throwIfRateLimited(resp);

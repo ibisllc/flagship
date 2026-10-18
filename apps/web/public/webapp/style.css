@@ -2826,3 +2826,65 @@ section h2.fs-hero-title::before { content: none; }
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
 #connect-back { padding-left: 0; }
+
+/* ── Security notices (docs/security-notices.md) ──
+ * A banner above the header for a maintenance or update notice, and the
+ * full-screen "Update required" lock. The lock sits under the toast (100) and
+ * every dialog (200), so a toast or the key-backup ceremony shows above it. */
+.notice-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 8px 24px 0;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent-graphic);
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.notice-banner.notice-update {
+  background: var(--warn-soft);
+  border-left-color: var(--warn);
+}
+.notice-banner-text { flex: 1 1 240px; margin: 0; }
+.notice-banner-actions { display: flex; gap: var(--space-2); }
+.notice-banner-actions button { min-height: 36px; padding: 6px 12px; font-size: 14px; }
+
+.update-lock {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  padding: calc(24px + env(safe-area-inset-top, 0px)) 24px calc(24px + env(safe-area-inset-bottom, 0px));
+  background: var(--canvas);
+  color: var(--ink);
+}
+.update-lock-card {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+.update-lock-kicker {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-muted);
+}
+.update-lock-title { margin: 0; font-size: 28px; line-height: 1.15; color: var(--ink); }
+.update-lock-body { margin: 0; font-size: 17px; line-height: 1.45; }
+.update-lock-why { margin: 0; font-size: 15px; line-height: 1.45; color: var(--ink-soft); }
+.update-lock-reassure { margin: 0; font-size: 14px; line-height: 1.45; color: var(--ink-muted); }
+.update-lock-actions { display: flex; flex-direction: column; gap: var(--space-2); margin-top: 8px; }
+.update-lock-meta { margin: 8px 0 0; font-size: 12px; color: var(--ink-faint); }
