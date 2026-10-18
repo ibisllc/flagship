@@ -62,6 +62,20 @@ object GymSeams {
      *  the real rate limiter does ("totp-verify", "recovery-lookup", …). */
     val rateLimited: MutableSet<String> = java.util.Collections.synchronizedSet(mutableSetOf())
 
+    /** The security-notice scenarios' throwaway authority: the mandate pin the
+     *  app judges a notice by, in place of the baked one (a real notice can't be
+     *  signed without the maintainers' YubiKey). Null = the baked pin. */
+    @Volatile
+    var noticePin: String? = null
+
+    /** Added to the clock a security notice is judged by, to move past a lock date. */
+    @Volatile
+    var noticeClockOffsetMs: Long = 0
+
+    /** What the mocked `.com` answers the notice poll with (null: the real fetch). */
+    @Volatile
+    var noticeFetcher: NoticeFetcher? = null
+
     /** Back to production behaviour (a launch without the gym's extras). */
     fun reset() {
         forceAdminRoot = false
@@ -71,5 +85,8 @@ object GymSeams {
         importBackupFile = null
         verifySignatures = false
         rateLimited.clear()
+        noticePin = null
+        noticeClockOffsetMs = 0
+        noticeFetcher = null
     }
 }

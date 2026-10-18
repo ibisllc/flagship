@@ -55,6 +55,11 @@ object Variant : AppVariant {
         operations: ActiveOperationsCenter,
         trust: TrustCenter,
     ): GymLaunch? {
+        // Every launch starts with no notice seam and no remembered notice state.
+        GymSeams.noticePin = null
+        GymSeams.noticeClockOffsetMs = 0
+        GymSeams.noticeFetcher = null
+        SecurityNoticeCenter.shared?.reset()
         val cfg = SmokeModeConfig.from(intent)
         if (cfg == null) {
             // A normal launch in the same process as an earlier gym run (the
@@ -152,6 +157,10 @@ object Variant : AppVariant {
     override val allowScreenCapture: Boolean get() = mockRun
     override val stubCamera: Boolean get() = mockRun
     override val gymImportBackupFile: java.io.File? get() = GymSeams.importBackupFile
+    override val noticePin: String get() = GymSeams.noticePin ?: MaintainersTrust.bakedPin
+    override fun noticeNowMs(): Long = System.currentTimeMillis() + GymSeams.noticeClockOffsetMs
+    // A mock run has no `.com`: the poll finds no notice unless a scenario serves one.
+    override fun noticeFetcher(): NoticeFetcher? = GymSeams.noticeFetcher ?: if (mockRun) NoticeFetcher { NoticeFetch.NoNotice } else null
 
     override fun defaultScreens(): ScreensClient = MockScreensClient()
     override fun defaultBuild(): BuildClient = MockBuildClient()

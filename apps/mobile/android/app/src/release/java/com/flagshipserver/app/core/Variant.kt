@@ -29,6 +29,9 @@ object Variant : AppVariant {
     override val allowScreenCapture: Boolean get() = false
     override val stubCamera: Boolean get() = false
     override val gymImportBackupFile: java.io.File? get() = null
+    override val noticePin: String get() = MaintainersTrust.bakedPin
+    override fun noticeNowMs(): Long = System.currentTimeMillis()
+    override fun noticeFetcher(): NoticeFetcher? = null
 
     private fun missing(what: String): Nothing =
         error("No $what was provided; the app provides the live one.")

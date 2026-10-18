@@ -57,6 +57,8 @@ class WatchApprovalResponder(
     suspend fun respond(cmd: ApproveCommand): ApproveReply {
         fun fail(message: String) = ApproveReply(cmd.serverFqdn, ok = false, errorMessage = message)
         if (cmd.kind != ApproveCommand.KIND || cmd.serverFqdn.isBlank()) return fail(UNSUPPORTED)
+        // A security notice has this app locked until it is updated: no approval is signed.
+        if (UpdateLock.isLocked) return fail(UpdateLock.REFUSAL)
         if (!delegateEnrolled()) return fail(NOT_ENROLLED)
         if (!hasSessionKey()) {
             onNeedsUnlock(cmd)

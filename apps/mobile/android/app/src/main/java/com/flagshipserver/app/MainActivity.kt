@@ -27,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.Modifier
 import com.flagshipserver.app.api.BuildClient
 import com.flagshipserver.app.api.EncryptedSessionStore
@@ -193,6 +194,9 @@ class MainActivity : FragmentActivity() {
         }
         val mocks = gymMocks
         val useLive = mocks == null
+        // Security notices: decide from the stored notice now and poll shortly
+        // after launch (after a gym launch has reset the previous run's state).
+        com.flagshipserver.app.core.SecurityNoticeCenter.install(applicationContext)
 
         // The leader becomes the current server only when this device can
         // talk to it (docs/app-placement.md §1). A gym run on mocks needs no session.
@@ -359,7 +363,7 @@ class MainActivity : FragmentActivity() {
                 com.flagshipserver.app.core.AiChatAlertPoller(
                     operations = operations,
                     client = livePhoneAlerts,
-                    isActiveGate = { appState.isPaired.value && appState.isUnlocked.value },
+                    isActiveGate = { appState.isPaired.value && appState.isUnlocked.value && !com.flagshipserver.app.core.UpdateLock.isLocked },
                     notify = { sessionId, request, server ->
                         FlagshipFcmService.showAiChatNotification(
                             appContext,
@@ -447,6 +451,7 @@ class MainActivity : FragmentActivity() {
                     boxes = accessBoxes,
                     isActiveGate = {
                         foreground.value && appState.isPaired.value && appState.isUnlocked.value &&
+                            !com.flagshipserver.app.core.UpdateLock.isLocked &&
                             !appState.isRestrictedDevice() &&
                             // Allow / Deny is an admin order: other devices see
                             // the requests on each app's page, read-only.
@@ -551,7 +556,7 @@ class MainActivity : FragmentActivity() {
                 com.flagshipserver.app.core.LiveSyncCoordinator(
                     app = appState,
                     mailbox = effectiveMailbox,
-                    isActiveGate = { appState.isPaired.value && appState.isUnlocked.value },
+                    isActiveGate = { appState.isPaired.value && appState.isUnlocked.value && !com.flagshipserver.app.core.UpdateLock.isLocked },
                     makeReconciler = {
                         // Same reconcile path Home uses, incl. the secret-free
                         // SWK/pairing deposit for newly-registered boxes
@@ -688,6 +693,7 @@ class MainActivity : FragmentActivity() {
     override fun onStart() {
         super.onStart()
         foreground.value = true
+        com.flagshipserver.app.core.SecurityNoticeCenter.shared?.onForeground()
         // The visible activity owns the biometric prompt (another instance's
         // onDestroy must never leave key use without one).
         if (::biometric.isInitialized) BiometricAuthority.set(biometric)
@@ -739,6 +745,23 @@ private fun AppRoot(
     val pods by app.pods.collectAsState()
 
     val showSecureAccount by app.pendingSecureAccountNudge.collectAsState()
+
+    // Security notices (docs/security-notices.md): the banner above the content,
+    // and the full-screen lock for a verified update-required notice. While the
+    // person steps aside to unlock the account (to back up its key), the lock
+    // hides until the app is unlocked again.
+    val noticeCenter = com.flagshipserver.app.core.SecurityNoticeCenter.shared
+    val noticeOutcome by remember(noticeCenter) {
+        noticeCenter?.outcome ?: kotlinx.coroutines.flow.MutableStateFlow<com.flagshipserver.app.core.NoticeOutcome>(
+            com.flagshipserver.app.core.NoticeOutcome.nothing,
+        )
+    }.collectAsState()
+    val updateLock = noticeOutcome as? com.flagshipserver.app.core.NoticeOutcome.Lock
+    var stepAsideToUnlock by remember { mutableStateOf(false) }
+    LaunchedEffect(isUnlocked, isPaired, updateLock) {
+        if (isUnlocked || !isPaired || updateLock == null) stepAsideToUnlock = false
+    }
+    val showUpdateLock = updateLock != null && !stepAsideToUnlock
 
     // Keep the global operations sliver's deploy feeder in sync with the pod
     // list (mirror of iOS ContentView's syncDeployOperations on every pod
@@ -803,13 +826,20 @@ private fun AppRoot(
     ) {
         // Sheets, dialogs and menus (their own windows) draw nothing while locked.
         androidx.compose.runtime.CompositionLocalProvider(
-            com.flagshipserver.app.ui.components.LocalAppLocked provides (isPaired && !isUnlocked),
+            com.flagshipserver.app.ui.components.LocalAppLocked provides ((isPaired && !isUnlocked) || showUpdateLock),
+        ) {
+        // Under the update lock nothing behind it is reachable by TalkBack or a test.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .then(if (showUpdateLock) Modifier.clearAndSetSemantics { } else Modifier),
         ) {
         if (isPaired) {
             // The teal sliver sits ABOVE the shell in a Column so revealing it
             // physically pushes the whole shell down (it animates its own
             // height), exactly like WhatsApp's active-call bar.
             Column(Modifier.fillMaxSize()) {
+                com.flagshipserver.app.ui.components.NoticeBanner(noticeCenter)
                 // The trust sliver sits ABOVE the operations sliver: a degraded
                 // maintainer-trust state is higher priority than any running
                 // operation, and both push the shell down from the top.
@@ -818,7 +848,12 @@ private fun AppRoot(
                 RootShell(widthSizeClass = widthSizeClass, initialTab = initialTab)
             }
         } else {
-            OnboardingFlow(onFinished = { /* AppState.completeOnboarding flips isPaired */ })
+            Column(Modifier.fillMaxSize()) {
+                com.flagshipserver.app.ui.components.NoticeBanner(noticeCenter)
+                Box(Modifier.weight(1f)) {
+                    OnboardingFlow(onFinished = { /* AppState.completeOnboarding flips isPaired */ })
+                }
+            }
         }
         // SKIPPABLE "Secure your account" backup nudge — layered ABOVE
         // the freshly-mounted shell on the CREATE path only, until the
@@ -827,6 +862,7 @@ private fun AppRoot(
             com.flagshipserver.app.ui.screens.SecureAccountOverlay(
                 onDismiss = { app.clearSecureAccountNudge() },
             )
+        }
         }
         }
         // C12 — lock overlay above EVERYTHING whenever the in-memory
@@ -844,7 +880,7 @@ private fun AppRoot(
         // the lock screen. "View access list" opens the app's list on its box.
         val accessCenter = com.flagshipserver.app.core.LocalAccessRequestCenter.current
         val deepLinker = LocalDeepLinker.current
-        if (isPaired && isUnlocked && accessCenter != null) {
+        if (isPaired && isUnlocked && !showUpdateLock && accessCenter != null) {
             com.flagshipserver.app.ui.screens.AccessRequestDialogHost(accessCenter) { alert ->
                 deepLinker.enqueue(
                     DeepLink.AccessList(alert.request.serviceId, draft = alert.isDraft, podId = alert.box.podId),
@@ -852,11 +888,18 @@ private fun AppRoot(
             }
         }
         // The watch's Approve reached a session without its biometric yet.
-        if (isPaired && isUnlocked) {
+        if (isPaired && isUnlocked && !showUpdateLock) {
             com.flagshipserver.app.ui.shell.WatchWaitingDialog()
         }
-        if (isPaired && !isUnlocked) {
+        if (isPaired && !isUnlocked && !showUpdateLock) {
             com.flagshipserver.app.ui.shell.BiometricLockScreen()
+        }
+        if (showUpdateLock && updateLock != null) {
+            com.flagshipserver.app.ui.shell.UpdateLockScreen(
+                notice = updateLock.notice,
+                unlocked = isPaired && isUnlocked,
+                onNeedUnlock = { stepAsideToUnlock = true },
+            )
         }
         Toaster(queue = toastQueue, onDismiss = { toasts.dismiss(it) })
     }

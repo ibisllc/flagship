@@ -73,6 +73,16 @@ interface AppVariant {
     /** Gym: a fake passkey app in place of Credential Manager. */
     fun credentialCalls(): com.flagshipserver.app.keystore.CredentialCalls?
 
+    /** The maintainer mandate pin a security notice is judged against: the baked
+     *  one. A debug gym run may stand in a throwaway authority's. */
+    val noticePin: String
+
+    /** The clock a security notice is judged by. */
+    fun noticeNowMs(): Long
+
+    /** Gym: a stand-in for the notice fetch (null: the real, anonymous one). */
+    fun noticeFetcher(): NoticeFetcher?
+
     /** The phone-to-phone pairing relay. Null until a live one exists: the
      *  pairing screens then say it isn't available yet. */
     fun devicePairingRelays(): DevicePairingRelays?

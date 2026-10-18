@@ -24,6 +24,9 @@ import java.util.concurrent.TimeUnit
 class BackupFetchWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val ctx = applicationContext
+        // A security notice has the app locked until it is updated: no backup fetch.
+        SecurityNoticeCenter.install(ctx).evaluate()
+        if (UpdateLock.isLocked) return Result.success()
         val sessions = runCatching { EncryptedSessionStore.create(ctx) }.getOrNull() ?: return Result.success()
         val servers = sessions.podTokenIds().map { it.removePrefix("pod-") }.filter { it.isNotEmpty() }
         if (servers.isEmpty()) return Result.success()

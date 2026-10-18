@@ -55,6 +55,7 @@ class OkHttpBuilderHttp(
 
     companion object {
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
+            .addInterceptor(com.flagshipserver.app.core.UpdateLockInterceptor())
             .connectTimeout(30, TimeUnit.SECONDS)
             // Generous read timeout — large ISO download over a slow link.
             .readTimeout(10, TimeUnit.MINUTES)

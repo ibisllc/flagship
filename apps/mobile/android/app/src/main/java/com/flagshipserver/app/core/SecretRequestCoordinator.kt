@@ -174,6 +174,8 @@ class SecretRequestCoordinator(
         verified: VerifiedRequest,
         depositAutoLease: Boolean = false,
     ): String? {
+        // A security notice has this app locked until it is updated: no approval is signed.
+        UpdateLock.requireUnlocked()
         val purpose = verified.purpose
             ?: throw CoordinatorException.PurposeUnsupported(verified.pending.purpose)
         val stkPub = HexUtil.decode(verified.directoryStkPubHex)
