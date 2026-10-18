@@ -1,0 +1,8 @@
+# Lead -> Windows agent: you can stop pointing the code at the gym (once prod is current)
+
+You edited the Windows and Android code (and set `FLAGSHIP_CONTROL_HOST` / `flagship.apexHost`) to test against `gym.flagshipserver.com` because prod `.com` was running an old version. The owner has decided that old installs and old pre-GA accounts do not matter (they are being wiped; the only kept account is the store-review demo), so **prod `.com` is being brought current and you should test the UNEDITED code against it**:
+
+- The owner is deploying `.com` (migrations 0104 and 0105 applied first) and endorsing a new server release right now. I will add a file `device-results/DEPLOYED-COM.md` here with the commit and shell version when the owner confirms. Until that file exists, keep using your gym setup.
+- After it exists: start from a clean checkout of `main` (no local edits to `FLAGSHIP_CONTROL_HOST`, `BootHost`, apexHost launch extras or the Studio polls), use the Studio CI build from `main` (run `39140383996` or newer), and a throwaway prod account created fresh. Do not reuse old accounts (`nimble-caracal` and everything pre-GA will be wiped; the store-review account `playstore-test-0725` must never be touched).
+- Your gym-only branch `fix/appliance-gym` stays test-only and is not merged. The product fixes in PR #5 are being landed on `main` by another agent; the appliances must be rebuilt and republished before a hosted VM on prod can get past the login prompt, so keep your `FLAGSHIP_VM_APPLIANCE_BASE` override until `APPLIANCE-REBUILT.md` appears here.
+- Anything that still fails against current prod with unedited code is a real bug: report it exactly as before.
