@@ -46,6 +46,12 @@
 -- wiped (holders, leases, spent serials, token counts, sealed roots).
 -- wipe-all-users.test.ts now fails when a migration
 -- adds a table that is neither wiped here nor named on the line below.
+-- Keep list (2026-10-18): scripts/wipe-all-users.sh no longer deletes whole
+-- tables blindly. It keeps the rows of the named accounts (default
+-- playstore-test-0725) by the key each table really uses, and wipes the rest.
+-- Every table listed below therefore also needs a rule in that script's
+-- pred_of (by account, wipe all, or keep all); the script refuses to run with
+-- a table that has none. Walk-through: docs/runbooks/pre-ga-scrub.md.
 -- PRESERVED-TABLES: marketplace_listings schema_version username_suggestion_queue repo_adapters adapter_blocklist adapter_attempts adapter_complaints adapter_insights model_capabilities rate_limit_log inference_settings
 --
 -- ⚠️ DO NOT run this file via `wrangler d1 execute --file`. Prod D1's schema

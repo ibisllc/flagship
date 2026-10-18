@@ -1,19 +1,19 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, expect, it } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { GYM, PROD, SQL, deleteCalls, getCallLog, installStub, readCalls, run, runWithTty } from "./wipe-all-users-harness.js";
 
 // Guard tests for the prod-wipe runner (AGENTS.md → "GA close-out" item 1).
-// The script can delete every user/server; the guards make it require BOTH a
-// --yes AND a WIPE_CONFIRM token that matches the target env, with a dry-run
-// row-count preview first. These tests must NEVER touch a real DB, so a stub
-// `npx` is injected on PATH: it records every `wrangler d1 execute` invocation
-// and returns canned count JSON. We then assert which DELETEs did/didn't run.
+// The script can delete every user/server except a keep list; the guards make
+// it require BOTH a --yes AND a WIPE_CONFIRM token that matches the target env,
+// with a dry-run per-table preview first. These tests must NEVER touch a real
+// DB, so a stub `npx` is injected on PATH: it records every `wrangler d1
+// execute` invocation. The guard tests get canned count JSON; the keep-list
+// tests point the stub at a throwaway node:sqlite file that has every
+// migration applied (foreign keys ON, as in D1) so the script's real SQL runs.
 
-const SCRIPT = join(__dirname, "wipe-all-users.sh");
-const SQL = join(__dirname, "wipe-all-users-prerelease-2026-06-02.sql");
 const MIGRATIONS = join(__dirname, "..", "packages", "storage", "migrations");
+
 
 /** Tables main's migrations leave in place, replaying CREATE/DROP/RENAME in order. */
 function liveMigrationTables(): Set<string> {
@@ -34,98 +34,7 @@ function liveMigrationTables(): Set<string> {
   return live;
 }
 
-let binDir = "";
-let callLog = "";
-
-beforeEach(() => {
-  binDir = mkdtempSync(join(tmpdir(), "wipe-stub-bin-"));
-  callLog = join(binDir, "calls.log");
-  // Stub `npx`: log argv, and for a `wrangler d1 execute --command "SELECT ..."`
-  // emit the shape wrangler --json produces so the preview can parse a count.
-  const stub = `#!/usr/bin/env bash
-echo "$*" >> "${callLog}"
-for a in "$@"; do
-  case "$a" in
-    "SELECT count(*) AS n FROM "*) echo '[{"results":[{"n":7}],"success":true}]'; exit 0 ;;
-  esac
-done
-exit 0
-`;
-  const npxPath = join(binDir, "npx");
-  writeFileSync(npxPath, stub);
-  chmodSync(npxPath, 0o755);
-});
-
-afterEach(() => {
-  if (binDir) rmSync(binDir, { recursive: true, force: true });
-  binDir = "";
-});
-
-function run(
-  args: string[],
-  env?: Record<string, string>,
-): { code: number; stdout: string; stderr: string } {
-  const r = spawnSync("bash", [SCRIPT, ...args], {
-    encoding: "utf8",
-    env: { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ""}`, ...env },
-  });
-  return { code: r.status ?? -1, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
-}
-
-function readCalls(): string {
-  try {
-    return readFileSync(callLog, "utf8");
-  } catch {
-    return "";
-  }
-}
-
-function deleteCalls(): string[] {
-  let log = "";
-  try {
-    log = readFileSync(callLog, "utf8");
-  } catch {
-    return [];
-  }
-  return log.split("\n").filter((l) => l.includes("DELETE FROM"));
-}
-
-const GYM = { WIPE_ENV: "gym", WIPE_D1: "flagship-state-gym" };
-const PROD = { WIPE_ENV: "prod", WIPE_D1: "flagship-state" };
-
-/** Run under a pseudo-terminal (stdin is a TTY) and feed `typed` to the prompt. */
-function runWithTty(
-  typed: string,
-  env: Record<string, string>,
-): { code: number; out: string } {
-  const py = [
-    "import os, pty, sys, select",
-    "typed = sys.argv[2].encode()",
-    "pid, fd = pty.fork()",
-    "if pid == 0:",
-    "    os.execvp('bash', ['bash', sys.argv[1], '--yes'])",
-    "out = b''",
-    "sent = False",
-    "while True:",
-    "    r, _, _ = select.select([fd], [], [], 30)",
-    "    if not r: break",
-    "    try: d = os.read(fd, 4096)",
-    "    except OSError: break",
-    "    if not d: break",
-    "    out += d",
-    "    if not sent and b'to continue' in out:",
-    "        os.write(fd, typed); sent = True",
-    "_, st = os.waitpid(pid, 0)",
-    "sys.stdout.write(out.decode(errors='replace'))",
-    "sys.exit(os.waitstatus_to_exitcode(st))",
-  ].join("\n");
-  const r = spawnSync("python3", ["-I", "-c", py, SCRIPT, typed], {
-    encoding: "utf8",
-    timeout: 60_000,
-    env: { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ""}`, ...env },
-  });
-  return { code: r.status ?? -1, out: (r.stdout ?? "") + (r.stderr ?? "") };
-}
+installStub();
 
 describe("wipe-all-users.sh — guards", () => {
   it("with no WIPE_ENV / WIPE_D1 it refuses: nothing defaults to prod", () => {
@@ -185,7 +94,7 @@ describe("wipe-all-users.sh — guards", () => {
     expect(r.stdout).toContain("AUDIT");
     expect(r.stdout).toContain("WIPE START");
     expect(r.stdout).toContain("WIPE DONE");
-    expect(readFileSync(callLog, "utf8")).toContain("flagship-state-gym");
+    expect(readFileSync(getCallLog(), "utf8")).toContain("flagship-state-gym");
     expect(deleteCalls().length).toBeGreaterThan(30);
   });
 
@@ -224,12 +133,12 @@ describe("wipe-all-users.sh — guards", () => {
   it("WIPE_WRANGLER_CONFIG threads --config into every wrangler call", () => {
     const r = run(["--yes"], { ...GYM, WIPE_CONFIRM: "gym", WIPE_WRANGLER_CONFIG: "wrangler.gym.toml" });
     expect(r.code).toBe(0);
-    expect(readFileSync(callLog, "utf8")).toContain("--config wrangler.gym.toml");
+    expect(readFileSync(getCallLog(), "utf8")).toContain("--config wrangler.gym.toml");
   });
 
   it("without WIPE_WRANGLER_CONFIG no --config flag is passed", () => {
     run(["--yes"], { ...GYM, WIPE_CONFIRM: "gym", WIPE_WRANGLER_CONFIG: "" });
-    expect(readFileSync(callLog, "utf8")).not.toContain("--config");
+    expect(readFileSync(getCallLog(), "utf8")).not.toContain("--config");
   });
 
   it("an unknown argument is rejected (no delete)", () => {
@@ -241,7 +150,7 @@ describe("wipe-all-users.sh — guards", () => {
 
   it("preserves marketplace_listings (never in the DELETE set)", () => {
     run(["--yes"], { ...GYM, WIPE_CONFIRM: "gym" });
-    expect(readFileSync(callLog, "utf8")).not.toContain("DELETE FROM marketplace_listings");
+    expect(readFileSync(getCallLog(), "utf8")).not.toContain("DELETE FROM marketplace_listings");
   });
 });
 
@@ -298,3 +207,5 @@ describe("wipe-all-users SQL table list — in sync with migrations", () => {
     expect(sql).not.toMatch(/DELETE FROM marketplace_listings;/);
   });
 });
+
+
