@@ -240,40 +240,44 @@ of the last check here: **not yet checked**.
   Alpine bootstrap). Needs the owner's YubiKey: mint a `CaEndorsement` with the
   maintainers CLI, commit it, redeploy `.com`.
 
-- **The `flagship.services` DNS zone is nearly full (2026-10-16).** Cloudflare
-  caps it at 200 records; prod holds ~154. An account with one server takes
-  about 12 (6 CAA + 2 for the account + 4 per box), so only ~3–4 more accounts
-  fit, and when it is full new boxes (prod and gym) never get their DNS-01
-  records or a certificate (two gym runs went red this way). ~70 of the 154 are
-  leftovers: accounts with no server left (`demoent1-4`, `demouser7347*`,
-  `demo1234`, `harry1`, `ltsln0yduha`: 4 each; `drill-1010`, `update-drill`,
-  `openai-build`, `jolly-quince`, `harry2`: 6–8 each). Owner options: a higher
-  record cap (paid Cloudflare plan); fewer records per account (one wildcard
-  A/AAAA for the relay's passthrough IP instead of per-box records, CAA only
-  on the account name: ~3 per account); the gym on its own registered domain
-  (also frees the shared Let's Encrypt budget: `flagship.services` isn't on
-  the PSL yet, so gym and prod certificates share 50 a week); reap the
-  leftovers.
-  **Reap tool built (2026-10-18, not deployed):** `scripts/reap-orphans.mjs`
-  (dry run by default, saved plan, `--apply --plan`, typed confirmation) over new
-  admin routes `/api/admin/reap/{list,classify,delete-one}` on `.com`
-  (`apps/com/src/prodReap.ts`): it removes DNS records and demo UpCloud servers
-  of accounts that no longer exist in D1, re-checking each against D1 right
-  before deleting. Needs a `.com` deploy, then the owner's dry run; steps in
-  `docs/runbooks/pre-ga-scrub.md`. The live gym now refuses to start when its fleet won't fit.
-  **Negative-cache TTL (2026-10-18):** a name that does not exist yet is cached
-  as NXDOMAIN for the SOA minimum, 1800 s on Cloudflare's default, so any
-  early lookup of `<server>.<user>.flagship.services` (Studio did one at VM
-  boot; a phone opening the app early could) leaves a home router answering
-  "no such host" for up to 30 min after the box is up. Studio no longer looks
-  the name up before the box reports in. Cloudflare lets only **Enterprise**
-  accounts change the SOA values (minimum range 60 to 86400 s; account default
-  under DNS zone defaults, or per zone under DNS Records, "DNS record
-  options"); on other plans it is not editable, so a lower value needs the
-  Enterprise plan or a different fix: a wildcard `*.<user>.flagship.services`
-  A/AAAA to the relay's passthrough IP per account (which also cuts the record
-  count), so a box's name resolves before the box registers. Nothing changed
-  in the zone.
+- **The `flagship.services` DNS zone is nearly full (2026-10-16); the fix is on
+  `main`, not deployed (2026-10-18).** Cloudflare Free caps the zone at 200
+  records (and fixes the SOA negative-cache time at 30 minutes); prod held ~154
+  when measured. An account used 8 records plus 4 per box (12 with one server),
+  ~70 of the 154 left behind by accounts with no server (`demoent1-4`,
+  `demouser7347*`, `demo1234`, `harry1`, `ltsln0yduha`: 4 each; `drill-1010`,
+  `update-drill`, `openai-build`, `jolly-quince`, `harry2`: 6-8 each). Built
+  (owner decision 2026-10-18, `docs/wildcard-dns.md`): **one wildcard per
+  account**, `*.<user>` A + AAAA to the relay, plus two CAA at `<user>`
+  (issue, issuewild): **4 records per account whatever its server count**
+  (was 12, 16, 20 for 1, 2, 3 servers), nothing per box, so 200 records hold
+  ~45 accounts and a box name never sits in a 30-minute negative cache. Each
+  box's DNS-01 challenge briefly adds 2 TXT + 4 shield records (A/AAAA at the
+  box and `*.box`, so the wildcard keeps answering while the TXT makes the box
+  an empty non-terminal); all are removed after issuance (sweep: TXT older than
+  an hour), so reserve ~20 of headroom. The relay now closes every unmatched
+  first-party SNI after the same wait. **To do (owner):** deploy `.com`
+  (`apps/com`; nothing on the box changes, so no endorsed release) and
+  `.services` (relay timing only); run the live gym (core group checks the
+  four-record set and the unregistered-name behaviour; the first run also
+  exercises Let's Encrypt against CAA found by tree climbing); then
+  the reap tool (`scripts/reap-orphans.mjs`: dry run by default, saved plan,
+  `--apply --plan`, typed confirmation, over `/api/admin/reap/{list,classify,
+  delete-one}` in `apps/com/src/prodReap.ts`; steps in
+  `docs/runbooks/pre-ga-scrub.md`) removes the records and demo servers of
+  accounts gone from D1, and now also trims accounts that stay: per-box records
+  the wildcard replaces, the CAA copy at `*.<user>` and `iodef`, and the records
+  of an account with no live server; each item is re-checked against D1 and the
+  zone right before deleting. `POST /api/admin/republish-server-dns` gives
+  accounts that predate the wildcard their set. Studio no longer looks a box
+  name up before the box reports in (the old negative-cache hazard).
+  Cloudflare lets only Enterprise accounts change the SOA values. Still open for the
+  owner: a paid Cloudflare plan (higher cap), the gym on its own registered
+  domain (also frees the shared Let's Encrypt budget: `flagship.services`
+  isn't on the PSL yet, so gym and prod certificates share 50 a week), a
+  zone-level wildcard (0 per account but drops per-account CAA), dropping
+  `issuewild` (3 per account). The live gym refuses to start when its fleet
+  won't fit.
 
 ### In flight
 
