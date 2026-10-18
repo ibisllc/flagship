@@ -45,15 +45,17 @@ export class D1NonceStore implements NonceStore {
   constructor(private readonly db: D1Database) {}
 
   async claim(key: string, expiresAt: number, now: number): Promise<boolean> {
-    // Drop this key if a previous claim has expired, so the window can
-    // reopen. Also prune a small batch of unrelated expired rows.
-    await this.db.prepare("DELETE FROM boot_nonces WHERE nonce_key = ?1 AND expires_at <= ?2").bind(key, now).run();
-    await this.db.prepare("DELETE FROM boot_nonces WHERE expires_at <= ?1").bind(now).run();
+    // One D1 round trip, in one transaction: drop this key if a previous claim
+    // has expired (so the window can reopen), prune the other expired rows,
+    // then take the key. A duplicate INSERT fails the batch, which rolls the
+    // two deletes back with it; they would have deleted nothing the next claim
+    // does not delete again.
     try {
-      await this.db
-        .prepare("INSERT INTO boot_nonces (nonce_key, expires_at) VALUES (?1, ?2)")
-        .bind(key, expiresAt)
-        .run();
+      await this.db.batch([
+        this.db.prepare("DELETE FROM boot_nonces WHERE nonce_key = ?1 AND expires_at <= ?2").bind(key, now),
+        this.db.prepare("DELETE FROM boot_nonces WHERE expires_at <= ?1").bind(now),
+        this.db.prepare("INSERT INTO boot_nonces (nonce_key, expires_at) VALUES (?1, ?2)").bind(key, expiresAt),
+      ]);
       return true;
     } catch (e) {
       const msg = String((e as Error).message ?? e);

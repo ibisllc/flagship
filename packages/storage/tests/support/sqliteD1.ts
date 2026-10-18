@@ -314,11 +314,17 @@ export interface SqliteD1 extends D1Database {
   toleratedNoOps: { file: string; error: string }[];
 }
 
-export function createSqliteD1(): SqliteD1 {
-  const raw = new DatabaseSync(":memory:");
+export function createSqliteD1(
+  /** A database file that already has the schema (the CPU harness seeds
+   *  wrangler's local D1 this way); the default is a fresh in-memory one. */
+  existingFile?: string,
+): SqliteD1 {
+  const raw = new DatabaseSync(existingFile ?? ":memory:");
   // Match D1: enforce FK + UNIQUE semantics (D1 has FKs on by default).
   raw.exec("PRAGMA foreign_keys = ON;");
-  const { toleratedNoOps } = applyAllMigrations(raw);
+  const { toleratedNoOps } = existingFile
+    ? { toleratedNoOps: [] as { file: string; error: string }[] }
+    : applyAllMigrations(raw);
   return {
     raw,
     toleratedNoOps,
