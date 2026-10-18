@@ -120,6 +120,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.flagshipserver.app.core.SecretPurpose
 import com.flagshipserver.app.core.SecretRequestCoordinator
+import com.flagshipserver.app.core.PendingLeaseStore
 import com.flagshipserver.app.core.ServerSettingsStore
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.KeystoreIrkAccess
@@ -134,6 +135,7 @@ import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.ui.theme.FSLayout
 import kotlinx.coroutines.launch
+import com.flagshipserver.app.viewmodels.ApprovalSource
 import com.flagshipserver.app.viewmodels.BootUnlockApprovalViewModel
 import com.flagshipserver.app.viewmodels.CoordinatorApprovalSource
 import com.flagshipserver.app.viewmodels.DeadManPhase
@@ -554,22 +556,32 @@ private fun BootUnlockApprovalCard(
             serverDomain = serverDomain,
             makeSource = {
                 username?.let { user ->
-                    CoordinatorApprovalSource(
+                    val inner = CoordinatorApprovalSource(
                         SecretRequestCoordinator(
                             mailbox = mailbox,
                             username = user,
                             irk = KeystoreIrkAccess(),
                             // Slice D — the boot-approval ceremony mints the
                             // RootEntitlement (owner decision: ADMIN-ROOT — a
-                            // reburned admin-pinned box rejects an IRK-signed one)
-                            // + the box-sealed auto-unlock lease; both sign with
-                            // the admin master root when held. Transport envelopes
-                            // stay IRK.
+                            // reburned admin-pinned box rejects an IRK-signed one),
+                            // signed with the admin master root when held. The
+                            // auto-unlock lease is NOT one of these: the boot
+                            // worker verifies it against the owner IRK, so it signs
+                            // with the IRK (SecretRequestCoordinator.depositAutoUnlockLease).
                             adminSigner = { r ->
                                 if (Keystore.hasAdminRoot()) Keystore.adminRootKey(r) else null
                             },
+                            pendingLeases = PendingLeaseStore.from(context),
                         ),
                     )
+                    // Keep the lease id the approval returned: it is the kill switch's handle.
+                    object : ApprovalSource {
+                        override suspend fun approvePendingUnlock(serverDomain: String, depositAutoLease: Boolean) =
+                            inner.approvePendingUnlock(serverDomain, depositAutoLease)
+                                .also { id -> if (id != null) store.setLeaseId(serverDomain, id) }
+                        override suspend fun approvePendingEntitlement(serverDomain: String) =
+                            inner.approvePendingEntitlement(serverDomain)
+                    }
                 }
             },
             // "auto" servers (default; absent ⇒ auto) deposit a self-unlock

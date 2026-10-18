@@ -1,0 +1,18 @@
+{
+  "about": "An auto-unlock lease is signed by the owner IRK (the boot worker verifies it against the IRK in the Authorization header), never by the admin root. Seeds are 32 repeated bytes. Ed25519 signatures are deterministic.",
+  "irkSeedHex": "0707070707070707070707070707070707070707070707070707070707070707",
+  "irkPubHex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+  "adminSeedHex": "0909090909090909090909090909090909090909090909090909090909090909",
+  "adminPubHex": "fd1724385aa0c75b64fb78cd602fa1d991fdebf76b13c58ed702eac835e9f618",
+  "lease": {
+    "serverDomain": "home.alice.flagship.services",
+    "stkPubHex": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+    "leaseId": "0123456789abcdef0123456789abcdef",
+    "sealedKeyHex": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910",
+    "issuedAt": 1760000000000,
+    "expiresAt": 1791536000000
+  },
+  "canonical": "flagship/auto-unlock-lease/v2|home.alice.flagship.services|6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1|0123456789abcdef0123456789abcdef|030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910|1760000000000|1791536000000|-1",
+  "irkSignatureHex": "add522450a1d9beb62d11d904cd969d9007c900668a7385e88c18d978d68361e7fb26aed256ec2cbe086c03fa0b193988249579fd68e319dc5ba29220ac9260a",
+  "adminSignatureHex": "aa0c407023f18443af889c71315b48730cd7dd852218702c985ba27a107ed945ba9d09b8f0563855f8924aac4d8d3205968342223f6cd4e58abacd1c8015f001"
+}

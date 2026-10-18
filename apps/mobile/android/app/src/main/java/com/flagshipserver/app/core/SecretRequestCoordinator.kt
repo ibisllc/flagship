@@ -87,6 +87,10 @@ class SecretRequestCoordinator(
      * owner-signed. Mirror of iOS `watchDelegateKeyProvider`.
      */
     private val watchDelegate: () -> WatchDelegateSigner? = { null },
+    /** Leases the worker could not take yet, kept for [retryPendingLeases]. */
+    private val pendingLeases: PendingLeases? = null,
+    /** Pauses before the 2nd and 3rd try of a lease deposit that failed in passing. */
+    private val leaseRetryDelaysMs: List<Long> = listOf(1_000L, 3_000L),
 ) {
     sealed class CoordinatorException(message: String) : Exception(message) {
         object NoSealedLuksKey :
@@ -267,7 +271,7 @@ class SecretRequestCoordinator(
         // it here — I2) using the key we just recovered (never .com-visible).
         val key = unlockKey
         if (depositAutoLease && purpose == SecretPurpose.UNLOCK_KEY && key != null) {
-            return depositAutoUnlockLease(verified.serverDomain, stkPub, key, material, orderKey)
+            return depositAutoUnlockLease(verified.serverDomain, stkPub, key, material)
         }
         return null
     }
@@ -335,18 +339,22 @@ class SecretRequestCoordinator(
     }
 
     /** Deposit a long-lived box-sealed lease (LUKS key sealed for the box
-     *  STK). Returns the lease id. */
+     *  STK). Returns the lease id, or null when the worker did not take it.
+     *
+     *  The lease body is signed by the owner IRK, the same key as the
+     *  Authorization header: the boot worker verifies the body against the IRK
+     *  it read from that header (handleDepositLease) and answers 403 "invalid
+     *  lease signature" for any other key, the admin root included. (An
+     *  admin-root signature here meant no lease was ever stored and every
+     *  restart asked the phone again.) A failed deposit never fails the
+     *  approval, which has already been answered: it is logged, and one that
+     *  failed in passing is kept to send again ([retryPendingLeases]). */
     private suspend fun depositAutoUnlockLease(
         serverDomain: String,
         stkPub: ByteArray,
         luksKey: ByteArray,
         material: IrkMaterial,
-        // Slice D — the lease is a SENSITIVE order (luksKeys.ts deposit): sign it
-        // with the admin master root when this device holds one, else the IRK. The
-        // boot-auth PUT header below STAYS IRK-signed (the owner transport
-        // credential). Canonical bytes unchanged.
-        orderKey: Ed25519Sign? = null,
-    ): String {
+    ): String? {
         val issuedAt = now()
         val leaseId = AutoUnlockLeaseV2.randomLeaseId()
         val expiresAt = issuedAt + 365L * 24 * 60 * 60 * 1000  // ~1 year; renewed each approve
@@ -358,8 +366,40 @@ class SecretRequestCoordinator(
             issuedAt = issuedAt,
             expiresAt = expiresAt,
         )
+        val wire = BoxSealedLeaseWire(
+            serverDomain = lease.serverDomain,
+            stkPub = HexUtil.encode(lease.stkPub),
+            leaseId = lease.leaseId,
+            sealedKey = HexUtil.encode(lease.sealedKey),
+            issuedAt = lease.issuedAt,
+            expiresAt = lease.expiresAt,
+            maxUses = lease.maxUses,
+        )
+        val signatureHex = HexUtil.encode(lease.sign(material.signer))
+        var attempt = 0
+        while (true) {
+            try {
+                putLease(wire, signatureHex, material)
+                pendingLeases?.clear(serverDomain)
+                return leaseId
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                if (isPassing(t) && attempt < leaseRetryDelaysMs.size) {
+                    kotlinx.coroutines.delay(leaseRetryDelaysMs[attempt])
+                    attempt++
+                    continue
+                }
+                ErrorLog.caught("lease", t, NetworkErrorHumanizer.errorCode(t))
+                if (isPassing(t)) pendingLeases?.put(serverDomain, PendingLease(wire, signatureHex))
+                return null
+            }
+        }
+    }
+
+    private suspend fun putLease(wire: BoxSealedLeaseWire, signatureHex: String, material: IrkMaterial) {
         val depositAuth = BootAuth.ownerHeader(
-            serverDomain = serverDomain,
+            serverDomain = wire.serverDomain,
             method = "PUT",
             path = "/api/boot/lease",
             signer = material.signer,
@@ -367,20 +407,44 @@ class SecretRequestCoordinator(
             issuedAt = now(),
             nonce = nonceGen(),
         )
-        mailbox.depositBoxSealedLease(
-            BoxSealedLeaseWire(
-                serverDomain = lease.serverDomain,
-                stkPub = HexUtil.encode(lease.stkPub),
-                leaseId = lease.leaseId,
-                sealedKey = HexUtil.encode(lease.sealedKey),
-                issuedAt = lease.issuedAt,
-                expiresAt = lease.expiresAt,
-                maxUses = lease.maxUses,
-            ),
-            HexUtil.encode(lease.sign(orderKey ?: material.signer)),
-            depositAuth,
-        )
-        return leaseId
+        mailbox.depositBoxSealedLease(wire, signatureHex, depositAuth)
+    }
+
+    /** No connection, a timeout or a 5xx: worth sending again. A refusal (4xx) is not. */
+    private fun isPassing(t: Throwable): Boolean = when {
+        t is HttpException -> t.status >= 500 || t.status == 429 || t.status == 408
+        else -> t is java.io.IOException
+    }
+
+    /**
+     * Send again the leases the worker could not take earlier. Returns
+     * (server, lease id) for each one it took, so the caller can keep the id
+     * for the kill switch. A lease past its expiry is dropped; a refusal drops
+     * it too (it would be refused again); a passing failure keeps it.
+     */
+    suspend fun retryPendingLeases(): List<Pair<String, String>> {
+        val store = pendingLeases ?: return emptyList()
+        val waiting = store.all()
+        if (waiting.isEmpty()) return emptyList()
+        val material = irk.resolve("Finish setting up automatic unlock")
+        val done = mutableListOf<Pair<String, String>>()
+        for ((server, p) in waiting) {
+            if (p.lease.expiresAt <= now()) {
+                store.clear(server)
+                continue
+            }
+            try {
+                putLease(p.lease, p.signatureHex, material)
+                store.clear(server)
+                done += server to p.lease.leaseId
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                ErrorLog.caught("lease-retry", t, NetworkErrorHumanizer.errorCode(t))
+                if (!isPassing(t)) store.clear(server)
+            }
+        }
+        return done
     }
 
     // ---- unlock-key ----------------------------------------------------

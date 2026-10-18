@@ -178,6 +178,27 @@ describe("boot routes — lease deposit → get → revoke round-trip", () => {
     expect(r?.status).toBe(403);
   });
 
+  it("refuses a lease signed by the admin root: only the owner IRK in the Authorization header signs it", async () => {
+    const body = buildLeaseBody();
+    const adminRoot = { privateKey: new Uint8Array(32).fill(9), publicKey: ed.getPublicKey(new Uint8Array(32).fill(9)) };
+    const lease = {
+      serverDomain: SERVER_A,
+      stkPub: boxA.publicKey,
+      leaseId: body.lease.leaseId,
+      sealedKey: Uint8Array.from(body.lease.sealedKey.match(/../g)!.map((b) => parseInt(b, 16))),
+      issuedAt: body.lease.issuedAt,
+      expiresAt: body.lease.expiresAt,
+    };
+    const path = "/api/boot/lease";
+    const rootSigned = { ...body, signature: bytesToHex(signAutoUnlockLeaseV2(lease, adminRoot)) };
+    const refused = await routeBoot(deps, "PUT", path, ownerAuth("PUT", path, 47), rootSigned);
+    expect(refused?.status).toBe(403);
+    expect((refused!.body as { error: string }).error).toBe("invalid lease signature");
+    // The same lease signed by the IRK is accepted.
+    const ok = await routeBoot(deps, "PUT", path, ownerAuth("PUT", path, 48), body);
+    expect(ok?.status).toBe(200);
+  });
+
   it("box cannot deposit a lease (write route is owner-only)", async () => {
     const path = "/api/boot/lease";
     // a valid body but box-signed Authorization → gate wrong-principal.

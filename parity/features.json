@@ -703,6 +703,16 @@
         "win": { "status": "present", "anchors": [["apps/builder-windows/src/VM/QemuFailure.cs", "NotEnoughMemoryMessage"], ["apps/builder-windows/src/VM/VMManager.cs", "QemuFailure\\.CheckFreeMemory"], ["apps/builder-windows/tests/QemuFailureTests.cs", "AStartWithTooLittleFreeMemory"]] },
         "linux": { "status": "present", "anchors": [["apps/builder-linux/vm/qemu_failure.py", "def not_enough_memory_message"], ["apps/builder-linux/vm/manager.py", "qemu_failure\\.check_free_memory"], ["apps/builder-linux/tests/test_vm_manager.py", "too_little_memory"]] }
       }
+    },
+    {
+      "id": "auto-unlock-lease-irk-signed",
+      "title": "Approving a boot in auto mode deposits the box-sealed lease signed by the owner IRK (never the admin root, which the boot worker refuses); vector auto-unlock-lease",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/SecretRequestCoordinator.swift", "lease\\.sign\\(with: irk\\)"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/SecretRequestCoordinator.kt", "lease\\.sign\\(material\\.signer\\)"], ["apps/mobile/android/app/src/testDebug/java/com/flagshipserver/app/core/AutoUnlockLeaseSignerTest.kt", "anAdminRootDeviceSignsTheLeaseWithTheIrk"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/leases.js", "signWithIrk"], ["packages/protocol/tests/autoUnlockLeaseVectors.test.ts", "admin root is refused"]] }
+      }
     }
   ]
 }

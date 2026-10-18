@@ -39,6 +39,7 @@ import com.flagshipserver.app.api.DeviceInfoHint
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalSecretMailboxClient
 import com.flagshipserver.app.core.LocalToastCenter
+import com.flagshipserver.app.core.PendingLeaseStore
 import com.flagshipserver.app.core.SecretPurpose
 import com.flagshipserver.app.core.SecretRequestCoordinator
 import com.flagshipserver.app.core.ServerSettingsStore
@@ -62,6 +63,7 @@ internal fun rememberApprovals(): ApprovalsModel<SecretRequestCoordinator.Verifi
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val username by app.currentUser.collectAsState()
+    val toasts = LocalToastCenter.current
     val store = remember { ServerSettingsStore.from(context) }
     return remember(username, mailbox) {
         // Slice D — the entitlement/lease orders minted in the ceremony sign
@@ -73,12 +75,19 @@ internal fun rememberApprovals(): ApprovalsModel<SecretRequestCoordinator.Verifi
                 username = it,
                 irk = KeystoreIrkAccess(),
                 adminSigner = { r -> if (Keystore.hasAdminRoot()) Keystore.adminRootKey(r) else null },
+                pendingLeases = PendingLeaseStore.from(context),
             )
         }
         ApprovalsModel(
             scope = scope,
             idOf = { it.id },
-            fetch = { coordinator?.fetchVerifiedRequests() ?: error("Sign in to approve a server.") },
+            fetch = {
+                val coord = coordinator ?: error("Sign in to approve a server.")
+                // Opening the list is the next foreground: send again any lease the
+                // worker could not take earlier, so a restart self-unlocks.
+                runCatching { coord.retryPendingLeases().forEach { (server, id) -> store.setLeaseId(server, id) } }
+                coord.fetchVerifiedRequests()
+            },
             respond = { req ->
                 // "auto" servers (default; absent ⇒ auto) also get a box-sealed
                 // self-unlock lease. The returned id is the kill-switch handle.
@@ -86,6 +95,10 @@ internal fun rememberApprovals(): ApprovalsModel<SecretRequestCoordinator.Verifi
                 val leaseId = (coordinator ?: error("Sign in to approve a server."))
                     .confirmAndRespond(req, depositAutoLease = deposit)
                 if (leaseId != null) store.setLeaseId(req.serverDomain, leaseId)
+                // Approved, but the worker did not take the lease: it will be sent again.
+                else if (deposit && req.purpose == SecretPurpose.UNLOCK_KEY) {
+                    toasts.warning("Approved. Automatic unlock couldn't be set up yet; it will try again.")
+                }
             },
             loadFailure = { UserErrorText.of(it, "Couldn't load requests") },
             answerFailure = { req, t -> "Couldn't approve ${req.serverDomain}. ${UserErrorText.of(t)}" },

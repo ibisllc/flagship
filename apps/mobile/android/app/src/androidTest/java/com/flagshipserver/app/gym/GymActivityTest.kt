@@ -125,4 +125,47 @@ class GymActivityTest : GymBase() {
         assertTrue("No separate Approve server page", textCount("Approve server") == 0)
         gymShot("approvals-link")
     }
+
+    /** Approving a boot on a device that holds the admin root stores the auto-unlock
+     *  lease (signed by the IRK, which is all the boot worker accepts), so the next
+     *  boot unlocks itself; the card goes at once and no raw error shows. */
+    @Test
+    fun approvingStoresALeaseSoTheNextBootUnlocksItself() {
+        launch(tab = "activity", username = "bright-maple", adminRoot = true)
+        waitUntilExists("activity-title", 20_000)
+        val domain = "kitchen.bright-maple.flagship.services"
+        val issuedAt = System.currentTimeMillis()
+        val irk = kotlinx.coroutines.runBlocking { com.flagshipserver.app.keystore.KeystoreIrkAccess().resolve("gym") }
+        val stk = com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPair()
+        val stkHex = com.flagshipserver.app.core.HexUtil.encode(stk.publicKey)
+        val nonce = "cd".repeat(32)
+        val sig = com.flagshipserver.app.core.HexUtil.encode(
+            com.google.crypto.tink.subtle.Ed25519Sign(stk.privateKey).sign(
+                com.flagshipserver.app.core.SecretRequest.canonicalBytes(
+                    domain, stkHex, com.flagshipserver.app.core.SecretPurpose.UNLOCK_KEY, nonce, issuedAt,
+                ),
+            ),
+        )
+        mailboxMock.directory = listOf(com.flagshipserver.app.api.PodDirectoryEntry(serverDomain = domain, identityPubKey = stkHex))
+        mailboxMock.sealedLuksKeyHex = com.flagshipserver.app.core.HexUtil.encode(
+            com.flagshipserver.app.core.SecretSeal.sealForEd25519Recipient(ByteArray(64) { it.toByte() }, com.flagshipserver.app.core.HexUtil.decode(irk.pubHex)!!),
+        )
+        mailboxMock.pending = listOf(
+            com.flagshipserver.app.api.PendingSecretRequest(
+                serverDomain = domain, requestNonceHex = nonce, stkPub = stkHex, purpose = "unlock-key",
+                issuedAt = issuedAt, requestSignature = sig, postedAt = issuedAt, expiresAt = issuedAt + 600_000,
+            ),
+        )
+        tapText("Refresh", 15_000)
+        openSection("approvals")
+        waitUntilExists("secret-request-card", 20_000)
+        gymShot("approvals-card")
+        assertTrue("No lease yet: a restart would ask the phone", !mailboxMock.secondBoot(domain))
+        tap("secret-request-approve", 15_000)
+        eventually(20_000, "the boot worker took the lease") { mailboxMock.secondBoot(domain) }
+        // The card is gone and nothing raw showed.
+        composeRule.waitUntil(15_000) { composeRule.onAllNodesWithTag("secret-request-card").fetchSemanticsNodes().isEmpty() }
+        assertTrue(textCount("HTTP 4") == 0 && textCount("already answered") == 0 && textCount("invalid lease signature") == 0)
+        gymShot("approvals-after")
+    }
 }

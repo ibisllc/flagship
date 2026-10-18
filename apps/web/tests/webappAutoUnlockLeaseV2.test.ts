@@ -12,7 +12,9 @@ import {
   verifyAutoUnlockLeaseV2,
   verifyLeaseRevocation,
 } from "@flagship/protocol";
+import { readFileSync } from "node:fs";
 import {
+  canonicalLeaseV2Bytes,
   enableLongLived,
   renewIfExpiringSoon,
   revokeLease,
@@ -133,5 +135,28 @@ describe("renewIfExpiringSoon", () => {
     expect(await renewIfExpiringSoon(DOMAIN, 86_400_000, off.deps)).toEqual([]);
     expect(fresh.enable).not.toHaveBeenCalled();
     expect(off.enable).not.toHaveBeenCalled();
+  });
+});
+
+// packages/protocol/test-vectors/auto-unlock-lease: the lease is the owner IRK's
+// to sign (the boot worker and `.com` both verify it against the IRK); a lease
+// signed by the admin root does not verify under it.
+describe("the shared auto-unlock lease vector", () => {
+  const V = JSON.parse(
+    readFileSync(new URL("../../../packages/protocol/test-vectors/auto-unlock-lease/vectors.json", import.meta.url), "utf8"),
+  );
+  it("the webapp's canonical bytes are the vector's, the IRK signature verifies and the admin root's does not", () => {
+    const l = V.lease;
+    expect(
+      new TextDecoder().decode(
+        canonicalLeaseV2Bytes({
+          serverDomain: l.serverDomain, stkPubHex: l.stkPubHex, leaseId: l.leaseId,
+          sealedKeyHex: l.sealedKeyHex, issuedAt: l.issuedAt, expiresAt: l.expiresAt,
+        }),
+      ),
+    ).toBe(V.canonical);
+    const msg = new TextEncoder().encode(V.canonical);
+    expect(ed25519.verify(unhex(V.irkSignatureHex), msg, unhex(V.irkPubHex))).toBe(true);
+    expect(ed25519.verify(unhex(V.adminSignatureHex), msg, unhex(V.irkPubHex))).toBe(false);
   });
 });
