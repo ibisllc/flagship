@@ -61,19 +61,13 @@ routes = [
   # itself, so the hostname resolves to flagship-com with no manual DNS step.
   # (Cut over 2026-06-11 — detached from flagship-boot first.)
   { pattern = "boot.flagshipserver.com",       custom_domain = true },
-  # webapp. + remote. — the 2026-07-23 split of the old `web.` origin into
-  # one host per concern: `webapp.` is the owner webapp, `remote.` is the
-  # phone-approved browser-remote session. Separate origins mean a remote
-  # session's storage is isolated from the owner app's by the same-origin
-  # policy, not by convention.
-  #
-  # CUSTOM DOMAINS (not zone routes), for the same reason as recovery. and
-  # boot. above: these are brand-new hostnames with NO DNS record, and the
-  # zone has no wildcard — a Worker Route only fires for a host that already
-  # resolves into Cloudflare. A custom domain makes wrangler provision the
-  # proxied record + edge cert itself, so there is no manual DNS step.
-  { pattern = "webapp.flagshipserver.com",     custom_domain = true },
-  { pattern = "remote.flagshipserver.com",     custom_domain = true },
+  # webapp. + remote. are NOT routes of this Worker any more. They moved to the
+  # static-only Worker `flagship-webapp` (apps/webapp-static/wrangler.toml) so that a
+  # webapp shell install (about 190 files per release) costs no Worker requests: on
+  # the Workers Free plan every request this Worker runs counts against 100,000 a day.
+  # The host-rewrite code for them stays in route.ts for local dev, the e2e harness
+  # and the gym Worker (wrangler.gym.toml), which still serves them itself.
+  # Deploy order matters once: docs/runbooks/final-deploy.md step 7.
   # www.flagshipserver.com — 2026-07-26 fix: this used to be a zone route
   # (`www.flagshipserver.com/*`) on the theory that a leftover CNAME from
   # the pre-Worker marketing site chained www. to the apex. That CNAME no
@@ -92,23 +86,92 @@ routes = [
   { pattern = "www.flagshipserver.com",        custom_domain = true },
 ]
 
-# Static assets — marketing pages, the webapp source under /webapp/
-# (served at root on webapp. AND remote.flagshipserver.com via Worker rewrite),
-# /deck/, /security pages, /.well-known/security.txt. Wrangler uploads
-# everything in this directory to Cloudflare's static edge.
+# Static assets — the marketing pages, /docs, /status, /security, /downloads,
+# /.well-known. (The webapp itself is NOT served from here any more: webapp. and
+# remote. are routes of the static-only Worker flagship-webapp, apps/webapp-static,
+# which no request ever wakes; see docs/runbooks/workers-cpu-budget.md "Static
+# assets".) Wrangler uploads everything in this directory to Cloudflare's static edge.
 [assets]
 directory = "../web/public"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
-# Worker runs first for every request so it can: (1) host-rewrite
-# webapp./remote.flagshipserver.com/X → asset /webapp/X before the assets
-# edge applies its SPA fallback at the wrong root; (2) 308-redirect apex
-# /webapp/* to webapp., and the retired web. host to webapp. too;
-# (3) handle /api/* and /build/iso/* directly. The
-# Worker calls ASSETS.fetch as the default fallback for anything it
-# doesn't intercept, so static-file behavior is unchanged for the
-# marketing site — only one extra Worker invocation per request.
-run_worker_first = ["/*"]
+# On the Workers Free plan every request that RUNS this Worker counts against the
+# 100,000 a day; a file the assets layer answers on its own is free and unlimited.
+# So the Worker runs first for every path ("/*") EXCEPT the static files listed with
+# `!`, which are answered straight from the assets. Everything not listed keeps the
+# old behaviour, so a new page is correct before anyone lists it (it just costs a
+# request); the list is an optimisation and fails safe.
+#
+# What the Worker still has to see, and why none of it may ever be listed:
+#   /api/*, /og, /qr-pipe/*, /builder-pipe/*, /build/iso/*   the Worker's own routes
+#   /me, /recovery*, /webapp*                    redirects to the dedicated origins
+#   /join /share /transfer /remote /builder /access /invite /invite-accept /app/*
+#                                                the app-link fallback page
+#   /studio /studio/ /build /ready /how-to /download*   redirects and rewrites
+#   /.well-known/apple-app-site-association      served with its JSON content type
+#   /wip_* /alpha* and the coming-soon gate      the gate is OFF (SITE_PUBLIC = "1"
+#                                                below); re-arming it needs "/*" alone
+#   /  and  /index.html                          recovery.flagshipserver.com's own
+#                                                page, and the www. redirect
+#   voi.ci/<code>                                any one-segment path is a short link
+#   recovery.flagshipserver.com's files          rewritten from /recovery/
+# Each `!` file below gets a matching rule in apps/web/public/_headers, which carries
+# the security headers the Worker used to add (apps/com/src/securityHeaders.ts).
+# `npx tsx scripts/static-assets.ts write-headers` regenerates that file; the predeploy
+# guard and apps/com/test/staticAssets.test.ts fail when the two drift, when a pattern
+# matches no file, or when one shadows a path the Worker must see.
+run_worker_first = [
+  "/*",
+  # fonts, scripts, styles and images of the marketing site
+  "!/fonts/*",
+  "!/site.css",
+  "!/components.css",
+  "!/theme-ui.css",
+  "!/tokens.css",
+  "!/theme.js",
+  "!/motion.js",
+  "!/app-stores.js",
+  "!/qrEncoder.js",
+  "!/grain.svg",
+  "!/logo.svg",
+  "!/apple-touch-icon.svg",
+  "!/apple-touch-icon.png",
+  "!/favicon.svg",
+  "!/favicon.ico",
+  # pages
+  "!/docs",
+  "!/docs/*",
+  "!/blog",
+  "!/blog/*",
+  "!/status/*",
+  "!/security",
+  "!/security/*",
+  "!/security.html",
+  "!/abuse",
+  "!/abuse.html",
+  "!/adapters",
+  "!/adapters.html",
+  "!/disambiguate",
+  "!/disambiguate.html",
+  "!/faq",
+  "!/faq.html",
+  "!/help",
+  "!/help.html",
+  "!/how-it-works",
+  "!/how-it-works.html",
+  "!/open-source",
+  "!/open-source.html",
+  "!/privacy",
+  "!/privacy.html",
+  "!/terms",
+  "!/terms.html",
+  # downloads (Studio, VM appliance manifests) and the public key files
+  "!/downloads/*",
+  "!/.well-known/assetlinks.json",
+  "!/.well-known/security.txt",
+  "!/.well-known/pgp-key.txt",
+  "!/.well-known/openpgpkey/*",
+]
 
 [[r2_buckets]]
 binding = "ISO_BUCKET"

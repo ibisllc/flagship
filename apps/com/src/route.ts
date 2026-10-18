@@ -24,6 +24,7 @@
  */
 
 import { RELEASES_PATH, handleReleases } from "./releaseCatalog.js";
+import { securityHeaders } from "./securityHeaders.js";
 import { tryControlPlane, tryBootHost, isAccountGoneResponse } from "./controlPlaneRoutes.js";
 import {
   handleAdapterIndex,
@@ -228,35 +229,6 @@ const RECOVERY_CSP =
   "object-src 'none'";
 
 /**
- * CSP for the webapp shell on `webapp.` and `remote.`. Scripts come only from
- * the shell itself (no inline script, no eval); the shell talks only to the
- * control apex and its sub-origins and to the account's servers under the
- * services apex. Inline styles stay allowed: the views set `style=`
- * attributes throughout.
- */
-function shellCsp(env: RouteEnv): string {
-  const apex = apexHost(env);
-  const services = env.SERVICES_APEX ?? "flagship.services";
-  return (
-    "default-src 'self'; " +
-    "script-src 'self'; " +
-    "style-src 'self' 'unsafe-inline'; " +
-    "img-src 'self' data: blob:; " +
-    "font-src 'self'; " +
-    `connect-src 'self' https://${apex} wss://${apex} https://*.${apex} wss://*.${apex} ` +
-    `https://*.${services} wss://*.${services}; ` +
-    "worker-src 'self'; " +
-    "manifest-src 'self'; " +
-    "media-src 'self' blob:; " +
-    "frame-src 'none'; " +
-    "frame-ancestors 'none'; " +
-    "form-action 'self'; " +
-    "base-uri 'none'; " +
-    "object-src 'none'"
-  );
-}
-
-/**
  * Headers on every response the Worker sends. No page on these hosts is meant
  * to sit in a frame (recovery opens as a popup), and a framed webapp or remote
  * session could have its clicks steered by an overlay, so framing is refused
@@ -271,16 +243,14 @@ function withSecurityHeaders(res: Response, requestUrl: URL, env: RouteEnv): Res
   const isShellHost =
     requestUrl.hostname === webappHost(env) || requestUrl.hostname === remoteHost(env);
   const headers = new Headers(res.headers);
-  if (!headers.has("content-security-policy")) {
-    headers.set("content-security-policy", isShellHost ? shellCsp(env) : "frame-ancestors 'none'");
-  }
-  if (!headers.has("x-frame-options")) headers.set("x-frame-options", "DENY");
-  if (!headers.has("x-content-type-options")) headers.set("x-content-type-options", "nosniff");
-  if (!headers.has("referrer-policy")) {
-    headers.set("referrer-policy", isShellHost ? "no-referrer" : "strict-origin-when-cross-origin");
-  }
-  if (requestUrl.protocol === "https:") {
-    headers.set("strict-transport-security", "max-age=31536000");
+  const list = securityHeaders(isShellHost ? "shell" : "site", {
+    apex: apexHost(env),
+    services: env.SERVICES_APEX ?? "flagship.services",
+    https: requestUrl.protocol === "https:",
+  });
+  for (const [name, value] of list) {
+    // A response that already carries one (recovery's CSP) keeps it; HSTS is always set.
+    if (name === "strict-transport-security" || !headers.has(name)) headers.set(name, value);
   }
   return new Response(res.body, {
     status: res.status,
@@ -1915,4 +1885,6 @@ export const _internal = {
   WIP_PREFIXES,
   WIP_PREVIEW_COOKIE_NAME,
   COMING_SOON_PATH,
+  WEBAPP_SHARED_ROOT_ASSETS,
+  WEBAPP_SHARED_ROOT_PREFIXES,
 };

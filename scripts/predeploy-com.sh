@@ -188,6 +188,21 @@ if [ "${FLAGSHIP_SKIP_DIST_FRESHNESS:-0}" != "1" ]; then
 fi
 
 # ──────────────────────────────────────────────────────────────────────
+# Static-asset gate (Workers Free plan request budget).
+#
+# `run_worker_first` in apps/com/wrangler.toml lists the static files the assets
+# layer answers WITHOUT running the Worker (each one saves a request of the
+# 100,000 a day). This refuses a deploy when a pattern shadows a path the Worker
+# must see (API, redirects, app links, the AASA file, recovery.'s files, voi.ci
+# codes), matches no file, or has drifted from apps/web/public/_headers, which
+# carries the security headers the Worker no longer adds to those files. Skipped
+# under the dist-check fixture root (the test suite's throwaway tree).
+# ──────────────────────────────────────────────────────────────────────
+if [ -z "${FLAGSHIP_DIST_CHECK_ROOT:-}" ]; then
+  (cd "$REPO_ROOT" && npx --no-install tsx scripts/static-assets.ts check) || exit 1
+fi
+
+# ──────────────────────────────────────────────────────────────────────
 # Migration-drift gate (OPS-2 enforcement).
 #
 # A deployed Worker can run AHEAD of the prod D1 schema (it bundles the

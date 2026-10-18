@@ -1,0 +1,46 @@
+# flagship-webapp — serves the owner webapp (webapp.flagshipserver.com) and the
+# browser-remote origin (remote.flagshipserver.com) as STATIC FILES, so that a
+# request for any file of the shell never wakes a Worker.
+#
+# Why a separate project: `.com` runs on the Workers Free plan (100,000 Worker
+# requests a day). The shell is about 190 files and the service worker fetches all
+# of them each time the shell version moves (almost daily), so with the files behind
+# flagship-com's `run_worker_first = ["/*"]` one webapp user cost ~190 of the 100,000
+# per release. `run_worker_first` matches PATHS, not hosts, and these two hosts serve
+# their files at the root (`/app.js`, `/lib/api.js`, `/`), so no path list on
+# flagship-com can send them to the assets without also sending the marketing site's
+# `/` and `/index.html` the same way. A project of their own has an assets directory
+# that IS the webapp, and static asset requests are free and unlimited.
+#
+# The Worker script below runs only for what no file answers and no page navigation
+# can be (compatibility_date >= 2025-04-01: navigations to a missing path get the SPA
+# fallback, index.html, straight from the assets): a missing script or stylesheet
+# (404 rather than index.html, so a half-deployed shell reads as a failed asset, not
+# as HTML to parse) and non-GET methods (405).
+#
+# The assets directory is GENERATED: `npx tsx scripts/static-assets.ts build-webapp`
+# (scripts/deploy-webapp-static.sh does it) copies apps/web/public/webapp to the root,
+# adds the site's /fonts/ and /qrEncoder.js the shell imports, and writes `_headers`
+# with the shell CSP and the other security headers from
+# apps/com/src/securityHeaders.ts, which the flagship-com Worker used to add.
+#
+# Moving the hosts: the first `wrangler deploy` here points the two custom domains at
+# this project (wrangler asks to update the existing domains; a non-interactive run
+# does it), and flagship-com no longer lists them. Deploy THIS before flagship-com
+# the first time; see docs/runbooks/final-deploy.md step 7. Rollback: put the two
+# `custom_domain` routes back in apps/com/wrangler.toml and deploy flagship-com (the
+# Worker still has the host-rewrite code and the webapp files).
+name = "flagship-webapp"
+main = "src/index.js"
+compatibility_date = "2026-05-01"
+workers_dev = false
+preview_urls = false
+
+routes = [
+  { pattern = "webapp.flagshipserver.com", custom_domain = true },
+  { pattern = "remote.flagshipserver.com", custom_domain = true },
+]
+
+[assets]
+directory = "./public"
+not_found_handling = "single-page-application"
