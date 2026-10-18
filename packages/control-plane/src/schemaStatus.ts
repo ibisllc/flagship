@@ -73,6 +73,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0103",
   // Peer backup between accounts: holders, leases, spent tokens, sealed roots.
   "0104",
+  // The signatures a re-pair carried, kept so a box can verify the swap itself.
+  "0105",
 ];
 
 export interface SchemaStatusDeps {
