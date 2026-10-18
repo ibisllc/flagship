@@ -22,7 +22,7 @@ import urllib.request
 from dataclasses import replace
 from typing import Callable, Dict, List, Optional
 
-from . import host_arch, kvm_probe, resource_plan
+from . import host_arch, kvm_probe, qemu_failure, resource_plan
 from .config import VMConfig
 from .control_plane import order_url
 from .host_resources import HostResources
@@ -264,6 +264,7 @@ class VMManager:
         host_arch_tag: Optional[str] = host_arch.ARCH_AMD64,
         health_fetch: Callable[[str], Optional[bytes]] = _default_health_fetch,
         health_interval: float = 60.0,
+        available_memory: Optional[Callable[[], Optional[int]]] = None,
     ) -> None:
         self.store = store
         self.toolchain = toolchain
@@ -294,6 +295,8 @@ class VMManager:
         self._unlock_polls: Dict[str, threading.Event] = {}
         self._install_polls: Dict[str, threading.Event] = {}
         self._install_stall_logged: set[str] = set()
+        # None = read /proc/meminfo at launch (looked up late so tests can patch it).
+        self._available_memory = available_memory
         self._health_fetch = health_fetch
         self._health_interval = health_interval
         self._health_polls: Dict[str, threading.Event] = {}
@@ -655,6 +658,17 @@ class VMManager:
             self.log(f"VM {name}: cannot start — {reason}")
             self._fail_from_state(name, reason)
             return
+        # KVM commits guest RAM lazily, so only a host that cannot back the
+        # whole guest is refused; the message replaces a raw QEMU failure.
+        too_little = qemu_failure.check_free_memory(
+            config.memory_bytes,
+            (self._available_memory or qemu_failure.available_memory_bytes)(),
+            headroom_bytes=0,
+        )
+        if too_little is not None:
+            self.log(f"VM {name}: cannot start — {too_little}")
+            self._fail_from_state(name, too_little)
+            return
         try:
             host = self._host_factory()
             host.on_guest_stopped = lambda code, tail: self._guest_stopped(name, code, tail)
@@ -676,6 +690,11 @@ class VMManager:
         elif kind in (VMStateKind.AWAITING_PHONE_UNLOCK, VMStateKind.RUNNING):
             self._apply(VMEvent.runtime_failed(reason), name)
 
+    def _describe_exit(self, name: str, exit_code: int, stderr_tail: str) -> str:
+        server = self.server(name)
+        memory = server.record.config.memory_bytes if server else 0
+        return qemu_failure.describe_exit(exit_code, stderr_tail, memory)
+
     def _guest_stopped(self, name: str, exit_code: int, stderr_tail: str) -> None:
         """The guest stopped on its own. What it MEANS depends on the phase the
         pure lifecycle is in. During install a clean stop is AMBIGUOUS
@@ -686,7 +705,7 @@ class VMManager:
         if kind == VMStateKind.INSTALLING:
             if exit_code != 0:
                 self._apply(
-                    VMEvent.install_failed(f"QEMU exited {exit_code}: {stderr_tail.strip()}"),
+                    VMEvent.install_failed(self._describe_exit(name, exit_code, stderr_tail)),
                     name,
                 )
                 return
@@ -718,7 +737,7 @@ class VMManager:
         elif kind in (VMStateKind.AWAITING_PHONE_UNLOCK, VMStateKind.RUNNING):
             if exit_code != 0:
                 self._apply(
-                    VMEvent.runtime_failed(f"QEMU exited {exit_code}: {stderr_tail.strip()}"),
+                    VMEvent.runtime_failed(self._describe_exit(name, exit_code, stderr_tail)),
                     name,
                 )
             else:

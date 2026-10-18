@@ -693,6 +693,16 @@
         "win": { "status": "present", "anchors": [["apps/builder-windows/src/VM/UnlockWatch.cs", "ProvesBoxIsUp"], ["apps/builder-windows/src/VM/VMManager.cs", "AwaitingUnlockOnItsOwn"], ["apps/builder-windows/tests/UnlockWatchTests.cs", "NoNameLookup"]] },
         "linux": { "status": "present", "anchors": [["apps/builder-linux/vm/manager.py", "proves_box_is_up"], ["apps/builder-linux/vm/manager.py", "AWAITING_UNLOCK_ON_ITS_OWN"], ["apps/builder-linux/tests/test_vm_manager.py", "never_looks_up_the_name"]] }
       }
+    },
+    {
+      "id": "studio-free-memory-and-plain-qemu-errors",
+      "title": "Studio: a hosted VM start checks free RAM first (\"Not enough free memory: this server needs 4 GiB. Close other apps and try again.\") and a QEMU that still dies shows only its last real stderr line",
+      "ref": "win",
+      "surfaces": {
+        "mac": { "status": "na", "reason": "The Mac hosts through Virtualization.framework, whose start errors are already plain sentences; macOS also pages guest memory instead of refusing to map it.", "anchors": [] },
+        "win": { "status": "present", "anchors": [["apps/builder-windows/src/VM/QemuFailure.cs", "NotEnoughMemoryMessage"], ["apps/builder-windows/src/VM/VMManager.cs", "QemuFailure\\.CheckFreeMemory"], ["apps/builder-windows/tests/QemuFailureTests.cs", "AStartWithTooLittleFreeMemory"]] },
+        "linux": { "status": "present", "anchors": [["apps/builder-linux/vm/qemu_failure.py", "def not_enough_memory_message"], ["apps/builder-linux/vm/manager.py", "qemu_failure\\.check_free_memory"], ["apps/builder-linux/tests/test_vm_manager.py", "too_little_memory"]] }
+      }
     }
   ]
 }

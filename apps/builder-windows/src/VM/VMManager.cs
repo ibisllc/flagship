@@ -207,6 +207,7 @@ public sealed class VMManager
     private readonly TimeSpan _healthInterval;
     private readonly Func<string, CancellationToken, Task<bool>> _unlockProbe;
     private readonly TimeSpan _unlockInterval;
+    private readonly Func<ulong?> _availableMemory;
     private readonly HashSet<string> _installStallLogged = new();
     private readonly SynchronizationContext? _sync;
     private readonly Func<DateTimeOffset> _clock;
@@ -225,7 +226,8 @@ public sealed class VMManager
                      Func<string, CancellationToken, Task<string?>>? healthFetch = null,
                      TimeSpan? healthInterval = null,
                      Func<string, CancellationToken, Task<bool>>? unlockProbe = null,
-                     TimeSpan? unlockInterval = null)
+                     TimeSpan? unlockInterval = null,
+                     Func<ulong?>? availableMemory = null)
     {
         Store = store;
         _toolchain = toolchain;
@@ -235,6 +237,7 @@ public sealed class VMManager
         _healthInterval = healthInterval ?? TimeSpan.FromMinutes(1);
         _unlockProbe = unlockProbe ?? ProbeNameAsync;
         _unlockInterval = unlockInterval ?? TimeSpan.FromSeconds(15);
+        _availableMemory = availableMemory ?? HostResources.AvailableMemoryBytes;
         _sync = SynchronizationContext.Current;
         LoadAndNormalize();
     }
@@ -535,6 +538,15 @@ public sealed class VMManager
             await FailFromStateAsync(name, reason);
             return;
         }
+        // WHPX maps the guest's RAM up front: refuse with a plain sentence
+        // instead of letting QEMU die with "failed to map GPA range".
+        if (QemuFailure.CheckFreeMemory(config.MemoryBytes, _availableMemory(), QemuFailure.WhpxHeadroomBytes)
+            is { } tooLittle)
+        {
+            Log($"VM {name}: cannot start — {tooLittle}");
+            await FailFromStateAsync(name, tooLittle);
+            return;
+        }
         try
         {
             var host = new QemuHost(_toolchain);
@@ -583,7 +595,7 @@ public sealed class VMManager
                 if (exitCode != 0)
                 {
                     await ApplyAsync(VMEvent.InstallFailed(
-                        $"QEMU exited {exitCode}: {stderrTail.Trim()}"), name);
+                        QemuFailure.DescribeExit(exitCode, stderrTail, Server(name)!.Record.Config.MemoryBytes)), name);
                     return;
                 }
                 var config = Server(name)!.Record.Config;
@@ -613,7 +625,7 @@ public sealed class VMManager
                 if (exitCode != 0)
                 {
                     await ApplyAsync(VMEvent.RuntimeFailed(
-                        $"QEMU exited {exitCode}: {stderrTail.Trim()}"), name);
+                        QemuFailure.DescribeExit(exitCode, stderrTail, Server(name)!.Record.Config.MemoryBytes)), name);
                 }
                 else
                 {

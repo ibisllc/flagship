@@ -33,3 +33,11 @@ def _no_published_appliance(monkeypatch):
     monkeypatch.setattr(wizard, "_live_ensure_appliance", unavailable)
     # The remaster itself is faked in these tests; xorriso need not exist.
     monkeypatch.setenv("FLAGSHIP_XORRISO", sys.executable)
+
+
+@pytest.fixture(autouse=True)
+def _plenty_of_free_memory(monkeypatch):
+    """A CI runner's free RAM must not decide whether a fake VM may start."""
+    from vm import qemu_failure
+
+    monkeypatch.setattr(qemu_failure, "available_memory_bytes", lambda: None)

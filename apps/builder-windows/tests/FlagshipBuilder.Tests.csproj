@@ -61,6 +61,7 @@
     <Compile Include="..\src\VM\VMManager.cs" />
     <Compile Include="..\src\VM\VMServerHealth.cs" />
     <Compile Include="..\src\VM\UnlockWatch.cs" />
+    <Compile Include="..\src\VM\QemuFailure.cs" />
     <Compile Include="..\src\VM\ApplianceCache.cs" />
     <Compile Include="..\src\VM\ApplianceProvisioner.cs" />
     <Compile Include="..\src\VM\ApplianceHosting.cs" />
@@ -85,6 +86,7 @@
     <Compile Include="WhpxProbeTests.cs" />
     <Compile Include="VMManagerTests.cs" />
     <Compile Include="UnlockWatchTests.cs" />
+    <Compile Include="QemuFailureTests.cs" />
     <Compile Include="PendingStopsTests.cs" />
     <Compile Include="QuitGateTests.cs" />
     <Compile Include="PairEventParserTests.cs" />

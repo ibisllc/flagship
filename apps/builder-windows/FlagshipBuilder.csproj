@@ -69,6 +69,7 @@
     <Compile Include="src\VM\VMManager.cs" />
     <Compile Include="src\VM\VMServerHealth.cs" />
     <Compile Include="src\VM\UnlockWatch.cs" />
+    <Compile Include="src\VM\QemuFailure.cs" />
     <Compile Include="src\VM\ApplianceCache.cs" />
     <Compile Include="src\VM\ApplianceProvisioner.cs" />
     <Compile Include="src\VM\ApplianceHosting.cs" />

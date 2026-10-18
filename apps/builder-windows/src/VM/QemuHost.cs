@@ -133,7 +133,7 @@ public sealed class QemuHost
         if (p.HasExited)
         {
             var stderr = Tail(await stderrTask, 2000);
-            throw new IOException($"QEMU failed to start (exit {p.ExitCode}): {stderr.Trim()}");
+            throw new IOException(QemuFailure.DescribeExit(p.ExitCode, stderr, config.MemoryBytes));
         }
     }
 

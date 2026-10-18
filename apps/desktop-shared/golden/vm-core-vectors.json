@@ -314,5 +314,92 @@
     "unlocksOnItsOwn": "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there.",
     "firstBoot": "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.",
     "approveEveryBoot": "The disk is sealed — approve the unlock on your phone."
+  },
+  "qemuFailure": {
+    "notes": "Plain failure text for a hosted VM's QEMU (Windows and Linux Studio; the Mac's Virtualization.framework errors are already plain). Studio checks free RAM before launching (checkFree: need = the VM's memory, headroom per host OS, null = enough, otherwise the message) and, when QEMU still dies, shows the memory sentence for an out-of-memory failure (WHPX 'failed to map GPA range', 'Cannot allocate memory') and otherwise only the LAST meaningful stderr line: blank lines and 'warning:' lines (the repeated host-CPUID feature warnings) are dropped and the 'qemu-system-x86_64(.exe): ' program prefix is stripped. Windows 2026-10-18 showed the raw stderr in the sidebar when a second 4 GiB VM started with under 5 GB free.",
+    "memoryMessageCases": [
+      {
+        "needBytes": 4294967296,
+        "message": "Not enough free memory: this server needs 4 GiB. Close other apps and try again."
+      },
+      {
+        "needBytes": 2684354560,
+        "message": "Not enough free memory: this server needs 3 GiB. Close other apps and try again."
+      }
+    ],
+    "checkFreeCases": [
+      {
+        "name": "plenty free",
+        "needBytes": 4294967296,
+        "availableBytes": 9663676416,
+        "headroomBytes": 1073741824,
+        "tooLittle": false
+      },
+      {
+        "name": "exactly need plus headroom",
+        "needBytes": 4294967296,
+        "availableBytes": 5368709120,
+        "headroomBytes": 1073741824,
+        "tooLittle": false
+      },
+      {
+        "name": "a leftover Gradle daemon ate the headroom",
+        "needBytes": 4294967296,
+        "availableBytes": 4831838208,
+        "headroomBytes": 1073741824,
+        "tooLittle": true
+      },
+      {
+        "name": "no headroom needed (Linux)",
+        "needBytes": 4294967296,
+        "availableBytes": 4294967296,
+        "headroomBytes": 0,
+        "tooLittle": false
+      },
+      {
+        "name": "below need",
+        "needBytes": 4294967296,
+        "availableBytes": 3221225472,
+        "headroomBytes": 0,
+        "tooLittle": true
+      }
+    ],
+    "describeCases": [
+      {
+        "name": "WHPX could not map guest memory",
+        "exitCode": 3,
+        "memoryBytes": 4294967296,
+        "stderr": "qemu-system-x86_64.exe: warning: host doesn't support requested feature: CPUID.07H:EBX.mpx [bit 14]\nqemu-system-x86_64.exe: warning: host doesn't support requested feature: CPUID.07H:EBX.mpx [bit 14]\nqemu-system-x86_64.exe: warning: host doesn't support requested feature: CPUID.07H:EBX.mpx [bit 14]\nqemu-system-x86_64.exe: WHPX: failed to map GPA range\n",
+        "text": "Not enough free memory: this server needs 4 GiB. Close other apps and try again."
+      },
+      {
+        "name": "out of memory on Linux",
+        "exitCode": 1,
+        "memoryBytes": 4294967296,
+        "stderr": "qemu-system-x86_64: cannot set up guest memory 'pc.ram': Cannot allocate memory\n",
+        "text": "Not enough free memory: this server needs 4 GiB. Close other apps and try again."
+      },
+      {
+        "name": "another error: only the last real line",
+        "exitCode": 1,
+        "memoryBytes": 4294967296,
+        "stderr": "qemu-system-x86_64.exe: warning: host doesn't support requested feature: CPUID.07H:EBX.mpx [bit 14]\nC:\\Program Files\\qemu\\qemu-system-x86_64.exe: -drive file=D:\\vm\\disk.qcow2: Could not open 'D:\\vm\\disk.qcow2': Permission denied\n  \n",
+        "text": "QEMU stopped (exit 1): -drive file=D:\\vm\\disk.qcow2: Could not open 'D:\\vm\\disk.qcow2': Permission denied"
+      },
+      {
+        "name": "only warnings",
+        "exitCode": 3,
+        "memoryBytes": 4294967296,
+        "stderr": "qemu-system-x86_64.exe: warning: host doesn't support requested feature: CPUID.07H:EBX.mpx [bit 14]\nqemu-system-x86_64.exe: warning: host doesn't support requested feature: CPUID.07H:EBX.mpx [bit 14]\n",
+        "text": "QEMU stopped unexpectedly (exit 3)."
+      },
+      {
+        "name": "no output",
+        "exitCode": 2,
+        "memoryBytes": 4294967296,
+        "stderr": "",
+        "text": "QEMU stopped unexpectedly (exit 2)."
+      }
+    ]
   }
 }

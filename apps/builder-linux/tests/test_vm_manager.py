@@ -460,6 +460,37 @@ def test_unlock_poll_ignores_a_report_whose_daemon_or_tunnel_is_down(store):
     m.power_off(domain)
 
 
+def test_start_refuses_with_a_plain_sentence_when_the_host_has_too_little_memory(store):
+    host = FakeHost()
+    seed(store, "s.h.flagship.services", VMState.stopped())
+    m = VMManager(
+        store, TOOLCHAIN, host_factory=lambda: host, unlock_probe=lambda url: False,
+        unlock_interval=0.01, available_memory=lambda: 3 * resource_plan.GIB,
+    )
+    m.power_on("s.h.flagship.services")
+    state = m.server("s.h.flagship.services").record.state
+    assert state.kind == VMStateKind.FAILED
+    assert state.failure.reason == (
+        "Not enough free memory: this server needs 4 GiB. Close other apps and try again."
+    )
+    assert host.started == []
+
+
+def test_a_qemu_that_dies_shows_only_its_last_real_line(store):
+    host = FakeHost()
+    seed(store, "s.h.flagship.services", VMState.stopped())
+    m = manager(store, host=host)
+    m.power_on("s.h.flagship.services")
+    host.on_guest_stopped(
+        1,
+        "qemu-system-x86_64: warning: host doesn't support requested feature: CPUID.07H:EBX.mpx\n"
+        "qemu-system-x86_64: -drive file=x: Could not open 'x': Permission denied\n",
+    )
+    state = m.server("s.h.flagship.services").record.state
+    assert state.kind == VMStateKind.FAILED
+    assert state.failure.reason == "QEMU stopped (exit 1): -drive file=x: Could not open 'x': Permission denied"
+
+
 def test_unlock_poll_is_cancelled_on_power_off(store):
     host = FakeHost()
     m = manager(store, host=host)

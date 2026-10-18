@@ -17,6 +17,15 @@ public sealed record HostResources(int CpuCount, ulong MemoryBytes)
     public static HostResources Current()
         => new(Environment.ProcessorCount, PhysicalMemoryBytes());
 
+    /// <summary>Memory the OS can hand out right now (free plus reclaimable
+    /// cache), or null where it can't tell (tests on CI).</summary>
+    public static ulong? AvailableMemoryBytes()
+    {
+        if (!OperatingSystem.IsWindows()) return null;
+        var status = new MEMORYSTATUSEX { dwLength = (uint)Marshal.SizeOf<MEMORYSTATUSEX>() };
+        return GlobalMemoryStatusEx(ref status) ? status.ullAvailPhys : null;
+    }
+
     private static ulong PhysicalMemoryBytes()
     {
         if (OperatingSystem.IsWindows())

@@ -217,3 +217,18 @@ def test_awaiting_unlock_copy_matches_vectors():
     assert manager.AWAITING_UNLOCK_FIRST_BOOT == section["firstBoot"]
     assert manager.AWAITING_UNLOCK_APPROVE_EVERY_BOOT == section["approveEveryBoot"]
     assert all("Nothing to approve" not in v for k, v in section.items() if k != "notes")
+
+
+def test_qemu_failure_matches_vectors():
+    from vm import qemu_failure
+
+    section = VECTORS["qemuFailure"]
+    for c in section["memoryMessageCases"]:
+        assert qemu_failure.not_enough_memory_message(c["needBytes"]) == c["message"]
+    for c in section["checkFreeCases"]:
+        got = qemu_failure.check_free_memory(c["needBytes"], c["availableBytes"], c["headroomBytes"])
+        assert (got is not None) == c["tooLittle"], c["name"]
+        if got is not None:
+            assert got == qemu_failure.not_enough_memory_message(c["needBytes"]), c["name"]
+    for c in section["describeCases"]:
+        assert qemu_failure.describe_exit(c["exitCode"], c["stderr"], c["memoryBytes"]) == c["text"], c["name"]

@@ -18,7 +18,7 @@ import threading
 import time
 from typing import Callable, Optional
 
-from . import qemu_command_line
+from . import qemu_command_line, qemu_failure
 from .config import VMConfig
 from .inventory import VMBundleLayout
 from .qemu_locator import QemuToolchain
@@ -146,7 +146,7 @@ class QemuHost:
         if proc.poll() is not None:
             self.on_guest_stopped = None
             tail = _tail(stderr_box[0] if stderr_box else "")
-            raise QemuHostError(f"QEMU failed to start (exit {proc.returncode}): {tail.strip()}")
+            raise QemuHostError(qemu_failure.describe_exit(proc.returncode, tail, config.memory_bytes))
 
     def stop(self, grace_seconds: float = 60) -> None:
         """Press the guest's power button (ACPI) and wait for it to power off,
