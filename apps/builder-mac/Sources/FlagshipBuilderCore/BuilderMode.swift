@@ -8,8 +8,8 @@ import Foundation
 ///   a generated preseed (the same remaster+flash path Advanced uses), and
 ///   flashes — no separate ISO file to bring, no third-party flasher. This is
 ///   the default.
-/// - `advanced`: the user supplies a stock Ubuntu/Debian ISO + a JSON recipe;
-///   the builder remasters that ISO in-place (autoinstall / preseed) and flashes.
+/// - `advanced`: the user supplies a stock Debian ISO + a JSON recipe;
+///   the builder remasters that ISO in-place (preseed) and flashes.
 public enum BuilderMode: String, Sendable, CaseIterable {
     case simple
     case advanced

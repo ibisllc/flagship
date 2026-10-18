@@ -90,7 +90,7 @@ function bytesToHex(b: Uint8Array): string {
 async function stubRemaster(args: {
   srcIsoPath: string;
   outIsoPath: string;
-  userDataYaml: string;
+  preseedCfg: string;
 }): Promise<void> {
   await writeFile(args.outIsoPath, Buffer.alloc(2048, 0xbb));
 }
@@ -172,7 +172,7 @@ describe("runWriteCommand — happy path + device gates", () => {
       yes: true,
       isRoot: () => true,
       remaster: stubRemaster,
-      family: "ubuntu", // skip ISO detection (no real xorriso in unit tests)
+      family: "debian", // skip ISO detection (no real xorriso in unit tests)
       writeBytesToDevice: async (a) => {
         expect(a.devicePath).toBe("/dev/sdb");
         writeCalls++;
@@ -207,7 +207,7 @@ describe("runWriteCommand — happy path + device gates", () => {
       keepRecipe: true,
       isRoot: () => true,
       remaster: stubRemaster,
-      family: "ubuntu", // skip ISO detection (no real xorriso in unit tests)
+      family: "debian", // skip ISO detection (no real xorriso in unit tests)
       writeBytesToDevice: async () => ({ bytesWritten: 7 }),
       enumerateOpts: makeLsblkRun([
         {
@@ -380,7 +380,7 @@ describe("runWriteCommand — happy path + device gates", () => {
       yes: true,
       isRoot: () => true,
       remaster: stubRemaster,
-      family: "ubuntu", // skip ISO detection (no real xorriso in unit tests)
+      family: "debian", // skip ISO detection (no real xorriso in unit tests)
       promptForLine: async (m) => {
         prompts.push(m);
         return "1";
@@ -472,7 +472,7 @@ describe("runWriteCommand — happy path + device gates", () => {
       device: "/dev/sdb",
       isRoot: () => true,
       remaster: stubRemaster,
-      family: "ubuntu", // skip ISO detection (no real xorriso in unit tests)
+      family: "debian", // skip ISO detection (no real xorriso in unit tests)
       promptForLine: async () => "  YES  ",
       writeBytesToDevice: async () => {
         writeCalls++;

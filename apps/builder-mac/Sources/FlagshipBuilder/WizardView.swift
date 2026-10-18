@@ -347,7 +347,7 @@ struct WizardView: View {
             } else {
                 sessionRecipeRow
             }
-            // Advanced brings its own stock Ubuntu/Debian ISO; Simple fetches a
+            // Advanced brings its own stock Debian ISO; Simple fetches a
             // server-named Debian base ISO and shows the download progress. The
             // "Use system-provided ISO" checkbox lets Advanced fetch it too.
             if model.advancedAllowed && model.mode == .advanced {
@@ -763,7 +763,7 @@ struct WizardView: View {
             },
             help: HelpIcon(
                 title: "Recommended distributions",
-                blurb: "Advanced mode remasters a stock Ubuntu or Debian installer ISO you supply. See the list of distributions known to assemble and boot cleanly.",
+                blurb: "Advanced mode remasters a stock Debian installer ISO you supply. See the list of distributions known to assemble and boot cleanly.",
                 url: FlagshipLinks.recommendedDistros
             )
         )

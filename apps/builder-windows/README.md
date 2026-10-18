@@ -1,6 +1,6 @@
 # Flagship Studio — Windows
 
-Flagship Studio is a .NET 8/WPF desktop application for pairing with a phone, verifying a signed server recipe, creating an unattended Debian or Ubuntu installer, writing it to USB, or hosting it locally with QEMU/WHPX. Published builds are self-contained and do not require Node.js or a separately installed .NET runtime.
+Flagship Studio is a .NET 8/WPF desktop application for pairing with a phone, verifying a signed server recipe, creating an unattended Debian installer, writing it to USB, or hosting it locally with QEMU/WHPX. Published builds are self-contained and do not require Node.js or a separately installed .NET runtime.
 
 ## Security and runtime architecture
 
@@ -9,8 +9,8 @@ The Windows application keeps trust decisions native:
 - `NativePairingCrypto.cs` and `PairSession.cs` implement relay pairing with native WebSocket and audited platform cryptography.
 - `Recipe.cs` verifies the phone's Ed25519 signature before installer generation. An invalid, expired, or malformed recipe fails closed.
 - `NativePreseedEngine.cs` executes the canonical `packages/flagship-builder/engine/preseed-engine.js` embedded as an application resource. Jint is pinned and constrained by memory, statement, and execution-time limits. No CLR, filesystem, network, process, or environment objects are exposed to the script.
-- Shared `preseed-vectors.json` tests require byte-identical Debian preseed and Ubuntu user-data output across the canonical TypeScript engine and Windows.
-- `NativeIsoRemaster.cs` detects Debian versus Ubuntu, patches GRUB/isolinux, and invokes xorriso with an argument list rather than a command shell. Cancellation kills the complete process tree and diagnostics are bounded.
+- Shared `preseed-vectors.json` tests require byte-identical Debian preseed output across the canonical TypeScript engine and Windows.
+- `NativeIsoRemaster.cs` detects a Debian installer (refusing anything else), patches GRUB/isolinux, and invokes xorriso with an argument list rather than a command shell. Cancellation kills the complete process tree and diagnostics are bounded.
 - `NativeBuildPipeline.cs` re-verifies recipe bytes, generates both installer formats, remasters a temporary ISO, and calls the native `DiskWrite.cs` raw-device writer. Sensitive input buffers and temporary images are cleaned up.
 
 The optional prebuilt-appliance shortcut is not used on Windows. Host Here follows the same native installer-ISO path as USB preparation.
@@ -19,7 +19,7 @@ The optional prebuilt-appliance shortcut is not used on Windows. Host Here follo
 
 - Pair with phone: Studio shows a scannable QR and SAS confirmation. Recipe paste, browse, and drag-and-drop remain available as recovery paths.
 - Simple USB: downloads and SHA-256 verifies the manifest-selected Debian base ISO, then remasters and writes it natively.
-- Advanced USB: remasters a user-supplied stock Debian or Ubuntu ISO.
+- Advanced USB: remasters a user-supplied stock Debian ISO.
 - Save installer: writes a personalized `.flagship.iso` without touching a disk.
 - Host Here: creates and installs a QEMU/WHPX VM using the same personalized ISO.
 

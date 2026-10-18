@@ -24,7 +24,6 @@ import {
   type InstallBlob,
 } from "@flagship/protocol";
 import {
-  buildAutoinstallUserData,
   buildBootstrapScript,
   buildWifiSafetyNetBlock,
   buildInitramfsWifiBlock,
@@ -82,26 +81,26 @@ function signedBlob(): { blob: InstallBlob; blobSignatureHex: string; userPub: U
 
 /** Pull the install-blob.json base64 out of the late-command line. */
 function extractEmbeddedBlob(yaml: string): Record<string, any> {
-  const m = yaml.match(/echo "([A-Za-z0-9+/=]+)" \| base64 -d > \/var\/flagship\/install-blob\.json/);
-  if (!m) throw new Error("install-blob late-command not found in user-data");
+  const m = yaml.match(/echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/var\/flagship\/install-blob\.json/);
+  if (!m) throw new Error("install-blob late_command not found in preseed");
   return JSON.parse(Buffer.from(m[1]!, "base64").toString("utf8"));
 }
 
 /** Decode the embedded first-boot bootstrap script back to its bash text. */
 function extractBootstrap(yaml: string): string {
   const m = yaml.match(
-    /echo "([A-Za-z0-9+/=]+)" \| base64 -d > \/usr\/local\/sbin\/flagship-bootstrap\.sh/,
+    /echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/usr\/local\/sbin\/flagship-bootstrap\.sh/,
   );
-  if (!m) throw new Error("bootstrap late-command not found in user-data");
+  if (!m) throw new Error("bootstrap late_command not found in preseed");
   return Buffer.from(m[1]!, "base64").toString("utf8");
 }
 
 describe("debug SSH key threading — a debug grant with a real key bakes the SSH stub", () => {
   const KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI owner@laptop";
 
-  it("Ubuntu path bakes the debug SSH stub when debugSshAuthorizedKey is set", () => {
+  it("the preseed bakes the debug SSH stub when debugSshAuthorizedKey is set", () => {
     const { blob, blobSignatureHex } = signedBlob();
-    const yaml = buildAutoinstallUserData({ blob, blobSignatureHex, debugSshAuthorizedKey: KEY });
+    const yaml = buildDebianPreseed({ blob, blobSignatureHex, debugSshAuthorizedKey: KEY });
     const b = extractBootstrap(yaml);
     // buildBootstrapScriptDebug — remote access only, NO provisioning/LUKS re-key.
     expect(b).toContain("Flagship DEBUG bootstrap");
@@ -112,28 +111,19 @@ describe("debug SSH key threading — a debug grant with a real key bakes the SS
     expect(b).not.toContain("[flagship-bootstrap] starting"); // not the provisioning bootstrap
   });
 
-  it("Debian path bakes the same debug SSH stub", () => {
-    const { blob, blobSignatureHex } = signedBlob();
-    const cfg = buildDebianPreseed({ blob, blobSignatureHex, debugSshAuthorizedKey: KEY });
-    const m = cfg.match(/echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/usr\/local\/sbin\/flagship-bootstrap\.sh/);
-    const b = Buffer.from(m![1]!, "base64").toString("utf8");
-    expect(b).toContain("Flagship DEBUG bootstrap");
-    expect(b).toContain(KEY);
-  });
-
   it("no debugSshAuthorizedKey ⇒ the normal provisioning bootstrap (byte-identical)", () => {
     const { blob, blobSignatureHex } = signedBlob();
-    const withUndef = buildAutoinstallUserData({ blob, blobSignatureHex, debugSshAuthorizedKey: undefined });
-    const without = buildAutoinstallUserData({ blob, blobSignatureHex });
+    const withUndef = buildDebianPreseed({ blob, blobSignatureHex, debugSshAuthorizedKey: undefined });
+    const without = buildDebianPreseed({ blob, blobSignatureHex });
     expect(withUndef).toBe(without);
     expect(extractBootstrap(without)).toContain("[flagship-bootstrap] starting");
   });
 });
 
-describe("buildAutoinstallUserData", () => {
+describe("buildDebianPreseed", () => {
   it("embeds an auth-code with every field canonicalAuthCode needs", () => {
     const { blob, blobSignatureHex } = signedBlob();
-    const yaml = buildAutoinstallUserData({ blob, blobSignatureHex });
+    const yaml = buildDebianPreseed({ blob, blobSignatureHex });
     const embedded = extractEmbeddedBlob(yaml);
     for (const f of [
       "version",
@@ -153,7 +143,7 @@ describe("buildAutoinstallUserData", () => {
 
   it("embedded auth-code signature verifies — exactly the .com register check", () => {
     const { blob, blobSignatureHex } = signedBlob();
-    const yaml = buildAutoinstallUserData({ blob, blobSignatureHex });
+    const yaml = buildDebianPreseed({ blob, blobSignatureHex });
     const e = extractEmbeddedBlob(yaml);
     const reconstructed: AuthCode = {
       version: e.authCode.version,
@@ -177,7 +167,7 @@ describe("buildAutoinstallUserData", () => {
 
   it("embeds blobSignatureHex so the daemon can forward the blob signature", () => {
     const { blob, blobSignatureHex } = signedBlob();
-    const yaml = buildAutoinstallUserData({ blob, blobSignatureHex });
+    const yaml = buildDebianPreseed({ blob, blobSignatureHex });
     expect(extractEmbeddedBlob(yaml).blobSignatureHex).toBe(blobSignatureHex);
   });
 });
@@ -185,7 +175,7 @@ describe("buildAutoinstallUserData", () => {
 describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", () => {
   function bootstrap(): string {
     const { blob, blobSignatureHex } = signedBlob();
-    return extractBootstrap(buildAutoinstallUserData({ blob, blobSignatureHex }));
+    return extractBootstrap(buildDebianPreseed({ blob, blobSignatureHex }));
   }
 
   it("writes /etc/flagship/daemon.env with the two REQUIRED daemon inputs (0600)", () => {
@@ -400,7 +390,7 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
 describe("LUKS is the locked DEFAULT — proven unencrypted path is the debug escape", () => {
   function userData(opts: { encryptRoot?: boolean }): string {
     const { blob, blobSignatureHex } = signedBlob();
-    return buildAutoinstallUserData({ blob, blobSignatureHex, ...opts });
+    return buildDebianPreseed({ blob, blobSignatureHex, ...opts });
   }
 
   it("default (no flag) === explicit encryptRoot:true, byte-for-byte", () => {
@@ -408,15 +398,14 @@ describe("LUKS is the locked DEFAULT — proven unencrypted path is the debug es
     // box as asking for it explicitly. (Auth-codes carry timestamps, so both
     // are generated from ONE signedBlob().)
     const { blob, blobSignatureHex } = signedBlob();
-    const dflt = buildAutoinstallUserData({ blob, blobSignatureHex });
-    const explicit = buildAutoinstallUserData({ blob, blobSignatureHex, encryptRoot: true });
+    const dflt = buildDebianPreseed({ blob, blobSignatureHex });
+    const explicit = buildDebianPreseed({ blob, blobSignatureHex, encryptRoot: true });
     expect(dflt).toBe(explicit);
   });
 
-  it("default path encrypts — curtin LUKS storage block + unlock hook present", () => {
+  it("default path encrypts — partman-crypto LVM-on-LUKS + unlock hook present", () => {
     const yaml = userData({});
-    expect(yaml).toContain("storage:");
-    expect(yaml).toContain("type: dm_crypt");
+    expect(yaml).toContain("d-i partman-auto/method string crypto");
     const b = extractBootstrap(yaml);
     expect(b).toContain("encryptRoot ON");
     expect(b).toContain("/boot/flagship-unseal");
@@ -426,8 +415,8 @@ describe("LUKS is the locked DEFAULT — proven unencrypted path is the debug es
     // The escape is intentionally NOT exposed in the CLI/GUI — it exists so a
     // boot failure can be bisected against the known-good plaintext baseline.
     const yaml = userData({ encryptRoot: false });
-    expect(yaml).not.toContain("storage:");
-    expect(yaml).not.toContain("dm_crypt");
+    expect(yaml).toContain("d-i partman-auto/method string regular");
+    expect(yaml).not.toContain("partman-crypto/passphrase");
     const b = extractBootstrap(yaml);
     expect(b).not.toContain("encryptRoot ON");
     expect(b).not.toContain("/boot/flagship-unseal");
@@ -450,7 +439,7 @@ describe("two-tier boot-unlock policy (docs §7a.1) — auto default + approve",
     const merged = opts.bootUnlockMode
       ? { ...blob, bootUnlockMode: opts.bootUnlockMode }
       : blob;
-    return buildAutoinstallUserData({ blob: merged, blobSignatureHex });
+    return buildDebianPreseed({ blob: merged, blobSignatureHex });
   }
 
   it("default (no bootUnlockMode) bakes \"auto\" to /boot + emits box-lease + the auto dispatch", () => {
@@ -481,8 +470,8 @@ describe("two-tier boot-unlock policy (docs §7a.1) — auto default + approve",
 
   it("explicit auto behaves exactly like the default (auto is the absent semantics)", () => {
     const { blob, blobSignatureHex } = signedBlob();
-    const dflt = buildAutoinstallUserData({ blob, blobSignatureHex });
-    const explicit = buildAutoinstallUserData({
+    const dflt = buildDebianPreseed({ blob, blobSignatureHex });
+    const explicit = buildDebianPreseed({
       blob: { ...blob, bootUnlockMode: "auto" },
       blobSignatureHex,
     });
@@ -491,7 +480,7 @@ describe("two-tier boot-unlock policy (docs §7a.1) — auto default + approve",
     // else in the user-data is byte-identical.
     expect(extractEmbeddedBlob(dflt).bootUnlockMode).toBeUndefined();
     expect(extractEmbeddedBlob(explicit).bootUnlockMode).toBe("auto");
-    const BLOB = /echo "[A-Za-z0-9+/=]+" \| base64 -d > \/var\/flagship\/install-blob\.json/;
+    const BLOB = /echo '[A-Za-z0-9+/=]+' \| base64 -d > \/target\/var\/flagship\/install-blob\.json/;
     expect(explicit.replace(BLOB, "BLOB")).toBe(dflt.replace(BLOB, "BLOB"));
   });
 
@@ -500,7 +489,7 @@ describe("two-tier boot-unlock policy (docs §7a.1) — auto default + approve",
     const { blob } = signedBlob();
     const full: InstallBlob = { ...blob, bootUnlockMode: "approve", diskEncryption: "none" };
     const sig = signInstallBlob(full, irk);
-    const yaml = buildAutoinstallUserData({ blob: full, blobSignatureHex: hx(sig) });
+    const yaml = buildDebianPreseed({ blob: full, blobSignatureHex: hx(sig) });
     const restored = parseInstallBlob(extractEmbeddedBlob(yaml));
     expect(restored).not.toBeNull();
     expect(verifyInstallBlob(restored!, sig, irk.publicKey)).toBe(true);
@@ -524,8 +513,8 @@ describe("two-tier boot-unlock policy (docs §7a.1) — auto default + approve",
 
   it("approve and auto YAML differ ONLY in the baked mode + nothing else structural", () => {
     const { blob, blobSignatureHex } = signedBlob();
-    const autoYaml = buildAutoinstallUserData({ blob, blobSignatureHex });
-    const approveYaml = buildAutoinstallUserData({
+    const autoYaml = buildDebianPreseed({ blob, blobSignatureHex });
+    const approveYaml = buildDebianPreseed({
       blob: { ...blob, bootUnlockMode: "approve" },
       blobSignatureHex,
     });
@@ -547,7 +536,7 @@ describe("two-tier boot-unlock policy (docs §7a.1) — auto default + approve",
 describe("boot worker repoint — boot.flagshipserver.com + box-STK Flagship-Boot-v1 auth", () => {
   function bootstrap(opts: { bootHost?: string } = {}): string {
     const { blob, blobSignatureHex } = signedBlob();
-    return extractBootstrap(buildAutoinstallUserData({ blob, blobSignatureHex, ...opts }));
+    return extractBootstrap(buildDebianPreseed({ blob, blobSignatureHex, ...opts }));
   }
 
   it("bakes the DEFAULT boot host (boot.flagshipserver.com) to /boot/flagship-boot-host", () => {
@@ -566,7 +555,7 @@ describe("boot worker repoint — boot.flagshipserver.com + box-STK Flagship-Boo
   it("rejects a non-https boot host", () => {
     const { blob, blobSignatureHex } = signedBlob();
     expect(() =>
-      buildAutoinstallUserData({ blob, blobSignatureHex, bootHost: "http://insecure.example" }),
+      buildDebianPreseed({ blob, blobSignatureHex, bootHost: "http://insecure.example" }),
     ).toThrow(/bootHost must be https/);
   });
 
@@ -621,54 +610,30 @@ describe("the locked default — LUKS path details (EXPERIMENTAL, needs live val
   function luksYaml(): string {
     // No flag → the default, which is now the encrypted path.
     const { blob, blobSignatureHex } = signedBlob();
-    return buildAutoinstallUserData({ blob, blobSignatureHex });
+    return buildDebianPreseed({ blob, blobSignatureHex });
   }
 
-  it("emits a curtin custom-storage block with a LUKS-encrypted root", () => {
+  it("emits a partman-crypto LVM-on-LUKS layout with the fixed labels", () => {
     const yaml = luksYaml();
-    expect(yaml).toContain("storage:");
-    expect(yaml).toContain("type: dm_crypt");
-    expect(yaml).toContain("dm_name: flagship_root");
+    expect(yaml).toContain("d-i partman-auto/method string crypto");
+    expect(yaml).toContain("d-i partman-auto-lvm/new_vg_name string flagship");
     // Unencrypted /boot + encrypted root, both labelled like boot-stage expects.
-    expect(yaml).toContain("label: FLAGSHIP_BOOT");
-    expect(yaml).toContain("label: FLAGSHIP_ROOT");
-    expect(yaml).toContain("path: /boot");
+    expect(yaml).toContain("label{ FLAGSHIP_BOOT }");
+    expect(yaml).toContain("label{ FLAGSHIP_ROOT }");
+    expect(yaml).toContain("mountpoint{ /boot }");
     expect(yaml).toMatch(/EXPERIMENTAL/);
   });
 
-  it("UEFI Secure Boot: ESP carries grub_device (signed chain), disk does NOT (avoids unsigned BIOS grub)", () => {
+  it("UEFI: an ESP is created and GRUB goes to the removable path with no NVRAM write", () => {
     const yaml = luksYaml();
-    // The UEFI ESP (flag boot, fat32, grub device, mounted /boot/efi).
-    expect(yaml).toContain("flag: boot, grub_device: true");
-    expect(yaml).toContain("fstype: fat32");
-    expect(yaml).toContain("path: /boot/efi");
-    // The DISK must NOT be a grub_device — that triggers a BIOS grub-pc install
-    // whose unsigned EFI grub fails Secure Boot ("invalid signature").
-    expect(yaml).toContain("wipe: superblock-recursive, grub_device: false");
-    expect(yaml).not.toContain("grub_device: true, preserve: false}\n      - {id: bios_grub");
-    // reserved bios_grub partition kept for a future BIOS variant.
-    expect(yaml).toContain("flag: bios_grub");
-    // ESP partition precedes its format precedes its mount.
-    expect(yaml.indexOf("esp_part")).toBeLessThan(yaml.indexOf("esp_fs"));
-    expect(yaml.indexOf("esp_fs")).toBeLessThan(yaml.indexOf("esp_mount"));
-  });
-
-  it("broken-NVRAM firmware: skips the EFI NVRAM write + installs grub to the removable fallback path", () => {
-    const yaml = luksYaml();
-    // curtin must NOT try to write the EFI NVRAM entry (that aborts the install
-    // on firmware that rejects efivarfs writes — "failed to register the EFI
-    // boot entry: Invalid argument").
-    expect(yaml).toContain("grub:\n      update_nvram: false");
-    // … and a late-command copies the SIGNED shim+grub to /EFI/BOOT/BOOTX64.EFI
-    // (the removable fallback firmware boots with no NVRAM entry).
-    expect(yaml).toContain('cp "$D/ubuntu/shimx64.efi" "$D/BOOT/BOOTX64.EFI"');
-    expect(yaml).toContain('cp "$D/ubuntu/grubx64.efi" "$D/BOOT/grubx64.efi"');
-    // the fallback copy runs before our install-blob/bootstrap late-commands.
-    expect(yaml.indexOf("BOOTX64.EFI")).toBeLessThan(yaml.indexOf("install-blob.json"));
-    // SECOND mechanism (in case subiquity ignores storage.grub.update_nvram):
-    // the debconf preseed MAAS uses so grub-install passes --no-nvram.
-    expect(yaml).toContain("debconf-selections: |");
-    expect(yaml).toContain("grub2/update_nvram boolean false");
+    // The UEFI ESP and the reserved bios_grub partition.
+    expect(yaml).toContain("method{ efi } format{ }");
+    expect(yaml).toContain("method{ biosgrub }");
+    // Many boxes' firmware rejects EFI NVRAM writes, which would abort the
+    // install: install an extra GRUB at /EFI/BOOT/BOOTX64.EFI and skip NVRAM.
+    expect(yaml).toContain("d-i grub-installer/force-efi-extra-removable boolean true");
+    expect(yaml).toContain("grub-efi-amd64 grub2/force_efi_extra_removable boolean true");
+    expect(yaml).toContain("d-i grub-installer/update-nvram boolean false");
   });
 
   it("bakes flagship-unseal to /boot — build-at-install from cloned source", () => {
@@ -731,9 +696,10 @@ describe("the locked default — LUKS path details (EXPERIMENTAL, needs live val
     expect(b).toContain("copy_exec /bin/sed");
     expect(b).toContain("copy_exec /sbin/cryptsetup");
     expect(b).toContain("copy_exec /boot/flagship-unseal /bin/flagship-unseal");
-    // luksOpen the labelled root, then pivot (the relay path's terminal step).
-    expect(b).toContain("/dev/disk/by-label/FLAGSHIP_ROOT");
-    expect(b).toContain("cryptsetup luksOpen --key-file - \"$ROOT_PART\" flagship_root");
+    // luksOpen the raw LUKS container, activate the VG, then pivot.
+    expect(b).toContain('ROOT_LUKS_PART="$(blkid -t TYPE=crypto_LUKS -o device | head -n1)"');
+    expect(b).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
+    expect(b).toContain("lvm vgchange -ay");
     // Rebuild the initrd so the hook lands in /boot.
     expect(b).toContain("update-initramfs -u");
   });
@@ -742,46 +708,37 @@ describe("the locked default — LUKS path details (EXPERIMENTAL, needs live val
 describe("optional Wi-Fi — for a box with no Ethernet (burn-time local input)", () => {
   function userData(opts: { wifiSSID?: string; wifiPassword?: string }): string {
     const { blob, blobSignatureHex } = signedBlob();
-    return buildAutoinstallUserData({ blob, blobSignatureHex, ...opts });
+    return buildDebianPreseed({ blob, blobSignatureHex, ...opts });
   }
 
   it("absent Wi-Fi === byte-identical to before (no network: block, no wpasupplicant)", () => {
     const { blob, blobSignatureHex } = signedBlob();
-    const none = buildAutoinstallUserData({ blob, blobSignatureHex });
-    const empty = buildAutoinstallUserData({ blob, blobSignatureHex, wifiSSID: "" });
-    const wsOnly = buildAutoinstallUserData({ blob, blobSignatureHex, wifiSSID: "   " });
+    const none = buildDebianPreseed({ blob, blobSignatureHex });
+    const empty = buildDebianPreseed({ blob, blobSignatureHex, wifiSSID: "" });
+    const wsOnly = buildDebianPreseed({ blob, blobSignatureHex, wifiSSID: "   " });
     expect(empty).toBe(none);
     expect(wsOnly).toBe(none); // whitespace-only SSID is treated as absent
     expect(none).not.toContain("network:");
     expect(none).not.toContain("wpasupplicant");
   });
 
-  /** Decode the base64 Wi-Fi setup script out of the early-command line. */
+  /** Decode the base64 Wi-Fi setup script out of the late_command. */
   function extractWifiScript(yaml: string): string {
-    const m = yaml.match(/echo ([A-Za-z0-9+/=]+) \| base64 -d > \/tmp\/flagship-wifi\.sh/);
-    if (!m) throw new Error("wifi setup command not found in user-data");
+    const m = yaml.match(/echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/tmp\/flagship-wifi\.sh/);
+    if (!m) throw new Error("wifi setup command not found in preseed");
     return Buffer.from(m[1]!, "base64").toString("utf8");
   }
 
-  it("with an SSID: wired-only network: fallback + early/late commands + wpasupplicant, NO wifi match in YAML", () => {
+  it("with an SSID: d-i joins the AP, the target gets the runtime script + wpasupplicant", () => {
     const yaml = userData({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
-    // networkd allows ethernet match (the optional wired fallback) …
-    expect(yaml).toContain("  network:\n    version: 2");
-    expect(yaml).toContain('match: {name: "en*"}');
-    // … but NOT a wifi match — so the YAML must carry no wifis:/wl* glob.
+    expect(yaml).toContain("d-i netcfg/wireless_essid string HomeNet");
+    expect(yaml).toContain("d-i netcfg/wireless_security_type select wpa");
+    // Wi-Fi inside the installed system is configured at runtime, in-target.
+    expect(yaml).toContain("in-target bash /tmp/flagship-wifi.sh");
+    expect(yaml).toMatch(/pkgsel\/include string [^\n]* wpasupplicant/);
+    // The creds ride the base64 script only; the YAML-era network: block is gone.
     expect(yaml).not.toContain("wifis:");
     expect(yaml).not.toContain("wl*");
-    // Wi-Fi is configured at runtime: early-command (live) + /target late-command.
-    expect(yaml).toContain("  early-commands:");
-    expect(yaml).toContain('bash /tmp/flagship-wifi.sh"'); // live (no arg)
-    expect(yaml).toContain('bash /tmp/flagship-wifi.sh /target"'); // target
-    expect(yaml).toContain("    - wpasupplicant\n");
-    // SSID + password never appear in plaintext — only inside the base64 script.
-    expect(yaml).not.toContain("HomeNet");
-    expect(yaml).not.toContain("s3cret");
-    // network: → early-commands: → identity: (sibling keys under autoinstall:).
-    expect(yaml.indexOf("network:")).toBeLessThan(yaml.indexOf("early-commands:"));
-    expect(yaml.indexOf("early-commands:")).toBeLessThan(yaml.indexOf("identity:"));
   });
 
   it("the runtime script detects the interface, writes a name-keyed netplan, escapes SSID/pw", () => {
@@ -798,7 +755,7 @@ describe("optional Wi-Fi — for a box with no Ethernet (burn-time local input)"
 
   it("the Wi-Fi script is BYTE-IDENTICAL to the Swift twin (cross-language lockstep)", () => {
     // The Swift builder (EngineTests.testWifiSetupScriptIsByteIdenticalToTs)
-    // pins this SAME sha256. The base64 embedded in the autoinstall only matches
+    // pins this SAME sha256. The base64 embedded in the preseed only matches
     // across the two builders if the script does — so both suites assert it.
     const yaml = userData({ wifiSSID: "Flagship Test AP", wifiPassword: "test-only-not-real" });
     const s = extractWifiScript(yaml);
@@ -809,26 +766,22 @@ describe("optional Wi-Fi — for a box with no Ethernet (burn-time local input)"
 
   it("a password with no SSID is ignored (SSID is what gates the block)", () => {
     const { blob, blobSignatureHex } = signedBlob();
-    const none = buildAutoinstallUserData({ blob, blobSignatureHex });
-    const pwOnly = buildAutoinstallUserData({ blob, blobSignatureHex, wifiPassword: "orphan" });
+    const none = buildDebianPreseed({ blob, blobSignatureHex });
+    const pwOnly = buildDebianPreseed({ blob, blobSignatureHex, wifiPassword: "orphan" });
     expect(pwOnly).toBe(none);
     expect(pwOnly).not.toContain("orphan");
   });
 
-  it("Wi-Fi composes with the locked LUKS default (network: + storage: both present)", () => {
+  it("Wi-Fi composes with the locked LUKS default (netcfg + crypto storage both present)", () => {
     const yaml = userData({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
-    expect(yaml).toContain("network:");
-    expect(yaml).toContain("storage:");
-    expect(yaml).toContain("type: dm_crypt");
-    // ordering under autoinstall: network → early-commands → packages(+wpasupplicant) → storage → late-commands
-    expect(yaml.indexOf("network:")).toBeLessThan(yaml.indexOf("early-commands:"));
-    expect(yaml.indexOf("early-commands:")).toBeLessThan(yaml.indexOf("wpasupplicant"));
-    expect(yaml.indexOf("wpasupplicant")).toBeLessThan(yaml.indexOf("storage:"));
-    expect(yaml.indexOf("storage:")).toBeLessThan(yaml.indexOf("late-commands:"));
+    expect(yaml).toContain("d-i netcfg/wireless_essid string HomeNet");
+    expect(yaml).toContain("d-i partman-auto/method string crypto");
+    expect(yaml.indexOf("netcfg/wireless_essid")).toBeLessThan(yaml.indexOf("partman-auto/method"));
+    expect(yaml.indexOf("partman-auto/method")).toBeLessThan(yaml.indexOf("preseed/late_command"));
   });
 });
 
-describe("wifiSetupScript — distro-correct installed-system config (Ubuntu netplan vs Debian networkd)", () => {
+describe("wifiSetupScript — installed-system config for whichever network stack is present (netplan or networkd)", () => {
   it("is one script that branches at RUNTIME on whether netplan is present", () => {
     const s = wifiSetupScript("HomeNet", "s3cret");
     // The discriminator: netplan dir present in the target ⇒ Ubuntu, else Debian.
@@ -890,7 +843,7 @@ describe("wifiSetupScript — distro-correct installed-system config (Ubuntu net
 describe("first-boot Wi-Fi safety-net — the headless-box backstop", () => {
   function bootstrapWith(opts: { wifiSSID?: string; wifiPassword?: string }): string {
     const { blob, blobSignatureHex } = signedBlob();
-    return extractBootstrap(buildAutoinstallUserData({ blob, blobSignatureHex, ...opts }));
+    return extractBootstrap(buildDebianPreseed({ blob, blobSignatureHex, ...opts }));
   }
 
   it("is ABSENT on a wired burn (no SSID) — keeps the bootstrap byte-identical", () => {
@@ -967,7 +920,7 @@ describe("BRING-UP SAFETY NET — burn-time recovery slot kept (remove before GA
   function encBootstrap(opts: Record<string, unknown> = {}): string {
     const { blob, blobSignatureHex } = signedBlob();
     return extractBootstrap(
-      buildAutoinstallUserData({ blob, blobSignatureHex, ...opts }),
+      buildDebianPreseed({ blob, blobSignatureHex, ...opts }),
     );
   }
 
@@ -994,7 +947,7 @@ describe("INITRAMFS Wi-Fi (phone-gated unlock needs network in early boot)", () 
   function encBootstrap(opts: Record<string, unknown> = {}): string {
     const { blob, blobSignatureHex } = signedBlob();
     return extractBootstrap(
-      buildAutoinstallUserData({ blob, blobSignatureHex, ...opts }),
+      buildDebianPreseed({ blob, blobSignatureHex, ...opts }),
     );
   }
 
@@ -1166,7 +1119,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
   function encBootstrap(opts: Record<string, unknown> = {}): string {
     const { blob, blobSignatureHex } = signedBlob();
     return extractBootstrap(
-      buildAutoinstallUserData({ blob, blobSignatureHex, ...opts }),
+      buildDebianPreseed({ blob, blobSignatureHex, ...opts }),
     );
   }
 
@@ -1255,48 +1208,6 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     expect(b.trimEnd().endsWith('echo "[flagship-bootstrap] done"')).toBe(true);
   });
 
-  it("the encrypted wired bootstrap is BYTE-IDENTICAL to the Swift twin (cross-language sha pin)", () => {
-    // EngineTests.testEncryptedWiredBootstrapIsByteIdenticalToTs pins this SAME
-    // sha256 — the unlock hook/premount (which fix 3 changed on every LUKS
-    // burn) had no cross-language pin before.
-    const s = buildBootstrapScript({
-      ref: "main",
-      repoUrl: "https://github.com/ibisllc/flagship.git",
-      encryptRoot: true,
-      bootUnlockMode: "auto",
-      bootHost: DEFAULT_BOOT_HOST,
-    });
-    // The initramfs unlock hook must stage the virtio NIC drivers so a
-    // virtio-backed guest (Apple VZ / QEMU-KVM) has an interface at premount —
-    // without it net-ensure finds only lo, never DHCPs, and the disk stays
-    // sealed forever (registered-at-install, then silent).
-    expect(s).toContain("manual_add_modules");
-    expect(s).toContain("virtio_net");
-    // The wired unlock premount persists a diagnostic log to FLAGSHIP_BOOT so a
-    // stuck box is diagnosable after a hand-unlock (the wired path otherwise only
-    // echoes to a console a VZ/KVM host never captures).
-    expect(s).toContain("flagship-unlock.log");
-    expect(s).toContain("net state before unlock:");
-    expect(createHash("sha256").update(s).digest("hex")).toBe(
-      // Re-pinned 2026-10-10: the box installs and compiles only the daemon's
-      // workspace closure instead of the whole monorepo.
-      // Re-pinned 2026-07-20: (1) initramfs hook stages virtio_net/virtio_pci/
-      // virtio_mmio (VZ/KVM guests came up registered then silent — no NIC driver
-      // in the installed initrd); (2) the wired premount now writes a persistent
-      // flagship-unlock.log to FLAGSHIP_BOOT. Prior: 2026-07-19 daemon
-      // Restart=always + StartLimitIntervalSec=0.
-      // Re-pinned for the generalized appliance path: the exact same script can
-      // skip apt/clone/build only when the image's ref marker matches the signed
-      // recipe, and reuses the factory-built unseal helper; normal ISO/bare-metal
-      // execution remains the default branch.
-      // Re-pinned 2026-10-12: the data-services unit runs init.sh on every boot
-      // and retries on failure (no once-only env-file gate); its Description
-      // and comments name Postgres, Forgejo and Chromium (MinIO and Redis
-      // are gone).
-      "86cf2f4f8e28104007d4636241703330e1329e01cafa4beb88ff7f079f3a10cd",
-    );
-  });
-
   it("the encrypted DEBIAN bootstrap is BYTE-IDENTICAL to the Swift twin (cross-language sha pin)", () => {
     // EngineTests.testEncryptedDebianBootstrapIsByteIdenticalToTs pins this SAME
     // sha256. The Debian premount must open the LUKS container under the
@@ -1310,19 +1221,20 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       encryptRoot: true,
       bootUnlockMode: "auto",
       bootHost: DEFAULT_BOOT_HOST,
-      family: "debian",
     });
     expect(s).toContain("/cryptroot/crypttab 2>/dev/null | head -n1");
     expect(s).toContain('[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root');
     expect(s).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      // Re-pinned 2026-10-10: daemon-only install scope (see the wired pin above).
+      // Re-pinned 2026-10-18: comments name d-i, not curtin/Ubuntu (autoinstall
+      // path removed; Debian is the only installer family).
+      // Re-pinned 2026-10-10: daemon-only install scope.
       // Re-pinned 2026-07-20: initramfs hook stages virtio NIC drivers + the
       // wired premount persists flagship-unlock.log (see the wired pin above).
       // Prior: 2026-07-19 daemon Restart=always.
       // Same appliance-only preinstalled helper reuse as the wired twin above.
       // Re-pinned 2026-10-12: retried data-services unit (see the wired pin above).
-      "b3f7d20a625c4921bcd68a8466279b98a26f6a0e869dacb1b319537733361e19",
+      "d1c422d6ea58528dcd061b9383ee1603b333a7902ac7300426e83f6838c8fb04",
     );
   });
 
@@ -1336,32 +1248,20 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     };
     // The bootstrap NEVER bakes a console-login account or "DEBUG BUILD" banner.
     // Debug access is 100% runtime + owner-grant-gated (the daemon's
-    // debugAccessGate, NOT in this package). Assert across both families.
-    for (const family of ["ubuntu", "debian"] as const) {
-      const prod = buildBootstrapScript({ ...base, family });
-      expect(prod).not.toContain("debug:flagship");
-      expect(prod).not.toContain("DEBUG BUILD");
-      expect(prod).not.toContain("console login 'debug'");
-      expect(prod).not.toMatch(/useradd[^\n]*\bdebug\b/);
-      // The brand banner + prod content stay intact.
-      expect(prod).toContain("Get yours at");
-      expect(prod).toContain("cat > /etc/motd");
-    }
+    // debugAccessGate, NOT in this package).
+    const prod = buildBootstrapScript(base);
+    expect(prod).not.toContain("debug:flagship");
+    expect(prod).not.toContain("DEBUG BUILD");
+    expect(prod).not.toContain("console login 'debug'");
+    expect(prod).not.toMatch(/useradd[^\n]*\bdebug\b/);
+    // The brand banner + prod content stay intact.
+    expect(prod).toContain("Get yours at");
+    expect(prod).toContain("cat > /etc/motd");
   });
 
   it("PRODUCTION installer configs cannot be logged into on the command line", () => {
     const { blob, blobSignatureHex } = signedBlob();
     const opts = { blob, blobSignatureHex };
-    // Ubuntu autoinstall: flagship password is LOCKED ("*"), no committed crypt,
-    // SSH password auth is off, and no inline debug account/banner.
-    const yaml = buildAutoinstallUserData(opts);
-    expect(yaml).toContain('password: "*"');
-    expect(yaml).not.toMatch(/\$6\$/); // no committed crypt hash anywhere
-    expect(yaml).toContain("allow-pw: false");
-    expect(yaml).not.toContain("debug:flagship");
-    expect(yaml).not.toContain("DEBUG BUILD");
-    expect(yaml).not.toMatch(/useradd[^\n]*\bdebug\b/);
-
     // Debian preseed: root login disabled + flagship password LOCKED ("*"),
     // no committed crypt, no inline debug account/banner.
     const preseed = buildDebianPreseed(opts);
@@ -1385,7 +1285,6 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       encryptRoot: true,
       bootUnlockMode: "auto",
       bootHost: DEFAULT_BOOT_HOST,
-      family: "debian",
     });
     // Span both /etc/issue heredocs (greedy to the LAST FLAGSHIP_ISSUE
     // terminator) - shell comments around them may use typographic chars,

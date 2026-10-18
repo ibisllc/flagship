@@ -681,7 +681,7 @@ public sealed class Wizard : INotifyPropertyChanged
     /// <summary>
     /// Simple (default) = fetch the server-manifest Debian-netinst base, then run
     /// the SAME remaster+flash path Advanced uses. Advanced = remaster a stock
-    /// user-supplied Debian/Ubuntu ISO through the native installer pipeline.
+    /// user-supplied Debian ISO through the native installer pipeline.
     /// </summary>
     public bool UseSystemIso { get => _useSystemIso; set { if (_useSystemIso != value) { _useSystemIso = value; FireBag(); } } }
     public string WifiSsid { get => _wifiSsid; set { if (_wifiSsid != value) { _wifiSsid = value; SaveWifi(); FireBag(); } } }
@@ -1002,7 +1002,7 @@ public sealed class Wizard : INotifyPropertyChanged
     /// the Node CLI's `write` subcommand — the SAME remaster+flash path Advanced
     /// uses, just with a server-supplied base instead of a user-supplied ISO.
     ///
-    /// Advanced mode: remaster the user's own stock Ubuntu/Debian ISO.
+    /// Advanced mode: remaster the user's own stock Debian ISO.
     /// </summary>
     public async Task RunBakeAsync()
     {

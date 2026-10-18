@@ -1,10 +1,10 @@
 /**
- * Builder: ISO remaster for unattended autoinstall.
+ * Builder: ISO remaster for the unattended Debian preseed install.
  *
- * The pure grub-edit transform is unit-tested directly. A full xorriso
+ * The pure boot-config edit transforms are unit-tested directly. A full xorriso
  * round-trip (build a synthetic ISO -> remaster -> extract -> assert) runs
  * when xorriso is present, so the real command plumbing is exercised
- * without needing the 2GB Ubuntu ISO.
+ * without needing a real netinst image.
  */
 import { describe, it, expect } from "vitest";
 import { spawn } from "node:child_process";
@@ -12,10 +12,8 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, stat, chmod } from "node:fs/pr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  editGrubCfgForAutoinstall,
   editGrubCfgForPreseed,
   editIsolinuxCfgForPreseed,
-  remasterIsoWithAutoinstall,
   remasterIsoWithPreseed,
   remasterIsoWithInstaller,
   classifyIsoText,
@@ -23,6 +21,7 @@ import {
   resolveXorriso,
   toXorrisoDiskPath,
   DEBIAN_PRESEED_CMDLINE,
+  NOT_DEBIAN_ISO_MESSAGE,
 } from "../src/remasterIso.js";
 
 describe("toXorrisoDiskPath (Cygwin/MSYS Windows builds)", () => {
@@ -35,46 +34,6 @@ describe("toXorrisoDiskPath (Cygwin/MSYS Windows builds)", () => {
   it("passes POSIX paths through untouched", () => {
     expect(toXorrisoDiskPath("/tmp/x/out.iso", "darwin")).toBe("/tmp/x/out.iso");
     expect(toXorrisoDiskPath("/tmp/x/out.iso", "linux")).toBe("/tmp/x/out.iso");
-  });
-});
-
-const GRUB = `set timeout=30
-menuentry "Try or Install Ubuntu Server" {
-\tset gfxpayload=keep
-\tlinux\t/casper/vmlinuz quiet ---
-\tinitrd\t/casper/initrd
-}
-menuentry "Test memory" {
-\tlinux16 /boot/memtest86+.bin
-}
-`;
-
-describe("editGrubCfgForAutoinstall", () => {
-  it("inserts the autoinstall + nocloud cmdline after the casper kernel", () => {
-    const out = editGrubCfgForAutoinstall(GRUB);
-    expect(out).toMatch(
-      /linux\t\/casper\/vmlinuz autoinstall ds=nocloud\\;s=\/cdrom\/nocloud\/ quiet ---/,
-    );
-  });
-
-  it("shortens the menu timeout so it boots without waiting", () => {
-    expect(editGrubCfgForAutoinstall(GRUB)).toContain("set timeout=1");
-    expect(editGrubCfgForAutoinstall(GRUB)).not.toContain("set timeout=30");
-  });
-
-  it("never touches non-casper boot entries (e.g. memtest)", () => {
-    expect(editGrubCfgForAutoinstall(GRUB)).toContain("linux16 /boot/memtest86+.bin");
-  });
-
-  it("is idempotent — does not double-insert autoinstall", () => {
-    const once = editGrubCfgForAutoinstall(GRUB);
-    const twice = editGrubCfgForAutoinstall(once);
-    expect((twice.match(/autoinstall/g) ?? []).length).toBe(1);
-  });
-
-  it("adds a timeout line when the source has none", () => {
-    const noTimeout = `menuentry "x" {\n\tlinux /casper/vmlinuz ---\n}\n`;
-    expect(editGrubCfgForAutoinstall(noTimeout).startsWith("set timeout=1\n")).toBe(true);
   });
 });
 
@@ -99,61 +58,6 @@ async function xorrisoPresent(): Promise<boolean> {
     return x !== "xorriso" ? false : (await sh(x, ["-version"]).then(() => true).catch(() => false));
   }
 }
-
-describe("remasterIsoWithAutoinstall (real xorriso round-trip)", () => {
-  it("bakes the seed at /nocloud and patches grub inside the ISO", async () => {
-    if (!(await xorrisoPresent())) {
-      // xorriso not installed in this environment — the pure transform
-      // tests above still cover the patch logic.
-      return;
-    }
-    const work = await mkdtemp(join(tmpdir(), "remaster-rt-"));
-    try {
-      const src = join(work, "src");
-      await mkdir(join(src, "boot", "grub"), { recursive: true });
-      await mkdir(join(src, "casper"), { recursive: true });
-      const grubSrc = join(src, "boot", "grub", "grub.cfg");
-      await writeFile(grubSrc, GRUB);
-      await writeFile(join(src, "casper", "vmlinuz"), "fake");
-      // Mirror the real Ubuntu ISO: grub.cfg is read-only (0444). With
-      // Rock Ridge (-R) the mode is preserved into the ISO and restored on
-      // extract, so the remaster must chmod it writable before patching.
-      await chmod(grubSrc, 0o444);
-      const srcIso = join(work, "src.iso");
-      const x = await resolveXorriso();
-      const mk = await sh(x, ["-as", "mkisofs", "-R", "-o", dp(srcIso), "-V", "SYNTH", dp(src)]);
-      expect(mk).toBe(0);
-
-      const outIso = join(work, "out.iso");
-      await remasterIsoWithAutoinstall({
-        srcIsoPath: srcIso,
-        outIsoPath: outIso,
-        userDataYaml: "#cloud-config\nautoinstall:\n  version: 1\n",
-      });
-
-      const check = join(work, "check");
-      await mkdir(check, { recursive: true });
-      await sh(x, [
-        "-osirrox",
-        "on",
-        "-indev",
-        dp(outIso),
-        "-extract",
-        "/boot/grub/grub.cfg",
-        dp(join(check, "grub.cfg")),
-        "-extract",
-        "/nocloud/user-data",
-        dp(join(check, "user-data")),
-      ]);
-      const patched = await readFile(join(check, "grub.cfg"), "utf-8");
-      expect(patched).toContain("autoinstall ds=nocloud\\;s=/cdrom/nocloud/");
-      const seeded = await readFile(join(check, "user-data"), "utf-8");
-      expect(seeded).toContain("autoinstall:");
-    } finally {
-      await rm(work, { recursive: true, force: true }).catch(() => {});
-    }
-  });
-});
 
 // ── Debian (debian-installer / d-i) preseed remaster ────────────────────────
 
@@ -230,22 +134,27 @@ describe("editIsolinuxCfgForPreseed (Debian BIOS)", () => {
   });
 });
 
-describe("classifyIsoText (Ubuntu vs Debian discriminator)", () => {
+describe("classifyIsoText (Debian installer vs anything else)", () => {
   it("classifies a Debian volume id / tree as debian", () => {
     expect(classifyIsoText("Debian 13.5.0 amd64 1")).toBe("debian");
     expect(classifyIsoText("/install.amd\n/boot\n/EFI")).toBe("debian");
   });
-  it("classifies an Ubuntu volume id / tree as ubuntu", () => {
-    expect(classifyIsoText("Ubuntu-Server 22.04.5 LTS amd64")).toBe("ubuntu");
-    expect(classifyIsoText("/casper\n/boot\n/EFI")).toBe("ubuntu");
+  it("classifies any other installer as other", () => {
+    expect(classifyIsoText("Ubuntu-Server 22.04.5 LTS amd64")).toBe("other");
+    expect(classifyIsoText("/casper\n/boot\n/EFI")).toBe("other");
+    expect(classifyIsoText("ubuntu based on debian\n/casper")).toBe("other");
+    expect(classifyIsoText("Some Custom Linux 1.0")).toBe("other");
+    expect(classifyIsoText("")).toBe("other");
   });
-  it("an Ubuntu image that mentions 'debian' but ships casper stays ubuntu", () => {
-    // Ubuntu derives from Debian; casper (subiquity) is the real decider.
-    expect(classifyIsoText("ubuntu based on debian\n/casper")).toBe("ubuntu");
-  });
-  it("defaults to the proven Ubuntu path when ambiguous", () => {
-    expect(classifyIsoText("Some Custom Linux 1.0")).toBe("ubuntu");
-    expect(classifyIsoText("")).toBe("ubuntu");
+  it("refuses to remaster an image that is not a Debian installer", async () => {
+    await expect(
+      remasterIsoWithInstaller({
+        srcIsoPath: "/nonexistent.iso",
+        outIsoPath: "/nonexistent-out.iso",
+        preseedCfg: "x",
+        family: "other",
+      }),
+    ).rejects.toThrow(NOT_DEBIAN_ISO_MESSAGE);
   });
 });
 
@@ -279,7 +188,6 @@ describe("remasterIsoWithPreseed + detection (real xorriso round-trip)", () => {
         srcIsoPath: srcIso,
         outIsoPath: outIso,
         preseedCfg: "# Flagship Studio — debian-installer preseed\nd-i debian-installer/locale string en_US.UTF-8\n",
-        userDataYaml: "#cloud-config\n",
       });
       expect(used).toBe("debian");
 

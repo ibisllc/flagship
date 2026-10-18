@@ -1,24 +1,14 @@
 /**
- * Remaster a stock Ubuntu Server ISO into an unattended autoinstall ISO.
+ * Remaster a stock Debian netinst ISO into an unattended preseed ISO.
  *
- * Why not "append a CIDATA FAT image after the ISO" (the old approach)?
- * cloud-init's NoCloud datasource discovers its seed via `blkid`, which
- * only sees filesystems the kernel exposes as partitions. Trailing bytes
- * past the ISO with no GPT/MBR entry are invisible — so the seed is never
- * found and the installer drops to interactive mode.
+ * The preseed.cfg is baked at the ISO root and every boot config (grub.cfg for
+ * UEFI, isolinux for BIOS) gets the preseed cmdline. xorriso's
+ * `-boot_image any replay` reproduces the source ISO's El Torito catalog AND
+ * isohybrid MBR/GPT in the output, so the result is a true hybrid image: `dd`
+ * it to USB and it boots on both BIOS and UEFI.
  *
- * Instead we bake the seed *inside* the ISO9660 image at `/nocloud/` and
- * tell the kernel to read it from the install media (mounted at /cdrom):
- *
- *     autoinstall ds=nocloud;s=/cdrom/nocloud/
- *
- * `autoinstall` on the cmdline also suppresses subiquity's "are you sure?"
- * confirmation, so the install is fully unattended. This is the method
- * documented by Canonical for custom autoinstall media.
- *
- * xorriso's `-boot_image any replay` reproduces the source ISO's El Torito
- * catalog AND isohybrid MBR/GPT in the output, so the result is a true
- * hybrid image: `dd` it to USB and it boots on both BIOS and UEFI.
+ * This file also holds the NoCloud seed helpers the VM appliance factory uses
+ * for Debian cloud images (buildNocloudSeed / buildNocloudSeedIso).
  */
 import { mkdir, rm, writeFile, readFile, stat, chmod } from "node:fs/promises";
 import { spawn } from "node:child_process";
@@ -26,16 +16,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 
-export interface RemasterArgs {
-  srcIsoPath: string;
-  outIsoPath: string;
-  userDataYaml: string;
-  /** Override for tests / non-standard installs. Defaults to a PATH scan. */
-  xorrisoPath?: string;
-}
-
-/** The installer family an ISO carries. */
-export type IsoFamily = "ubuntu" | "debian";
+/** The installer family an ISO carries: Debian's d-i is the only one Flagship installs from. */
+export type IsoFamily = "debian" | "other";
 
 export interface RemasterPreseedArgs {
   srcIsoPath: string;
@@ -49,14 +31,8 @@ export interface RemasterPreseedArgs {
 export interface RemasterInstallerArgs {
   srcIsoPath: string;
   outIsoPath: string;
-  /**
-   * The unattended-install config. For an Ubuntu ISO this is the cloud-init
-   * user-data; for a Debian ISO it is the d-i preseed.cfg. The caller usually
-   * generates the right one for the detected family (or passes both and lets
-   * the dispatcher pick — see remasterIsoForRecipe in the CLI).
-   */
-  userDataYaml?: string;
-  preseedCfg?: string;
+  /** The d-i preseed.cfg text (from preseed.ts buildDebianPreseed). */
+  preseedCfg: string;
   /** Force a family instead of detecting from the ISO (tests / overrides). */
   family?: IsoFamily;
   xorrisoPath?: string;
@@ -99,43 +75,13 @@ export function toXorrisoDiskPath(p: string, platform: string = process.platform
 }
 
 /**
- * Insert the autoinstall kernel cmdline into every GRUB boot entry that
- * loads the casper kernel, and shorten the menu timeout so the install
- * entry boots without a 30s wait.
- *
- * Pure string transform — unit-tested without touching a real ISO.
- */
-export function editGrubCfgForAutoinstall(cfg: string): string {
-  const SEED = "autoinstall ds=nocloud\\;s=/cdrom/nocloud/";
-  const lines = cfg.split("\n").map((line) => {
-    // The kernel line looks like:  linux /casper/vmlinuz quiet ---
-    // (leading whitespace varies). Only touch lines that load the
-    // installer kernel, and never double-insert.
-    if (/^\s*linux\b/.test(line) && /\/casper\/vmlinuz/.test(line)) {
-      if (line.includes("autoinstall")) return line;
-      return line.replace(/(\/casper\/vmlinuz\S*)/, `$1 ${SEED}`);
-    }
-    return line;
-  });
-  let out = lines.join("\n");
-  // Boot the autoinstall entry promptly. Replace any timeout, else prepend.
-  if (/set\s+timeout=\d+/.test(out)) {
-    out = out.replace(/set\s+timeout=\d+/g, "set timeout=1");
-  } else {
-    out = `set timeout=1\n${out}`;
-  }
-  return out;
-}
-
-/**
  * The d-i kernel cmdline that drives a fully-unattended preseed install from
  * a preseed.cfg placed at the ISO root (mounted at /cdrom during install):
  *   - `auto=true priority=critical` suppresses every prompt at priority<critical
  *   - `preseed/file=/cdrom/preseed.cfg` points d-i at our config
  * The CD is already mounted at /cdrom by the time the preseed is read, so the
  * file method is reliable for the standard (text) installer entry — no initrd
- * repack needed (which keeps this inside the same `-map` + `replay` flow the
- * Ubuntu path uses). https://wiki.debian.org/DebianInstaller/Preseed
+ * repack needed (which keeps this inside one `-map` + `replay` flow). https://wiki.debian.org/DebianInstaller/Preseed
  */
 export const DEBIAN_PRESEED_CMDLINE =
   "auto=true priority=critical preseed/file=/cdrom/preseed.cfg";
@@ -287,104 +233,35 @@ export async function buildNocloudSeedIso(args: {
   }
 }
 
-export async function remasterIsoWithAutoinstall(args: RemasterArgs): Promise<void> {
-  const st = await stat(args.srcIsoPath);
-  if (st.size < 1024) {
-    throw new Error(`source ISO too small (${st.size}B); not an ISO`);
-  }
-  const xorriso = await resolveXorriso(args.xorrisoPath);
-  const work = join(
-    tmpdir(),
-    `flagship-remaster-${createHash("sha256")
-      .update(args.srcIsoPath + args.userDataYaml)
-      .digest("hex")
-      .slice(0, 12)}`,
-  );
-  await rm(work, { recursive: true, force: true });
-  await mkdir(work, { recursive: true });
-  try {
-    // 1. Extract the GRUB config from the source ISO.
-    const grubOut = join(work, "grub.cfg");
-    await sh(xorriso, [
-      "-osirrox",
-      "on",
-      "-indev",
-      toXorrisoDiskPath(args.srcIsoPath),
-      "-extract",
-      "/boot/grub/grub.cfg",
-      toXorrisoDiskPath(grubOut),
-    ]);
-    // osirrox preserves the file's ISO mode, and grub.cfg ships read-only
-    // (0444) on the Ubuntu image — so make our copy writable before we
-    // rewrite it, or the open-for-write below fails with EACCES.
-    await chmod(grubOut, 0o644);
-
-    // 2. Patch it for unattended autoinstall.
-    const patched = editGrubCfgForAutoinstall(await readFile(grubOut, "utf-8"));
-    await writeFile(grubOut, patched, "utf-8");
-
-    // 3. Build the NoCloud seed directory.
-    const seed = await buildNocloudSeed(work, args.userDataYaml);
-
-    // 4. Repack: replay the boot equipment, then overlay our seed + grub.
-    //    Clear a stale output first — xorriso refuses to write when -indev
-    //    differs from -outdev and the outdev already holds data.
-    await rm(args.outIsoPath, { force: true }).catch(() => {});
-    await sh(xorriso, [
-      "-indev",
-      toXorrisoDiskPath(args.srcIsoPath),
-      "-outdev",
-      toXorrisoDiskPath(args.outIsoPath),
-      "-boot_image",
-      "any",
-      "replay",
-      "-map",
-      toXorrisoDiskPath(seed),
-      "/nocloud",
-      "-map",
-      toXorrisoDiskPath(grubOut),
-      "/boot/grub/grub.cfg",
-    ]);
-  } finally {
-    await rm(work, { recursive: true, force: true }).catch(() => {});
-  }
-}
-
 /**
- * Classify the volume-descriptor / ISO contents text as ubuntu vs debian.
- * Pure (no I/O) so it's unit-testable: feed it the volume id or a directory
- * listing. Debian wins on an explicit "debian" marker OR the d-i kernel tree
- * (/install.amd, /d-i); Ubuntu on "ubuntu"/casper. Defaults to ubuntu (the
- * original, proven path) when ambiguous — the burn never refuses an ISO, it
- * just picks the most-likely-correct unattended mechanism.
+ * Classify the volume-descriptor / ISO contents text as Debian's installer or
+ * something else. Pure (no I/O) so it's unit-testable: feed it the volume id or
+ * a directory listing. Debian wins on an explicit "debian" marker OR the d-i
+ * kernel tree (/install.amd, /d-i), unless the text also looks like a casper
+ * (Ubuntu live) image without the d-i tree.
  */
 export function classifyIsoText(text: string): IsoFamily {
   const t = text.toLowerCase();
-  // Strong, specific markers first.
   if (/\binstall\.amd\b|\/d-i\/|debian-installer|\bdebian\b/.test(t)) {
-    // …unless it ALSO looks like Ubuntu (Ubuntu derives from Debian, but its
-    // live-server ISO is subiquity/casper — treat casper as the decider).
     if (/\bcasper\b|\bubuntu\b/.test(t) && !/\binstall\.amd\b|\/d-i\//.test(t)) {
-      return "ubuntu";
+      return "other";
     }
     return "debian";
   }
-  if (/\bubuntu\b|\bcasper\b|subiquity/.test(t)) return "ubuntu";
-  return "ubuntu";
+  return "other";
 }
 
 /**
- * Detect whether a source ISO is an Ubuntu (subiquity) or Debian (d-i) image.
- * Reads the ISO volume id; if that's inconclusive, peeks at the boot config
- * tree (Debian has /install.amd, Ubuntu has /casper). Defaults to "ubuntu".
+ * Detect whether a source ISO is a Debian (d-i) image. Reads the ISO volume id;
+ * if that's inconclusive, peeks at the boot config tree (Debian has
+ * /install.amd).
  */
 export async function detectIsoFamily(
   srcIsoPath: string,
   xorrisoPath?: string,
 ): Promise<IsoFamily> {
   const xorriso = await resolveXorriso(xorrisoPath);
-  // 1. Volume id (cheap, usually decisive: "Debian 13.5.0 amd64 1" vs
-  //    "Ubuntu-Server 22.04.5 LTS amd64").
+  // 1. Volume id (cheap, usually decisive: "Debian 13.5.0 amd64 1").
   let volid = "";
   try {
     volid = await shCapture(xorriso, ["-indev", toXorrisoDiskPath(srcIsoPath), "-toc"]);
@@ -394,7 +271,6 @@ export async function detectIsoFamily(
   const m = volid.match(/Volume id\s*:\s*'([^']*)'/i) ?? volid.match(/Volume id\s*:\s*(.+)/i);
   const volName = (m?.[1] ?? "").trim();
   if (/\bdebian\b/i.test(volName)) return "debian";
-  if (/\bubuntu\b/i.test(volName)) return "ubuntu";
   // 2. Directory probe — list the root + boot tree and classify the listing.
   try {
     const listing = await shCapture(xorriso, [
@@ -418,11 +294,11 @@ export async function detectIsoFamily(
  * preseed.cfg at the ISO root and patches BOTH boot paths — grub.cfg (UEFI) and
  * the isolinux/syslinux configs (BIOS) — to add the preseed cmdline + drop the
  * menu timeout. `-boot_image any replay` preserves the El Torito + isohybrid
- * MBR/GPT so the result is dd-able on BIOS and UEFI, same as the Ubuntu path.
+ * MBR/GPT so the result is dd-able on BIOS and UEFI.
  *
  * Note on md5sum.txt: d-i only verifies it during an explicit "Check disc"
  * step, which the unattended boot never runs — so editing files on the ISO is
- * fine (the Ubuntu path likewise doesn't regenerate any checksums).
+ * fine.
  */
 export async function remasterIsoWithPreseed(args: RemasterPreseedArgs): Promise<void> {
   const st = await stat(args.srcIsoPath);
@@ -494,36 +370,25 @@ export async function remasterIsoWithPreseed(args: RemasterPreseedArgs): Promise
 }
 
 /**
- * Family-aware remaster. Detects (or takes) the ISO family and routes to the
- * Ubuntu autoinstall path or the Debian preseed path, using whichever config
- * the caller supplied for that family.
+ * Remaster a Debian installer ISO. Detects (or takes) the ISO family and
+ * refuses anything that is not a Debian d-i image, with a sentence the apps can
+ * show as is.
  */
+export const NOT_DEBIAN_ISO_MESSAGE =
+  "This is not a Debian installer image. Flagship installs from a Debian netinst ISO.";
+
 export async function remasterIsoWithInstaller(
   args: RemasterInstallerArgs,
 ): Promise<IsoFamily> {
   const family = args.family ?? (await detectIsoFamily(args.srcIsoPath, args.xorrisoPath));
-  if (family === "debian") {
-    if (!args.preseedCfg) {
-      throw new Error("Debian ISO detected but no preseedCfg was provided");
-    }
-    await remasterIsoWithPreseed({
-      srcIsoPath: args.srcIsoPath,
-      outIsoPath: args.outIsoPath,
-      preseedCfg: args.preseedCfg,
-      xorrisoPath: args.xorrisoPath,
-    });
-    return "debian";
-  }
-  if (!args.userDataYaml) {
-    throw new Error("Ubuntu ISO detected but no userDataYaml was provided");
-  }
-  await remasterIsoWithAutoinstall({
+  if (family !== "debian") throw new Error(NOT_DEBIAN_ISO_MESSAGE);
+  await remasterIsoWithPreseed({
     srcIsoPath: args.srcIsoPath,
     outIsoPath: args.outIsoPath,
-    userDataYaml: args.userDataYaml,
+    preseedCfg: args.preseedCfg,
     xorrisoPath: args.xorrisoPath,
   });
-  return "ubuntu";
+  return "debian";
 }
 
 /** Run a command and capture stdout (for ISO introspection). */

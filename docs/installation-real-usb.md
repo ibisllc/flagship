@@ -91,7 +91,7 @@ Plug the USB into the target. Power on, hit your firmware's boot-menu key
 (F12 / F10 / Esc — varies by manufacturer), pick the USB. The installer
 reads the recipe and runs unattended. Allow roughly 5–15 minutes.
 
-The machine reboots into its newly-installed Debian/Ubuntu rootfs and the
+The machine reboots into its newly-installed Debian rootfs and the
 flagship-bootstrap systemd unit POSTs the registration to
 `flagshipserver.com`. Once that lands, the pod is alive at
 `https://<server-name>.<your-username>.flagship.services/`.

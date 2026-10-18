@@ -157,6 +157,8 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   (the marketplace; also Pro payments + vouchers), **`feat/retail`** (getting the
   app working with retail / NFC boxes), **`feat/browser-extension`**,
   **`feat/phone-usb-burn`** (Android burns a USB stick on its own),
+  **`feat/other-os-installers`** (the Ubuntu autoinstall and Debian-netboot
+  installer paths `main` shed on 2026-10-18, kept for a possible multi-OS effort),
   **`feat/custom-names`** (dibs + paid name change) and **`feat/custom-domains`**
   (custom domains as a Pro feature) and **`feat/outbound-proxy`** (a box's
   traffic through a proxy + OHTTP setup) — the last three branch OFF `feat/marketplace`
@@ -1081,16 +1083,15 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
 11. **Static-asset content-hashing:** the site flashes unstyled mid-deploy.
     Content-hash filenames and serve them immutable, or at least 404 `.css`/`.js`
     instead of the SPA fallback (`apps/com/src/route.ts`).
-12. **Netboot path** (`parse-trailer.sh`) verifies v2 blobs but nothing ships it.
-13. **Relay-trust enforcement is OFF** (`FLAGSHIP_RELAY_TRUST_ENFORCE`). Before
+12. **Relay-trust enforcement is OFF** (`FLAGSHIP_RELAY_TRUST_ENFORCE`). Before
     flipping it on a canary, do `docs/maintainer-trust-enforcement.md`
     live-validation steps 7–9 (dedicated hub credential, persisted blessing,
     re-verify on expiry).
-14. **VM boot observability:** the wired initramfs unlock log isn't persisted to
+13. **VM boot observability:** the wired initramfs unlock log isn't persisted to
     the FLAGSHIP_BOOT partition (the Wi-Fi path's is), and the "taking longer
     than expected" stalled-boot advisory exists on Mac, Linux and Windows Studio.
-15. **Obsolete plaintext display-name fixtures** remain in some active tests.
-16. **Repo adapters** (`docs/repo-adapters.md`): built and deployed
+14. **Obsolete plaintext display-name fixtures** remain in some active tests.
+15. **Repo adapters** (`docs/repo-adapters.md`): built and deployed
     2026-10-11 — single-file format, the public store
     (github.com/ibisllc/flagship-adapters, token set, migrations 0085–0086
     applied), share by default with up to 2 fix rounds, crash/report
@@ -1101,10 +1102,10 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
     insights); per-IP limits on submit/complain (anyone can retire an
     adapter with 3 anonymous complaints). Git and IDE builds still live only
     in daemon memory, so a restart forgets them (journals survive).
-17. **Flagship Inference region choice:** both shim upstreams are US
+16. **Flagship Inference region choice:** both shim upstreams are US
     (DeepInfra primary, OpenRouter fallback). Add a user-selectable US/EU
     region (an EU upstream such as Scaleway, picked per account).
-18. **Share this server, after v1** (owner, 2026-10-14; v1 targets a family:
+17. **Share this server, after v1** (owner, 2026-10-14; v1 targets a family:
     start-up approval while the owner is away, plus day-to-day upkeep).
     Later, in order: **succession** (the owner names a successor who can
     claim ownership if the owner's dead-man switch lapses, after a waiting
@@ -1114,7 +1115,7 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
     co-managers can see**; **IDE/git builds for co-managers** with MCP keys
     scoped to the share and revoked with it. Offices (company owns the
     server, staff come and go) need all four: target them after.
-19. **Flagship Inference allowances: decided (owner, 2026-10-15).** Keep
+18. **Flagship Inference allowances: decided (owner, 2026-10-15).** Keep
     2M starter, 500k a week, 50M daily cap: 40 measured builds put a first
     build at 3-9% of the 474k estimate (`docs/ai-inference-costs.md` §16;
     harness `infra/inference/build-eval`). Thinking is off on Flagship
@@ -1174,6 +1175,13 @@ Not compiled since the rebase: the iOS and Android code on any branch.
   relay (Oblivious Network first) and set the relay secrets.
 - **`feat/phone-usb-burn`:** validate the OTG write on a real phone + stick,
   publish the seed and set `FLAGSHIP_ISO_SEED`.
+- **`feat/other-os-installers`** (owner, 2026-10-18): `main` + the Ubuntu
+  subiquity autoinstall generator/remaster (TS, Swift, C#, the engine API
+  `buildUserDataFromRecipe`) and `packages/installer-netboot` +
+  `scripts/build-flagship-netboot-iso.*`, for a future other-OS effort. Its
+  LUKS burn passphrase constant is removed from those paths but they are
+  UNTESTED (see `OTHER-OS-INSTALLERS.md` on the branch). Rebase onto `main`
+  when it moves; nothing on `main` depends on it.
 - **`feat/retail`** (NFC box), **`feat/browser-extension`**, **`alpine`** (parked
   installer), **`gym`** (main + the gym trust pin and app adoption seams; kept
   current by `scripts/gym-refresh.sh`; run its live account-recovery spec).
@@ -1240,7 +1248,7 @@ spec in `docs/`, the runbooks in `docs/runbooks/`, or — for architecture —
 - **Cert & addressing** — `per-user-cert-and-addressing.md`, `per-user-cert-worklist.md`, `multiplexing.md`, `service-addressing-double-dash.md`
 - **Recovery / multi-device / security** — `multi-device.md`, `lifecycle-spec.md`, `security-phone-as-unlock-endpoint.md`, `box-request-inbox.md`, `v1.2-security-cascade.md`, `revocation-ui.md`, `wipe-restart.md`, `watch-delegate-key-design.md`, `v2-device-addressing-and-real-ticket.md`, `account-deletion-and-name-reclaim.md`, `server-replacement-graceful-decommission.md`, `box-recipe-persistence-and-restore.md`, `multi-pod-liveness-session-leadership.md`
 - **Login / accounts / demo** — `login-and-account-redesign.md`, `naming-recovery-and-name-change.md`, `username-suggestion-queue.md`, `sample-users.md`
-- **Install / ISO / builder** — `studio-mac-app-store.md`, `recipe-schema-v2.md`, `installer-tiny.md`, `installer-netboot.md`, `cloud-init-direct-provisioning.md`, `installation-real-usb.md`, `reproducible-iso-build.md`, `recipe-delivery-and-remote-install.md`
+- **Install / ISO / builder** — `studio-mac-app-store.md`, `recipe-schema-v2.md`, `installer-tiny.md`, `cloud-init-direct-provisioning.md`, `installation-real-usb.md`, `reproducible-iso-build.md`, `recipe-delivery-and-remote-install.md`
 - **NFC retail box** — `nfc-box-pairing.md`, `v1-operational-tasks.md § N`, `n-cloud-2-design-discussion.md`
 - **CA / maintainers** — `ca-operations.md`, `maintainer-ca-endorsement.md`, `maintainers-checkpoints-spec-v0.1.md`, `maintainers-deployment.md`
 - **Marketplace / apps / monetization** — `app-developer-guide.md`, `manifest.md`, `repo-adapters.md`, `monetization-free-tier-first.md`, `metering.md`, `launch-mvp.md`, `anonymous-vouchers.md`, `multi-device-monetization.md`, `vibe-code-experience.md`

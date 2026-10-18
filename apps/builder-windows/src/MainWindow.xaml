@@ -227,7 +227,7 @@
                                 <StackPanel Grid.Column="1" Margin="12,0,8,0"
                                             VerticalAlignment="Center">
                                     <TextBlock Style="{StaticResource RowTitle}"
-                                               Text="Debian / Ubuntu ISO"/>
+                                               Text="Debian ISO"/>
                                     <TextBlock Style="{StaticResource RowHint}"
                                                Text="Drop a stock installer ISO to remaster"
                                                Visibility="{Binding HasIso,

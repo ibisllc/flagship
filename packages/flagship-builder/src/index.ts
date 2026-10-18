@@ -12,11 +12,9 @@ export {
   type LoadedBlob,
 } from "./loadBlob.js";
 export {
-  buildAutoinstallUserData,
   buildBootstrapScript,
   type UserDataOptions,
   type BootstrapTemplateArgs,
-  type InstallerFamily,
   type BootUnlockMode,
 } from "./userdata.js";
 export { buildDebianPreseed } from "./preseed.js";
@@ -41,26 +39,23 @@ export {
   buildPreseedFromRecipe,
   buildBootstrapFromRecipe,
   buildInstallBlobJsonFromRecipe,
-  buildUserDataFromRecipe,
   optionsFromRecipeJson,
   installAsEngineGlobal,
   type EngineBurnOptions,
 } from "./preseedEngine.js";
 export { verifyIsoHash, type VerifyIsoResult } from "./verifyIso.js";
 export {
-  remasterIsoWithAutoinstall,
   remasterIsoWithPreseed,
   remasterIsoWithInstaller,
   detectIsoFamily,
   classifyIsoText,
-  editGrubCfgForAutoinstall,
   editGrubCfgForPreseed,
   editIsolinuxCfgForPreseed,
   buildNocloudSeed,
   buildNocloudSeedIso,
   resolveXorriso,
   DEBIAN_PRESEED_CMDLINE,
-  type RemasterArgs,
+  NOT_DEBIAN_ISO_MESSAGE,
   type RemasterPreseedArgs,
   type RemasterInstallerArgs,
   type IsoFamily,

@@ -94,7 +94,7 @@ Make the box **inspectable** so the first-boot chain can be watched/driven:
 1. **Bake a diagnostic dev SSH key** (now wired end-to-end). The CLI's
    `prepare`/`user-data` accept `--debug-ssh-key-file <pub>` (or
    `--debug-ssh-key "<key>"`), threaded into `buildDebianPreseed`
-   /`buildAutoinstallUserData` → the `flagship` user's `authorized_keys`:
+   → the `flagship` user's `authorized_keys`:
 
    ```pwsh
    ssh-keygen -t ed25519 -N '""' -f out\diag

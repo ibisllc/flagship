@@ -162,7 +162,7 @@
         <p style="color: var(--text-muted);">The technical reference below is for people who want to know exactly what gets written, or who run the Builder in its advanced bring-your-own-image mode. Everyone else can skip it.</p>
 
         <h4 style="font-family: var(--font-heading); font-size: var(--h5-size, var(--body-size)); font-weight: 600; margin: var(--space-6) 0 var(--space-2); display:flex; align-items:center; gap: var(--space-3);">Debian 13 (trixie) <span class="pill">amd64 · recommended</span></h4>
-        <p>The most compatible choice. Its installer can place the bootloader where even stubborn UEFI firmware will find it — so Debian installs and boots on machines where other installers give up. It's also a smaller download (a network installer), and boots on both BIOS and UEFI. <strong>If you're not sure which to pick, pick Debian.</strong></p>
+        <p>The most compatible choice. Its installer can place the bootloader where even stubborn UEFI firmware will find it — so Debian installs and boots on machines where other installers give up. It's also a smaller download (a network installer), and boots on both BIOS and UEFI.</p>
         <dl class="kv">
           <dt>Download</dt>
           <dd><a href="https://cdimage.debian.org/cdimage/archive/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso">debian-13.6.0-amd64-netinst.iso</a></dd>
@@ -172,16 +172,6 @@
           <dd>65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7</dd>
         </dl>
 
-        <h4 style="font-family: var(--font-heading); font-size: var(--h5-size, var(--body-size)); font-weight: 600; margin: var(--space-8) 0 var(--space-2); display:flex; align-items:center; gap: var(--space-3);">Ubuntu Server 22.04.5 LTS <span class="pill">amd64</span></h4>
-        <p>The long-term-support server image. Boots on both BIOS and UEFI. A solid alternative — though on some machines whose firmware refuses to register a new boot entry, Ubuntu's installer can't complete; if that happens to you, use Debian instead.</p>
-        <dl class="kv">
-          <dt>Download</dt>
-          <dd><a href="https://releases.ubuntu.com/22.04.5/ubuntu-22.04.5-live-server-amd64.iso">ubuntu-22.04.5-live-server-amd64.iso</a></dd>
-          <dt>Size</dt>
-          <dd>~2.0 GB</dd>
-          <dt>SHA-256</dt>
-          <dd>9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635434a46aa98b0</dd>
-        </dl>
         <div class="callout">
           <p style="margin:0;"><strong>Why a pinned list?</strong> The Builder verifies the image's SHA-256 against this list before it writes anything. A corrupted download, a tampered mirror, or an untested version is refused — you never have to check a checksum by hand. We add images here only after a real end-to-end install on real hardware.</p>
         </div>

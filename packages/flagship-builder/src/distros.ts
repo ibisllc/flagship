@@ -23,15 +23,11 @@ export interface PinnedDistro {
   /** Size in bytes (we sanity-check before reading the whole file). */
   sizeBytes: number;
   /**
-   * Which installer family the ISO carries. "debian" → debian-installer (d-i)
-   * preseed; "ubuntu" → subiquity autoinstall. Selects the unattended-install
-   * mechanism the remaster bakes in (preseed vs NoCloud) and the generator
-   * (preseed.cfg vs cloud-init user-data). This is the discriminator, not
-   * cloudInitDatasource (kept for back-compat).
+   * Which installer family the ISO carries: debian-installer (d-i) preseed.
    */
-  family: "debian" | "ubuntu";
+  family: "debian";
   /** Cloud-init NoCloud datasource layout the bootstrap relies on. */
-  cloudInitDatasource: "subiquity" | "debian-cloud";
+  cloudInitDatasource: "debian-cloud";
   /** Whether boot is BIOS-legacy, UEFI, or both. */
   boot: "bios" | "uefi" | "hybrid";
   /**
@@ -46,7 +42,7 @@ export const PINNED_DISTROS: readonly PinnedDistro[] = [
     // Debian is the recommended default: its installer (debian-installer) can be
     // preseeded to force GRUB to the EFI removable-media path, so it installs
     // and boots on firmware that REJECTS NVRAM boot-entry writes — the exact
-    // class of box Ubuntu's subiquity fatally aborts on.
+    // class of box other installers fatally abort on.
     id: "debian-13-netinst-amd64",
     displayName: "Debian 13 (trixie) netinst (amd64)",
     upstreamUrl:
@@ -75,17 +71,6 @@ export const PINNED_DISTROS: readonly PinnedDistro[] = [
     // tolerates that (it patches whichever boot configs exist).
     boot: "uefi",
     recommended: false,
-  },
-  {
-    id: "ubuntu-22.04-server-amd64",
-    displayName: "Ubuntu Server 22.04.5 LTS (amd64)",
-    upstreamUrl:
-      "https://releases.ubuntu.com/22.04.5/ubuntu-22.04.5-live-server-amd64.iso",
-    sha256: "9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635434a46aa98b0",
-    sizeBytes: 2_136_926_208,
-    family: "ubuntu",
-    cloudInitDatasource: "subiquity",
-    boot: "hybrid",
   },
 ] as const;
 

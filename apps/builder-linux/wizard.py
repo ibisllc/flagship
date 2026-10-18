@@ -4,7 +4,7 @@ Five-step wizard in one Adw.ApplicationWindow with a scrolling content area
 and a log pane pinned at the bottom:
 
   1. Drop recipe JSON (or paste raw JSON into a text area)
-  2. Drop the stock Ubuntu Server ISO
+  2. Drop the stock Debian netinst ISO
   3. Pick target USB drive (read-only list of removable drives)
   4. Big "Bake" button → calls `flagship-build write` and streams output
   5. Done — show server-domain + when it expires
@@ -71,7 +71,7 @@ from vm.server_tier import ServerDestination, ServerTier
 #   simple   : recipe + USB only. The Debian-netinst base ISO is fetched per
 #              the SERVER manifest (/api/iso-manifest) + cached, then handed to
 #              the SAME Node CLI remaster+write path Advanced uses. Default.
-#   advanced : recipe + a user-supplied stock Ubuntu/Debian ISO. Same CLI path.
+#   advanced : recipe + a user-supplied stock Debian ISO. Same CLI path.
 MODE_SIMPLE = "simple"
 MODE_ADVANCED = "advanced"
 
@@ -1554,12 +1554,12 @@ def build_window(application, model: Optional[WizardModel] = None):
     step2 = _wizard_card(
         step=2,
         title="Drop the ISO",
-        subtitle="Ubuntu Server stock image. Run `flagship-build distros` for accepted SHAs.",
+        subtitle="Debian netinst stock image. Run `flagship-build distros` for accepted SHAs.",
     )
     content_box.append(step2["card"])
 
     iso_drop = _drop_zone(
-        "Drop ubuntu-*-live-server.iso here",
+        "Drop debian-*-netinst.iso here",
         on_drop=lambda p: wizard_model.accept_iso_file(Path(p)),
         Gtk=Gtk,
     )

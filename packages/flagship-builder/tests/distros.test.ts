@@ -27,8 +27,8 @@ describe("PINNED_DISTROS allowlist", () => {
 
   it("every entry's URL references the major.minor version from the id", () => {
     for (const d of PINNED_DISTROS) {
-      // Extract the major.minor token from the id (e.g. 22.04 from
-      // "ubuntu-22.04-server-amd64").
+      // Extract the major.minor token from the id (e.g. 13 from
+      // "debian-13-netinst-amd64").
       const m = d.id.match(/(\d+\.\d+)/);
       if (m) expect(d.upstreamUrl).toContain(m[1]!);
     }
@@ -65,17 +65,17 @@ describe("PINNED_DISTROS allowlist", () => {
     expect(findDistroBySha("00".repeat(32))).toBeUndefined();
   });
 
-  it("v1 includes Ubuntu Server 22.04 — kept working alongside Debian", () => {
-    const d = findDistroById("ubuntu-22.04-server-amd64");
+  it("the allowlist is Debian installers only", () => {
+    const d = findDistroById("debian-13-netinst-amd64");
     expect(d).toBeDefined();
-    expect(d!.cloudInitDatasource).toBe("subiquity");
-    expect(d!.family).toBe("ubuntu");
+    expect(d!.cloudInitDatasource).toBe("debian-cloud");
+    expect(d!.family).toBe("debian");
   });
 
   it("Debian is FIRST and the single recommended choice (NVRAM-compat default)", () => {
     // Debian's d-i can be preseeded to the EFI removable-media path, so it
-    // installs on firmware that subiquity fatally aborts on — it's the
-    // recommended default and must lead the list (website + picker order).
+    // installs on firmware that rejects NVRAM writes — it's the recommended
+    // default and must lead the list (website + picker order).
     expect(PINNED_DISTROS[0]!.id).toBe("debian-13-netinst-amd64");
     expect(PINNED_DISTROS[0]!.family).toBe("debian");
     const recommended = PINNED_DISTROS.filter((d) => d.recommended);
@@ -85,7 +85,7 @@ describe("PINNED_DISTROS allowlist", () => {
 
   it("every entry has a known installer family", () => {
     for (const d of PINNED_DISTROS) {
-      expect(["debian", "ubuntu"]).toContain(d.family);
+      expect(d.family).toBe("debian");
     }
   });
 });

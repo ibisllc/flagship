@@ -143,11 +143,6 @@ public final class PreseedEngine {
         try invoke("buildPreseedFromRecipe", recipeJSON: recipeJSON, burnOptsJson: burnOpts.json())
     }
 
-    /// Ubuntu autoinstall user-data for the (already-verified) recipe + options.
-    public func buildUserData(recipeJSON: Data, burnOpts: BurnOptions = .init()) throws -> String {
-        try invoke("buildUserDataFromRecipe", recipeJSON: recipeJSON, burnOptsJson: burnOpts.json())
-    }
-
     /// The canonical per-owner specialization script for a generalized VM
     /// appliance. The guest runs it with FLAGSHIP_APPLIANCE_PREINSTALLED=1.
     public func buildApplianceBootstrap(recipeJSON: Data,
@@ -167,10 +162,6 @@ public final class PreseedEngine {
     /// byte-identity test to isolate JSC fidelity from the BurnOptions struct.
     func buildPreseedRaw(recipeJSON: Data, burnOptsJson: String) throws -> String {
         try invoke("buildPreseedFromRecipe", recipeJSON: recipeJSON, burnOptsJson: burnOptsJson)
-    }
-
-    func buildUserDataRaw(recipeJSON: Data, burnOptsJson: String) throws -> String {
-        try invoke("buildUserDataFromRecipe", recipeJSON: recipeJSON, burnOptsJson: burnOptsJson)
     }
 
     private func invoke(_ method: String, recipeJSON: Data, burnOptsJson: String) throws -> String {

@@ -107,8 +107,7 @@ second `write_files` entry). The script:
    `/api/server/register` and uploads the sealed-LUKS-key.
 7. `systemctl daemon-reload && systemctl enable --now …`.
 
-The script is byte-for-byte mirrored from `installer-netboot/late-command.sh`,
-but it runs in a real Debian rootfs at first boot instead of in d-i's
+The script runs in a real Debian rootfs at first boot instead of in d-i's
 post-install chroot, so the failure modes are far more diagnosable.
 
 The whole user_data is plain UTF-8 ≤ 16 KB (Hetzner's hard limit is
