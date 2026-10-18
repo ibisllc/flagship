@@ -359,6 +359,20 @@ describe("the challenge shield", () => {
     expect(cf.dump()).toEqual(ACCOUNT_SET);
   });
 
+  it("refuses to publish the challenge when the shield cannot be made (no half-dark window)", async () => {
+    const { storage, identity } = await boxWithAccount();
+    const real = globalThis.fetch;
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "POST" && String(init?.body).includes('"A"')) {
+        return new Response(JSON.stringify({ success: false, errors: [{ code: 1004 }] }), { status: 400 });
+      }
+      return real(url, init);
+    });
+    const r = await publish(storage, identity, "token");
+    expect(r.status).toBe(502);
+    expect(cf.records.some((x) => x.type === "TXT")).toBe(false);
+  });
+
   it("adds nothing when no relay address is configured (compat)", async () => {
     const storage = new InMemoryStorage();
     const identity = key();

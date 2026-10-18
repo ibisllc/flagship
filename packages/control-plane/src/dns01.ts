@@ -260,14 +260,16 @@ export async function handleDns01Publish(
   }
 
   // Shield first, so there is never a moment where the TXT exists without it.
-  // Best-effort: a shield failure must not stop the issuance it protects.
+  // Fail closed: without the shield the TXT would make the box's names an empty
+  // non-terminal that resolvers cache as "no such name" for the SOA minimum
+  // (30 minutes), so a failed shield refuses the publish and the box retries.
   if (deps.shield) {
     const host = challengeHostOf(r.recordName);
     if (host) {
       try {
         await ensureChallengeShield(deps.dns, deps.shield, host, r.recordName === expectedName);
-      } catch {
-        // swallow; the stale-challenge sweep and the reap tool tidy leftovers
+      } catch (e) {
+        return { status: 502, body: { error: "shield failed", message: errMsg(e) } };
       }
     }
   }

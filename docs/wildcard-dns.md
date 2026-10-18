@@ -97,9 +97,11 @@ which writes those TXTs for the box (the box publishes nothing else), adds a
 **shield** around them:
 
 - On `dns-01/publish` for `_acme-challenge.X`: upsert A (and AAAA when the
-  relay has one) at `X` and, for a box, at `*.X`, with the relay's address.
-  The answers are identical to the wildcard's, so nothing changes for a
-  resolver; they only keep `X` from going dark.
+  relay has one) at `X` and, for a box, at `*.X`, with the relay's address,
+  BEFORE the TXT is written. The answers are identical to the wildcard's, so
+  nothing changes for a resolver; they only keep `X` from going dark. If the
+  shield cannot be made the publish is refused (502) and the box retries: a
+  TXT without its shield is exactly the 30-minute outage.
 - On `dns-01/delete`: when the last TXT at `_acme-challenge.X` is gone, delete
   the shield, but only while the account's `*.<user>` records exist with the
   same address (so a legacy per-box record, which is what the shield looks
@@ -111,6 +113,19 @@ which writes those TXTs for the box (the box publishes nothing else), adds a
 At most, per box being issued: 2 TXT + 4 shield records, all gone minutes
 later. Over a whole zone the steady state is zero, so reserve about 20 records
 of headroom for concurrent issuances.
+
+**Verification status.** Verified live (2026-10-18, Cloudflare's authoritative
+servers): `x.y.<user>` is synthesised from `*.<user>` (multi-label), and the
+zone's SOA minimum is 1800 s. NOT verified: that Cloudflare treats a name with
+only a descendant (`_acme-challenge.X` TXT) as an empty non-terminal and so
+answers NODATA for `X` (RFC 4592 says so, and "a `_dmarc` record blocks the
+parent wildcard" is a well-known Cloudflare behaviour, but no scratch zone was
+available and the zone's name servers started refusing direct queries from
+this machine mid-assessment), nor that a shield created just before the TXT
+and removed just after it is seen in that order on every anycast node (a gap
+of milliseconds is conceivable). The live gym exercises a first issuance on
+every run; a poll of the box name during it (every 200 ms, via 1.1.1.1) would
+prove it and is the first thing to add if the owner wants proof before prod.
 
 ## 5. What `.com` keeps per account
 
@@ -203,3 +218,104 @@ the wildcard for accounts that predate it.
   wildcard certificates.
 - A higher record cap, the gym on its own domain (frees the shared Let's
   Encrypt budget), reaping leftovers: unchanged, see AGENTS.md.
+
+## 10. Alternative evaluated: one zone-level wildcard `*.flagship.services`
+
+Question (owner, 2026-10-18): wildcards span labels (RFC 4592), so could one
+`*.flagship.services` A/AAAA to the relay answer `server.user` and `user` too,
+with only temporary records for challenges, and HTTP-01 / TLS-ALPN-01 instead
+of DNS-01 where names allow?
+
+Short answer: it works for resolution and removes the per-account cost, but it
+widens the one hazard we already have to design around, cannot replace DNS-01
+for the certificates we mint, and gives up the per-account CAA node. I
+recommend the per-account plan now and this as the scale step.
+
+### 10.1 Empty non-terminals (trap 1), compared
+
+| | per-account `*.<user>` (built) | zone-level `*.flagship.services` |
+|---|---|---|
+| a challenge TXT at `_acme-challenge.server.user` blocks | `server.user` and below | `server.user` and below, AND `user` itself, so the account's OTHER boxes and its tier-2 names too (closest encloser `user` has no `*.user`: NXDOMAIN) |
+| shield needed | `server.user` + `*.server.user`, A + AAAA (4) | those 4 plus a temporary `*.user` pair (2), reference-counted across the account's concurrent challenges; released only when no `_acme-challenge.*.user` TXT remains (needs a zone listing) |
+| failure mode if the shield is missing | one box dark 30 min | the whole account dark 30 min |
+| any record at `user` (CAA, an old `home.user` record) | harmless: `*.user` is its child | kills the synthesis for that account unless it also gets its own `*.user` pair |
+
+So yes: a TXT (or CNAME) challenge window recreates the 30-minute negative
+cache for clients that query the name during it, in BOTH plans, and a CAA (or
+any record) at `<user>` does the same in the zone-level plan. There is no
+challenge name that avoids it: the CA asks for `_acme-challenge.<validated
+name>`, which is always a descendant of the validated name, so a delegated or
+CNAMEd challenge still creates the node. Ways around it, in the order we
+considered them: (a) keep per-box A/AAAA permanently, which is the old 4
+records a box and what we are removing; (b) a shield for the length of the
+challenge, built, fail-closed; (c) make clients retry: useless, the negative
+answer is cached by recursive resolvers outside our control; (d) shorten the
+window: helps, does not remove it; (e) no TXT at all: only possible without
+wildcard SANs (10.2).
+
+### 10.2 Certificate model (trap 2)
+
+A box's certificate is `[server.user, *.server.user]`; the wildcard SAN can be
+proven only by DNS-01, and the apex SAN of the same order shares the same
+TXT name. Replacing it with explicit names validated by TLS-ALPN-01 (the daemon
+already has the presenter) or HTTP-01 means one SAN or one certificate per app
+(`<app>.<server>.<user>`), reissued on every install. Let's Encrypt allows 50
+new certificates a week per registered domain, and `flagship.services` is
+not on the Public Suffix List yet (`docs/psl-submission-flagship-services.md`),
+so all users share that one bucket: a few dozen app installs a week would
+exhaust it. After the PSL entry each account gets its own bucket and per-app
+issuance becomes thinkable, but that is weeks to months away and trades one
+certificate per box per 60-90 days for one per app. Tier-2 `<svc>.<user>`
+certificates are single names and could use TLS-ALPN-01 (no TXT, so no hole at
+`<svc>.<user>`), but the issuer prefers DNS-01 for every name on purpose
+(ALPN-01 depended on a path that was unreliable); not changed here.
+
+### 10.3 CAA (trap 3)
+
+What the per-account CAA does TODAY: nothing a single apex CAA would not.
+Phase 1 publishes the same `issue/issuewild "letsencrypt.org"` for every
+account, which tree climbing would find at the apex. What the per-account node
+is FOR is phase 2, the RFC 8657 `accounturi` pin (per-user-cert-and-addressing
+4.3, not built: the per-user ACME account decision is open). `.com` writes the
+zone, so a malicious `.com` could rewrite the pin before asking for a
+certificate; CAA never defended against that (caaPin.ts says so), and what
+does is Certificate Transparency monitoring (`ctMonitor.ts`: any SAN set that
+is not a registered box's pair is an alarm) plus the box holding its own key.
+Losing the per-account CAA therefore loses (i) the future pin against OTHER
+parties, i.e. a CA tricked into issuing to someone else's ACME account, and
+(ii) the tell-tale that a rewritten record is an anomaly; it does not lose
+detection of a malicious `.com`. A pinned account could still be given its own
+`*.<user>` pair plus CAA (3 to 4 records) on top of the zone wildcard.
+
+### 10.4 The relay (trap 4)
+
+The relay already takes any SNI and closes unmatched first-party ones after one
+fixed wait with no reply and no stream (section 2), and DNS does not change who
+can reach it. Under a zone-level wildcard `anything.flagship.services` (one
+label) would also reach it: `userOfSni` is null for it and it is destroyed at
+once, and no one can hold a certificate for it (CAA at the apex, validation
+needs our DNS or a registered tunnel). Explicit records (`hub.`, `www.`,
+`gym.` and the like) win over the wildcard. DNS would also stop revealing
+whether an account has a server: a small privacy gain over the per-account
+plan.
+
+### 10.5 Numbers and recommendation
+
+| | steady state | per box while issuing | accounts at 200 records |
+|---|---|---|---|
+| before | 8 + 4 per box | 2 TXT | ~15 with one box |
+| per-account (built) | 4 per account | 2 TXT + 4 shield | ~45 |
+| zone-level | 2 (wildcard) + 1-2 (apex CAA), 0 per account | 2 TXT + 6 shield | no longer limited by records |
+
+Recommendation: ship the per-account plan (built, tested, and each step
+reversible), run the gym and prod with it, and move to the zone-level wildcard
+when either the 45-account ceiling becomes real (before that, a paid plan
+lifts the cap) or the per-account CAA decision is made against phase 2.
+The move is small from here: publish the zone pair and one apex CAA once,
+stop calling `ensureAccountDns`, add the `*.user` pair to the shield with a
+refcount, and let the reap tool trim the per-account sets. What it must not do
+is go first: the shield is the only thing between a challenge and a
+30-minute outage, and in the zone-level plan its failure darkens an account
+rather than a box, so it wants the live proof described in section 4 before
+the blast radius grows.
+
