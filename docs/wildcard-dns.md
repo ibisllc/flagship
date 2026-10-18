@@ -64,7 +64,13 @@ names too. What the relay did on such an SNI (`sniRouter.ts`, `registry.ts`):
   (does this account have a box online; has this hub seen this box).
 - Fix, in this change: any miss under the apex that is not released by a claim
   closes after the same fixed time (the hold timeout), whatever the account.
-  The delayed sockets are bounded. Nothing else about routing changes.
+  The delayed sockets are bounded (2048 at once, then an immediate close), and
+  a visitor who hangs up frees its slot. Nothing else about routing changes.
+- Not changed, noted: offering such an SNI still makes the hub nudge that
+  account's online boxes (once per name while parked). The nudge carries only
+  the name and was always reachable by connecting to the relay's IP directly;
+  the wildcard does not widen it, but a per-account nudge budget is a sensible
+  follow-up.
 
 ## 3. Assessment
 

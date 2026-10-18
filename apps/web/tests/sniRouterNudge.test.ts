@@ -213,7 +213,7 @@ describe("SNI router — park-on-miss → nudge → wait-for-claim → drop", ()
     expect(b.sock.destroyed).toBe(false);
   });
 
-  it("MISS for a user with NO online boxes → IMMEDIATE drop (no park, no nudge)", async () => {
+  it("MISS for a user with NO online boxes → dropped after the SAME wait (no park, no nudge)", async () => {
     const reg = new TunnelRegistry();
     // harry has a box; nobody-user does not.
     const box = mockTunnel("home.harry.flagship.services");
@@ -224,14 +224,15 @@ describe("SNI router — park-on-miss → nudge → wait-for-claim → drop", ()
     const { sock, closed } = dial(router.port, "anything.nobody.flagship.services");
     sockets.push(sock);
     await closed;
-    // Dropped well within the hold timeout (immediate, not parked).
-    expect(Date.now() - t0).toBeLessThan(FAST.holdTimeoutMs);
+    // Closed at the hold timeout like every other first-party miss, so the
+    // time to close does not say whether the account exists.
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(FAST.holdTimeoutMs - 60);
     expect(sock.destroyed).toBe(true);
     // harry's box was never nudged for nobody's domain.
     expect(reassembleAllData(box)).not.toContain("/internal/route-nudge");
   });
 
-  it("MISS for a known box's OWN offline apex → drop, never nudged", async () => {
+  it("MISS for a known box's OWN offline apex → same wait, never nudged", async () => {
     const reg = new TunnelRegistry();
     // Register then unregister 'attic' so it is a KNOWN (recent) box canonical
     // that is now offline; harry still has 'home' online.
@@ -246,7 +247,101 @@ describe("SNI router — park-on-miss → nudge → wait-for-claim → drop", ()
     const { sock, closed } = dial(router.port, "attic.harry.flagship.services");
     sockets.push(sock);
     await closed;
-    expect(Date.now() - t0).toBeLessThan(FAST.holdTimeoutMs);
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(FAST.holdTimeoutMs - 60);
     expect(reassembleAllData(home)).not.toContain("/internal/route-nudge");
+  });
+});
+
+describe("SNI router: names the wildcard DNS resolves here but no box registered", () => {
+  let router: RunningSniRouter | undefined;
+  let sockets: Socket[] = [];
+  afterEach(async () => {
+    for (const s of sockets) s.destroy();
+    sockets = [];
+    if (router) await router.close();
+    router = undefined;
+  });
+
+  /** Dial, record every byte sent back, resolve with how long the close took. */
+  async function probe(port: number, sni: string): Promise<{ ms: number; received: number }> {
+    const t0 = Date.now();
+    let received = 0;
+    const sock = netConnect(port, "127.0.0.1");
+    sockets.push(sock);
+    sock.on("data", (d) => (received += d.length));
+    sock.on("error", () => {});
+    const closed = new Promise<void>((r) => sock.on("close", () => r()));
+    sock.write(Buffer.from(buildClientHello(sni)));
+    await closed;
+    return { ms: Date.now() - t0, received };
+  }
+
+  it("closes silently, without opening a stream on any tunnel, and in the same time whatever exists", async () => {
+    const reg = new TunnelRegistry();
+    const home = mockTunnel("home.harry.flagship.services");
+    reg.register({ tunnel: home, canonicals: ["home.harry.flagship.services"] });
+    // attic: a box this hub has seen and lost; sarah: an account with no box online at all.
+    const attic = mockTunnel("attic.harry.flagship.services");
+    reg.register({ tunnel: attic, canonicals: ["attic.harry.flagship.services"] });
+    reg.unregister("attic.harry.flagship.services");
+    router = await startSniRouter(reg, { port: 0, host: "127.0.0.1", ...FAST });
+
+    const probes = await Promise.all([
+      probe(router.port, "ghost.harry.flagship.services"), // account with a box online, no such name
+      probe(router.port, "a.b.c.harry.flagship.services"), // deeper than any registration
+      probe(router.port, "attic.harry.flagship.services"), // a box the hub once saw
+      probe(router.port, "anything.nobody.flagship.services"), // no such account
+      probe(router.port, "x.y.nobody.flagship.services"),
+    ]);
+    for (const p of probes) {
+      expect(p.received).toBe(0); // no TLS reply, no certificate, nothing
+      expect(p.ms).toBeGreaterThanOrEqual(FAST.holdTimeoutMs - 60);
+      expect(p.ms).toBeLessThan(FAST.holdTimeoutMs + 700);
+    }
+    const spread = Math.max(...probes.map((p) => p.ms)) - Math.min(...probes.map((p) => p.ms));
+    expect(spread).toBeLessThan(300);
+    // No visitor stream was handed to any box (a nudge to harry's own box is
+    // the only thing that may reach one, and it carries no visitor bytes).
+    for (const sni of ["ghost.harry.flagship.services", "a.b.c.harry.flagship.services", "attic.harry.flagship.services"]) {
+      expect(opensFor(home, sni), sni).toHaveLength(0);
+      expect(opensFor(attic, sni), sni).toHaveLength(0);
+    }
+    // …and no TLS record (the visitor's ClientHello starts 0x16 0x03) went down any tunnel.
+    expect(reassembleAllData(home)).not.toContain("\u0016\u0003");
+    expect(reassembleAllData(attic)).not.toContain("\u0016\u0003");
+  });
+
+  it("still drops a name that is not under the apex at once", async () => {
+    const reg = new TunnelRegistry();
+    router = await startSniRouter(reg, { port: 0, host: "127.0.0.1", ...FAST });
+    const p = await probe(router.port, "example.org");
+    expect(p.ms).toBeLessThan(FAST.holdTimeoutMs - 100);
+    expect(p.received).toBe(0);
+  });
+
+  it("holds only so many: past the cap a miss is destroyed at once", async () => {
+    const reg = new TunnelRegistry();
+    router = await startSniRouter(reg, { port: 0, host: "127.0.0.1", ...FAST, maxDelayedDrops: 2 });
+    const held = [probe(router.port, "a.nobody.flagship.services"), probe(router.port, "b.nobody.flagship.services")];
+    await sleep(100); // both are waiting out their drop
+    const third = await probe(router.port, "c.nobody.flagship.services");
+    expect(third.ms).toBeLessThan(FAST.holdTimeoutMs - 200);
+    const done = await Promise.all(held);
+    for (const h of done) expect(h.ms).toBeGreaterThanOrEqual(FAST.holdTimeoutMs - 60);
+  });
+
+  it("a visitor who hangs up frees its slot and leaves nothing running", async () => {
+    const reg = new TunnelRegistry();
+    router = await startSniRouter(reg, { port: 0, host: "127.0.0.1", ...FAST, maxDelayedDrops: 1 });
+    const first = netConnect(router.port, "127.0.0.1");
+    sockets.push(first);
+    first.on("error", () => {});
+    first.write(Buffer.from(buildClientHello("a.nobody.flagship.services")));
+    await sleep(80);
+    first.destroy();
+    await sleep(80);
+    // The single slot is free again: this one is held for the full wait, not destroyed at once.
+    const p = await probe(router.port, "b.nobody.flagship.services");
+    expect(p.ms).toBeGreaterThanOrEqual(FAST.holdTimeoutMs - 60);
   });
 });

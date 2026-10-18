@@ -21,6 +21,13 @@ export const HOLD_TIMEOUT_MS = 4_000;
 /** How often the hub re-checks `findBySni` for the awaited claim while parked. */
 export const HOLD_POLL_INTERVAL_MS = 100;
 
+/**
+ * How many unmatched first-party streams may sit out their delayed drop at
+ * once. Past it they are destroyed at once: holding is a courtesy against an
+ * oracle, never worth exhausting file descriptors for.
+ */
+export const MAX_DELAYED_DROPS = 2_048;
+
 export interface SniRouterOptions {
   port: number;
   host?: string;
@@ -32,6 +39,8 @@ export interface SniRouterOptions {
   holdTimeoutMs?: number;
   /** Override the park poll interval (tests). Defaults to {@link HOLD_POLL_INTERVAL_MS}. */
   holdPollIntervalMs?: number;
+  /** Override the delayed-drop cap (tests). Defaults to {@link MAX_DELAYED_DROPS}. */
+  maxDelayedDrops?: number;
 }
 
 /**
@@ -82,7 +91,7 @@ export function startSniRouter(
   const holdPollIntervalMs = opts.holdPollIntervalMs ?? HOLD_POLL_INTERVAL_MS;
   // Single-flight park state, shared across every connection of THIS router.
   const parkLot: ParkLot = new Map();
-  const hold: HoldConfig = { registry, meter, holdTimeoutMs, holdPollIntervalMs, parkLot };
+  const hold: HoldConfig = { registry, meter, holdTimeoutMs, holdPollIntervalMs, parkLot, delayed: { count: 0 }, maxDelayed: opts.maxDelayedDrops ?? MAX_DELAYED_DROPS };
 
   const server: Server = createServer((client) =>
     handleConnection(client, registry, maxPeek, peekTimeoutMs, meter, hold),
@@ -116,6 +125,9 @@ interface HoldConfig {
   holdTimeoutMs: number;
   holdPollIntervalMs: number;
   parkLot: ParkLot;
+  /** Streams currently waiting out a delayed drop (shared by this router's connections). */
+  delayed: { count: number };
+  maxDelayed: number;
 }
 
 function handleConnection(
@@ -192,7 +204,41 @@ function routeToTunnel(
     parkAndNudge(client, sni, initialBytes, hold);
     return;
   }
+  // Under the wildcard DNS (docs/wildcard-dns.md) every name below an account
+  // resolves here, registered or not. A first-party miss is dropped after the
+  // same wait a nudged one gets, so the time to close tells a prober nothing
+  // about whether the account exists, has a box online, or ever had this box.
+  if (hold.registry.userOfSni(sni)) {
+    delayedDrop(client, sni, hold);
+    return;
+  }
   client.destroy(new Error(`no tunnel for ${sni}`));
+}
+
+/**
+ * Close a first-party stream nobody registered after the hold timeout, saying
+ * nothing in between: no TLS reply, no byte to any tunnel. Uses the same wait
+ * as {@link parkAndNudge}'s drop so the two are indistinguishable by timing.
+ */
+function delayedDrop(client: Socket, sni: string, hold: HoldConfig): void {
+  if (hold.delayed.count >= hold.maxDelayed) {
+    client.destroy(new Error(`no tunnel for ${sni}`));
+    return;
+  }
+  hold.delayed.count += 1;
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    hold.delayed.count -= 1;
+    clearTimeout(timer);
+    client.destroy();
+  };
+  const timer = setTimeout(finish, hold.holdTimeoutMs);
+  // Swallow whatever the client sends meanwhile; a client that hangs up first frees the slot.
+  client.on("data", () => undefined);
+  client.once("close", finish);
+  client.once("error", finish);
 }
 
 /**
