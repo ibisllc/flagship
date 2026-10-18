@@ -93,7 +93,7 @@ st_get() { if [ -f "$STATE" ]; then st get "$1"; fi; }
 
 # ---------------------------------------------------------------- the plan
 
-STEP_IDS=(preflight plan lease endorse kickoff secrets gym backup migrations com cpu services dns publish redeployA status
+STEP_IDS=(preflight plan lease endorse kickoff secrets gym backup migrations services dns com cpu publish redeployA status
           notice scrub reap retire studiowl studiomac publisharm redeployB ios android final)
 LAST_A=16   # the last step of phase A (status)
 
@@ -236,7 +236,7 @@ meta_com() {
   TITLE="Deploy .com (Cloudflare Worker) and check it"
   RUNBOOK="7. Deploy \`.com\`"
   REQUIRED=1
-  WHAT="Runs 'npm run deploy' in apps/com from the clean worktree (clean rebuild, route-safety, migration drift gates), then probes health, shell version, notices, the account-not-found answer, the boot route, the shim and the zone."
+  WHAT="Runs 'npm run deploy' in apps/com from the clean worktree (clean rebuild, route-safety, migration drift gates) once the wildcard exists, then probes health, shell version, notices, the account-not-found answer, the boot route, the shim, and runs zone-health (now deployed) as a post-check."
   read -r -d '' CMDS <<'EOF' || true
 (cd apps/com && wrangler deployments list)         (the rollback target)
 (cd apps/com && npm run deploy)
@@ -247,7 +247,7 @@ curl -s -o /dev/null -w "%{http_code}" https://flagshipserver.com/api/users/<unk
 curl -s -o /dev/null -w "%{http_code}" https://boot.flagshipserver.com/not-a-route   (404 from the boot host)
 curl -s https://inference.flagshipserver.com/healthz                                 (shim; warning only)
 curl -sI https://flagshipserver.com/ | grep -i "x-frame-options\|strict-transport"
-npm run zone-health                                                                  (informational here; admin secret)
+npm run zone-health                                                                  (post-check: wildcard + CAA lines must be OK; legacy account records are listed until the reap; admin secret)
 EOF
   GATE="health 200, the live shell version equals the tree's, notices 204, account-not-found 404, boot route 404, framing headers present."
   ROLLBACK="(cd apps/com && wrangler deployments list && wrangler rollback <version-id>): code only; D1 and custom domains are untouched."
@@ -266,7 +266,7 @@ EOF
 meta_services() {
   TITLE="Deploy .services (Fly relay)"
   RUNBOOK="8. Deploy \`.services\` (Fly): needed, one image"
-  WHAT="Deploys the relay image (the uniform drop timing for unregistered names) right after .com and before the DNS wildcard. Every box's tunnel drops for about 20 seconds."
+  WHAT="Deploys the relay image (the uniform drop timing for unregistered names) FIRST, before the DNS wildcard and before .com, so the relay already drops unknown names uniformly when the wildcard starts answering them. Every box's tunnel drops for about 20 seconds."
   read -r -d '' CMDS <<'EOF' || true
 flyctl releases -a flagship-services | head -5
 flyctl deploy --remote-only --strategy=immediate --yes -a flagship-services
@@ -276,19 +276,19 @@ EOF
   ROLLBACK="flyctl releases rollback -a flagship-services (stateless; clean)."
 }
 meta_dns() {
-  TITLE="Cloudflare DNS by hand: root wildcard + apex CAA, then zone-health"
+  TITLE="Cloudflare DNS by hand: root wildcard + apex CAA (before the .com deploy)"
   RUNBOOK="6a. The one-time manual DNS step: the root wildcard and the apex CAA"
-  WHAT="Prints the exact records for you to create in the Cloudflare dashboard (grey cloud), then checks them with dig and with 'npm run zone-health'."
+  WHAT="Prints the exact records for you to create in the Cloudflare dashboard (grey cloud) and checks them with dig only. It comes before the .com deploy: the new .com writes no per-box address records, so a box registering while no wildcard exists would get names that do not resolve (and resolvers cache that for 30 minutes). Existing accounts keep answering from their own records."
   read -r -d '' CMDS <<'EOF' || true
-flyctl ips list -a flagship-services          (must match SERVICES_PASSTHROUGH_IPV4/6 in apps/com/wrangler.toml)
+flyctl ips list -a flagship-services          (must list SERVICES_PASSTHROUGH_IPV4/6 from apps/com/wrangler.toml)
 (dashboard, flagship.services zone, DNS only / grey cloud:)
   A     *   <relay IPv4>        AAAA  *   <relay IPv6>
   CAA   @   issue     letsencrypt.org        CAA  @   issuewild   letsencrypt.org
 dig +short A anything-at-all.flagship.services @1.1.1.1
+dig +short AAAA anything-at-all.flagship.services @1.1.1.1
 dig +short CAA flagship.services @1.1.1.1
-npm run zone-health                            (admin secret, typed silently)
 EOF
-  GATE="The wildcard answers the relay address, the CAA pair is visible, zone-health shows the wildcard and CAA lines OK (legacy account records still listed until the reap)."
+  GATE="The wildcard A and AAAA answer the relay address and the CAA pair is visible (zone-health is not deployed yet; it runs as a post-check of the .com deploy)."
   ROLLBACK="Delete the two wildcard records and the two CAA records. Do not roll back after the reap has trimmed accounts."
 }
 meta_publish() {
@@ -584,6 +584,68 @@ WRQ() { ( cd "$WT/apps/com" && WR "$@" ); } # quiet capture, caller handles fail
 
 json_field() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let o=JSON.parse(s);for(const k of process.argv[1].split("."))o=o==null?o:o[k];console.log(o==null?"":o)})' "$1"; }
 
+
+# ---------------------------------------------------------------- parsers
+# Pure functions: each reads the raw output of one external tool on stdin. They are
+# tested against real captured outputs (scripts/release-fixtures/).
+
+# wrangler secret list (JSON) -> one secret NAME per line
+json_names() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{for(const x of JSON.parse(s))console.log(x.name)}catch{}})'; }
+
+# gh secret list (tab separated: NAME, updated) -> NAME per line
+gh_secret_names() { awk -F'\t' 'NF>=1 && $1 != "" {print $1}'; }
+
+# wrangler d1 execute --json of "SELECT version FROM schema_version" + a migrations dir -> pending files
+pending_migrations() { # $1 = migrations dir
+  node -e '
+const fs=require("fs"),dir=process.argv[1];let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+const p=JSON.parse(s);const have=new Set((Array.isArray(p)?p:[p]).flatMap(r=>r.results||[]).map(r=>String(r.version)));
+for(const f of fs.readdirSync(dir).filter(f=>/^\d{4}_.*\.sql$/.test(f)).sort())if(!have.has(f.slice(0,4)))console.log(f)})' "$1"
+}
+
+# gh run list --json databaseId,status,conclusion,headSha,createdAt -> ids of completed+successful runs created at/after $1 (ISO, may be empty), newest first
+runs_after() {
+  node -e '
+const after=process.argv[1]?Date.parse(process.argv[1]):0;let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+const runs=JSON.parse(s).filter(r=>r.status==="completed"&&r.conclusion==="success"&&Date.parse(r.createdAt)>=after);
+runs.sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt));for(const r of runs)console.log(r.databaseId)})' "${1:-}"
+}
+
+# gh api .../runs/<id>/artifacts -> exit 0 when it holds a live vm-appliance-<arch> artifact
+artifacts_have() { # $1 = arch
+  node -e '
+let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+const a=(JSON.parse(s).artifacts||[]).some(x=>x.name==="vm-appliance-"+process.argv[1]&&!x.expired);process.exit(a?0:1)})' "$1"
+}
+
+# gh run view <id> --json jobs -> the conclusion of the boot-smoke step ("success", "failure", "" when absent)
+smoke_state() {
+  node -e '
+let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+const c=(JSON.parse(s).jobs||[]).flatMap(j=>j.steps||[]).filter(x=>/boot smoke/i.test(x.name)).map(x=>x.conclusion||x.status);
+console.log(c.length&&c.every(x=>x==="success")?"success":(c[0]||""))})'
+}
+
+# flyctl ips list output on stdin; $1 = v4, $2 = v6 (may be empty) -> exit 0 when both are listed
+ips_agree() { local t; t=$(cat); echo "$t" | grep -qF "$1" && { [ -z "${2:-}" ] || echo "$t" | grep -qF "$2"; }; }
+
+# file names on stdin -> the ones under a box path
+box_files_in() {
+  local f p keep
+  while IFS= read -r f; do
+    keep=0
+    for p in "${BOX_PATHS[@]}"; do case "$f" in "$p"|"$p"/*) keep=1 ;; esac; done
+    if [ "$keep" = 1 ]; then echo "$f"; fi
+  done
+}
+
+# file names on stdin -> vitest filters for the packages they touch (scripts and apps/com always)
+test_filters_from_names() {
+  { echo scripts; echo apps/com
+    sed -n 's#^\(packages/[^/]*\)/.*#\1#p;s#^\(apps/[^/]*\)/.*#\1#p;s#^\(billing\)/.*#\1#p;s#^\(infra\)/.*#\1#p;s#^\(tools\)/.*#\1#p'
+  } | sort -u | tr '\n' ' '
+}
+
 # ---------------------------------------------------------------- pin and worktree
 
 git_fetch_main() { git -C "$REPO" fetch -q origin main; }
@@ -732,8 +794,9 @@ com_checks() {
   info_code "status page" "$COM_URL/status/"
   if [ "${1:-}" = zone ]; then
     if need_admin_secret; then
-      say "  zone-health (informational before the DNS step and before the reap):"
-      with_secret bash -c "cd '$WT' && npm run -s zone-health" || warn "zone-health reported problems (expected until the DNS step and the reap are done)"
+      say "  zone-health (the wildcard and CAA lines must be OK; legacy per-account records are still listed until the reap):"
+      with_secret bash -c "cd '$WT' && npm run -s zone-health" || warn "zone-health exited non-zero (expected while legacy account records remain)"
+      [ "$(ask_word "Are the wildcard and CAA lines OK? (y/n)")" = y ] || PROBE_FAILS=$((PROBE_FAILS + 1))
     fi
   fi
   probe_end
@@ -804,7 +867,7 @@ run_preflight() {
 touched_test_filters() { # a vitest filter list from the files changed since the newest endorsement
   local e=$1 names=""
   if [ -n "$e" ]; then names=$(wt_git diff --name-only "$e" "$PIN" 2>/dev/null || true); fi
-  { echo scripts; echo apps/com; echo "$names" | sed -n 's#^\(packages/[^/]*\)/.*#\1#p;s#^\(apps/[^/]*\)/.*#\1#p;s#^\(billing\)/.*#\1#p;s#^\(infra\)/.*#\1#p;s#^\(tools\)/.*#\1#p'; } | sort -u | tr '\n' ' '
+  echo "$names" | test_filters_from_names
 }
 
 run_plan() {
@@ -864,7 +927,7 @@ run_endorse() {
   say "  box code changed since then (git diff --stat, box paths):"
   if [ -n "$E" ]; then
     wt_git diff --stat "$E" "$PIN" -- "${BOX_PATHS[@]}" | tail -25 | sed 's/^/    /'
-    if [ -z "$(wt_git diff --name-only "$E" "$PIN" -- "${BOX_PATHS[@]}")" ]; then
+    if [ -z "$(wt_git diff --name-only "$E" "$PIN" | box_files_in)" ]; then
       warn "no box path changed since $E. The endorsement is still offered (tests and vectors may count, and the appliances bake the newest endorsed release)."
     else
       warn "BOX CODE CHANGED: this release needs a new endorsement."
@@ -913,7 +976,6 @@ run_secrets() {
   done
   if [ "$missing" = 1 ]; then confirm "Some names are missing on prod. Continue anyway?" || return 10; fi
 }
-json_names() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{for(const x of JSON.parse(s))console.log(x.name)}catch{}})'; }
 
 run_gym() {
   cat <<'EOF'
@@ -964,7 +1026,7 @@ EOF
     [ "$a" = backup-ok ] || return 10
     return 0
   fi
-  local names; names=$(cd "$WT" && gh secret list 2>/dev/null | awk '{print $1}' || true)
+  local names; names=$( (cd "$WT" && gh secret list 2>/dev/null) | gh_secret_names || true)
   local s bad=0
   for s in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
     if echo "$names" | grep -qx "$s"; then ok "repo secret $s exists"; else err "repo secret $s is missing (gh secret set $s)"; bad=1; fi
@@ -1000,13 +1062,10 @@ EOF
 
 run_migrations() {
   ensure_wt
-  local json; json=$(WRQ d1 execute flagship-state --remote --json --command "SELECT version FROM schema_version" 2>/dev/null || true)
+  local json; json=$(WRQ d1 execute flagship-state --remote --json --command "SELECT version FROM schema_version ORDER BY version" 2>/dev/null || true)
   [ -n "$json" ] || fail "could not read the prod ledger (wrangler login?)"
   local pending
-  pending=$(printf '%s' "$json" | node -e '
-const fs=require("fs"),dir=process.argv[1];let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
-const p=JSON.parse(s);const have=new Set((Array.isArray(p)?p:[p]).flatMap(r=>r.results||[]).map(r=>String(r.version)));
-for(const f of fs.readdirSync(dir).filter(f=>/^\d{4}_.*\.sql$/.test(f)).sort())if(!have.has(f.slice(0,4)))console.log(f)})' "$WT/packages/storage/migrations")
+  pending=$(printf '%s' "$json" | pending_migrations "$WT/packages/storage/migrations")
   if [ -z "$pending" ]; then ok "nothing is pending: every migration file is in the prod ledger"; return 0; fi
   warn "pending migrations:"; echo "$pending" | sed 's/^/    /'
   say "  Make sure the backup of step 8 is fresh: a migration cannot be undone."
@@ -1024,8 +1083,8 @@ for(const f of fs.readdirSync(dir).filter(f=>/^\d{4}_.*\.sql$/.test(f)).sort())i
 }
 
 run_com() {
-  require_gym_gate
-  require_done migrations || return 10
+  require_gym_gate || return $?
+  require_done migrations services dns || return 10
   com_deploy || return $?
   com_checks zone
 }
@@ -1073,7 +1132,8 @@ EOF
 }
 
 run_services() {
-  require_done com || return 10
+  require_gym_gate || return $?
+  require_done migrations || return 10
   ensure_wt
   say "  recent Fly releases:"; flyctl releases -a flagship-services 2>&1 | head -5 | sed 's/^/    /' || true
   say "  last relay-path commit on the pin:"; wt_git log -1 --format='    %h %cI %s' -- apps/web/src packages Dockerfile fly.toml billing
@@ -1094,14 +1154,14 @@ relay_ips() { # prints "<v4> <v6>" from apps/com/wrangler.toml
   echo "$v4 $v6"
 }
 run_dns() {
-  require_done com services || return 10
+  require_done services || return 10
   ensure_wt
   local v4 v6; read -r v4 v6 < <(relay_ips)
   [ -n "$v4" ] || fail "SERVICES_PASSTHROUGH_IPV4 not found in apps/com/wrangler.toml"
   say "  relay addresses in the repo: $v4  $v6"
   local ips; ips=$(flyctl ips list -a flagship-services 2>&1 || true)
   echo "$ips" | sed 's/^/    /'
-  if echo "$ips" | grep -qF "$v4" && { [ -z "$v6" ] || echo "$ips" | grep -qF "$v6"; }; then ok "flyctl agrees with wrangler.toml"
+  if echo "$ips" | ips_agree "$v4" "$v6"; then ok "flyctl agrees with wrangler.toml"
   else fail "flyctl ips and apps/com/wrangler.toml disagree: fix the repo first (zone-health compares against the Worker's variables)"; fi
   cat <<EOF
 
@@ -1131,34 +1191,23 @@ EOF
   fi
   caa=$(dig +short CAA flagship.services @1.1.1.1 2>/dev/null || true)
   if echo "$caa" | grep -q issuewild && echo "$caa" | grep -q 'letsencrypt.org'; then ok "apex CAA pair visible"; else err "apex CAA not visible yet: '$caa'"; PROBE_FAILS=$((PROBE_FAILS + 1)); fi
-  if need_admin_secret; then
-    say "  zone-health (legacy per-account records are still listed as problems until the reap; the wildcard and CAA lines must be OK):"
-    with_secret bash -c "cd '$WT' && npm run -s zone-health" || warn "zone-health exited non-zero (expected while legacy records remain)"
-    [ "$(ask_word "Are the wildcard and CAA lines OK? (y/n)")" = y ] || PROBE_FAILS=$((PROBE_FAILS + 1))
-  else
-    warn "no admin secret: zone-health was not run"; PROBE_FAILS=$((PROBE_FAILS + 1))
-  fi
+  say "  (zone-health is not deployed yet: it runs as a post-check of the .com deploy.)"
   st_w set dnsWildcardAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   probe_end
 }
 
 # publish_arch ARCH -> 0 published, 20 not ready/deferred
 find_green_run() { # find_green_run arch -> run id of the newest green main run of that arch built after the endorsement
-  local arch=$1 after id art ts ids
+  local arch=$1 after id ids
   after=$(st_get endorsedAt)
-  ids=$(cd "$WT" && gh run list --workflow vm-appliance.yml --branch main --status success --limit 20 --json databaseId,createdAt -q '.[]|[.databaseId,.createdAt]|@tsv' 2>/dev/null || true)
-  while IFS=$'\t' read -r id ts; do
-    [ -n "$id" ] || continue
-    if [ -n "$after" ] && [[ "$ts" < "$after" ]]; then continue; fi
-    art=$(cd "$WT" && gh api "repos/{owner}/{repo}/actions/runs/$id/artifacts" -q '.artifacts[].name' 2>/dev/null || true)
-    if echo "$art" | grep -qx "vm-appliance-$arch"; then echo "$id"; return 0; fi
-  done <<EOF
-$ids
-EOF
+  ids=$( (cd "$WT" && gh run list --workflow vm-appliance.yml --branch main --json databaseId,status,conclusion,headSha,createdAt --limit 20 2>/dev/null) | runs_after "$after" || true)
+  for id in $ids; do
+    if (cd "$WT" && gh api "repos/{owner}/{repo}/actions/runs/$id/artifacts" 2>/dev/null) | artifacts_have "$arch"; then echo "$id"; return 0; fi
+  done
   return 0
 }
 smoke_ok() { # smoke_ok run-id
-  local r; r=$(cd "$WT" && gh run view "$1" --json jobs -q '[.jobs[].steps[]|select(.name|test("boot smoke";"i"))|.conclusion]|join(",")' 2>/dev/null || true)
+  local r; r=$( (cd "$WT" && gh run view "$1" --json jobs 2>/dev/null) | smoke_state || true)
   [ "$r" = success ]
 }
 publish_arch() {
@@ -1242,7 +1291,7 @@ run_status() {
     echo "- endorsed release commit (what new boxes install): \`$endorsed\`"
     echo "- .com deployed from: \`$(st_get comDeployedSha)\`, webapp shell version live: \`${shell:-unknown}\`"
     echo "- .services (Fly relay): deployed from this release"
-    echo "- DNS design: the flagship.services zone holds a root wildcard (\`*\` A and AAAA, DNS only, grey cloud, pointing at the relay) and an apex CAA pair (issue and issuewild: letsencrypt.org). Accounts and boxes hold no address or CAA records; only short-lived \`_acme-challenge\` TXT records exist during issuance. Recorded ${dns_at:-unknown}."
+    echo "- DNS design: the flagship.services zone holds a root wildcard (\`*\` A and AAAA, DNS only, grey cloud, pointing at the relay) and an apex CAA pair (issue and issuewild: letsencrypt.org). Accounts and boxes hold no address or CAA records; only short-lived \`_acme-challenge\` TXT records exist during issuance. Rollout order: the relay (.services) was deployed first, then the wildcard and CAA were added (${dns_at:-time unknown}), then the new .com; existing accounts kept their own records until the phase B reap."
     echo "- Workers plan: $(st_get workersPlan)"
     echo "- Published VM appliances (Studio \"Host on this PC\" downloads these):"
     printf '%s' "$row"

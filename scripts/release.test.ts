@@ -98,11 +98,11 @@ describe("release.sh", () => {
     const r = run(env, ["--list"]);
     const sections = [...r.out.matchAll(/runbook: (\S+?)\. /g)].map((m) => m[1]);
     // 0 ready | 1 plan | 2 lease | 3 endorse | 9 appliance builds start after the endorsement
-    // | 5 secrets | 6 gym | 14 backup | 4 migrations (moved after the gym gate and a fresh backup)
-    // | 7 .com | 14 cpu watch | 8 .services | 6a DNS (moved after .com and .services: zone-health
-    // ships with .com, the relay must drop uniformly before the wildcard answers) | 9 publish...
+    // | 5 secrets | 6 gym | 14 backup | 4 migrations (after the gym gate and a fresh backup)
+    // | 8 .services FIRST | 6a DNS wildcard (before .com: the new .com writes no per-box records)
+    // | 7 .com (+ zone-health post-check) | 14 cpu watch | 9 publish | 9 redeploy | 9 status ...
     expect(sections).toEqual([
-      "0", "1", "2", "3", "9", "5", "6", "14", "4", "7", "14", "8", "6a", "9", "9", "9",
+      "0", "1", "2", "3", "9", "5", "6", "14", "4", "8", "6a", "7", "14", "9", "9", "9",
       "12", "12", "12", "12", "10", "10", "9", "7", "11", "11", "13",
     ]);
     // every referenced heading exists verbatim in the runbook
@@ -112,11 +112,11 @@ describe("release.sh", () => {
     // gym gate before any prod change; DNS after the deploys; scrub after DNS; reap after scrub
     const idx = (needle: string) => planSteps(r.out).find((s) => s.title.includes(needle))!.n;
     expect(idx("Gym gate")).toBeLessThan(idx("Pending D1 migrations"));
-    expect(idx("Pending D1 migrations")).toBeLessThan(idx("Deploy .com"));
-    expect(idx("Deploy .com")).toBeLessThan(idx("Deploy .services"));
+    expect(idx("Pending D1 migrations")).toBeLessThan(idx("Deploy .services"));
     expect(idx("Deploy .services")).toBeLessThan(idx("Cloudflare DNS by hand"));
+    expect(idx("Cloudflare DNS by hand")).toBeLessThan(idx("Deploy .com"));
     expect(idx("Endorse")).toBeLessThan(idx("Start the VM appliance builds"));
-    expect(idx("Cloudflare DNS by hand")).toBeLessThan(idx("Pre-GA scrub"));
+    expect(idx("Deploy .com")).toBeLessThan(idx("Pre-GA scrub"));
     expect(idx("Pre-GA scrub")).toBeLessThan(idx("Reap orphaned"));
     expect(idx("Reap orphaned")).toBeLessThan(idx("Land chore/delete-wipe-tooling"));
     expect(idx("Write DEPLOYED-FINAL")).toBe(16);
@@ -140,6 +140,9 @@ describe("release.sh", () => {
     expect(r.out).toContain("flyctl deploy --remote-only --strategy=immediate --yes -a flagship-services");
     expect(r.out).toContain("endorse-release.mjs --to <PIN> --from <endorsed> --sign");
     expect(r.out).toContain("wrangler tail flagship-com --format json");
+    // .services, then the DNS wildcard (dig only), then .com with zone-health as its post-check
+    expect(r.out.indexOf("flyctl deploy --remote-only")).toBeLessThan(r.out.indexOf("dig +short A anything-at-all"));
+    expect(r.out.indexOf("dig +short A anything-at-all")).toBeLessThan(r.out.indexOf("(cd apps/com && npm run deploy)"));
     expect(r.out).toContain("gh secret list");
     expect(calls(env)).toBe(""); // no gh, wrangler, flyctl, curl, npm, npx, dig, openssl, and no git fetch/push
     expect(existsSync(join(env.home, ".flagship-release"))).toBe(false); // nothing written, no worktree
@@ -230,5 +233,105 @@ echo "open=$(phase_open A | wc -w | tr -d ' ')"`;
     expect(SOURCE).not.toMatch(/export FLAGSHIP_ADMIN_SECRET=/); // only inside the with_secret subshell
     expect(SOURCE).toContain("unset FLAGSHIP_ADMIN_SECRET ADMIN_SECRET");
     expect(SOURCE).toContain('-K -'); // the curl header travels on stdin, not argv
+  });
+
+  it("also runs under the system bash 3.2 of macOS", () => {
+    const sysbash = "/bin/bash";
+    if (!existsSync(sysbash)) return;
+    const env = sandbox();
+    for (const args of [["--list", "--short"], ["--dry-run", "--from", "1"], ["--status"]]) {
+      const r = spawnSync(sysbash, [SCRIPT, ...args], {
+        cwd: ROOT,
+        encoding: "utf8",
+        env: { PATH: `${join(env.dir, "bin")}:/usr/bin:/bin:${process.execPath.replace(/\/node$/, "")}`, HOME: env.home, FLAGSHIP_RELEASE_HOME: join(env.home, ".flagship-release"), NO_COLOR: "1" },
+      });
+      expect(r.status, `${args.join(" ")}: ${r.stderr}`).toBe(0);
+      expect(r.stderr).not.toMatch(/unbound variable|bad substitution|syntax error/);
+    }
+    expect(calls(env)).toBe("");
+  });
+});
+
+// The parsers the steps depend on, fed with REAL captured outputs of the tools
+// (scripts/release-fixtures/, captured 2026-10-18 from read-only commands; the D1
+// ledger one is synthetic in wrangler's documented --json shape because the live
+// read was not run from the automation). Same functions the script calls.
+describe("release.sh parsers against captured tool output", () => {
+  const FX = join(ROOT, "scripts/release-fixtures");
+  const fx = (n: string) => readFileSync(join(FX, n), "utf8");
+  const sh = (fn: string, input: string, extra = "") => {
+    const r = spawnSync("bash", ["-c", `RELEASE_SOURCE_ONLY=1 source ${SCRIPT}\n${extra}\n${fn}`], {
+      encoding: "utf8",
+      input,
+      env: { PATH: process.env.PATH ?? "", HOME: tmpdir(), FLAGSHIP_RELEASE_HOME: join(tmpdir(), "release-parsers") },
+    });
+    return { code: r.status, out: r.stdout.trim(), err: r.stderr };
+  };
+
+  it("wrangler secret list -> names", () => {
+    const r = sh("json_names", fx("wrangler-secret-list.json"));
+    const names = r.out.split("\n");
+    expect(names).toContain("ACCOUNT_READ_TOKEN_SECRET");
+    expect(names.length).toBe(JSON.parse(fx("wrangler-secret-list.json")).length);
+    expect(names.every((n) => /^[A-Z0-9_]+$/.test(n))).toBe(true);
+    expect(fx("wrangler-secret-list.json")).not.toMatch(/"value"/);
+  });
+
+  it("gh secret list -> names", () => {
+    expect(sh("gh_secret_names", fx("gh-secret-list.txt")).out).toBe("BILLING_MIRROR_DEPLOY_KEY");
+    expect(sh("gh_secret_names", "").out).toBe("");
+  });
+
+  it("schema_version ledger -> pending migration files", () => {
+    const dir = join(ROOT, "packages/storage/migrations");
+    const r = sh(`pending_migrations ${dir}`, fx("wrangler-d1-ledger.synthetic.json"));
+    expect(r.out).toMatch(/^0105_re_pair_proof\.sql$/m);
+    expect(r.out.split("\n")).toHaveLength(1);
+    // a ledger that has everything -> nothing pending
+    const all = JSON.stringify([{ results: ["0105", ...JSON.parse(fx("wrangler-d1-ledger.synthetic.json"))[0].results.map((x: { version: string }) => x.version)].map((version) => ({ version })) }]);
+    expect(sh(`pending_migrations ${dir}`, all).out).toBe("");
+  });
+
+  it("gh run list -> green runs after the endorsement, newest first", () => {
+    expect(sh("runs_after", fx("gh-run-list.json")).out.split("\n")).toEqual(["39160505562", "39158345483", "39153553427", "39142014433"]);
+    expect(sh("runs_after 2026-10-18T19:00:00Z", fx("gh-run-list.json")).out.split("\n")).toEqual(["39160505562", "39158345483"]);
+    expect(sh("runs_after 2027-01-01T00:00:00Z", fx("gh-run-list.json")).out).toBe("");
+  });
+
+  it("gh api artifacts -> which arch a run built", () => {
+    expect(sh("artifacts_have amd64", fx("gh-run-artifacts.json")).code).toBe(0);
+    expect(sh("artifacts_have arm64", fx("gh-run-artifacts.json")).code).toBe(1);
+    expect(sh("artifacts_have arm64", fx("gh-run-artifacts-arm64.json")).code).toBe(0);
+    expect(sh("artifacts_have amd64", fx("gh-run-artifacts-arm64.json")).code).toBe(1);
+    const expired = JSON.stringify({ artifacts: [{ name: "vm-appliance-amd64", expired: true }] });
+    expect(sh("artifacts_have amd64", expired).code).toBe(1);
+  });
+
+  it("gh run view --json jobs -> the boot smoke step state", () => {
+    expect(sh("smoke_state", fx("gh-run-view-jobs.json")).out).toBe("success");
+    expect(sh("smoke_state", fx("gh-run-view-jobs-arm64.json")).out).toBe("success");
+    const failed = JSON.parse(fx("gh-run-view-jobs.json"));
+    for (const s of failed.jobs[0].steps) if (/boot smoke/i.test(s.name)) s.conclusion = "failure";
+    expect(sh("smoke_state", JSON.stringify(failed)).out).toBe("failure");
+    expect(sh("smoke_state", JSON.stringify({ jobs: [{ steps: [{ name: "Set up job", conclusion: "success" }] }] })).out).toBe("");
+  });
+
+  it("flyctl ips list agrees with the relay addresses in apps/com/wrangler.toml", () => {
+    const ips = fx("flyctl-ips.txt");
+    const [v4, v6] = sh("relay_ips", "", `WT=${ROOT}`).out.split(" ");
+    expect(v4).toBe("149.248.216.86");
+    expect(sh(`ips_agree ${v4} ${v6}`, ips).code).toBe(0);
+    expect(sh(`ips_agree 1.2.3.4 ${v6}`, ips).code).toBe(1);
+    expect(sh(`ips_agree ${v4} 2001:db8::1`, ips).code).toBe(1);
+  });
+
+  it("git diff names -> box files and test filters", () => {
+    const names = fx("git-diff-names.txt");
+    const box = sh("box_files_in", names).out.split("\n");
+    expect(box).toContain("packages/server-daemon/src/doorbell.ts");
+    expect(box.every((f) => /^(packages\/(server-daemon|boot-core|protocol|tunnel-protocol|llm-providers)|installer|package(-lock)?\.json)/.test(f))).toBe(true);
+    expect(sh("box_files_in", "apps/web/public/index.html\ndocs/x.md\n").out).toBe("");
+    const filters = sh("test_filters_from_names", names).out.split(/\s+/);
+    expect(filters).toEqual(expect.arrayContaining(["scripts", "apps/com", "packages/server-daemon"]));
   });
 });

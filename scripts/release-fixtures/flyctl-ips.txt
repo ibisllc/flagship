@@ -1,0 +1,6 @@
+ VERSION │ IP                      │ TYPE                              │ REGION │ NETWORK │ CREATED AT       
+ v4      │ 149.248.216.86          │ public ingress (dedicated, $2/mo) │ global │         │ May 5 2026 16:39 
+ v6      │ 2a09:8280:1::110:d2b6:0 │ public ingress (dedicated)        │ global │         │ May 4 2026 07:13 
+ v4      │ 66.241.124.161          │ public ingress (shared)           │        │         │ Jan 1 0001 00:00 
+
+Learn more about Fly.io public, private, shared and dedicated IP addresses in our docs: https://fly.io/docs/networking/services/

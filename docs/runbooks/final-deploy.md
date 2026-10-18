@@ -41,10 +41,15 @@ refuses to start until phase A is recorded finished.
 The script's order differs from the section numbers below in four places, on purpose:
 the gym gate (6) and a fresh D1 backup come before the migrations (4), so nothing on
 prod changes until the gate is green; the VM appliance builds start right after the
-endorsement (3) so the hours-long builds overlap the deploys; the manual DNS step (6a)
-comes after `.com` (7) and `.services` (8), because `zone-health` ships with the `.com`
-deploy and the relay must drop unregistered names uniformly before the wildcard starts
-answering them; and the maintenance notice (12.1) is its own step at the start of
+endorsement (3) so the hours-long builds overlap the deploys; the deploys run
+`.services` (8) first, then the manual DNS step (6a), then `.com` (7): the new `.com`
+publishes no per-box address records, so a box registering while the wildcard does not
+exist yet would get names that do not resolve (and resolvers negative-cache that for
+30 minutes), and the relay must already drop unregistered names uniformly when the
+wildcard starts answering them. Adding the wildcard first is safe for existing
+accounts, whose own records keep answering. `zone-health` ships with the `.com`
+deploy, so the DNS step is checked with `dig` and `zone-health` runs as a post-check
+of the `.com` deploy. The maintenance notice (12.1) is its own step at the start of
 phase B. What it cannot do for you: the gym run (it prints the checklist and you type
 `verified`), the Cloudflare dashboard DNS records, the YubiKey and PIN prompts (the
 tools ask on `/dev/tty`), the App Store Connect and Play Console submissions, and
