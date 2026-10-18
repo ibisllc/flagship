@@ -449,6 +449,50 @@ describe("runCtScan — bounded / capped", () => {
     expect(res.usersSkippedForCap).toBe(1);
   });
 
+  it("scans a rotating window of users, wrapping at the end, so a cron with a small budget visits everyone in turn", async () => {
+    const storage = new InMemoryStorage();
+    const asked: string[] = [];
+    const ctSource: CtSource = async (identity) => {
+      asked.push(identity);
+      return [];
+    };
+    const users = ["alpha", "bravo", "charlie", "delta", "echo"];
+    for (const u of users) {
+      await storage.servers.put({
+        serverDomain: `home.${u}.flagship.services`,
+        username: u,
+        identityPubKeyHex: "11".repeat(32),
+        registeredAt: FIXED_NOW,
+      });
+    }
+    const scanWindow = async (start: number, count: number) => {
+      asked.length = 0;
+      const res = await runCtScan({
+        servers: storage.servers,
+        daemonStatus: storage.daemonStatus,
+        auditEvents: storage.auditEvents,
+        ctAlerts: storage.ctAlerts,
+        ctSource,
+        userWindow: { start, count },
+        now: () => FIXED_NOW,
+        log: () => {},
+      });
+      expect(res.usersScanned).toBe(count);
+      return [...new Set(asked.map((a) => a.replace(/^%\./, "").split(".")[0]))];
+    };
+    expect(await scanWindow(0, 2)).toEqual(["alpha", "bravo"]);
+    expect(await scanWindow(2, 2)).toEqual(["charlie", "delta"]);
+    expect(await scanWindow(4, 2)).toEqual(["echo", "alpha"]);
+    expect(await scanWindow(7, 2)).toEqual(["charlie", "delta"]);
+    // a window as big as the list is the whole list
+    asked.length = 0;
+    const all = await runCtScan({
+      servers: storage.servers, daemonStatus: storage.daemonStatus, auditEvents: storage.auditEvents,
+      ctAlerts: storage.ctAlerts, ctSource, userWindow: { start: 3, count: 9 }, now: () => FIXED_NOW, log: () => {},
+    });
+    expect(all.usersScanned).toBe(5);
+  });
+
   it("skips revoked servers' users", async () => {
     const storage = new InMemoryStorage();
     const ctSource: CtSource = async () => [];

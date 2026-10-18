@@ -125,17 +125,9 @@ bucket_name = "flagship-iso"
 binding = "ISO_TEMP_BUCKET"
 bucket_name = "flagship-iso-temp"
 
-# D1 → R2 backup destination. Separate bucket from flagship-iso so a
-# blast-radius event on user-facing ISO serving doesn't compromise the
-# backup tail. Provision once via:
-#   npx wrangler r2 bucket create flagship-backups
-# Hourly snapshots are pruned by the scheduled handler after 30 days;
-# monthly snapshots are kept indefinitely. If you'd rather enforce the
-# 30-day window with a bucket-level lifecycle rule, point the rule at
-# the `d1/hourly/` prefix only — never `d1/monthly/`.
-[[r2_buckets]]
-binding = "BACKUPS_BUCKET"
-bucket_name = "flagship-backups"
+# (No D1 backup binding: the backup runs in GitHub Actions now, see
+# .github/workflows/d1-backup.yml and docs/runbooks/d1-restore.md. The old
+# `flagship-backups` bucket keeps the Worker-era dumps; nothing writes to it.)
 
 # Repo adapter queue (src/adapterIndex.ts): anonymous submitted
 # flagship.app.json files waiting for the daily publish to the public repo
@@ -146,17 +138,20 @@ bucket_name = "flagship-backups"
 binding = "ADAPTERS_BUCKET"
 bucket_name = "flagship-adapters"
 
-# Cron triggers.
-#  * `0 */6 * * *` — D1 → R2 backup (gzipped JSONL). First run of each
-#    calendar month (UTC) also writes a monthly snapshot kept forever.
-#    Also drives the custom-domain verification pass AND the server-side
-#    CT-monitoring scan (crt.sh → owner push on an unexpected cert).
-#  * `*/10 * * * *` — Plan A demo-user reaper (destroys idle Hetzner
-#    VPSs past their per-row ttl_idle_minutes) AND provisioning poller
-#    (promotes provisioning → up rows when Hetzner reports running +
-#    install_events shows the daemon has registered). No-ops when
-#    HCLOUD_TOKEN isn't configured, so this cron is safe to ship
-#    before the demo-user system is provisioned.
+# Cron triggers. A Free account may spend 10 ms of CPU and make 50 subrequests
+# (every D1 call is one) per invocation, and has 5 cron triggers in all (the gym
+# Worker uses two), so there are two schedules and apps/com/src/cronPlan.ts
+# decides what each tick runs (apps/com/test/cronBudget.test.ts measures it).
+#  * `0 */6 * * *` — custom-domain verification, the CA lease warning, log
+#    pruning.
+#  * `*/10 * * * *` — the demo provisioning poller every tick, plus one rotating
+#    thing: a window of the CT-monitoring scan (crt.sh -> owner push on an
+#    unexpected cert), the re-pair / quarantine alert ladders and the stale ACME
+#    TXT sweep, or the username-suggestion refill; at 00:30 UTC the daily
+#    repo-adapter publish; Monday 01:30 the weekly adapter insight.
+# The D1 -> R2 backup and the OpenRouter capability refresh are not crons any
+# more (they do not fit): .github/workflows/d1-backup.yml and
+# .github/workflows/model-capabilities.yml.
 [triggers]
 crons = ["0 */6 * * *", "*/10 * * * *"]
 

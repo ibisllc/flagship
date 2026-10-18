@@ -1,38 +1,18 @@
 /**
- * D1 → R2 backup pipeline. Runs from the Worker's cron trigger every
- * 6 hours.
+ * The Worker's cron handler. `.com` runs on the Workers Free plan, where one
+ * cron invocation may spend 10 ms of CPU and make 50 subrequests (every D1 call
+ * is one). So the work is split across invocations by `cronPlan.ts` (which job
+ * runs at which tick) instead of one big invocation per cron, and every plan is
+ * held to the limits by apps/com/test/cronBudget.test.ts
+ * (scripts/cronHarness.ts measures it). docs/runbooks/workers-cpu-budget.md
+ * "Crons" has the inventory.
  *
- * Why a Worker-resident job (not a Fly cron / external runner):
- *   - D1 lives behind the binding; the Worker already has authenticated
- *     access without needing to plumb a long-lived API token elsewhere.
- *   - R2 is bound here too — zero-egress, zero-extra-cred backups.
- *   - Cloudflare's scheduler is the same trust root as the Worker, so
- *     this stays inside the .com control-plane boundary.
- *
- * Dump format: one JSON Lines file per run. Each row is either
- *   {"type":"table","name":"<table>"}
- * announcing the table, followed by N
- *   {"type":"row","table":"<table>","data":{...}}
- * lines for its contents.
- *
- * Why JSONL (not SQL): D1 has no native dump API, so we'd be hand-
- * constructing INSERTs either way. JSONL is easier to inspect, easier
- * to filter (`zcat foo.jsonl.gz | jq 'select(.table=="usernames")'`),
- * and trivially streamable. The restore runbook turns it back into SQL
- * via a tiny tsx script.
- *
- * Streaming: tables are walked LIMIT/OFFSET in chunks of CHUNK_ROWS so
- * we never buffer a whole table in memory. The JSONL bytes flow through
- * a CompressionStream into R2.put(stream), so the entire pipeline is
- * O(CHUNK_ROWS) RAM regardless of table size.
- *
- * Retention:
- *   - Hourly snapshots live under d1/hourly/YYYY-MM-DD-HH.jsonl.gz and
- *     are pruned to 30 days by code on each run.
- *   - On the first run of each calendar month (UTC) we ALSO write a
- *     monthly snapshot under d1/monthly/YYYY-MM.jsonl.gz. Monthly
- *     snapshots are never pruned by the Worker — operators reclaim
- *     them via R2 lifecycle rules or by hand.
+ * Two jobs are NOT here any more because they cannot fit in a Worker on Free:
+ *   - the D1 backup (89 D1 calls, 45 ms): .github/workflows/d1-backup.yml
+ *     exports the database with `wrangler d1 export` and keeps an encrypted copy
+ *     in R2 (docs/runbooks/d1-restore.md);
+ *   - the OpenRouter capability-table refresh (350 models parsed and upserted,
+ *     33 ms): .github/workflows/model-capabilities.yml.
  */
 
 import type { D1Database } from "@flagship/storage";
@@ -60,22 +40,14 @@ import { activeCaLeaseNotAfterMs } from "./caTrustChainLoader.js";
 import { notifyCaLeaseViaGithubIssue } from "./caLeaseGithubNotifier.js";
 import { runAdapterPublish } from "./adapterPublish.js";
 import { runAdapterInsights } from "./adapterInsights.js";
-import { runModelCapabilityRefresh } from "./inferenceModelRoutes.js";
+import { cronPlan, SUGGESTION_ATTEMPTS_PER_TICK, type CronJobId, type CronPlan } from "./cronPlan.js";
 import { pruneRateLimitLog } from "./rateLimitLog.js";
 import { protectedAccountsFrom } from "./prodReap.js";
 import type { AdapterBucketLike } from "./adapterIndex.js";
 import { pruneLateLogs, type LateLogBucket } from "./legacyLateLogs.js";
 
-/** Scope of one row that the dump emits. */
-export type DumpRow =
-  | { type: "meta"; tookAt: string; cron: string }
-  | { type: "table"; name: string }
-  | { type: "row"; table: string; data: Record<string, unknown> };
-
 export interface ScheduledEnv {
   DB?: D1Database;
-  /** R2 bucket for D1 backup artifacts. Separate from ISO_BUCKET. */
-  BACKUPS_BUCKET?: R2BucketLike;
   /** .services :8443 base (wrangler.toml) — custom-domain verifier
    *  pushes confirmed/invalidated redirections here (#79B/#87). */
   SERVICES_BASE_URL?: string;
@@ -132,234 +104,10 @@ export interface ScheduledEnv {
 }
 
 /**
- * Minimal R2 binding shape the backup needs. The real Cloudflare
- * binding is a superset (put / list / delete are the only methods we
- * call). Defined locally so the tests can hand in a plain object stub
- * without dragging in @cloudflare/workers-types at runtime.
- */
-export interface R2BucketLike {
-  put(
-    key: string,
-    value: ReadableStream<Uint8Array> | ArrayBuffer | Uint8Array | string,
-    options?: { httpMetadata?: { contentType?: string; contentEncoding?: string } },
-  ): Promise<unknown>;
-  list(options?: { prefix?: string; cursor?: string }): Promise<R2ListResultLike>;
-  delete(keys: string | string[]): Promise<void>;
-}
-
-export interface R2ListResultLike {
-  objects: Array<{ key: string }>;
-  truncated: boolean;
-  cursor?: string;
-}
-
-/** Read this many rows per D1 round-trip. Keeps each request small enough that workerd's CPU budget doesn't trip on a single batch. */
-export const CHUNK_ROWS = 500;
-
-/** Hourly retention window (days). 30 = "you can roll back a month." */
-export const HOURLY_RETENTION_DAYS = 30;
-
-const HOURLY_PREFIX = "d1/hourly/";
-const MONTHLY_PREFIX = "d1/monthly/";
-
-/**
- * Run one full backup cycle. Called both from the cron handler and
- * directly from tests.
- */
-export async function runBackup(
-  env: ScheduledEnv,
-  now: Date,
-  cronSpec: string,
-): Promise<BackupResult> {
-  if (!env.DB) throw new Error("DB binding missing — cannot run D1 backup");
-  if (!env.BACKUPS_BUCKET) {
-    throw new Error("BACKUPS_BUCKET binding missing — cannot write D1 backup");
-  }
-
-  const tables = await listTables(env.DB);
-  const hourlyKey = `${HOURLY_PREFIX}${formatHourlyKey(now)}.jsonl.gz`;
-
-  const hourly = buildDumpStream(env.DB, tables, now, cronSpec);
-  const gzip = hourly.stream.pipeThrough(new CompressionStream("gzip"));
-  await env.BACKUPS_BUCKET.put(hourlyKey, gzip, {
-    httpMetadata: { contentType: "application/x-ndjson", contentEncoding: "gzip" },
-  });
-
-  let monthlyKey: string | null = null;
-  // Monthly snapshot: first hourly run of each calendar month (UTC).
-  // We can't reuse the hourly stream — it's already consumed — so we
-  // dump again. Cost is one extra D1 walk every ~720 hourly runs;
-  // negligible vs the value of an indefinite long-tail snapshot.
-  if (now.getUTCDate() === 1 && now.getUTCHours() < 6) {
-    monthlyKey = `${MONTHLY_PREFIX}${formatMonthlyKey(now)}.jsonl.gz`;
-    const month = buildDumpStream(env.DB, tables, now, cronSpec);
-    const monthGz = month.stream.pipeThrough(new CompressionStream("gzip"));
-    await env.BACKUPS_BUCKET.put(monthlyKey, monthGz, {
-      httpMetadata: { contentType: "application/x-ndjson", contentEncoding: "gzip" },
-    });
-  }
-
-  // Sweep stale hourly snapshots after the new one is durable, so a
-  // failure between write + sweep just keeps a stragglier file around
-  // — never erases the last good copy.
-  const cutoff = new Date(now.getTime() - HOURLY_RETENTION_DAYS * 86_400 * 1000);
-  const deleted = await pruneHourly(env.BACKUPS_BUCKET, cutoff);
-
-  return {
-    hourlyKey,
-    monthlyKey,
-    tables,
-    tableStats: hourly.stats.perTable,
-    totalRows: hourly.stats.totalRows,
-    deletedHourlyKeys: deleted,
-  };
-}
-
-export interface BackupResult {
-  hourlyKey: string;
-  monthlyKey: string | null;
-  tables: string[];
-  tableStats: Map<string, number>;
-  totalRows: number;
-  deletedHourlyKeys: string[];
-}
-
-interface DumpStats {
-  totalRows: number;
-  perTable: Map<string, number>;
-}
-
-/**
- * Discover user tables to dump. We deliberately skip
- *   - sqlite_*  internal bookkeeping
- *   - _cf_KV    Cloudflare's D1 migrations bookkeeping
- * because both are recreated by the platform/migrations on a fresh
- * database, so backing them up would just clutter the dump.
- */
-async function listTables(db: D1Database): Promise<string[]> {
-  const result = await db
-    .prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name",
-    )
-    .all<{ name: string }>();
-  return (result.results ?? []).map((r) => r.name).filter((n) => typeof n === "string");
-}
-
-/**
- * Build a ReadableStream of UTF-8 JSONL bytes for a full dump. Rows
- * are pulled chunk-by-chunk so memory is bounded.
- */
-function buildDumpStream(
-  db: D1Database,
-  tables: string[],
-  now: Date,
-  cronSpec: string,
-): { stream: ReadableStream<Uint8Array>; stats: DumpStats } {
-  const encoder = new TextEncoder();
-  // Stats live on a shared object so callers see updates as the stream
-  // is consumed downstream (R2.put). Otherwise the caller would close
-  // over zero-valued primitives at construction time.
-  const stats: DumpStats = { totalRows: 0, perTable: new Map() };
-
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      try {
-        const meta: DumpRow = { type: "meta", tookAt: now.toISOString(), cron: cronSpec };
-        controller.enqueue(encoder.encode(JSON.stringify(meta) + "\n"));
-        for (const table of tables) {
-          // SQL injection guard: tables came from sqlite_master and
-          // pass the identifier shape check below. We still quote the
-          // identifier with [ ] in case a legitimate table name shares
-          // a SQL keyword.
-          if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(table)) continue;
-          const header: DumpRow = { type: "table", name: table };
-          controller.enqueue(encoder.encode(JSON.stringify(header) + "\n"));
-          let offset = 0;
-          let perTable = 0;
-          while (true) {
-            const chunk = await db
-              .prepare(`SELECT * FROM [${table}] LIMIT ? OFFSET ?`)
-              .bind(CHUNK_ROWS, offset)
-              .all<Record<string, unknown>>();
-            const rows = chunk.results ?? [];
-            for (const data of rows) {
-              const row: DumpRow = { type: "row", table, data };
-              controller.enqueue(encoder.encode(JSON.stringify(row) + "\n"));
-            }
-            perTable += rows.length;
-            if (rows.length < CHUNK_ROWS) break;
-            offset += CHUNK_ROWS;
-          }
-          stats.perTable.set(table, perTable);
-          stats.totalRows += perTable;
-        }
-        controller.close();
-      } catch (e) {
-        controller.error(e);
-      }
-    },
-  });
-
-  return { stream, stats };
-}
-
-/**
- * Walk d1/hourly/* and delete keys whose embedded timestamp is older
- * than `cutoff`. Pagination follows the R2 cursor so a backlog of many
- * thousands of files still terminates.
- */
-async function pruneHourly(bucket: R2BucketLike, cutoff: Date): Promise<string[]> {
-  const deleted: string[] = [];
-  let cursor: string | undefined;
-  do {
-    const page: R2ListResultLike = await bucket.list({
-      prefix: HOURLY_PREFIX,
-      ...(cursor ? { cursor } : {}),
-    });
-    const stale = page.objects
-      .map((o) => o.key)
-      .filter((k) => isHourlyKeyOlderThan(k, cutoff));
-    if (stale.length > 0) {
-      await bucket.delete(stale);
-      for (const k of stale) deleted.push(k);
-    }
-    cursor = page.truncated ? page.cursor : undefined;
-  } while (cursor);
-  return deleted;
-}
-
-const HOURLY_KEY_RE = /^d1\/hourly\/(\d{4})-(\d{2})-(\d{2})-(\d{2})\.jsonl\.gz$/;
-
-function isHourlyKeyOlderThan(key: string, cutoff: Date): boolean {
-  const m = key.match(HOURLY_KEY_RE);
-  if (!m) return false;
-  const [, y, mo, d, h] = m;
-  const t = Date.UTC(
-    Number(y),
-    Number(mo) - 1,
-    Number(d),
-    Number(h),
-    0,
-    0,
-    0,
-  );
-  return t < cutoff.getTime();
-}
-
-function pad2(n: number): string {
-  return n < 10 ? `0${n}` : String(n);
-}
-function formatHourlyKey(d: Date): string {
-  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}-${pad2(d.getUTCHours())}`;
-}
-function formatMonthlyKey(d: Date): string {
-  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`;
-}
-
-/**
- * Worker-facing scheduled handler. Cloudflare passes a controller +
- * env + ctx; we forward env to runBackup and use waitUntil so a slow
- * backup doesn't get the Worker terminated when the handler returns.
+ * Worker-facing scheduled handler. Cloudflare passes a controller + env + ctx;
+ * `cronPlan` says which jobs this tick runs, each is guarded on its own so one
+ * failure never stops another, and `waitUntil` keeps the Worker alive until
+ * they finish.
  */
 export async function scheduled(
   controller: { scheduledTime: number; cron: string },
@@ -367,115 +115,47 @@ export async function scheduled(
   ctx: { waitUntil(p: Promise<unknown>): void },
 ): Promise<void> {
   const now = new Date(controller.scheduledTime);
-  // The 6-hourly cron drives D1 backup + custom-domain verify (both
-  // were here before Plan A). The new 10-minute cron drives the
-  // demo-user reaper + provisioning poller.
-  if (controller.cron === "0 */6 * * *") {
-    ctx.waitUntil(runBackup(env, now, controller.cron));
-    ctx.waitUntil(runCustomDomainVerify(env, now));
-    // CT monitoring (server-side, defense-in-depth) — slow cadence
-    // alongside the existing 6-hourly work. Independently guarded so a
-    // crt.sh outage or scan error can never break the backup / verify
-    // tasks. See packages/control-plane/src/ctMonitor.ts for the honest
-    // threat-model note (this catches external mis-issuance + a
-    // non-suppressing .com; the phone-side watcher is Phase 2).
+  const plan = cronPlan(controller.cron, controller.scheduledTime);
+  for (const id of plan.jobs) {
     ctx.waitUntil(
-      runCtMonitor(env, now).catch((e) => {
-        console.error("[ct-monitor] cron pass failed", e);
+      runJob(id, env, now, plan).catch((e) => {
+        console.error(`[cron] ${id} failed`, (e as Error).message ?? e);
       }),
     );
-    // OPS-3 — CA-endorsement lease lapse warning. Under ENFORCE a lapsed
-    // lease 410s every pubkey-cert; this emits a high-severity audit event
-    // (+ loud log) when the soonest active lease is within 7 days of its
-    // notAfter, so the 14-day YubiKey ceremony happens BEFORE the outage.
-    // Independently guarded so a failure here never breaks the other tasks.
-    ctx.waitUntil(
-      runCaLeaseWarning(env, now).catch((e) => {
-        console.error("[ca-lease] cron pass failed", e);
-      }),
-    );
-    if (env.DB) {
-      ctx.waitUntil(
-        pruneRateLimitLog(env.DB, now).catch((e) => {
-          console.error("[rate-limit-log] prune failed", (e as Error).message);
-        }),
-      );
-    }
-    if (env.ISO_TEMP_BUCKET) {
-      ctx.waitUntil(
-        pruneLateLogs(env.ISO_TEMP_BUCKET, now).catch((e) => {
-          console.error("[late-log] prune failed", (e as Error).message);
-        }),
-      );
-    }
-    // Repo adapters: once a day (the 00:00 UTC run), publish the queue to the
-    // public index repo in one commit. A failure leaves the queue for tomorrow.
-    if (now.getUTCHours() === 0) {
-      ctx.waitUntil(
-        runAdapterPublish(env, now).catch((e) => {
-          console.error("[adapters] publish failed", (e as Error).message);
-        }),
-      );
-      // The own-key model menus' capability table, from OpenRouter's catalog.
-      ctx.waitUntil(
-        runModelCapabilityRefresh(env, now).catch((e) => {
-          console.error("[model-capabilities] refresh failed", (e as Error).message);
-        }),
-      );
-      // Mondays: the private weekly insight on adapters retired since the last.
-      if (now.getUTCDay() === 1) {
-        ctx.waitUntil(
-          runAdapterInsights(env, now).catch((e) => {
-            console.error("[adapters] insight failed", (e as Error).message);
-          }),
-        );
-      }
-    }
-    return;
   }
-  if (controller.cron === "*/10 * * * *") {
-    ctx.waitUntil(runDemoCron(env, now));
-    // v1.2 Phase 2 — pending-re-pair alert ladder. Fires the
-    // schedule-1d/3d/6d/urgent pings for any pending row that's
-    // crossed a threshold since the last tick. Inline alongside the
-    // demo cron so a single 10-minute tick handles both.
-    ctx.waitUntil(runRePairAlertsCron(env, now));
-    // Phase 3b — quarantine review-alert ladder for cross-device
-    // (vouched-QR) admits. Fires the T+0/+1d/+3d/+7d/+13d "review your
-    // trusted devices" pings to the owner's other devices while a
-    // newly-joined collaborator device is in its 14-day quarantine.
-    ctx.waitUntil(runQuarantineAlertsCron(env, now));
-    // Keep the username suggestion queue warm — the DoH `.com` exclusion runs
-    // HERE, off the request path — and prune stale per-device throttle rows.
-    // Independently guarded so a resolver hiccup never breaks the other tasks.
-    ctx.waitUntil(
-      runSuggestionQueueCron(env, now).catch((e) => {
-        console.error("[username-suggest] cron pass failed", e);
-      }),
-    );
-    // Graceful-decommission eviction-chain GC. Drops rows the successor has
-    // acked (newAckedAt set) and that are well past the TTL — a generous 30-day
-    // window is the safe v1 (encryption-conditional GC is a documented
-    // refinement). Independently guarded.
-    ctx.waitUntil(
-      runEvictionGcCron(env, now).catch((e) => {
-        console.error("[decommission] eviction GC pass failed", e);
-      }),
-    );
-    ctx.waitUntil(
-      runDnsChallengeGcCron(env, now).catch((e) => {
-        console.error("[dns] stale ACME TXT GC pass failed", e);
-      }),
-    );
-    ctx.waitUntil(
-      runLegacyDnsSweepCron(env, now).catch((e) => {
-        console.error("[dns] legacy account-record sweep failed", e);
-      }),
-    );
-    return;
+}
+
+async function runJob(id: CronJobId, env: ScheduledEnv, now: Date, plan: CronPlan): Promise<unknown> {
+  switch (id) {
+    case "custom-domain-verify":
+      return runCustomDomainVerify(env, now);
+    case "ca-lease-warning":
+      return runCaLeaseWarning(env, now);
+    case "prune-rate-limit-log":
+      return env.DB ? pruneRateLimitLog(env.DB, now) : null;
+    case "prune-late-logs":
+      return env.ISO_TEMP_BUCKET ? pruneLateLogs(env.ISO_TEMP_BUCKET, now) : null;
+    case "demo":
+      return runDemoCron(env, now);
+    case "ct-scan":
+      return runCtMonitor(env, now, plan.ctWindow);
+    case "repair-alerts":
+      return runRePairAlertsCron(env, now);
+    case "quarantine-alerts":
+      return runQuarantineAlertsCron(env, now);
+    case "suggestions":
+      return runSuggestionQueueCron(env, now);
+    case "eviction-gc":
+      return runEvictionGcCron(env, now);
+    case "dns-gc":
+      return runDnsChallengeGcCron(env, now);
+    case "legacy-dns-sweep":
+      return runLegacyDnsSweepCron(env, now);
+    case "adapter-publish":
+      return runAdapterPublish(env, now);
+    case "adapter-insights":
+      return runAdapterInsights(env, now);
   }
-  // Unknown cron string — be defensive: do nothing rather than mis-
-  // dispatch. Cloudflare can't add crons without a deploy.
 }
 
 /** Remove only ACME TXT records older than one hour. */
@@ -528,7 +208,7 @@ export async function runLegacyDnsSweepCron(
 /** Top the username suggestion queue up to its warm target (the slow DoH `.com`
  *  exclusion happens here, not on the request path) and prune throttle rows that
  *  are well past their reset window. Best-effort; guarded by the caller. */
-async function runSuggestionQueueCron(env: ScheduledEnv, now: Date): Promise<void> {
+export async function runSuggestionQueueCron(env: ScheduledEnv, now: Date): Promise<void> {
   if (!env.DB) return;
   const storage = new D1Storage(env.DB);
   const nowMs = now.getTime();
@@ -538,6 +218,9 @@ async function runSuggestionQueueCron(env: ScheduledEnv, now: Date): Promise<voi
     usernames: storage.usernames,
     comExists: (name) => comDomainExists(name, f),
     now: nowMs,
+    // Each attempt is a D1 read and a DoH lookup (two subrequests): a cold queue
+    // fills over a few ticks instead of in one invocation's 50.
+    attemptCap: SUGGESTION_ATTEMPTS_PER_TICK,
   });
   await storage.suggestThrottle.prune(nowMs - 2 * THROTTLE_WINDOW_RESET_MS);
   // Drop offers well past their claimable window (the gate uses OFFER_TTL_MS).
@@ -547,7 +230,7 @@ async function runSuggestionQueueCron(env: ScheduledEnv, now: Date): Promise<voi
 /** GC the graceful-decommission eviction chain: drop successor-acked rows that
  *  are past a generous TTL. No-ops without a DB. Best-effort; guarded by caller. */
 const EVICTION_GC_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-async function runEvictionGcCron(env: ScheduledEnv, now: Date): Promise<void> {
+export async function runEvictionGcCron(env: ScheduledEnv, now: Date): Promise<void> {
   if (!env.DB) return;
   const storage = new D1Storage(env.DB);
   await storage.serverEvictions.gcEvictions(now.getTime(), EVICTION_GC_TTL_MS);
@@ -704,6 +387,7 @@ export async function runCustomDomainVerify(
 export async function runCtMonitor(
   env: ScheduledEnv,
   now: Date,
+  window?: { start: number; count: number },
 ): Promise<{
   usersScanned: number;
   alerted: number;
@@ -718,6 +402,7 @@ export async function runCtMonitor(
     auditEvents: storage.auditEvents,
     ctAlerts: storage.ctAlerts,
     ctSource: createCrtShSource(),
+    ...(window ? { userWindow: window } : {}),
     pushTokens: storage.pushTokens,
     ...(fanout ? { pushFanout: fanout } : {}),
     now: () => now.getTime(),
@@ -813,13 +498,5 @@ function buildOptionalV12PushFanoutFromEnv(env: ScheduledEnv) {
 }
 
 export const _internal = {
-  HOURLY_PREFIX,
-  MONTHLY_PREFIX,
-  CHUNK_ROWS,
-  HOURLY_RETENTION_DAYS,
-  isHourlyKeyOlderThan,
-  formatHourlyKey,
-  formatMonthlyKey,
-  HOURLY_KEY_RE,
   buildOptionalV12PushFanoutFromEnv,
 };

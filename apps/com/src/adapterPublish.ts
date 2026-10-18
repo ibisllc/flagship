@@ -13,7 +13,7 @@
  *   README.md                                      written only if missing
  */
 
-import type { D1Database } from "@flagship/storage";
+import { RequestD1, type D1Database } from "@flagship/storage";
 import { splitAdapterFile } from "@flagship/protocol";
 import { aiReview, utcDay, type AdapterBucketLike } from "./adapterIndex.js";
 
@@ -37,12 +37,14 @@ export type PublishResult =
   | { published: false; reason: string }
   | { published: true; commit: string; added: number; confirmed: number; removedRepos: number; withdrawn: number };
 
-// One R2 read and one blob per new file, inside the subrequest budget the
-// scheduled invocation shares with the backup and the other 6-hourly tasks.
-// Anything past this waits for the next day's publish.
-export const MAX_NEW_PER_PUBLISH = 100;
+// The publish runs alone in its invocation (cronPlan.ts, 00:30 UTC), which on
+// the Workers Free plan has 50 subrequests. About 25 go to the fixed work (the
+// D1 reads, six GitHub calls, the settle batch); a new file costs up to four (R2
+// read, review, blob, its repo's index read). Anything past this waits for the
+// next day's publish; a paid plan can raise both.
+export const MAX_NEW_PER_PUBLISH = 4;
 // AI reviews per publish, new and catch-up together, for the same budget.
-export const MAX_REVIEWS_PER_PUBLISH = 40;
+export const MAX_REVIEWS_PER_PUBLISH = 4;
 
 const GITHUB_API = "https://api.github.com";
 const AUTHOR_NAME = "Flagship adapters";
@@ -102,8 +104,12 @@ async function pruneOld(db: D1Database, bucket: AdapterBucketLike | undefined, n
 }
 
 export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Promise<PublishResult> {
-  const { DB: db, ADAPTERS_BUCKET: bucket, ADAPTERS_GITHUB_TOKEN: token, ADAPTERS_REPO: repoName } = env;
-  if (!db) return { published: false, reason: "not configured" };
+  const { DB: rawDb, ADAPTERS_BUCKET: bucket, ADAPTERS_GITHUB_TOKEN: token, ADAPTERS_REPO: repoName } = env;
+  if (!rawDb) return { published: false, reason: "not configured" };
+  // Reads started together leave as one batch (a D1 call costs the Worker about
+  // half a millisecond of its 10 on the Free plan); nothing is remembered, since
+  // this run writes between its reads.
+  const db: D1Database = new RequestD1(rawDb, { cache: false });
   const day = utcDay(now);
   const complaintCutoff = utcDay(new Date(now.getTime() - COMPLAINT_TTL_DAYS * DAY_MS));
   await pruneOld(db, bucket, now);
@@ -121,67 +127,69 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
 
   const all = async <T>(sql: string, ...args: unknown[]) => (await db.prepare(sql).bind(...args).all<T>()).results;
 
-  const fresh = await all<Row>(
-    `SELECT * FROM repo_adapters WHERE published_day IS NULL ORDER BY created_day, file_sha256 LIMIT ${MAX_NEW_PER_PUBLISH}`,
-  );
-  const bumped = await all<Row>(`SELECT * FROM repo_adapters WHERE ${LIVE} AND pending_confirmations > 0`);
-  const listChanges = await all<{ repo: string; state: string }>(
-    "SELECT repo, state FROM adapter_blocklist WHERE state IN ('pending', 'unlisting')",
-  );
   const reviewKey = env.ADAPTER_REVIEW_ANTHROPIC_KEY;
-  // Published before there was a key to review them with: review them now.
-  const unreviewed = reviewKey
-    ? await all<Row>(
-        `SELECT * FROM repo_adapters WHERE ${LIVE} AND review = 'rules'
+  const [fresh, bumped, listChanges, unreviewed, maxComplaint] = await Promise.all([
+    all<Row>(
+      `SELECT * FROM repo_adapters WHERE published_day IS NULL ORDER BY created_day, file_sha256 LIMIT ${MAX_NEW_PER_PUBLISH}`,
+    ),
+    all<Row>(`SELECT * FROM repo_adapters WHERE ${LIVE} AND pending_confirmations > 0`),
+    all<{ repo: string; state: string }>(
+      "SELECT repo, state FROM adapter_blocklist WHERE state IN ('pending', 'unlisting')",
+    ),
+    // Published before there was a key to review them with: review them now.
+    reviewKey
+      ? all<Row>(
+          `SELECT * FROM repo_adapters WHERE ${LIVE} AND review = 'rules'
          ORDER BY published_day, file_sha256 LIMIT ${MAX_REVIEWS_PER_PUBLISH}`,
-      )
-    : [];
-
-  // Complaints, as of this snapshot (later ones wait for the next publish).
-  const maxComplaint =
-    (await db.prepare("SELECT max(id) AS m FROM adapter_complaints").bind().first<{ m: number | null }>())?.m ?? 0;
-  const complaintCounts = new Map(
-    (
-      await all<{ file_sha256: string; n: number }>(
-        `SELECT file_sha256, count(*) AS n FROM adapter_complaints
+        )
+      : Promise.resolve([] as Row[]),
+    // Complaints, as of this snapshot (later ones wait for the next publish).
+    db
+      .prepare("SELECT max(id) AS m FROM adapter_complaints")
+      .bind()
+      .first<{ m: number | null }>()
+      .then((r) => r?.m ?? 0),
+  ]);
+  const [complaintCountRows, recountRows, broken, reported, expiring] = await Promise.all([
+    all<{ file_sha256: string; n: number }>(
+      `SELECT file_sha256, count(*) AS n FROM adapter_complaints
          WHERE stage IN ('build', 'start') AND day >= ? AND id <= ? GROUP BY file_sha256`,
-        complaintCutoff,
-        maxComplaint,
-      )
-    ).map((r) => [r.file_sha256, r.n]),
-  );
-  // Repos whose published counts change: new build/start complaints, or old
-  // ones expiring.
-  const recount = (
-    await all<{ repo: string }>(
+      complaintCutoff,
+      maxComplaint,
+    ),
+    // Repos whose published counts change: new build/start complaints, or old
+    // ones expiring.
+    all<{ repo: string }>(
       `SELECT DISTINCT r.repo FROM adapter_complaints c JOIN repo_adapters r ON r.file_sha256 = c.file_sha256
        WHERE c.stage IN ('build', 'start') AND c.id <= ? AND (c.counted = 0 OR c.day < ?)
          AND r.published_day IS NOT NULL AND r.retired_day IS NULL`,
       maxComplaint,
       complaintCutoff,
-    )
-  ).map((r) => r.repo);
-  // Three problems of any kind, from installs or owners, retire an adapter.
-  const broken = await all<Row>(
-    `SELECT * FROM repo_adapters WHERE ${LIVE} AND file_sha256 IN (
+    ),
+    // Three problems of any kind, from installs or owners, retire an adapter.
+    all<Row>(
+      `SELECT * FROM repo_adapters WHERE ${LIVE} AND file_sha256 IN (
        SELECT file_sha256 FROM adapter_complaints WHERE day >= ? AND id <= ?
        GROUP BY file_sha256 HAVING count(*) >= ?)`,
-    complaintCutoff,
-    maxComplaint,
-    RETIRE_AT_COMPLAINTS,
-  );
-  const reported = reviewKey
-    ? await all<Row>(
-        `SELECT * FROM repo_adapters WHERE ${LIVE} AND file_sha256 IN (
+      complaintCutoff,
+      maxComplaint,
+      RETIRE_AT_COMPLAINTS,
+    ),
+    reviewKey
+      ? all<Row>(
+          `SELECT * FROM repo_adapters WHERE ${LIVE} AND file_sha256 IN (
            SELECT file_sha256 FROM adapter_complaints WHERE stage = 'report' AND reviewed = 0 AND id <= ?)
          ORDER BY published_day, file_sha256`,
-        maxComplaint,
-      )
-    : [];
-  const expiring = await db
-    .prepare(`SELECT 1 AS x FROM adapter_complaints WHERE day < ? AND file_sha256 NOT IN (${RETIRED_FILES}) LIMIT 1`)
-    .bind(complaintCutoff)
-    .first();
+          maxComplaint,
+        )
+      : Promise.resolve([] as Row[]),
+    db
+      .prepare(`SELECT 1 AS x FROM adapter_complaints WHERE day < ? AND file_sha256 NOT IN (${RETIRED_FILES}) LIMIT 1`)
+      .bind(complaintCutoff)
+      .first(),
+  ]);
+  const complaintCounts = new Map(complaintCountRows.map((r) => [r.file_sha256, r.n]));
+  const recount = recountRows.map((r) => r.repo);
 
   if (
     !fresh.length && !bumped.length && !listChanges.length && !unreviewed.length &&

@@ -316,6 +316,41 @@ describe("runAdapterPublish", () => {
     expect(await all("SELECT count(*) AS n FROM repo_adapters WHERE published_day IS NULL")).toEqual([{ n: 2 }]);
   });
 
+  it("a full publish fits the 50 subrequests a Workers Free cron invocation has", async () => {
+    // D1 calls + fetches + R2 reads, counted: queued past the cap, in three repos,
+    // with confirmations on one already published.
+    await queue({ repo: NOTES, n: 1 });
+    await runAdapterPublish(env, NOW);
+    await queue({ repo: NOTES, n: 2, pending: 3 });
+    await queue({ repo: GROUP, n: 3 });
+    await queue({ repo: "https://github.com/me/third", n: 4 });
+    await queue({ repo: "https://github.com/me/fourth", n: 5 });
+    await queue({ repo: "https://github.com/me/fifth", n: 6 });
+    let d1 = 0;
+    let r2 = 0;
+    const countingDb = {
+      prepare(sql: string) {
+        const stmt = db.prepare(sql);
+        for (const m of ["first", "all", "run"] as const) {
+          const orig = (stmt as never as Record<string, (...a: unknown[]) => unknown>)[m]!.bind(stmt);
+          (stmt as never as Record<string, unknown>)[m] = (...a: unknown[]) => (d1++, orig(...a));
+        }
+        return stmt;
+      },
+      batch: (s: never) => (d1++, db.batch(s)),
+    } as unknown as D1Database;
+    const countingBucket: AdapterBucketLike = {
+      get: (k) => (r2++, bucket.get(k)),
+      put: (k, v) => bucket.put(k, v),
+      delete: (k) => bucket.delete(k),
+    };
+    const fetchBefore = (globalThis.fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length;
+    const res = await runAdapterPublish({ ...env, DB: countingDb, ADAPTERS_BUCKET: countingBucket }, NOW);
+    const fetches = (globalThis.fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length - fetchBefore;
+    expect(res).toMatchObject({ published: true, added: MAX_NEW_PER_PUBLISH });
+    expect(d1 + fetches + r2).toBeLessThanOrEqual(45);
+  });
+
   it("listing a repo removes its directory and appends it to do-not-adapt.txt; unlisting drops the line", async () => {
     await queue({ repo: NOTES, n: 1 });
     await queue({ repo: GROUP, n: 2 });
@@ -356,10 +391,10 @@ describe("runAdapterPublish", () => {
 });
 
 describe("scheduled()", () => {
-  async function run(hour: number, e: Record<string, unknown>) {
+  async function run(hour: number, minute: number, e: Record<string, unknown>) {
     const waits: Promise<unknown>[] = [];
     await scheduled(
-      { scheduledTime: Date.UTC(2026, 9, 12, hour, 0, 0), cron: "0 */6 * * *" },
+      { scheduledTime: Date.UTC(2026, 9, 12, hour, minute, 0), cron: "*/10 * * * *" },
       e as never,
       { waitUntil: (p) => waits.push(p) },
     );
@@ -367,14 +402,12 @@ describe("scheduled()", () => {
     return waits.length;
   }
 
-  it("publishes on the 00:00 UTC run only", async () => {
+  it("publishes in the 00:30 UTC tick only, alone in its invocation", async () => {
     await queue({ repo: NOTES, n: 1 });
-    const e = { ...env, BACKUPS_BUCKET: { put: async () => undefined, list: async () => ({ objects: [], truncated: false }), delete: async () => undefined } };
-    expect(await run(6, e)).toBe(5);
+    await run(6, 30, env);
+    await run(0, 0, env);
     expect(gh.calls).toHaveLength(0);
-    // 2026-10-12 is a Monday: the weekly insight is scheduled too, beside the
-    // daily model-capability refresh.
-    expect(await run(0, e)).toBe(8);
+    expect(await run(0, 30, env)).toBe(1);
     expect(gh.files()[`adapters/github.com/me/notes/${sha(1)}.json`]).toBeDefined();
   });
 });

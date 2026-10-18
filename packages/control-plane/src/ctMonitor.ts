@@ -226,6 +226,14 @@ export interface CtScanDeps {
    */
   maxUsersPerRun?: number;
   /**
+   * Scan only a window of the (sorted) users, wrapping around the end:
+   * `count` users starting at index `start % users`. A cron that has a
+   * handful of subrequests per invocation (the Workers Free plan allows 50)
+   * advances `start` by `count` every tick, so every user is scanned in turn
+   * without any state of its own. Absent: all users, as before.
+   */
+  userWindow?: { start: number; count: number };
+  /**
    * Cap on CT queries per run across all users (each user costs 2 — the
    * apex + the wildcard identity). Default 400.
    */
@@ -287,7 +295,11 @@ export async function runCtScan(deps: CtScanDeps): Promise<CtScanResult> {
   const usernames = [...serverDomainsByUser.keys()].sort();
 
   let usersToScan = usernames;
-  if (usernames.length > maxUsers) {
+  if (deps.userWindow && usernames.length > deps.userWindow.count) {
+    const n = usernames.length;
+    const start = ((Math.floor(deps.userWindow.start) % n) + n) % n;
+    usersToScan = Array.from({ length: deps.userWindow.count }, (_, i) => usernames[(start + i) % n]!);
+  } else if (usernames.length > maxUsers) {
     result.usersSkippedForCap = usernames.length - maxUsers;
     usersToScan = usernames.slice(0, maxUsers);
     log(
