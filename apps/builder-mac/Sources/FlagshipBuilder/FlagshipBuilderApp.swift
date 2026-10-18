@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import FlagshipBuilderCore
 
 /// Entry point. Normally launches the SwiftUI app, but a hidden
 /// `--vm-smoke` flag runs the headless Phase-0 VM boot harness (VMSmoke)
