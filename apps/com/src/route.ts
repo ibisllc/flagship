@@ -45,7 +45,6 @@ import {
   clientIp,
   endpointFor,
   extractIrkPub,
-  extractSubject,
   extractUsernameHash,
   rateLimitedResponse,
   type RateLimitNamespace,
@@ -877,9 +876,7 @@ async function routeImpl(
   let buffered = request;
   if (rlEndpoint) {
     let bodyText: string | undefined;
-    // The installer log's budget needs no body, and its handler caps the
-    // size before reading one.
-    if (request.method !== "GET" && request.method !== "HEAD" && rlEndpoint !== "dev-late-log") {
+    if (request.method !== "GET" && request.method !== "HEAD") {
       bodyText = await request.text();
       buffered = new Request(request.url, {
         method: request.method,
@@ -897,13 +894,11 @@ async function routeImpl(
     }
     const irkPub = extractIrkPub(rlEndpoint, parsed);
     const usernameHash = extractUsernameHash(url.pathname);
-    const subject = extractSubject(url.pathname);
     const rl = await checkRateLimit(env, {
       endpoint: rlEndpoint,
       ip: clientIp(request),
       ...(irkPub ? { irkPub } : {}),
       ...(usernameHash ? { usernameHash } : {}),
-      ...(subject ? { subject } : {}),
     }, ctx);
     if (rl.limited) return rateLimitedResponse(rl);
   }

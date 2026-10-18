@@ -57,7 +57,7 @@ if [ -n "${FLAGSHIP_BLOB_JSON_BASE64:-}" ]; then
     printf '%s' "$FLAGSHIP_BLOB_JSON_BASE64" | base64 -d > /tmp/flagship-blob.json
 fi
 
-# Stash the username so post-log.sh can default to it as the log label.
+# Stash the username for the later stages.
 printf '%s\n' "$FLAGSHIP_USERNAME" > /tmp/flagship-username
 
 echo "[early-scan] done; username=$FLAGSHIP_USERNAME domain=$FLAGSHIP_SERVER_DOMAIN ref=$FLAGSHIP_INSTALLER_GIT_REF"

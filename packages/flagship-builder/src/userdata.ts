@@ -1458,16 +1458,6 @@ if [ -n "\\\$_ip" ]; then
 fi
 log_stage "bring-up attempt complete on \\\$IF"
 
-# OBSERVABILITY: now that the network is (maybe) up, best-effort POST the whole
-# accumulated bring-up log to the dev late-log endpoint — the SAME channel + the
-# SAME busybox-wget --post-file form the bootstrap's other dev beacons use, keyed
-# <serial>-wifi. Covers the network-came-up-but-unlock-still-failed case. Wrapped
-# so a down/just-coming-up network never blocks the imminent unlock relay.
-_serial="\\\$(cat /boot/flagship-beacon-serial 2>/dev/null | tr -cd 'A-Za-z0-9._:-')"
-if [ -n "\\\$_serial" ] && [ -n "\\\$_ip" ]; then
-  ( wget -q -O- --post-file="\\\$FLAGSHIP_WIFI_LOG" --timeout=15 \\\\
-      "https://flagshipserver.com/api/dev/late-log/\\\${_serial}-wifi" 2>/dev/null; ) || true
-fi
 umount "\\\$FLAGSHIP_BOOTMNT" 2>/dev/null || true
 exit 0
 WIFIPREMOUNT

@@ -1201,7 +1201,10 @@ first update after it (`docs/anonymous-vouchers.md`, $1 voucher unit). Detail: `
    `luksRemoveKey` guard. `release-guard.sh` stays red on release tags until then.
 3. Remove the demo/dev flips (demo mode, any remaining hidden toggles). **iOS and webapp done 2026-10-16:** Release iOS builds carry no mock clients, fixtures, gym seams or developer mode (all `#if DEBUG`; `scripts/ios-release-clean.mjs`, `--build` checks a built app), the webapp has no `?debug=1` tools. Demo accounts stay (real `.com` accounts). iOS Add a device / Join an account had only the in-process mock relay, so Release now refuses with a sentence until the `/qr-pipe` pairing transport exists.
 4. Fill the `pro.html` payment placeholders (on `feat/marketplace`).
-5. Remove `DEV_LATE_LOG` / W12 debug endpoints in `controlPlaneRoutes.ts`.
+5. ~~`DEV_LATE_LOG` / W12 debug endpoints~~ removed 2026-10-17 (late-log, Hetzner
+   rescue/destroy/server-info, upload-iso; installers post no logs any more; needs
+   an endorsed box release and a `.com` deploy; `legacyLateLogs.ts` and its cron
+   call go on or after 2026-10-31).
 6. Quiet the box console: diagnose `journalctl -b -p warning` on a real box
    first, fix real warnings at the source, then add `quiet loglevel=3`.
 - Owner debug access ships at GA by owner decision (2026-10-16): SSH key only,

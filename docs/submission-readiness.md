@@ -13,8 +13,8 @@
 
 ## P1 — Dev-mode disarmament (Bucket C — MUST before real users)
 6. **CI grep-gate** that FAILS a *release* build if the `debug`-user or burn-time-LUKS constants are present. **[agent]**
-7. **Guard/disarm the prod-wipe script** — per-env confirmation token + prod row-count dry-run + audit-logged admin-only path (or remove it from the deployable surface). **[agent]**
-8. **Remove `DEV_LATE_LOG` + the W12 debug endpoints** from the release surface (keep on dev). **[agent]**
+7. **Guard/disarm the prod-wipe script** — **Done 2026-10-17**: no default target, env must match the database, a prod wipe needs a person typing the database name at a terminal, `release-guard.sh` enforces it.
+8. **Remove `DEV_LATE_LOG` + the W12 debug endpoints** from the release surface. **Done 2026-10-17** (removed outright, not just hidden; the Hetzner rescue/destroy/server-info/upload-iso routes went with it; demo endpoints under `/api/dev/sample-user` are untouched).
 9. **Gate the demo/dev flips** (3-tap live/mock toggle + DemoFixtures) behind the release flag — keep them for dev/gym. **Done on iOS and the webapp (2026-10-16): mocks, fixtures and gym seams are `#if DEBUG`, developer mode and `?debug=1` are gone; `scripts/ios-release-clean.mjs`.**
 10. **Builder reburn:** remove the `debug`/`flagship` console user + burn-time LUKS passphrase + re-enable the `luksRemoveKey` guard. **[agent code + owner reburn]**
 

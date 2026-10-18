@@ -105,7 +105,7 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
   // completed but the box has not registered — it powered off awaiting the user
   // to unplug the USB + power back on (registration + cert happen on the first
   // real boot → `live`). Emitted on the success branch ONLY (the failure branch
-  // posts the dev late-log + exits 1, never this).
+  // just exits 1, never this).
   const installedBeacon = debianBeaconCommand("installed", beaconSerial);
   // The exact same first-boot bootstrap as Ubuntu — only the LUKS unlock step
   // adapts to Debian's LVM-on-LUKS (family:"debian").
@@ -177,18 +177,14 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
     `echo '${bootstrapB64}' | base64 -d > /target/usr/local/sbin/flagship-bootstrap.sh; ` +
     `chmod +x /target/usr/local/sbin/flagship-bootstrap.sh; ` +
     wifiLateCommand +
-    // Run the first-boot bootstrap capturing its output to a log on the target.
-    // On failure, POST the last 16 KB home to the dev late-log endpoint (so we
-    // can read WHY it failed via R2 without a serial console / d-i shell), then
-    // exit non-zero so d-i still flags the failure. Best-effort post (|| true
-    // inside) never masks the real exit code.
-    // On SUCCESS, fire the `installed` beacon (best-effort `|| true`, so it never
-    // blocks the imminent poweroff and never trips the failure branch). On
-    // FAILURE, POST the last 16 KB to the dev late-log and exit 1.
+    // Run the first-boot bootstrap capturing its output to a log on the target
+    // (/var/log/flagship-bootstrap.log). On SUCCESS, fire the `installed` beacon
+    // (best-effort `|| true`, so it never blocks the imminent poweroff and never
+    // trips the failure branch). On FAILURE, exit non-zero so d-i still flags the
+    // failure; the log stays on the target for the owner's debug access.
     `( in-target /usr/local/sbin/flagship-bootstrap.sh > /target/var/log/flagship-bootstrap.log 2>&1 ) && ` +
     `${installedBeacon} || ` +
-    `( tail -c 16000 /target/var/log/flagship-bootstrap.log > /tmp/fb-bootstrap-tail.txt 2>/dev/null; ` +
-    `wget -q -O- --post-file=/tmp/fb-bootstrap-tail.txt --timeout=20 https://flagshipserver.com/api/dev/late-log/${beaconSerial}-bootstrap 2>/dev/null; exit 1 )`;
+    `( exit 1 )`;
 
   return `# Flagship Studio — debian-installer preseed
 # Generated at burn time. Don't edit by hand.

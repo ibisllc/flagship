@@ -602,18 +602,22 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
 
   it("Beacon D — late_command POSTs 'installed' on the bootstrap SUCCESS path only, before poweroff", () => {
     const c = cfg();
-    // The success path: bootstrap `&&` the installed beacon, THEN `||` the
-    // failure (dev late-log) branch.
+    // The success path: bootstrap `&&` the installed beacon, THEN `||` a bare
+    // failure exit (no log leaves the box).
     expect(c).toContain(
       `( in-target /usr/local/sbin/flagship-bootstrap.sh > /target/var/log/flagship-bootstrap.log 2>&1 ) && ` +
-        `${INSTALLED_BEACON} || `,
+        `${INSTALLED_BEACON} || ( exit 1 )`,
     );
-    // The `installed` beacon must come AFTER the bootstrap run and BEFORE the
-    // failure branch's dev late-log POST (success-only, never on failure).
     expect(c.indexOf('"phase":"installed"')).toBeGreaterThan(
       c.indexOf("flagship-bootstrap.log 2>&1 ) &&"),
     );
-    expect(c.indexOf('"phase":"installed"')).toBeLessThan(c.indexOf("/api/dev/late-log/"));
+  });
+
+  it("no installer log is ever posted to the control plane (GA close-out 5)", () => {
+    const c = cfg();
+    expect(c).not.toContain("/api/dev/");
+    expect(c).not.toContain("late-log");
+    expect(c).not.toContain("fb-bootstrap-tail");
   });
 
   it("beacons are best-effort (|| true) and use busybox wget --post-file= (no curl in d-i)", () => {

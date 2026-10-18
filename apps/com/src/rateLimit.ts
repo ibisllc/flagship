@@ -150,10 +150,6 @@ export type RateLimitEndpoint =
   // reply) or a status read. Minting records nothing, so this only fences
   // signature-check load from one address.
   | "free-ai"
-  // Installer logs (/api/dev/late-log/<label>): posted by an installer that
-  // holds no credential yet, so per-IP plus per label (`subject`), which keeps
-  // one source from flooding the bucket or rotating out a box's own log.
-  | "dev-late-log"
   // Repo adapter index (adapterIndex.ts): anonymous. A submit can cost
   // hundreds of source fetches; three complaints retire an adapter, so they
   // are also budgeted per adapter and per (address, adapter).
@@ -324,12 +320,6 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 30, windowSec: 60 },
     { axis: "ip", limit: 600, windowSec: 3600 },
   ],
-  // A real install posts a handful of chunks (Wi-Fi bring-up, a failure tail).
-  "dev-late-log": [
-    { axis: "ip", limit: 10, windowSec: 60 },
-    { axis: "ip", limit: 60, windowSec: 3600 },
-    { axis: "subject", limit: 30, windowSec: 3600 },
-  ],
   // A box adapts a repo with up to 2 fix rounds, each one submit.
   "adapter-submit": [
     { axis: "ip", limit: 5, windowSec: 60 },
@@ -353,7 +343,7 @@ export interface RateLimitInput {
   irkPub?: string;
   /** Username hash (last path segment) for the recovery endpoint. */
   usernameHash?: string;
-  /** The thing acted on (a log label, an adapter's file hash). */
+  /** The thing acted on (an adapter's file hash). */
   subject?: string;
 }
 
@@ -673,9 +663,6 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && (pathname === "/api/free-ai/token" || pathname === "/api/free-ai/status")) {
     return "free-ai";
   }
-  if (m === "POST" && /^\/api\/dev\/late-log\/[^/]+$/.test(pathname)) {
-    return "dev-late-log";
-  }
   return null;
 }
 
@@ -734,17 +721,6 @@ export function extractIrkPub(endpoint: RateLimitEndpoint, body: unknown): strin
   return typeof candidate === "string" && /^[0-9a-fA-F]{64}$/.test(candidate)
     ? candidate.toLowerCase()
     : undefined;
-}
-
-/** The late-log label a POST names, the subject of its budget. */
-export function extractSubject(pathname: string): string | undefined {
-  const m = pathname.match(/^\/api\/dev\/late-log\/([^/]+)$/);
-  if (!m) return undefined;
-  try {
-    return decodeURIComponent(m[1]!);
-  } catch {
-    return m[1]!;
-  }
 }
 
 /** Pull the username hash out of the recovery path (`/api/recovery/by-username/<hash>[/fetch]`). */

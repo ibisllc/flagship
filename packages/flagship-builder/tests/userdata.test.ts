@@ -1093,6 +1093,13 @@ describe("INITRAMFS Wi-Fi (phone-gated unlock needs network in early boot)", () 
     expect(b).toContain("falling through");
   });
 
+  it("the premount keeps its bring-up log on the boot partition and posts it nowhere", () => {
+    const b = encBootstrap({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
+    expect(b).not.toContain("/api/dev/");
+    expect(b).not.toContain("late-log");
+    expect(b).toContain("FLAGSHIP_WIFI_LOG");
+  });
+
   it("the creds are embedded (single-quote-escaped) in the premount, NOT base64", () => {
     // The initramfs is a /bin/sh env (no base64 guaranteed); the creds are on the
     // unencrypted /boot initramfs regardless, so embedding them is not a new
@@ -1144,11 +1151,11 @@ describe("INITRAMFS Wi-Fi (phone-gated unlock needs network in early boot)", () 
     expect(relayAt).toBeGreaterThan(0);
   });
 
-  it("the initramfs Wi-Fi block is BYTE-IDENTICAL to the Swift twin (cross-language sha pin)", () => {
-    // EngineTests.testInitramfsWifiBlockIsByteIdenticalToTs pins this SAME sha256.
+  it("the initramfs Wi-Fi block is pinned byte for byte (sha256)", () => {
+    // Every native builder runs the bundled engine, so this one pin covers them.
     const s = buildInitramfsWifiBlock("Flagship Test AP", "test-only-not-real");
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "5a0ad7e25ec0e8bd6b44082797d4dba6838ce025f11947b7cd2d5d69732cb444",
+      "a756ad78c3fe9ab9243f5f25475c75ffa79902362c378fe89b726071c0887394",
     );
   });
 });
