@@ -26,7 +26,9 @@ function stubDb(accountRow: Record<string, unknown> | null = null): D1Database {
         run: async () => ({ success: true, meta: {} }),
       }),
     }),
-    batch: async () => [],
+    // Reads issued together come through batch(); each answers as first() does.
+    batch: async (stmts: unknown[]) =>
+      stmts.map(() => ({ success: true, meta: {}, results: accountRow ? [accountRow] : [] })),
   } as unknown as D1Database;
 }
 function env(extra: Partial<ControlPlaneEnv> = {}): ControlPlaneEnv {

@@ -11,6 +11,7 @@ import {
 import { InMemoryStorage, type DemoUserRecord } from "@flagship/storage";
 import {
   handleMintAccountReadToken,
+  peekAccountReadToken,
   requireAccountRead,
   type AccountReadTokenDeps,
 } from "../src/accountReadToken.js";
@@ -191,5 +192,56 @@ describe("reading with an account read token", () => {
       expect(r.response.status).toBe(401);
       expect(r.response.headers?.["cache-control"]).toBe("private, no-store");
     }
+  });
+});
+
+describe("a read token whose MAC was already checked", () => {
+  it("is still refused the moment its signer is revoked, rotated away or expired", async () => {
+    const h = await harness();
+    const byDevice = (await mint(h.deps, { device: deviceAuth(h.device) })).token!;
+    const byIrk = (await mint(h.deps, { body: irkBody(h.irk) })).token!;
+    const byBox = (await mint(h.deps, { body: boxBody(h.stk) })).token!;
+    // Used once each, so every MAC is now remembered.
+    for (const t of [byDevice, byIrk, byBox]) expect((await read(h.deps, t)).ok).toBe(true);
+    await h.storage.deviceIdentities.revoke(U, DEVICE_ID, NOW);
+    await h.storage.usernames.swapIrkPub(U, hex(h.irk.publicKey), hex(key(2).publicKey), NOW);
+    await h.storage.servers.revoke(DOMAIN, "lost", NOW);
+    for (const t of [byDevice, byIrk, byBox]) expect((await read(h.deps, t)).ok).toBe(false);
+  });
+
+  it("is still refused after its expiry", async () => {
+    const h = await harness();
+    const byIrk = (await mint(h.deps, { body: irkBody(h.irk) })).token!;
+    expect((await read(h.deps, byIrk)).ok).toBe(true);
+    h.advance(25 * 60 * 60_000);
+    expect((await read(h.deps, byIrk)).ok).toBe(false);
+  });
+
+  it("is not honoured under a different secret", async () => {
+    const h = await harness();
+    const token = (await mint(h.deps, { device: deviceAuth(h.device) })).token!;
+    expect((await read(h.deps, token)).ok).toBe(true);
+    const other = { ...h.deps, secret: "another-secret" };
+    expect((await read(other, token)).ok).toBe(false);
+  });
+
+  it("a forged MAC is never remembered as good", async () => {
+    const h = await harness();
+    const token = (await mint(h.deps, { device: deviceAuth(h.device) })).token!;
+    const [p, payload, mac] = token.split(".");
+    const forged = `${p}.${payload}.${mac!.slice(0, -2)}AA`;
+    for (let i = 0; i < 3; i++) expect((await read(h.deps, forged)).ok).toBe(false);
+  });
+
+  it("peekAccountReadToken reads the claims of a good token and nothing else", async () => {
+    const h = await harness();
+    const token = (await mint(h.deps, { device: deviceAuth(h.device) })).token!;
+    const claims = await peekAccountReadToken("s3cret", `Bearer ${token}`);
+    expect(claims?.u).toBe(U);
+    expect(claims?.sub).toBe(`d:${DEVICE_ID}`);
+    expect(await peekAccountReadToken("wrong", `Bearer ${token}`)).toBeNull();
+    expect(await peekAccountReadToken("s3cret", "Bearer nonsense")).toBeNull();
+    expect(await peekAccountReadToken("s3cret", null)).toBeNull();
+    expect(await peekAccountReadToken(undefined, `Bearer ${token}`)).toBeNull();
   });
 });

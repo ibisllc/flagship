@@ -19,8 +19,8 @@
 import {
   ACCOUNT_READ_TOKEN_LABEL,
   accountReadTokenPath,
-  verifyBoxReadTokenRequest,
-  verifyDeviceEndpointClaim,
+  verifyBoxReadTokenRequestFast,
+  verifyDeviceEndpointClaimFast,
   type BoxReadTokenRequest,
 } from "@flagship/protocol";
 import type {
@@ -135,7 +135,7 @@ async function authorizeIrk(
   if (Math.abs(now - a.issuedAt) > FRESHNESS_MS || a.expiresAt <= now) return null;
   const user = await deps.usernames.get(u);
   if (!user?.irkPubHex || user.irkPubHex.toLowerCase() !== a.phoneIrkPub) return null;
-  const verified = verifyDeviceEndpointClaim(
+  const verified = await verifyDeviceEndpointClaimFast(
     {
       username: a.username,
       endpointLabel: a.endpointLabel,
@@ -171,7 +171,7 @@ async function authorizeBox(
   if (!server || server.revokedAt || server.username.toLowerCase() !== u) return null;
   if (server.identityPubKeyHex.toLowerCase() !== r.stkPubHex) return null;
   const request = r as BoxReadTokenRequest;
-  if (!verifyBoxReadTokenRequest(request, signature, hexToBytes(server.identityPubKeyHex))) return null;
+  if (!(await verifyBoxReadTokenRequestFast(request, signature, hexToBytes(server.identityPubKeyHex)))) return null;
   if (!(await deps.nonces.claim(`read-token|box|${domain}|${r.nonceHex}`, now + FRESHNESS_MS, now))) return null;
   return { sub: `s:${domain}`, key: r.stkPubHex, ttlMs: BOX_TOKEN_TTL_MS };
 }
@@ -224,7 +224,19 @@ async function encode(claims: AccountReadTokenClaims, secret: string): Promise<s
   return `${PREFIX}.${payload}.${b64urlEncode(await hmac(secret, `${MAC_CONTEXT}|${payload}`))}`;
 }
 
+// A token whose MAC checked out is remembered, keyed by the whole token string
+// and the secret it was checked under, so the same bearer token (an app sends
+// it on every poll) costs one HMAC per isolate rather than one per request.
+// Only the MAC and the claims are remembered: expiry (`exp`) and whether the
+// signer is still current are judged on every call, so a revoked device or a
+// rotated root loses access on its next request exactly as before. A token the
+// secret does not vouch for is never stored.
+const VERIFIED_TOKENS = new Map<string, { secret: string; claims: AccountReadTokenClaims }>();
+const VERIFIED_TOKENS_MAX = 512;
+
 async function decode(token: string, secret: string): Promise<AccountReadTokenClaims | null> {
+  const seen = VERIFIED_TOKENS.get(token);
+  if (seen && seen.secret === secret) return seen.claims;
   const parts = token.split(".");
   if (parts.length !== 3 || parts[0] !== PREFIX) return null;
   try {
@@ -234,21 +246,39 @@ async function decode(token: string, secret: string): Promise<AccountReadTokenCl
     if (typeof c.u !== "string" || typeof c.sub !== "string" || typeof c.k !== "string" || typeof c.exp !== "number") {
       return null;
     }
+    if (VERIFIED_TOKENS.size >= VERIFIED_TOKENS_MAX) VERIFIED_TOKENS.delete(VERIFIED_TOKENS.keys().next().value!);
+    VERIFIED_TOKENS.set(token, { secret, claims: c });
     return c;
   } catch {
     return null;
   }
 }
 
+/**
+ * The claims of a bearer token that carries a valid MAC, or null. Says nothing
+ * about expiry or whether the signer is still current: it exists so the route
+ * can start the reads the gate will make together with its own.
+ */
+export async function peekAccountReadToken(
+  secret: string | undefined,
+  authorization: string | null | undefined,
+): Promise<AccountReadTokenClaims | null> {
+  const match = /^Bearer\s+(\S+)$/i.exec(authorization ?? "");
+  if (!match || !secret) return null;
+  return decode(match[1]!, secret);
+}
+
+// The imported HMAC key, kept per secret: importing it is most of the work.
+const hmacKeys = new Map<string, ReturnType<typeof crypto.subtle.importKey>>();
+
 async function hmac(secret: string, message: string): Promise<Uint8Array> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  return new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message)));
+  let key = hmacKeys.get(secret);
+  if (!key) {
+    key = crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    hmacKeys.set(secret, key);
+    key.catch(() => hmacKeys.delete(secret));
+  }
+  return new Uint8Array(await crypto.subtle.sign("HMAC", await key, new TextEncoder().encode(message)));
 }
 
 function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {

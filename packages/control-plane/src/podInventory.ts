@@ -23,8 +23,8 @@
  */
 
 import {
-  verifyDaemonStatusReport,
-  verifyBoxTrustStatusReport,
+  verifyDaemonStatusReportFast,
+  verifyBoxTrustStatusReportFast,
   type BoxTrustStatusReport,
   type DaemonStatusReport,
   type SignedServerOrder,
@@ -261,20 +261,44 @@ const UNREVOKABLE_REASONS: ReadonlySet<string> = new Set(["lost", "stolen", "dec
 export async function buildPodInventory(
   deps: PodInventoryDeps,
   username: string,
+  opts: { light?: boolean } = {},
 ): Promise<PodInventory> {
+  // `light` is for change detection only (the held /stream): it leaves out what
+  // the stream cursor does not look at (routing, health, the parsed signed
+  // report), so each check is one round trip and almost no parsing.
+  const light = opts.light === true;
+  // Every read that does not depend on another starts together, so the storage
+  // layer can send them as one round trip (a D1 call costs the Free plan's 10 ms
+  // CPU budget about half a millisecond). Guarded ones keep their own catch.
+  const now = (deps.now ?? (() => Date.now()))();
+  const mailboxP: Promise<Awaited<ReturnType<SecretMailboxStorage["listPendingForUser"]>> | null> =
+    deps.secretMailbox
+      ? deps.secretMailbox.listPendingForUser(username, now).catch(() => null)
+      : Promise.resolve(null);
+  const outstandingP: Promise<Awaited<ReturnType<AuthCodeStorage["listOutstandingByUsername"]>> | null> =
+    deps.authCodes
+      ? deps.authCodes.listOutstandingByUsername(username, now).catch(() => null)
+      : Promise.resolve(null);
+  const serverOrderP: Promise<SignedServerOrder | null> = deps.serverOrders
+    ? readServerOrder(deps.serverOrders, username).catch(() => null)
+    : Promise.resolve(null);
+  const [allServers, statuses, pendingReqs, outstanding, serverOrder] = await Promise.all([
+    deps.servers.listForUser(username),
+    deps.daemonStatus.listForUser(username),
+    mailboxP,
+    outstandingP,
+    serverOrderP,
+  ]);
   // A revoked server stays listed only while the owner can un-revoke it
   // (lost / stolen / decommissioned). A deleted one (released by its owner,
   // moved, deleted with the account) is gone for good, so it isn't listed.
-  const servers = (await deps.servers.listForUser(username)).filter(
+  const servers = allServers.filter(
     (s) => !s.revokedAt || UNREVOKABLE_REASONS.has(s.revocationReason ?? ""),
   );
-  const statuses = await deps.daemonStatus.listForUser(username);
   const statusByDomain = new Map<string, (typeof statuses)[number]>();
   for (const s of statuses) {
     statusByDomain.set(s.serverDomain.toLowerCase(), s);
   }
-
-  const now = (deps.now ?? (() => Date.now()))();
 
   // Cheap, non-biometric digest of "what is each box asking its owner to
   // approve right now?" — the detection tier of the Box Request Inbox
@@ -287,29 +311,59 @@ export async function buildPodInventory(
   // lanes are answered-by-construction and never surface), so this set is
   // exactly the inbox. Guarded so a failure never drops or fails the list.
   const pendingByDomain = new Map<string, PendingRequestSummary[]>();
-  if (deps.secretMailbox) {
-    try {
-      const pendingReqs = await deps.secretMailbox.listPendingForUser(username, now);
-      for (const r of pendingReqs) {
-        const key = r.serverDomain.toLowerCase();
-        const list = pendingByDomain.get(key) ?? [];
-        list.push({
-          id: r.requestNonceHex,
-          type: r.purpose,
-          issuedAt: r.requestIssuedAt,
-          expiresAt: r.expiresAt,
-        });
-        pendingByDomain.set(key, list);
-      }
-    } catch {
-      /* enrichment failure must never empty or 500 the authoritative list */
-    }
+  for (const r of pendingReqs ?? []) {
+    const key = r.serverDomain.toLowerCase();
+    const list = pendingByDomain.get(key) ?? [];
+    list.push({
+      id: r.requestNonceHex,
+      type: r.purpose,
+      issuedAt: r.requestIssuedAt,
+      expiresAt: r.expiresAt,
+    });
+    pendingByDomain.set(key, list);
   }
 
-  const pods: OnlinePodEntry[] = await Promise.all(
+  const phasesP = (async (): Promise<Map<string, string | null>> => {
+    const phases = new Map<string, string | null>();
+    const provisionStatus = deps.provisionStatus;
+    if (!outstanding || !provisionStatus) return phases;
+    await Promise.all(
+      outstanding.map(async (c) => {
+        try {
+          phases.set(c.serial, (await provisionStatus.getProvisionStatus(c.serial))?.phase ?? null);
+        } catch {
+          phases.set(c.serial, null);
+        }
+      }),
+    );
+    return phases;
+  })();
+
+  const podsP: Promise<OnlinePodEntry[]> = Promise.all(
     servers.map(async (s): Promise<OnlinePodEntry> => {
-      const routing = await deps.routing.get(s.serverDomain);
       const status = statusByDomain.get(s.serverDomain.toLowerCase());
+      // Routing, health and (without a heartbeat) the provision-status bridge
+      // are independent reads: start them together.
+      const routingP = light ? Promise.resolve(null) : deps.routing.get(s.serverDomain);
+      const healthP: Promise<(BoxHealthReport & { receivedAt: number }) | undefined> = deps.serverHealth && !light
+        ? healthForPods(deps.serverHealth, s.serverDomain).catch(() => undefined)
+        : Promise.resolve(undefined);
+      const bridgeP: Promise<number | null> =
+        !status && deps.authCodes && deps.provisionStatus
+          ? (async () => {
+              try {
+                const code = await deps.authCodes!.latestByServerDomain(s.serverDomain);
+                if (code) {
+                  const ps = await deps.provisionStatus!.getProvisionStatus(code.serial);
+                  if (ps?.phase === "live") return ps.updatedAt ?? now;
+                }
+              } catch {
+                /* enrichment failure must never drop the server */
+              }
+              return null;
+            })()
+          : Promise.resolve(null);
+      const [routing, health, bridged] = await Promise.all([routingP, healthP, bridgeP]);
       const pendingRequests = pendingByDomain.get(s.serverDomain.toLowerCase()) ?? [];
       let appsServed: string[] = [];
       if (status?.servicesServedJson) {
@@ -342,21 +396,7 @@ export async function buildPodInventory(
       // rather than wrongly flipping them to "unreachable" after 15 min.
       let lastReported = status?.lastReported ?? null;
       let realLastReported: number | null = status?.lastReported ?? null;
-      if (!status && deps.authCodes && deps.provisionStatus) {
-        try {
-          const code = await deps.authCodes.latestByServerDomain(s.serverDomain);
-          if (code) {
-            const ps = await deps.provisionStatus.getProvisionStatus(code.serial);
-            if (ps?.phase === "live") {
-              lastReported = ps.updatedAt ?? now;
-              // Keep realLastReported null — this is a bridge value, not a real
-              // heartbeat. The liveness classifier must not apply the window to it.
-            }
-          }
-        } catch {
-          /* enrichment failure must never drop the server */
-        }
-      }
+      if (bridged !== null) lastReported = bridged;
       // Cert-fingerprint pinning (A′ phase 4a) — relay the VERBATIM
       // STK-signed report + signature so a client that derived the box STK
       // locally re-verifies the fingerprint end-to-end (a rogue .com can
@@ -376,7 +416,7 @@ export async function buildPodInventory(
       // aggregates warnings by `failingCertHash` ACROSS all a user's pods (one
       // sliver line + one override per DISTINCT faulty authority, not per box).
       let trustStatus: { report: unknown; signatureHex: string } | null = null;
-      if (status?.reportJson && status.signatureHex) {
+      if (!light && status?.reportJson && status.signatureHex) {
         try {
           const parsedReport = JSON.parse(status.reportJson) as unknown;
           signedStatus = {
@@ -412,14 +452,6 @@ export async function buildPodInventory(
         }
       }
       const { liveness, lastSeenMsAgo } = computeLiveness(realLastReported, now);
-      let health: (BoxHealthReport & { receivedAt: number }) | undefined;
-      if (deps.serverHealth) {
-        try {
-          health = await healthForPods(deps.serverHealth, s.serverDomain);
-        } catch {
-          /* a health lookup failure must never drop the server */
-        }
-      }
       return {
         ...(health ? { health } : {}),
         serverDomain: s.serverDomain,
@@ -463,6 +495,8 @@ export async function buildPodInventory(
     }),
   );
 
+  const [pods, phasesBySerial] = await Promise.all([podsP, phasesP]);
+
   // Deterministic oldest-first order so /pods is stable across fetches.
   // The storage listForUser has no guaranteed order (D1 query lacks ORDER BY);
   // sort here rather than changing the storage layer so this stays within scope.
@@ -473,43 +507,17 @@ export async function buildPodInventory(
   // a provision_status failure yields `phase: null` and NEVER drops the order
   // or fails the whole list (this list is the phone's authoritative reconciler
   // source — it must not be silently emptied by an enrichment hiccup).
-  let pending: PendingPodEntry[] = [];
-  if (deps.authCodes) {
-    try {
-      const codes = await deps.authCodes.listOutstandingByUsername(username, now);
-      pending = await Promise.all(
-        codes.map(async (c) => {
-          let phase: string | null = null;
-          if (deps.provisionStatus) {
-            try {
-              const ps = await deps.provisionStatus.getProvisionStatus(c.serial);
-              phase = ps?.phase ?? null;
-            } catch {
-              phase = null;
-            }
-          }
-          return {
-            orderRef: orderRefForSerial(c.serial),
-            serverName: c.serverName,
-            fqdn: c.serverDomain,
-            phase,
-            createdAt: c.recordedAt,
-            state: "pending" as const,
-          };
-        }),
-      );
-      // Newest first — the phone surfaces the freshest in-flight install on top.
-      pending.sort((a, b) => b.createdAt - a.createdAt);
-    } catch {
-      // A failure to list outstanding orders must not break the registered
-      // inventory; degrade to an empty pending list.
-      pending = [];
-    }
-  }
+  const pending: PendingPodEntry[] = (outstanding ?? []).map((c) => ({
+    orderRef: orderRefForSerial(c.serial),
+    serverName: c.serverName,
+    fqdn: c.serverDomain,
+    phase: phasesBySerial.get(c.serial) ?? null,
+    createdAt: c.recordedAt,
+    state: "pending" as const,
+  }));
+  // Newest first — the phone surfaces the freshest in-flight install on top.
+  pending.sort((a, b) => b.createdAt - a.createdAt);
 
-  const serverOrder = deps.serverOrders
-    ? await readServerOrder(deps.serverOrders, username).catch(() => null)
-    : null;
   return { username, pods, pending, serverOrder, fetchedAt: now };
 }
 
@@ -635,7 +643,7 @@ export async function handlePostDaemonStatus(
   // pubkey actually corresponds to the running pod.
   const sig = hexToBytes(body.signature);
   const stkPub = hexToBytes(server.identityPubKeyHex);
-  if (!verifyDaemonStatusReport(report, sig, stkPub)) {
+  if (!(await verifyDaemonStatusReportFast(report, sig, stkPub))) {
     return forbidden("invalid signature");
   }
 
@@ -657,7 +665,7 @@ export async function handlePostDaemonStatus(
     typeof ts.signatureHex === "string" &&
     HEX128.test(ts.signatureHex) &&
     ts.report.serverDomain === report.serverDomain &&
-    verifyBoxTrustStatusReport(ts.report, hexToBytes(ts.signatureHex), stkPub)
+    (await verifyBoxTrustStatusReportFast(ts.report, hexToBytes(ts.signatureHex), stkPub))
   ) {
     trustStatusForStore = { report: ts.report, signatureHex: ts.signatureHex };
   }

@@ -32,6 +32,14 @@ import {
 export const DEFAULT_STREAM_CHECK_INTERVAL_MS = 2_000;
 /** Default hold ceiling: return the current snapshot after at most this long. */
 export const DEFAULT_STREAM_MAX_HOLD_MS = 25_000;
+/**
+ * The default hold's re-check schedule: the gaps between checks, adding up to
+ * the hold ceiling. A held request is billed for the CPU of every check it
+ * makes (the Workers Free plan allows 10 ms a request, and each check costs a
+ * D1 round trip), so there are four checks in 25 s instead of twelve; the first
+ * comes soonest because a change right after the last one is the likeliest.
+ */
+export const STREAM_CHECK_DELAYS_MS: readonly number[] = [3_000, 5_000, 7_000, 10_000];
 
 /**
  * Compute the change-detection cursor for a pod inventory: a sha256 hex over a
@@ -118,27 +126,36 @@ export async function handleUserStream(
 ): Promise<HandlerResponseWithHeaders<StreamPayload>> {
   const now = deps.now ?? (() => Date.now());
   const sleep = deps.sleep ?? realSleep;
-  const checkIntervalMs = deps.checkIntervalMs ?? DEFAULT_STREAM_CHECK_INTERVAL_MS;
   const maxHoldMs = deps.maxHoldMs ?? DEFAULT_STREAM_MAX_HOLD_MS;
+  const delays: readonly number[] =
+    deps.checkIntervalMs !== undefined
+      ? Array.from({ length: Math.ceil(maxHoldMs / Math.max(1, deps.checkIntervalMs)) }, () => deps.checkIntervalMs!)
+      : STREAM_CHECK_DELAYS_MS;
 
-  let inventory = await buildPodInventory(deps, username);
-  let current = computePodInventoryCursor(inventory);
+  const full = async () => {
+    const inventory = await buildPodInventory(deps, username);
+    return ok({ cursor: computePodInventoryCursor(inventory), ...inventory });
+  };
 
-  // First connect, or the client's cursor is already stale ⇒ answer now.
-  if (!cursor || cursor !== current) {
-    return ok({ cursor: current, ...inventory });
-  }
+  // First connect: answer now.
+  if (!cursor) return full();
+
+  // Is the client's cursor still current? Checked on the light inventory (the
+  // cursor reads only what it holds), so a held request does not rebuild and
+  // re-parse every box's signed report at each check.
+  const changed = async () =>
+    computePodInventoryCursor(await buildPodInventory(deps, username, { light: true })) !== cursor;
+  if (await changed()) return full();
 
   // Cursor matches ⇒ hold until it changes or we hit the ceiling. Bound by a
-  // wall-clock deadline (not a fixed tick count) so a slow rebuild can't make
+  // wall-clock deadline (not a fixed tick count) so a slow check can't make
   // the hold overrun maxHoldMs.
   const deadline = now() + maxHoldMs;
-  while (now() < deadline) {
-    await sleep(checkIntervalMs);
-    inventory = await buildPodInventory(deps, username);
-    current = computePodInventoryCursor(inventory);
-    if (current !== cursor) break;
+  for (const delay of delays) {
+    if (now() >= deadline) break;
+    await sleep(delay);
+    if (await changed()) break;
   }
 
-  return ok({ cursor: current, ...inventory });
+  return full();
 }

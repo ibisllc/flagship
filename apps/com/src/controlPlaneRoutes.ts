@@ -146,6 +146,7 @@ import {
   handleMintAccountReadToken,
   handleGetOrderHealth,
   requireAccountRead,
+  peekAccountReadToken,
   checkAccountExists,
   ACCOUNT_READ_HEADERS,
   handleUserStream,
@@ -222,7 +223,7 @@ import {
   type HandlerResponseWithHeaders,
   type IsoManifest,
 } from "@flagship/control-plane";
-import { D1Storage, D1DemoUsersStorage, D1MeterStorage, type D1Database } from "@flagship/storage";
+import { D1Storage, D1DemoUsersStorage, D1MeterStorage, RequestD1, type D1Database } from "@flagship/storage";
 import {
   routeBoot,
   AUTH_HEADER,
@@ -932,15 +933,28 @@ function bootJson(body: unknown, status: number): Response {
   });
 }
 
+/** Test seams for time-dependent handlers (the CPU harness holds a 25 s
+ *  stream on a virtual clock). Production passes nothing. */
+export interface ControlPlaneOptions {
+  stream?: { now?: () => number; sleep?: (ms: number) => Promise<void> };
+}
+
 export async function tryControlPlane(
   request: Request,
   env: ControlPlaneEnv,
+  options: ControlPlaneOptions = {},
 ): Promise<Response | null> {
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method.toUpperCase();
   if (!env.DB) return null;
-  const storage = new D1Storage(env.DB);
+  // One RequestD1 per request: reads issued together leave as one D1 batch and a
+  // read answered once is not asked again until something writes (D1 calls cost
+  // the Free plan's 10 ms CPU budget about half a millisecond each).
+  const rawDb = env.DB;
+  const requestDb = new RequestD1(rawDb);
+  env = { ...env, DB: requestDb };
+  const storage = new D1Storage(requestDb);
   const ca: CaIssuer = caKeypairFromEnv({
     FLAGSHIP_CA_PRIV_HEX: env.FLAGSHIP_CA_PRIV_HEX,
     FLAGSHIP_CA_ISSUER: env.FLAGSHIP_CA_ISSUER,
@@ -971,6 +985,7 @@ export async function tryControlPlane(
         break;
       }
       if (name === "check") break;
+      await warmAccountReads(storage, env, request, name);
       const gone = await checkAccountExists({ usernames: storage.usernames, demoUsers: storage.demoUsers }, name);
       if (gone) {
         const answer = finishRead(gone);
@@ -2348,17 +2363,21 @@ export async function tryControlPlane(
   if (method === "GET" && (m = path.match(ROUTE_RE.USER_STREAM))) {
     const gate = await gateAccountRead(storage, env, request, decodeURIComponent(m[1]!));
     if (gate) return gate;
+    // The held stream re-reads to see change, so it must never be answered from
+    // memory: reads still leave together, but nothing is remembered.
+    const live = new D1Storage(new RequestD1(rawDb, { cache: false }));
     return finishRead(
       await handleUserStream(
         {
-          daemonStatus: storage.daemonStatus,
-          serverHealth: storage.serverHealth,
-          servers: storage.servers,
-          routing: storage.routing,
-          authCodes: storage.authCodes,
-          provisionStatus: storage.provisionStatus,
-          secretMailbox: storage.secretMailbox,
-          serverOrders: storage.serverOrders,
+          daemonStatus: live.daemonStatus,
+          serverHealth: live.serverHealth,
+          servers: live.servers,
+          routing: live.routing,
+          authCodes: live.authCodes,
+          provisionStatus: live.provisionStatus,
+          secretMailbox: live.secretMailbox,
+          serverOrders: live.serverOrders,
+          ...(options.stream ?? {}),
         },
         decodeURIComponent(m[1]!),
         url.searchParams.get("cursor"),
@@ -3775,6 +3794,40 @@ async function gateAccountRead(
     request.headers.get("authorization"),
   );
   return check.ok ? null : finish(check.response);
+}
+
+/**
+ * Start together the reads an account route is about to make one after the
+ * other: the account-gone lookups, the caller's device row and grant (signed
+ * requests), or the signer row behind a bearer read token. They leave as one D1
+ * round trip and the handlers' own reads are then answered from memory
+ * (RequestD1). Nothing here decides anything and a failed read is ignored: the
+ * handler asks again for itself.
+ */
+async function warmAccountReads(
+  storage: D1Storage,
+  env: ControlPlaneEnv,
+  request: Request,
+  account: string,
+): Promise<void> {
+  const a = account.toLowerCase();
+  const deviceId = request.headers.get("x-flagship-device-id");
+  const devicePub = request.headers.get("x-flagship-device-pub");
+  // Decide what to read before reading anything: the reads below go out as one
+  // batch only if they are all started in the same turn.
+  const claims =
+    deviceId && devicePub
+      ? null
+      : await peekAccountReadToken(env.ACCOUNT_READ_TOKEN_SECRET, request.headers.get("authorization"));
+  const reads: Promise<unknown>[] = [storage.demoUsers.get(a), storage.usernames.get(a)];
+  if (deviceId && devicePub) {
+    reads.push(storage.deviceIdentities.get(a, deviceId.toLowerCase()));
+    reads.push(storage.deviceCapabilityGrants.getByDevicePub(devicePub.toLowerCase()));
+  } else if (claims && claims.u === a) {
+    if (claims.sub.startsWith("d:")) reads.push(storage.deviceIdentities.get(claims.u, claims.sub.slice(2)));
+    else if (claims.sub.startsWith("s:")) reads.push(storage.servers.get(claims.sub.slice(2)));
+  }
+  await Promise.all(reads.map((r) => r.catch(() => undefined)));
 }
 
 function accountDirectoryDeps(storage: D1Storage, db: D1Database) {
