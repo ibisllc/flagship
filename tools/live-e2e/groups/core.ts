@@ -73,7 +73,8 @@ export const core: Group = {
       const z = await sweep(false);
       assert(z.status === 200, `gym sweep dry run ${z.status}`);
       const records = (z.body?.dnsRecords ?? []) as Array<{ type: string; name: string }>;
-      assert(records.length > 0, "the gym sweep returned no record names");
+      // Under the root wildcard an account owns nothing, so an empty list is the right answer; what must hold is that the sweep answered with a list at all.
+      assert(Array.isArray(z.body?.dnsRecords) && typeof z.body?.zoneRecords === "number", "the gym sweep did not return a record list");
       const surprises = accountRecordSurprises(records, user, SERVICES);
       assert(surprises.length === 0, surprises.join("; "));
       return `0 records under ${user}.${SERVICES}`;
