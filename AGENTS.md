@@ -261,6 +261,19 @@ of the last check here: **not yet checked**.
   of accounts that no longer exist in D1, re-checking each against D1 right
   before deleting. Needs a `.com` deploy, then the owner's dry run; steps in
   `docs/runbooks/pre-ga-scrub.md`. The live gym now refuses to start when its fleet won't fit.
+  **Negative-cache TTL (2026-10-18):** a name that does not exist yet is cached
+  as NXDOMAIN for the SOA minimum, 1800 s on Cloudflare's default, so any
+  early lookup of `<server>.<user>.flagship.services` (Studio did one at VM
+  boot; a phone opening the app early could) leaves a home router answering
+  "no such host" for up to 30 min after the box is up. Studio no longer looks
+  the name up before the box reports in. Cloudflare lets only **Enterprise**
+  accounts change the SOA values (minimum range 60 to 86400 s; account default
+  under DNS zone defaults, or per zone under DNS Records, "DNS record
+  options"); on other plans it is not editable, so a lower value needs the
+  Enterprise plan or a different fix: a wildcard `*.<user>.flagship.services`
+  A/AAAA to the relay's passthrough IP per account (which also cuts the record
+  count), so a box's name resolves before the box registers. Nothing changed
+  in the zone.
 
 ### In flight
 
@@ -1116,6 +1129,44 @@ Follow `docs/runbooks/desktop-windows-linux-validation.md`: the released
 Windows zip and Linux AppImage each need one real run (pair with a phone, host a
 server through phone unlock to a green padlock, burn a USB and boot it on
 metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
+
+**Windows 11 run against prod (i5-14400F, WHPX), 2026-10-18** (Windows agent,
+`device-results/windows-2026-10-17`, `RESULT-hosted-vm-on-prod-windows-2026-10-18.md`;
+unedited main `1b656fd24` + a CI appliance, throwaway account, no UpCloud
+server). **Verified pass:** pairing a phone with Studio (typed code, matching
+SAS), host on this PC from the prebuilt appliance, first boot to sealed boot,
+phone approval, Online + Leader on Home, the Health card, HTTPS 200 with valid
+TLS (resolved by `--resolve`), sleep inhibit (`powercfg /requests` shows
+FlagshipBuilder.exe), graceful Stop (~5 s, Last connected kept).
+**Fixed on `main` from it (2026-10-18; Windows agent to re-verify):**
+Studio decided "Running" by fetching the server's own name before the box had
+registered it, so home routers cached NXDOMAIN for the zone's negative TTL
+and a healthy box showed "Waiting for you to unlock ... taking longer than
+expected" for ~30 min; all three Studios now take the box's signed health
+report (daemon active, tunnel up, received after this boot began) as the proof
+and never look the name up (`UnlockWatch`, vectors `bootEvidence`). The
+sealed-guest copy no longer says "Nothing to approve". W-1: a start with too
+little free RAM now says "Not enough free memory: this server needs 4 GiB.
+Close other apps and try again." and a dying QEMU shows its last real stderr
+line only (vectors `qemuFailure`).
+**Still open from that run:** Restart asked the phone although Studio said
+"Nothing to approve": the lease the phone leaves for self-unlock was never
+there (first boot logs `no box-sealed lease (HTTP 404)`). Cause found in code,
+not yet fixed (Android, outside the Studio stream): Android's
+`SecretRequestCoordinator.depositAutoUnlockLease` signs the lease body with the
+admin root when the device holds one (`orderKey ?: material.signer`), but the
+boot worker verifies it against the owner IRK in the Authorization header
+(`packages/boot-core/src/routes.ts` `handleDepositLease`; iOS signs with the
+IRK, "the boot worker gates the lease on the owner IRK"), so the PUT answers
+403 `invalid lease signature` after the unlock reply was already posted: the
+approval card stays and a second tap gets `HTTP 409 already answered` (A-11).
+Fix: sign the lease with `material.signer` on Android, and add a gym check
+that a second boot after an approval self-unlocks. Android Apps card "Couldn't
+reach the server" (A-12) is the phone's own negative DNS cache for the box
+name; the apps should fall back to the relay path when the name does not
+resolve. Not yet run on Windows: installer-ISO fallback, USB burn + metal
+boot, webapp + Remote walks, backup import, Restart as administrator, the
+published (not CI) appliance, the Android fixes landed after `eb08dcdc4`.
 
 ### Open work (owner + hardware)
 
