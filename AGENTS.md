@@ -846,6 +846,19 @@ allowances (1M / 5M / 20M a month) are placeholders.
 
 ### Built, waiting on deploys or rebuilds
 
+- **Account delete said "Another device is still on this account" on every
+  fresh account (2026-10-18, found by the Windows test agent):** `.com`'s
+  last-device check counted every active grant, but bootstrap (and demo
+  provisioning) writes the founding device's own device row and admin grant,
+  so the caller always counted itself. Now it counts the live device rows
+  Trusted devices lists minus the caller (admin-root orders; legacy accounts
+  without an admin root still count every row), answers 403
+  `code: other-devices-remain` with the sentence "Remove it in Settings,
+  Trusted devices, then delete the account", and retires the account's
+  device rows when it deletes. Needs a `.com` deploy (webapp shell v151);
+  current store builds show their generic refusal line for the new body until
+  the next iOS/Android builds. Admin reclaim still counts any grant as an
+  active device (a real account never looks dormant to it).
 - **`.com` Worker:** current with `main` as of 2026-10-15 (`3e8fef1de`,
   version `f8c619da`, webapp shell **v113**, D1 through migration 0103).
   Measured live on 2026-10-16 evening: shell **v114** (a later deploy was not
