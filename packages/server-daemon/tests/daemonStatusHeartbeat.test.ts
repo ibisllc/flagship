@@ -513,4 +513,27 @@ describe("daemon-status heartbeat — loop resilience", () => {
     await vi.advanceTimersByTimeAsync(20 * 60_000);
     expect(calls).toBe(6);
   });
+
+  it("hands the doorbell in the reply to onDoorbell, and tolerates a reply without one", async () => {
+    const id = makeKeypair(7);
+    const rung = { v: 1, lanes: ["update"], stamps: { aliases: "a", rotations: "r" } };
+    const seen: unknown[] = [];
+    let withBell = true;
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ ok: true, serverOrder: null, ...(withBell ? { doorbell: rung } : {}) }), { status: 200 })) as unknown as typeof fetch;
+    const args = {
+      serverDomain: "home.alice.flagship.services",
+      sign: id,
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      cert: { certPem: DUMMY_PEM, keyPem: "k" } as never,
+      certValidUntil: Date.now() + 1000,
+      appsServed: [],
+      fetchImpl,
+      onDoorbell: (raw: unknown) => void seen.push(raw),
+    };
+    await postDaemonStatus(args);
+    withBell = false;
+    await postDaemonStatus(args);
+    expect(seen).toEqual([rung]);
+  });
 });

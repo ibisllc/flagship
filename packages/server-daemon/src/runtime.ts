@@ -65,6 +65,9 @@ import { ensureUnfencedNetworks } from "./egress/networks.js";
 import { AppQuotaManager, LoopVolumes, RealPgQuota, buildDiskWatcher, hostDiskUse } from "./appQuota/index.js";
 
 export interface DaemonRuntimeOptions {
+  /** The `.com` doorbell (doorbell.ts): lets the alias poll skip a minute that
+   *  would come back unchanged. Absent ⇒ it polls every minute as before. */
+  doorbell?: import("./doorbell.js").Doorbell;
   /** Server FQDN, e.g. "home.alice.flagship.services". */
   serverFqdn: string;
   /**
@@ -1575,6 +1578,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
           serverFqdn: opts.serverFqdn,
           boxPublicKey: () => opts.custodian.boxPublicKey(),
           signAsBox: (msg) => opts.custodian.signAsBox(msg),
+          ...(opts.doorbell ? { fetchImpl: opts.doorbell.fetch } : {}),
         }),
         platform: servicePlatformRef.current,
         intervalMs: apOpts.aliasReconcilerIntervalMs ?? 60_000,
@@ -1590,6 +1594,8 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
         },
       });
       aliasReconciler.start();
+      const reconciler = aliasReconciler;
+      opts.doorbell?.onRing("aliases", () => void reconciler.reconcileNow().catch(() => {}));
       console.log(`[runtime] AliasReconciler polling ${apOpts.hostUsername} → ${reconcileBase ?? "flagshipserver.com"}`);
     }
   } else {

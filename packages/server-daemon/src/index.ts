@@ -24,6 +24,7 @@ import {
   buildAlertInboxHandlers,
 } from "./alertInboxHttp.js";
 import { startDaemonStatusHeartbeat, type DaemonStatusHeartbeat } from "./daemonStatusHeartbeat.js";
+import { Doorbell, type DoorbellLane } from "./doorbell.js";
 import { buildSignedLanHint, hostAddresses, lanPortFromEnv } from "./lanDirect.js";
 import { makeRelayTrustExceptionResolver } from "./relayTrustExceptions.js";
 import { sendPushRelay, sendRelayTrustAlert } from "./relaySos.js";
@@ -289,6 +290,19 @@ import { AccessJournal } from "./accessJournal.js";
 import { buildAccessSync, deriveAccessSyncKey, type AccessPeers, type AccessSync } from "./accessSync.js";
 import { buildPodsPeers } from "./accessPeers.js";
 import { BoxReadToken } from "./boxReadToken.js";
+
+/**
+ * The `.com` doorbell (doorbell.ts): created once the box knows its account and
+ * server, then handed to every poller as its `fetchImpl` so a poll the heartbeat
+ * reply says is empty never leaves the box.
+ */
+const doorbellRef: { current: Doorbell | null } = { current: null };
+const bellFetch = (): { fetchImpl?: typeof fetch } =>
+  doorbellRef.current ? { fetchImpl: doorbellRef.current.fetch } : {};
+/** Poll a consumer the moment its lane starts to ring. */
+const onRing = (lane: DoorbellLane | "aliases" | "rotations", poll: () => Promise<unknown>): void =>
+  doorbellRef.current?.onRing(lane, () => void poll().catch(() => {}));
+
 
 /**
  * The maintainer-endorsement gate every in-place update passes, whoever
@@ -899,12 +913,16 @@ async function main(): Promise<void> {
   // SWK resolution above picks it up and the service platform constructs. Runs
   // ONLY in the no-SWK + production (cfg present) state — the recipe-embedded
   // swkHex path is entirely untouched; demo/gym (cfg-absent) is a no-op.
+  if (cfg && env.controlPlaneBaseUrl && env.serverFqdn) {
+    doorbellRef.current = new Doorbell({ serverDomain: env.serverFqdn, username: cfg.userId });
+  }
   if (!swkHex && cfg && env.controlPlaneBaseUrl) {
     const swkPoller = buildSwkDepositPoller({
       serverDomain: env.serverFqdn,
       ownerIrkPub: cfg.irkPublicKey,
       unsealToBox: (blob) => custodian.unsealToBox(blob),
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+      ...bellFetch(),
       persistSwk: (hex) => persistSwkHex(swkHexFilePath, hex),
       restart: () => restarts.request("SWK provisioned via deposit; restarting to enable the service platform"),
       markerStore: fileSwkMarkerStore(`${dataDir}/swk-claimed.json`),
@@ -912,6 +930,7 @@ async function main(): Promise<void> {
       onLog: (m) => console.log(m),
     });
     swkPoller.start();
+    onRing("swk", () => swkPoller.pollOnce());
     process.once("SIGTERM", () => swkPoller.stop());
     process.once("SIGINT", () => swkPoller.stop());
     console.log("[daemon] no SWK yet — swk-deposit consumer armed (secret-free recipe)");
@@ -936,6 +955,7 @@ async function main(): Promise<void> {
       ownerIrkPub: cfg.irkPublicKey,
       unsealToBox: (blob) => custodian.unsealToBox(blob),
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+      ...bellFetch(),
       persistCgk: (hex) => persistCgkHex(cgkHexFilePath, hex),
       restart: () => restarts.request("CGK provisioned via deposit; restarting to enable gossip"),
       markerStore: fileCgkMarkerStore(`${dataDir}/cgk-claimed.json`),
@@ -943,6 +963,7 @@ async function main(): Promise<void> {
       onLog: (m) => console.log(m),
     });
     cgkPoller.start();
+    onRing("cgk", () => cgkPoller.pollOnce());
     process.once("SIGTERM", () => cgkPoller.stop());
     process.once("SIGINT", () => cgkPoller.stop());
     console.log("[daemon] no CGK yet — cgk-deposit consumer armed (secret-free recipe)");
@@ -960,11 +981,13 @@ async function main(): Promise<void> {
       seedAdminRootHex: bytesToHexLocal(cfg.adminRootPub),
       ...(adminRootSeedHex ? { recoverySeedHex: adminRootSeedHex } : {}),
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+      ...bellFetch(),
       pinStore: fileAdminRootPinStore(adminRootPinPath),
       restart: () => restarts.request("admin root rotated; restarting to re-bind the authority anchor"),
       onLog: (m) => console.log(m),
     });
     adminRotationPoller.start();
+    onRing("rotations", () => adminRotationPoller.pollOnce());
     process.once("SIGTERM", () => adminRotationPoller.stop());
     process.once("SIGINT", () => adminRotationPoller.stop());
     console.log("[daemon] admin-root-rotation consumer armed (recovery re-pin, verify-then-pin)");
@@ -1227,6 +1250,7 @@ async function main(): Promise<void> {
     serverDomain: env.serverFqdn!,
     sign: (msg) => custodian.signAsBox(msg),
     controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+    onDoorbell: (raw: unknown) => doorbellRef.current?.update(raw),
     ...(serverOrder
       ? {
           onServerOrder: (raw: unknown) => void serverOrder.offer(raw, ".com"),
@@ -1258,6 +1282,7 @@ async function main(): Promise<void> {
       serverFqdn: env.serverFqdn!,
       identityPrivKey,
       custodian,
+      ...(doorbellRef.current ? { doorbell: doorbellRef.current } : {}),
       tunnelHubUrl: endpoints.endpoints.tunnelHub,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
       acmeEmail: env.acmeEmail!,
@@ -1449,6 +1474,7 @@ async function main(): Promise<void> {
           ownerIrkPub: cfg.irkPublicKey,
           unsealToBox: (blob) => custodian.unsealToBox(blob),
           pairedSessions,
+          ...bellFetch(),
           markerStore: pairingMarker,
           onVerified: async (json) => {
               await adoptPairingSiblings(json);
@@ -1457,6 +1483,7 @@ async function main(): Promise<void> {
           onLog: (m) => console.log(m),
         });
         pairingPoller.start();
+        onRing("pairing", () => pairingPoller.pollOnce());
         process.once("SIGTERM", () => pairingPoller.stop());
         process.once("SIGINT", () => pairingPoller.stop());
         console.log("[daemon] no embedded pairing — pairing-deposit consumer armed (secret-free recipe)");
@@ -1676,10 +1703,12 @@ async function main(): Promise<void> {
         );
         process.exit(0);
       },
+      ...bellFetch(),
       markerStore: fileMigrationMarkerStore(`${dataDir}/migration-state.json`),
       onLog: (m) => console.log(m),
     });
     migrationPoller.start();
+    onRing("migration", () => migrationPoller.pollOnce());
     process.once("SIGTERM", () => migrationPoller.stop());
     process.once("SIGINT", () => migrationPoller.stop());
     console.log("[daemon] server-migration consumer armed");
@@ -3795,11 +3824,13 @@ async function wireOwnerHandlers(deps: {
       ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
       username: cfg.userId,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+      ...bellFetch(),
       markerStore: fileMarkerStore(`${dataDir}/self-delete-done.json`),
       wipeContent: realWipeContent,
       onLog: (m) => console.log(m),
     });
     selfDeletePoller.start();
+    onRing("self-delete", () => selfDeletePoller.pollOnce());
     process.once("SIGTERM", () => selfDeletePoller.stop());
     process.once("SIGINT", () => selfDeletePoller.stop());
     console.log("[daemon] self-delete content-wipe poller armed");
@@ -3824,6 +3855,7 @@ async function wireOwnerHandlers(deps: {
       ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
       username: cfg.userId,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+      ...bellFetch(),
       markerStore: decommissionMarkerStore(`${dataDir}/decommissioned`),
       onEvent: (kind, detail, ok) => deps.activityLog.note(kind, detail, { ok: ok ?? true }),
       // Final-flush (the migration/replacement FINAL DELTA): DUMP the data
@@ -3884,6 +3916,7 @@ async function wireOwnerHandlers(deps: {
       onLog: (m) => console.log(m),
     });
     decommissionPoller.start();
+    onRing("decommission", () => decommissionPoller.pollOnce());
     process.once("SIGTERM", () => decommissionPoller.stop());
     process.once("SIGINT", () => decommissionPoller.stop());
     console.log("[daemon] graceful-decommission poller armed");
@@ -3909,6 +3942,7 @@ async function wireOwnerHandlers(deps: {
         username: cfg.userId,
         controlPlaneBaseUrl: env.controlPlaneBaseUrl,
         repoPath,
+        ...bellFetch(),
         releaseGate: selfUpdateReleaseGate(repoPath),
         runner: realUpdateCommandRunner,
         usedNonceStore: fileUsedNonceStore(`${dataDir}/update-used-nonces.json`),
@@ -3921,6 +3955,7 @@ async function wireOwnerHandlers(deps: {
         onLog: (m) => console.log(m),
       });
       updatePoller.start();
+      onRing("update", () => updatePoller.pollOnce());
       process.once("SIGTERM", () => updatePoller.stop());
       process.once("SIGINT", () => updatePoller.stop());
       console.log("[daemon] self-update consumer armed");
@@ -3985,6 +4020,7 @@ async function wireOwnerHandlers(deps: {
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       markerPath:
         process.env.FLAGSHIP_REHOME_MARKER ?? `${dataDir}/transfer-rehome.json`,
+      ...bellFetch(),
       pinnedAdminRootPubHex: cfg.adminRootPub ? bytesToHexLocal(cfg.adminRootPub) : null,
       // v1-sec GAP 3 — on the legacy (no-admin-root) path the re-home is written
       // only against a giver-owner-IRK-signed authorization verified under THIS
@@ -3993,6 +4029,7 @@ async function wireOwnerHandlers(deps: {
       onLog: (m) => console.log(m),
     });
     rehomePoller.start();
+    onRing("rehome", () => rehomePoller.pollOnce());
     process.once("SIGTERM", () => rehomePoller.stop());
     process.once("SIGINT", () => rehomePoller.stop());
     console.log("[daemon] transfer re-home poller armed");
