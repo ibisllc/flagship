@@ -56,6 +56,8 @@ const BUDGETS: Record<string, Budget> = {
   "lane-transfer-rehome": { d1: 1, ratio: DEFAULT_RATIO },
   "apps-aliases": { d1: 2, ratio: DEFAULT_RATIO },
   notices: { d1: 0, ratio: DEFAULT_RATIO },
+  "order-status": { d1: 5, ratio: DEFAULT_RATIO },
+  "order-health": { d1: 3, ratio: DEFAULT_RATIO },
   "edge-account-resolve": { d1: 3, ratio: DEFAULT_RATIO },
   "ratelimit-counter": { d1: 0, ratio: DEFAULT_RATIO },
   // reads, then writes the beat, then reads the order and the doorbell together

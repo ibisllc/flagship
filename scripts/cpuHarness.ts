@@ -167,6 +167,8 @@ function key(seedByte: number): Keypair {
 const rid = () => hex(crypto.getRandomValues(new Uint8Array(16)));
 
 export const ACCOUNT = "plucky-avocet";
+/** The install order the first server was created from (provision-status posts). */
+export const ORDER_SERIAL = "cpu-harness-order-0001";
 export const READ_SECRET = "cpu-harness-read-token-secret";
 
 export interface World {
@@ -286,6 +288,20 @@ export async function buildWorld(opts: WorldOptions = {}): Promise<World> {
       lastTargetNonce: "00",
     } as never);
   }
+
+  await seed.authCodes.put({
+    serial: ORDER_SERIAL,
+    username: ACCOUNT,
+    serverName: "home",
+    serverDomain: servers[0]!.domain,
+    delegatedPubKeyHex: hex(servers[0]!.stk.publicKey),
+    userPubKeyHex: hex(irk.publicKey),
+    userSignatureHex: "00".repeat(64),
+    issuedAt: now - 60_000_000,
+    expiresAt: now - 59_000_000,
+    status: "used",
+    recordedAt: now - 60_000_000,
+  });
 
   const env = {
     DB: db,
@@ -640,6 +656,14 @@ export const SCENARIOS: Scenario[] = [
     },
     world: { withRateLimits: true },
   },
+  http("order-status", "POST /api/order/<serial>/status (a box reports an install phase)", "a box, during an install", () =>
+    new Request(`${ORIGIN}/api/order/${ORDER_SERIAL}/status`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ phase: "installing" }),
+    })),
+  http("order-health", "GET /api/order/<serial>/health (Studio's VM list)", "Studio, per refresh", () =>
+    new Request(`${ORIGIN}/api/order/${ORDER_SERIAL}/health`)),
   http("daemon-status", "POST /api/daemon-status (box heartbeat, 2 signatures)", "every box, every 5 min", (w) =>
     daemonStatusRequest(w)),
   http("edge-pods", "pods through route() (edge wrapper + rate limits)", "apps and boxes", (w) =>
