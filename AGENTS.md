@@ -1056,6 +1056,10 @@ allowances (1M / 5M / 20M a month) are placeholders.
   deposits, CGK gossip claim/yield + route nudge, the debug-access gate,
   self-delete, transfer re-home + giver→acquirer disk-key handshake.
 
+### Release script (2026-10-18)
+
+`bash scripts/release.sh --phase A` then `--phase B` runs `docs/runbooks/final-deploy.md` by hand (pinned commit, clean worktree, prompts before every outward step, state in `~/.flagship-release/state.json`; `--list` shows the plan, `--dry-run` runs nothing). Test: `scripts/release.test.ts`.
+
 ### Update this server (2026-10-10)
 
 The whole pipeline works on a demo box: the owner's YubiKey endorses a release

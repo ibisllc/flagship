@@ -1,0 +1,234 @@
+// scripts/release.sh is the owner's interactive release script (docs/runbooks/
+// final-deploy.md). Nothing here runs a real step: the modes under test are
+// --list, --dry-run, --status and the phase-order refusal, all of which run with
+// shims for every network tool on PATH that record any call.
+import { spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { describe, expect, it } from "vitest";
+
+const ROOT = resolve(__dirname, "..");
+const SCRIPT = join(ROOT, "scripts/release.sh");
+const SOURCE = readFileSync(SCRIPT, "utf8");
+const RUNBOOK = readFileSync(join(ROOT, "docs/runbooks/final-deploy.md"), "utf8");
+const REAL_GIT = spawnSync("bash", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+
+type Env = { dir: string; home: string; calls: string };
+
+function sandbox(): Env {
+  const dir = mkdtempSync(join(tmpdir(), "release-test-"));
+  const bin = join(dir, "bin");
+  const home = join(dir, "home");
+  mkdirSync(bin);
+  mkdirSync(home);
+  const calls = join(dir, "calls.log");
+  writeFileSync(calls, "");
+  for (const tool of ["gh", "wrangler", "flyctl", "curl", "npm", "npx", "dig", "xcodebuild", "openssl"]) {
+    writeFileSync(join(bin, tool), `#!/bin/sh\necho "${tool} $*" >> "${calls}"\nexit 99\n`);
+    chmodSync(join(bin, tool), 0o755);
+  }
+  // git: local reads work, anything that talks to a remote is recorded and refused
+  writeFileSync(
+    join(bin, "git"),
+    `#!/bin/sh
+for a in "$@"; do
+  case "$a" in
+    fetch|push|pull|clone|ls-remote|remote) echo "git $*" >> "${calls}"; exit 98 ;;
+  esac
+done
+exec "${REAL_GIT}" "$@"
+`,
+  );
+  chmodSync(join(bin, "git"), 0o755);
+  return { dir, home, calls };
+}
+
+function run(env: Env, args: string[], extra: Record<string, string> = {}) {
+  const r = spawnSync("bash", [SCRIPT, ...args], {
+    cwd: ROOT,
+    encoding: "utf8",
+    stdin: "ignore",
+    env: {
+      PATH: `${join(env.dir, "bin")}:/usr/bin:/bin:${process.execPath.replace(/\/node$/, "")}`,
+      HOME: env.home,
+      FLAGSHIP_RELEASE_HOME: join(env.home, ".flagship-release"),
+      NO_COLOR: "1",
+      ...extra,
+    },
+    timeout: 60_000,
+  } as Parameters<typeof spawnSync>[2]);
+  return { code: r.status, out: String(r.stdout), err: String(r.stderr) };
+}
+const calls = (env: Env) => readFileSync(env.calls, "utf8").trim();
+
+const STEP_RE = /^(\d\d)\. (.+)$/gm;
+function planSteps(out: string) {
+  return [...out.matchAll(STEP_RE)].map((m) => ({ n: Number(m[1]), title: m[2]! }));
+}
+
+describe("release.sh", () => {
+  it("is valid bash and bash 3.2 friendly", () => {
+    const r = spawnSync("bash", ["-n", SCRIPT], { encoding: "utf8" });
+    expect(r.status, r.stderr).toBe(0);
+    expect(SOURCE).not.toMatch(/declare -A|mapfile|readarray|\$\{[A-Za-z_]+(,,|\^\^)\}/);
+    expect(SOURCE.startsWith("#!/usr/bin/env bash")).toBe(true);
+    expect(SOURCE).toContain("set -Eeuo pipefail");
+    expect(SOURCE).toContain("trap on_exit EXIT");
+  });
+
+  it("--list prints the plan in two phases, every step with phase, commands, gate and rollback", () => {
+    const env = sandbox();
+    const r = run(env, ["--list"]);
+    expect(r.code).toBe(0);
+    const steps = planSteps(r.out);
+    expect(steps).toHaveLength(27);
+    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 27 }, (_, i) => i + 1));
+    const phases = [...r.out.matchAll(/^ {4}phase ([AB]) \|/gm)].map((m) => m[1]);
+    expect(phases).toHaveLength(27);
+    expect(phases.slice(0, 16).every((p) => p === "A")).toBe(true);
+    expect(phases.slice(16).every((p) => p === "B")).toBe(true);
+    expect([...r.out.matchAll(/^ {4}gate: /gm)]).toHaveLength(27);
+    expect([...r.out.matchAll(/^ {4}rollback: /gm)]).toHaveLength(27);
+    expect(calls(env)).toBe("");
+  });
+
+  it("orders the steps as the runbook sections, with only the documented moves", () => {
+    const env = sandbox();
+    const r = run(env, ["--list"]);
+    const sections = [...r.out.matchAll(/runbook: (\S+?)\. /g)].map((m) => m[1]);
+    // 0 ready | 1 plan | 2 lease | 3 endorse | 9 appliance builds start after the endorsement
+    // | 5 secrets | 6 gym | 14 backup | 4 migrations (moved after the gym gate and a fresh backup)
+    // | 7 .com | 14 cpu watch | 8 .services | 6a DNS (moved after .com and .services: zone-health
+    // ships with .com, the relay must drop uniformly before the wildcard answers) | 9 publish...
+    expect(sections).toEqual([
+      "0", "1", "2", "3", "9", "5", "6", "14", "4", "7", "14", "8", "6a", "9", "9", "9",
+      "12", "12", "12", "12", "10", "10", "9", "7", "11", "11", "13",
+    ]);
+    // every referenced heading exists verbatim in the runbook
+    for (const m of r.out.matchAll(/runbook: (.+)$/gm)) {
+      expect(RUNBOOK, m[1]).toContain(`## ${m[1]}`);
+    }
+    // gym gate before any prod change; DNS after the deploys; scrub after DNS; reap after scrub
+    const idx = (needle: string) => planSteps(r.out).find((s) => s.title.includes(needle))!.n;
+    expect(idx("Gym gate")).toBeLessThan(idx("Pending D1 migrations"));
+    expect(idx("Pending D1 migrations")).toBeLessThan(idx("Deploy .com"));
+    expect(idx("Deploy .com")).toBeLessThan(idx("Deploy .services"));
+    expect(idx("Deploy .services")).toBeLessThan(idx("Cloudflare DNS by hand"));
+    expect(idx("Endorse")).toBeLessThan(idx("Start the VM appliance builds"));
+    expect(idx("Cloudflare DNS by hand")).toBeLessThan(idx("Pre-GA scrub"));
+    expect(idx("Pre-GA scrub")).toBeLessThan(idx("Reap orphaned"));
+    expect(idx("Reap orphaned")).toBeLessThan(idx("Land chore/delete-wipe-tooling"));
+    expect(idx("Write DEPLOYED-FINAL")).toBe(16);
+  });
+
+  it("--list --phase B lists only phase B", () => {
+    const r = run(sandbox(), ["--list", "--short", "--phase", "B"]);
+    const steps = planSteps(r.out);
+    expect(steps[0]!.n).toBe(17);
+    expect(steps).toHaveLength(11);
+  });
+
+  it("--dry-run --from 1 prints every command of phase A and runs no tool", () => {
+    const env = sandbox();
+    const r = run(env, ["--dry-run", "--from", "1"]);
+    expect(r.code, r.err).toBe(0);
+    expect(r.out).toContain("[dry-run]");
+    const steps = planSteps(r.out);
+    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 16 }, (_, i) => i + 1));
+    expect(r.out).toContain("npm run deploy");
+    expect(r.out).toContain("flyctl deploy --remote-only --strategy=immediate --yes -a flagship-services");
+    expect(r.out).toContain("endorse-release.mjs --to <PIN> --from <endorsed> --sign");
+    expect(r.out).toContain("wrangler tail flagship-com --format json");
+    expect(r.out).toContain("gh secret list");
+    expect(calls(env)).toBe(""); // no gh, wrangler, flyctl, curl, npm, npx, dig, openssl, and no git fetch/push
+    expect(existsSync(join(env.home, ".flagship-release"))).toBe(false); // nothing written, no worktree
+  });
+
+  it("--dry-run --only N shows one step", () => {
+    const r = run(sandbox(), ["--dry-run", "--only", "10"]);
+    expect(planSteps(r.out).map((s) => s.n)).toEqual([10]);
+  });
+
+  it("resumes at the first unfinished step from the state file and never rewrites it in a dry run", () => {
+    const env = sandbox();
+    const stateDir = join(env.home, ".flagship-release");
+    mkdirSync(stateDir, { recursive: true });
+    const sha = "0123456789abcdef0123456789abcdef01234567";
+    const state = JSON.stringify({ pinned: sha, done: ["1", "2", "3"] }, null, 2) + "\n";
+    writeFileSync(join(stateDir, "state.json"), state);
+
+    const status = run(env, ["--status"]);
+    expect(status.out).toContain(`pinned:      ${sha}`);
+    expect(status.out).toContain("done steps:  1 2 3");
+    expect(status.out).toContain("next step:   4");
+
+    const dry = run(env, ["--dry-run", "--phase", "A"]);
+    expect(dry.out).toContain("would start at step 4");
+    expect(dry.out).toContain(sha);
+    expect(planSteps(dry.out)[0]!.n).toBe(4);
+    expect(readFileSync(join(stateDir, "state.json"), "utf8")).toBe(state);
+    expect(calls(env)).toBe("");
+  });
+
+  it("keeps state in a helper that adds, queries and deletes list entries", () => {
+    const env = sandbox();
+    const home = join(env.home, ".flagship-release");
+    const script = `RELEASE_SOURCE_ONLY=1 source ${SCRIPT}
+st set pinned abc; st add done 1; st add done 2; st add done 2; st del done 1
+echo "done=$(st_get done) pinned=$(st_get pinned)"; st_has done 2 && echo has2; st_has done 1 || echo no1
+echo "open=$(phase_open A | wc -w | tr -d ' ')"`;
+    const r = spawnSync("bash", ["-c", script], {
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "", HOME: env.home, FLAGSHIP_RELEASE_HOME: home },
+    });
+    expect(r.stdout.trim().split("\n")).toEqual(["done=2 pinned=abc", "has2", "no1", "open=15"]);
+    expect(JSON.parse(readFileSync(join(home, "state.json"), "utf8")).done).toEqual(["2"]);
+  });
+
+  it("refuses to run phase B before phase A is finished, with or without a terminal", () => {
+    const env = sandbox();
+    const r = run(env, ["--phase", "B"]);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("refusing to run phase B before phase A");
+    expect(calls(env)).toBe("");
+  });
+
+  it("refuses to run unattended: a real run needs a terminal and a phase", () => {
+    const r = run(sandbox(), ["--phase", "A"]);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("interactive");
+  });
+
+  it("rejects unknown flags and has no auto-yes flag", () => {
+    expect(run(sandbox(), ["--yes-to-safe"]).code).toBe(2);
+    expect(run(sandbox(), ["--yes"]).code).toBe(2);
+    expect(SOURCE).not.toMatch(/yes-to-safe|--assume-yes|--auto-yes/);
+  });
+
+  it("never force-pushes, never uploads the Worker outside npm run deploy, never stages everything", () => {
+    const env = sandbox();
+    const plan = run(env, ["--list"]).out;
+    for (const text of [SOURCE.replace(/^ *#.*$/gm, ""), plan]) {
+      expect(text).not.toMatch(/push\s+(-f\b|--force)/);
+      expect(text).not.toMatch(/force-with-lease/);
+      expect(text).not.toMatch(/wrangler deploy(\s|$|")/);
+      expect(text).not.toMatch(/git add (-A|--all|\.)(\s|$)/);
+    }
+    expect(SOURCE).toContain("npm run deploy");
+    // the only pushes target main (fast-forward) or the device-results branch
+    const pushes = [...SOURCE.matchAll(/push origin (\S+)/g)].map((m) => m[1]!.replace(/["')?]+$/, "").replace(/^"/, ""));
+    expect(pushes.length).toBeGreaterThan(3);
+    for (const p of pushes) expect(p).toMatch(/^HEAD:(main|refs\/heads\/(\$RESULTS_BRANCH|device-results\/windows-2026-10-17))$/);
+  });
+
+  it("never prints or stores the admin secret", () => {
+    expect(SOURCE).toContain("read -rs ADMIN_SECRET");
+    const leaks = SOURCE.split("\n").filter((l) => /(echo|printf|say)[^\n]*\$\{?ADMIN_SECRET/.test(l));
+    expect(leaks).toHaveLength(1); // the curl config line, which goes to curl's stdin
+    expect(leaks[0]).toContain("| curl -s -m 30 -K -");
+    expect(SOURCE).not.toMatch(/export FLAGSHIP_ADMIN_SECRET=/); // only inside the with_secret subshell
+    expect(SOURCE).toContain("unset FLAGSHIP_ADMIN_SECRET ADMIN_SECRET");
+    expect(SOURCE).toContain('-K -'); // the curl header travels on stdin, not argv
+  });
+});

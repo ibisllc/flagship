@@ -15,6 +15,41 @@ Principles that hold throughout (AGENTS.md "Conventions"):
 - One deployer at a time. Don't touch prod while a gym run is in progress.
 - A step that fails: stop, roll that step back, do not continue down the list.
 
+## Run it with the script
+
+`scripts/release.sh` is the way to run this runbook. It is interactive (it needs a
+terminal), pins the release to one commit, builds from its own clean worktree, asks
+y/N/skip/quit before every step that changes anything outside the checkout, never
+force-pushes and keeps its progress in `~/.flagship-release/state.json` so a failed
+run resumes at the failed step. The commands below stay as the reference it follows.
+
+```sh
+bash scripts/release.sh --list                # the 27 steps, with phase, commands, gate, rollback
+bash scripts/release.sh --phase A             # deploy the real state (steps 1-16), before the Windows test
+bash scripts/release.sh --phase B             # after the Windows results (steps 17-27)
+bash scripts/release.sh --dry-run --phase A   # print every command, run nothing
+bash scripts/release.sh --status              # pinned sha, finished steps, next step
+bash scripts/release.sh --from 10             # resume at, or --only 10 to run only, one step
+```
+
+Phase A ends by writing `device-results/DEPLOYED-FINAL-<date>.md` (main sha, endorsed
+release, shell version, DNS design, appliance sha256, what is live) and, on your yes,
+pushes it to `device-results/windows-2026-10-17` so the Windows agent tests the real
+deployed state. Phase B (scrub, reap, retire the wipe tool, public Studio, stores)
+refuses to start until phase A is recorded finished.
+
+The script's order differs from the section numbers below in four places, on purpose:
+the gym gate (6) and a fresh D1 backup come before the migrations (4), so nothing on
+prod changes until the gate is green; the VM appliance builds start right after the
+endorsement (3) so the hours-long builds overlap the deploys; the manual DNS step (6a)
+comes after `.com` (7) and `.services` (8), because `zone-health` ships with the `.com`
+deploy and the relay must drop unregistered names uniformly before the wildcard starts
+answering them; and the maintenance notice (12.1) is its own step at the start of
+phase B. What it cannot do for you: the gym run (it prints the checklist and you type
+`verified`), the Cloudflare dashboard DNS records, the YubiKey and PIN prompts (the
+tools ask on `/dev/tty`), the App Store Connect and Play Console submissions, and
+reading the Windows results (typed `windows-ok` before the scrub).
+
 Set up a clean deploy tree once and reuse it for every step that builds:
 
 ```sh
