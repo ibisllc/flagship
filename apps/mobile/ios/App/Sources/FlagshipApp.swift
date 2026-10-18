@@ -649,6 +649,8 @@ struct FlagshipApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                // Inside the environment below: the lock window reads the app state.
+                .updateLockHost()
                 .onGeometryChange(for: CGSize.self, of: { $0.size }) { _ in
                     OrientationPolicy.reconcile()
                 }
@@ -675,7 +677,6 @@ struct FlagshipApp: App {
                 .environment(\.serverTransferClient, activeServerTransfer)
                 .environment(\.serverMigrationClient, activeServerMigration)
                 .environment(\.pushRegistrar, pushRegistrar)
-                .updateLockHost()
                 .alert(
                     "Account no longer listed",
                     isPresented: Binding(

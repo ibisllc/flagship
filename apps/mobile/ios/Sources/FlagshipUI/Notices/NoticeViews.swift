@@ -135,7 +135,13 @@ struct UpdateLockScreen: View {
     @State private var confirmSignOut = false
     @State private var failure: String?
 
-    private var accountUnlocked: Bool { app.isDemoAccount || Keystore.hasSessionKey() }
+    private var accountUnlocked: Bool {
+        #if DEBUG
+        // The mock gym has no enrolled biometric: its consent prompts are bypassed.
+        if GymSeams.bypassBiometricGates { return true }
+        #endif
+        return app.isDemoAccount || Keystore.hasSessionKey()
+    }
 
     var body: some View {
         let c = FSColors.scheme(scheme)
