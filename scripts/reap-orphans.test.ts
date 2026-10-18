@@ -67,6 +67,14 @@ describe("formatPlan", () => {
     expect(text).toMatch(/alice\s+4\s+4/);
     expect(text).not.toContain("Kept accounts with records: alice");
   });
+  it("says whether the root wildcard is in place, and why the trim table exists", () => {
+    expect(formatPlan(plan({ rootWildcardReady: true }))).toContain("root wildcard *.flagship.services: in place");
+    const not = formatPlan(plan({ rootWildcardReady: false }));
+    expect(not).toContain("NOT in place");
+    expect(not).toContain("records of live accounts are kept until it is");
+    const trim = formatPlan(plan({ accounts: [{ owner: "alice", status: "trim", dnsOrphans: 2, serverOrphans: 0, dnsKept: 0 }] }));
+    expect(trim).toContain("stop the zone's root wildcard for every name below");
+  });
   it("says so when servers were not checked or nothing is left", () => {
     expect(formatPlan(plan({ serversChecked: false }))).toContain("NOT CHECKED");
     expect(formatPlan(plan({ accounts: [] }))).toContain("Nothing to reap.");
@@ -80,6 +88,23 @@ describe("selectOrphans", () => {
     expect(sel.servers).toHaveLength(1);
     expect(sel.refused).toEqual([]);
     expect(confirmationPhrase(sel)).toBe("delete 3 records and 1 servers");
+  });
+
+  it("orders the deletes as the plan says: the user-name CAA first, the account wildcard last", () => {
+    const withOrder = (n: number, name: string, type: string, order: number) => ({ ...dns(n, name, type, "bob"), order });
+    const sel = selectOrphans(
+      plan({
+        dns: [
+          withOrder(3, "*.bob.flagship.services", "A", 42),
+          withOrder(4, "home.bob.flagship.services", "A", 12),
+          withOrder(5, "bob.flagship.services", "CAA", 0),
+          withOrder(6, "*.home.bob.flagship.services", "AAAA", 31),
+        ],
+        servers: [],
+      }),
+      NOW,
+    );
+    expect(sel.dns.map((d: { id: string }) => d.id)).toEqual([hex(5), hex(4), hex(6), hex(3)]);
   });
 
   it("refuses an old, foreign or future-dated plan", () => {

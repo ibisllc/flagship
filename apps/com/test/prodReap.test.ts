@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { D1Database } from "@flagship/storage";
+import { answerFor } from "@flagship/services-zone";
 import {
   buildPlan,
   classifyDnsRecord,
   classifyServer,
   deleteOne,
-  indexZone,
   handleReapRoute,
   loadKnownAccounts,
   type KnownAccounts,
@@ -107,10 +107,11 @@ function zone(): ReapDnsRecord[] {
     rec(hex(5), `hub.${APEX}`, "A"),
     rec(hex(6), `gym.${APEX}`, "A"),
     rec(hex(7), `x.gym.${APEX}`, "A"),
-    // kept account alice
+    rec(hex(8), APEX, "CAA", '0 issue "letsencrypt.org"'),
+    rec(hex(9), APEX, "CAA", '0 issuewild "letsencrypt.org"'),
+    // account alice is serving: every record at her names blocks the root wildcard
     rec(hex(10), `alice.${APEX}`, "CAA", '0 issue "letsencrypt.org"'),
     rec(hex(11), `*.alice.${APEX}`, "A"),
-    // a box on its own address: nothing the account wildcard replaces
     rec(hex(12), `home.alice.${APEX}`, "A", "198.51.100.5"),
     rec(hex(13), `*.home.alice.${APEX}`, "AAAA"),
     // protected review account
@@ -128,13 +129,17 @@ function zone(): ReapDnsRecord[] {
     rec(hex(40), `carol-2.${APEX}`, "CAA"),
     rec(hex(41), `box.carol-2.${APEX}`, "A"),
     // shapes the rules do not know: kept even though bob is an orphan
-    rec(hex(50), `bob.${APEX}`, "A"),
+    rec(hex(50), `bob.${APEX}`, "A"), // a host record at a label that is not an account
     rec(hex(51), `svc.home.bob.${APEX}`, "A"),
     rec(hex(52), `broadcast--bob.${APEX}`, "A"),
     rec(hex(53), `home.bob.${APEX}`, "TXT", "something"),
     rec(hex(54), `foo.example.org`, "A"),
   ];
 }
+
+/** The ids of `zone()` the plan trims: alice's four (they block), bob's seven and carol-2's two (gone), bob's TXT. */
+const ORPHAN_IDS = [10, 11, 12, 13, 30, 31, 32, 33, 34, 35, 36, 40, 41, 53];
+const RELAY = { servicesIpv4: "1.2.3.4" };
 
 function fakeDns(records: ReapDnsRecord[]): ReapDnsClient & { deleted: string[]; failures: Map<string, number>; reads: number } {
   const live = new Map(records.map((r) => [r.id, r]));
@@ -205,6 +210,7 @@ function deps(over: Partial<ReapDeps> = {}, world: Partial<World> = {}): ReapDep
     cloud: cloudC,
     apex: APEX,
     protectedAccounts: PROTECTED,
+    relay: RELAY,
     log: (l) => lines.push(l),
     ...over,
     dnsC,
@@ -239,11 +245,14 @@ describe("loadKnownAccounts", () => {
 });
 
 describe("classifyDnsRecord", () => {
-  const verdict = async (name: string, type: string, world: Partial<World> = {}) =>
-    classifyDnsRecord({ name, type }, APEX, await known(world), PROTECTED);
+  const verdict = async (name: string, type: string, world: Partial<World> = {}, ctx = { rootReady: true }, extra = {}) =>
+    classifyDnsRecord({ name, type, ...extra }, APEX, await known(world), PROTECTED, ctx);
 
-  it("keeps apex and system records", async () => {
-    for (const [n, t] of [[APEX, "A"], [`*.${APEX}`, "A"], [APEX, "MX"], [`_dmarc.${APEX}`, "TXT"], [`hub.${APEX}`, "A"], ["foo.example.org", "A"]] as const) {
+  it("keeps the apex, its CAA, the root wildcard and system records", async () => {
+    for (const [n, t] of [
+      [APEX, "A"], [APEX, "CAA"], [`*.${APEX}`, "A"], [`*.${APEX}`, "AAAA"], [APEX, "MX"], [`_dmarc.${APEX}`, "TXT"],
+      [`hub.${APEX}`, "A"], ["foo.example.org", "A"],
+    ] as const) {
       expect((await verdict(n, t)).action, `${t} ${n}`).toBe("keep");
     }
   });
@@ -254,35 +263,57 @@ describe("classifyDnsRecord", () => {
     }
   });
 
-  it("keeps everything of an account that still exists in D1, in any spelling", async () => {
-    for (const [n, t] of [
-      [`alice.${APEX}`, "CAA"], [`*.alice.${APEX}`, "CAA"], [`*.alice.${APEX}`, "AAAA"],
-      [`home.alice.${APEX}`, "A"], [`*.home.alice.${APEX}`, "A"], [`_acme-challenge.home.alice.${APEX}`, "TXT"],
-      [`HOME.Alice.${APEX}.`, "A"],
-    ] as const) {
-      const v = await verdict(n, t);
-      expect(v.action, `${t} ${n}`).toBe("keep");
-      expect(v.owner).toBe("alice");
+  it("trims every A, AAAA, CAA and TXT at a live account's or box's name once the root wildcard is in place", async () => {
+    for (const t of ["A", "AAAA", "CAA", "TXT"]) {
+      for (const n of [`alice.${APEX}`, `*.alice.${APEX}`, `home.alice.${APEX}`, `*.home.alice.${APEX}`, `HOME.Alice.${APEX}.`]) {
+        const v = await verdict(n, t);
+        expect(v, `${t} ${n}`).toMatchObject({ action: "orphan", owner: "alice", trim: "block" });
+        expect(v.reason).toMatch(/blocks the root wildcard/);
+      }
     }
   });
 
-  it("keeps an account known only through an alias, a server row, a demo row or an auth code", async () => {
-    expect((await verdict(`oldie.${APEX}`, "CAA", { aliases: [["oldie", "alice"]], liveServers: ["oldie"] })).action).toBe("keep");
-    expect((await verdict(`oldie.${APEX}`, "CAA", { servers: ["oldie"] })).action).toBe("keep");
-    expect((await verdict(`oldie.${APEX}`, "CAA", { demoUsers: [{ username: "oldie", active_server_id: null }], liveServers: ["oldie"] })).action).toBe("keep");
-    expect((await verdict(`oldie.${APEX}`, "CAA", { authCodes: ["oldie"] })).action).toBe("keep");
+  it("keeps a live account's records until the root wildcard is in place (they are what resolves it)", async () => {
+    for (const ctx of [{ rootReady: false }, {}]) {
+      const v = await verdict(`*.alice.${APEX}`, "A", {}, ctx);
+      expect(v).toMatchObject({ action: "keep", owner: "alice" });
+      expect(v.reason).toMatch(/root wildcard is not in place yet/);
+    }
+  });
+
+  it("trims a gone or idle account's records whether or not the wildcard is in place", async () => {
+    for (const ctx of [{ rootReady: false }, { rootReady: true }]) {
+      expect(await verdict(`*.bob.${APEX}`, "A", {}, ctx)).toMatchObject({ action: "orphan", trim: "gone", reason: "no account of this name in D1" });
+      const idle = await verdict(`home.alice.${APEX}`, "A", { servers: ["alice"], liveServers: [] }, ctx);
+      expect(idle).toMatchObject({ action: "orphan", trim: "gone" });
+      expect(idle.reason).toMatch(/no live server or install in flight/);
+    }
+  });
+
+  it("an account known through an alias, a server row, a demo row or an auth code still counts as an account", async () => {
+    const live = ["oldie"];
+    for (const world of [
+      { aliases: [["oldie", "alice"]] as [string, string][], liveServers: live },
+      { servers: ["oldie"] },
+      { demoUsers: [{ username: "oldie", active_server_id: null }], liveServers: live },
+      { authCodes: ["oldie"] },
+    ] as Partial<World>[]) {
+      const v = await verdict(`oldie.${APEX}`, "CAA", world);
+      expect(v.reason, JSON.stringify(world)).not.toMatch(/no account of this name/);
+    }
   });
 
   it("keeps the store-review account even if D1 forgot the name", async () => {
     const k: KnownAccounts = { names: new Set(["alice"]), serverIds: new Set() };
-    const v = classifyDnsRecord({ name: `home.playstore-test-0725.${APEX}`, type: "A" }, APEX, k, PROTECTED);
-    expect(v).toMatchObject({ action: "keep", reason: "protected account" });
+    const v = classifyDnsRecord({ name: `home.playstore-test-0725.${APEX}`, type: "A" }, APEX, k, PROTECTED, { rootReady: true });
+    expect(v).toMatchObject({ action: "keep" });
+    expect(v.reason).toMatch(/protected account/);
   });
 
-  it("marks the record shapes Flagship publishes for a missing account as orphans", async () => {
+  it("trims every record shape of a missing account", async () => {
     for (const [n, t] of [
-      [`bob.${APEX}`, "CAA"], [`*.bob.${APEX}`, "CAA"], [`*.bob.${APEX}`, "A"], [`*.bob.${APEX}`, "AAAA"],
-      [`home.bob.${APEX}`, "A"], [`home.bob.${APEX}`, "AAAA"], [`*.home.bob.${APEX}`, "A"],
+      [`bob.${APEX}`, "CAA"], [`*.bob.${APEX}`, "CAA"], [`*.bob.${APEX}`, "A"], [`*.bob.${APEX}`, "AAAA"], [`*.bob.${APEX}`, "TXT"],
+      [`home.bob.${APEX}`, "A"], [`home.bob.${APEX}`, "AAAA"], [`home.bob.${APEX}`, "TXT"], [`home.bob.${APEX}`, "CAA"], [`*.home.bob.${APEX}`, "A"],
       [`_acme-challenge.home.bob.${APEX}`, "TXT"], [`_acme-challenge.bob.${APEX}`, "TXT"], [`box.carol-2.${APEX}`, "A"],
     ] as const) {
       const v = await verdict(n, t);
@@ -290,11 +321,20 @@ describe("classifyDnsRecord", () => {
     }
   });
 
-  it("keeps shapes it does not recognise, even under a missing account", async () => {
+  it("keeps a host record at a single label that is not an account, but trims it when it is", async () => {
+    for (const t of ["A", "AAAA", "TXT"]) {
+      expect(await verdict(`bob.${APEX}`, t)).toMatchObject({ action: "keep", reason: "a host record, not an account's" });
+    }
+    expect((await verdict(`alice.${APEX}`, "A")).action).toBe("orphan");
+    // a CAA there is always the old per-account record
+    expect((await verdict(`bob.${APEX}`, "CAA")).action).toBe("orphan");
+  });
+
+  it("keeps shapes and types it does not recognise, even under a missing account", async () => {
     for (const [n, t] of [
-      [`bob.${APEX}`, "A"], [`bob.${APEX}`, "TXT"], [`home.bob.${APEX}`, "TXT"], [`home.bob.${APEX}`, "CAA"],
       [`svc.home.bob.${APEX}`, "A"], [`broadcast--bob.${APEX}`, "A"], [`_acme-challenge.*.bob.${APEX}`, "TXT"],
       [`*.*.bob.${APEX}`, "A"], [`bad_name.bob.${APEX}`, "A"], [`-x.bob.${APEX}`, "A"], [`.bob.${APEX}`, "A"],
+      [`home.bob.${APEX}`, "CNAME"], [`home.bob.${APEX}`, "MX"], [`_acme-challenge.home.bob.${APEX}`, "A"],
     ] as const) {
       expect((await verdict(n, t)).action, `${t} ${n}`).toBe("keep");
     }
@@ -304,118 +344,47 @@ describe("classifyDnsRecord", () => {
     expect((await verdict(`bob.not${APEX}`, "CAA")).action).toBe("keep");
     expect((await verdict(`bob.${APEX}.evil.com`, "CAA")).action).toBe("keep");
   });
-});
 
-// ── the one-wildcard-per-account layout (docs/wildcard-dns.md) ───────────────
-
-const RELAY4 = "203.0.113.7";
-const RELAY6 = "2001:db8::7";
-const ISSUE = '0 issue "letsencrypt.org"';
-const ISSUEWILD = '0 issuewild "letsencrypt.org"';
-const IODEF = '0 iodef "mailto:security@flagshipserver.com"';
-
-/** What a serving account holds: its four records, plus whatever older builds left. */
-function accountZone(user: string, extra: ReapDnsRecord[] = []): ReapDnsRecord[] {
-  return [
-    rec(hex(100), `*.${user}.${APEX}`, "A", RELAY4),
-    rec(hex(101), `*.${user}.${APEX}`, "AAAA", RELAY6),
-    rec(hex(102), `${user}.${APEX}`, "CAA", ISSUE),
-    rec(hex(103), `${user}.${APEX}`, "CAA", ISSUEWILD),
-    ...extra,
-  ];
-}
-
-describe("classifyDnsRecord: the account's own records", () => {
-  const verdict = async (r: ReapDnsRecord, zoneRecords: ReapDnsRecord[], world: Partial<World> = {}) =>
-    classifyDnsRecord(r, APEX, await known(world), PROTECTED, indexZone(zoneRecords));
-
-  it("keeps the four records of an account that is serving", async () => {
-    const z = accountZone("alice");
-    for (const r of z) expect((await verdict(r, z)).action, `${r.type} ${r.name}`).toBe("keep");
+  it("keeps a challenge TXT of a live account while it is young, trims it when stale", async () => {
+    const now = Date.parse("2026-10-18T12:00:00Z");
+    const name = `_acme-challenge.home.alice.${APEX}`;
+    const young = await verdict(name, "TXT", {}, { rootReady: true, now } as never, { modified_on: "2026-10-18T11:30:00Z" });
+    expect(young).toMatchObject({ action: "keep", owner: "alice" });
+    const stale = await verdict(name, "TXT", {}, { rootReady: true, now } as never, { modified_on: "2026-10-18T09:00:00Z" });
+    expect(stale).toMatchObject({ action: "orphan", trim: "stale-challenge" });
+    // no timestamp: never guessed stale
+    expect((await verdict(name, "TXT", {}, { rootReady: true, now } as never)).action).toBe("keep");
+    // a gone account's challenge goes whatever its age
+    expect(await verdict(`_acme-challenge.home.bob.${APEX}`, "TXT")).toMatchObject({ action: "orphan", trim: "gone" });
   });
 
-  it("orphans an older per-box A/AAAA the wildcard of the same address already answers for", async () => {
-    const legacy = [
-      rec(hex(110), `home.alice.${APEX}`, "A", RELAY4),
-      rec(hex(111), `home.alice.${APEX}`, "AAAA", RELAY6),
-      rec(hex(112), `*.home.alice.${APEX}`, "A", RELAY4),
-      rec(hex(113), `*.home.alice.${APEX}`, "AAAA", RELAY6),
-    ];
-    const z = accountZone("alice", legacy);
-    for (const r of legacy) {
-      const v = await verdict(r, z);
-      expect(v, `${r.type} ${r.name}`).toMatchObject({ action: "orphan", owner: "alice" });
-      expect(v.reason).toMatch(/replaced by the account's wildcard/);
-    }
-  });
-
-  it("keeps a per-box record the wildcard does not replace", async () => {
-    const own = rec(hex(120), `home.alice.${APEX}`, "A", "198.51.100.5"); // a box on its own address
-    expect((await verdict(own, accountZone("alice", [own]))).action).toBe("keep");
-    const noAaaa = rec(hex(121), `home.alice.${APEX}`, "AAAA", RELAY6);
-    const v4only = [rec(hex(100), `*.alice.${APEX}`, "A", RELAY4), noAaaa];
-    expect((await verdict(noAaaa, v4only)).action).toBe("keep"); // no *.alice AAAA to take over
-    const orphanedWildcard = [rec(hex(122), `home.alice.${APEX}`, "A", RELAY4)];
-    expect((await verdict(orphanedWildcard[0]!, orphanedWildcard)).action).toBe("keep"); // no wildcard at all
-  });
-
-  it("keeps a per-box record while a challenge TXT is in flight at that box", async () => {
-    const shield = rec(hex(130), `home.alice.${APEX}`, "A", RELAY4);
-    const txt = rec(hex(131), `_acme-challenge.home.alice.${APEX}`, "TXT", "token");
-    const z = accountZone("alice", [shield, txt]);
-    expect((await verdict(shield, z)).action).toBe("keep");
-    expect((await verdict(txt, z)).action).toBe("keep");
-    // another box of the account is not held back by it
-    const other = rec(hex(132), `media.alice.${APEX}`, "A", RELAY4);
-    expect((await verdict(other, [...z, other])).action).toBe("orphan");
-  });
-
-  it("orphans the CAA copy at *.<user> and the iodef at <user> once <user> keeps its issue record", async () => {
-    const wildcardCaa = [
-      rec(hex(140), `*.alice.${APEX}`, "CAA", ISSUE),
-      rec(hex(141), `*.alice.${APEX}`, "CAA", ISSUEWILD),
-      rec(hex(142), `*.alice.${APEX}`, "CAA", IODEF),
-    ];
-    const iodef = rec(hex(143), `alice.${APEX}`, "CAA", IODEF);
-    const z = accountZone("alice", [...wildcardCaa, iodef]);
-    for (const r of [...wildcardCaa, iodef]) expect((await verdict(r, z)).action, r.content).toBe("orphan");
-    // the pair that pins issuance stays
-    expect((await verdict(z[2]!, z)).action).toBe("keep");
-    expect((await verdict(z[3]!, z)).action).toBe("keep");
-  });
-
-  it("does not trim CAA when <user> has no issue record to fall back on", async () => {
-    const lone = [rec(hex(150), `*.alice.${APEX}`, "CAA", ISSUE), rec(hex(151), `alice.${APEX}`, "CAA", IODEF)];
-    for (const r of lone) expect((await verdict(r, lone)).action).toBe("keep");
+  it("orders the deletes so the user-name CAA goes first and the account wildcard last", async () => {
+    const o = async (n: string, t: string) => (await verdict(n, t)).order!;
+    expect(await o(`alice.${APEX}`, "CAA")).toBeLessThan(await o(`home.alice.${APEX}`, "A"));
+    expect(await o(`home.alice.${APEX}`, "A")).toBeLessThan(await o(`*.home.alice.${APEX}`, "A"));
+    expect(await o(`*.home.alice.${APEX}`, "A")).toBeLessThan(await o(`*.alice.${APEX}`, "A"));
+    expect(await o(`*.alice.${APEX}`, "AAAA")).toBeLessThan(await o(`*.alice.${APEX}`, "A"));
   });
 
   it("orphans every record of an account that exists but has no live server or install", async () => {
-    const z = accountZone("alice", [rec(hex(160), `home.alice.${APEX}`, "A", "198.51.100.5"), rec(hex(161), `_acme-challenge.home.alice.${APEX}`, "TXT", "t")]);
-    for (const r of z) {
-      const v = await verdict(r, z, { servers: ["alice"], liveServers: [] });
-      expect(v, `${r.type} ${r.name}`).toMatchObject({ action: "orphan", owner: "alice" });
+    const live = { servers: ["alice"], liveServers: [] as string[] };
+    for (const [n, t] of [[`*.alice.${APEX}`, "A"], [`alice.${APEX}`, "CAA"], [`home.alice.${APEX}`, "A"], [`_acme-challenge.home.alice.${APEX}`, "TXT"]] as const) {
+      const v = await verdict(n, t, live);
+      expect(v, `${t} ${n}`).toMatchObject({ action: "orphan", owner: "alice" });
       expect(v.reason).toMatch(/no live server or install in flight/);
     }
   });
 
   it("keeps an idle account's records while an install order is in flight", async () => {
-    const z = accountZone("alice");
-    const v = await verdict(z[0]!, z, { servers: ["alice"], liveServers: [], authCodes: ["alice"], activeAuthCodes: ["alice"] });
+    const v = await verdict(`*.alice.${APEX}`, "A", { servers: ["alice"], liveServers: [], authCodes: ["alice"], activeAuthCodes: ["alice"] }, { rootReady: false });
     expect(v.action).toBe("keep");
   });
 
   it("does not apply the no-live-server rule when D1 cannot say, or to the protected account", async () => {
-    const z = accountZone("alice");
-    const unknownLive = await verdict(z[0]!, z, { servers: ["alice"], liveServers: [], missingColumns: new Set(["servers"]) });
-    expect(unknownLive.action).toBe("keep");
-    const p = accountZone("playstore-test-0725");
-    const prot = classifyDnsRecord(p[0]!, APEX, { names: new Set(["alice"]), serverIds: new Set(), liveAccounts: new Set() }, PROTECTED, indexZone(p));
-    expect(prot).toMatchObject({ action: "keep", reason: "protected account" });
-  });
-
-  it("without a zone index the neighbour rules are not applied", async () => {
-    const legacy = rec(hex(110), `home.alice.${APEX}`, "A", RELAY4);
-    expect(classifyDnsRecord(legacy, APEX, await known(), PROTECTED).action).toBe("keep");
+    const unknownLive = await verdict(`*.alice.${APEX}`, "A", { servers: ["alice"], liveServers: [], missingColumns: new Set(["servers"]) });
+    expect(unknownLive.reason).toMatch(/blocks the root wildcard/);
+    const prot = classifyDnsRecord({ name: `*.playstore-test-0725.${APEX}`, type: "A" }, APEX, { names: new Set(["alice"]), serverIds: new Set(), liveAccounts: new Set() }, PROTECTED, { rootReady: true });
+    expect(prot.action).toBe("keep");
   });
 });
 
@@ -433,50 +402,90 @@ describe("loadKnownAccounts: who is still serving", () => {
   });
 });
 
-describe("buildPlan and deleteOne with the wildcard layout", () => {
-  const legacy = [
-    rec(hex(210), `home.alice.${APEX}`, "A", RELAY4),
-    rec(hex(211), `*.home.alice.${APEX}`, "A", RELAY4),
-    rec(hex(212), `*.alice.${APEX}`, "CAA", ISSUE),
-    rec(hex(213), `alice.${APEX}`, "CAA", IODEF),
+describe("buildPlan and deleteOne with the root-wildcard layout", () => {
+  const records = [
+    rec(hex(1), APEX, "A"),
+    rec(hex(2), `*.${APEX}`, "A", RELAY.servicesIpv4),
+    rec(hex(8), APEX, "CAA", '0 issue "letsencrypt.org"'),
+    rec(hex(100), `*.alice.${APEX}`, "A", RELAY.servicesIpv4),
+    rec(hex(101), `*.alice.${APEX}`, "AAAA", "2001:db8::7"),
+    rec(hex(102), `alice.${APEX}`, "CAA", '0 issue "letsencrypt.org"'),
+    rec(hex(110), `home.alice.${APEX}`, "A", RELAY.servicesIpv4),
+    rec(hex(112), `*.home.alice.${APEX}`, "A", RELAY.servicesIpv4),
+    rec(hex(120), `_acme-challenge.home.alice.${APEX}`, "TXT", "token", ),
   ];
-  const records = [...accountZone("alice", legacy), rec(hex(1), APEX, "A")];
-  const mk = () => {
-    const dnsC = fakeDns(records);
-    return { dnsC, d: { db: fakeDb(newWorld()), dns: dnsC, cloud: undefined, apex: APEX, protectedAccounts: PROTECTED } as ReapDeps };
+  const mk = (recs = records, over: Partial<ReapDeps> = {}) => {
+    const dnsC = fakeDns(recs);
+    return { dnsC, d: { db: fakeDb(newWorld()), dns: dnsC, cloud: undefined, apex: APEX, protectedAccounts: PROTECTED, relay: RELAY, ...over } as ReapDeps };
   };
 
-  it("plans a trim for an account that stays: status trim, the four records kept", async () => {
+  it("plans a trim for an account that stays: every record at her names goes, the root set and the challenge stay", async () => {
     const { d } = mk();
     const plan = await buildPlan(d);
-    expect(plan.summary.dnsOrphan).toBe(4);
-    expect(plan.accounts.find((a) => a.owner === "alice")).toMatchObject({ status: "trim", dnsOrphans: 4, dnsKept: 4 });
-    expect(plan.summary.zoneRecordsAfter).toBe(5);
+    expect(plan.rootWildcardReady).toBe(true);
+    expect(plan.summary.dnsOrphan).toBe(5);
+    expect(plan.accounts.find((a) => a.owner === "alice")).toMatchObject({ status: "trim", dnsOrphans: 5, dnsKept: 1 });
+    expect(plan.summary.zoneRecordsAfter).toBe(4);
+    expect(plan.dns.filter((x) => x.action === "orphan").every((x) => x.trim === "block")).toBe(true);
   });
 
-  it("deletes a superseded record, re-judging against the zone as it is now", async () => {
-    const { d, dnsC } = mk();
-    const r = await deleteOne(d, { kind: "dns", id: hex(210), name: `home.alice.${APEX}`, type: "A" });
-    expect(r).toMatchObject({ status: 200, body: { result: "deleted", owner: "alice" } });
-    expect(dnsC.deleted).toEqual([hex(210)]);
+  it("keeps everything of a live account while the root wildcard is missing, and says so in the plan", async () => {
+    const { d } = mk(records.filter((r) => r.id !== hex(2)));
+    const plan = await buildPlan(d);
+    expect(plan.rootWildcardReady).toBe(false);
+    expect(plan.summary.dnsOrphan).toBe(0);
   });
 
-  it("refuses to delete it once the wildcard that replaces it is gone", async () => {
+  it("does not see a wildcard at the wrong address or without a configured relay as ready", async () => {
+    const wrong = mk(records.map((r) => (r.id === hex(2) ? { ...r, content: "198.51.100.9" } : r)));
+    expect((await buildPlan(wrong.d)).rootWildcardReady).toBe(false);
+    const noRelay = mk(records, { relay: undefined });
+    expect((await buildPlan(noRelay.d)).rootWildcardReady).toBe(false);
+  });
+
+  it("applied in plan order, no name of the account ever stops answering the relay", async () => {
     const { d, dnsC } = mk();
-    await dnsC.deleteById(hex(100));
+    const plan = await buildPlan(d);
+    const trims = plan.dns.filter((x) => x.action === "orphan").sort((a, b) => a.order! - b.order!);
+    const live = new Map(records.map((r) => [r.id, r]));
+    const names = [`home.alice.${APEX}`, `x.home.alice.${APEX}`, `app.alice.${APEX}`];
+    for (const t of trims) {
+      const r = await deleteOne(d, { kind: "dns", id: t.id, name: t.name, type: t.type });
+      expect(r.status, `${t.type} ${t.name}`).toBe(200);
+      live.delete(t.id);
+      for (const n of names) expect(answerFor([...live.values()], n).result, `${n} after ${t.type} ${t.name}`).toBe("answer");
+    }
+    expect(dnsC.deleted).toHaveLength(5);
+  });
+
+  it("refuses to delete a blocking record once the root wildcard that replaces it is gone", async () => {
+    const { d, dnsC } = mk();
+    await dnsC.deleteById(hex(2));
     dnsC.deleted.length = 0;
-    const r = await deleteOne(d, { kind: "dns", id: hex(210), name: `home.alice.${APEX}`, type: "A" });
+    const r = await deleteOne(d, { kind: "dns", id: hex(110), name: `home.alice.${APEX}`, type: "A" });
     expect(r).toMatchObject({ status: 409, body: { code: "not-orphan" } });
     expect(dnsC.deleted).toEqual([]);
   });
 
-  it("never offers the account's own four records for deletion", async () => {
+  it("never offers the apex, its CAA, or the root wildcard for deletion", async () => {
     const { d, dnsC } = mk();
-    for (const id of [hex(100), hex(101), hex(102), hex(103)]) {
+    for (const id of [hex(1), hex(2), hex(8)]) {
       const live = (await dnsC.getById(id))!;
       expect((await deleteOne(d, { kind: "dns", id, name: live.name, type: live.type })).status, id).toBe(409);
     }
     expect(dnsC.deleted).toEqual([]);
+  });
+
+  it("deletes a stale challenge TXT and keeps a young one", async () => {
+    const now = Date.parse("2026-10-18T12:00:00Z");
+    const old = rec(hex(130), `_acme-challenge.home.alice.${APEX}`, "TXT", "old");
+    old.modified_on = "2026-10-18T08:00:00Z";
+    const young = rec(hex(131), `_acme-challenge.media.alice.${APEX}`, "TXT", "young");
+    young.modified_on = "2026-10-18T11:50:00Z";
+    const { d, dnsC } = mk([...records.slice(0, 3), old, young], { now: () => now });
+    expect((await deleteOne(d, { kind: "dns", id: hex(130), name: old.name, type: "TXT" })).status).toBe(200);
+    expect((await deleteOne(d, { kind: "dns", id: hex(131), name: young.name, type: "TXT" })).status).toBe(409);
+    expect(dnsC.deleted).toEqual([hex(130)]);
   });
 });
 
@@ -508,15 +517,17 @@ describe("buildPlan", () => {
     const d = deps();
     const plan = await buildPlan(d);
     expect(plan.zoneRecords).toBe(zone().length);
-    expect(plan.summary.dnsOrphan).toBe(9);
-    expect(plan.summary.zoneRecordsAfter).toBe(zone().length - 9);
+    expect(plan.summary.dnsOrphan).toBe(ORPHAN_IDS.length);
+    expect(plan.summary.zoneRecordsAfter).toBe(zone().length - ORPHAN_IDS.length);
     expect(plan.summary.serversOrphan).toBe(1);
     expect(plan.serversChecked).toBe(true);
     const bob = plan.accounts.find((a) => a.owner === "bob")!;
-    expect(bob).toMatchObject({ status: "orphan", dnsOrphans: 7, serverOrphans: 1 });
+    expect(bob).toMatchObject({ status: "orphan", dnsOrphans: 8, serverOrphans: 1 });
     expect(plan.accounts.find((a) => a.owner === "carol-2")).toMatchObject({ status: "orphan", dnsOrphans: 2 });
-    expect(plan.accounts.find((a) => a.owner === "alice")).toMatchObject({ status: "kept", dnsOrphans: 0 });
-    expect(plan.accounts.map((a) => a.status)).toEqual([...plan.accounts.map((a) => a.status)].sort((a, b) => (a === b ? 0 : a === "orphan" ? -1 : 1)));
+    expect(plan.accounts.find((a) => a.owner === "alice")).toMatchObject({ status: "trim", dnsOrphans: 4 });
+    expect(plan.accounts.find((a) => a.owner === "playstore-test-0725")).toMatchObject({ status: "kept", dnsOrphans: 0, dnsKept: 2 });
+    const order = { orphan: 0, trim: 1, kept: 2 } as const;
+    expect(plan.accounts.map((a) => order[a.status])).toEqual([...plan.accounts.map((a) => order[a.status])].sort());
     // building a plan is read-only
     expect(d.dnsC.deleted).toEqual([]);
     expect(d.cloudC.destroyed).toEqual([]);
@@ -546,16 +557,20 @@ describe("deleteOne", () => {
     expect(d.lines.join("\n")).toContain(`reap deleted dns CAA bob.${APEX}`);
   });
 
-  it("re-verifies against D1 right now: an account that came back is not touched", async () => {
-    const d = deps({}, { usernames: ["playstore-test-0725", "alice", "bob"], servers: ["alice", "bob"] });
+  it("re-verifies against D1 right now: an account that came back keeps its records until the root wildcard is verified", async () => {
+    const back = { usernames: ["playstore-test-0725", "alice", "bob"], servers: ["alice", "bob"] };
+    const d = deps({ relay: undefined }, back);
     const r = await deleteOne(d, { kind: "dns", id: hex(30), name: `bob.${APEX}`, type: "CAA" });
     expect(r).toMatchObject({ status: 409, body: { code: "not-orphan" } });
     expect(d.dnsC.deleted).toEqual([]);
+    // with the wildcard in place the same record blocks it, so it is trimmed even though bob is live again
+    const d2 = deps({}, back);
+    expect((await deleteOne(d2, { kind: "dns", id: hex(30), name: `bob.${APEX}`, type: "CAA" })).status).toBe(200);
   });
 
   it("refuses every keep record by id, even if the caller names it", async () => {
     const d = deps();
-    for (const r of zone().filter((x) => !["30", "31", "32", "33", "34", "35", "36", "40", "41"].includes(String(parseInt(x.id, 16))))) {
+    for (const r of zone().filter((x) => !ORPHAN_IDS.includes(parseInt(x.id, 16)))) {
       const res = await deleteOne(d, { kind: "dns", id: r.id, name: r.name, type: r.type });
       expect(res.status, `${r.type} ${r.name}`).toBe(409);
     }
@@ -628,7 +643,7 @@ describe("handleReapRoute", () => {
   const dnsC = fakeDns(zone());
   const cloudC = fakeCloud(servers());
   const world = newWorld({ demoUsers: [{ username: "dave", active_server_id: S_POINTED }] });
-  const env = { DB: fakeDb(world), FLAGSHIP_ADMIN_SECRET: SECRET, CLOUDFLARE_DNS_API_TOKEN: "t", CLOUDFLARE_SERVICES_ZONE_ID: "z", UPCLOUD_TOKEN: "u" };
+  const env = { DB: fakeDb(world), FLAGSHIP_ADMIN_SECRET: SECRET, CLOUDFLARE_DNS_API_TOKEN: "t", CLOUDFLARE_SERVICES_ZONE_ID: "z", UPCLOUD_TOKEN: "u", SERVICES_PASSTHROUGH_IPV4: "1.2.3.4" };
   const opts = { makeDns: () => dnsC, makeCloud: () => cloudC };
   const call = (path: string, init: RequestInit = {}, secret: string | null = SECRET, e = env) =>
     handleReapRoute(
@@ -654,7 +669,7 @@ describe("handleReapRoute", () => {
     expect(((await list.json()) as { zoneRecords: number }).zoneRecords).toBe(zone().length);
     const plan = await call("classify");
     expect(plan.status).toBe(200);
-    expect(((await plan.json()) as { summary: { dnsOrphan: number } }).summary.dnsOrphan).toBe(9);
+    expect(((await plan.json()) as { summary: { dnsOrphan: number } }).summary.dnsOrphan).toBe(ORPHAN_IDS.length);
     expect(dnsC.deleted).toEqual([]);
     expect(cloudC.destroyed).toEqual([]);
   });
@@ -669,7 +684,7 @@ describe("handleReapRoute", () => {
   it("delete-one deletes one orphan and refuses a kept record", async () => {
     const ok = await call("delete-one", { method: "POST", body: JSON.stringify({ kind: "dns", id: hex(34), name: `home.bob.${APEX}`, type: "A" }) });
     expect(ok.status).toBe(200);
-    const no = await call("delete-one", { method: "POST", body: JSON.stringify({ kind: "dns", id: hex(12), name: `home.alice.${APEX}`, type: "A" }) });
+    const no = await call("delete-one", { method: "POST", body: JSON.stringify({ kind: "dns", id: hex(20), name: `playstore-test-0725.${APEX}`, type: "CAA" }) });
     expect(no.status).toBe(409);
     expect(dnsC.deleted).toEqual([hex(34)]);
   });

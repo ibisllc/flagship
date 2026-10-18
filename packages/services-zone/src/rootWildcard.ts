@@ -153,6 +153,11 @@ function blocksRoot(r: ZoneRecordView, k: ZoneNameKind, scope: AccountScope, typ
   return types === null || types.has(type);
 }
 
+/** Sort key for a record in a deletion plan: lower goes first (see {@link legacyDeletionRank}). */
+export function legacyDeletionOrder(r: ZoneRecordView, apex: string): number {
+  return legacyDeletionRank(r.name, apex) * 10 + (TYPE_ORDER[r.type.toUpperCase()] ?? 3);
+}
+
 /**
  * The records an earlier layout wrote that the root wildcard replaces: A, AAAA
  * and CAA at an account or box name (per-account `*.<user>`, per-account CAA,

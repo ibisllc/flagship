@@ -5,9 +5,13 @@
  * longer exist. The tokens for Cloudflare DNS and UpCloud live only on the
  * `.com` Worker, so this talks to its admin routes
  * (apps/com/src/prodReap.ts). Run it AFTER the D1 scrub. It also trims
- * accounts that stay: records an account wildcard replaced (older per-box
- * A/AAAA, the CAA copy at *.<user>, iodef) and the records of an account with
- * no live server (docs/wildcard-dns.md).
+ * accounts that stay: the zone holds `*.flagship.services` and the apex CAA and
+ * NOTHING at an account or box name, so every A, AAAA, CAA and TXT at
+ * `<user>`, `*.<user>`, `<box>.<user>` or `*.<box>.<user>` is trimmed, since it
+ * stops that wildcard for the names below it (docs/wildcard-dns.md). A live
+ * account's records are trimmed only once the root wildcard is in the zone
+ * (the plan says whether it is); a stale `_acme-challenge` TXT goes too.
+ * Check the result with `npm run zone-health`.
  *
  *   node scripts/reap-orphans.mjs                      dry run: classify every
  *                                                      record and server, print
@@ -83,6 +87,11 @@ export function formatPlan(plan, { show = false } = {}) {
       : "  UpCloud demo servers: NOT CHECKED (the Worker has no UPCLOUD_TOKEN)",
   );
   lines.push(`  zone after the reap: ${s.zoneRecordsAfter} of 200 records`);
+  if (plan.rootWildcardReady === false) {
+    lines.push(`  root wildcard *.${plan.apex}: NOT in place (or not exactly the relay): records of live accounts are kept until it is`);
+  } else if (plan.rootWildcardReady === true) {
+    lines.push(`  root wildcard *.${plan.apex}: in place`);
+  }
   const orphans = plan.accounts.filter((a) => a.status === "orphan");
   lines.push("");
   if (orphans.length === 0) {
@@ -94,6 +103,7 @@ export function formatPlan(plan, { show = false } = {}) {
   const trims = plan.accounts.filter((a) => a.status === "trim");
   if (trims.length > 0) {
     lines.push("");
+    lines.push("Records at an account or box name stop the zone's root wildcard for every name below; the wildcard answers them.");
     lines.push(`${pad("account (stays; records to trim)", 32)}  ${lpad("records", 7)}  ${lpad("kept", 5)}`);
     for (const a of trims) lines.push(`${pad(a.owner, 32)}  ${lpad(a.dnsOrphans, 7)}  ${lpad(a.dnsKept, 5)}`);
   }
@@ -141,7 +151,7 @@ export function selectOrphans(plan, now = Date.now()) {
       d.owner && USERNAME_RE.test(d.owner) && !protectedNames.has(d.owner) &&
       labels[labels.length - 1] === d.owner &&
       DNS_TYPES.has(String(d.type).toUpperCase());
-    if (ok) dns.push({ kind: "dns", id: d.id, name: d.name, type: d.type, owner: d.owner });
+    if (ok) dns.push({ kind: "dns", id: d.id, name: d.name, type: d.type, owner: d.owner, order: Number.isFinite(d.order) ? d.order : 0 });
     else refused.push(`dns ${d.type} ${d.name}`);
   }
   for (const v of plan.servers) {
@@ -150,6 +160,8 @@ export function selectOrphans(plan, now = Date.now()) {
     if (ok) servers.push({ kind: "server", id: v.serverId, owner: v.owner, name: v.title });
     else refused.push(`server ${v.serverId}`);
   }
+  // The server states the order in which no name goes dark between two deletes.
+  dns.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   return { dns, servers, refused };
 }
 

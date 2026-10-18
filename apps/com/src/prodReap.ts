@@ -1,42 +1,54 @@
 /**
  * Prod reap: removes what the pre-GA scrub (docs/runbooks/pre-ga-scrub.md)
- * leaves behind. The scrub deletes D1 rows only; the wiped accounts' DNS
- * records in the `flagship.services` zone (the zone is capped at 200) and
- * their demo UpCloud servers stay until reaped here.
+ * leaves behind, and every record an earlier DNS layout left at an account or
+ * box name. The scrub deletes D1 rows only; the wiped accounts' DNS records in
+ * the `flagship.services` zone (the zone is capped at 200) and their demo
+ * UpCloud servers stay until reaped here.
  *
- * Three admin routes (x-admin-secret, like /api/admin/rate-limits), driven by
- * scripts/reap-orphans.mjs. Nothing here deletes by itself: only `delete-one`
- * writes, one DNS record or one server per call, and it re-checks the item
- * against D1 right then.
+ * Admin routes (x-admin-secret, like /api/admin/rate-limits), driven by
+ * scripts/reap-orphans.mjs and scripts/dns-zone-health.mjs. Nothing here
+ * deletes by itself: only `delete-one` writes, one DNS record or one server per
+ * call, and it re-checks the item against D1 and the zone right then.
  *
- *   GET  /api/admin/reap/list       the zone's records and the Flagship-labelled
- *                                   UpCloud servers, unclassified
- *   GET  /api/admin/reap/classify   the same, each marked KEEP or ORPHAN with a
- *                                   reason, plus per-account counts (the plan)
- *   POST /api/admin/reap/delete-one {kind:"dns",id,name,type} or
- *                                   {kind:"server",id,owner}
+ *   GET  /api/admin/reap/list         the zone's records and the Flagship-labelled
+ *                                     UpCloud servers, unclassified
+ *   GET  /api/admin/reap/classify     the same, each marked KEEP or ORPHAN with a
+ *                                     reason, plus per-account counts (the plan)
+ *   GET  /api/admin/reap/zone-health  read-only check of the root-wildcard layout
+ *   POST /api/admin/reap/delete-one   {kind:"dns",id,name,type} or
+ *                                     {kind:"server",id,owner}
  *
- * An item is ORPHAN only when its name has exactly a shape that Flagship
- * publishes, the account label is a valid, non-reserved username, and one of
- * these holds (docs/wildcard-dns.md "Reap tool"):
+ * The zone holds `*.<apex>` A/AAAA at the relay and the apex CAA pair and
+ * nothing at an account or box name (docs/wildcard-dns.md). A record at such a
+ * name stops that wildcard for every name below it, so a record at
+ * `<user>`, `*.<user>`, `<box>.<user>` or `*.<box>.<user>` (A, AAAA, CAA, TXT;
+ * not `_acme-challenge`) is TRIMMED when one of these holds:
  *
  *   1. no account of that name is known to D1 (usernames, aliases, servers,
  *      demo users, auth codes);
- *   2. the account has no live (unrevoked) server and no install in flight:
- *      the publisher removes the account's records with its last server, so
- *      these are leaks;
- *   3. the record is superseded: an older per-box A/AAAA that the account's
- *      `*.<user>` wildcard of the same address already answers for (and no
- *      challenge TXT is in flight at the box), the older CAA at `*.<user>`, or
- *      an `iodef` CAA at `<user>` while `<user>` keeps its `issue` record.
+ *   2. the account has no live (unrevoked) server and no install in flight;
+ *   3. the account is live and the zone's root wildcard is in place and points
+ *      at the relay: the record is redundant and blocks the wildcard. Before the
+ *      wildcard exists the account's own records are all that resolve its names,
+ *      so they are KEPT.
  *
- * Everything else (apex, system records, gym, anything unrecognised, an
- * account still serving, the protected store-review account) is KEEP. A D1
- * that does not hold every protected account is refused outright: that is the
- * wrong database or the wipe went too far.
+ * A `_acme-challenge` TXT is kept only while its account is live and the TXT is
+ * young (the hourly sweep clears stale ones; this clears them too).
+ *
+ * Everything else (the apex and its CAA, the root wildcard, system records,
+ * gym, a host record at a single label that is not an account, anything
+ * unrecognised, the protected store-review account) is KEEP. A D1 that does not
+ * hold every protected account is refused outright: that is the wrong database
+ * or the wipe went too far.
  */
 
-import { authorizeAdmin, validateServerLabel, validateUserLabel } from "@flagship/control-plane";
+import {
+  authorizeAdmin,
+  validateServerLabel,
+  validateUserLabel,
+  type RelayAddress,
+} from "@flagship/control-plane";
+import { evaluateZoneHealth, legacyDeletionOrder, rootWildcardStatus, type ZoneHealth } from "@flagship/services-zone";
 import type { D1Database } from "@flagship/storage";
 
 export const REAP_PATH_PREFIX = "/api/admin/reap/";
@@ -51,6 +63,9 @@ export interface ReapDnsRecord {
   name: string;
   type: string;
   content?: string;
+  proxied?: boolean;
+  created_on?: string;
+  modified_on?: string;
 }
 
 export interface ReapDnsClient {
@@ -81,6 +96,9 @@ export interface ReapEnv {
   UPCLOUD_TOKEN?: string;
   /** Comma list overriding DEFAULT_PROTECTED_ACCOUNTS (empty = none). */
   REAP_PROTECTED_ACCOUNTS?: string;
+  /** The relay's address: what the root wildcard must point at. */
+  SERVICES_PASSTHROUGH_IPV4?: string;
+  SERVICES_PASSTHROUGH_IPV6?: string;
 }
 
 export interface ReapDeps {
@@ -89,6 +107,8 @@ export interface ReapDeps {
   cloud: ReapCloudClient | undefined;
   apex: string;
   protectedAccounts: readonly string[];
+  /** The relay's address. Without it the root wildcard can't be verified, so live accounts' records are kept. */
+  relay?: RelayAddress;
   now?: () => number;
   log?: (line: string) => void;
 }
@@ -103,58 +123,38 @@ export interface KnownAccounts {
   liveAccounts?: Set<string>;
 }
 
-/** A read-only index of the zone's records, for the rules that look at neighbours. */
-export interface ZoneIndex {
-  /** Is there a record of `type` at `name` (with this exact content, when given)? */
-  has(name: string, type: string, content?: string): boolean;
-}
-
-const normName = (n: string): string => n.toLowerCase().replace(/\.$/, "");
-
-export function indexZone(records: readonly { name: string; type: string; content?: string }[]): ZoneIndex {
-  const by = new Map<string, (string | undefined)[]>();
-  for (const r of records) {
-    const k = `${r.type.toUpperCase()} ${normName(r.name)}`;
-    const list = by.get(k);
-    if (list) list.push(r.content);
-    else by.set(k, [r.content]);
-  }
-  return {
-    has(name, type, content) {
-      const list = by.get(`${type.toUpperCase()} ${normName(name)}`);
-      if (!list) return false;
-      return content === undefined ? true : list.includes(content);
-    },
-  };
-}
-
 export type ReapAction = "keep" | "orphan";
+
+export type TrimClass = "gone" | "block" | "stale-challenge";
 
 export interface DnsVerdict {
   action: ReapAction;
   /** The account label the name belongs to, when it has a recognisable shape. */
   owner: string | null;
   reason: string;
+  /** Why an ORPHAN goes: its account is gone, it blocks the root wildcard, or it is a stale challenge. */
+  trim?: TrimClass;
+  /** Deletion order within a plan: lower first, so no name goes dark between deletes. */
+  order?: number;
+}
+
+export interface ClassifyContext {
+  /** Is the zone's root wildcard in place and pointing at the relay? */
+  rootReady?: boolean;
+  now?: number;
 }
 
 const NAME_CHARS = /^[a-z0-9_*.-]+$/;
-
-/** Record shapes Flagship publishes under `<user>.<apex>`, by (labels, kind). */
-const ALLOWED: Record<string, readonly string[]> = {
-  "1:plain": ["CAA"],
-  "1:wild": ["CAA", "A", "AAAA"],
-  "1:acme": ["TXT"],
-  "2:plain": ["A", "AAAA"],
-  "2:wild": ["A", "AAAA"],
-  "2:acme": ["TXT"],
-};
+/** Record types Flagship ever wrote at account names; anything else is left for a human. */
+const TRIM_TYPES = new Set(["A", "AAAA", "CAA", "TXT"]);
+const STALE_CHALLENGE_MS = 60 * 60 * 1000;
 
 export function classifyDnsRecord(
-  rec: { name: string; type: string; content?: string },
+  rec: { name: string; type: string; content?: string; created_on?: string; modified_on?: string },
   apexIn: string,
   known: KnownAccounts,
   protectedAccounts: readonly string[],
-  zone?: ZoneIndex,
+  ctx: ClassifyContext = {},
 ): DnsVerdict {
   const apex = apexIn.toLowerCase().replace(/\.$/, "");
   const name = rec.name.toLowerCase().replace(/\.$/, "");
@@ -163,6 +163,7 @@ export function classifyDnsRecord(
   if (!name.endsWith(`.${apex}`)) return { action: "keep", owner: null, reason: "outside the services zone apex" };
   const rel = name.slice(0, -(apex.length + 1));
   if (!NAME_CHARS.test(rel)) return { action: "keep", owner: null, reason: "unrecognised name" };
+  if (rel === "*") return { action: "keep", owner: null, reason: "the zone's root wildcard" };
   let labels = rel.split(".");
   if (labels.some((l) => l === "")) return { action: "keep", owner: null, reason: "unrecognised name" };
   let kind: "plain" | "wild" | "acme" = "plain";
@@ -183,47 +184,50 @@ export function classifyDnsRecord(
   if (labels.length === 2 && !validateServerLabel(labels[0]!).ok) {
     return { action: "keep", owner: null, reason: "unrecognised name" };
   }
-  const allowed = ALLOWED[`${labels.length}:${kind}`];
-  if (!allowed || !allowed.includes(type)) {
-    return { action: "keep", owner: null, reason: `not a record Flagship publishes (${type})` };
+  const order = legacyDeletionOrder({ name, type }, apex);
+  const orphan = (reason: string, trim: TrimClass): DnsVerdict => ({ action: "orphan", owner, reason, trim, order });
+  const goneOrIdle = (): DnsVerdict | null => {
+    if (!known.names.has(owner)) return orphan("no account of this name in D1", "gone");
+    if (known.liveAccounts && !known.liveAccounts.has(owner)) {
+      return orphan("the account has no live server or install in flight (nothing is left to serve)", "gone");
+    }
+    return null;
+  };
+
+  if (kind === "acme") {
+    if (type !== "TXT") return { action: "keep", owner: null, reason: `not a record Flagship publishes (${type})` };
+    if (protectedAccounts.includes(owner)) return { action: "keep", owner, reason: "protected account" };
+    const idle = goneOrIdle();
+    if (idle) return idle;
+    const stamp = Date.parse(rec.modified_on ?? rec.created_on ?? "");
+    if (ctx.now !== undefined && Number.isFinite(stamp) && stamp < ctx.now - STALE_CHALLENGE_MS) {
+      return orphan("a challenge TXT older than an hour (the certificate was issued or abandoned)", "stale-challenge");
+    }
+    return { action: "keep", owner, reason: "a challenge in flight for a live account" };
   }
-  if (protectedAccounts.includes(owner)) return { action: "keep", owner, reason: "protected account" };
-  if (!known.names.has(owner)) return { action: "orphan", owner, reason: "no account of this name in D1" };
-  if (known.liveAccounts && !known.liveAccounts.has(owner)) {
+
+  if (!TRIM_TYPES.has(type)) return { action: "keep", owner: null, reason: `not a record Flagship publishes (${type})` };
+  // `<label>.<apex>` holding an A, AAAA or TXT is a host record (hub, www, ...)
+  // unless the label is an account: it only blocks names below it, and none exist.
+  if (kind === "plain" && labels.length === 1 && type !== "CAA" && !known.names.has(owner)) {
+    return { action: "keep", owner: null, reason: "a host record, not an account's" };
+  }
+  if (protectedAccounts.includes(owner)) {
+    return { action: "keep", owner, reason: "protected account (its own records keep it working; trim by hand once its review ends)" };
+  }
+  const idle = goneOrIdle();
+  if (idle) return idle;
+  if (!ctx.rootReady) {
     return {
-      action: "orphan",
+      action: "keep",
       owner,
-      reason: "the account has no live server or install in flight (its DNS goes with its last server)",
+      reason: "the zone's root wildcard is not in place yet, so this record still resolves the account: create it first (docs/runbooks/final-deploy.md)",
     };
   }
-  if (zone) {
-    const why = supersededReason({ labels, kind, type, content: rec.content, owner, apex }, zone);
-    if (why) return { action: "orphan", owner, reason: why };
-  }
-  return { action: "keep", owner, reason: "account still exists in D1" };
-}
-
-/** Why a record of a still-serving account is redundant, or null. */
-function supersededReason(
-  r: { labels: string[]; kind: "plain" | "wild" | "acme"; type: string; content?: string; owner: string; apex: string },
-  zone: ZoneIndex,
-): string | null {
-  if (r.kind === "acme") return null;
-  const userZone = `${r.owner}.${r.apex}`;
-  if (r.type === "CAA" && r.labels.length === 1) {
-    const covered = zone.has(userZone, "CAA", '0 issue "letsencrypt.org"') || zone.has(userZone, "CAA", '0 issuewild "letsencrypt.org"');
-    if (!covered) return null;
-    if (r.kind === "wild") return "CAA at *.<user> only repeats the one at <user>";
-    if (r.content !== undefined && / iodef /.test(r.content)) return "iodef CAA: Let's Encrypt ignores it";
-    return null;
-  }
-  if ((r.type === "A" || r.type === "AAAA") && r.labels.length === 2 && r.content !== undefined) {
-    const box = `${r.labels[0]}.${userZone}`;
-    if (!zone.has(`*.${userZone}`, r.type, r.content)) return null;
-    if (zone.has(`_acme-challenge.${box}`, "TXT")) return null;
-    return "replaced by the account's wildcard record";
-  }
-  return null;
+  return orphan(
+    "blocks the root wildcard: a record at an account or box name stops it for every name below; the zone wildcard answers this name",
+    "block",
+  );
 }
 
 export interface ServerVerdict {
@@ -339,6 +343,11 @@ export function protectedAccountsFrom(env: ReapEnv): string[] {
 }
 
 export interface PlanDnsEntry extends ReapDnsRecord, DnsVerdict {}
+
+/** The root wildcard's state in a zone listing, against the relay the Worker is configured with. */
+function rootReadyIn(records: readonly ReapDnsRecord[], apex: string, relay: RelayAddress | undefined): boolean {
+  return relay !== undefined && rootWildcardStatus(records, apex, relay).ready;
+}
 export interface PlanServerEntry extends ReapServer, ServerVerdict {}
 
 export interface ReapAccountSummary {
@@ -357,6 +366,8 @@ export interface ReapPlan {
   zoneRecords: number;
   knownAccounts: number;
   protectedAccounts: string[];
+  /** Is `*.<apex>` in the zone and pointing at the relay? Until it is, live accounts' records are kept. */
+  rootWildcardReady: boolean;
   /** False when the UpCloud token is not configured: servers were not looked at. */
   serversChecked: boolean;
   summary: {
@@ -381,13 +392,13 @@ export async function buildPlan(deps: ReapDeps): Promise<ReapPlan> {
   }
   const known = await loadKnownAccounts(deps.db, deps.protectedAccounts, (deps.now ?? Date.now)());
   const records = await deps.dns.listAll();
-  const zone = indexZone(records);
+  const ctx: ClassifyContext = { rootReady: rootReadyIn(records, deps.apex, deps.relay), now: (deps.now ?? Date.now)() };
   const dns: PlanDnsEntry[] = records.map((r) => ({
     id: r.id,
     name: r.name,
     type: r.type,
     ...(r.content !== undefined ? { content: r.content } : {}),
-    ...classifyDnsRecord(r, deps.apex, known, deps.protectedAccounts, zone),
+    ...classifyDnsRecord(r, deps.apex, known, deps.protectedAccounts, ctx),
   }));
   const servers: PlanServerEntry[] = deps.cloud
     ? (await deps.cloud.listServersByLabelKey(REAP_DEMO_LABEL)).map((s) => ({
@@ -426,6 +437,7 @@ export async function buildPlan(deps: ReapDeps): Promise<ReapPlan> {
     version: 1,
     generatedAt: new Date((deps.now ?? Date.now)()).toISOString(),
     apex: deps.apex,
+    rootWildcardReady: ctx.rootReady === true,
     zoneRecords: dns.length,
     knownAccounts: known.names.size,
     protectedAccounts: [...deps.protectedAccounts],
@@ -507,14 +519,14 @@ export async function deleteOne(deps: ReapDeps, body: DeleteOneBody | undefined)
     if (live.name.toLowerCase() !== name.toLowerCase() || live.type.toUpperCase() !== type.toUpperCase()) {
       return { status: 409, body: { error: "the record is not the one in the plan", code: "mismatch" } };
     }
-    // The neighbour-looking rules (superseded records) judge against the zone as it is now.
-    let zone: ZoneIndex;
+    // The root wildcard must be in the zone right now, not as the plan saw it.
+    let ctx: ClassifyContext;
     try {
-      zone = indexZone(await deps.dns.listAll());
+      ctx = { rootReady: rootReadyIn(await deps.dns.listAll(), deps.apex, deps.relay), now: (deps.now ?? Date.now)() };
     } catch (e) {
       return { status: 502, body: { error: errText(e), code: "dns-read-failed", retryable: true } };
     }
-    const verdict = classifyDnsRecord(live, deps.apex, known, deps.protectedAccounts, zone);
+    const verdict = classifyDnsRecord(live, deps.apex, known, deps.protectedAccounts, ctx);
     if (verdict.action !== "orphan") {
       log(`reap refused dns ${live.type} ${live.name}: ${verdict.reason}`);
       return { status: 409, body: { error: `not an orphan: ${verdict.reason}`, code: "not-orphan", reason: verdict.reason } };
@@ -583,6 +595,14 @@ export async function handleReapRoute(
     cloud: opts.makeCloud(env),
     apex: (env.SERVICES_APEX ?? "flagship.services").toLowerCase(),
     protectedAccounts: protectedAccountsFrom(env),
+    ...(env.SERVICES_PASSTHROUGH_IPV4
+      ? {
+          relay: {
+            servicesIpv4: env.SERVICES_PASSTHROUGH_IPV4,
+            ...(env.SERVICES_PASSTHROUGH_IPV6 ? { servicesIpv6: env.SERVICES_PASSTHROUGH_IPV6 } : {}),
+          },
+        }
+      : {}),
     log: (line) => console.log(line),
   };
   try {
