@@ -24,9 +24,14 @@ final class GymSweepSettingsTests: GymSweepCase {
     /// Scroll either way until `el` is on screen.
     @discardableResult
     private func find(_ app: XCUIApplication, _ el: XCUIElement) -> Bool {
-        if el.exists && el.isHittable { return true }
-        if reveal(app, el, tries: 8), el.isHittable { return true }
-        return revealUp(app, el, tries: 12)
+        let found: Bool
+        if el.exists && el.isHittable { found = true }
+        else if reveal(app, el, tries: 8), el.isHittable { found = true }
+        else { found = revealUp(app, el, tries: 12) }
+        // The floating tab bar sits over the bottom rows and swallows a tap
+        // that isHittable still allows: bring the row off the edge.
+        if found { bringToMiddle(app, el) }
+        return found
     }
 
     private func open(_ app: XCUIApplication, row title: String, screen: String,

@@ -15,6 +15,9 @@ public final class PhoneBackupStore: @unchecked Sendable {
         public let createdAt: Int64
         public let bytes: Int64
         public let fileName: String
+        public init(archiveId: String, createdAt: Int64, bytes: Int64, fileName: String) {
+            self.archiveId = archiveId; self.createdAt = createdAt; self.bytes = bytes; self.fileName = fileName
+        }
     }
 
     /// What the phone knows of a server it keeps copies for.

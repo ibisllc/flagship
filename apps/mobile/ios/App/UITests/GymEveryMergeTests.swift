@@ -90,9 +90,8 @@ final class GymEveryMergeTests: XCTestCase {
             "Settings should show the account-security row."
         )
         let signOut = app.buttons["settings-sign-out-btn"]
-        if !signOut.exists {
-            app.swipeUp()
-        }
+        // A List draws rows lazily: scroll until the row is built.
+        for _ in 0..<8 where !signOut.exists { app.swipeUp() }
         XCTAssertTrue(
             signOut.waitForExistence(timeout: 5),
             "Settings should show the tier-2 lock-with-passkey (sign-out) row."
