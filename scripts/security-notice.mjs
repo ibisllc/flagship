@@ -36,6 +36,8 @@
 //   --security-reason <text>  one sentence (required for `required`)
 //   --seq <N>                 default: one above the highest ever signed
 //   --supersede-lock          needed to replace a lock that is still in force with a weaker notice
+//   --allow-unshipped         let a minimum name a webapp build or protocol level that is not in this
+//                             checkout (otherwise refused: nobody could ever satisfy it)
 //   --signing-key <src>       default yubikey-piv:slot=9c (for a drill: file:/path/to/priv-hex)
 //   --path <dir>              maintainers folder (default .maintainers)
 //   --sign                    actually sign and write; omit for a preview
@@ -49,6 +51,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
+  CLIENT_PROTOCOL_LEVEL,
   MAINTAINER_PINNED_MANDATE_HASH,
   SECURITY_NOTICE_MAX_MESSAGE,
   SECURITY_NOTICE_MAX_REASON,
@@ -80,10 +83,10 @@ const VALUE_FLAGS = new Set([
   "message", "event", "from", "until", "platform", "lock-at", "deprecate-protocol",
   "advisory", "security-reason", "seq", "signing-key", "path",
 ]);
-const BOOL_FLAGS = new Set(["sign", "supersede-lock", "help"]);
+const BOOL_FLAGS = new Set(["sign", "supersede-lock", "allow-unshipped", "help"]);
 
 export function parseArgs(argv) {
-  const out = { verb: null, platform: [], sign: false, supersedeLock: false, help: false };
+  const out = { verb: null, platform: [], sign: false, supersedeLock: false, allowUnshipped: false, help: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (!a.startsWith("--")) {
@@ -100,7 +103,7 @@ export function parseArgs(argv) {
     }
     if (BOOL_FLAGS.has(name)) {
       if (value !== undefined) throw new UsageError(`--${name} takes no value`);
-      out[name === "supersede-lock" ? "supersedeLock" : name] = true;
+      out[name.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = true;
     } else if (VALUE_FLAGS.has(name)) {
       if (value === undefined) {
         value = argv[++i];
@@ -161,6 +164,17 @@ export function lintText(text, label) {
   if (text.length > 0 && !/^[A-Z0-9{]/.test(text)) warnings.push(`${label}: start with a capital letter (sentence case)`);
   if (text.length > 0 && !/[.?]$/.test(text)) warnings.push(`${label}: end with a full stop`);
   return { errors, warnings };
+}
+
+/** The webapp shell version this checkout ships (service-worker.js SHELL_VERSION), or 0. */
+export function shippedWebBuild(repo = REPO) {
+  try {
+    const sw = fs.readFileSync(path.join(repo, "apps/web/public/webapp/service-worker.js"), "utf8");
+    const m = /const SHELL_VERSION = "v(\d+)"/.exec(sw);
+    return m ? Number(m[1]) : 0;
+  } catch {
+    return 0;
+  }
 }
 
 // ---- the folder ----------------------------------------------------------------
@@ -281,6 +295,24 @@ export function buildBody(args, { now, root }) {
   }
   if (message.length > SECURITY_NOTICE_MAX_MESSAGE) errors.push(`message is ${message.length} characters; the limit is ${SECURITY_NOTICE_MAX_MESSAGE}`);
   if (reason.length > SECURITY_NOTICE_MAX_REASON) errors.push(`security reason is ${reason.length} characters; the limit is ${SECURITY_NOTICE_MAX_REASON}`);
+
+  if (kind === "update-advisory" || kind === "update-required") {
+    const web = shippedWebBuild(args.repo ?? REPO);
+    const problems = [];
+    for (const [name, m] of Object.entries(platforms)) {
+      if (name === "web" && web > 0 && m.minBuild > web) {
+        problems.push(`web minBuild ${m.minBuild} is above the webapp this checkout ships (${web}): no webapp could ever satisfy it`);
+      }
+      if (m.minProtocol > CLIENT_PROTOCOL_LEVEL) {
+        problems.push(`${name} minProtocol ${m.minProtocol} is above the protocol level this checkout speaks (${CLIENT_PROTOCOL_LEVEL}): no build could ever satisfy it`);
+      }
+    }
+    if (problems.length && !args.allowUnshipped) errors.push(...problems.map((p) => `${p} (--allow-unshipped if the build ships first)`));
+    else warnings.push(...problems);
+    for (const name of ["ios", "android"]) {
+      if (platforms[name]) warnings.push(`${name}: confirm a store build at or above ${platforms[name].minBuild || "the protocol minimum"} is live before this reaches people`);
+    }
+  }
 
   const cur = readCurrent(root);
   if (cur && cur.kind === "update-required" && kind !== "update-required" && now >= cur.validFrom && now < cur.validUntil && !args.supersedeLock) {

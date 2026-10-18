@@ -57,7 +57,8 @@ describe("security-notice body", () => {
   });
 
   it("builds a complete update-required body the protocol accepts", () => {
-    const { body, errors } = sn.buildBody(args(...REQUIRED, "--deprecate-protocol", "1"), { now: NOW, root });
+    // Protocol 2 does not exist in this checkout yet, so the minimum needs the override.
+    const { body, errors } = sn.buildBody(args(...REQUIRED, "--deprecate-protocol", "1", "--allow-unshipped"), { now: NOW, root });
     expect(errors).toEqual([]);
     expect(body.kind).toBe("update-required");
     expect(body.platforms.ios).toEqual({ minBuild: 12, minProtocol: 2 });
@@ -110,6 +111,21 @@ describe("security-notice body", () => {
     expect(sn.buildBody(args("clear"), { now: NOW, root: r }).errors.join(" ")).toMatch(/would unlock everyone/);
   });
 
+  it("refuses a minimum no shipped build could satisfy, unless told", () => {
+    const web = sn.shippedWebBuild();
+    expect(web).toBeGreaterThan(100);
+    const noPlatforms = REQUIRED.filter((x, i) => x !== "--platform" && REQUIRED[i - 1] !== "--platform");
+    const mk = (spec: string, ...extra: string[]) =>
+      sn.buildBody(args(...noPlatforms, "--platform", spec, ...extra), { now: NOW, root });
+    expect(mk(`web:${web}`).errors).toEqual([]);
+    expect(mk(`web:${web + 1}`).errors.join(" ")).toMatch(/no webapp could ever satisfy it/);
+    expect(mk(`web:${web}:99`).errors.join(" ")).toMatch(/no build could ever satisfy it/);
+    const forced = mk(`web:${web + 1}`, "--allow-unshipped");
+    expect(forced.errors).toEqual([]);
+    expect(forced.warnings.join(" ")).toMatch(/no webapp could ever satisfy it/);
+    expect(mk("ios:12").warnings.join(" ")).toMatch(/confirm a store build/);
+  });
+
   it("warns that a grace window keeps the old protocol alive", () => {
     const { warnings } = sn.buildBody(args(...REQUIRED), { now: NOW, root });
     expect(warnings.join(" ")).toMatch(/keeps the old protocol alive/);
@@ -128,7 +144,7 @@ describe("security-notice signing", () => {
       sign: (m: Uint8Array) => Buffer.from(ed.sign(m, seed)).toString("hex"),
     };
     const root = tmpRoot();
-    const { body } = sn.buildBody(args(...REQUIRED, "--deprecate-protocol", "1"), { now: NOW, root });
+    const { body } = sn.buildBody(args(...REQUIRED, "--deprecate-protocol", "1", "--allow-unshipped"), { now: NOW, root });
     const notice = await sn.signAndWrite({ body, signer, root, authorityKeys: [pub] });
     const onDisk = JSON.parse(fs.readFileSync(path.join(root, "notices", "current.json"), "utf8"));
     expect(onDisk).toEqual(JSON.parse(JSON.stringify(notice)));
