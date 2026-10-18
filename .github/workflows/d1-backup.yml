@@ -2,7 +2,7 @@ name: D1 backup
 
 # The production database's backup. It used to be a Worker cron (89 D1 calls, 45 ms
 # of CPU), which cannot finish on the Workers Free plan (50 subrequests, 10 ms), so
-# it lives here: `wrangler d1 export` -> gpg-encrypt to the security@ key -> R2.
+# it lives here: `wrangler d1 export` -> gzip -> age-encrypt to the owner's key -> R2.
 # docs/runbooks/d1-restore.md has the restore; scripts/d1-restore-drill.sh rehearses it.
 #
 # Owner prerequisites (docs/runbooks/final-deploy.md step 1b), none of them secret
@@ -10,6 +10,9 @@ name: D1 backup
 #   - repo secrets CLOUDFLARE_API_TOKEN (D1 Edit + Workers R2 Storage Edit on this
 #     account) and CLOUDFLARE_ACCOUNT_ID
 #   - the private R2 bucket flagship-d1-backups and its 30-day rule on d1/daily/
+#   - the owner's age PUBLIC key in .maintainers/backup-recipient.pub, replacing the
+#     placeholder (the backup refuses to run with the placeholder; the private key
+#     stays offline)
 #
 # Two schedules: the daily backup, and a freshness check every six hours that fails
 # (GitHub emails the owner a failed scheduled run) when the newest backup is older
@@ -48,6 +51,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
+      - name: Install age
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
       - name: Secrets are present
         run: |
           test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::repo secret CLOUDFLARE_API_TOKEN is not set (docs/runbooks/final-deploy.md step 1b)"; exit 1; }

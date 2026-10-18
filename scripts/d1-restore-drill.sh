@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Rehearse the D1 restore end to end against LOCAL databases, with a throwaway
-# gpg key standing in for the YubiKey:
+# age key standing in for the offline one:
 #
 #   migrate A -> seed rows -> d1-backup.sh --local (export + encrypt)
 #     -> decrypt -> import into an EMPTY database B -> compare A and B row for row
@@ -16,16 +16,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 W="$(mktemp -d)"
 trap 'rm -rf "$W"' EXIT
-export GNUPGHOME="$W/gnupg"
-mkdir -m 700 "$GNUPGHOME"
 WRANGLER=(npx --yes wrangler@4.151.0)
 
-echo "== throwaway key"
-gpg --batch --quiet --pinentry-mode loopback --passphrase '' \
-  --quick-generate-key "drill <drill@example.invalid>" ed25519 cert never
-FPR="$(gpg --batch --with-colons --list-keys | awk -F: '$1=="fpr"{print $10; exit}')"
-gpg --batch --quiet --pinentry-mode loopback --passphrase '' --quick-add-key "$FPR" cv25519 encr never
-gpg --batch --armor --export "$FPR" > "$W/recipient.asc"
+echo "== throwaway age key"
+age-keygen -o "$W/key.txt" 2>/dev/null
+age-keygen -y "$W/key.txt" > "$W/recipient.pub"
 
 # Two scratch projects: wrangler keeps local D1 state next to the config it reads.
 for P in A B; do
@@ -48,13 +43,13 @@ wr A d1 execute flagship-state --local --command \
   "INSERT INTO usernames (username, irk_pub_hex, claimed_at) VALUES ('alice','aa',1),('bob','bb',2),('o''brien','cc',3);" >/dev/null
 
 echo "== back up A"
-D1_PROJECT_DIR="$W/A" D1_BACKUP_KEY_FILE="$W/recipient.asc" D1_BACKUP_FPR="$FPR" \
+D1_PROJECT_DIR="$W/A" D1_BACKUP_RECIPIENT_FILE="$W/recipient.pub" \
   bash "$ROOT/scripts/d1-backup.sh" --local "$W/out"
-CT="$(ls "$W"/out/*.gpg)"
+CT="$(ls "$W"/out/*.age)"
 node "$ROOT/scripts/d1-backup-freshness.mjs" "$W/out/latest.json" --max-hours 1 >/dev/null
 
 echo "== decrypt and import into an empty database B"
-gpg --batch --quiet --pinentry-mode loopback --passphrase '' --output "$W/restored.sql" --decrypt "$CT"
+age -d -i "$W/key.txt" "$CT" | gunzip > "$W/restored.sql"
 wr B d1 execute flagship-state --local --file "$W/restored.sql" >/dev/null
 
 echo "== compare"

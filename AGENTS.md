@@ -65,7 +65,7 @@ npx vitest run                                  # everything (~3 min)
 npx tsc -b                                      # typecheck the whole tree
 
 # Deploy
-npx tsc -b && (cd apps/com && npm run deploy)   # Worker — it bundles the BUILT dist/ of the packages in scripts/com-bundled-packages.sh. Use `npm run deploy` (NOT `wrangler deploy` directly): its `predeploy` rebuilds those packages from an empty dist/ (scripts/clean-build-com.sh — `tsc -b` alone never deletes a removed module's output) and then runs the guard (scripts/predeploy-com.sh — route-safety + dist-freshness + orphaned-output + static-asset list + migration drift), and after flagship-com deploys the webapp Worker (scripts/deploy-webapp-static.sh)
+npx tsc -b && (cd apps/com && npm run deploy)   # Worker — it bundles the BUILT dist/ of the packages in scripts/com-bundled-packages.sh. Use `npm run deploy` (NOT `wrangler deploy` directly): its `predeploy` rebuilds those packages from an empty dist/ (scripts/clean-build-com.sh — `tsc -b` alone never deletes a removed module's output) and then runs the guard (scripts/predeploy-com.sh — route-safety + dist-freshness + orphaned-output + static-asset list + migration drift), and deploys the webapp Worker first (scripts/deploy-webapp-static.sh), then flagship-com
 export PATH="$HOME/.fly/bin:$PATH"
 flyctl deploy --remote-only --strategy=immediate --yes -a flagship-services
 
@@ -307,15 +307,16 @@ of the last check here: **not yet checked**.
   update was ~190 Worker requests per user and is now 0; `flagship-com` runs
   `run_worker_first = ["/*"]` minus 46 listed static files (a page view of `/` went
   10 to 1), guarded by `scripts/predeploy-com.sh` and `apps/com/test/staticAssets.test.ts`.
-  **First deploy: run `bash scripts/deploy-webapp-static.sh` BEFORE `npm run deploy`**
-  (`npm run deploy` now runs both afterwards); `final-deploy.md` step 7. The Worker's
+  `npm run deploy` in `apps/com` now deploys the webapp Worker first, then
+  flagship-com (the first run moves the two custom domains; wrangler asks, answer
+  yes); `final-deploy.md` step 7. The Worker's
   crons are split into budgeted ticks (`cronPlan.ts`, `cronBudget.test.ts`; the 6-hourly
   one made 230 subrequests and 36 ms); the **D1 backup and the model-table refresh run in
-  GitHub Actions** (`d1-backup.yml`: daily, gpg-encrypted to the security@ key, R2
+  GitHub Actions** (`d1-backup.yml`: daily, age-encrypted to the key in `.maintainers/backup-recipient.pub` (placeholder until the owner replaces it), R2
   `flagship-d1-backups`, fails when over 36 h old; `docs/runbooks/d1-restore.md`;
   `model-capabilities.yml`). **Owner, before the first deploy** (`final-deploy.md` step 1b):
   create the bucket, add the repo secrets `CLOUDFLARE_API_TOKEN` and
-  `CLOUDFLARE_ACCOUNT_ID`, run the backup once. Without it the deploy removes the only
+  `CLOUDFLARE_ACCOUNT_ID`, make the age key and commit its public half, run the backup once. Without it the deploy removes the only
   backup. Open: the adapter publish takes 4 new files a day on Free; the gym Worker
   still serves everything itself (the static-only path is covered by tests and a local
   workerd smoke, not the gym). Next: gate the

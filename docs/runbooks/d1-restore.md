@@ -17,13 +17,13 @@ The production database is `flagship-state` (D1). Two things protect it:
 ```
 wrangler d1 export flagship-state --remote      (the platform dumps; no Worker CPU)
   -> refuse a dump with fewer than 60 CREATE TABLEs or no rows
-  -> gpg --encrypt to security@flagshipserver.com (fingerprint pinned in the script)
-  -> r2://flagship-d1-backups/d1/daily/flagship-state-<UTC stamp>.sql.gpg
+  -> gzip, then age-encrypt to the public key in .maintainers/backup-recipient.pub
+  -> r2://flagship-d1-backups/d1/daily/flagship-state-<UTC stamp>.sql.gz.age
   -> read it back and compare SHA-256
   -> r2://flagship-d1-backups/latest.json    {takenAt, key, bytes, sha256, tables, recipient}
 ```
 
-The first run of each month also copies the file to `d1/monthly/YYYY-MM.sql.gpg`.
+The first run of each month also copies the file to `d1/monthly/YYYY-MM.sql.gz.age`.
 A second schedule (every 6 hours) fetches `latest.json` and **fails the workflow when
 `takenAt` is more than 36 hours old** or the file is missing; GitHub emails the owner a
 failed scheduled run. That check also catches the workflow being disabled (GitHub
@@ -33,13 +33,13 @@ Why it is not a Worker cron any more: the old one made one D1 call per table (89
 spent about 45 ms of CPU. The Workers Free plan allows 50 subrequests and 10 ms, so it
 never finished (`docs/runbooks/workers-cpu-budget.md` "Crons").
 
-Why gpg to the security@ key and not age: the public key is already in the repo
-(`apps/web/public/.well-known/pgp-key.txt`, fingerprint
-`D96D 675D B03E 3F3B BC88 7030 2308 936D 2154 96D0`) and its private half exists only
-on the owner's two YubiKeys, so there is no new key to generate, store or lose, and
-nothing in GitHub or R2 can read a backup. The cost is that a restore needs a YubiKey
-and `gpg` (the encryption subkey, `93E72BB8872A57D9`, is on the cards). The key expires
-2028-10-07; renew it before then and update `D1_BACKUP_FPR` if the fingerprint changes.
+Why age: one small public key in the repo (`.maintainers/backup-recipient.pub`), its
+private identity file kept offline by the owner, nothing else to trust. Until the
+owner replaces the placeholder in that file the backup refuses to run (loudly: the
+workflow goes red). **Keep the private file safe in two places: without it no backup
+can be read.** (An alternative with no new key is to encrypt to the published
+security@flagshipserver.com PGP key, whose private half is on the YubiKeys; it needs a
+YubiKey and `gpg` to restore. Not chosen: the release runner and this runbook assume age.)
 
 The plaintext SQL exists only in the runner's temp directory for the length of the
 run.
@@ -53,6 +53,14 @@ npx wrangler r2 bucket lifecycle add flagship-d1-backups expire-daily d1/daily/ 
 npx wrangler r2 bucket lifecycle list flagship-d1-backups
 ```
 
+Then generate the backup key pair once, offline (`brew install age`):
+
+```sh
+age-keygen -o d1-backup-key.txt     # prints: Public key: age1...   The FILE is the private identity.
+```
+
+Store `d1-backup-key.txt` in two offline places, put the single `age1...` line in
+`.maintainers/backup-recipient.pub` (replacing the whole placeholder file) and commit it.
 Then, in the GitHub repo settings (Secrets and variables > Actions), add
 `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`. Make the token with
 dashboard > My Profile > API Tokens > Create Custom Token, restricted to this one
@@ -96,19 +104,19 @@ has had no migrations run. Restoring into the live database would fail on the fi
    ```sh
    mkdir -p ~/d1-restore && cd ~/d1-restore
    npx wrangler r2 object get flagship-d1-backups/latest.json --file latest.json --remote
-   cat latest.json                       # {"takenAt": ..., "key": "d1/daily/....sql.gpg", "sha256": ...}
-   npx wrangler r2 object get "flagship-d1-backups/$(jq -r .key latest.json)" --file dump.sql.gpg --remote
-   shasum -a 256 dump.sql.gpg            # must equal latest.json's sha256
+   cat latest.json                       # {"takenAt": ..., "key": "d1/daily/....sql.gz.age", "sha256": ...}
+   npx wrangler r2 object get "flagship-d1-backups/$(jq -r .key latest.json)" --file dump.sql.gz.age --remote
+   shasum -a 256 dump.sql.gz.age           # must equal latest.json's sha256
    ```
 
    An older day: `npx wrangler r2 object list` does not exist in wrangler 4; list the
    bucket in the dashboard (R2 > flagship-d1-backups > `d1/daily/` or `d1/monthly/`) and
    fetch that key.
 
-2. Decrypt with a YubiKey (touch it when it blinks):
+2. Decrypt with the offline identity file:
 
    ```sh
-   gpg --decrypt dump.sql.gpg > dump.sql
+   age -d -i d1-backup-key.txt dump.sql.gz.age | gunzip > dump.sql
    grep -c '^CREATE TABLE' dump.sql      # about 89
    ```
 
@@ -143,12 +151,12 @@ device paired, a rank order) is gone and must be redone.
 ## Rehearse it
 
 `bash scripts/d1-restore-drill.sh` runs the whole procedure on local databases with a
-throwaway gpg key standing in for the YubiKey: migrate database A, seed rows
+throwaway age key standing in for the offline one: migrate database A, seed rows
 (including a name with a quote), `d1-backup.sh --local` (export + sanity checks +
-encrypt), decrypt, import into an empty database B, then compare A and B row for row
+gzip + encrypt), decrypt, import into an empty database B, then compare A and B row for row
 and table for table. Last run: 89 tables, 92 rows, identical. Run it after changing
 `d1-backup.sh` or upgrading wrangler. `scripts/d1-backup.test.ts` pins the rest
-(the freshness rule, the fingerprint, the secrets the workflow may name).
+(the freshness rule, the placeholder refusal, the secrets the workflow may name).
 
 ## The old Worker-era dumps
 

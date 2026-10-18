@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "predeploy": "bash ../../scripts/clean-build-com.sh && FLAGSHIP_CHECK_PROD_MIGRATIONS=1 bash ../../scripts/predeploy-com.sh",
-    "deploy": "wrangler deploy && bash ../../scripts/deploy-webapp-static.sh",
+    "deploy": "bash ../../scripts/deploy-webapp-static.sh && wrangler deploy",
     "test": "vitest run --dir test"
   },
   "dependencies": {

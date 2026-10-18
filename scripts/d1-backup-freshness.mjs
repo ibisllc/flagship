@@ -13,7 +13,7 @@ export function checkFreshness(text, nowMs, maxHours = 36) {
   }
   const takenMs = Date.parse(j?.takenAt ?? "");
   if (!Number.isFinite(takenMs)) return { ok: false, reason: "latest.json has no takenAt" };
-  if (typeof j.key !== "string" || !/^d1\/daily\/.+\.sql\.gpg$/.test(j.key)) return { ok: false, reason: "latest.json names no backup object" };
+  if (typeof j.key !== "string" || !/^d1\/daily\/.+\.sql\.gz\.age$/.test(j.key)) return { ok: false, reason: "latest.json names no backup object" };
   if (!(j.bytes > 0)) return { ok: false, reason: "latest.json says the backup is empty" };
   const ageH = (nowMs - takenMs) / 3_600_000;
   if (ageH > maxHours) return { ok: false, reason: `the newest backup is ${ageH.toFixed(1)} hours old (limit ${maxHours}): ${j.key}`, ageH };

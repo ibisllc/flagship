@@ -157,12 +157,13 @@ a secret in the repo; you add two values in GitHub.
 3. **Add the two GitHub repository secrets** (repo > Settings > Secrets and variables >
    Actions > New repository secret): `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
    Do not paste either into a file in the repo.
-4. **The backup is encrypted to the security@flagshipserver.com key** that is already
-   published (`apps/web/public/.well-known/pgp-key.txt`, fingerprint
-   `D96D 675D B03E 3F3B BC88 7030 2308 936D 2154 96D0`, expires 2028-10-07; the private
-   half stays on your two YubiKeys). Nothing to generate or replace. You need a YubiKey
-   and `gpg` only to restore. (We chose this over `age` because no new key has to be
-   created, stored or lost.)
+4. **Make the backup's encryption key and commit its public half.** On an offline Mac:
+   `brew install age && age-keygen -o d1-backup-key.txt`. It prints `Public key: age1...`.
+   Store `d1-backup-key.txt` (the PRIVATE identity) in two offline places; without it no
+   backup can be read. Replace the whole of `.maintainers/backup-recipient.pub` with that
+   single `age1...` line and commit it to main (the file in the repo is a placeholder,
+   and the backup, the workflow and `scripts/release.sh` all refuse it). The public key
+   alone decrypts nothing.
 5. **Run the backup once and verify the object**: Actions > D1 backup > Run workflow
    (leave "backup"). It exports, encrypts, uploads, reads the object back and checks the
    result is fresh. Then:
@@ -172,7 +173,7 @@ a secret in the repo; you add two values in GitHub.
    ```
 
    shows `takenAt` just now, `tables` about 89, a `key` under `d1/daily/`. Optionally
-   rehearse the restore: `bash scripts/d1-restore-drill.sh` (local, throwaway key;
+   rehearse the restore: `bash scripts/d1-restore-drill.sh` (local, throwaway age key; needs `age`;
    `docs/runbooks/d1-restore.md` has the real steps).
 6. **Run "Model capability table" once** (Actions > Model capability table > Run workflow);
    `model_capabilities` then has about 350 rows (`GET /api/inference/capabilities`).
@@ -494,24 +495,22 @@ to the prod zone):**
 
 `.com` is now two Workers: `flagship-com` (the API, the marketing site, recovery., boot.,
 voi.ci, www.) and `flagship-webapp` (the static-only project that serves `webapp.` and
-`remote.flagshipserver.com`; `apps/webapp-static`). `npm run deploy` in `apps/com` deploys
-`flagship-com` and then builds and deploys `flagship-webapp` (`scripts/deploy-webapp-static.sh`).
+`remote.flagshipserver.com`; `apps/webapp-static`). `npm run deploy` in `apps/com` runs
+the guards, then builds and deploys `flagship-webapp` (`scripts/deploy-webapp-static.sh`),
+**then** `flagship-com`. That order matters once: `flagship-com` no longer lists the
+`webapp.` and `remote.` custom domains, and `flagship-webapp` does, so the first
+`flagship-webapp` deploy takes the two hostnames over with no gap. Run it in a terminal:
+wrangler asks "Custom Domains already exist for these domains ... Update them to point to
+this script instead?" and you answer yes. (Deploying `flagship-com` alone first would
+detach the hostnames and leave the webapp unreachable until `flagship-webapp` is
+deployed.)
 
 ```sh
 cd ~/flagship-deploy
 git fetch origin && git checkout --detach origin/main && npm ci && npx tsc -b
 cd apps/com
-npm run deploy        # predeploy: clean rebuild of the bundled packages, route-safety, dist freshness, orphaned output, static-asset guard, prod-migration drift; then wrangler deploy; then the webapp Worker
+npm run deploy        # predeploy: clean rebuild of the bundled packages, route-safety, dist freshness, orphaned output, static-asset guard, prod-migration drift; then the webapp Worker; then flagship-com
 ```
-
-**First time only: the move of `webapp.` and `remote.`.** `flagship-com` no longer lists
-those two custom domains and `flagship-webapp` does. Deploy `flagship-webapp` **first**:
-`bash scripts/deploy-webapp-static.sh` from the repo root (run it in a terminal: wrangler
-asks "Custom Domains already exist for these domains ... Update them to point to this
-script instead?"; answer yes). The two hostnames switch to the new Worker in one step,
-with no gap. Then `npm run deploy` as above. Doing it the other way round detaches the
-hostnames from `flagship-com` and leaves the webapp unreachable until `flagship-webapp`
-is deployed. After that, plain `npm run deploy` is enough every time.
 
 Rollback of the move: put the two `custom_domain` lines for `webapp.` and `remote.` back
 in the `routes` array of `apps/com/wrangler.toml` (git history has them) and deploy
