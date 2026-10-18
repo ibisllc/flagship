@@ -26,6 +26,7 @@ import { getSession } from "./state.js";
 import { controlApex } from "./apex.js";
 import { accountReadFetch } from "./accountRead.js";
 import { rememberServerOrder } from "./serverOrder.js";
+import { isAccountGone } from "./accountGone.js";
 
 /** Jitter (± ms) applied to every reconnect so a fleet of tabs that all time
  *  out together don't reconnect in lockstep (thundering herd). */
@@ -256,6 +257,7 @@ export function createLiveSync(deps = {}) {
 function defaultActive() {
   try {
     if (typeof document !== "undefined" && document.hidden) return false;
+    if (isAccountGone()) return false;
     return !!getSession()?.username;
   } catch {
     return false;

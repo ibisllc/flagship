@@ -21,6 +21,7 @@ import { serverTrust } from "./serverTrust.js";
 import { controlApex, controlHost } from "./apex.js";
 import { throwIfRateLimited } from "./rateLimited.js";
 import { UpdateRequiredError, isUpdateLocked, updateLockAllows } from "./updateLock.js";
+import { answerIfAccountGone, noteAccountGoneResponse } from "./accountGone.js";
 
 // Back-compat re-export: the control apex used to be a baked literal here.
 // It is now derived (lib/apex.js — origin-driven, prod-default), so this
@@ -106,7 +107,10 @@ function lockRequest(input, init, url, controlHost) {
  * per-file call-sites (lib/leases.js, recovery.js, …) and any future one
  * without each having to import comFetch. The blessing probe is exempt so
  * trust can always be (re)established. A rate-limited `.com` answer rejects
- * with a RateLimitedError, so every screen's error path shows the wait.
+ * with a RateLimitedError, so every screen's error path shows the wait. A
+ * `404 account-not-found` for this browser's own account flips the "account
+ * was removed" state (lib/accountGone.js) and later calls naming it are
+ * answered locally.
  * Idempotent.
  */
 export function installComFetchGuard() {
@@ -127,8 +131,16 @@ export function installComFetchGuard() {
     if (isUpdateLocked() && !updateLockAllows(lockRequest(input, init, url, com))) {
       throw new UpdateRequiredError();
     }
+    if (com) {
+      // An account that was removed answers locally: no poller keeps asking.
+      const goneAnswer = answerIfAccountGone(url);
+      if (goneAnswer) return goneAnswer;
+    }
     const resp = await real(input, init);
-    if (com) await throwIfRateLimited(resp);
+    if (com) {
+      await throwIfRateLimited(resp);
+      await noteAccountGoneResponse(url, resp);
+    }
     return resp;
   };
   guarded.__flagshipTrustGuard = true;

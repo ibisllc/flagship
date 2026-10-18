@@ -12,6 +12,7 @@
 // like ToastCenter.publish. The public API — `toast(text, kind)` — is unchanged.
 
 import { TOAST_ICONS } from "./icons.js";
+import { isAccountGone } from "./accountGone.js";
 
 const DISPLAY_MS = 3000;
 
@@ -39,6 +40,9 @@ export function enqueueToast(queue, text, kind) {
 
 export function toast(text, kind) {
   if (typeof document === "undefined") return;
+  // Once the account is gone the full-screen "removed" state says it; a
+  // failing poll must not stack error toasts behind it.
+  if (kind === "err" && isAccountGone()) return;
   // Dedupe + enqueue; a dropped duplicate doesn't disturb what's on screen.
   const added = enqueueToast(toastQueue, text, kind);
   if (!added) return;

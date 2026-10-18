@@ -35,6 +35,7 @@ import {
 import { currentPodFqdn, getPodBaseUrl } from "./lib/api.js";
 import { installComFetchGuard } from "./lib/comFetch.js";
 import { initNoticeUi } from "./lib/noticeUi.js";
+import { initAccountGoneUi } from "./lib/accountGoneUi.js";
 import { startSecurityNoticePoller } from "./lib/securityNotice.js";
 import { applyCompanionUiRestrictions, installCompanionUiRestrictions } from "./lib/companionGuard.js";
 import { applyDemoSettingsRestrictions, isDemoProfile } from "./lib/demoAccount.js";
@@ -494,6 +495,9 @@ async function boot() {
   // reason. Mounted before anything else can render, on every surface; it
   // fails open, so a failure here never stops the app.
   try { initNoticeUi(); startSecurityNoticePoller(); } catch { /* best-effort */ }
+  // "This account was removed" (docs/account-gone.md): when .com says this
+  // browser's own account no longer exists, a full-screen state takes over.
+  try { initAccountGoneUi(); } catch { /* best-effort */ }
   // P12 — auto-migrate legacy single-profile localStorage into the new
   // per-profile namespace. Idempotent; gated by `flagship.profiles.migrated.v2`.
   try { migrateProfilesStore(); } catch { /* swallow — best-effort */ }

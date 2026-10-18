@@ -20,6 +20,7 @@ import { isCompanionProfile } from "./companionGuard.js";
 import { isDemoProfile } from "./demoAccount.js";
 import { getActiveProfile } from "./profiles.js";
 import { getSession, onSessionLock } from "./state.js";
+import { answerIfAccountGone, noteAccountGoneResponse } from "./accountGone.js";
 import { bytesToHex, deriveAccountDeviceKeyFromSeed, deriveIrkFromSeed, signWithIrk } from "../keystore.js";
 
 export const ACCOUNT_READ_TOKEN_LABEL = "account-read-token";
@@ -82,7 +83,9 @@ export async function accountReadFetch(url, init = {}, deps = {}) {
     });
   }
   const username = accountReadUsername(url);
-  if (!username || isDemoProfile(profile)) return f(url, init);
+  const goneAnswer = username ? answerIfAccountGone(url) : null;
+  if (goneAnswer) return goneAnswer;
+  if (!username || isDemoProfile(profile)) return noted(url, await f(url, init));
   let entry = await tokenFor(username, deps, false);
   let r = await f(url, withToken(init, entry?.token));
   if (r.status === 401 && canMint(username, deps)) {
@@ -92,6 +95,12 @@ export async function accountReadFetch(url, init = {}, deps = {}) {
   }
   if (r.status === 401) setPaused(true);
   else if (r.ok) setPaused(false);
+  return noted(url, r);
+}
+
+/** A removed account answers 404 account-not-found: note it (lib/accountGone.js). */
+async function noted(url, r) {
+  await noteAccountGoneResponse(url, r);
   return r;
 }
 

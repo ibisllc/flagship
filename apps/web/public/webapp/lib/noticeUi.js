@@ -168,7 +168,7 @@ function paintLock(notice) {
   });
 }
 
-const KEEP_LIVE = new Set(["update-lock", "toast", "flagship-modal-host"]);
+const KEEP_LIVE = new Set(["update-lock", "account-gone", "toast", "flagship-modal-host"]);
 
 function setPageInert(on) {
   for (const child of Array.from(document.body.children)) {

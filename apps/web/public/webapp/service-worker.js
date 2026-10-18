@@ -326,7 +326,11 @@
 //  v144: security notices: a signed "we will update" banner, and the full-screen
 //       "Update required" lock for a security reason (lib/securityNotice.js,
 //       lib/noticeUi.js, lib/updateLock.js, lib/buildInfo.js).
-const SHELL_VERSION = "v144";
+//  v145: "This account was removed": a signed-in browser whose account no
+//       longer exists (404 account-not-found) shows a full-screen state with
+//       Create a new account / Remove it from this browser, and stops polling
+//       (lib/accountGone.js, lib/accountGoneUi.js).
+const SHELL_VERSION = "v145";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -455,6 +459,8 @@ const OPTIONAL_SHELL = [
   "/lib/maintainerTrust.js",
   "/lib/modal.js",
   "/lib/lockSweep.js",
+  "/lib/accountGone.js",
+  "/lib/accountGoneUi.js",
   "/lib/securityNotice.js",
   "/lib/noticeUi.js",
   "/lib/updateLock.js",
