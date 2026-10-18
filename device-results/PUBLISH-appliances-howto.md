@@ -1,4 +1,4 @@
-# Publishing the rebuilt VM appliances (owner steps), 2026-10-18
+# Publishing the rebuilt VM appliances, 2026-10-18 (reference; the handoff to the lead agent is HANDOFF-lead-publish-appliances-2026-10-18.md)
 
 The product fixes are on `main`. The images below are built from `main`; nothing is published until you run these steps (needs your wrangler login + R2 access, which the Windows agent does not have).
 
