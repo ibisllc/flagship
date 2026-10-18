@@ -33,6 +33,7 @@ import { buildRestoreWait, type RestoreWait } from "../../src/serverArchive/rest
 import { AppCopyOps } from "../../src/appCopy/ops.js";
 import { DataProvisioner, InMemoryFilesAdmin, InMemoryPostgresAdmin } from "../../src/dataLayer/index.js";
 import { ServicePlatform } from "../../src/servicePlatform.js";
+import { InMemoryAppPullStateStore } from "../../src/updateClient.js";
 import { AppRunner, type CommandRunner } from "../../src/serviceRunner.js";
 import { InMemoryAppEnvStore } from "../../src/serviceEnvStore.js";
 import { buildServerArchiveService, parseRange, ARCHIVE_PATH, DOWNLOAD_PATH, RESTORE_PATH } from "../../src/serverArchive/service.js";
@@ -886,5 +887,151 @@ describe("the daemon's HTTP writer", () => {
     const raw = Buffer.concat(out).toString();
     expect(raw).toContain("Content-Length: 5");
     expect(raw.endsWith("\r\n\r\n")).toBe(true);
+  });
+});
+
+describe("If we are ever forced to cut you off: a backup moves to a brand-new account", () => {
+  const ownerB = deriveIRK({ seed: new Uint8Array(32).fill(77) });
+  const UMK_B = { seed: new Uint8Array(32).fill(78) };
+  const DST_B = "fresh.sam.flagship.services";
+
+  /** Account B's new server: host "sam", with the pull-state store a real box wires. */
+  async function accountB(w: World) {
+    const provisioner = new DataProvisioner({ postgres: new InMemoryPostgresAdmin(), files: new InMemoryFilesAdmin(), nameKey: "b".repeat(40) });
+    const pulls: Array<{ serviceId: string; canonicalUrl: string }> = [];
+    const pullState = new InMemoryAppPullStateStore();
+    const platform = new ServicePlatform({
+      host: { username: "sam", irkPub: ownerB.publicKey },
+      hostIdentityPub: dstBox.boxPublicKey(),
+      swk: swkOps(new Uint8Array(32).fill(1)),
+      appRunner: new AppRunner({ run: async () => {}, capture: async () => ({ stdout: "", stderr: "" }) }),
+      dataProvisioner: provisioner,
+      startCheck: async () => ({ ok: true }),
+      pullStateStore: pullState,
+      cloneService: async ({ serviceId, canonicalUrl }) => {
+        pulls.push({ serviceId, canonicalUrl });
+        return { currentTip: "deadbeef" };
+      },
+    });
+    const ops = fakeOps();
+    const env = new InMemoryAppEnvStore();
+    const clones = join(w.dir, "b-clones");
+    const service = buildServerArchiveService({
+      dir: join(w.dir, "b-archives"),
+      uploadDir: join(w.dir, "b-upload"),
+      wait: await (async () => {
+        const wait = buildRestoreWait({ path: join(w.dir, "b-wait.json"), donePath: join(w.dir, "b-done.json"), serverDomain: DST_B, ownerIrkPub: ownerB.publicKey, username: "sam" });
+        await wait.load();
+        return wait;
+      })(),
+      serverSettings: async () => ({ bootUnlockMode: "approve", diskEncryption: "luks" }),
+      build: { serverFqdn: DST_B, apps: () => [], containerName: () => "", ops: ops.ops, envStore: env, access: null, accessList: null },
+      restore: {
+        serverFqdn: DST_B,
+        platform,
+        dataProvisioner: provisioner,
+        ops: ops.ops,
+        signInstall: (r) => dstBox.signInstallService(r),
+        envStore: env,
+        access: null,
+        egress: null,
+        sourceDir: clones,
+        buildImage: async (a) => {
+          await writeSourceTree(a.contextDir, a.files, { binaries: a.binaries });
+          ops.images.add(a.image);
+          return { ok: true as const };
+        },
+        pullImage: async () => {},
+      },
+      freeBytes: async () => 1e12,
+    });
+    return { platform, pulls, pullState, env, service, clones, ops };
+  }
+
+  async function adopt(b: Awaited<ReturnType<typeof accountB>>, file: Buffer, w: World) {
+    const wait = buildRestoreWait({ path: join(w.dir, "b2-wait.json"), donePath: join(w.dir, "b2-done.json"), serverDomain: DST_B, ownerIrkPub: ownerB.publicKey, username: "sam" });
+    await wait.load();
+    const order: ServerRestoreOrder = { serverDomain: DST_B, archiveId: ARCHIVE_ID, bytes: file.length, sha256: createHash("sha256").update(file).digest("hex"), issuedAt: Date.now() };
+    const signatureHex = Buffer.from(signServerRestoreOrder(order, ownerB)).toString("hex");
+    expect(await wait.adoptFromPairingJson(JSON.stringify({ request: {}, signature: "", restore: { order, signatureHex } }))).toBe(true);
+    return wait;
+  }
+
+  it("opens with the passcode only, and the new account's key does not open the account slot", async () => {
+    const w = await world();
+    await backUp(w);
+    const text = String((await call(w.sourceService, "GET", `${ARCHIVE_PATH}/backup-file`)).body);
+    const f = parseBackupFile(text);
+    expect(openBackupWithAccountKey(f, deriveServerArchiveKey(UMK_B, ARCHIVE_ID))).toBeNull();
+    expect(Buffer.from(openBackupWithPasscode(f, PASSCODE).contentKey)).toEqual(CONTENT_KEY);
+  });
+
+  it("restores the apps as the new account's own: new creator, no pull from the old name's home", async () => {
+    const w = await world();
+    const file = await backUp(w);
+    const text = String((await call(w.sourceService, "GET", `${ARCHIVE_PATH}/backup-file`)).body);
+    // The phone opens the file with the passcode (the old account is gone) and sends the key it got.
+    const key = Buffer.from(openBackupWithPasscode(parseBackupFile(text), PASSCODE).contentKey).toString("hex");
+
+    const b = await accountB(w);
+    // Both sources (a copy held on the phone, a .flagship file picked from storage) arrive as the same chunked upload.
+    const waitB = await adopt(b, file, w);
+    const svc = buildServerArchiveService({
+      dir: join(w.dir, "b3-archives"),
+      uploadDir: join(w.dir, "b3-upload"),
+      wait: waitB,
+      serverSettings: async () => ({ bootUnlockMode: "approve", diskEncryption: "luks" }),
+      build: { serverFqdn: DST_B, apps: () => [], containerName: () => "", ops: b.ops.ops, envStore: b.env, access: null, accessList: null },
+      restore: {
+        serverFqdn: DST_B,
+        platform: b.platform,
+        dataProvisioner: null,
+        ops: b.ops.ops,
+        signInstall: (r) => dstBox.signInstallService(r),
+        envStore: b.env,
+        access: null,
+        egress: null,
+        sourceDir: b.clones,
+        buildImage: async (a) => {
+          await writeSourceTree(a.contextDir, a.files, { binaries: a.binaries });
+          b.ops.images.add(a.image);
+          return { ok: true as const };
+        },
+        pullImage: async () => {},
+      },
+      freeBytes: async () => 1e12,
+    });
+    await upload(svc, file);
+    expect((await call(svc, "POST", `${RESTORE_PATH}/commit`, { key })).status).toBe(202);
+    await svc.settle();
+
+    const view = asJson(await call(svc, "GET", RESTORE_PATH));
+    expect(view.restore).toMatchObject({ state: "done", apps: [{ serviceId: "sam--notes", name: "notes", state: "done" }] });
+    expect(view.waiting).toBeNull();
+
+    // Its own app: the new account is the creator, the old id is nowhere.
+    const app = b.platform.byServiceId("sam--notes");
+    expect(app).toBeDefined();
+    expect(b.platform.byServiceId(SERVICE)).toBeUndefined();
+    expect(ServicePlatform.urlLabel("sam", "sam", "notes")).toBe("notes");
+    expect(b.platform.byLabel("notes")?.serviceId).toBe("sam--notes");
+    // The pull scheduler is not pointed at notes.harry.flagship.services (a freed name anyone could claim).
+    expect(b.pulls).toEqual([]);
+    expect(await b.pullState.get("sam--notes")).toBeNull();
+    expect(await b.pullState.get(SERVICE)).toBeNull();
+    // The data came over, under the new id.
+    expect(b.ops.restoredDbs.length).toBe(1);
+    expect(b.ops.restoredFiles.length).toBe(1);
+    expect(await b.env.get("sam--notes")).toEqual({ OPENAI_KEY: "sk-secret", MODE: "prod" });
+    expect(await b.env.get(SERVICE)).toBeNull();
+  });
+
+  it("the same app installed cross-creator WOULD have been pointed at the old name (why the rewrite matters)", async () => {
+    const w = await world();
+    const b = await accountB(w);
+    const request = { serverId: DST_B, creator: "harry", slug: "notes", manifestJson: JSON.stringify(MANIFEST), addOwnerToMembership: false, issuedAt: Date.now() };
+    const r = await b.platform.install({ request, signature: dstBox.signInstallService(request), verify: verifyInstallService });
+    expect(r.ok).toBe(true);
+    expect(b.pulls.map((p) => p.canonicalUrl)).toEqual([expect.stringContaining("harry")]);
   });
 });

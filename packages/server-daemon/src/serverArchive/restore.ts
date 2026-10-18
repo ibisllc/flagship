@@ -11,9 +11,14 @@
  * working tree brought over, the access list kept as a draft for the owner.
  *
  * The apps are installed under THIS server (its own name), so a clone made
- * under a new name works; their ids (`<creator>--<slug>`) are unchanged. An
- * app that is already here is skipped and said so; an app that fails leaves
- * nothing behind (stores dropped, image and env removed) and the rest go on.
+ * under a new name works. They become the importing account's own apps: the
+ * creator in their id (`<creator>--<slug>`) is rewritten to the account this
+ * server belongs to, so a backup made under another account (a name that may
+ * since have been freed and claimed by someone else) never installs as a
+ * cross-creator app, which would record an auto-update pull from that old
+ * name's canonical home. An app that is already here is skipped and said so;
+ * an app that fails leaves nothing behind (stores dropped, image and env
+ * removed) and the rest go on.
  */
 import { createWriteStream } from "node:fs";
 import { mkdir, readFile, readdir, rm } from "node:fs/promises";
@@ -195,6 +200,18 @@ interface Held {
   filesVolume?: string;
 }
 
+/** The account this server belongs to: `<server>.<account>.<apex>`, the same label the platform checks installs against. */
+function hostAccount(serverFqdn: string): string {
+  return serverFqdn.split(".")[1] ?? "";
+}
+
+/** The id an archived app takes on this server: the importing account is its creator. */
+export function localServiceId(serverFqdn: string, archivedServiceId: string): string {
+  const id = parseServiceId(archivedServiceId);
+  const host = hostAccount(serverFqdn);
+  return id && host ? `${host}--${id.slug}` : archivedServiceId;
+}
+
 async function installOne(
   deps: ArchiveRestoreDeps,
   dir: string,
@@ -202,8 +219,9 @@ async function installOne(
   log: (m: string) => void,
 ): Promise<RestoreAppResult> {
   const now = deps.now ?? (() => Date.now());
-  const result: RestoreAppResult = { serviceId: meta.serviceId, name: meta.name, state: "restoring" };
-  if (deps.platform.byServiceId(meta.serviceId)) {
+  const sid = localServiceId(deps.serverFqdn, meta.serviceId);
+  const result: RestoreAppResult = { serviceId: sid, name: meta.name, state: "restoring" };
+  if (deps.platform.byServiceId(sid)) {
     return { ...result, state: "skipped", reason: "already on this server" };
   }
   const held: Held = {};
@@ -218,8 +236,8 @@ async function installOne(
     if (meta.rebuild === "source") {
       if (!deps.sourceDir) throw new Error("this server can't rebuild apps (no working-tree folder)");
       const tree = await readTree(path("source")!);
-      image = `flagship-vibe-${meta.serviceId}:${now()}`.toLowerCase();
-      held.tree = join(deps.sourceDir, meta.serviceId);
+      image = `flagship-vibe-${sid}:${now()}`.toLowerCase();
+      held.tree = join(deps.sourceDir, sid);
       held.image = image;
       const built = await deps.buildImage({ contextDir: held.tree, files: tree.files, binaries: tree.binaries, image });
       if (!built.ok) throw new Error(`rebuilding it here failed: ${built.reason}`);
@@ -238,11 +256,11 @@ async function installOne(
         const clean = Object.fromEntries(
           Object.entries(meta.env).filter(([k, v]) => typeof v === "string" && !k.startsWith("FLAGSHIP_")),
         );
-        await deps.envStore.put(meta.serviceId, clean);
+        await deps.envStore.put(sid, clean);
       }
     }
 
-    const id = parseServiceId(meta.serviceId)!;
+    const id = parseServiceId(sid)!;
     const request: InstallServiceRequest = {
       serverId: deps.serverFqdn,
       creator: id.creator,
@@ -278,28 +296,28 @@ async function installOne(
     installed = true;
 
     if (meta.access && deps.access) {
-      await deps.access.importEntry(meta.serviceId, meta.access).catch((e: Error) => log(`[server-archive] ${meta.serviceId}: couldn't take the members' access: ${e.message}`));
+      await deps.access.importEntry(sid, meta.access).catch((e: Error) => log(`[server-archive] ${sid}: couldn't take the members' access: ${e.message}`));
     }
     // A pulled app's tree, when it had one, still comes along so it can be edited here.
     const tree = path("source");
     if (tree && deps.sourceDir && meta.rebuild !== "source") {
-      await writeTree(join(deps.sourceDir, meta.serviceId), tree).catch((e: Error) =>
-        log(`[server-archive] ${meta.serviceId}: couldn't write its working tree (it runs, but can't be edited here): ${e.message}`),
+      await writeTree(join(deps.sourceDir, sid), tree).catch((e: Error) =>
+        log(`[server-archive] ${sid}: couldn't write its working tree (it runs, but can't be edited here): ${e.message}`),
       );
     }
     if (deps.apiKeys && Array.isArray(meta.apiKeys) && meta.apiKeys.length > 0) {
-      const r = await deps.apiKeys.importService(meta.serviceId, meta.apiKeys).catch((e: Error) => {
-        log(`[server-archive] ${meta.serviceId}: couldn't take its API keys: ${e.message}`);
+      const r = await deps.apiKeys.importService(sid, meta.apiKeys).catch((e: Error) => {
+        log(`[server-archive] ${sid}: couldn't take its API keys: ${e.message}`);
         return null;
       });
-      if (r && r.dropped > 0) log(`[server-archive] ${meta.serviceId}: ${r.dropped} API key(s) no longer verify; left out`);
+      if (r && r.dropped > 0) log(`[server-archive] ${sid}: ${r.dropped} API key(s) no longer verify; left out`);
     }
     if (meta.accessList && deps.egress) {
-      await deps.egress.noteCopied(meta.serviceId, meta.accessList, egressSuggestions(manifest.network)).catch(() => {});
+      await deps.egress.noteCopied(sid, meta.accessList, egressSuggestions(manifest.network)).catch(() => {});
     }
     return { ...result, state: "done" };
   } catch (e) {
-    if (!installed) await release(deps, meta.serviceId, held, log);
+    if (!installed) await release(deps, sid, held, log);
     return { ...result, state: "failed", reason: (e as Error).message };
   }
 }
@@ -354,7 +372,12 @@ export async function installArchive(
     await rm(join(dir, "apps", meta.serviceId), { recursive: true, force: true }).catch(() => {});
   }
   // The front page, when this server has none and the app came back here.
-  const fp = contents.manifest.frontPage;
+  // A label of the form `<slug>-<creator>` named a cross-creator app on the old
+  // server; here the app is the importing account's own, so its label is the slug.
+  const fpRaw = contents.manifest.frontPage;
+  const fp = fpRaw
+    ? (contents.metas.find((m) => fpRaw === `${m.slug}-${m.creator}` && m.creator !== hostAccount(deps.serverFqdn))?.slug ?? fpRaw)
+    : fpRaw;
   if (fp && deps.frontPage && !deps.frontPage.get() && deps.frontPage.installed(fp)) {
     await deps.frontPage.set(fp).catch((e: Error) => log(`[server-archive] couldn't set the front page: ${e.message}`));
   }
