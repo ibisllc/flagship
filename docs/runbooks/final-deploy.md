@@ -234,8 +234,7 @@ CAA record is written for an account, and the box gets its Let's Encrypt
 certificate. The first gym run already overturned one design assumption: a
 challenge TXT does *not* make the box name an empty non-terminal on Cloudflare,
 and the "shield" written against that was itself what opened a 5 s NXDOMAIN
-window, so it is **off** (`DNS_CHALLENGE_SHIELD=1` would turn it back on: never
-set that on prod).
+window, so it is **removed** (code, switch and tests deleted).
 
 ```sh
 cd ~/flagship-deploy
@@ -357,8 +356,7 @@ to the prod zone):**
 3. During the first new prod box's certificate issuance, watch it from outside
    (the box name and a label under it must keep answering, 5 per second is enough):
    `for i in $(seq 1 1500); do dig +short @jade.ns.cloudflare.com home.<acct>.flagship.services; dig +short @jade.ns.cloudflare.com probe$i.home.<acct>.flagship.services; sleep 0.2; done | sort | uniq -c`
-   must show only the relay address (an empty line is a dark answer: stop, set nothing,
-   and tell the maintainer; do NOT set `DNS_CHALLENGE_SHIELD`).
+   must show only the relay address (an empty line is a dark answer: stop and tell the maintainer).
 4. After step 8 (`.services`), an unregistered name under an account with an
    online box and one under an unknown account both get no TLS answer and close
    after the same wait (the gym core group's check, by hand:
@@ -379,8 +377,7 @@ npm run deploy        # predeploy: clean rebuild of the bundled packages, route-
 
 This deploy carries the root-wildcard logic (no address or CAA record is written
 for anybody; legacy records are cleared once the step 6a wildcard exists; the new
-reap rules and `zone-health`; the challenge shield is off unless
-`DNS_CHALLENGE_SHIELD=1`, which you must not set): it needs the step 6 gate green,
+reap rules and `zone-health`; the challenge shield is gone): it needs the step 6 gate green,
 **no D1 migration** and **no endorsed box release** (boxes only publish and
 delete their own `_acme-challenge` TXT through `.com`; they publish no A, AAAA or
 CAA). The hourly legacy sweep stays off until you set `DNS_LEGACY_SWEEP=1`. Do not use `--force` or set `FLAGSHIP_SKIP_*`. If the migration check says it

@@ -160,7 +160,7 @@ only while its account is live and it is under an hour old. `delete-one`
 re-reads D1 and the zone and re-decides at delete time; a plan older than a day
 is refused. The plan carries the deletion order.
 
-## 6. Direct-IP boxes, the shield and the broker
+## 6. Direct-IP boxes, the (removed) shield and the broker
 
 - **Direct-IP boxes (`mode: "direct"` of `/api/services-zone/publish-server`)
   are not supported.** A box on its own IP needs a record at `<box>.<user>`,
@@ -173,16 +173,19 @@ is refused. The plan carries the deletion order.
   per-box record an older build left. If direct mode is ever wanted it needs its
   own name space (a label that is not under `<user>`), not a record under a
   wildcard.
-- **The challenge shield** (A/AAAA at the challenged name written beside the TXT)
-  is OFF and unnecessary: a TXT below a name blocks nothing (section 3), and the
-  shield itself opened a 5 s NXDOMAIN window (a literal A at the box name
-  reached the name servers before its `*.<box>` sibling). The code stays behind
-  `DNS_CHALLENGE_SHIELD=1` as a fallback if Cloudflare ever applies the RFC rule
-  (section 8); its release now waits for the root wildcard instead of the
-  account's. Never set it on prod unless that happens.
+- **The challenge shield was measured harmful and removed** (2026-10-18). It
+  wrote A/AAAA at the challenged name beside the TXT so the name would keep
+  answering. A TXT below a name blocks nothing on Cloudflare (section 3), and the
+  shield itself opened a 5 s NXDOMAIN window under the box (its literal A at the
+  box name reached the name servers before its `*.<box>` sibling; section 9.2).
+  The code, its `DNS_CHALLENGE_SHIELD` switch and its tests are deleted; the
+  legacy-record rules still treat a leftover shield as a legacy per-box record
+  and remove it. If Cloudflare ever applies the RFC 4592 rule the canary
+  (section 8) fails; the answer is then a new design, not the old shield.
 - **The DNS broker** (`apps/dns-broker`, `DNS_BROKER_URL`): `.com` no longer
-  calls its `publishARecord` (the client for it is deleted); the broker's
-  ACME-TXT RPCs are untouched. The prod Worker doesn't set `DNS_BROKER_URL`
+  calls its `publishARecord` (the client for it is deleted) and the broker now
+  refuses it outright ("per-box records are not published under the root
+  wildcard"); the broker's ACME-TXT RPCs are untouched. The prod Worker doesn't set `DNS_BROKER_URL`
   (it writes with its Cloudflare token directly), and the legacy clean-up needs
   that direct token (the broker has no list or delete RPC).
 
@@ -218,9 +221,9 @@ challenge TXT would darken a box for up to 30 minutes. Standing checks:
   8.8.8.8) runs in the weekly gym. Re-run it after any change of Cloudflare plan
   or zone settings.
 
-If either fails: set `DNS_CHALLENGE_SHIELD=1` (its ordering needs fixing first:
-write `*.<box>` before `<box>`), and restore the per-account layout from git
-history for the time being.
+If either fails: stop, and restore the per-account layout from git history for
+the time being (the removed shield is not the answer: its ordering was itself the
+outage).
 
 ## 9. Live verification (gym, 2026-10-18)
 

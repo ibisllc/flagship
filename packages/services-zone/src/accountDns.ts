@@ -36,7 +36,7 @@ export function challengeHostOf(recordName: string): string | null {
   return host.length > 0 && !host.includes("*") && !host.startsWith("_") ? host : null;
 }
 
-/** The names a shield occupies: `<host>` always, `*.<host>` too for a box. */
-export function shieldNames(host: string, withWildcard: boolean): string[] {
-  return withWildcard ? [host, `*.${host}`] : [host];
+/** The two names an older layout kept records at for a box: `<host>` and `*.<host>`. */
+export function boxRecordNames(host: string): string[] {
+  return [host, `*.${host}`];
 }

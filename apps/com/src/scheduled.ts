@@ -90,7 +90,7 @@ export interface ScheduledEnv {
   CLOUDFLARE_DNS_API_TOKEN?: string;
   CLOUDFLARE_SERVICES_ZONE_ID?: string;
   SERVICES_APEX?: string;
-  /** The relay's address: the root wildcard the legacy sweep waits for, and the challenge shields. */
+  /** The relay's address: the root wildcard the legacy sweep waits for. */
   SERVICES_PASSTHROUGH_IPV4?: string;
   SERVICES_PASSTHROUGH_IPV6?: string;
   /** Accounts the legacy sweep leaves alone (the reap tool's protected list). */
@@ -491,14 +491,6 @@ export async function runDnsChallengeGcCron(
   return dns.deleteStaleAcmeTxt({
     apex: env.SERVICES_APEX ?? "flagship.services",
     cutoffMs: now.getTime() - 60 * 60 * 1000,
-    ...(env.SERVICES_PASSTHROUGH_IPV4
-      ? {
-          relay: {
-            servicesIpv4: env.SERVICES_PASSTHROUGH_IPV4,
-            ...(env.SERVICES_PASSTHROUGH_IPV6 ? { servicesIpv6: env.SERVICES_PASSTHROUGH_IPV6 } : {}),
-          },
-        }
-      : {}),
   });
 }
 

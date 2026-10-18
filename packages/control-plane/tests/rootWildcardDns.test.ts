@@ -13,7 +13,6 @@ import { answerFor } from "@flagship/services-zone";
 import {
   accountZoneOfServerDomain,
   clearLegacyAccountDns,
-  releaseChallengeShield,
   removeAccountDns,
   removeBoxDns,
 } from "../src/accountDns.js";
@@ -90,8 +89,8 @@ describe("no address or CAA record is ever written for an account", () => {
     const identity = key();
     await storage.servers.put({ serverDomain: BOX, username: "alice", identityPubKeyHex: hexOf(identity.publicKey), registeredAt: 1_000 });
     const before = cf.dump();
-    expect((await publish(storage, identity, "token-apex", BOX, BOX, false)).status).toBe(200);
-    expect((await publish(storage, identity, "token-wild", BOX, BOX, false)).status).toBe(200);
+    expect((await publish(storage, identity, "token-apex")).status).toBe(200);
+    expect((await publish(storage, identity, "token-wild")).status).toBe(200);
     expect(cf.dump().filter((l) => !before.includes(l)).every((l) => l.startsWith("TXT _acme-challenge."))).toBe(true);
     expect(cf.records.filter((r) => r.type !== "TXT")).toHaveLength(4);
     expect(cf.requests.filter((r) => r.startsWith("PATCH"))).toEqual([]);
@@ -312,7 +311,7 @@ describe("account deletion", () => {
   });
 });
 
-// ── the challenge shield ────────────────────────────────────────────────────
+// ── the challenge TXT ───────────────────────────────────────────────────────
 
 function key(): Keypair {
   const priv = new Uint8Array(32);
@@ -321,13 +320,13 @@ function key(): Keypair {
 }
 const hexOf = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
 
-async function publish(storage: InMemoryStorage, identity: Keypair, value: string, host = BOX, serverId = BOX, withShield = true) {
+async function publish(storage: InMemoryStorage, identity: Keypair, value: string, host = BOX, serverId = BOX) {
   const recordName = `_acme-challenge.${host}`;
   const recordValueHash = sha256(new TextEncoder().encode(value));
   const issuedAt = Date.now();
   const claim = { serverId, recordName, recordValueHash, issuedAt };
   const r = await handleDns01Publish(
-    { servers: storage.servers, dns, apex: APEX, ...(withShield ? { shield: RELAY } : {}) },
+    { servers: storage.servers, dns, apex: APEX },
     {
       request: { serverId, recordName, recordValueHash: hexOf(recordValueHash), issuedAt },
       signature: hexOf(signDns01Publish(claim, identity)),
@@ -340,12 +339,12 @@ async function publish(storage: InMemoryStorage, identity: Keypair, value: strin
 async function remove(storage: InMemoryStorage, identity: Keypair, recordId: string, serverId = BOX) {
   const issuedAt = Date.now();
   return handleDns01Delete(
-    { servers: storage.servers, dns, apex: APEX, shield: RELAY },
+    { servers: storage.servers, dns, apex: APEX },
     { request: { serverId, recordId, issuedAt }, signature: hexOf(signDns01Delete({ serverId, recordId, issuedAt }, identity)) },
   );
 }
 
-describe("the challenge shield", () => {
+describe("the challenge TXT on its own (there is no shield: a TXT below a name blocks nothing)", () => {
   async function boxWithAccount() {
     const storage = new InMemoryStorage();
     const identity = key();
@@ -353,111 +352,34 @@ describe("the challenge shield", () => {
     seedRoot();
     return { storage, identity };
   }
-  const shielded = (name: string) => [`A ${name} ${RELAY.servicesIpv4}`, `AAAA ${name} ${RELAY.servicesIpv6}`];
 
-  it("is in place before the challenge TXT exists, and gone after the last TXT is deleted", async () => {
+  it("publish writes the TXT and nothing else; delete removes only the TXT", async () => {
     const { storage, identity } = await boxWithAccount();
-    const seen: string[][] = [];
-    cf.afterRequest = (method, name) => {
-      if (method === "POST" && name === `_acme-challenge.${BOX}`) seen.push(cf.dump());
-    };
-    const p1 = await publish(storage, identity, "token-apex");
-    const p2 = await publish(storage, identity, "token-wild");
-    expect(p1.status).toBe(200);
-    expect(p2.status).toBe(200);
-    // The first TXT appeared with the shield already beside it.
-    for (const line of [...shielded(BOX), ...shielded(`*.${BOX}`)]) {
-      expect(seen[0]).toContain(line);
-    }
+    expect((await publish(storage, identity, "token-apex")).status).toBe(200);
+    expect((await publish(storage, identity, "token-wild")).status).toBe(200);
+    expect(cf.dump().filter((l) => !l.startsWith("TXT"))).toEqual(ROOT_SET);
     expect(cf.dump().filter((l) => l.startsWith("TXT"))).toHaveLength(2);
-
-    // One TXT gone, one left: the shield stays.
     const ids = cf.records.filter((r) => r.type === "TXT").map((r) => r.id);
     expect((await remove(storage, identity, ids[0]!)).status).toBe(200);
-    expect(cf.dump()).toContain(shielded(BOX)[0]);
-    // The last one gone: the shield goes, the account set stays.
     expect((await remove(storage, identity, ids[1]!)).status).toBe(200);
     expect(cf.dump()).toEqual(ROOT_SET);
   });
 
-  it("shields a tier-2 service name at that name only", async () => {
-    seedRoot();
-    // Tier-2 publish is authorised by a phone-signed grant; shield a service host directly.
-    const { ensureChallengeShield } = await import("../src/accountDns.js");
-    await ensureChallengeShield(dns, RELAY, `blog.${ZONE}`, false);
-    expect(cf.dump()).toEqual([...ROOT_SET, ...shielded(`blog.${ZONE}`)].sort());
-    // The release is for the whole name pair but only deletes what exists.
-    expect(await releaseChallengeShield(dns, RELAY, `blog.${ZONE}`, APEX)).toBe(2);
-    expect(cf.dump()).toEqual(ROOT_SET);
-  });
-
-  it("never removes a legacy per-box record while the zone has no root wildcard to take over", async () => {
-    const storage = new InMemoryStorage();
-    const identity = key();
-    await storage.servers.put({ serverDomain: BOX, username: "alice", identityPubKeyHex: hexOf(identity.publicKey), registeredAt: 1_000 });
-    cf.seed("A", BOX, RELAY.servicesIpv4);
-    cf.seed("AAAA", BOX, RELAY.servicesIpv6);
-    expect(await releaseChallengeShield(dns, RELAY, BOX, APEX)).toBe(0);
-    expect(cf.records).toHaveLength(2);
-  });
-
-  it("never removes records that point somewhere else (a box on its own address)", async () => {
-    seedRoot();
-    cf.seed("A", BOX, "192.0.2.44");
-    expect(await releaseChallengeShield(dns, RELAY, BOX, APEX)).toBe(0);
-    expect(cf.dump()).toContain(`A ${BOX} 192.0.2.44`);
-  });
-
-  it("leaves a shield alone while a challenge TXT remains", async () => {
-    seedRoot();
-    const { ensureChallengeShield } = await import("../src/accountDns.js");
-    await ensureChallengeShield(dns, RELAY, BOX, true);
-    cf.seed("TXT", `_acme-challenge.${BOX}`, "pending");
-    expect(await releaseChallengeShield(dns, RELAY, BOX, APEX)).toBe(0);
-    expect(cf.dump().filter((l) => l.includes(BOX) && !l.startsWith("TXT"))).toHaveLength(4);
-  });
-
-  it("puts the shield back when a new challenge arrives while it is being taken down", async () => {
-    seedRoot();
-    const { ensureChallengeShield } = await import("../src/accountDns.js");
-    await ensureChallengeShield(dns, RELAY, BOX, true);
-    let injected = false;
-    cf.afterRequest = (method) => {
-      if (method === "DELETE" && !injected) {
-        injected = true;
-        cf.seed("TXT", `_acme-challenge.${BOX}`, "late");
-      }
-    };
-    await releaseChallengeShield(dns, RELAY, BOX, APEX);
-    expect(cf.dump().filter((l) => l.includes(BOX) && !l.startsWith("TXT"))).toHaveLength(4);
-  });
-
-  it("is taken down by the stale-challenge sweep too", async () => {
-    seedRoot();
-    const { ensureChallengeShield } = await import("../src/accountDns.js");
-    await ensureChallengeShield(dns, RELAY, BOX, true);
-    cf.seed("TXT", `_acme-challenge.${BOX}`, "abandoned");
-    const r = await dns.deleteStaleAcmeTxt({ apex: APEX, cutoffMs: Date.parse("2026-10-18T00:00:00Z"), relay: RELAY });
-    expect(r.deleted).toBe(1);
-    expect(r.shieldsReleased).toBe(4);
-    expect(cf.dump()).toEqual(ROOT_SET);
-  });
-
-  it("refuses to publish the challenge when the shield cannot be made (no half-dark window)", async () => {
+  it("never writes an address record at the box name or under it, whatever the zone holds", async () => {
     const { storage, identity } = await boxWithAccount();
-    const real = globalThis.fetch;
-    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
-      if ((init?.method ?? "GET") === "POST" && String(init?.body).includes('"A"')) {
-        return new Response(JSON.stringify({ success: false, errors: [{ code: 1004 }] }), { status: 400 });
-      }
-      return real(url, init);
-    });
-    const r = await publish(storage, identity, "token");
-    expect(r.status).toBe(502);
-    expect(cf.records.some((x) => x.type === "TXT")).toBe(false);
+    await publish(storage, identity, "t");
+    expect(cf.records.filter((r) => r.type !== "TXT" && r.name.includes(BOX))).toEqual([]);
   });
 
-  it("adds nothing when no relay address is configured (compat)", async () => {
+  it("the stale-challenge sweep removes an abandoned TXT and only that", async () => {
+    seedRoot();
+    cf.seed("TXT", `_acme-challenge.${BOX}`, "abandoned");
+    const r = await dns.deleteStaleAcmeTxt({ apex: APEX, cutoffMs: Date.parse("2026-10-18T00:00:00Z") });
+    expect(r.deleted).toBe(1);
+    expect(cf.dump()).toEqual(ROOT_SET);
+  });
+
+  it("works with no relay address configured", async () => {
     const storage = new InMemoryStorage();
     const identity = key();
     await storage.servers.put({ serverDomain: BOX, username: "alice", identityPubKeyHex: hexOf(identity.publicKey), registeredAt: 1_000 });

@@ -3,7 +3,7 @@ import {
   legacyAccountRecords,
   rootWildcardName,
   rootWildcardStatus,
-  shieldNames,
+  boxRecordNames,
   userZoneOf,
   type ZoneRecordView,
 } from "@flagship/services-zone";
@@ -20,7 +20,7 @@ import type { DnsDeleteClient } from "./cloudflareDns.js";
  *
  * What is left here is cleaning up after the older layouts. A record at an
  * account or box name (the per-account `*.<user>` pair and CAA, the per-box
- * pairs, a challenge shield) stops the root wildcard for the names below it,
+ * pairs, an old challenge shield) stops the root wildcard for the names below it,
  * so each is removed: when an auth code is issued, a box registers, a server
  * is un-revoked or transferred (`clearLegacyAccountDns`), when a server or
  * account goes (`removeBoxDns`, `removeAccountDns`), hourly for the whole zone
@@ -130,12 +130,11 @@ export async function removeAccountDns(client: DnsDeleteClient, userZone: string
 }
 
 /**
- * Delete the per-box A/AAAA/CAA older builds published for a box (and a shield
- * that was never released). Best-effort; returns how many were deleted.
+ * Delete the per-box A/AAAA/CAA older builds published for a box (and an old challenge shield). Best-effort; returns how many were deleted.
  */
 export async function removeBoxDns(client: DnsDeleteClient, serverDomain: string): Promise<number> {
   let deleted = 0;
-  for (const name of shieldNames(serverDomain, true)) {
+  for (const name of boxRecordNames(serverDomain)) {
     for (const type of ["A", "AAAA", "CAA"]) {
       try {
         deleted += await client.deleteByName(name, type);
@@ -143,89 +142,6 @@ export async function removeBoxDns(client: DnsDeleteClient, serverDomain: string
         // best-effort
       }
     }
-  }
-  return deleted;
-}
-
-// ── Challenge shield ───────────────────────────────────────────────────────
-
-export interface ShieldRecord {
-  id: string;
-  content: string;
-}
-
-/** What the shield needs from the zone; `CloudflareDnsClient` satisfies it. */
-export interface ShieldDns {
-  upsert(opts: {
-    name: string;
-    type: "A" | "AAAA";
-    content: string;
-    ttl?: number;
-  }): Promise<unknown>;
-  list(name: string, type?: string): Promise<ShieldRecord[]>;
-  deleteById(id: string): Promise<boolean>;
-}
-
-/**
- * Put the shield next to a challenge TXT about to be written at
- * `_acme-challenge.<host>`: A (and AAAA) at `<host>`, and at `*.<host>` for a
- * box (`withWildcard`). They answer exactly what the account wildcard would,
- * so a resolver sees no change; they only keep `<host>` from going dark while
- * it is an empty non-terminal. Idempotent.
- */
-export async function ensureChallengeShield(
-  dns: ShieldDns,
-  relay: RelayAddress,
-  host: string,
-  withWildcard: boolean,
-): Promise<void> {
-  for (const name of shieldNames(host, withWildcard)) {
-    await dns.upsert({ name, type: "A", content: relay.servicesIpv4 });
-    if (relay.servicesIpv6) await dns.upsert({ name, type: "AAAA", content: relay.servicesIpv6 });
-  }
-}
-
-/**
- * Take the shield down once the last challenge TXT at `_acme-challenge.<host>`
- * is gone. Three guards keep it from ever removing something that matters:
- * no challenge TXT may remain; the zone's root wildcard `*.<apex>` must exist
- * with the relay's address (the shield looks exactly like a legacy per-box
- * record, and one is only removed while the wildcard answers for the name);
- * and only records carrying the relay's address are deleted. After deleting it looks again, and puts the shield back if a
- * new challenge arrived meanwhile. Returns how many records it deleted.
- */
-export async function releaseChallengeShield(
-  dns: ShieldDns,
-  relay: RelayAddress,
-  host: string,
-  apex: string,
-): Promise<number> {
-  const challenge = `${CHALLENGE_PREFIX}${host}`;
-  if ((await dns.list(challenge, "TXT")).length > 0) return 0;
-  const zone = userZoneOf(host, apex);
-  if (!zone) return 0;
-  const wild = rootWildcardName(apex);
-  const wildA = await dns.list(wild, "A");
-  if (!wildA.some((r) => r.content === relay.servicesIpv4)) return 0;
-  if (relay.servicesIpv6) {
-    const wildAaaa = await dns.list(wild, "AAAA");
-    if (!wildAaaa.some((r) => r.content === relay.servicesIpv6)) return 0;
-  }
-  let deleted = 0;
-  for (const name of shieldNames(host, true)) {
-    for (const [type, content] of [
-      ["A", relay.servicesIpv4],
-      ["AAAA", relay.servicesIpv6],
-    ] as const) {
-      if (!content) continue;
-      for (const r of await dns.list(name, type)) {
-        if (r.content === content && (await dns.deleteById(r.id))) deleted += 1;
-      }
-    }
-  }
-  if (deleted > 0 && (await dns.list(challenge, "TXT")).length > 0) {
-    // A new challenge arrived while we were deleting: shield it again.
-    await ensureChallengeShield(dns, relay, host, true);
   }
   return deleted;
 }

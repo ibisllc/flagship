@@ -1,10 +1,9 @@
 import {
-  challengeHostOf,
   classifyZoneName,
   legacyAccountRecords,
   rootWildcardStatus,
 } from "@flagship/services-zone";
-import { releaseChallengeShield, type RelayAddress } from "./accountDns.js";
+import type { RelayAddress } from "./accountDns.js";
 
 /**
  * Cloudflare DNS API client for `.com` (Worker-resident).
@@ -44,8 +43,6 @@ export interface StaleAcmeTxtCleanupResult {
   eligible: number;
   deleted: number;
   names: string[];
-  /** Challenge shields (docs/wildcard-dns.md) taken down for the names cleared. */
-  shieldsReleased: number;
 }
 
 export interface LegacyDnsSweepResult {
@@ -286,8 +283,6 @@ export class CloudflareDnsClient {
   async deleteStaleAcmeTxt(opts: {
     apex: string;
     cutoffMs: number;
-    /** When given, the challenge shield of each name cleared is released too. */
-    relay?: RelayAddress;
   }): Promise<StaleAcmeTxtCleanupResult> {
     const apex = opts.apex.toLowerCase().replace(/\.$/, "");
     const challengeRoot = `_acme-challenge.${apex}`;
@@ -305,24 +300,11 @@ export class CloudflareDnsClient {
       if (await this.deleteById(record.id)) deleted += 1;
     }
     const names = [...new Set(eligible.map((record) => record.name))].sort();
-    let shieldsReleased = 0;
-    if (opts.relay) {
-      for (const name of names) {
-        const host = challengeHostOf(name);
-        if (!host || host === apex) continue;
-        try {
-          shieldsReleased += await releaseChallengeShield(this, opts.relay, host, apex);
-        } catch {
-          // best-effort: the next sweep and the reap tool tidy leftovers
-        }
-      }
-    }
     return {
       scanned: records.length,
       eligible: eligible.length,
       deleted,
       names,
-      shieldsReleased,
     };
   }
 

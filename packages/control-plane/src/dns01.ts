@@ -10,8 +10,6 @@ import {
   type ServiceCertAuthority,
 } from "@flagship/protocol";
 import type { ServerStorage, UsernameStorage } from "@flagship/storage";
-import { challengeHostOf } from "@flagship/services-zone";
-import { ensureChallengeShield, releaseChallengeShield, type RelayAddress } from "./accountDns.js";
 import type { CloudflareDnsClient, CloudflareDnsRecord } from "./cloudflareDns.js";
 import { hexToBytes } from "./hex.js";
 import { forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
@@ -50,15 +48,6 @@ export interface Dns01Deps {
   dns: CloudflareDnsClient;
   /** The apex this control plane manages. Default `flagship.services`. */
   apex?: string;
-  /**
-   * The relay's address. When set, a challenge TXT is wrapped in a shield
-   * (A/AAAA at the challenged name, and under it for a box) so the account
-   * wildcard keeps answering while the TXT makes the name an empty
-   * non-terminal; the shield is removed with the last TXT
-   * (docs/wildcard-dns.md "The challenge shield"). Absent: no shield (the
-   * account then goes dark for the length of each issuance).
-   */
-  shield?: RelayAddress;
   /** Replay window in ms. Default 5 minutes. */
   maxAgeMs?: number;
   /** Test seam. */
@@ -259,21 +248,6 @@ export async function handleDns01Publish(
     return forbidden("stale request");
   }
 
-  // Shield first, so there is never a moment where the TXT exists without it.
-  // Fail closed: without the shield the TXT would make the box's names an empty
-  // non-terminal that resolvers cache as "no such name" for the SOA minimum
-  // (30 minutes), so a failed shield refuses the publish and the box retries.
-  if (deps.shield) {
-    const host = challengeHostOf(r.recordName);
-    if (host) {
-      try {
-        await ensureChallengeShield(deps.dns, deps.shield, host, r.recordName === expectedName);
-      } catch (e) {
-        return { status: 502, body: { error: "shield failed", message: errMsg(e) } };
-      }
-    }
-  }
-
   let record: CloudflareDnsRecord;
   try {
     record = await deps.dns.createTxt({ name: r.recordName, value: b.recordValue, ttl: 60 });
@@ -362,16 +336,6 @@ export async function handleDns01Delete(
     await deps.dns.deleteById(r.recordId);
   } catch (e) {
     return { status: 502, body: { error: "delete failed", message: errMsg(e) } };
-  }
-  if (deps.shield) {
-    const host = challengeHostOf(rec.name);
-    if (host) {
-      try {
-        await releaseChallengeShield(deps.dns, deps.shield, host, apex);
-      } catch {
-        // swallow; the stale-challenge sweep releases it later
-      }
-    }
   }
   return { status: 200, body: { ok: true } };
 }

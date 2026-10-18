@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   challengeHostOf,
-  shieldNames,
+  boxRecordNames,
   userZoneOf,
 } from "../src/accountDns.js";
 
@@ -34,11 +34,10 @@ describe("challenge and shield names", () => {
     expect(challengeHostOf("_acme-challenge.")).toBeNull();
   });
 
-  it("shields a box at its apex and wildcard, a service at its own name only", () => {
-    expect(shieldNames("home.alice.flagship.services", true)).toEqual([
+  it("names a box's two old record names: its apex and its wildcard", () => {
+    expect(boxRecordNames("home.alice.flagship.services")).toEqual([
       "home.alice.flagship.services",
       "*.home.alice.flagship.services",
     ]);
-    expect(shieldNames("blog.alice.flagship.services", false)).toEqual(["blog.alice.flagship.services"]);
   });
 });

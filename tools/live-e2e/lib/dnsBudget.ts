@@ -4,8 +4,8 @@
  * (docs/wildcard-dns.md): the zone holds `*.<apex>` A + AAAA and the apex CAA
  * pair, set up once by hand, and an ACCOUNT holds nothing, whatever its box
  * count; a box adds none of its own. The only records a run creates are the
- * temporary DNS-01 TXTs of a certificate in flight (2 per box; the challenge
- * shield is off since 2026-10-18, docs/wildcard-dns.md section 11), so the
+ * temporary DNS-01 TXTs of a certificate in flight (2 per box; there is no challenge
+ * shield any more, docs/wildcard-dns.md section 6), so the
  * boxes up at once are budgeted for those. Thousands of accounts fit.
  */
 export const RECORDS_AT_REST = 4;

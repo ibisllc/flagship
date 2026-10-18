@@ -265,7 +265,7 @@ of the last check here: **not yet checked**.
   reap-orphans`: every A/AAAA/CAA/TXT at an account or box name, live accounts
   too once the wildcard is in place) and, opt-in (`DNS_LEGACY_SWEEP=1`), hourly.
   Nothing is deleted before the wildcard is in the zone at exactly the relay's
-  address. The challenge shield is OFF (a TXT below a name blocks nothing); direct-IP
+  address. The challenge shield is REMOVED (a TXT below a name blocks nothing; measured, it was harmful); direct-IP
   servers are refused (`direct-mode-unsupported`); `republish-server-dns` is gone.
   `npm run zone-health` (read-only, exit 1 on a missing/wrong/proxied wildcard,
   a missing apex CAA or any record at an account or box name) is the standing
