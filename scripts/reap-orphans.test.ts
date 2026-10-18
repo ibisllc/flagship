@@ -56,6 +56,17 @@ describe("formatPlan", () => {
     expect(text).toContain("alice (1)");
     expect(text).toContain("dns    TXT   _acme-challenge.home.bob.flagship.services");
   });
+  it("lists accounts that stay but have records to trim, apart from the gone ones", () => {
+    const text = formatPlan(plan({
+      accounts: [
+        { owner: "bob", status: "orphan", dnsOrphans: 3, serverOrphans: 1, dnsKept: 0 },
+        { owner: "alice", status: "trim", dnsOrphans: 4, serverOrphans: 0, dnsKept: 4 },
+      ],
+    }));
+    expect(text).toContain("account (stays; records to trim)");
+    expect(text).toMatch(/alice\s+4\s+4/);
+    expect(text).not.toContain("Kept accounts with records: alice");
+  });
   it("says so when servers were not checked or nothing is left", () => {
     expect(formatPlan(plan({ serversChecked: false }))).toContain("NOT CHECKED");
     expect(formatPlan(plan({ accounts: [] }))).toContain("Nothing to reap.");

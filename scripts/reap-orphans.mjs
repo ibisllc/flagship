@@ -4,7 +4,10 @@
  * scrub (docs/runbooks/pre-ga-scrub.md) leaves behind for accounts that no
  * longer exist. The tokens for Cloudflare DNS and UpCloud live only on the
  * `.com` Worker, so this talks to its admin routes
- * (apps/com/src/prodReap.ts). Run it AFTER the D1 scrub.
+ * (apps/com/src/prodReap.ts). Run it AFTER the D1 scrub. It also trims
+ * accounts that stay: records an account wildcard replaced (older per-box
+ * A/AAAA, the CAA copy at *.<user>, iodef) and the records of an account with
+ * no live server (docs/wildcard-dns.md).
  *
  *   node scripts/reap-orphans.mjs                      dry run: classify every
  *                                                      record and server, print
@@ -83,10 +86,16 @@ export function formatPlan(plan, { show = false } = {}) {
   const orphans = plan.accounts.filter((a) => a.status === "orphan");
   lines.push("");
   if (orphans.length === 0) {
-    lines.push("Nothing to reap.");
+    lines.push(plan.accounts.some((a) => a.status === "trim") ? "No account to reap." : "Nothing to reap.");
   } else {
     lines.push(`${pad("account (gone from D1)", 28)}  ${lpad("records", 7)}  ${lpad("servers", 7)}`);
     for (const a of orphans) lines.push(`${pad(a.owner, 28)}  ${lpad(a.dnsOrphans, 7)}  ${lpad(a.serverOrphans, 7)}`);
+  }
+  const trims = plan.accounts.filter((a) => a.status === "trim");
+  if (trims.length > 0) {
+    lines.push("");
+    lines.push(`${pad("account (stays; records to trim)", 32)}  ${lpad("records", 7)}  ${lpad("kept", 5)}`);
+    for (const a of trims) lines.push(`${pad(a.owner, 32)}  ${lpad(a.dnsOrphans, 7)}  ${lpad(a.dnsKept, 5)}`);
   }
   const kept = plan.accounts.filter((a) => a.status === "kept");
   if (kept.length > 0) {

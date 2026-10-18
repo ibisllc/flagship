@@ -5,6 +5,7 @@ import {
   classifyDnsRecord,
   classifyServer,
   deleteOne,
+  indexZone,
   handleReapRoute,
   loadKnownAccounts,
   type KnownAccounts,
@@ -32,6 +33,12 @@ interface World {
   servers: string[];
   demoUsers: { username: string; active_server_id: string | null }[];
   authCodes: string[];
+  /** Usernames with an unrevoked server; defaults to `servers`. */
+  liveServers?: string[];
+  /** Usernames with an unexpired active order; defaults to `authCodes`. */
+  activeAuthCodes?: string[];
+  /** Tables whose live-ness column is missing (an older schema). */
+  missingColumns?: Set<string>;
   missingTables: Set<string>;
   failQuery: boolean;
 }
@@ -56,6 +63,11 @@ function fakeDb(w: World): D1Database {
     if (w.failQuery) throw new Error("D1_ERROR: network connection lost");
     if (table === "usernames") return w.usernames.map((v) => ({ v }));
     if (table === "usernames_aliases") return w.aliases.map(([o, n]) => ({ v: sql.includes("old_username") ? o : n }));
+    if (sql.includes("revoked_at IS NULL") || sql.includes("status = 'active'")) {
+      if (w.missingColumns?.has(table)) throw new Error(`D1_ERROR: no such column: ${table}`);
+      if (table === "servers") return (w.liveServers ?? w.servers).map((v) => ({ v }));
+      if (table === "auth_codes") return (w.activeAuthCodes ?? w.authCodes).map((v) => ({ v }));
+    }
     if (table === "servers") return w.servers.map((v) => ({ v }));
     if (table === "auth_codes") return w.authCodes.map((v) => ({ v }));
     if (table === "demo_users") {
@@ -98,7 +110,8 @@ function zone(): ReapDnsRecord[] {
     // kept account alice
     rec(hex(10), `alice.${APEX}`, "CAA", '0 issue "letsencrypt.org"'),
     rec(hex(11), `*.alice.${APEX}`, "A"),
-    rec(hex(12), `home.alice.${APEX}`, "A"),
+    // a box on its own address: nothing the account wildcard replaces
+    rec(hex(12), `home.alice.${APEX}`, "A", "198.51.100.5"),
     rec(hex(13), `*.home.alice.${APEX}`, "AAAA"),
     // protected review account
     rec(hex(20), `playstore-test-0725.${APEX}`, "CAA"),
@@ -254,9 +267,9 @@ describe("classifyDnsRecord", () => {
   });
 
   it("keeps an account known only through an alias, a server row, a demo row or an auth code", async () => {
-    expect((await verdict(`oldie.${APEX}`, "CAA", { aliases: [["oldie", "alice"]] })).action).toBe("keep");
+    expect((await verdict(`oldie.${APEX}`, "CAA", { aliases: [["oldie", "alice"]], liveServers: ["oldie"] })).action).toBe("keep");
     expect((await verdict(`oldie.${APEX}`, "CAA", { servers: ["oldie"] })).action).toBe("keep");
-    expect((await verdict(`oldie.${APEX}`, "CAA", { demoUsers: [{ username: "oldie", active_server_id: null }] })).action).toBe("keep");
+    expect((await verdict(`oldie.${APEX}`, "CAA", { demoUsers: [{ username: "oldie", active_server_id: null }], liveServers: ["oldie"] })).action).toBe("keep");
     expect((await verdict(`oldie.${APEX}`, "CAA", { authCodes: ["oldie"] })).action).toBe("keep");
   });
 
@@ -290,6 +303,180 @@ describe("classifyDnsRecord", () => {
   it("keeps a name that merely ends like the apex", async () => {
     expect((await verdict(`bob.not${APEX}`, "CAA")).action).toBe("keep");
     expect((await verdict(`bob.${APEX}.evil.com`, "CAA")).action).toBe("keep");
+  });
+});
+
+// ── the one-wildcard-per-account layout (docs/wildcard-dns.md) ───────────────
+
+const RELAY4 = "203.0.113.7";
+const RELAY6 = "2001:db8::7";
+const ISSUE = '0 issue "letsencrypt.org"';
+const ISSUEWILD = '0 issuewild "letsencrypt.org"';
+const IODEF = '0 iodef "mailto:security@flagshipserver.com"';
+
+/** What a serving account holds: its four records, plus whatever older builds left. */
+function accountZone(user: string, extra: ReapDnsRecord[] = []): ReapDnsRecord[] {
+  return [
+    rec(hex(100), `*.${user}.${APEX}`, "A", RELAY4),
+    rec(hex(101), `*.${user}.${APEX}`, "AAAA", RELAY6),
+    rec(hex(102), `${user}.${APEX}`, "CAA", ISSUE),
+    rec(hex(103), `${user}.${APEX}`, "CAA", ISSUEWILD),
+    ...extra,
+  ];
+}
+
+describe("classifyDnsRecord: the account's own records", () => {
+  const verdict = async (r: ReapDnsRecord, zoneRecords: ReapDnsRecord[], world: Partial<World> = {}) =>
+    classifyDnsRecord(r, APEX, await known(world), PROTECTED, indexZone(zoneRecords));
+
+  it("keeps the four records of an account that is serving", async () => {
+    const z = accountZone("alice");
+    for (const r of z) expect((await verdict(r, z)).action, `${r.type} ${r.name}`).toBe("keep");
+  });
+
+  it("orphans an older per-box A/AAAA the wildcard of the same address already answers for", async () => {
+    const legacy = [
+      rec(hex(110), `home.alice.${APEX}`, "A", RELAY4),
+      rec(hex(111), `home.alice.${APEX}`, "AAAA", RELAY6),
+      rec(hex(112), `*.home.alice.${APEX}`, "A", RELAY4),
+      rec(hex(113), `*.home.alice.${APEX}`, "AAAA", RELAY6),
+    ];
+    const z = accountZone("alice", legacy);
+    for (const r of legacy) {
+      const v = await verdict(r, z);
+      expect(v, `${r.type} ${r.name}`).toMatchObject({ action: "orphan", owner: "alice" });
+      expect(v.reason).toMatch(/replaced by the account's wildcard/);
+    }
+  });
+
+  it("keeps a per-box record the wildcard does not replace", async () => {
+    const own = rec(hex(120), `home.alice.${APEX}`, "A", "198.51.100.5"); // a box on its own address
+    expect((await verdict(own, accountZone("alice", [own]))).action).toBe("keep");
+    const noAaaa = rec(hex(121), `home.alice.${APEX}`, "AAAA", RELAY6);
+    const v4only = [rec(hex(100), `*.alice.${APEX}`, "A", RELAY4), noAaaa];
+    expect((await verdict(noAaaa, v4only)).action).toBe("keep"); // no *.alice AAAA to take over
+    const orphanedWildcard = [rec(hex(122), `home.alice.${APEX}`, "A", RELAY4)];
+    expect((await verdict(orphanedWildcard[0]!, orphanedWildcard)).action).toBe("keep"); // no wildcard at all
+  });
+
+  it("keeps a per-box record while a challenge TXT is in flight at that box", async () => {
+    const shield = rec(hex(130), `home.alice.${APEX}`, "A", RELAY4);
+    const txt = rec(hex(131), `_acme-challenge.home.alice.${APEX}`, "TXT", "token");
+    const z = accountZone("alice", [shield, txt]);
+    expect((await verdict(shield, z)).action).toBe("keep");
+    expect((await verdict(txt, z)).action).toBe("keep");
+    // another box of the account is not held back by it
+    const other = rec(hex(132), `media.alice.${APEX}`, "A", RELAY4);
+    expect((await verdict(other, [...z, other])).action).toBe("orphan");
+  });
+
+  it("orphans the CAA copy at *.<user> and the iodef at <user> once <user> keeps its issue record", async () => {
+    const wildcardCaa = [
+      rec(hex(140), `*.alice.${APEX}`, "CAA", ISSUE),
+      rec(hex(141), `*.alice.${APEX}`, "CAA", ISSUEWILD),
+      rec(hex(142), `*.alice.${APEX}`, "CAA", IODEF),
+    ];
+    const iodef = rec(hex(143), `alice.${APEX}`, "CAA", IODEF);
+    const z = accountZone("alice", [...wildcardCaa, iodef]);
+    for (const r of [...wildcardCaa, iodef]) expect((await verdict(r, z)).action, r.content).toBe("orphan");
+    // the pair that pins issuance stays
+    expect((await verdict(z[2]!, z)).action).toBe("keep");
+    expect((await verdict(z[3]!, z)).action).toBe("keep");
+  });
+
+  it("does not trim CAA when <user> has no issue record to fall back on", async () => {
+    const lone = [rec(hex(150), `*.alice.${APEX}`, "CAA", ISSUE), rec(hex(151), `alice.${APEX}`, "CAA", IODEF)];
+    for (const r of lone) expect((await verdict(r, lone)).action).toBe("keep");
+  });
+
+  it("orphans every record of an account that exists but has no live server or install", async () => {
+    const z = accountZone("alice", [rec(hex(160), `home.alice.${APEX}`, "A", "198.51.100.5"), rec(hex(161), `_acme-challenge.home.alice.${APEX}`, "TXT", "t")]);
+    for (const r of z) {
+      const v = await verdict(r, z, { servers: ["alice"], liveServers: [] });
+      expect(v, `${r.type} ${r.name}`).toMatchObject({ action: "orphan", owner: "alice" });
+      expect(v.reason).toMatch(/no live server or install in flight/);
+    }
+  });
+
+  it("keeps an idle account's records while an install order is in flight", async () => {
+    const z = accountZone("alice");
+    const v = await verdict(z[0]!, z, { servers: ["alice"], liveServers: [], authCodes: ["alice"], activeAuthCodes: ["alice"] });
+    expect(v.action).toBe("keep");
+  });
+
+  it("does not apply the no-live-server rule when D1 cannot say, or to the protected account", async () => {
+    const z = accountZone("alice");
+    const unknownLive = await verdict(z[0]!, z, { servers: ["alice"], liveServers: [], missingColumns: new Set(["servers"]) });
+    expect(unknownLive.action).toBe("keep");
+    const p = accountZone("playstore-test-0725");
+    const prot = classifyDnsRecord(p[0]!, APEX, { names: new Set(["alice"]), serverIds: new Set(), liveAccounts: new Set() }, PROTECTED, indexZone(p));
+    expect(prot).toMatchObject({ action: "keep", reason: "protected account" });
+  });
+
+  it("without a zone index the neighbour rules are not applied", async () => {
+    const legacy = rec(hex(110), `home.alice.${APEX}`, "A", RELAY4);
+    expect(classifyDnsRecord(legacy, APEX, await known(), PROTECTED).action).toBe("keep");
+  });
+});
+
+describe("loadKnownAccounts: who is still serving", () => {
+  it("reads unrevoked servers and unexpired orders", async () => {
+    const k = await known({ servers: ["alice", "gone"], liveServers: ["alice"], authCodes: ["buyer", "stale"], activeAuthCodes: ["buyer"] });
+    expect([...k.liveAccounts!].sort()).toEqual(["alice", "buyer"]);
+    expect(k.names.has("gone")).toBe(true);
+  });
+
+  it("leaves it unknown when the columns are missing and fails closed on any other error", async () => {
+    expect((await known({ missingColumns: new Set(["servers"]) })).liveAccounts).toBeUndefined();
+    expect((await known({ missingColumns: new Set(["auth_codes"]) })).liveAccounts).toBeUndefined();
+    await expect(known({ failQuery: true })).rejects.toMatchObject({ code: "d1-unavailable" });
+  });
+});
+
+describe("buildPlan and deleteOne with the wildcard layout", () => {
+  const legacy = [
+    rec(hex(210), `home.alice.${APEX}`, "A", RELAY4),
+    rec(hex(211), `*.home.alice.${APEX}`, "A", RELAY4),
+    rec(hex(212), `*.alice.${APEX}`, "CAA", ISSUE),
+    rec(hex(213), `alice.${APEX}`, "CAA", IODEF),
+  ];
+  const records = [...accountZone("alice", legacy), rec(hex(1), APEX, "A")];
+  const mk = () => {
+    const dnsC = fakeDns(records);
+    return { dnsC, d: { db: fakeDb(newWorld()), dns: dnsC, cloud: undefined, apex: APEX, protectedAccounts: PROTECTED } as ReapDeps };
+  };
+
+  it("plans a trim for an account that stays: status trim, the four records kept", async () => {
+    const { d } = mk();
+    const plan = await buildPlan(d);
+    expect(plan.summary.dnsOrphan).toBe(4);
+    expect(plan.accounts.find((a) => a.owner === "alice")).toMatchObject({ status: "trim", dnsOrphans: 4, dnsKept: 4 });
+    expect(plan.summary.zoneRecordsAfter).toBe(5);
+  });
+
+  it("deletes a superseded record, re-judging against the zone as it is now", async () => {
+    const { d, dnsC } = mk();
+    const r = await deleteOne(d, { kind: "dns", id: hex(210), name: `home.alice.${APEX}`, type: "A" });
+    expect(r).toMatchObject({ status: 200, body: { result: "deleted", owner: "alice" } });
+    expect(dnsC.deleted).toEqual([hex(210)]);
+  });
+
+  it("refuses to delete it once the wildcard that replaces it is gone", async () => {
+    const { d, dnsC } = mk();
+    await dnsC.deleteById(hex(100));
+    dnsC.deleted.length = 0;
+    const r = await deleteOne(d, { kind: "dns", id: hex(210), name: `home.alice.${APEX}`, type: "A" });
+    expect(r).toMatchObject({ status: 409, body: { code: "not-orphan" } });
+    expect(dnsC.deleted).toEqual([]);
+  });
+
+  it("never offers the account's own four records for deletion", async () => {
+    const { d, dnsC } = mk();
+    for (const id of [hex(100), hex(101), hex(102), hex(103)]) {
+      const live = (await dnsC.getById(id))!;
+      expect((await deleteOne(d, { kind: "dns", id, name: live.name, type: live.type })).status, id).toBe(409);
+    }
+    expect(dnsC.deleted).toEqual([]);
   });
 });
 
@@ -360,7 +547,7 @@ describe("deleteOne", () => {
   });
 
   it("re-verifies against D1 right now: an account that came back is not touched", async () => {
-    const d = deps({}, { usernames: ["playstore-test-0725", "alice", "bob"] });
+    const d = deps({}, { usernames: ["playstore-test-0725", "alice", "bob"], servers: ["alice", "bob"] });
     const r = await deleteOne(d, { kind: "dns", id: hex(30), name: `bob.${APEX}`, type: "CAA" });
     expect(r).toMatchObject({ status: 409, body: { code: "not-orphan" } });
     expect(d.dnsC.deleted).toEqual([]);

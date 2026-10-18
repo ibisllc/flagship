@@ -16,13 +16,24 @@
  *   POST /api/admin/reap/delete-one {kind:"dns",id,name,type} or
  *                                   {kind:"server",id,owner}
  *
- * An item is ORPHAN only when ALL hold: its name has exactly a shape that
- * Flagship publishes, the account label is a valid, non-reserved username, and
- * no account of that name is known to D1 (usernames, aliases, servers, demo
- * users, auth codes). Everything else (apex, system records, gym, anything
- * unrecognised, any account still in D1, the protected store-review account)
- * is KEEP. A D1 that does not hold every protected account is refused
- * outright: that is the wrong database or the wipe went too far.
+ * An item is ORPHAN only when its name has exactly a shape that Flagship
+ * publishes, the account label is a valid, non-reserved username, and one of
+ * these holds (docs/wildcard-dns.md "Reap tool"):
+ *
+ *   1. no account of that name is known to D1 (usernames, aliases, servers,
+ *      demo users, auth codes);
+ *   2. the account has no live (unrevoked) server and no install in flight:
+ *      the publisher removes the account's records with its last server, so
+ *      these are leaks;
+ *   3. the record is superseded: an older per-box A/AAAA that the account's
+ *      `*.<user>` wildcard of the same address already answers for (and no
+ *      challenge TXT is in flight at the box), the older CAA at `*.<user>`, or
+ *      an `iodef` CAA at `<user>` while `<user>` keeps its `issue` record.
+ *
+ * Everything else (apex, system records, gym, anything unrecognised, an
+ * account still serving, the protected store-review account) is KEEP. A D1
+ * that does not hold every protected account is refused outright: that is the
+ * wrong database or the wipe went too far.
  */
 
 import { authorizeAdmin, validateServerLabel, validateUserLabel } from "@flagship/control-plane";
@@ -85,6 +96,36 @@ export interface ReapDeps {
 export interface KnownAccounts {
   names: Set<string>;
   serverIds: Set<string>;
+  /**
+   * Accounts with an unrevoked server or an install in flight. Absent when D1
+   * could not say (a table or column missing): rule 2 is then not applied.
+   */
+  liveAccounts?: Set<string>;
+}
+
+/** A read-only index of the zone's records, for the rules that look at neighbours. */
+export interface ZoneIndex {
+  /** Is there a record of `type` at `name` (with this exact content, when given)? */
+  has(name: string, type: string, content?: string): boolean;
+}
+
+const normName = (n: string): string => n.toLowerCase().replace(/\.$/, "");
+
+export function indexZone(records: readonly { name: string; type: string; content?: string }[]): ZoneIndex {
+  const by = new Map<string, (string | undefined)[]>();
+  for (const r of records) {
+    const k = `${r.type.toUpperCase()} ${normName(r.name)}`;
+    const list = by.get(k);
+    if (list) list.push(r.content);
+    else by.set(k, [r.content]);
+  }
+  return {
+    has(name, type, content) {
+      const list = by.get(`${type.toUpperCase()} ${normName(name)}`);
+      if (!list) return false;
+      return content === undefined ? true : list.includes(content);
+    },
+  };
 }
 
 export type ReapAction = "keep" | "orphan";
@@ -109,10 +150,11 @@ const ALLOWED: Record<string, readonly string[]> = {
 };
 
 export function classifyDnsRecord(
-  rec: { name: string; type: string },
+  rec: { name: string; type: string; content?: string },
   apexIn: string,
   known: KnownAccounts,
   protectedAccounts: readonly string[],
+  zone?: ZoneIndex,
 ): DnsVerdict {
   const apex = apexIn.toLowerCase().replace(/\.$/, "");
   const name = rec.name.toLowerCase().replace(/\.$/, "");
@@ -146,8 +188,42 @@ export function classifyDnsRecord(
     return { action: "keep", owner: null, reason: `not a record Flagship publishes (${type})` };
   }
   if (protectedAccounts.includes(owner)) return { action: "keep", owner, reason: "protected account" };
-  if (known.names.has(owner)) return { action: "keep", owner, reason: "account still exists in D1" };
-  return { action: "orphan", owner, reason: "no account of this name in D1" };
+  if (!known.names.has(owner)) return { action: "orphan", owner, reason: "no account of this name in D1" };
+  if (known.liveAccounts && !known.liveAccounts.has(owner)) {
+    return {
+      action: "orphan",
+      owner,
+      reason: "the account has no live server or install in flight (its DNS goes with its last server)",
+    };
+  }
+  if (zone) {
+    const why = supersededReason({ labels, kind, type, content: rec.content, owner, apex }, zone);
+    if (why) return { action: "orphan", owner, reason: why };
+  }
+  return { action: "keep", owner, reason: "account still exists in D1" };
+}
+
+/** Why a record of a still-serving account is redundant, or null. */
+function supersededReason(
+  r: { labels: string[]; kind: "plain" | "wild" | "acme"; type: string; content?: string; owner: string; apex: string },
+  zone: ZoneIndex,
+): string | null {
+  if (r.kind === "acme") return null;
+  const userZone = `${r.owner}.${r.apex}`;
+  if (r.type === "CAA" && r.labels.length === 1) {
+    const covered = zone.has(userZone, "CAA", '0 issue "letsencrypt.org"') || zone.has(userZone, "CAA", '0 issuewild "letsencrypt.org"');
+    if (!covered) return null;
+    if (r.kind === "wild") return "CAA at *.<user> only repeats the one at <user>";
+    if (r.content !== undefined && / iodef /.test(r.content)) return "iodef CAA: Let's Encrypt ignores it";
+    return null;
+  }
+  if ((r.type === "A" || r.type === "AAAA") && r.labels.length === 2 && r.content !== undefined) {
+    const box = `${r.labels[0]}.${userZone}`;
+    if (!zone.has(`*.${userZone}`, r.type, r.content)) return null;
+    if (zone.has(`_acme-challenge.${box}`, "TXT")) return null;
+    return "replaced by the account's wildcard record";
+  }
+  return null;
 }
 
 export interface ServerVerdict {
@@ -187,6 +263,12 @@ const KNOWN_QUERIES: { sql: string; kind: "name" | "serverId"; primary?: true }[
   { sql: "SELECT active_server_id AS v FROM demo_users WHERE active_server_id IS NOT NULL", kind: "serverId" },
 ];
 
+/** Accounts that still serve: an unrevoked server, or an unexpired install order. */
+const LIVE_QUERIES: { sql: string; bindNow?: true }[] = [
+  { sql: "SELECT username AS v FROM servers WHERE revoked_at IS NULL" },
+  { sql: "SELECT username AS v FROM auth_codes WHERE status = 'active' AND expires_at > ?", bindNow: true },
+];
+
 export class ReapRefusal extends Error {
   constructor(
     readonly status: number,
@@ -198,7 +280,11 @@ export class ReapRefusal extends Error {
 }
 
 /** Every account name D1 still knows. A query error other than a missing table fails closed. */
-export async function loadKnownAccounts(db: D1Database, protectedAccounts: readonly string[]): Promise<KnownAccounts> {
+export async function loadKnownAccounts(
+  db: D1Database,
+  protectedAccounts: readonly string[],
+  now: number = Date.now(),
+): Promise<KnownAccounts> {
   const names = new Set<string>();
   const serverIds = new Set<string>();
   let usernameRows = 0;
@@ -228,7 +314,23 @@ export async function loadKnownAccounts(db: D1Database, protectedAccounts: reado
       `D1 does not hold the protected account ${missing.join(", ")}: wrong database, or the review login is gone. Nothing was classified.`,
     );
   }
-  return { names, serverIds };
+  // Which accounts still serve. If D1 cannot say (a table or column is missing),
+  // leave it unknown and the "no live server" rule is simply not applied.
+  let liveAccounts: Set<string> | undefined = new Set<string>();
+  for (const q of LIVE_QUERIES) {
+    try {
+      const stmt = db.prepare(q.sql);
+      const rows = (await (q.bindNow ? stmt.bind(now) : stmt).all<{ v: unknown }>()).results;
+      for (const r of rows) if (typeof r.v === "string" && r.v !== "") liveAccounts.add(r.v.toLowerCase());
+    } catch (e) {
+      if (/no such (table|column)/i.test(e instanceof Error ? e.message : String(e))) {
+        liveAccounts = undefined;
+        break;
+      }
+      throw new ReapRefusal(502, "d1-unavailable", "Could not read the account tables; nothing was classified.");
+    }
+  }
+  return { names, serverIds, ...(liveAccounts ? { liveAccounts } : {}) };
 }
 
 export function protectedAccountsFrom(env: ReapEnv): string[] {
@@ -241,7 +343,8 @@ export interface PlanServerEntry extends ReapServer, ServerVerdict {}
 
 export interface ReapAccountSummary {
   owner: string;
-  status: "orphan" | "kept";
+  /** orphan: the account is gone; trim: it stays, some records go; kept: nothing to do. */
+  status: "orphan" | "trim" | "kept";
   dnsOrphans: number;
   serverOrphans: number;
   dnsKept: number;
@@ -270,18 +373,21 @@ export interface ReapPlan {
   servers: PlanServerEntry[];
 }
 
+const STATUS_ORDER = { orphan: 0, trim: 1, kept: 2 } as const;
+
 export async function buildPlan(deps: ReapDeps): Promise<ReapPlan> {
   if (!deps.dns) {
     throw new ReapRefusal(503, "dns-not-configured", "CLOUDFLARE_DNS_API_TOKEN and CLOUDFLARE_SERVICES_ZONE_ID are required.");
   }
-  const known = await loadKnownAccounts(deps.db, deps.protectedAccounts);
+  const known = await loadKnownAccounts(deps.db, deps.protectedAccounts, (deps.now ?? Date.now)());
   const records = await deps.dns.listAll();
+  const zone = indexZone(records);
   const dns: PlanDnsEntry[] = records.map((r) => ({
     id: r.id,
     name: r.name,
     type: r.type,
     ...(r.content !== undefined ? { content: r.content } : {}),
-    ...classifyDnsRecord(r, deps.apex, known, deps.protectedAccounts),
+    ...classifyDnsRecord(r, deps.apex, known, deps.protectedAccounts, zone),
   }));
   const servers: PlanServerEntry[] = deps.cloud
     ? (await deps.cloud.listServersByLabelKey(REAP_DEMO_LABEL)).map((s) => ({
@@ -302,7 +408,7 @@ export async function buildPlan(deps: ReapDeps): Promise<ReapPlan> {
     if (!d.owner) continue;
     const a = row(d.owner);
     if (d.action === "orphan") {
-      a.status = "orphan";
+      if (a.status === "kept") a.status = known.names.has(d.owner) ? "trim" : "orphan";
       a.dnsOrphans += 1;
     } else a.dnsKept += 1;
   }
@@ -334,7 +440,7 @@ export async function buildPlan(deps: ReapDeps): Promise<ReapPlan> {
       zoneRecordsAfter: dns.length - dnsOrphan,
     },
     accounts: [...accounts.values()].sort(
-      (a, b) => Number(b.status === "orphan") - Number(a.status === "orphan") || a.owner.localeCompare(b.owner),
+      (a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || a.owner.localeCompare(b.owner),
     ),
     dns,
     servers,
@@ -378,7 +484,7 @@ export async function deleteOne(deps: ReapDeps, body: DeleteOneBody | undefined)
   }
   let known: KnownAccounts;
   try {
-    known = await loadKnownAccounts(deps.db, deps.protectedAccounts);
+    known = await loadKnownAccounts(deps.db, deps.protectedAccounts, (deps.now ?? Date.now)());
   } catch (e) {
     if (e instanceof ReapRefusal) return { status: e.status, body: { error: e.message, code: e.code } };
     throw e;
@@ -401,7 +507,14 @@ export async function deleteOne(deps: ReapDeps, body: DeleteOneBody | undefined)
     if (live.name.toLowerCase() !== name.toLowerCase() || live.type.toUpperCase() !== type.toUpperCase()) {
       return { status: 409, body: { error: "the record is not the one in the plan", code: "mismatch" } };
     }
-    const verdict = classifyDnsRecord(live, deps.apex, known, deps.protectedAccounts);
+    // The neighbour-looking rules (superseded records) judge against the zone as it is now.
+    let zone: ZoneIndex;
+    try {
+      zone = indexZone(await deps.dns.listAll());
+    } catch (e) {
+      return { status: 502, body: { error: errText(e), code: "dns-read-failed", retryable: true } };
+    }
+    const verdict = classifyDnsRecord(live, deps.apex, known, deps.protectedAccounts, zone);
     if (verdict.action !== "orphan") {
       log(`reap refused dns ${live.type} ${live.name}: ${verdict.reason}`);
       return { status: 409, body: { error: `not an orphan: ${verdict.reason}`, code: "not-orphan", reason: verdict.reason } };
@@ -411,7 +524,7 @@ export async function deleteOne(deps: ReapDeps, body: DeleteOneBody | undefined)
     } catch (e) {
       return { status: 502, body: { error: errText(e), code: "dns-delete-failed", retryable: true } };
     }
-    log(`reap deleted dns ${live.type} ${live.name} (${verdict.owner})`);
+    log(`reap deleted dns ${live.type} ${live.name} (${verdict.owner}: ${verdict.reason})`);
     return { status: 200, body: { result: "deleted", kind, id, name: live.name, type: live.type, owner: verdict.owner } };
   }
 
