@@ -1,0 +1,18 @@
+# Line endings: the repo is LF everywhere (the boxes run Debian, vectors and
+# unit files are compared byte for byte). A Windows checkout with autocrlf
+# otherwise turns vectors and scripts into CRLF and fails their --check tests.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.bat -text
+*.cmd -text
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.pdf binary
+*.iso binary
+*.jks binary
+*.p8 binary
+*.xcresult binary
