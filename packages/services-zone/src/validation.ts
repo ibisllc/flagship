@@ -32,6 +32,9 @@ const SLUG_MAX = 32;
 /** Legacy DNS label regex retained for callers that do raw subdomain validation. */
 const LABEL_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
+/** The label the Android relay fallback uses. It must never exist as a literal DNS record. */
+export const RELAY_FALLBACK_LABEL = "relay-fallback";
+
 const RESERVED_USER_LABELS = new Set([
   "api",
   "www",
@@ -88,6 +91,10 @@ const RESERVED_USER_LABELS = new Set([
   "broadcast",
   "servers",
   "all",
+  // The Android relay fallback answers at `relay-fallback.<apex>` by the zone's root
+  // wildcard, so no record may exist at that name: nobody may own it (mirror of
+  // control-plane labels.ts; zone-health fails on a record there).
+  RELAY_FALLBACK_LABEL,
 ]);
 
 export type LabelValidation =

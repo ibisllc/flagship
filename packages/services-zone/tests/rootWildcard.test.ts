@@ -223,6 +223,21 @@ describe("evaluateZoneHealth", () => {
     expect(h.problems.every((p) => p.code !== "account-record" || p.id)).toBe(true);
   });
 
+  it("fails on any record at relay-fallback, with its id, whatever its type", () => {
+    for (const [t, n] of [["A", `relay-fallback.${APEX}`], ["CAA", `relay-fallback.${APEX}`], ["TXT", `relay-fallback.${APEX}`], ["A", `*.relay-fallback.${APEX}`], ["A", `x.relay-fallback.${APEX}`]] as const) {
+      const h = health([...ROOT, rec(t, n, "198.51.100.7")]);
+      expect(h.ok, `${t} ${n}`).toBe(false);
+      expect(h.problems.filter((p) => p.code === "reserved-name").map((p) => p.name)).toEqual([n]);
+      expect(h.problems.find((p) => p.code === "reserved-name")?.message).toMatch(/Android relay fallback/);
+    }
+  });
+
+  it("does not count a challenge TXT below relay-fallback, nor a name that merely contains it", () => {
+    expect(health([...ROOT, rec("TXT", `_acme-challenge.relay-fallback.${APEX}`, "t")]).problems).toEqual([]);
+    expect(health([...ROOT, rec("A", `relay-fallbacks.${APEX}`, "198.51.100.7")]).problems.map((p) => p.code)).not.toContain("reserved-name");
+    expect(health(ROOT).ok).toBe(true);
+  });
+
   it("turns a protected account's records into warnings", () => {
     const h = health([...ROOT, rec("A", `*.review.${APEX}`, RELAY.servicesIpv4)], { skipUsers: ["review"] });
     expect(h.ok).toBe(true);

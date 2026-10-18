@@ -37,6 +37,10 @@ const RESERVED_USER_LABELS = new Set([
   // gossip through; `servers`/`all` are reserved collective addresses for the
   // same fleet-wide regime. A user must never own any of these as a username.
   "broadcast", "servers", "all",
+  // The Android relay fallback answers at `relay-fallback.flagship.services` by the
+  // zone's root wildcard, so no record may exist at that name: nobody may own it as an
+  // account (docs/wildcard-dns.md; zone-health fails if a record sits there).
+  "relay-fallback",
   // Test-environment apex labels (docs/ui-test-gym.md §6.5). Banning
   // these as usernames is what makes the `gym.` test env safe to share
   // the prod zones: no prod user can ever own the `gym` label, so a test
@@ -65,6 +69,8 @@ const RESERVED_SERVER_LABELS = new Set([
   // `<server>` label) must not collide with the fleet-wide gossip addresses
   // either, so a box can never shadow `broadcast--<user>` routing.
   "broadcast", "servers", "all",
+  // Reserved for the Android relay fallback (see RESERVED_USER_LABELS).
+  "relay-fallback",
 ]);
 
 // Test-account usernames live in a Worker secret (env.TEST_ACCOUNTS),

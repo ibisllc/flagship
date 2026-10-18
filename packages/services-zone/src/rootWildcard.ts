@@ -21,7 +21,7 @@
 
 import { CHALLENGE_PREFIX } from "./accountDns.js";
 import { buildUserZoneCaRestrictionCaaRecords, caaRecordRdata } from "./caaPin.js";
-import { validateUserLabel } from "./validation.js";
+import { RELAY_FALLBACK_LABEL, validateUserLabel } from "./validation.js";
 
 /** Cloudflare Free caps a zone at this many records. */
 export const ZONE_RECORD_CAP = 200;
@@ -211,6 +211,16 @@ export function blockingRecords<T extends ZoneRecordView>(
   return records.filter((r) => blocksRoot(r, classifyZoneName(r.name, apex), scope, null)).sort(byDeletionOrder(apex));
 }
 
+/** A record at `relay-fallback.<apex>` or `*.relay-fallback.<apex>` or any name below it (a challenge TXT below blocks nothing, and is not counted). */
+export function isRelayFallbackRecord(r: { name: string; type: string }, apexIn: string): boolean {
+  const apex = norm(apexIn);
+  const name = norm(r.name);
+  const reserved = `${RELAY_FALLBACK_LABEL}.${apex}`;
+  if (name !== reserved && !name.endsWith(`.${reserved}`)) return false;
+  const first = name === reserved ? "" : name.slice(0, -(reserved.length + 1)).split(".")[0]!;
+  return !(r.type.toUpperCase() === "TXT" && first.startsWith(CHALLENGE_PREFIX.slice(0, -1)));
+}
+
 export type WildcardCheck = "ok" | "missing" | "wrong";
 
 export interface RootWildcardStatus {
@@ -265,6 +275,7 @@ export interface ZoneHealthProblem {
     | "caa-missing"
     | "caa-unexpected"
     | "account-record"
+    | "reserved-name"
     | "over-cap";
   message: string;
   name?: string;
@@ -342,6 +353,20 @@ export function evaluateZoneHealth(
       continue;
     }
     problems.push({ code: "account-record", message, name: r.name, type: r.type, ...(r.id ? { id: r.id } : {}) });
+  }
+
+  // `relay-fallback` is answered by the root wildcard like every other name (the Android
+  // relay fallback relies on it): a record at it or below it, of any type, stops that.
+  for (const r of records) {
+    if (isRelayFallbackRecord(r, apex)) {
+      problems.push({
+        code: "reserved-name",
+        message: `${r.type} ${r.name} must not exist: ${RELAY_FALLBACK_LABEL}.${apex} is reserved for the Android relay fallback and has to be answered by the root wildcard`,
+        name: r.name,
+        type: r.type,
+        ...(r.id ? { id: r.id } : {}),
+      });
+    }
   }
 
   const challenges = records.filter((r) => classifyZoneName(r.name, apex).kind === "challenge").length;

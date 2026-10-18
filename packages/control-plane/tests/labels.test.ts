@@ -66,6 +66,17 @@ describe("validateUserLabel — strict, 3–30, dashless", () => {
     expect(validateUserLabel("support").ok).toBe(false);
   });
 
+  it("reserves relay-fallback as an account and as a server name (the Android relay fallback)", () => {
+    const u = validateUserLabel("relay-fallback");
+    expect(u.ok).toBe(false);
+    if (!u.ok) expect(u.reason).toMatch(/reserved/);
+    expect(_labelInternal.RESERVED_USER_LABELS.has("relay-fallback")).toBe(true);
+    const sv = validateServerLabel("relay-fallback");
+    expect(sv.ok).toBe(false);
+    if (!sv.ok) expect(sv.reason).toMatch(/reserved/);
+    expect(validateServerLabel("relay-fallbacks").ok).toBe(true);
+  });
+
   it("bans the test-environment apex labels (docs/ui-test-gym.md §6.5)", () => {
     // `gym` is the load-bearing one: banning it as a username is what makes
     // sharing the prod zones with the `gym.` test env safe — no prod user can

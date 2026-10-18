@@ -19,6 +19,14 @@ describe("validateUserLabel", () => {
     expect(validateUserLabel("abc").ok).toBe(true); // min length 3
   });
 
+  it("reserves relay-fallback: the Android relay fallback name is answered by the root wildcard", () => {
+    const r = validateUserLabel("relay-fallback");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toMatch(/reserved/);
+    expect(validateUserLabel("RELAY-FALLBACK").ok).toBe(false);
+    expect(validateUserLabel("relay-fallback2").ok).toBe(true);
+  });
+
   it("normalizes case", () => {
     const r = validateUserLabel("HARRY");
     if (r.ok) expect(r.label).toBe("harry");

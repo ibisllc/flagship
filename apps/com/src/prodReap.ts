@@ -50,6 +50,7 @@ import {
 } from "@flagship/control-plane";
 import {
   PROTECTED_DNS_ACCOUNTS,
+  RELAY_FALLBACK_LABEL,
   evaluateZoneHealth,
   isProtectedDnsName,
   legacyDeletionOrder,
@@ -185,6 +186,13 @@ export function classifyDnsRecord(
     return { action: "keep", owner: null, reason: "unrecognised name" };
   }
   const ownerLabel = labels[labels.length - 1]!;
+  if (ownerLabel === RELAY_FALLBACK_LABEL) {
+    return {
+      action: "keep",
+      owner: null,
+      reason: `${RELAY_FALLBACK_LABEL} is reserved for the Android relay fallback; a record here is wrong, but it is not an account's to reap: remove it by hand (zone-health lists it)`,
+    };
+  }
   const user = validateUserLabel(ownerLabel);
   if (!user.ok) return { action: "keep", owner: null, reason: "system or reserved label" };
   const owner = user.label;

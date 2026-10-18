@@ -265,6 +265,16 @@ describe("classifyDnsRecord", () => {
     }
   });
 
+  it("keeps a record at relay-fallback, saying it is reserved and must be removed by hand", async () => {
+    for (const t of ["A", "AAAA", "CAA", "TXT"]) {
+      for (const n of [`relay-fallback.${APEX}`, `*.relay-fallback.${APEX}`, `home.relay-fallback.${APEX}`]) {
+        const v = await verdict(n, t);
+        expect(v, `${t} ${n}`).toMatchObject({ action: "keep", owner: null });
+        expect(v.reason).toMatch(/reserved for the Android relay fallback/);
+      }
+    }
+  });
+
   it("trims every A, AAAA, CAA and TXT at a live account's or box's name once the root wildcard is in place", async () => {
     for (const t of ["A", "AAAA", "CAA", "TXT"]) {
       for (const n of [`alice.${APEX}`, `*.alice.${APEX}`, `home.alice.${APEX}`, `*.home.alice.${APEX}`, `HOME.Alice.${APEX}.`]) {
