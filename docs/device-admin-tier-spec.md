@@ -505,7 +505,7 @@ No retroactive migration. Sequence:
      DEFAULT 'membership';`
    Apply to prod D1 **before** the Worker deploy (the predeploy drift gate blocks
    on migration drift — CLAUDE.md).
-3. **Wipe** — `WIPE_CONFIRM=prod bash scripts/wipe-all-users.sh --yes` (the
+3. **Wipe** — `WIPE_CONFIRM=prod bash scripts/wipe-all-users.sh --yes` (historical: the script was deleted after the last pre-GA scrub; the
    guarded tolerant runner; NOT the raw `--file` .sql). Removes all accounts +
    servers so no box carries a UMK-derived-only authority anchor.
 4. **Redeploy** — `npx tsc -b && (cd apps/com && npm run deploy)` for the Worker;

@@ -150,6 +150,9 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   lead server distributes signed changes box to box in server order; every
   box verifies every entry itself; nothing about members goes through
   `.com`. Separate per-server lists are a later Pro option (branch only).
+- **Accounts are never bulk-wiped after GA** (owner rule, 2026-10-18; git
+  history keeps the script). No tool that deletes every account may exist;
+  `scripts/release-guard.sh` fails any build that has `scripts/wipe-all-users*`.
 - **Only `main` is deployed** (owner rule, 2026-10-15). `main` is the sole
   source of truth: every `.com`, `.services`, shim or box release is built
   from a commit that is already on `main`, or lands on `main` (pushed)
@@ -1463,12 +1466,8 @@ first update after it (`docs/anonymous-vouchers.md`, $1 voucher unit). Detail: `
 
 ### GA close-out (do NOT do in dev)
 
-1. ~~Prod-wipe script~~ guarded 2026-10-17 (`scripts/wipe-all-users.sh`: no
-   default target, env must match the database, a prod wipe needs a person
-   typing `flagship-state` at a terminal; `release-guard.sh` fails if a guard
-   goes). Keep its table list in step with migrations (a test enforces it).
-   Still to run: the last pre-GA scrub, keeping only `playstore-test-0725`
-   (`docs/runbooks/pre-ga-scrub.md`); update this item after the run.
+1. ~~Prod-wipe script~~ deleted after the last pre-GA scrub (history in
+   `docs/runbooks/pre-ga-scrub.md`; `release-guard.sh` fails if it returns).
 2. ~~Remove the burn-time LUKS passphrase~~ done 2026-10-18 for the USB/ISO
    installer (`docs/luks-burn-passphrase-removal.md`): a random passphrase per
    install is generated inside d-i, the bootstrap removes it and fails the install
