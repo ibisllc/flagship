@@ -176,3 +176,15 @@ Rules as before. 8 agents in parallel (Android, iOS, web/box, live gym), coordin
 - 14 allowlisted signed-tag differences: any that hide a real gap?
 - Release readiness: server-side changes since endorsement 91ec31931 (gym fixes, gVisor mirror, wipe guard, installer log removal) need another endorsement + .com deploy; store builds wait for that.
 - Free AI: shim deployed with keys on 10-14 but no public host (route landed a1df5e106, deploy is owner-run); never run end to end.
+
+---
+# Part 4 (2026-10-18): first Windows device results (branch device-results/windows-2026-10-17, tip 171fadb0c)
+
+Windows 11 Home, i5-14400F, 16 GB; Studio CI build run 38844687451 (0.1.3, built from main on 2026-10-16, so it predates today's work); repo at 932fb603e.
+- **Passed (automated):** npm ci + tsc (exit 0); .NET tests 269/269; `make.ps1 publish` builds `FlagshipBuilder.exe`; the CI zip holds `Flagship Studio.exe` + `tools\xorriso.exe`.
+- **Blocked on the owner (hands needed):** Studio pairing/hosting/restart/sleep/USB (2.1-2.8: phone, SmartScreen click-through, ~2.5 GB appliance download, USB stick), webapp walk in Edge/Chrome, Remote QR, backup to PC + import. None of the product behaviour on Windows has been exercised yet.
+- **vitest on Windows:** 92 files / 554 tests fail, all Windows-host issues: directory `fsync` EPERM in durableFile tests (~40 daemon files), CRLF vs LF in vectors/units (6 files), POSIX-only tests (`bash -n`, symlinks, `/var` paths, file modes), a Python SyntaxError text difference. None is a product failure (boxes run Debian).
+- **Action taken:** added `.gitattributes` (LF for the repo, binaries marked, `*.bat`/`*.cmd` untouched) landed as eb08dcdc4; it fixes the CRLF class once a Windows checkout is re-normalised (`git rm --cached -r . && git reset --hard`, or a fresh clone). The daemon suite should run on Linux/WSL CI only; no code change (a Windows-tolerant dir fsync would be a box change needing an endorsement for no product benefit).
+- **Critic notes:** the test run was against a stale Studio build and a stale main; the runbook's Windows list is mostly unattended-impossible, so the plan needs a scheduled owner session. The agent correctly refused to guess at the phone steps.
+
+Plan impact: W-hands session (see WORKLIST W1) after a fresh `studio-release.yml` run on main and after the .com deploy + endorsement.
