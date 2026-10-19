@@ -180,6 +180,11 @@ interface FlagshipServerClient {
      *  the Settings security badge. Maps to GET /api/users/:u. */
     suspend fun getUsernameRecord(username: String): UsernameLookupResponse
 
+    /** The account's identity-root pub (hex) as the CA signed it, from
+     *  GET /api/users/:u/pubkey-cert. A joining device verifies its invite
+     *  against this; the bare /api/users/:u record no longer exists. */
+    suspend fun getAccountIrkPub(username: String): String
+
     /** v1.2 Phase 3/4 — begin TOTP enrollment. IRK-signed envelope
      *  over canonical `flagship/totp-enroll-begin/v1` bytes. */
     suspend fun totpEnrollBegin(
@@ -761,6 +766,13 @@ data class UsernameLookupResponse(
     /** Wall-clock ms of the successful TOTP enroll-confirm, or null. */
     val totpEnrolledAt: Long? = null,
 )
+
+/** GET /api/users/:u/pubkey-cert: only the bound key is read. */
+@Serializable
+data class PubkeyCertResponse(val binding: Binding) {
+    @Serializable
+    data class Binding(val pubKey: String)
+}
 
 /** v1.2 Phase 3 — POST /api/users/:u/totp/enroll-begin. */
 @Serializable
@@ -1764,6 +1776,14 @@ class LiveFlagshipServerClient(
             url = "$base/api/users/$encoded",
             responseSerializer = UsernameLookupResponse.serializer(),
         )
+    }
+
+    override suspend fun getAccountIrkPub(username: String): String {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        return transport.getJson(
+            url = "$base/api/users/$encoded/pubkey-cert",
+            responseSerializer = PubkeyCertResponse.serializer(),
+        ).binding.pubKey
     }
 
     override suspend fun totpEnrollBegin(

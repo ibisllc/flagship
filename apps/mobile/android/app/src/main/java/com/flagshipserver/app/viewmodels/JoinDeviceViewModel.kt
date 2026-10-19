@@ -14,7 +14,7 @@
 //      verifies it matches the admin's screen, then calls [verifyAndJoin].
 //   4. await the sealed bundle; AEAD-open it; VERIFY the admit signature
 //      under the account's CURRENT IRK pub (resolved via
-//      getUsernameRecord → irkPub) and that it binds OUR device pubkey.
+//      getAccountIrkPub) and that it binds OUR device pubkey.
 //   5. install the recovered UMK into a NEW per-profile slot (NEVER
 //      clobbering an existing profile), register push, POST the admit to
 //      .com (lands QUARANTINED), and addProfile(setActive = true).
@@ -153,8 +153,7 @@ class JoinDeviceViewModel(
             // 2. VERIFY the admit signature under the account's CURRENT
             //    IRK pub (the vouch). Resolve it from .com — the admin
             //    holds that key. A forged / wrong-key admit fails closed.
-            val record = server.getUsernameRecord(bundle.admit.username)
-            val irkPub = HexUtil.decode(record.irkPub)
+            val irkPub = HexUtil.decode(server.getAccountIrkPub(bundle.admit.username))
                 ?: throw IllegalStateException("account IRK pub is not valid hex")
             val admitSig = HexUtil.decode(bundle.admitSig)
                 ?: throw IllegalStateException("admit signature is not valid hex")

@@ -690,6 +690,11 @@ class MockFlagshipServerClient(
         )
     }
 
+    override suspend fun getAccountIrkPub(username: String): String {
+        tick()
+        return _claimedUsernames[username.lowercase()] ?: throw HttpException(404, "not found")
+    }
+
     override suspend fun totpEnrollBegin(
         username: String,
         body: TotpEnrollBeginRequest,
