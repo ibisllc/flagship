@@ -50,6 +50,16 @@ describe("WorkerTail reads wrangler's pretty-printed events", () => {
   });
 });
 
+describe("WorkerTail per-route CPU percentiles", () => {
+  it("reports the median and p95 of cpuTime per route", async () => {
+    const lines = [2, 3, 4, 5, 90].map((cpu) => JSON.stringify({ outcome: "ok", cpuTime: cpu, eventTimestamp: 1, event: { request: { url: "https://x/api/users/a/pods", method: "GET" }, response: { status: 200 } } }));
+    const t = new WorkerTail({ cwd: ".", source: (on) => { for (const l of lines) on(l); return { stop() {} }; } });
+    await t.start();
+    const r = t.summary().routes[0]!;
+    expect(r).toMatchObject({ n: 5, cpuMsMax: 90, cpuMsP50: 4, cpuMsP95: 90 });
+  });
+});
+
 describe("WorkerTail", () => {
   const feed = (lines: string[]) =>
     new WorkerTail({

@@ -92,7 +92,7 @@ export interface TailSummary {
   outcomes: Record<string, number>;
   exceeded: Array<{ at: string; method: string; route: string; outcome: string; status: number | null; exceptions: string[] }>;
   error1102: number;
-  routes: Array<{ route: string; method: string; n: number; cpuMsMax: number | null; wallMsMax: number | null; statuses: Record<string, number> }>;
+  routes: Array<{ route: string; method: string; n: number; cpuMsMax: number | null; cpuMsP50: number | null; cpuMsP95: number | null; wallMsMax: number | null; statuses: Record<string, number> }>;
   /** Routes whose slowest request used more than 8 of the Free plan's 10 ms CPU (only when wrangler reports cpuTime). */
   nearBudget: Array<{ route: string; method: string; cpuMsMax: number }>;
 }
@@ -197,12 +197,14 @@ export class WorkerTail {
     if (!this.started) return { available: false, reason: this.reason ?? "not started", events: 0, outcomes: {}, exceeded: [], error1102: 0, routes: [], nearBudget: [] };
     const outcomes: Record<string, number> = {};
     const routes = new Map<string, TailSummary["routes"][number]>();
+    const cpus = new Map<string, number[]>();
     const exceeded: TailSummary["exceeded"] = [];
     let error1102 = 0;
     for (const e of this.events) {
       outcomes[e.outcome] = (outcomes[e.outcome] ?? 0) + 1;
       const k = `${e.method} ${e.route}`;
-      const r = routes.get(k) ?? { route: e.route, method: e.method, n: 0, cpuMsMax: null, wallMsMax: null, statuses: {} };
+      const r = routes.get(k) ?? { route: e.route, method: e.method, n: 0, cpuMsMax: null, cpuMsP50: null, cpuMsP95: null, wallMsMax: null, statuses: {} };
+      if (e.cpuMs !== null) cpus.set(k, [...(cpus.get(k) ?? []), e.cpuMs]);
       r.n += 1;
       if (e.cpuMs !== null) r.cpuMsMax = Math.max(r.cpuMsMax ?? 0, e.cpuMs);
       if (e.wallMs !== null) r.wallMsMax = Math.max(r.wallMsMax ?? 0, e.wallMs);
@@ -220,7 +222,14 @@ export class WorkerTail {
       outcomes,
       exceeded,
       error1102,
-      routes: [...routes.values()].sort((a, b) => b.n - a.n).slice(0, 60),
+      routes: [...routes.entries()]
+        .map(([k, r]) => {
+          const xs = [...(cpus.get(k) ?? [])].sort((a, b) => a - b);
+          const pick = (q: number): number | null => (xs.length ? xs[Math.min(xs.length - 1, Math.floor(q * xs.length))]! : null);
+          return { ...r, cpuMsP50: pick(0.5), cpuMsP95: pick(0.95) };
+        })
+        .sort((a, b) => b.n - a.n)
+        .slice(0, 80),
       nearBudget: [...routes.values()]
         .filter((r) => r.cpuMsMax !== null && r.cpuMsMax > 8)
         .map((r) => ({ route: r.route, method: r.method, cpuMsMax: r.cpuMsMax! }))
