@@ -207,7 +207,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > when done. History up to 2026-10-10 is frozen verbatim in
 > `docs/archive/status-log-through-2026-10-10.md`; read it for the why behind
 > anything below. Keep this section short: it loads into every agent session.
-> Last updated **2026-10-18**.
+> Last updated **2026-10-19**.
 
 ### Launch
 
@@ -285,15 +285,27 @@ of the last check here: **not yet checked**.
 
 ### In flight
 
-- **Android device pairing transport (2026-10-19, branch `fix/android-device-pairing`).**
-  Release builds returned no pairing relay, so Settings > Trusted devices > Add a
-  device and Connect to an existing account > pairing code both said "isn't
-  available yet". `LiveAdminPairingRelay` / `LiveIncomingPairingRelay` now speak the
-  webapp's two-leg QR relay protocol (`pairingRelay.js`) and are wired in the release
-  variant and in debug on a real backend; the mock stays for mock runs. A shared
-  vector (`test-vectors/device-pairing-relay.json`, `tools/device-pairing-relay-vectors.mjs`)
-  pins the SAS and sealed bytes against the web. **Remaining:** the iOS twin, and a live two-device run (web admin to Android, Android admin to
-  web and to another phone) on hardware; only a fake in-JVM relay has exercised it.
+- **Final-round device test fixes (2026-10-19; merged to local `main`, not yet pushed).**
+  The Windows device test (`device-results/FINAL-ROUND-windows-2026-10-19.md` on
+  `device-results/windows-2026-10-17`) found these; the fixes are merged:
+  hosted VMs get a discarding UART (`-chardev null -serial chardev:ser-null`; with
+  `-serial none` the Debian kernel idled before init and never asked the phone to
+  unlock); Android and iOS device pairing over the `/qr-pipe` relay (Android live-verified
+  both ways with the web; shared vectors `test-vectors/device-pairing-relay.json`,
+  `tools/device-pairing-relay-vectors.mjs`; iOS compiles and its 341 tests pass, but it
+  has had no two-device run); backup save picker on the Activity (was 0 bytes); queued
+  biometric prompts; Home marks only the leader; Studio Start works after a cancelled
+  Restart as administrator; a long manifest description is shortened, not rejected.
+  Web shell is v155. **Still open:** (1) relay fallback under a DNS block: Android reaches
+  the relay's built-in addresses but the TLS handshake is closed (look at OkHttp's
+  ClientHello, `LanAwareSocketFactory`, `CertPinHostnameVerifier`); (2) owner or hardware:
+  retest Restart as administrator at the UAC prompt, a fresh Windows hosted-VM first boot
+  with serial off, USB burn / ISO fallback on metal, the "Account was removed" screen (second
+  device), a live update with a failed-health rollback, iOS two-device pairing; (3) left on
+  purpose: the phone's "If it ran from a USB stick, unplug it" copy, the CSP-blocked Cloudflare
+  Insights beacon (Cloudflare dashboard setting), "Software 0.0.0" on Android's server page;
+  (4) throwaway prod accounts (prime-marten, several web ones) go in the Phase B wipe; never
+  touch playstore-test-0725.
 - **`.com` on the Workers Free plan (owner, 2026-10-18; 10 ms CPU a request, 100,000
   requests a day, 50 subrequests).** `docs/runbooks/workers-cpu-budget.md` has the
   limits, the measurements and what each cache is keyed on. Done on `main`: reads
@@ -909,10 +921,9 @@ allowances (1M / 5M / 20M a month) are placeholders.
   protocol byte for byte (the incoming device's one sealed hello carries the
   return-leg coordinates; the admin delivers the bundle on the swapped-role leg
   under the same SAS-verified key), so a web admin can add an iPhone and an iPhone
-  admin can add a browser or phone. Shared vectors: `test-vectors/pairing-relay.json`
-  (`node tools/pairing-relay-vectors.mjs`). UNCOMPILED and its tests unrun (written
-  without a Swift toolchain): needs a Mac build, GymIPadTests, and a two-device live
-  check against the web app before merge.
+  admin can add a browser or phone. Shared vectors: `test-vectors/device-pairing-relay.json`
+  (`node tools/device-pairing-relay-vectors.mjs`). Compiled and its tests pass on a Mac
+  (2026-10-19); still needs GymIPadTests and a two-device live check against the web app.
 - **Account delete said "Another device is still on this account" on every
   fresh account (2026-10-18, found by the Windows test agent):** `.com`'s
   last-device check counted every active grant, but bootstrap (and demo

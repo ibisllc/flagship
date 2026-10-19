@@ -539,32 +539,32 @@ final class LivePairingRelayTests: XCTestCase {
         XCTAssertEqual(bundle.admit.deviceId, deviceId)
     }
 
-    // MARK: - Golden vectors (test-vectors/pairing-relay.json)
+    // MARK: - Golden vectors (test-vectors/device-pairing-relay.json)
 
     private func loadVectors() throws -> [String: Any] {
         var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         for _ in 0..<12 {
-            let candidate = dir.appendingPathComponent("test-vectors").appendingPathComponent("pairing-relay.json")
+            let candidate = dir.appendingPathComponent("test-vectors").appendingPathComponent("device-pairing-relay.json")
             if FileManager.default.fileExists(atPath: candidate.path) {
                 let data = try Data(contentsOf: candidate)
                 return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
             }
             dir = dir.deletingLastPathComponent()
         }
-        XCTFail("could not locate test-vectors/pairing-relay.json from \(#filePath)")
+        XCTFail("could not locate test-vectors/device-pairing-relay.json from \(#filePath)")
         throw NSError(domain: "fixture", code: 1)
     }
 
     func test_goldenVectors_matchWebCrypto() throws {
         let v = try loadVectors()
         let adminSk = try Curve25519.KeyAgreement.PrivateKey(
-            rawRepresentation: try XCTUnwrap(HexUtil.decode(v["adminSkHex"] as! String))
+            rawRepresentation: try XCTUnwrap(HexUtil.decode(v["adminPrivHex"] as! String))
         )
         let incomingSk = try Curve25519.KeyAgreement.PrivateKey(
-            rawRepresentation: try XCTUnwrap(HexUtil.decode(v["incomingSkHex"] as! String))
+            rawRepresentation: try XCTUnwrap(HexUtil.decode(v["incomingPrivHex"] as! String))
         )
-        XCTAssertEqual(Base64URL.encode(adminSk.publicKey.rawRepresentation), v["adminPkB64u"] as? String)
-        XCTAssertEqual(Base64URL.encode(incomingSk.publicKey.rawRepresentation), v["incomingPkB64u"] as? String)
+        XCTAssertEqual(Base64URL.encode(adminSk.publicKey.rawRepresentation), v["adminPubB64u"] as? String)
+        XCTAssertEqual(Base64URL.encode(incomingSk.publicKey.rawRepresentation), v["incomingPubB64u"] as? String)
 
         let fromAdmin = try QrRelay.deriveMaterial(
             phonePrivateKey: adminSk, browserPublicKey: incomingSk.publicKey.rawRepresentation
@@ -577,11 +577,11 @@ final class LivePairingRelayTests: XCTestCase {
         let kEnc = fromAdmin.aeadKey.withUnsafeBytes { Data($0) }
         XCTAssertEqual(HexUtil.encode(kEnc), v["kEncHex"] as? String)
 
-        for name in ["incomingHello", "adminBundle"] {
+        for name in ["leg1Payload", "bundle"] {
             let entry = try XCTUnwrap(v[name] as? [String: Any])
             let plaintext = Data((entry["plaintext"] as! String).utf8)
-            let ct = entry["ciphertext"] as! String
-            let nonceB64 = entry["nonce"] as! String
+            let ct = entry["ciphertextB64u"] as! String
+            let nonceB64 = entry["nonceB64u"] as! String
 
             XCTAssertEqual(
                 LivePairingRelayClient.aeadOpen(key: fromIncoming.aeadKey, ciphertextBase64Url: ct, nonceBase64Url: nonceB64),
