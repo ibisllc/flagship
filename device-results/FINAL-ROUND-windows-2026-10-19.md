@@ -1,4 +1,4 @@
-# NO-GO
+# NO-GO (updated: four of the blockers now have fixes on pushed branches; see "Update 2")
 
 Release recommendation: hold the release. The Android/iOS device-pairing gap, passcode-backup zero-byte save, Studio restart-after-UAC bug, and first-boot unlock request anomaly remain unresolved or unverified. The Android and iOS pairing fixes exist on separate unpushed branches; neither has been merged or live-validated.
 
@@ -54,3 +54,25 @@ Recommendation: NO-GO until the four release blockers in the opening paragraph a
 ## Cleanup state
 
 The prior session had already deleted the throwaway account `sturdy-heron`; throwaway web accounts remain as listed in the handoff. `quiet-plum` remains because the pending restore test uses it. This session could not inspect or automate native app windows: the Windows app-control bridge returned `Trusted RPC service is not configured`. Consequently, the pending restore retest and live two-device join were not performed. Cleanup completed: both poll/monitor loops and the serial logger were stopped; the VM received a graceful ACPI powerdown (guest log ended at `reboot: Power down`); emulator `emulator-5554` exited through its authenticated console; Studio exited; and the exact `home.sturdy-heron.flagship.services` VM bundle was removed after its config identity was checked. Deletion of `harrywinner2/flagship-hello-test` is pending: GitHub rejected the CLI request because its saved token lacks the `delete_repo` scope. I requested approval to add that scope and retry.
+
+## Update 2 (same day, later): fixes written and checked, pushed as branches, nothing merged
+
+All branches are on origin, built on `origin/main` `59dbc8cac`; none touches `main`.
+
+| Blocker | Branch | Result |
+|---|---|---|
+| Android/iOS cannot add or join a device | `fix/android-device-pairing` (`8485548ee`), `fix/ios-device-pairing` (`f5dc6e5d4`, uncompiled) | Android: **verified live against prod in both directions** (a web admin adds the emulator; the Android admin adds a browser): matching codes, device added. The live join first failed with `Couldn't join` because Android resolved the account key with `GET /api/users/:u`, a route that now answers 404; the web uses `/api/users/:u/pubkey-cert`. Fixed (`45cb27c27`) and re-run. iOS reads the key from the sealed bundle, so it probably does not share that bug, but it has never been compiled. |
+| Passcode backup saved as 0 bytes | same Android branch | Root cause: returning from the system picker re-locks the app and rebuilt the dialog, so the save found no file after the server had already removed its copy. The picker now lives on the Activity and the file is held outside the dialog. Verified: 8,050 bytes written, "Saved." |
+| Restore hung on "Flagship is locked / Authenticating…" | same | Two biometric prompts raced and the second replaced the first. Prompts are now queued (unit test added). Verified: the restore shows its own prompt, accepts the passcode and lists the app. |
+| Restore into a new account (G) | same | **PASS** with the fixes: new account `prime-marten`, new hosted VM (Studio paired, code 360 203), the app restored in about 9 s and served 200 with its original content. The server's Home card does not advertise the pending restore; it is only under the card's menu (Send the backup). |
+| Studio refuses Start after a cancelled Restart as administrator | `fix/studio-restart-keeps-start` (`c2372b989`) | `VMManager.CancelQuit()` runs when the restart is cancelled; test added (16/16 pass). The README publish command now carries the single-file flags. The UAC retest itself still needs the owner at the screen. |
+| Git import rejects a long description | `fix/manifest-description-shorten` (`fe1f62601`) | `parseManifest` keeps the first 30 characters and returns a note; test and `docs/manifest.md` updated; `tsc -b` clean. |
+| Git import ignores a name typed after Check repo | Android branch | Editing the repo, ref or name after a check now clears the verdict so it must be checked again (the screen returned to "Check repo" after the edit). Not run through to a full install. |
+| Front page card "Couldn't reach the server" under the DNS block (E) | Android branch | Box-direct calls used a bare HTTP client; they now use the shared client with the relay fallback and the box cert pin. Unit tests pass; not re-run under the DNS block. |
+
+### Still open
+
+- **First sealed boot: the unlock request does not reach the phone.** Reproduced on two more fresh hosted VMs (`home.prime-marten`, `home2.prime-marten`): Studio says "Waiting for you to unlock" and the phone shows "Nothing waiting" for 8+ minutes. On `home.prime-marten`, Stop then Start made the guest post `unlock-key boot-request`, the card appeared within about a minute, and approval gave HTTPS 200 about 4 minutes later (cert YR1, commit `072ee32d`). Studio only enables the guest serial console when the recipe carries a debug grant, so the first boot's own log is still unseen; a debug-friendly recipe attempt failed because the phone rejected the typed key at send time ("That isn't an SSH public key this server can use"). Worth checking what the appliance does on its very first sealed boot (network ready, the `boot.` host reachable, the request posted).
+- **Memory:** Studio refuses to start a VM with under 4 GiB free; a 1.5 GiB emulator plus a hosted VM does not fit on a 16 GB machine, so the phone and the VM could not run together while hosting.
+- **Not run:** the UAC retest, H (USB/ISO fallback), the "Account was removed" screen and a live two-device update.
+- **Cleanup owed:** the public repo `harrywinner2/flagship-hello-test` still exists (the token lacks `delete_repo`; run `gh auth refresh -h github.com -s delete_repo`, then delete it). Throwaway prod accounts remain: `prime-marten` and several web accounts.
