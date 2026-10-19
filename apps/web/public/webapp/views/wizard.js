@@ -281,8 +281,10 @@ async function handleSecureAccount() {
 async function renderStep(state) {
   const step = STEPS[state.stepIdx];
   if (!step) {
-    // Wizard complete.
-    show("view-home");
+    // Wizard complete. Enter Home the way every other path does (not just show the view),
+    // or it keeps the pre-sign-in "first run / unpaired" panel until a reload.
+    const { enterHome } = await import("./home.js");
+    await enterHome();
     return;
   }
   const root = document.getElementById("view-wizard");

@@ -249,7 +249,7 @@ public sealed class Wizard : INotifyPropertyChanged
                 _pairingWatch.OnReady();
                 PairingStage = PairingStage.Qr;
                 PairQr = ev.Payload;
-                PairCode = ev.HumanCode;
+                PairCode = ev.HumanCode is { } human ? NativePairingCrypto.FormatHumanCode(human) : null;
                 PairStatus = "Scan the QR with the Flagship app, or type the code.";
                 break;
             case "phone-connected":

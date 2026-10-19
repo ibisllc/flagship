@@ -4,13 +4,13 @@
  * from the keys an admin device deposited, kept on the server by the
  * schedule's retention, and restorable onto a new server like any backup.
  */
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync as makeTempDir, rmSync } from "node:fs";
 import { mkdir, open, readFile, readdir, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   archiveKeysDigest,
   deriveIRK,
@@ -38,6 +38,18 @@ import { buildServerArchiveService, RESTORE_PATH, SAVED_PATH } from "../../src/s
 import type { HttpRequest } from "../../src/runtime.js";
 import { swkOps, testCustodian } from "../helpers/keyCustody.js";
 import { writeSourceTree } from "../../src/llm/serviceSource.js";
+
+// Every temp dir a test makes is removed afterwards: the 5 GiB sparse-file test left real 5 GiB
+// files behind on NTFS, which filled a disk.
+const tempDirs: string[] = [];
+const mkdtempSync = (prefix: string): string => {
+  const d = makeTempDir(prefix);
+  tempDirs.push(d);
+  return d;
+};
+afterEach(() => {
+  for (const d of tempDirs.splice(0)) rmSync(d, { recursive: true, force: true });
+});
 
 const owner = deriveIRK({ seed: new Uint8Array(32).fill(42) });
 const stranger = deriveIRK({ seed: new Uint8Array(32).fill(43) });
