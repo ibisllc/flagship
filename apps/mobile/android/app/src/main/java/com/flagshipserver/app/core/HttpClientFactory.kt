@@ -24,8 +24,9 @@ import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
 object HttpClientFactory {
-    fun build(): OkHttpClient =
-        OkHttpClient.Builder()
+    fun build(): OkHttpClient {
+        val relayDns = RelayFallbackDns(LanDirectDns())
+        return OkHttpClient.Builder()
             // FIRST: while a security notice has the app locked, nothing but
             // reads from the control apex leaves the phone (docs/security-notices.md 6.3).
             .addInterceptor(UpdateLockInterceptor())
@@ -43,12 +44,15 @@ object HttpClientFactory {
             // first when the phone is next to it (docs/lan-direct.md).
             // A box name the phone's resolver can't find (cached "no such name")
             // is reached through the relay instead (core/RelayFallback.kt).
-            .dns(RelayFallbackDns(LanDirectDns()))
+            .dns(relayDns)
             .socketFactory(LanAwareSocketFactory())
             .addInterceptor(LanDirectFallbackInterceptor())
+            // Outside the retry: a relay hint that fails reads as "didn't resolve" after the retries.
+            .addInterceptor(RelayHintFailureInterceptor(relayDns))
             .addInterceptor(DnsRetryInterceptor())
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
             .build()
+    }
 }

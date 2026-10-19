@@ -156,4 +156,71 @@ class RelayFallbackTest {
         assertThrows(java.io.IOException::class.java) { DnsRetryInterceptor(listOf(1, 1), { }).intercept(chain) }
         assertEquals(1, chain.n)
     }
+
+    // The relay addresses are a hint. A hint that fails, for any reason, must not
+    // read as a problem with the box; a name DNS answered keeps its real errors.
+    private class Failing(private val request: Request, private val error: java.io.IOException) : Interceptor.Chain by Chain(request, 0) {
+        override fun request() = request
+        override fun proceed(request: Request): Response = throw error
+    }
+
+    private fun hintDns(): RelayFallbackDns {
+        val d = dns(Resolver(mapOf(label to listOf(relayAddr))))
+        d.lookup(box)
+        return d
+    }
+
+    @Test fun aFailedHintReadsAsAnUnresolvedName() {
+        val failures = listOf(
+            javax.net.ssl.SSLHandshakeException("connection closed"),
+            javax.net.ssl.SSLPeerUnverifiedException("Certificate for $box does not match the server's STK-signed fingerprint"),
+            java.net.ConnectException("refused"),
+            java.net.SocketTimeoutException("timeout"),
+        )
+        for (f in failures) {
+            val err = assertThrows(UnknownHostException::class.java) {
+                RelayHintFailureInterceptor(hintDns(), { }).intercept(Failing(req, f))
+            }
+            assertEquals(f, err.cause)
+        }
+    }
+
+    @Test fun aNameDnsAnsweredKeepsItsRealErrors() {
+        val own = InetAddress.getByAddress(byteArrayOf(10, 0, 0, 9))
+        val d = dns(Resolver(mapOf(box to listOf(own))))
+        d.lookup(box)
+        val pin = javax.net.ssl.SSLPeerUnverifiedException("pin")
+        val thrown = assertThrows(javax.net.ssl.SSLPeerUnverifiedException::class.java) {
+            RelayHintFailureInterceptor(d, { }).intercept(Failing(req, pin))
+        }
+        assertEquals(pin, thrown)
+    }
+
+    @Test fun aHintStopsCountingOnceDnsAnswersAgain() {
+        val resolver = object : Dns {
+            var up = false
+            override fun lookup(hostname: String): List<InetAddress> = when {
+                up && hostname == box -> listOf(relayAddr)
+                hostname == label -> listOf(relayAddr)
+                else -> throw UnknownHostException(hostname)
+            }
+        }
+        val d = RelayFallbackDns(resolver, { apex }, { }, { emptyList() })
+        d.lookup(box)
+        assertEquals(true, d.servedByHint(box))
+        resolver.up = true
+        d.lookup(box)
+        assertEquals(false, d.servedByHint(box))
+    }
+
+    @Test fun aHintMarkExpires() {
+        val d = hintDns()
+        assertEquals(true, d.servedByHint(box))
+        assertEquals(false, d.servedByHint(box, System.currentTimeMillis() + RelayFallbackDns.HINT_MARK_MS + 1))
+    }
+
+    @Test fun aSuccessfulRequestPassesThroughUntouched() {
+        val out = RelayHintFailureInterceptor(hintDns(), { }).intercept(Chain(req, 0))
+        assertEquals(200, out.code)
+    }
 }

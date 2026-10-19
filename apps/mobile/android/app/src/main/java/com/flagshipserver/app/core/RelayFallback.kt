@@ -26,8 +26,10 @@ package com.flagshipserver.app.core
 import okhttp3.Dns
 import okhttp3.Interceptor
 import okhttp3.Response
+import java.io.IOException
 import java.net.InetAddress
 import java.net.UnknownHostException
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * The relay's anycast addresses (Fly dedicated pair, the same values as
@@ -57,9 +59,17 @@ class RelayFallbackDns(
         if (a == Endpoints.PROD_DATA_APEX) RelayAddresses.prod else emptyList()
     },
 ) : Dns {
+    private val viaHint = ConcurrentHashMap<String, Long>()
+
+    /** True while [hostname] was last answered with relay addresses (a hint), not by DNS. */
+    fun servedByHint(hostname: String, now: Long = System.currentTimeMillis()): Boolean {
+        val at = viaHint[hostname.lowercase()] ?: return false
+        return now - at < HINT_MARK_MS
+    }
+
     override fun lookup(hostname: String): List<InetAddress> {
         try {
-            return delegate.lookup(hostname)
+            return delegate.lookup(hostname).also { viaHint.remove(hostname.lowercase()) }
         } catch (e: UnknownHostException) {
             val base = apex().lowercase()
             val name = hostname.lowercase()
@@ -73,6 +83,7 @@ class RelayFallbackDns(
             val addresses = resolved.ifEmpty { lastResort(base) }
             if (addresses.isEmpty()) throw e
             log("$hostname didn't resolve; reaching it through the relay (${if (resolved.isEmpty()) "built-in addresses" else label})")
+            viaHint[name] = System.currentTimeMillis()
             return addresses
         }
     }
@@ -80,6 +91,9 @@ class RelayFallbackDns(
     companion object {
         /** Answered by the zone's root wildcard, so it is the relay. */
         const val LABEL = "relay-fallback"
+
+        /** How long a name stays marked as served by a hint. */
+        const val HINT_MARK_MS = 60_000L
     }
 }
 
@@ -98,6 +112,32 @@ class DnsRetryInterceptor(
                 sleep(backoffMs[attempt])
                 attempt++
             }
+        }
+    }
+}
+
+/**
+ * The relay addresses are only a hint. When DNS has failed and the hint is used,
+ * a connection that then fails, whatever the reason (a stale address, a host
+ * that is not the box, a refused handshake, a pin that does not match), says
+ * nothing about the box. It reads as what it was before the hint, "that name
+ * didn't resolve", never as a TLS or trust error. A host that DNS answered is
+ * never touched here, so a real pin or certificate failure still surfaces.
+ */
+class RelayHintFailureInterceptor(
+    private val dns: RelayFallbackDns,
+    private val log: (String) -> Unit = { m -> runCatching { android.util.Log.i("RelayFallback", m) } },
+) : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val host = chain.request().url.host
+        try {
+            return chain.proceed(chain.request())
+        } catch (e: UnknownHostException) {
+            throw e
+        } catch (e: IOException) {
+            if (!dns.servedByHint(host)) throw e
+            log("the relay hint for $host didn't work (${e.javaClass.simpleName}); treating the name as unresolved")
+            throw UnknownHostException("Unable to resolve host \"$host\"").also { it.initCause(e) }
         }
     }
 }
