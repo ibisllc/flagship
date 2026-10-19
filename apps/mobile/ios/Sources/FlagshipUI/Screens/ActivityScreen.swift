@@ -100,7 +100,7 @@ public struct ActivityScreen: View {
                                hint: "Devices, recovery and servers, across all your servers", count: feed.auditEvents.count))
         let n = feed.boxEvents.filter { BoxEventLabels.title($0) != nil }.count
         out.append(SectionInfo(id: .server, icon: "server.rack", title: serverTitle,
-                               hint: "Updates, backups, apps and shares on this server", count: n))
+                               hint: showsAllServers ? "Updates, backups, apps and shares across all servers" : "Updates, backups, apps and shares on this server", count: n))
         return out
     }
 
@@ -122,7 +122,7 @@ public struct ActivityScreen: View {
             if case .loaded(let feed) = state {
                 let rows = feed.boxEvents.filter { BoxEventLabels.title($0) != nil }
                 eventList(
-                    empty: "Nothing has happened on this server yet.",
+                    empty: showsAllServers ? "Nothing has happened on your servers yet." : "Nothing has happened on this server yet.",
                     rows: rows.indices.map { i in AnyView(boxRow(entry: rows[i], c: c)) },
                     more: feed.moreBoxEvents, onMore: onLoadMoreBox, bounded: bounded, c: c)
             }
@@ -341,8 +341,14 @@ public struct ActivityScreen: View {
     }
 
     /// "Server · home2": the server this log belongs to (the one picked in the
-    /// switcher, else the one in use).
+    /// switcher, else the one in use). With several servers and none picked the
+    /// log is every server's, so it says "All servers".
+    private var showsAllServers: Bool {
+        pods.count > 1 && !pods.contains { $0.podId == currentPodId }
+    }
+
     private var serverTitle: String {
+        if showsAllServers { return "All servers" }
         let pod = pods.first { $0.podId == currentPodId } ?? (pods.count == 1 ? pods.first : nil)
         guard let name = pod?.name, !name.isEmpty else { return "This server" }
         return "Server · \(name)"

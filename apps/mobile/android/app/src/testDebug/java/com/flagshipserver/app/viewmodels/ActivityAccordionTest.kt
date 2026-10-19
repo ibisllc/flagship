@@ -86,7 +86,7 @@ class ActivityAccordionTest {
         val office = PodInfo(podId = "p2", name = "Office", fqdn = "office.a.flagship.services")
         assertEquals("Server · Home", activityServerTitle(listOf(home), null))
         assertEquals("Server · Office", activityServerTitle(listOf(home, office), "p2"))
-        assertEquals("This server", activityServerTitle(listOf(home, office), null))
+        assertEquals("All servers", activityServerTitle(listOf(home, office), null))
         assertEquals("This server", activityServerTitle(emptyList(), null))
     }
 

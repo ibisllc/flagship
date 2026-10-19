@@ -356,7 +356,8 @@
 //  v153: when .com keeps failing, the live-sync loop backs off (5 s, 10 s ... up
 //       to 2 minutes) instead of retrying every 5 s, and asks /pods again only
 //       every fourth round once it has failed too (lib/liveSync.js).
-const SHELL_VERSION = "v153";
+//  v154: a server's Home row no longer lists "leads <app>"; only the leader is marked.
+const SHELL_VERSION = "v154";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
