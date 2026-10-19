@@ -167,14 +167,16 @@ public final class JoinAccountViewModel {
         devicePubRaw.append(pushSigningKey.publicKey.rawRepresentation)
         devicePubRaw.append(deviceIdBytes)
         do {
-            let sealed = try QrRelay.seal(payload: devicePubRaw, with: material.aeadKey)
             provideRawPubkeyToRelay?(devicePubRaw)
+            // The SAS must be on screen while the admin compares codes, so
+            // it is shown before the (possibly minutes-long) wait.
+            phase = .awaitingBundle(matchCode: material.matchCode)
             let bundleFrame = try await relay.incomingSendPubkeyAwaitBundle(
                 sid: session.sid,
-                devicePubCiphertextBase64Url: sealed.ciphertextBase64Url,
-                devicePubNonceBase64Url: sealed.nonceBase64Url
+                handshakePublicKey: handshakeSk.publicKey.rawRepresentation,
+                aeadKey: material.aeadKey,
+                devicePubRaw: devicePubRaw
             )
-            phase = .awaitingBundle(matchCode: material.matchCode)
             await processBundle(
                 frame: bundleFrame,
                 aeadKey: material.aeadKey,

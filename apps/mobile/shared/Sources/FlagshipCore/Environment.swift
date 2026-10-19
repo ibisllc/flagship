@@ -55,12 +55,12 @@ public extension EnvironmentValues {
 
 /// Phase 3b — bidirectional cross-device pairing relay seam (collaborator
 /// admit). Distinct from `qrRelayClient` (one-shot phone→browser create-
-/// server delivery). Defaults to the in-process Mock.
+/// server delivery). Defaults to the in-process Mock in Debug, the live relay in Release.
 private struct PairingRelayClientKey: EnvironmentKey {
 #if DEBUG
     static let defaultValue: any PairingRelayClient = MockPairingRelayClient()
 #else
-    static let defaultValue: any PairingRelayClient = UnavailablePairingRelayClient()
+    static let defaultValue: any PairingRelayClient = LivePairingRelayClient()
 #endif
 }
 

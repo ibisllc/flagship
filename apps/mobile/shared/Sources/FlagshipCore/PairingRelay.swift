@@ -45,8 +45,54 @@ public protocol PairingRelayClient: Sendable {
         devicePubNonceBase64Url: String
     ) async throws -> (ciphertextBase64Url: String, nonceBase64Url: String)
 
+    /// Admin role, live transport: same as `adminAwaitDevicePubkey(sid:aeadKey:)`
+    /// but hands over the QR's ephemeral X25519 private key so a network
+    /// relay can derive the leg-1 AEAD key itself and open the incoming
+    /// device's sealed hello. Returns the same 80 bytes: X25519 handshake
+    /// key (32) || Ed25519 device key (32) || device id (16).
+    func adminAwaitDevicePubkey(
+        sid: String,
+        adminPrivateKey: Curve25519.KeyAgreement.PrivateKey
+    ) async throws -> Data
+
+    /// Incoming role, live transport: the raw 80-byte device payload
+    /// (handshake key || device key || device id), the handshake public key
+    /// the relay must announce as `phonePk`, and the AEAD key derived from it.
+    /// A network relay seals the web-shaped JSON hello under `aeadKey`
+    /// itself, because that frame also carries the return-channel
+    /// coordinates only the relay knows.
+    func incomingSendPubkeyAwaitBundle(
+        sid: String,
+        handshakePublicKey: Data,
+        aeadKey: SymmetricKey,
+        devicePubRaw: Data
+    ) async throws -> (ciphertextBase64Url: String, nonceBase64Url: String)
+
     /// Cleanly close the channel. Idempotent.
     func close() async
+}
+
+extension PairingRelayClient {
+    public func adminAwaitDevicePubkey(
+        sid: String,
+        adminPrivateKey: Curve25519.KeyAgreement.PrivateKey
+    ) async throws -> Data {
+        try await adminAwaitDevicePubkey(sid: sid, aeadKey: SymmetricKey(size: .bits256))
+    }
+
+    public func incomingSendPubkeyAwaitBundle(
+        sid: String,
+        handshakePublicKey: Data,
+        aeadKey: SymmetricKey,
+        devicePubRaw: Data
+    ) async throws -> (ciphertextBase64Url: String, nonceBase64Url: String) {
+        let sealed = try QrRelay.seal(payload: devicePubRaw, with: aeadKey)
+        return try await incomingSendPubkeyAwaitBundle(
+            sid: sid,
+            devicePubCiphertextBase64Url: sealed.ciphertextBase64Url,
+            devicePubNonceBase64Url: sealed.nonceBase64Url
+        )
+    }
 }
 
 public enum PairingRelayError: Error, LocalizedError, Sendable {
@@ -74,9 +120,9 @@ public enum PairingRelayError: Error, LocalizedError, Sendable {
         "Joining an account from this phone isn't available yet. Use the web app."
 }
 
-/// The pairing relay has no network transport yet (the `/qr-pipe` leg is a
-/// follow-up), so shipped builds refuse with a sentence instead of waiting
-/// on a peer that can never arrive.
+/// Refuses with a sentence instead of waiting on a peer that can never
+/// arrive. Shipped builds use `LivePairingRelayClient`; this remains for
+/// hosts that have no network transport at all.
 public struct UnavailablePairingRelayClient: PairingRelayClient {
     public init() {}
     public func adminAwaitDevicePubkey(sid: String, aeadKey: SymmetricKey) async throws -> Data {
