@@ -205,7 +205,7 @@ class MainActivity : FragmentActivity() {
         // Security notices: decide from the stored notice now and poll shortly
         // after launch (after a gym launch has reset the previous run's state).
         com.flagshipserver.app.core.SecurityNoticeCenter.install(applicationContext)
-        com.flagshipserver.app.core.RelayHintCenter.install(applicationContext).start()
+        com.flagshipserver.app.core.RelayAddressCenter.install(applicationContext).start()
         // Which names are this device's own account, for the account-removed screen.
         com.flagshipserver.app.core.AccountGone.ownNames = {
             listOfNotNull(appState.currentUser.value, appState.activeCloudName.value)

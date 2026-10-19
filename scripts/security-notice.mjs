@@ -422,7 +422,7 @@ export async function signAndWrite({ body, signer, root, authorityKeys }) {
   return notice;
 }
 
-export async function loadMaintainersCli() {
+async function loadMaintainersCli() {
   const candidates = [
     process.env.FLAGSHIP_MAINTAINERS_DIR,
     path.join(REPO, "maintainers"),

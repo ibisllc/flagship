@@ -306,11 +306,11 @@ of the last check here: **not yet checked**.
   Insights beacon (Cloudflare dashboard setting), "Software 0.0.0" on Android's server page;
   (4) throwaway prod accounts (prime-marten, several web ones) go in the Phase B wipe; never
   touch playstore-test-0725.
-  **Relay hints (2026-10-19, `docs/relay-hints.md`):** the relay's addresses stay a compiled-in
-  seed, but a hint signed by the ca-track authority (`node scripts/relay-hint.mjs`, served at
-  `GET /api/relay-hints`, committed `null`) now comes first when DNS fails (Android); a failed
-  hint reads as an unresolved name, never as a box error. Needs a `.com` deploy and a store build
-  to matter. iOS has no DNS-failure fallback yet.
+  **Relay addresses (2026-10-19, `docs/relay-addresses.md`):** when DNS can't resolve a box's name,
+  Android asks `.com` (`GET /api/services/endpoints`, which already returns `passthroughIPv4/6`) for
+  the relay's current addresses, keeps the last answer, and tries it before the compiled-in seed;
+  the box's own pinned certificate is still what authenticates the connection, and a failed attempt
+  reads as an unresolved name, never as a box error. iOS has no DNS-failure fallback yet.
 - **`.com` on the Workers Free plan (owner, 2026-10-18; 10 ms CPU a request, 100,000
   requests a day, 50 subrequests).** `docs/runbooks/workers-cpu-budget.md` has the
   limits, the measurements and what each cache is keyed on. Done on `main`: reads
