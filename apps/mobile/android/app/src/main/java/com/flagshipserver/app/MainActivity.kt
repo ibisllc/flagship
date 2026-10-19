@@ -103,6 +103,10 @@ class MainActivity : FragmentActivity() {
     /** The mock clients of a debug gym run; null everywhere else (always in release). */
     private var gymMocks: com.flagshipserver.app.core.GymMocks? = null
 
+    private val saveBackupPicker = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri -> com.flagshipserver.app.core.PendingBackupSave.onPicked(applicationContext, uri) }
+
     /** The activity is visible; internet-access requests are fetched only then. */
     private val foreground = MutableStateFlow(false)
 
@@ -124,6 +128,7 @@ class MainActivity : FragmentActivity() {
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.flagshipserver.app.core.PendingBackupSave.launcher = { name -> saveBackupPicker.launch(name) }
         enableEdgeToEdge()
         applyOrientationPolicy()
         // FIRST: a debug build's launch overrides (the gym's backend apex),
@@ -683,6 +688,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        com.flagshipserver.app.core.PendingBackupSave.launcher = null
         registeredNetworkCallback?.let { cb ->
             runCatching { getSystemService(android.net.ConnectivityManager::class.java)?.unregisterNetworkCallback(cb) }
         }

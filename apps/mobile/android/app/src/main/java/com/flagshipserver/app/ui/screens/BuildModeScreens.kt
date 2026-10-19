@@ -569,12 +569,27 @@ fun BuildGitScreen(nav: NavController) {
         }
         Spacer(Modifier.height(FS.space.s4))
 
+        // A check answers for the repo, ref and name it was made with. Edit any of them afterwards and
+        // the answer (and the name the box reserved) no longer applies: ask again rather than install
+        // under a name other than the one shown.
+        var checkedInputs by remember { mutableStateOf<Triple<String, String, String>?>(null) }
+        val inputs = Triple(url.trim(), ref.trim(), slug)
+        LaunchedEffect(inputs, phase) {
+            val checked = checkedInputs
+            if (checked != null && checked != inputs && phase !is BuildGitViewModel.GitPhase.Idle &&
+                phase !is BuildGitViewModel.GitPhase.Checking
+            ) {
+                checkedInputs = null
+                vm.reset()
+            }
+        }
         val checkRepo = {
             if (url.isBlank()) {
                 toasts.error("Paste a repo URL first.")
             } else {
                 // Keep the server it builds on for the steps after this one.
                 podScope?.let { it.choose?.invoke(it.pod.podId) }
+                checkedInputs = inputs
                 vm.checkRepo(url, ref, name)
             }
         }

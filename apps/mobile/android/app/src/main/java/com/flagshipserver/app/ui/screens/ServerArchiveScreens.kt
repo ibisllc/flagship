@@ -73,7 +73,9 @@ import com.flagshipserver.app.ui.theme.FSLayout
 import com.flagshipserver.app.viewmodels.ImportBackupViewModel
 import com.flagshipserver.app.viewmodels.PickedFile
 import com.flagshipserver.app.viewmodels.ServerBackupViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -96,33 +98,24 @@ internal fun ServerBackupButton(serverDomain: String) {
     if (show) ServerBackupDialog(serverDomain, onDismiss = { show = false })
 }
 
-/** Copy [file] into the document the user created (ACTION_CREATE_DOCUMENT). */
-internal fun saveIntoDocument(context: Context, doc: Uri, file: File) {
-    context.contentResolver.openOutputStream(doc)?.use { out -> file.inputStream().use { it.copyTo(out, 1 shl 20) } }
-        ?: throw java.io.IOException("couldn't write ${file.name}")
+/** The system "Save to" picker for one backup file, then the copy into it ([PendingBackupSave]). */
+class BackupSaveLauncher internal constructor(private val file: () -> File?, private val onSaving: (Boolean) -> Unit, private val onResult: (Boolean) -> Unit) {
+    fun launch(name: String) {
+        val f = file() ?: return
+        onSaving(true)
+        com.flagshipserver.app.core.PendingBackupSave.start(f, name) { ok ->
+            onSaving(false)
+            onResult(ok)
+        }
+    }
 }
 
-/** The system "Save to" picker for one backup file, then the copy into it. */
 @Composable
 internal fun rememberSaveBackupLauncher(
     file: () -> File?,
     onSaving: (Boolean) -> Unit,
     onResult: (Boolean) -> Unit,
-): androidx.activity.compose.ManagedActivityResultLauncher<String, Uri?> {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    return rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { doc: Uri? ->
-        val f = file()
-        if (doc != null && f != null) {
-            scope.launch {
-                onSaving(true)
-                val ok = runCatching { withContext(Dispatchers.IO) { saveIntoDocument(context, doc, f) } }.isSuccess
-                onSaving(false)
-                onResult(ok)
-            }
-        }
-    }
-}
+): BackupSaveLauncher = BackupSaveLauncher(file, onSaving, onResult)
 
 @Composable
 private fun ServerBackupDialog(serverDomain: String, onDismiss: () -> Unit) {
