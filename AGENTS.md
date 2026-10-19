@@ -321,6 +321,13 @@ of the last check here: **not yet checked**.
   still serves everything itself (the static-only path is covered by tests and a local
   workerd smoke, not the gym). Next: gate the
   invite-revocation and share-end polls on the doorbell (576 requests a day a box).
+  **Next release (about 2026-10-25, owner): add a CPU profiler to `.com`** that records
+  CPU per route on the live Worker (p50/p95/max, kept in D1 or logs), because the gym
+  Worker does not enforce the Free 10 ms limit and its 2026-10-18 tail showed install-path
+  routes (register, `sealed-luks-key`, `order/status`, `server/:x/health`, `username/claim`,
+  `dns-01/delete`) at 30-50 ms on small samples (likely cold starts, unproven). Until it
+  exists, release step 13's `wrangler tail` watch is the only check; profile those routes
+  with `scripts/cpu-profile.ts` / `cpu-workerd.ts` first.
 - **Account gone (2026-10-18, N1, `docs/account-gone.md`).** After the pre-GA
   wipe a signed-in device must learn its account no longer exists. `.com`
   answers `404 { error, code: "account-not-found" }` before any auth check on
