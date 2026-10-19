@@ -105,9 +105,12 @@ def test_prebuilt_appliance_attaches_read_only_raw_seed_not_iso():
     assert ("-device", "qemu-xhci") not in pairs(args)
 
 
-def test_production_vm_gets_no_serial_and_no_ssh_forward():
+def test_production_vm_gets_a_discarding_serial_and_no_ssh_forward():
     args = build(config(debug=False))
-    assert ("-serial", "none") in pairs(args)
+    assert ("-chardev", "null,id=ser-null") in pairs(args)
+    assert ("-serial", "chardev:ser-null") in pairs(args)
+    assert ("-serial", "none") not in pairs(args)
+    assert not any("console.log" in a for a in args)
     assert not any("hostfwd" in a for a in args)
     assert ("-netdev", "user,id=net0") in pairs(args)
 

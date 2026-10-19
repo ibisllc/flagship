@@ -52,7 +52,7 @@ def build(
 
     qmp_port: loopback TCP port for the QMP control socket. serial_port:
     loopback TCP port for the serial console — ONLY used when the pure layer
-    said so (debug grant present). A production VM gets `-serial none`.
+    said so (debug grant present). A production VM gets a UART whose output is discarded (`-chardev null`): no console endpoint and no log, but a guest kernel that expects ttyS0 still boots (`-serial none` left it idle).
 
     accel: "kvm" in production; tests / CI without a hypervisor may pass "tcg".
     """
@@ -161,7 +161,7 @@ def build(
             "-serial", "chardev:ser0",
         ]
     else:
-        args += ["-serial", "none"]
+        args += ["-chardev", "null,id=ser-null", "-serial", "chardev:ser-null"]
 
     # Headless: the appliance has no GUI; all interaction is phone/web.
     args += ["-display", "none"]

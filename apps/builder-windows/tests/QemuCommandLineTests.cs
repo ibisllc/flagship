@@ -118,12 +118,15 @@ public class QemuCommandLineTests
     // ---- The debug-console hard guardrail ----
 
     [Fact]
-    public void ProductionVmGetsNoSerialDevice()
+    public void ProductionVmGetsASerialPortThatGoesNowhere()
     {
         var args = QemuCommandLine.Build(Config(console: false), Layout, Code, false, 4444, 0);
         var s = Joined(args);
-        Assert.Contains("-serial none", s);
+        Assert.Contains("-chardev null,id=ser-null", s);
+        Assert.Contains("-serial chardev:ser-null", s);
+        Assert.DoesNotContain("-serial none", s);
         Assert.DoesNotContain("chardev:ser0", s);
+        Assert.DoesNotContain("server=on,wait=off,logfile", s);
         Assert.DoesNotContain("console.log", s);
     }
 
