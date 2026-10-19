@@ -1552,7 +1552,13 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public private(set) var savedKeyDeposits: [ArchiveKeysDepositRequest] = []
     public private(set) var savedDeletes: [String] = []
     public private(set) var savedRuns = 0
-    public private(set) var bundleReads: [ServerArchiveRoute] = []
+    /// The parallel downloader reads bundle parts from several tasks at once, so this one list is locked.
+    private let bundleReadsLock = NSLock()
+    private var bundleReadsStore: [ServerArchiveRoute] = []
+    public var bundleReads: [ServerArchiveRoute] {
+        bundleReadsLock.lock(); defer { bundleReadsLock.unlock() }
+        return bundleReadsStore
+    }
     private var savedUsedIds: Set<String> = []
     private var savedRunReadsLeft = 0
 
@@ -1737,7 +1743,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         }
         let bundle = archiveBundle
         guard offset >= 0, offset <= Int64(bundle.count) else { throw Self.refusal(400, "bad offset") }
-        bundleReads.append(route)
+        bundleReadsLock.lock(); bundleReadsStore.append(route); bundleReadsLock.unlock()
         let start = Int(offset)
         let data = bundle.subdata(in: start..<min(start + 4 * 1024 * 1024, bundle.count))
         if start + data.count >= bundle.count, case .saved(let id) = route { GymProbe.note("downloaded backup \(id)") }
