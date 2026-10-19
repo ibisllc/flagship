@@ -37,7 +37,7 @@ This page is a field-by-field reference. For workflow + how-to, see
 |---|---|---|
 | `schema_version` | yes | Must be `1`. |
 | `name` | yes | DNS label (lowercase, 1-63 chars, `[a-z0-9-]`, no leading hyphen). |
-| `description` | no | Free text. |
+| `description` | no | One line, at most 30 characters; a longer one is shortened with a note, not rejected. |
 | `version` | yes | Semver. `1.2.3` or `1.2.3-beta.4`. |
 | `runtime` | yes | The runtime (or image) + port + start command + env. |
 | `data` | yes | Persistence (Postgres / a files folder) + scratch path. |
