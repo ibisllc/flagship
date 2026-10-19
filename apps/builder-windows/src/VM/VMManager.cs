@@ -401,6 +401,10 @@ public sealed class VMManager
         }
     }
 
+    /// <summary>The app is staying open after all (a cancelled restart as
+    /// administrator): servers may boot again.</summary>
+    public void CancelQuit() => _quitting = false;
+
     /// <summary>Whether a stop that leaves the lifecycle in this state presses
     /// the guest's power button first. A booted server gets to stop its daemon
     /// and flush its disk; an install that failed or was cancelled is redone
