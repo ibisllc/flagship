@@ -143,12 +143,12 @@ describe("parseManifest — name and version", () => {
     expect(r.ok).toBe(false);
   });
 
-  it("rejects a description longer than 30 chars", () => {
-    const m = { ...valid(), description: "a".repeat(31) };
-    const r = parseManifest(m);
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.errors.some((s) => s.includes("description"))).toBe(true);
+  it("shortens a description longer than 30 chars and says so", () => {
+    const r = parseManifest({ ...valid(), description: "a".repeat(31) });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.manifest.description).toBe("a".repeat(30));
+    expect(r.notes?.some((s) => s.includes("description"))).toBe(true);
   });
 
   it("accepts a description of exactly 30 chars", () => {

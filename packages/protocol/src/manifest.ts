@@ -369,12 +369,12 @@ export function parseManifest(input: unknown): ManifestParseResult {
     e("version must be semver (e.g. 1.2.3 or 1.2.3-beta.4)");
   }
 
+  const notes: string[] = [];
   optionalString(m, "description", e);
-  if (
-    typeof m.description === "string" &&
-    m.description.length > APP_ONELINER_MAX_LEN
-  ) {
-    e(`description must be at most ${APP_ONELINER_MAX_LEN} characters`);
+  let description = typeof m.description === "string" ? m.description : undefined;
+  if (description !== undefined && description.length > APP_ONELINER_MAX_LEN) {
+    description = description.slice(0, APP_ONELINER_MAX_LEN).trimEnd();
+    notes.push(`description was longer than ${APP_ONELINER_MAX_LEN} characters and was shortened`);
   }
 
   const runtime = parseRuntime(m.runtime, e);
@@ -387,7 +387,6 @@ export function parseManifest(input: unknown): ManifestParseResult {
   //   - access  ⇒ {enabled:true} — apps cannot OPT OUT of platform identity, so absent
   //               is treated as the only valid value (enabled:true), not a rejection.
   //   - migration ⇒ {verification:"standard"}
-  const notes: string[] = [];
   const data = parseData(m.data ?? {}, e, notes);
   const network = parseNetwork(m.network ?? {}, e);
   const access = parseAccess(m.access ?? { enabled: true }, e);
@@ -402,7 +401,7 @@ export function parseManifest(input: unknown): ManifestParseResult {
     manifest: {
       schema_version: MANIFEST_SCHEMA_VERSION,
       name: name!,
-      description: typeof m.description === "string" ? m.description : undefined,
+      description,
       version: version!,
       runtime: runtime!,
       data: data!,
