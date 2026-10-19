@@ -891,6 +891,16 @@ allowances (1M / 5M / 20M a month) are placeholders.
 
 ### Built, waiting on deploys or rebuilds
 
+- **iOS device-pairing transport (2026-10-19, branch `fix/ios-device-pairing`, not
+  merged):** Add a device and Join an account on the iPhone/iPad no longer refuse
+  in Release builds. `LivePairingRelayClient` speaks the web's two-leg `/qr-pipe`
+  protocol byte for byte (the incoming device's one sealed hello carries the
+  return-leg coordinates; the admin delivers the bundle on the swapped-role leg
+  under the same SAS-verified key), so a web admin can add an iPhone and an iPhone
+  admin can add a browser or phone. Shared vectors: `test-vectors/pairing-relay.json`
+  (`node tools/pairing-relay-vectors.mjs`). UNCOMPILED and its tests unrun (written
+  without a Swift toolchain): needs a Mac build, GymIPadTests, and a two-device live
+  check against the web app before merge.
 - **Account delete said "Another device is still on this account" on every
   fresh account (2026-10-18, found by the Windows test agent):** `.com`'s
   last-device check counted every active grant, but bootstrap (and demo
@@ -1414,7 +1424,7 @@ first update after it (`docs/anonymous-vouchers.md`, $1 voucher unit). Detail: `
    gym `.com`, sealed, removed the key and reported the one-slot detail; torn down,
    gym DNS back to base. It also found and fixed two ISO bugs (BIOS boots landed in
    the speech installer without the preseed; apt hung on the CD apt source).
-3. Remove the demo/dev flips (demo mode, any remaining hidden toggles). **iOS and webapp done 2026-10-16:** Release iOS builds carry no mock clients, fixtures, gym seams or developer mode (all `#if DEBUG`; `scripts/ios-release-clean.mjs`, `--build` checks a built app), the webapp has no `?debug=1` tools. Demo accounts stay (real `.com` accounts). iOS Add a device / Join an account had only the in-process mock relay, so Release now refuses with a sentence until the `/qr-pipe` pairing transport exists. **Rest done 2026-10-17:** the public `/dev/create-server` phone simulator is gone; `scripts/release-clean-sources.test.ts` scans the webapp, the site, Android's main source sets and `.com`'s `/api/dev` surface (only the demo `sample-user` routes remain) in plain vitest; Android's built-APK check is `apps/mobile/android/scripts/check-release-clean.sh`. Open: Studio's `FLAGSHIP_CONTROL_INSECURE` (Windows pairing over plain ws) and the box's `FLAGSHIP_MAINTAINER_PIN_OVERRIDE` seam are env-only and root-gated, left for the owner to decide.
+3. Remove the demo/dev flips (demo mode, any remaining hidden toggles). **iOS and webapp done 2026-10-16:** Release iOS builds carry no mock clients, fixtures, gym seams or developer mode (all `#if DEBUG`; `scripts/ios-release-clean.mjs`, `--build` checks a built app), the webapp has no `?debug=1` tools. Demo accounts stay (real `.com` accounts). iOS Add a device / Join an account had only the in-process mock relay, so Release refused with a sentence until the `/qr-pipe` pairing transport existed (it now exists on branch `fix/ios-device-pairing`, unmerged). **Rest done 2026-10-17:** the public `/dev/create-server` phone simulator is gone; `scripts/release-clean-sources.test.ts` scans the webapp, the site, Android's main source sets and `.com`'s `/api/dev` surface (only the demo `sample-user` routes remain) in plain vitest; Android's built-APK check is `apps/mobile/android/scripts/check-release-clean.sh`. Open: Studio's `FLAGSHIP_CONTROL_INSECURE` (Windows pairing over plain ws) and the box's `FLAGSHIP_MAINTAINER_PIN_OVERRIDE` seam are env-only and root-gated, left for the owner to decide.
 4. Fill the `pro.html` payment placeholders (on `feat/marketplace`).
 5. ~~`DEV_LATE_LOG` / W12 debug endpoints~~ removed 2026-10-17 (late-log, Hetzner
    rescue/destroy/server-info, upload-iso; installers post no logs any more; needs
