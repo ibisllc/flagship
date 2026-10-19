@@ -30,8 +30,10 @@ public static class QemuCommandLine
     /// qmpPort: loopback TCP port for the QMP control socket (clean shutdown +
     /// guest-stop events). serialPort: loopback TCP port for the serial
     /// console — ONLY used when the pure layer said so (debug grant present in
-    /// the recipe). A production VM gets `-serial none`: no console endpoint
-    /// of any kind, and the host app must never mount its disk or inject
+    /// the recipe). A production VM gets a UART whose output is
+    /// discarded (`-chardev null`): no console endpoint of any kind and no log
+    /// (a missing UART, `-serial none`, leaves this Debian kernel idle before init, so it
+    /// never asks the phone to unlock), and the host app must never mount its disk or inject
     /// users to work around that (the gate is the recipe's phone-signed
     /// consent, not a UI preference).
     ///
@@ -149,7 +151,7 @@ public static class QemuCommandLine
         }
         else
         {
-            args.AddRange(new[] { "-serial", "none" });
+            args.AddRange(new[] { "-chardev", "null,id=ser-null", "-serial", "chardev:ser-null" });
         }
 
         // Headless: the appliance has no GUI; all interaction is phone/web.
