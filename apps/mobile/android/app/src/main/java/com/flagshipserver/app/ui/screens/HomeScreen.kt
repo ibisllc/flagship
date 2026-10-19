@@ -767,9 +767,6 @@ fun ServerRow(
                         verticalArrangement = Arrangement.spacedBy(FS.space.s1),
                     ) {
                         if (leader != null) LeaderPill(confirmed = leaderConfirmed)
-                        // Per-service leadership (Phase 6): the services this box leads
-                        // (from /pods `leadsServices`). Tolerant of absence.
-                        LeadServicesPill(pod)
                         if (shownBackupWait != null) {
                             FSPill(
                                 label = if (shownBackupWait.state == "restoring") "Restoring its backup" else "Waiting for its backup",
@@ -914,17 +911,4 @@ fun ErrorCard(message: String, onRetry: (() -> Unit)? = null) {
         iconTint = FS.colors.danger,
         action = if (onRetry != null) ({ FSSecondaryButton(label = "Try again", onClick = onRetry) }) else null,
     )
-}
-
-/// Per-service leadership (Phase 6) — a small "Leads N" indicator for a box that
-/// is the current lead for one or more services (`PodInfo.leadsServices` from
-/// `/pods`). Tolerant of absence: renders nothing when the list is empty or the
-/// box never came online (a dead box is never badged as leading). Mirror of iOS
-/// LeadServicesBadge.
-@Composable
-fun LeadServicesPill(pod: PodInfo) {
-    val services = pod.leadsServices
-    if (!pod.cameOnline || services.isEmpty()) return
-    val label = if (services.size == 1) "Leads ${services[0]}" else "Leads ${services.size} services"
-    FSPill(label, kind = FSPillKind.Online, modifier = Modifier.testTag("pod-leads-badge"))
 }

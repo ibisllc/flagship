@@ -166,6 +166,7 @@ fun ActivityScreen(
         ) { ApprovalsList(approvals) }
 
         val serverTitle = activityServerTitle(pods, effectiveServerFilter)
+        val allServers = serverTitle == "All servers"
         when (val s = state) {
             is LoadingState.Loaded -> {
                 val items = s.value.items
@@ -203,14 +204,14 @@ fun ActivityScreen(
                 Accordion(
                     section = ActivitySection.Server,
                     title = serverTitle,
-                    hint = "Updates, backups, apps and shares on this server",
+                    hint = if (allServers) "Updates, backups, apps and shares across all servers" else "Updates, backups, apps and shares on this server",
                     count = box.size,
                     isOpen = open == ActivitySection.Server,
                     onToggle = { toggle(ActivitySection.Server) },
                 ) {
                     EventList(
                         rows = box,
-                        empty = "Nothing has happened on this server yet.",
+                        empty = if (allServers) "Nothing has happened on your servers yet." else "Nothing has happened on this server yet.",
                         more = s.value.moreBox,
                         onMore = { vm.loadMoreBox() },
                         moreTag = "activity-load-more-server",
@@ -263,9 +264,11 @@ internal class ActivityPane {
 internal val LocalActivityPane = androidx.compose.runtime.compositionLocalOf<ActivityPane?> { null }
 
 /** "Server · home2": the server this log belongs to (the one picked in the
- *  switcher, else the only one). */
+ *  switcher, else the only one). With several servers and none picked the log is every
+ *  server's, so it says "All servers". */
 internal fun activityServerTitle(pods: List<com.flagshipserver.app.core.PodInfo>, pickedPodId: String?): String {
     val pod = pods.firstOrNull { it.podId == pickedPodId } ?: pods.singleOrNull()
+    if (pod == null && pods.size > 1) return "All servers"
     val name = pod?.name?.takeIf { it.isNotEmpty() } ?: return "This server"
     return "Server · $name"
 }

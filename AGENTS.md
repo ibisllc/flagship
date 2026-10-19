@@ -818,7 +818,10 @@ of the last check here: **not yet checked**.
   each server that is up (`POST /api/screens/server-order`), boxes report
   the order they hold (`orderIssuedAt` on the heartbeat and `/pods`) and
   beat at once on adopting one, and the Leader badge stays gray until the
-  leader acknowledges (webapp shell v76). iOS's stuck "No. 2" came from a drop between rows
+  leader acknowledges (webapp shell v76). Home shows no per-app "leads <app>" chips
+  (2026-10-19, shell v154, all three apps): only the one leader is marked; an app's own
+  page says where it runs. Activity's server section reads "All servers" when no
+  server is picked. iOS's stuck "No. 2" came from a drop between rows
   never firing `performDrop`: rows showed the drag preview, labels the
   saved order, and nothing saved.
 - **Continue a build chat and switch provider (2026-10-15, `d3dd73c8`..`0a8a9391`).**

@@ -520,13 +520,6 @@ export function renderServerCard(server, pod, opts = {}) {
   // Subtitle folds the app count + auto-unlock state into one muted line; the
   // cert countdown (when <30d) rides the mono detail line.
   let subtitle = `${serviceCount} service${serviceCount === 1 ? "" : "s"} · ${autoUnlock}`;
-  // Per-service leadership (Phase 6): `/pods` relays `leadsServices: [slug]` —
-  // the services THIS box currently leads (highest-clout live runner). Additive
-  // + tolerant of absence: only append when the box actually leads ≥1 service.
-  const leads = leadsOf(pod);
-  if (leads.length) {
-    subtitle += ` · leads ${leads.length === 1 ? leads[0] : `${leads.length} services`}`;
-  }
   const standingIn = opts.order?.isLeader ? standingInText(opts.order.standingInFor) : "";
   if (standingIn) subtitle += ` · ${standingIn}`;
   // A box that registered but never came online is a dead install: put Delete
