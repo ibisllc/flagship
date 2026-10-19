@@ -114,6 +114,7 @@ class JoinDeviceViewModel(
         _phase.value = JoinDevicePhase.Connecting
         try {
             val hello = session.phonePubKey + deviceKeyPair.publicKey + requireNotNull(HexUtil.decode(deviceId))
+            relay.attachSession(session, joinLink.adminPubKey)
             relay.connectAndHello(joinLink.sid, hello)
             val matchCode = session.pair(joinLink.adminPubKey)
             _phase.value = JoinDevicePhase.VerifySas(matchCode)

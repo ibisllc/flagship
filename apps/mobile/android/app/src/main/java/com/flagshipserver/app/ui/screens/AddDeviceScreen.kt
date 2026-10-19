@@ -88,8 +88,8 @@ fun AddDeviceScreen(
     val username = app.currentUser.collectAsState().value ?: ""
     val scope = rememberCoroutineScope()
 
-    // No live phone-to-phone relay exists yet: say so instead of pairing over
-    // nothing. Debug builds use the in-memory relay so the gym can drive it.
+    // A variant without a pairing transport says so instead of pairing over
+    // nothing. Mock debug runs use the in-memory relay so the gym can drive it.
     if (!com.flagshipserver.app.core.AddServerGate.allowsAddDevice(app)) {
         AddServerAdminOnlyScreen(
             onBack = onCancel,

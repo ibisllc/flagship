@@ -83,8 +83,8 @@ interface AppVariant {
     /** Gym: a stand-in for the notice fetch (null: the real, anonymous one). */
     fun noticeFetcher(): NoticeFetcher?
 
-    /** The phone-to-phone pairing relay. Null until a live one exists: the
-     *  pairing screens then say it isn't available yet. */
+    /** The phone-to-phone pairing relay. Null only for a variant with no
+     *  transport at all: the pairing screens then say it isn't available. */
     fun devicePairingRelays(): DevicePairingRelays?
 }
 

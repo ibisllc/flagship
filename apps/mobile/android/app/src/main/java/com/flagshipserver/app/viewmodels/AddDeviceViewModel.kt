@@ -161,6 +161,7 @@ class AddDeviceViewModel(
     suspend fun start() {
         _phase.value = AddDevicePhase.ShowingQr(joinUrl)
         try {
+            relay.attachSession(session)
             val helloBytes = relay.awaitPeerHello(sid)
             require(helloBytes.size == 80) {
                 "peer hello must be 80 bytes (x25519 pub || device pub || device id)"

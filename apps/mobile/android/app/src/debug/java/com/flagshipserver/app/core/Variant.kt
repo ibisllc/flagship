@@ -206,9 +206,9 @@ object Variant : AppVariant {
     override fun credentialCalls(): com.flagshipserver.app.keystore.CredentialCalls? =
         if (GymSeams.fakePasskeysNoPrfOnCreate) com.flagshipserver.app.keystore.FakePasskeyApp() else null
 
-    // Only a mock run (and the unit tests) pair over the in-memory relay. A debug
-    // build on a real backend has no live relay, exactly like a release build: it
-    // says so instead of failing with the mock's "hasn't sent hello yet".
+    // Only a mock run (and the unit tests) pair over the in-memory relay; a
+    // debug build on a real backend pairs over the live one, like a release build.
     override fun devicePairingRelays(): DevicePairingRelays? =
-        if (realBackendLaunch) null else MockDevicePairingRelay().let { DevicePairingRelays(it.admin, it.incoming) }
+        if (realBackendLaunch) DevicePairingRelays(LiveAdminPairingRelay(), LiveIncomingPairingRelay())
+        else MockDevicePairingRelay().let { DevicePairingRelays(it.admin, it.incoming) }
 }
