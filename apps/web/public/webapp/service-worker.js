@@ -356,7 +356,8 @@
 //  v153: when .com keeps failing, the live-sync loop backs off (5 s, 10 s ... up
 //       to 2 minutes) instead of retrying every 5 s, and asks /pods again only
 //       every fourth round once it has failed too (lib/liveSync.js).
-const SHELL_VERSION = "v153";
+//  v154: finishing the first-run wizard enters Home (it showed the pre-sign-in panel until a reload).
+const SHELL_VERSION = "v154";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
