@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 // test-vectors/device-pairing-relay.json is what Android and iOS read. The
 // generator runs the web for real and checks it against node:crypto before it
 // writes, so a file that passes --check holds only values the web agrees with.
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const FILE = join(ROOT, "test-vectors/device-pairing-relay.json");
 
 describe("device-pairing-relay vectors", () => {
