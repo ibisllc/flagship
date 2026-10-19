@@ -13,7 +13,12 @@
 //                                      root, plus the shared fonts and qrEncoder.js, plus `_headers`)
 //   * checkStaticAssets(root)          the predeploy guard (scripts/predeploy-com.sh)
 //
-// CLI: npx tsx scripts/static-assets.ts check | write-headers | build-webapp [outDir]
+//   * servedWebappFindings(dir, root)  the served webapp must carry the PRODUCTION trust pin and no gym seam
+//   * webappDeployGuardFindings(facts) why scripts/deploy-webapp-static.sh must refuse (a gym tree, an
+//                                      off-main or dirty tree, a gym environment)
+//
+// CLI: npx tsx scripts/static-assets.ts check | write-headers | build-webapp [outDir] | deploy-guard [servedDir]
+import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -280,7 +285,124 @@ export function checkStaticAssets(root = REPO_ROOT, tomlOverride?: string): Find
   if (/^\s*\{\s*pattern\s*=\s*"(webapp|remote)\.flagshipserver\.com"/m.test(toml)) {
     err("webapp. / remote. are routes of flagship-webapp (apps/webapp-static), not of flagship-com");
   }
+
+  // The gym Worker (scripts/gym-refresh.sh sets FLAGSHIP_GYM_DEPLOY=1) serves its own re-pinned webapp
+  // on webapp.gym.; every other deploy publishes this tree's webapp on the production hostnames.
+  if (process.env[GYM_DEPLOY_ENV] !== "1") {
+    f.push(...servedWebappFindings(join(publicDir, "webapp"), root));
+  }
   return f;
+}
+
+
+// ---- what may be served on the production hostnames -----------------------
+
+/** The word the gym branch's webapp installs its adopt seam under (apps/web/public/webapp/app.js on `gym`). */
+export const GYM_SEAM_MARKER = "installGymAdoptSeam";
+/** Set only by scripts/gym-refresh.sh, which deploys the gym Worker and never the production static Worker. */
+export const GYM_DEPLOY_ENV = "FLAGSHIP_GYM_DEPLOY";
+/**
+ * The one deliberate escape hatch of scripts/deploy-webapp-static.sh. It waives ONLY "HEAD is on
+ * origin/main" and "the worktree is clean"; the production pin, the gym seam and the gym
+ * environment are never waivable.
+ */
+export const WEBAPP_DEPLOY_OVERRIDE_ENV = "FLAGSHIP_WEBAPP_DEPLOY_OVERRIDE";
+export const WEBAPP_DEPLOY_OVERRIDE_VALUE = "I-AM-SHIPPING-AN-UNVERIFIED-TREE-TO-THE-PRODUCTION-WEBAPP-HOSTNAMES";
+
+export function readBakedPin(serverTrustJs: string): string | undefined {
+  return serverTrustJs.match(/export const BAKED_PIN\s*=\s*"([0-9a-f]*)"/)?.[1];
+}
+
+export function readMandatePin(maintainerCaTs: string): string | undefined {
+  return maintainerCaTs.match(/export const MAINTAINER_PINNED_MANDATE_HASH\s*=\s*"([0-9a-f]*)"/)?.[1];
+}
+
+/**
+ * What a directory about to be served on webapp. / remote.flagshipserver.com must satisfy: its
+ * lib/serverTrust.js BAKED_PIN is the pin this tree's protocol package carries (the gym branch bakes
+ * its own CA pin, so a gym webapp on the production hostnames trusts the wrong CA) and its app.js
+ * has no gym adopt seam. `servedDir` is apps/web/public/webapp or the generated assets directory.
+ */
+export function servedWebappFindings(servedDir: string, root = REPO_ROOT): Finding[] {
+  const f: Finding[] = [];
+  const err = (message: string) => f.push({ level: "error", message });
+  const trust = join(servedDir, "lib/serverTrust.js");
+  const app = join(servedDir, "app.js");
+  const baked = existsSync(trust) ? readBakedPin(readFileSync(trust, "utf8")) : undefined;
+  const mandate = readMandatePin(readFileSync(join(root, "packages/protocol/src/maintainerCa.ts"), "utf8"));
+  if (!baked) err(`${trust}: no BAKED_PIN found`);
+  else if (!mandate) err("packages/protocol/src/maintainerCa.ts: no MAINTAINER_PINNED_MANDATE_HASH found");
+  else if (baked !== mandate) {
+    err(`the served webapp's BAKED_PIN (${baked.slice(0, 8)}...) is not MAINTAINER_PINNED_MANDATE_HASH (${mandate.slice(0, 8)}...): a gym or otherwise re-pinned webapp must not reach webapp. / remote.flagshipserver.com`);
+  }
+  if (existsSync(app) && readFileSync(app, "utf8").includes(GYM_SEAM_MARKER)) {
+    err(`${app} contains ${GYM_SEAM_MARKER}: that is the gym branch's webapp, never for the production hostnames`);
+  }
+  return f;
+}
+
+export interface WebappDeployFacts {
+  /** HEAD is an ancestor of (or equal to) origin/main, after a fetch. */
+  onMain: boolean;
+  /** No uncommitted change to a tracked file. */
+  clean: boolean;
+  env: Record<string, string | undefined>;
+  /** The arguments given to deploy-webapp-static.sh. */
+  args: string[];
+  /** Command lines of the processes above this one (npm run deploy, gym-refresh.sh ...). */
+  ancestry: string[];
+  /** servedWebappFindings for the directory being deployed. */
+  served: Finding[];
+}
+
+/** Every reason scripts/deploy-webapp-static.sh must refuse; empty = go ahead. */
+export function webappDeployGuardFindings(x: WebappDeployFacts): string[] {
+  const out: string[] = [];
+  const gym: string[] = [];
+  for (const [k, v] of Object.entries(x.env)) {
+    if (v === undefined) continue;
+    if (k === GYM_DEPLOY_ENV && v !== "" && v !== "0") gym.push(`${k}=${v}`);
+    else if (/^GYM_/.test(k) && v !== "") gym.push(`${k} is set`);
+    else if ((k === "FLAGSHIP_MIGRATION_CHECK_DB" || k === "FLAGSHIP_MIGRATION_CHECK_CONFIG") && /gym/i.test(v)) gym.push(`${k}=${v}`);
+  }
+  if (x.args.some((a) => /gym/i.test(a))) gym.push(`argument ${x.args.find((a) => /gym/i.test(a))}`);
+  const via = x.ancestry.find((c) => /wrangler\.gym|gym-refresh|gym-weekly/.test(c));
+  if (via) gym.push(`started under: ${via.slice(0, 120)}`);
+  if (gym.length) {
+    out.push(`a gym deployment is in progress (${gym.join("; ")}): the gym deploys only flagship-com-gym and never touches flagship-webapp, which owns webapp. and remote.flagshipserver.com`);
+  }
+  for (const s of x.served) out.push(s.message);
+  const overridden = x.env[WEBAPP_DEPLOY_OVERRIDE_ENV] === WEBAPP_DEPLOY_OVERRIDE_VALUE;
+  if (!overridden) {
+    if (!x.onMain) out.push("HEAD is not on origin/main (or origin/main could not be fetched): only a commit that is already on main is deployed to the production hostnames");
+    if (!x.clean) out.push("the worktree has uncommitted changes to tracked files");
+  }
+  return out;
+}
+
+function git(root: string, ...args: string[]) {
+  return spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
+}
+
+/** Command lines of this process's ancestors, nearest first (best effort; empty where `ps` is missing). */
+function ancestorCommands(): string[] {
+  const out: string[] = [];
+  let pid = process.ppid;
+  for (let i = 0; i < 12 && pid > 1; i++) {
+    const r = spawnSync("ps", ["-o", "ppid=", "-o", "command=", "-p", String(pid)], { encoding: "utf8" });
+    const m = (r.stdout ?? "").trim().match(/^(\d+)\s+(.*)$/s);
+    if (!m) break;
+    out.push(m[2]!);
+    pid = Number(m[1]);
+  }
+  return out;
+}
+
+export function gatherWebappDeployFacts(root: string, args: string[], servedDir: string): WebappDeployFacts {
+  const fetched = git(root, "fetch", "-q", "origin", "main").status === 0;
+  const onMain = fetched && git(root, "merge-base", "--is-ancestor", "HEAD", "origin/main").status === 0;
+  const clean = git(root, "status", "--porcelain", "--untracked-files=no").stdout.trim() === "";
+  return { onMain, clean, env: process.env, args, ancestry: ancestorCommands(), served: servedWebappFindings(servedDir, root) };
 }
 
 // ---- CLI -------------------------------------------------------------------
@@ -296,12 +418,29 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     const patterns = readWorkerFirst(readFileSync(join(REPO_ROOT, "apps/com/wrangler.toml"), "utf8"));
     writeFileSync(join(REPO_ROOT, SITE_HEADERS_PATH), siteHeadersFile(patterns));
     console.log(`wrote ${SITE_HEADERS_PATH} (${countHeaderRules(siteHeadersFile(patterns))} rules)`);
+  } else if (cmd === "deploy-guard") {
+    // scripts/deploy-webapp-static.sh: [servedDir] defaults to the source apps/web/public/webapp
+    const served = arg ?? join(REPO_ROOT, "apps/web/public/webapp");
+    const args = process.argv.slice(4);
+    const reasons = webappDeployGuardFindings(gatherWebappDeployFacts(REPO_ROOT, args, served));
+    if (reasons.length) {
+      console.error("\n================================================================");
+      console.error("REFUSING TO DEPLOY flagship-webapp (webapp. / remote.flagshipserver.com)");
+      console.error("================================================================");
+      for (const r of reasons) console.error(`  - ${r}`);
+      console.error(`\nOnly a clean checkout of a commit already on origin/main, whose webapp carries the production pin,`);
+      console.error("may be published on these hostnames. The gym deploys only flagship-com-gym (scripts/gym-refresh.sh).");
+      console.error(`Deliberate exception for "not on main" / "dirty" only: ${WEBAPP_DEPLOY_OVERRIDE_ENV}=${WEBAPP_DEPLOY_OVERRIDE_VALUE}`);
+      console.error("================================================================\n");
+      process.exit(1);
+    }
+    console.log("deploy-guard: ok");
   } else if (cmd === "build-webapp") {
     const out = arg ?? join(REPO_ROOT, "apps/webapp-static/public");
     const r = await buildWebappAssets(out);
     console.log(`built ${out}: ${r.files} files`);
   } else {
-    console.error("usage: static-assets.ts check | write-headers | build-webapp [outDir]");
+    console.error("usage: static-assets.ts check | write-headers | build-webapp [outDir] | deploy-guard [servedDir]");
     process.exit(2);
   }
 }

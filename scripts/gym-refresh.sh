@@ -12,9 +12,11 @@
 #   4. secrets  every secret name prod's Worker has must exist on the gym
 #               Worker (values are the gym's own, from .gym-secrets.env or
 #               generated; never copied from prod). Same for the gym Fly app.
-#   5. deploy   the gym Worker FROM THE GYM BRANCH through `npm run deploy`
-#               (clean build + predeploy gates, pointed at the gym D1), then the
-#               gym Fly app, scaled to one machine.
+#   5. deploy   the gym Worker FROM THE GYM BRANCH (clean build + predeploy gates,
+#               pointed at the gym D1, then `wrangler deploy --config wrangler.gym.toml`),
+#               then the gym Fly app, scaled to one machine. It NEVER runs `npm run
+#               deploy` and never touches flagship-webapp (the production static Worker
+#               that owns webapp./remote.flagshipserver.com).
 #   6. health   gym.flagshipserver.com and flagship-services-gym answer 200.
 #
 # Usage: bash scripts/gym-refresh.sh [--no-push] [--skip-fly-deploy] [--skip-deploy] [--dry-run]
@@ -43,7 +45,7 @@ for arg in "$@"; do
     --skip-fly-deploy) fly_deploy=0 ;;
     --skip-deploy) deploy=0; fly_deploy=0 ;;
     --dry-run) DRY=1 ;;
-    -h|--help) sed -n '2,29p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,33p' "$0"; exit 0 ;;
     *) echo "unknown argument: $arg (see --help)" >&2; exit 2 ;;
   esac
 done
@@ -269,10 +271,16 @@ if [ "$deploy" = "0" ]; then
   say "--skip-deploy: leaving both deployments as they are"
 else
   if [ "$DRY" = "1" ]; then
-    say "DRY-RUN would: (cd $WT/apps/com && npm run deploy -- --config $CFG) with the migration gate on $D1"
+    say "DRY-RUN would: (cd $WT/apps/com && clean-build-com.sh && predeploy-com.sh && wrangler deploy --config $CFG) with the migration gate on $D1; never the production static Worker"
   else
-    if ! out="$(cd "$WT/apps/com" && FLAGSHIP_MIGRATION_CHECK_DB="$D1" FLAGSHIP_MIGRATION_CHECK_CONFIG="$CFG" \
-        npm run deploy -- --config "$CFG" ${GYM_INSTALLER_GIT_REF:+--var "DEMO_INSTALLER_GIT_REF:$GYM_INSTALLER_GIT_REF"} 2>&1)"; then
+    # NOT `npm run deploy`: that script deploys the production static Worker `flagship-webapp`
+    # first, which owns webapp./remote.flagshipserver.com. Once a gym run put the gym webapp (its
+    # own CA pin) live there. The gym Worker serves its own webapp on webapp.gym., so the gym path
+    # runs the same build and predeploy gates and then deploys flagship-com-gym only.
+    if ! out="$(cd "$WT/apps/com" && export FLAGSHIP_GYM_DEPLOY=1 FLAGSHIP_MIGRATION_CHECK_DB="$D1" FLAGSHIP_MIGRATION_CHECK_CONFIG="$CFG" \
+        && { bash ../../scripts/clean-build-com.sh \
+        && FLAGSHIP_CHECK_PROD_MIGRATIONS=1 bash ../../scripts/predeploy-com.sh \
+        && npx wrangler deploy --config "$CFG" ${GYM_INSTALLER_GIT_REF:+--var "DEMO_INSTALLER_GIT_REF:$GYM_INSTALLER_GIT_REF"}; } 2>&1)"; then
       echo "$out" | tail -30
       die "gym Worker deploy failed"
     fi

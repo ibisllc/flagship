@@ -53,8 +53,10 @@ npx tsx tools/live-e2e/fleet-cli.ts sweep [--destroy]         # list / destroy e
   (`~/.cache/flagship/gym-worktree`) and pushes it, builds it, applies and
   stamps the gym D1 migrations, gives the gym Worker its own value for every
   secret prod has (it fails naming any it can't), deploys the gym Worker from
-  the gym branch through `npm run deploy` (migration gate pointed at the gym
-  D1), deploys and scales the gym Fly app, and health-checks both. A rebase
+  the gym branch (clean build and predeploy gates with the migration gate
+  pointed at the gym D1, then `wrangler deploy --config wrangler.gym.toml`;
+  never `npm run deploy`, which would also deploy the production static Worker
+  `flagship-webapp`), deploys and scales the gym Fly app, and health-checks both. A rebase
   conflict stops it: resolve on the gym branch by hand (keep main's behaviour
   plus the gym seams), then `git push --force-with-lease origin gym`.
   `GYM_BASE_REF=<branch>` deploys the gym on unlanded work (never pushed).

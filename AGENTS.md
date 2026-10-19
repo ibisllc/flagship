@@ -379,6 +379,7 @@ of the last check here: **not yet checked**.
   Postgres 18 and real loop images on a Debian 13 VM (CI runs both). Needs
   an endorsed box release; the webapp (shell v132) and Android show `storage` and the alert, iOS doesn't yet;
   live gym group `quota` not run yet.
+- **`gym-refresh.sh` must never touch `flagship-webapp` (2026-10-18).** It once ran `npm run deploy`, whose first step deploys the production static Worker, and the gym webapp (gym `BAKED_PIN`, adopt seam) went live on `webapp.`/`remote.flagshipserver.com`. It now deploys `flagship-com-gym` only; `deploy-webapp-static.sh` refuses off-main, dirty, gym-env or non-prod-pin trees (`FLAGSHIP_WEBAPP_DEPLOY_OVERRIDE` waives only off-main/dirty); tests `scripts/webapp-deploy-guard.test.ts`; `docs/runbooks/final-deploy.md` step 6.
 - **Live gym on UpCloud, all green (2026-10-17).** `bash scripts/gym-refresh.sh`
   (rebases `gym` onto main, gym D1 migrations, secret parity, deploys the gym
   Worker and Fly app) is gym:weekly's phase 0; the live half is

@@ -366,6 +366,23 @@ bash scripts/gym-refresh.sh               # rebases `gym` onto main, gym D1 migr
 npx tsx tools/live-e2e/shared-run.ts      # the live fleet run (about 11 minutes, 3 boxes); its core group checks that the account holds ZERO records and that box, service and unregistered names resolve through the zone wildcard
 ```
 
+`gym-refresh.sh` must never touch the webapp Worker. It deploys `flagship-com-gym` only
+(clean build and predeploy gates, then `wrangler deploy --config wrangler.gym.toml`), never
+`npm run deploy`: that script first deploys `flagship-webapp`, which owns the PRODUCTION
+`webapp.` and `remote.flagshipserver.com`. On 2026-10-18 a gym refresh did exactly that and the
+gym branch's webapp (its own `BAKED_PIN` `87f5ae60...`, the gym adopt seam) went live on both
+production hostnames until `.com` was redeployed from `main`. The gym Worker serves its own
+webapp on `webapp.gym.`, so nothing is lost. Guards that keep it that way:
+`scripts/deploy-webapp-static.sh` refuses unless HEAD is on `origin/main`, the worktree is
+clean, the built `lib/serverTrust.js` `BAKED_PIN` equals `MAINTAINER_PINNED_MANDATE_HASH`
+(prod: `5016749377de07fd...`) and `app.js` has no `installGymAdoptSeam`, and it never runs
+under a gym environment (`FLAGSHIP_GYM_DEPLOY`, `GYM_*`, `wrangler.gym.toml`); the same pin and
+seam check is in `static-assets.ts check` (the `npm run deploy` predeploy). The one deliberate
+override, `FLAGSHIP_WEBAPP_DEPLOY_OVERRIDE=I-AM-SHIPPING-AN-UNVERIFIED-TREE-TO-THE-PRODUCTION-WEBAPP-HOSTNAMES`,
+waives only "not on main" and "dirty"; the pin, seam and gym checks cannot be waived.
+Tests: `scripts/webapp-deploy-guard.test.ts`. After any `.com` deploy,
+`curl -s https://webapp.flagshipserver.com/lib/serverTrust.js | grep BAKED_PIN` must show the prod pin.
+
 Run it only when no other live run is in progress. The gym refuses to start if
 its fleet will not fit the zone. Teardown goes through `/api/gym/teardown`. Every
 shared run records DNS for the first box's issuance (a poll every 200 ms of the
