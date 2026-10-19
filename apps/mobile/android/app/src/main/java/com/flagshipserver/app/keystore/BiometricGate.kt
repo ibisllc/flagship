@@ -9,6 +9,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.withStateAtLeast
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 class BiometricCancelled : Exception("biometric prompt cancelled")
@@ -62,9 +64,21 @@ object BiometricGate {
      *    a prompt that never came up, the screen destroyed) throws
      *    [BiometricFailed], so callers can show an idle "Try again".
      *
+     * Requests queue: the system shows one prompt per activity, and a second
+     * `authenticate` while one is up replaces it without ever calling the
+     * first's callback, which left the app-lock screen on "Authenticating…"
+     * after a file picker returned and the backup restore asked at the same
+     * moment.
+     *
      * Must run on the main thread (the prompt and the lifecycle live there).
      */
     suspend fun run(lifecycle: Lifecycle, starter: PromptStarter) {
+        promptLock.withLock { runExclusive(lifecycle, starter) }
+    }
+
+    private val promptLock = Mutex()
+
+    private suspend fun runExclusive(lifecycle: Lifecycle, starter: PromptStarter) {
         while (true) {
             if (lifecycle.currentState == Lifecycle.State.DESTROYED) {
                 throw BiometricFailed(BiometricFailed.SCREEN_GONE, "screen closed")
