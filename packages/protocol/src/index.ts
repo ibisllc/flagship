@@ -56,3 +56,4 @@ export * from "./blindRsa.js";
 export * from "./peerBackupNet.js";
 export * from "./peerBackupMail.js";
 export * from "./securityNotice.js";
+export * from "./relayHint.js";

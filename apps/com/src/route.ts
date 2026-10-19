@@ -34,6 +34,7 @@ import {
 } from "./adapterIndex.js";
 import { handleInferenceModelRoutes, isInferenceModelPath } from "./inferenceModelRoutes.js";
 import { handleSecurityNotices, isSecurityNoticesPath } from "./securityNotices.js";
+import { handleRelayHints, isRelayHintsPath } from "./relayHints.js";
 import { handlePeerBackupNetRoute, isPeerBackupNetPath } from "./peerBackupNetworkRoutes.js";
 import { handleRateLimitReport, RATE_LIMIT_REPORT_PATH } from "./rateLimitReport.js";
 import { handleReapRoute, REAP_PATH_PREFIX } from "./prodReap.js";
@@ -670,6 +671,12 @@ async function routeImpl(
   // answered before the rate limiter, which keys on the caller.
   if (isSecurityNoticesPath(url.pathname)) {
     return handleSecurityNotices(request, env, ctx);
+  }
+
+  // The maintainer-signed relay address hint (docs/relay-hints.md): the same
+  // kind of document, an advisory for apps whose DNS fails.
+  if (isRelayHintsPath(url.pathname)) {
+    return handleRelayHints(request);
   }
 
   // AI model menus: Flagship Inference's catalog and the capability table.

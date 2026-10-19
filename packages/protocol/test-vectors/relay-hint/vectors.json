@@ -1,0 +1,650 @@
+{
+  "note": "Golden vectors for RelayHint (docs/relay-hints.md). Ed25519 is deterministic: regenerate with `npx tsx packages/protocol/tests/genRelayHintVectors.ts`.",
+  "keys": {
+    "authorityPubHex": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+    "otherPubHex": "ee31f83c88a71219a6fcf9bee0da9bc22620588f5a15a6145553504df9649e5c"
+  },
+  "t0": 1792000000000,
+  "positive": [
+    {
+      "name": "first",
+      "hint": {
+        "type": "RelayHint",
+        "version": 1,
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "149.248.216.86",
+          "2a09:8280:1::110:d2b6:0"
+        ],
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "6bc8ffea538418df4d5292a6ea0a67cb8ea5cd6c37e08d8d65f261640608d43d63dce127b548641fd447aecf53397879d650166bd5f2554991f96aee18fab201"
+      },
+      "canonical": "flagship/relay-hint/v1|c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7|1|1792000000000|1799776000000|149.248.216.86,2a09:8280:1::110:d2b6:0"
+    },
+    {
+      "name": "second-changes-the-list",
+      "hint": {
+        "type": "RelayHint",
+        "version": 1,
+        "seq": 2,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "203.0.113.7",
+          "149.248.216.86",
+          "2a09:8280:1::110:d2b6:0"
+        ],
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "045125aab79b6c632c4d0c9408bfe7d1ca850ea4c1b5ae900e9cbe4c2e991f2695c61ecb92352933c94f056f1c41e2e86b11e595c21accee84d48380b7c6ef01"
+      },
+      "canonical": "flagship/relay-hint/v1|c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7|2|1792000000000|1799776000000|203.0.113.7,149.248.216.86,2a09:8280:1::110:d2b6:0"
+    }
+  ],
+  "reject": [
+    {
+      "name": "signed-by-someone-else",
+      "hint": {
+        "type": "RelayHint",
+        "version": 1,
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "149.248.216.86",
+          "2a09:8280:1::110:d2b6:0"
+        ],
+        "signedBy": "ee31f83c88a71219a6fcf9bee0da9bc22620588f5a15a6145553504df9649e5c",
+        "signature": "b65f9a0e291deff43eba35af65a8a3863ec1b1bb2442a7bbcc0b735418d3e6f70cd4a6832d335f56f2ffa6ddcc47c9f0c962ff437aca13f720f7bd6782f93c05"
+      },
+      "expect": "unauthorized-signer"
+    },
+    {
+      "name": "address-changed-after-signing",
+      "hint": {
+        "type": "RelayHint",
+        "version": 1,
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "203.0.113.7",
+          "2a09:8280:1::110:d2b6:0"
+        ],
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "6bc8ffea538418df4d5292a6ea0a67cb8ea5cd6c37e08d8d65f261640608d43d63dce127b548641fd447aecf53397879d650166bd5f2554991f96aee18fab201"
+      },
+      "expect": "signature-invalid"
+    },
+    {
+      "name": "seq-changed-after-signing",
+      "hint": {
+        "type": "RelayHint",
+        "version": 1,
+        "seq": 9,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "149.248.216.86",
+          "2a09:8280:1::110:d2b6:0"
+        ],
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "6bc8ffea538418df4d5292a6ea0a67cb8ea5cd6c37e08d8d65f261640608d43d63dce127b548641fd447aecf53397879d650166bd5f2554991f96aee18fab201"
+      },
+      "expect": "signature-invalid"
+    }
+  ],
+  "unsignable": [
+    {
+      "name": "seq-zero",
+      "body": {
+        "seq": 0,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "149.248.216.86",
+          "2a09:8280:1::110:d2b6:0"
+        ]
+      },
+      "code": "bad-seq"
+    },
+    {
+      "name": "window-reversed",
+      "body": {
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1792000000000,
+        "addresses": [
+          "149.248.216.86",
+          "2a09:8280:1::110:d2b6:0"
+        ]
+      },
+      "code": "window-order"
+    },
+    {
+      "name": "window-over-180-days",
+      "body": {
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1807638400000,
+        "addresses": [
+          "149.248.216.86",
+          "2a09:8280:1::110:d2b6:0"
+        ]
+      },
+      "code": "window-too-long"
+    },
+    {
+      "name": "no-addresses",
+      "body": {
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": []
+      },
+      "code": "addresses-required"
+    },
+    {
+      "name": "nine-addresses",
+      "body": {
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "203.0.113.1",
+          "203.0.113.2",
+          "203.0.113.3",
+          "203.0.113.4",
+          "203.0.113.5",
+          "203.0.113.6",
+          "203.0.113.7",
+          "203.0.113.8",
+          "203.0.113.9"
+        ]
+      },
+      "code": "too-many-addresses"
+    },
+    {
+      "name": "duplicate-address",
+      "body": {
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "149.248.216.86",
+          "149.248.216.86"
+        ]
+      },
+      "code": "duplicate-address"
+    },
+    {
+      "name": "hostname-not-an-address",
+      "body": {
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "relay.example.com"
+        ]
+      },
+      "code": "bad-address"
+    },
+    {
+      "name": "ipv4-leading-zero",
+      "body": {
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "149.248.216.086"
+        ]
+      },
+      "code": "bad-address"
+    },
+    {
+      "name": "ipv4-octet-over-255",
+      "body": {
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "149.248.216.256"
+        ]
+      },
+      "code": "bad-address"
+    },
+    {
+      "name": "private-10",
+      "body": {
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "10.0.0.7"
+        ]
+      },
+      "code": "not-public"
+    },
+    {
+      "name": "private-192-168",
+      "body": {
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "192.168.1.2"
+        ]
+      },
+      "code": "not-public"
+    },
+    {
+      "name": "private-172-16",
+      "body": {
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "172.16.0.1"
+        ]
+      },
+      "code": "not-public"
+    },
+    {
+      "name": "loopback",
+      "body": {
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "127.0.0.1"
+        ]
+      },
+      "code": "not-public"
+    },
+    {
+      "name": "link-local",
+      "body": {
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "169.254.1.1"
+        ]
+      },
+      "code": "not-public"
+    },
+    {
+      "name": "cgnat",
+      "body": {
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "100.64.0.1"
+        ]
+      },
+      "code": "not-public"
+    },
+    {
+      "name": "ipv6-loopback",
+      "body": {
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "::1"
+        ]
+      },
+      "code": "not-public"
+    },
+    {
+      "name": "ipv6-unique-local",
+      "body": {
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "fd00::1"
+        ]
+      },
+      "code": "not-public"
+    },
+    {
+      "name": "ipv6-link-local",
+      "body": {
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "fe80::1"
+        ]
+      },
+      "code": "not-public"
+    }
+  ],
+  "accept": [
+    {
+      "name": "first-into-empty",
+      "from": {
+        "highestSeq": 0,
+        "hint": null
+      },
+      "candidate": {
+        "type": "RelayHint",
+        "version": 1,
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "149.248.216.86",
+          "2a09:8280:1::110:d2b6:0"
+        ],
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "6bc8ffea538418df4d5292a6ea0a67cb8ea5cd6c37e08d8d65f261640608d43d63dce127b548641fd447aecf53397879d650166bd5f2554991f96aee18fab201"
+      },
+      "refused": null,
+      "highestSeq": 1
+    },
+    {
+      "name": "second-replaces-first",
+      "from": {
+        "highestSeq": 1,
+        "hint": {
+          "type": "RelayHint",
+          "version": 1,
+          "seq": 1,
+          "validFrom": 1792000000000,
+          "validUntil": 1799776000000,
+          "addresses": [
+            "149.248.216.86",
+            "2a09:8280:1::110:d2b6:0"
+          ],
+          "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+          "signature": "6bc8ffea538418df4d5292a6ea0a67cb8ea5cd6c37e08d8d65f261640608d43d63dce127b548641fd447aecf53397879d650166bd5f2554991f96aee18fab201"
+        }
+      },
+      "candidate": {
+        "type": "RelayHint",
+        "version": 1,
+        "seq": 2,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "203.0.113.7",
+          "149.248.216.86",
+          "2a09:8280:1::110:d2b6:0"
+        ],
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "045125aab79b6c632c4d0c9408bfe7d1ca850ea4c1b5ae900e9cbe4c2e991f2695c61ecb92352933c94f056f1c41e2e86b11e595c21accee84d48380b7c6ef01"
+      },
+      "refused": null,
+      "highestSeq": 2
+    },
+    {
+      "name": "older-one-is-stale",
+      "from": {
+        "highestSeq": 2,
+        "hint": {
+          "type": "RelayHint",
+          "version": 1,
+          "seq": 2,
+          "validFrom": 1792000000000,
+          "validUntil": 1799776000000,
+          "addresses": [
+            "203.0.113.7",
+            "149.248.216.86",
+            "2a09:8280:1::110:d2b6:0"
+          ],
+          "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+          "signature": "045125aab79b6c632c4d0c9408bfe7d1ca850ea4c1b5ae900e9cbe4c2e991f2695c61ecb92352933c94f056f1c41e2e86b11e595c21accee84d48380b7c6ef01"
+        }
+      },
+      "candidate": {
+        "type": "RelayHint",
+        "version": 1,
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "149.248.216.86",
+          "2a09:8280:1::110:d2b6:0"
+        ],
+        "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "signature": "6bc8ffea538418df4d5292a6ea0a67cb8ea5cd6c37e08d8d65f261640608d43d63dce127b548641fd447aecf53397879d650166bd5f2554991f96aee18fab201"
+      },
+      "refused": "stale",
+      "highestSeq": 2
+    },
+    {
+      "name": "another-signer-refused",
+      "from": {
+        "highestSeq": 1,
+        "hint": {
+          "type": "RelayHint",
+          "version": 1,
+          "seq": 1,
+          "validFrom": 1792000000000,
+          "validUntil": 1799776000000,
+          "addresses": [
+            "149.248.216.86",
+            "2a09:8280:1::110:d2b6:0"
+          ],
+          "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+          "signature": "6bc8ffea538418df4d5292a6ea0a67cb8ea5cd6c37e08d8d65f261640608d43d63dce127b548641fd447aecf53397879d650166bd5f2554991f96aee18fab201"
+        }
+      },
+      "candidate": {
+        "type": "RelayHint",
+        "version": 1,
+        "seq": 1,
+        "validFrom": 1792000000000,
+        "validUntil": 1799776000000,
+        "addresses": [
+          "149.248.216.86",
+          "2a09:8280:1::110:d2b6:0"
+        ],
+        "signedBy": "ee31f83c88a71219a6fcf9bee0da9bc22620588f5a15a6145553504df9649e5c",
+        "signature": "b65f9a0e291deff43eba35af65a8a3863ec1b1bb2442a7bbcc0b735418d3e6f70cd4a6832d335f56f2ffa6ddcc47c9f0c962ff437aca13f720f7bd6782f93c05"
+      },
+      "refused": "unauthorized-signer",
+      "highestSeq": 1
+    },
+    {
+      "name": "null-changes-nothing",
+      "from": {
+        "highestSeq": 1,
+        "hint": {
+          "type": "RelayHint",
+          "version": 1,
+          "seq": 1,
+          "validFrom": 1792000000000,
+          "validUntil": 1799776000000,
+          "addresses": [
+            "149.248.216.86",
+            "2a09:8280:1::110:d2b6:0"
+          ],
+          "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+          "signature": "6bc8ffea538418df4d5292a6ea0a67cb8ea5cd6c37e08d8d65f261640608d43d63dce127b548641fd447aecf53397879d650166bd5f2554991f96aee18fab201"
+        }
+      },
+      "candidate": null,
+      "refused": null,
+      "highestSeq": 1
+    },
+    {
+      "name": "garbage-is-malformed",
+      "from": {
+        "highestSeq": 1,
+        "hint": {
+          "type": "RelayHint",
+          "version": 1,
+          "seq": 1,
+          "validFrom": 1792000000000,
+          "validUntil": 1799776000000,
+          "addresses": [
+            "149.248.216.86",
+            "2a09:8280:1::110:d2b6:0"
+          ],
+          "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+          "signature": "6bc8ffea538418df4d5292a6ea0a67cb8ea5cd6c37e08d8d65f261640608d43d63dce127b548641fd447aecf53397879d650166bd5f2554991f96aee18fab201"
+        }
+      },
+      "candidate": {
+        "type": "RelayHint"
+      },
+      "refused": "malformed",
+      "highestSeq": 1
+    }
+  ],
+  "addresses": [
+    {
+      "name": "no-hint-uses-the-seed",
+      "store": {
+        "highestSeq": 0,
+        "hint": null
+      },
+      "now": 1792000000000,
+      "authority": [
+        "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7"
+      ],
+      "seed": [
+        "149.248.216.86",
+        "2a09:8280:1::110:d2b6:0"
+      ],
+      "expect": [
+        "149.248.216.86",
+        "2a09:8280:1::110:d2b6:0"
+      ]
+    },
+    {
+      "name": "hint-first-then-seed",
+      "store": {
+        "highestSeq": 2,
+        "hint": {
+          "type": "RelayHint",
+          "version": 1,
+          "seq": 2,
+          "validFrom": 1792000000000,
+          "validUntil": 1799776000000,
+          "addresses": [
+            "203.0.113.7",
+            "149.248.216.86",
+            "2a09:8280:1::110:d2b6:0"
+          ],
+          "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+          "signature": "045125aab79b6c632c4d0c9408bfe7d1ca850ea4c1b5ae900e9cbe4c2e991f2695c61ecb92352933c94f056f1c41e2e86b11e595c21accee84d48380b7c6ef01"
+        }
+      },
+      "now": 1792086400000,
+      "authority": [
+        "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7"
+      ],
+      "seed": [
+        "149.248.216.86",
+        "2a09:8280:1::110:d2b6:0"
+      ],
+      "expect": [
+        "203.0.113.7",
+        "149.248.216.86",
+        "2a09:8280:1::110:d2b6:0"
+      ]
+    },
+    {
+      "name": "before-window-uses-the-seed",
+      "store": {
+        "highestSeq": 2,
+        "hint": {
+          "type": "RelayHint",
+          "version": 1,
+          "seq": 2,
+          "validFrom": 1792000000000,
+          "validUntil": 1799776000000,
+          "addresses": [
+            "203.0.113.7",
+            "149.248.216.86",
+            "2a09:8280:1::110:d2b6:0"
+          ],
+          "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+          "signature": "045125aab79b6c632c4d0c9408bfe7d1ca850ea4c1b5ae900e9cbe4c2e991f2695c61ecb92352933c94f056f1c41e2e86b11e595c21accee84d48380b7c6ef01"
+        }
+      },
+      "now": 1791999999999,
+      "authority": [
+        "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7"
+      ],
+      "seed": [
+        "149.248.216.86",
+        "2a09:8280:1::110:d2b6:0"
+      ],
+      "expect": [
+        "149.248.216.86",
+        "2a09:8280:1::110:d2b6:0"
+      ]
+    },
+    {
+      "name": "after-window-uses-the-seed",
+      "store": {
+        "highestSeq": 2,
+        "hint": {
+          "type": "RelayHint",
+          "version": 1,
+          "seq": 2,
+          "validFrom": 1792000000000,
+          "validUntil": 1799776000000,
+          "addresses": [
+            "203.0.113.7",
+            "149.248.216.86",
+            "2a09:8280:1::110:d2b6:0"
+          ],
+          "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+          "signature": "045125aab79b6c632c4d0c9408bfe7d1ca850ea4c1b5ae900e9cbe4c2e991f2695c61ecb92352933c94f056f1c41e2e86b11e595c21accee84d48380b7c6ef01"
+        }
+      },
+      "now": 1799776000000,
+      "authority": [
+        "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7"
+      ],
+      "seed": [
+        "149.248.216.86",
+        "2a09:8280:1::110:d2b6:0"
+      ],
+      "expect": [
+        "149.248.216.86",
+        "2a09:8280:1::110:d2b6:0"
+      ]
+    },
+    {
+      "name": "authority-gone-uses-the-seed",
+      "store": {
+        "highestSeq": 2,
+        "hint": {
+          "type": "RelayHint",
+          "version": 1,
+          "seq": 2,
+          "validFrom": 1792000000000,
+          "validUntil": 1799776000000,
+          "addresses": [
+            "203.0.113.7",
+            "149.248.216.86",
+            "2a09:8280:1::110:d2b6:0"
+          ],
+          "signedBy": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+          "signature": "045125aab79b6c632c4d0c9408bfe7d1ca850ea4c1b5ae900e9cbe4c2e991f2695c61ecb92352933c94f056f1c41e2e86b11e595c21accee84d48380b7c6ef01"
+        }
+      },
+      "now": 1792086400000,
+      "authority": [
+        "ee31f83c88a71219a6fcf9bee0da9bc22620588f5a15a6145553504df9649e5c"
+      ],
+      "seed": [
+        "149.248.216.86",
+        "2a09:8280:1::110:d2b6:0"
+      ],
+      "expect": [
+        "149.248.216.86",
+        "2a09:8280:1::110:d2b6:0"
+      ]
+    }
+  ]
+}
