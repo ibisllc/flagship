@@ -499,15 +499,19 @@ struct FlagshipApp: App {
     private let liveServiceAccess: any ServiceAccessClient
     private let liveMailbox: any SecretMailboxClient
     private let readTokens: AccountReadTokenProvider
-    // Cross-device pairing relay (Add a device / Join an account). Its
-    // network transport over /qr-pipe is a follow-up, so Release builds
-    // refuse with a sentence; Debug builds keep the in-process relay the
-    // gym and unit tests pair through.
+    // Cross-device pairing relay (Add a device / Join an account): the live
+    // /qr-pipe transport, or the in-process relay the gym and unit tests pair
+    // through in a Debug build launched with mocks.
+    private let livePairingRelay: any PairingRelayClient = LivePairingRelayClient()
     #if DEBUG
-    private let pairingRelay: any PairingRelayClient = MockPairingRelayClient()
-    #else
-    private let pairingRelay: any PairingRelayClient = UnavailablePairingRelayClient()
+    private let mockPairingRelay = MockPairingRelayClient()
     #endif
+    private var pairingRelay: any PairingRelayClient {
+        #if DEBUG
+        if GymLaunch.usesMocks { return mockPairingRelay }
+        #endif
+        return livePairingRelay
+    }
     #if DEBUG
     // The mock gym's clients (Debug builds only): every one stands in for
     // its live twin when GymLaunch.usesMocks.
@@ -589,7 +593,7 @@ struct FlagshipApp: App {
                              lockPower: mockLockPower, frontPage: mockFrontPage, uninstall: mockServiceUninstall,
                              access: mockServiceAccess, transfer: mockServerTransfer, migration: mockServerMigration,
                              relay: mockRelay)
-        mocks.pairingRelay = pairingRelay as? MockPairingRelayClient
+        mocks.pairingRelay = mockPairingRelay
         return mocks
     }
     #else

@@ -140,7 +140,7 @@ public final class AddDeviceViewModel {
         do {
             let devicePubRaw = try await relay.adminAwaitDevicePubkey(
                 sid: session,
-                aeadKey: SymmetricKey(size: .bits256)
+                adminPrivateKey: sk
             )
             guard devicePubRaw.count == 80 else {
                 phase = .failed("The other device sent an invalid key.")
