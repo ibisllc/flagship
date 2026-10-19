@@ -3,7 +3,7 @@
 // app compares them with these.
 //
 // WEB_BUILD is the shell version number in service-worker.js (SHELL_VERSION
-// "v154" is 154); a test fails when they drift, so bump both together.
+// "v155" is 155); a test fails when they drift, so bump both together.
 // PROTOCOL_LEVEL mirrors CLIENT_PROTOCOL_LEVEL in packages/protocol: raise it
 // only when a breaking change to a signed message or wire contract ships.
 
