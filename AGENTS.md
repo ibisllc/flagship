@@ -285,6 +285,15 @@ of the last check here: **not yet checked**.
 
 ### In flight
 
+- **Android device pairing transport (2026-10-19, branch `fix/android-device-pairing`).**
+  Release builds returned no pairing relay, so Settings > Trusted devices > Add a
+  device and Connect to an existing account > pairing code both said "isn't
+  available yet". `LiveAdminPairingRelay` / `LiveIncomingPairingRelay` now speak the
+  webapp's two-leg QR relay protocol (`pairingRelay.js`) and are wired in the release
+  variant and in debug on a real backend; the mock stays for mock runs. A shared
+  vector (`test-vectors/device-pairing-relay.json`, `tools/device-pairing-relay-vectors.mjs`)
+  pins the SAS and sealed bytes against the web. **Remaining:** the iOS twin, and a live two-device run (web admin to Android, Android admin to
+  web and to another phone) on hardware; only a fake in-JVM relay has exercised it.
 - **`.com` on the Workers Free plan (owner, 2026-10-18; 10 ms CPU a request, 100,000
   requests a day, 50 subrequests).** `docs/runbooks/workers-cpu-budget.md` has the
   limits, the measurements and what each cache is keyed on. Done on `main`: reads

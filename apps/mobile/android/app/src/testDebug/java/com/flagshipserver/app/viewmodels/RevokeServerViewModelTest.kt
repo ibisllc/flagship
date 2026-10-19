@@ -199,6 +199,7 @@ class RevokeServerViewModelTest {
         override suspend fun renameApp(username: String, serviceId: String, body: AppRenameRequest): AppRenameResponse = throw error
         override suspend fun getAppLinks(username: String, serviceId: String): AppLinksResponse = throw error
         override suspend fun getUsernameRecord(username: String): UsernameLookupResponse = throw error
+        override suspend fun getAccountIrkPub(username: String): String = throw error
         override suspend fun totpEnrollBegin(username: String, body: TotpEnrollBeginRequest): TotpEnrollBeginResponse = throw error
         override suspend fun totpEnrollConfirm(username: String, body: TotpEnrollConfirmRequest): TotpEnrollConfirmResponse = throw error
         override suspend fun totpDisable(username: String, body: TotpDisableRequest): TotpDisableResponse = throw error

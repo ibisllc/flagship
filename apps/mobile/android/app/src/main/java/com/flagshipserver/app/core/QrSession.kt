@@ -93,6 +93,11 @@ class QrSession private constructor(
     companion object {
         private val rng = SecureRandom()
 
+        fun fromPrivateKey(privateKey: ByteArray): QrSession {
+            require(privateKey.size == 32) { "X25519 private key must be 32 bytes" }
+            return QrSession(privateKey.copyOf(), X25519.publicFromPrivate(privateKey))
+        }
+
         /** Generate a fresh phone-side X25519 keypair. */
         fun fresh(): QrSession {
             val priv = X25519.generatePrivateKey()

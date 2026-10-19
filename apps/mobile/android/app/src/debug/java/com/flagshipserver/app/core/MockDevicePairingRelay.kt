@@ -31,8 +31,8 @@ class MockDevicePairingRelay {
     }
 
     val incoming: IncomingPairingRelay = object : IncomingPairingRelay {
-        override suspend fun connectAndHello(sid: String, ephemeralPubKey: ByteArray) {
-            helloPub = ephemeralPubKey
+        override suspend fun connectAndHello(sid: String, hello: ByteArray) {
+            helloPub = hello
         }
         override suspend fun awaitDelivery(): Pair<String, String> {
             deliveryError?.let { throw it }

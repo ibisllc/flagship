@@ -86,8 +86,8 @@ fun JoinDeviceScreen(
     // No screenshots — the SAS + relay are the join doorway.
     SecureWindow()
 
-    // No live phone-to-phone relay exists yet: say so before the scanner.
-    // Debug builds use the in-memory relay so the gym can drive it.
+    // A variant without a pairing transport says so before the scanner.
+    // Mock debug runs use the in-memory relay so the gym can drive it.
     val relays = remember { com.flagshipserver.app.core.Variant.devicePairingRelays() }
     if (relays == null) {
         DevicePairingUnavailable(title = "Join an account", onCancel = onCancel, message = com.flagshipserver.app.core.DEVICE_JOIN_UNAVAILABLE)

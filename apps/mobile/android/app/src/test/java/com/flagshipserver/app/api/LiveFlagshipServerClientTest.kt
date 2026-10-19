@@ -46,6 +46,29 @@ class LiveFlagshipServerClientTest {
         assertTrue(body.contains("\"irkPub\":\"deadbeef\""))
     }
 
+    @Test fun getAccountIrkPub_readsTheBoundKeyFromPubkeyCert() = runTest {
+        val pub = "d1832f91d924e7edc069b7479831d816b7a4e64b5da157747549a9d304f9c497"
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """{"binding":{"version":1,"username":"true-quokka","pubKey":"$pub","issuedAt":1,"expiresAt":2,"issuer":"flagship-ca-v1"},"signature":"00"}""",
+            ),
+        )
+        assertEquals(pub, client.getAccountIrkPub("true-quokka"))
+        val rec = server.takeRequest()
+        assertEquals("GET", rec.method)
+        assertEquals("/api/users/true-quokka/pubkey-cert", rec.path)
+    }
+
+    @Test fun getAccountIrkPub_surfaces404() = runTest {
+        server.enqueue(MockResponse().setResponseCode(404).setBody("""{"error":"not found"}"""))
+        try {
+            client.getAccountIrkPub("nobody")
+            fail("expected HttpException")
+        } catch (e: HttpException) {
+            assertEquals(404, e.status)
+        }
+    }
+
     @Test fun claimUsername_treats409AsSuccess() = runTest {
         server.enqueue(MockResponse().setResponseCode(409).setBody("already claimed"))
         client.claimUsername(

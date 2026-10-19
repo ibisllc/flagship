@@ -104,6 +104,21 @@ class BiometricGateTest {
         assertEquals(BiometricFailed.NOT_STARTED, (c.await().exceptionOrNull() as BiometricFailed).code)
     }
 
+    @Test fun aSecondRequestWaitsForTheFirstPromptInsteadOfReplacingIt() = runTest(UnconfinedTestDispatcher()) {
+        lifecycle.currentState = Lifecycle.State.RESUMED
+        val first = FakePrompt()
+        val second = FakePrompt()
+        val a = async { runCatching { BiometricGate.run(lifecycle, first) } }
+        val b = async { runCatching { BiometricGate.run(lifecycle, second) } }
+        assertEquals(1, first.starts)
+        assertEquals("the second prompt must not open over the first", 0, second.starts)
+        first.answer(PromptOutcome.Succeeded)
+        assertTrue(a.await().isSuccess)
+        assertEquals(1, second.starts)
+        second.answer(PromptOutcome.Succeeded)
+        assertTrue(b.await().isSuccess)
+    }
+
     @Test fun aDestroyedScreenEndsAWaitingRequest() = runTest(UnconfinedTestDispatcher()) {
         lifecycle.currentState = Lifecycle.State.RESUMED
         val prompt = FakePrompt()
