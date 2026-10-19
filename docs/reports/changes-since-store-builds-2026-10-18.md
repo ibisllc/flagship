@@ -100,6 +100,46 @@ s.9.4). Not fixed, because out of scope for a docs-only contradiction pass: the 
 fallback itself, the `release.sh` test coverage of real tools, and everything in section 5 other
 than D1-D7.
 
+### 0.2 Revision 3 (2026-10-19): the Windows-round fixes, relay addresses, and the final gym
+
+Written against `origin/main` = `eac81c0eb` (pushed 2026-10-19; baseline of this revision
+`59dbc8cac`, 38 commits). Evidence tags as in section 0. This revision is newer than 0.1.
+
+**What the Windows device test (2026-10-19) found, and what landed** (seven fix branches, merged
+and pushed). Surface and deploy consequence in brackets.
+
+| fix | surface | consequence |
+|---|---|---|
+| hosted VMs get a discarding UART (`-chardev null,id=ser-null -serial chardev:ser-null`); with `-serial none` the Debian kernel idled before init and never asked the phone to unlock [V: Linux QEMU pytest 13/13; Windows first boot NOT retested] | STU-W, STU-L, STU-M | [STU] |
+| device pairing over the `/qr-pipe` relay, Android and iOS (shared vectors `test-vectors/device-pairing-relay.json`; web, Android and iOS tests read them) [V: Android live both ways with the web; iOS compiles and its tests pass, **no two-device run**] | AND, iOS, WEB | [iOS] [AND] |
+| Home marks only the leader; backup save picker on Activity (was 0 bytes); queued biometric prompts; first-run wizard enters Home | AND, iOS, WEB | [AND] [iOS], web shell v155 |
+| Studio Start works after a cancelled "Restart as administrator" [N: UAC path needs the owner] | STU-W | [STU] |
+| a long marketplace manifest description is shortened, not rejected | COM | [COM] |
+| web shell renumbered once to v155 (`SHELL_VERSION`, `WEB_BUILD`, pinned tests) | WEB | web deploy |
+| iOS test mock data race (`MockScreensClient.bundleReads`) fixed [V: it crashed the iOS suite after the merge] | iOS tests | none |
+| stale `d1-backup` test replaced by one that checks the real age recipient [V] | scripts | none |
+
+**Relay addresses, on both phones** (`docs/relay-addresses.md`, `eac81c0eb`). Compiled-in relay
+addresses used to be the only fallback when DNS could not resolve a box (and iOS had none).
+Now the phone asks `.com` (`GET /api/services/endpoints`, an answer `.com` already served), keeps
+the last answer, **tests each address first** (a handshake under a known box's name that must end
+in the box's pinned certificate: the relay is up and authorized), and relies on the compiled-in
+pair only last. No protocol, no new signed document: a signed relay hint was built and then
+removed on the owner's direction (`904b512ec`). Android: `RelayFallbackDns`,
+`RelayAddressCenter`, `TlsPinRelayProber`, `RelayHintFailureInterceptor` (a failed hint reads as an
+unresolved name). iOS: `RelayFallback.swift`; URLSession cannot choose an address, so a loopback
+CONNECT proxy (`RelayForwarder`) forwards ciphertext and serves only names under the data apex.
+Shared rule vectors: `apps/mobile/test-vectors/relay-addresses.json`. The webapp (browser DNS)
+and the Studios (they only call `.com`) have nothing to feed. [V: Android 1,879+ unit tests, 0
+failures; shared Swift suite 351 tests, 0 failures; iOS app target builds.] **Not verified on a
+device: the iOS relay route through a real DNS block, and the Android handshake that the
+Windows round saw closed under a DNS block (cause still unknown).** [iOS] [AND]
+
+**Verification of the merged tree before the push** [V]: `npx tsc -b` clean; vitest 841 files and
+11,017 tests passed (2 files skipped by design: Linux-only quota tests); `scripts/release-guard.test.ts`
+passes 18 of 18 in a clean worktree (it never finishes in a checkout that holds stale
+`.claude/worktrees/agent-*` folders); `npm run parity` 0 red.
+
 ## 1. Scope, baselines and size
 
 | | iOS baseline | Android baseline |

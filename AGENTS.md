@@ -285,7 +285,7 @@ of the last check here: **not yet checked**.
 
 ### In flight
 
-- **Final-round device test fixes (2026-10-19; merged to local `main`, not yet pushed).**
+- **Final-round device test fixes (2026-10-19; on `origin/main`).**
   The Windows device test (`device-results/FINAL-ROUND-windows-2026-10-19.md` on
   `device-results/windows-2026-10-17`) found these; the fixes are merged:
   hosted VMs get a discarding UART (`-chardev null -serial chardev:ser-null`; with
@@ -307,10 +307,14 @@ of the last check here: **not yet checked**.
   (4) throwaway prod accounts (prime-marten, several web ones) go in the Phase B wipe; never
   touch playstore-test-0725.
   **Relay addresses (2026-10-19, `docs/relay-addresses.md`):** when DNS can't resolve a box's name,
-  Android asks `.com` (`GET /api/services/endpoints`, which already returns `passthroughIPv4/6`) for
-  the relay's current addresses, keeps the last answer, and tries it before the compiled-in seed;
-  the box's own pinned certificate is still what authenticates the connection, and a failed attempt
-  reads as an unresolved name, never as a box error. iOS has no DNS-failure fallback yet.
+  Android and iOS ask `.com` (`GET /api/services/endpoints`, which already returns `passthroughIPv4/6`)
+  for the relay's current addresses, keep the last answer, and test each one (a handshake under a
+  known box's name that must end in the box's pinned certificate: the relay is up and authorized)
+  before relying on it; the compiled-in pair is the last resort. iOS reaches the relay through a
+  loopback CONNECT proxy (`RelayForwarder`), since URLSession can't choose an address. A failed
+  attempt reads as an unresolved name, never as a box error. The webapp (browser DNS) and the
+  Studios (they only call `.com`) have nothing to feed. Only a live run through a real DNS block
+  proves the iOS path on a device.
 - **`.com` on the Workers Free plan (owner, 2026-10-18; 10 ms CPU a request, 100,000
   requests a day, 50 subrequests).** `docs/runbooks/workers-cpu-budget.md` has the
   limits, the measurements and what each cache is keyed on. Done on `main`: reads
