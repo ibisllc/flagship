@@ -13,7 +13,7 @@ The Windows application keeps trust decisions native:
 - `NativeIsoRemaster.cs` detects a Debian installer (refusing anything else), patches GRUB/isolinux, and invokes xorriso with an argument list rather than a command shell. Cancellation kills the complete process tree and diagnostics are bounded.
 - `NativeBuildPipeline.cs` re-verifies recipe bytes, generates both installer formats, remasters a temporary ISO, and calls the native `DiskWrite.cs` raw-device writer. Sensitive input buffers and temporary images are cleaned up.
 
-The optional prebuilt-appliance shortcut is not used on Windows. Host Here follows the same native installer-ISO path as USB preparation.
+Host Here downloads the published prebuilt appliance, verifies its SHA-256, and runs it as a qcow2 overlay under QEMU/WHPX; it falls back to the native installer-ISO path (the one USB preparation uses) only when no image fits.
 
 ## User flows
 
@@ -42,7 +42,7 @@ Release packaging should place the approved Windows xorriso build at `tools\xorr
 powershell.exe -ExecutionPolicy Bypass -NoProfile -File apps/builder-windows/make.ps1
 dotnet test apps/builder-windows/tests/FlagshipBuilder.Tests.csproj -c Release
 dotnet build apps/builder-windows/FlagshipBuilder.csproj -c Release
-dotnet publish apps/builder-windows/FlagshipBuilder.csproj -c Release -r win-x64 --self-contained true
+dotnet publish apps/builder-windows/FlagshipBuilder.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
 The test project targets plain `net8.0`, so platform-independent parsing, cryptography, generator-vector, remaster-transform, and VM-core tests also run on Linux/macOS CI.

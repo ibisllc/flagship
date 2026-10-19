@@ -193,6 +193,17 @@ public sealed class VMManagerTests : IDisposable
         Assert.Equal("earlier", m.Server("b.h.flagship.services")!.Record.State.Failure!.Reason);
     }
 
+    [Fact]
+    public async Task ServersBootAgainWhenTheQuitIsCancelled()
+    {
+        Seed("a.h.flagship.services", VMState.Stopped);
+        var m = Manager();
+        await m.ShutDownAllAsync();
+        m.CancelQuit();
+        await m.PowerOnAsync("a.h.flagship.services");
+        Assert.NotEqual(VMStateKind.Stopped, m.Server("a.h.flagship.services")!.Record.State.Kind);
+    }
+
     // ---- Display mapping ----
 
     [Fact]

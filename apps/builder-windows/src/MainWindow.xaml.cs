@@ -138,6 +138,7 @@ public partial class MainWindow : Window
 
     private void RestoreAfterShutdown()
     {
+        _wizard.Vm.CancelQuit();
         Title = "Flagship Studio";
         IsEnabled = true;
         _trayIcon.SetStatus(null);
