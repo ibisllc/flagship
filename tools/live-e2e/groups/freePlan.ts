@@ -235,6 +235,7 @@ export const freePlan: Group = {
     await rec.check("static files are served without the Worker (the tail sees no invocation for them)", async () => {
       const tail = currentTail();
       if (!tail || !tail.summary().available) return "tail not running here: not checked (headers above still are)";
+      if (tail.summary().events === 0) return "the tail has seen no request yet: not checked";
       const tag = randomBytes(4).toString("hex");
       const t0 = Date.now();
       for (const url of statics) await http(uncachedProbe(url, tag));

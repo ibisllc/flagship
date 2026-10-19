@@ -386,8 +386,9 @@ async function main(): Promise<number> {
     if (tail && tail.summary().available) {
       await fleetRec.check("Worker tail: no request ran out of CPU or resources (exceededCpu / 1102) on the gym Worker", async () => {
         const s = tail!.summary();
+        if (s.events === 0) throw new Error("the tail connected but saw no request at all, so nothing was checked (wrangler's output format changed, or the tail dropped)");
         if (s.exceeded.length || s.error1102) throw new Error(`${s.exceeded.length} request(s): ${s.exceeded.slice(0, 5).map((e) => `${e.method} ${e.route} ${e.outcome}`).join("; ")}`);
-        return `${s.events} Worker invocations, outcomes ${JSON.stringify(s.outcomes)}`;
+        return `${s.events} Worker invocations, outcomes ${JSON.stringify(s.outcomes)}${s.nearBudget.length ? `; over 8 ms CPU: ${s.nearBudget.slice(0, 5).map((r) => `${r.method} ${r.route} ${r.cpuMsMax} ms`).join(", ")}` : ""}`;
       });
     }
     writeJson(dir, "fleet-checks.json", fleetRec.results);

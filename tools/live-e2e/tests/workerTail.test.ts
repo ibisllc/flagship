@@ -33,6 +33,23 @@ describe("parseTailLine", () => {
   });
 });
 
+describe("WorkerTail reads wrangler's pretty-printed events", () => {
+  const pretty = (o: unknown) => JSON.stringify(o, null, 4).split("\n");
+  it("assembles an event printed over many lines, with its CPU time", async () => {
+    const lines = [
+      "Successfully created tail, expires at 2026-10-19T04:00:00Z",
+      ...pretty({ wallTime: 3, cpuTime: 9, outcome: "ok", eventTimestamp: 7, exceptions: [], event: { request: { url: "https://x/api/users/a/pods", method: "GET" }, response: { status: 200 } } }),
+      ...pretty({ wallTime: 30, cpuTime: 11, outcome: "exceededCpu", eventTimestamp: 8, exceptions: [], event: { request: { url: "https://x/api/users/b/stream", method: "GET" }, response: { status: 503 } } }),
+    ];
+    const t = new WorkerTail({ cwd: ".", source: (on) => { for (const l of lines) on(l); return { stop() {} }; } });
+    await t.start();
+    const s = t.summary();
+    expect(s.events).toBe(2);
+    expect(s.exceeded.map((e) => e.route)).toEqual(["/api/users/:x/stream"]);
+    expect(s.nearBudget.map((r) => `${r.route} ${r.cpuMsMax}`)).toEqual(["/api/users/:x/stream 11", "/api/users/:x/pods 9"]);
+  });
+});
+
 describe("WorkerTail", () => {
   const feed = (lines: string[]) =>
     new WorkerTail({

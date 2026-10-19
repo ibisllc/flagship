@@ -93,6 +93,8 @@ export interface TailSummary {
   exceeded: Array<{ at: string; method: string; route: string; outcome: string; status: number | null; exceptions: string[] }>;
   error1102: number;
   routes: Array<{ route: string; method: string; n: number; cpuMsMax: number | null; wallMsMax: number | null; statuses: Record<string, number> }>;
+  /** Routes whose slowest request used more than 8 of the Free plan's 10 ms CPU (only when wrangler reports cpuTime). */
+  nearBudget: Array<{ route: string; method: string; cpuMsMax: number }>;
 }
 
 export class WorkerTail {
@@ -155,7 +157,24 @@ export class WorkerTail {
     });
   }
 
+  /** Lines of a pretty-printed object (`wrangler tail --format json` prints one over many lines). */
+  private pending: string[] | null = null;
+
   ingest(line: string): void {
+    // Wrangler prints each event indented over many lines: "{" ... "}" at column 0.
+    if (this.pending) {
+      this.pending.push(line);
+      if (line === "}") {
+        const e = parseTailLine(this.pending.join("\n"));
+        this.pending = null;
+        if (e) this.events.push(e);
+      }
+      return;
+    }
+    if (line === "{") {
+      this.pending = [line];
+      return;
+    }
     const e = parseTailLine(line);
     if (e) this.events.push(e);
   }
@@ -175,7 +194,7 @@ export class WorkerTail {
   }
 
   summary(): TailSummary {
-    if (!this.started) return { available: false, reason: this.reason ?? "not started", events: 0, outcomes: {}, exceeded: [], error1102: 0, routes: [] };
+    if (!this.started) return { available: false, reason: this.reason ?? "not started", events: 0, outcomes: {}, exceeded: [], error1102: 0, routes: [], nearBudget: [] };
     const outcomes: Record<string, number> = {};
     const routes = new Map<string, TailSummary["routes"][number]>();
     const exceeded: TailSummary["exceeded"] = [];
@@ -202,6 +221,10 @@ export class WorkerTail {
       exceeded,
       error1102,
       routes: [...routes.values()].sort((a, b) => b.n - a.n).slice(0, 60),
+      nearBudget: [...routes.values()]
+        .filter((r) => r.cpuMsMax !== null && r.cpuMsMax > 8)
+        .map((r) => ({ route: r.route, method: r.method, cpuMsMax: r.cpuMsMax! }))
+        .sort((a, b) => b.cpuMsMax - a.cpuMsMax),
     };
   }
 }
