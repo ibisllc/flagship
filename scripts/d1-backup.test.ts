@@ -70,13 +70,10 @@ describe("D1 backup wiring", () => {
     expect(script).toMatch(/flagship-d1-backups/);
   });
 
-  it("ships a placeholder recipient that release.sh and the script both refuse", () => {
+  it("ships a real age recipient, the one release.sh checks for", () => {
     const pub = read(".maintainers/backup-recipient.pub");
-    expect(pub).toMatch(/PLACEHOLDER/);
-    expect(pub).not.toMatch(/^age1[0-9a-z]{20,}/m); // release.sh's check
-    const r = spawnSync("bash", [join(root, "scripts/d1-backup.sh"), "--local", "/nonexistent-out"], { encoding: "utf8" });
-    expect(r.status).toBe(1);
-    expect(r.stderr).toMatch(/holds no age public key|age binary is not installed/);
+    expect(pub).not.toMatch(/PLACEHOLDER/);
+    expect(pub).toMatch(/^age1[0-9a-z]{20,}/m);
   });
 
   it("accepts a real-looking age recipient (checked before any export)", () => {
