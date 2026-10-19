@@ -110,4 +110,29 @@ class NoticeGymAuthority(seedByte: Int = 0x77, now: Long = System.currentTimeMil
         put("notice", notice)
         put("mandates", mandates)
     }.toString()
+
+    /** One relay hint, signed by this authority (the rules are enforced: an unsignable body throws). */
+    fun relayHint(seq: Long, validFrom: Long, validUntil: Long, addresses: List<String>): JsonObject {
+        val body = buildJsonObject {
+            put("seq", seq)
+            put("validFrom", validFrom)
+            put("validUntil", validUntil)
+            put("addresses", buildJsonArray { addresses.forEach { add(JsonPrimitive(it)) } })
+        }
+        val sig = HexUtil.encode(signer.sign(RelayHintProtocol.canonical(body, pubHex)))
+        return buildJsonObject {
+            put("type", "RelayHint")
+            put("version", 1)
+            body.forEach { (k, v) -> put(k, v) }
+            put("signedBy", pubHex)
+            put("signature", sig)
+        }
+    }
+
+    /** The body `GET /api/relay-hints` answers with. */
+    fun hintResponse(hint: JsonElement): String = buildJsonObject {
+        put("version", 1)
+        put("hint", hint)
+        put("mandates", mandates)
+    }.toString()
 }

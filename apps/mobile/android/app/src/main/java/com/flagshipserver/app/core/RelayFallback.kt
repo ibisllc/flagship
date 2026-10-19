@@ -55,9 +55,7 @@ class RelayFallbackDns(
     private val apex: () -> String = { Endpoints.dataApex },
     private val log: (String) -> Unit = { m -> runCatching { android.util.Log.i("RelayFallback", m) } },
     /** Last resort when `relay-fallback.<apex>` doesn't resolve either. */
-    private val lastResort: (String) -> List<InetAddress> = { a ->
-        if (a == Endpoints.PROD_DATA_APEX) RelayAddresses.prod else emptyList()
-    },
+    private val lastResort: (String) -> List<InetAddress> = RelayHintCenter.Companion::addressesFor,
 ) : Dns {
     private val viaHint = ConcurrentHashMap<String, Long>()
 

@@ -53,10 +53,12 @@ fun interface NoticeFetcher {
 class AnonymousNoticeFetcher(
     private val baseUrl: () -> String = { Endpoints.controlBaseUrl },
     private val client: OkHttpClient = anonymousClient(),
+    /** The document to read: the security notice by default (the relay hint is the other). */
+    private val path: String = SecurityNoticeCenter.PATH,
 ) : NoticeFetcher {
     override suspend fun fetch(): NoticeFetch = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         try {
-            val req = Request.Builder().url(baseUrl() + SecurityNoticeCenter.PATH).get().build()
+            val req = Request.Builder().url(baseUrl() + path).get().build()
             client.newCall(req).execute().use { res ->
                 when {
                     res.code == 204 -> NoticeFetch.NoNotice
