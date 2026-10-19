@@ -178,18 +178,26 @@ The wipe deletes rows only. The wiped accounts' demo cloud servers and their
 `<server>.<user>.flagship.services` DNS records (the zone is capped at 200
 records: about 154 used, about 70 of them leftovers from accounts that are
 already gone) stay until you reap them. R2 objects and Fly state are not
-covered by any tool; Hetzner is not covered (its account is suspended).
+covered by any tool; Hetzner is not covered (its account is suspended). The
+end of this section ("Left on purpose" and "Owner checklist") is how you check
+that nothing else is left. `bash scripts/release.sh --phase B` step 19 runs the
+whole section, including the typed answers.
 
 1. **Demo accounts with a running cloud server: before the wipe, optional.**
    `node scripts/sample-user.mjs cleanup <username>` (needs `FLAGSHIP_ADMIN_SECRET`
    in your shell; no dry-run, so work from the read-only list in "Before you
    start" step 4, one account at a time). The prod reap below also finds these
    servers afterwards, so this is only for ones you want gone first.
-2. **Gym leftovers (the shared zone's gym records and gym servers).** Dry run,
-   then destroy; only when no live gym run is in progress:
+2. **Gym leftovers (the shared zone's gym records and gym servers): a default
+   part of the reap.** Dry run, then destroy; only when no live gym run is in
+   progress:
    `npx tsx tools/live-e2e/sweep-cli.ts` then `npx tsx tools/live-e2e/sweep-cli.ts --destroy`
    (the gym Worker's `/api/gym/teardown`; it touches only `flagship-env=gym`
-   servers and records under the gym apex, never prod's).
+   servers and records under the gym apex, never prod's). `release.sh` step 19
+   asks you to type `sweep` (or `skip-gym`, an explicit skip that it records) and
+   refuses the sweep while `/private/tmp/claude-501/flagship-locks/gym.lock`
+   exists, because that means a gym run is live. If the destroy reports
+   `dnsFailed`, wait 30 s and run it again.
 3. **Prod DNS records and demo servers of removed accounts: `scripts/reap-orphans.mjs`.**
    It talks to the `.com` Worker's admin routes (`/api/admin/reap/list`,
    `/classify`, `/delete-one`, `apps/com/src/prodReap.ts`), because the
@@ -249,6 +257,38 @@ covered by any tool; Hetzner is not covered (its account is suspended).
    Check `playstore-test-0725` still resolves (its box answers over HTTPS) and
    a kept account's box still has its three record groups. Note the date here.
 
+   **d. Left on purpose (read-only; no secret, no network).** Run it on the
+   dry run saved after the apply:
+
+   ```sh
+   node scripts/reap-orphans.mjs --show --out ~/pre-ga-reap-plan-after.json
+   node scripts/reap-orphans.mjs --review --plan ~/pre-ga-reap-plan-after.json
+   ```
+
+   It prints every DNS record that was kept, grouped by reason (the zone apex,
+   the root wildcard, system or reserved labels, host records, the protected
+   account, an account D1 still has, unrecognised shapes and records Flagship
+   does not publish), and every kept server with its reason, and exits 1 while
+   the plan still lists anything to delete. It adds no deletion rule; it only
+   shows what remains. The expected end state is the apex and its CAA, the
+   wildcard, system names, and `playstore-test-0725` with its server. `release.sh`
+   makes you type `reviewed` once you have read it.
+
+   **e. Owner checklist: what the tools cannot see.** Each needs your own
+   login. `release.sh` asks you to type `checked` or `skipped` for each and
+   records the answers in its state file.
+   - **UpCloud console:** servers without the `flagship-demo` label (the reap
+     only lists labelled ones). Keep only the `playstore-test-0725` server.
+   - **Hetzner** (account suspended): delete servers 153213447, 153638469,
+     153643080, 153813669 and 155315594 when it unlocks.
+   - **Cloudflare zone `flagshipserver.com`:** stale records pointing at
+     retired hosts (the old `web.` record pointed at an unclaimed Surge site and
+     was a takeover risk; audit for others).
+   - **R2 buckets:** objects of wiped accounts (`flagship-d1-backups` and
+     `flagship-iso` stay).
+   - **Fly:** apps, volumes and secrets besides `flagship-services`
+     (`flyctl apps list`, `flyctl volumes list -a flagship-services`).
+
 ## Final step: retire the wipe tooling (only after the run is verified)
 
 This is the last time users are ever scrubbed. Do this step **only after** the
@@ -300,7 +340,9 @@ If a *kept* name shows `MISSING`, fix the spelling (the script already refused).
   out. Demo cloud servers are removed by the reap; delete any other cloud
   server you pay for (Hetzner, or UpCloud without the `flagship-demo` label) by hand.
 - Cloudflare DNS records and demo servers of wiped accounts: run the reap
-  (above). R2 objects and Fly state are not touched by anything.
+  (above), read its "Left on purpose" list and go through the owner checklist
+  (step e). R2 objects and Fly state are not touched by any tool: the checklist
+  is how you cover them.
 - Note the date here and, in **AGENTS.md**, update GA close-out item 1 ("wipe
   script guard"): the scrub is done, and the script can now be guarded further or
   removed per that item. The release guard (`scripts/release-guard.sh`) still

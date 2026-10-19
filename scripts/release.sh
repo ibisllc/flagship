@@ -371,15 +371,18 @@ EOF
 meta_reap() {
   TITLE="Reap orphaned DNS records and demo servers, then zone-health"
   RUNBOOK="12. The pre-GA scrub, the reap and the maintenance notice"
-  WHAT="Dry-runs the reap (saved plan), shows the summary, applies it (the tool asks you to type the counts), re-runs the dry run and zone-health."
+  WHAT="Sweeps the gym leftovers (default; refused while the gym lock exists, skippable with a typed answer), dry-runs the reap (saved plan), applies it (the tool asks you to type the counts), re-runs the dry run and zone-health, prints what is left on purpose and why (you type reviewed), then the owner checklist of what no tool can see (you type checked or skipped for each)."
   read -r -d '' CMDS <<'EOF' || true
-(optional) npx tsx tools/live-e2e/sweep-cli.ts   then   npx tsx tools/live-e2e/sweep-cli.ts --destroy      (gym leftovers; no live gym run may be in progress)
+(typed: sweep, or skip-gym; refused while /private/tmp/claude-501/flagship-locks/gym.lock exists)
+npx tsx tools/live-e2e/sweep-cli.ts   then   npx tsx tools/live-e2e/sweep-cli.ts --destroy      (gym leftovers)
 node scripts/reap-orphans.mjs --show --out ~/pre-ga-reap-plan.json                 (admin secret; dry run)
 node scripts/reap-orphans.mjs --apply --plan ~/pre-ga-reap-plan.json               (types "delete N records and M servers")
 node scripts/reap-orphans.mjs --show --out ~/pre-ga-reap-plan-after.json
 npm run zone-health
+node scripts/reap-orphans.mjs --review --plan ~/pre-ga-reap-plan-after.json         (every kept record and server, with its reason; read-only; type reviewed)
+(owner checklist, type checked or skipped for each: UpCloud console, Hetzner, flagshipserver.com Cloudflare zone, R2 buckets, Fly)
 EOF
-  GATE="The second dry run lists 0 orphaned records and servers; zone-health is OK."
+  GATE="The second dry run lists 0 orphaned records and servers; zone-health is OK; you typed reviewed and answered every owner-checklist line."
   ROLLBACK="DNS records need no recreating (the wildcard answers every name); a demo server is recreated from its account. ~/pre-ga-reap-plan.json.log.jsonl lists what went."
 }
 meta_retire() {
@@ -1450,15 +1453,60 @@ EOF
   probe_end
 }
 
+GYM_LOCK="${FLAGSHIP_GYM_LOCK:-/private/tmp/claude-501/flagship-locks/gym.lock}"
+gym_lock_held() { [ -e "$GYM_LOCK" ]; }
+
+# What no tool can see: each needs the owner's own login. The ids are the state keys.
+OWNER_CHECK_IDS="upcloud hetzner cfcom r2 fly"
+owner_check_text() { # owner_check_text id
+  case "$1" in
+    upcloud) echo "UpCloud console: servers WITHOUT the flagship-demo label (the reap only sees labelled ones). Keep only the playstore-test-0725 server." ;;
+    hetzner) echo "Hetzner (account suspended): delete servers 153213447, 153638469, 153643080, 153813669, 155315594 when it unlocks." ;;
+    cfcom) echo "Cloudflare zone flagshipserver.com: stale records pointing at retired hosts (the old web. record pointed at an unclaimed Surge site)." ;;
+    r2) echo "R2 buckets: per-account objects of wiped accounts (flagship-d1-backups and flagship-iso must stay)." ;;
+    fly) echo "Fly: apps, volumes and secrets besides flagship-services (flyctl apps list; flyctl volumes list -a flagship-services)." ;;
+    *) return 1 ;;
+  esac
+}
+run_owner_checklist() {
+  local id a results=""
+  hdr "Owner checklist: what the tools cannot see"
+  say "  The reap sees the services-zone DNS and UpCloud servers labelled flagship-demo. These need your own logins:"
+  for id in $OWNER_CHECK_IDS; do say "    - $(owner_check_text "$id")"; done
+  for id in $OWNER_CHECK_IDS; do
+    a=$(ask_word "$id: type  checked  or  skipped")
+    case "$a" in checked|skipped) results="$results $id=$a" ;; *) fail "answer checked or skipped for $id (got '$a'); rerun the step" ;; esac
+  done
+  results="${results# }"
+  st_w set reapOwnerChecklist "$results"
+  case "$results" in *skipped*) warn "skipped by you: $results" ;; *) ok "owner checklist: $results" ;; esac
+}
+reap_review_ack() { # a typed 'reviewed' once the left-on-purpose list was shown
+  local a; a=$(ask_word "Read what was left on purpose above. Type  reviewed  to go on")
+  [ "$a" = reviewed ] || fail "not acknowledged ('$a'): read the left-on-purpose list, then rerun the step"
+  st_w set reapReviewed "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+
 run_reap() {
   require_done scrub || return 10
   ensure_wt
   need_admin_secret || fail "the reap talks to the .com admin routes: the admin secret is required"
-  if confirm "Optional: first sweep gym leftovers (dry run, then you decide)? Only when no live gym run is in progress."; then
-    XA "$WT" npx tsx tools/live-e2e/sweep-cli.ts
-    confirm "Destroy those gym leftovers (sweep-cli --destroy)?" && XA "$WT" npx tsx tools/live-e2e/sweep-cli.ts --destroy
-  fi
-  local plan="$HOME/pre-ga-reap-plan.json"
+  hdr "Gym leftovers (shared services zone and gym servers)"
+  say "  The sweep removes every gym-labelled server and gym DNS record through the gym Worker (never prod's)."
+  local g; g=$(ask_word "Type  sweep  to sweep them now, or  skip-gym  to skip it (only while no live gym run is in progress)")
+  case "$g" in
+    sweep)
+      if gym_lock_held; then
+        fail "a live gym run holds $GYM_LOCK: wait for it to finish (or remove the lock only if you know it is stale), then rerun this step"
+      fi
+      XA "$WT" npx tsx tools/live-e2e/sweep-cli.ts
+      confirm "Destroy those gym leftovers (sweep-cli --destroy)? If it reports dnsFailed, wait 30 s and run it again." || return 10
+      XA "$WT" npx tsx tools/live-e2e/sweep-cli.ts --destroy
+      st_w set reapGymSweep swept ;;
+    skip-gym) warn "gym sweep skipped by you: shared-zone gym records and gym servers may remain"; st_w set reapGymSweep skipped ;;
+    *) fail "answer sweep or skip-gym (got '$g'); rerun the step" ;;
+  esac
+  local plan="$HOME/pre-ga-reap-plan.json" after="$HOME/pre-ga-reap-plan-after.json"
   hdr "Reap dry run (writes nothing in Cloudflare, UpCloud or D1)"
   printf '%s+ node scripts/reap-orphans.mjs --show --out %s%s\n' "$C_D" "$plan" "$C_0"
   with_secret bash -c "cd '$WT' && node scripts/reap-orphans.mjs --show --out '$plan'" || fail "the reap dry run failed"
@@ -1467,10 +1515,15 @@ run_reap() {
   printf '%s+ node scripts/reap-orphans.mjs --apply --plan %s%s\n' "$C_D" "$plan" "$C_0"
   with_secret bash -c "cd '$WT' && node scripts/reap-orphans.mjs --apply --plan '$plan'" || fail "the reap apply reported failures (see $plan.log.jsonl); rerun the step"
   hdr "Verify"
-  with_secret bash -c "cd '$WT' && node scripts/reap-orphans.mjs --show --out '$HOME/pre-ga-reap-plan-after.json'" || warn "second dry run failed"
+  with_secret bash -c "cd '$WT' && node scripts/reap-orphans.mjs --show --out '$after'" || fail "the second dry run failed: the left-on-purpose review needs it; rerun the step"
   with_secret bash -c "cd '$WT' && npm run -s zone-health" || { PROBE_FAILS=$((PROBE_FAILS + 1)); err "zone-health is not OK"; }
+  hdr "Left on purpose (from the second dry run)"
+  printf '%s+ node scripts/reap-orphans.mjs --review --plan %s%s\n' "$C_D" "$after" "$C_0"
+  ( cd "$WT" && node scripts/reap-orphans.mjs --review --plan "$after" ) || { PROBE_FAILS=$((PROBE_FAILS + 1)); err "the second dry run still lists records or servers to delete"; }
   say "  The protected review account keeps its own records (a warning) until its store review ends."
-  probe_end
+  probe_end || return $?
+  reap_review_ack
+  run_owner_checklist
 }
 
 run_retire() {

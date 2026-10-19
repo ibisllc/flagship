@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { GROUP_WAIT_MS, applyPlan, confirmationPhrase, formatPlan, groupOf, parseArgs, selectOrphans } from "./reap-orphans.mjs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { GROUP_WAIT_MS, applyPlan, checkPlanShape, confirmationPhrase, dnsKeepGroup, formatPlan, formatReview, groupOf, parseArgs, selectOrphans } from "./reap-orphans.mjs";
 
 const hex = (n: number) => n.toString(16).padStart(32, "0");
 const SRV = "00000000-0000-4000-8000-0000000000a1";
@@ -44,6 +48,12 @@ describe("parseArgs", () => {
     expect(() => parseArgs(["--apply", "--plan", "x", "--out", "y"])).toThrow(/dry run/);
     expect(() => parseArgs(["--nope"])).toThrow(/unknown/);
     expect(parseArgs(["--apply", "--plan", "p.json"])).toMatchObject({ apply: true, plan: "p.json" });
+  });
+  it("--review is read-only and needs a saved plan", () => {
+    expect(parseArgs(["--review", "--plan", "p.json"])).toMatchObject({ review: true, apply: false, plan: "p.json" });
+    expect(() => parseArgs(["--review"])).toThrow(/--plan/);
+    expect(() => parseArgs(["--review", "--apply", "--plan", "p"])).toThrow(/separate/);
+    expect(() => parseArgs(["--review", "--plan", "p", "--out", "o"])).toThrow(/dry run/);
   });
 });
 
@@ -244,5 +254,99 @@ describe("applyPlan", () => {
     expect(n).toBe(1);
     expect(out.aborted).toContain("403");
     expect(out.deleted).toBe(0);
+  });
+});
+
+const keep = (n: number, name: string, type: string, reason: string, owner: string | null = null, content?: string) => ({
+  id: hex(n), name, type, owner, action: "keep", reason, ...(content ? { content } : {}),
+});
+
+function afterPlan(over: Record<string, unknown> = {}) {
+  return plan({
+    dns: [
+      keep(1, "flagship.services", "CAA", "the zone apex", null, '0 issue "letsencrypt.org"'),
+      keep(2, "*.flagship.services", "A", "the zone's root wildcard", null, "149.248.216.86"),
+      keep(3, "hub.flagship.services", "A", "system or reserved label"),
+      keep(4, "mystery.flagship.services", "A", "unrecognised name"),
+      keep(5, "x.home.playstore-test-0725.flagship.services", "A", "protected account (its own records keep it working; trim by hand once its review ends)", "playstore-test-0725"),
+      keep(6, "www.flagship.services", "TXT", "a host record, not an account's"),
+      keep(7, "info.flagship.services", "MX", "not a record Flagship publishes (MX)"),
+    ],
+    servers: [
+      { serverId: SRV, title: "home", state: "started", labels: {}, action: "keep", owner: "playstore-test-0725", reason: "protected account" },
+    ],
+    ...over,
+  });
+}
+
+describe("formatReview (the left-on-purpose list)", () => {
+  it("groups every kept record by reason and lists each kept server with its reason", () => {
+    const text = formatReview(afterPlan());
+    expect(text).toContain("DNS records kept: 7 of 7");
+    expect(text).toMatch(/the zone apex: 1\n\s+CAA\s+flagship\.services -> 0 issue/);
+    expect(text).toMatch(/root wildcard.*: 1\n\s+A\s+\*\.flagship\.services -> 149\.248\.216\.86/);
+    expect(text).toMatch(/system or reserved label.*: 1\n\s+A\s+hub\.flagship\.services/);
+    expect(text).toMatch(/protected account.*: 1\n\s+A\s+x\.home\.playstore-test-0725\.flagship\.services.*\[playstore-test-0725\]/);
+    expect(text).toMatch(/host record at a single label.*: 1/);
+    expect(text).toMatch(/unrecognised shape, or not a record Flagship publishes: 2/);
+    expect(text).toContain("why: unrecognised name");
+    expect(text).toContain("why: not a record Flagship publishes (MX)");
+    expect(text).toContain("Servers kept (UpCloud servers labelled flagship-demo): 1 of 1");
+    expect(text).toMatch(/protected account:\n\s+00000000-0000-4000-8000-0000000000a1\s+home\s+started\s+\[playstore-test-0725\]/);
+    expect(text).not.toContain("STILL LISTED FOR DELETION");
+    expect(text).not.toContain("NOTE:");
+    expect(text).toContain("owner checklist");
+  });
+
+  it("puts anything still listed for deletion first and loudly", () => {
+    const text = formatReview(afterPlan({ dns: [dns(9, "bob.flagship.services", "CAA", "bob")] }));
+    expect(text).toContain("STILL LISTED FOR DELETION: 1 records, 0 servers");
+    expect(text).toContain("dns    CAA   bob.flagship.services");
+  });
+
+  it("notes a kept account that is not protected, a missing protected server, and unchecked servers", () => {
+    const stranger = formatReview(afterPlan({
+      servers: [{ serverId: SRV, title: "t", state: "started", labels: {}, action: "keep", owner: "carol", reason: "account still exists in D1" }],
+    }));
+    expect(stranger).toContain("kept for accounts that are NOT protected: carol");
+    expect(stranger).toContain("no kept server is labelled for playstore-test-0725");
+    const unchecked = formatReview(afterPlan({ serversChecked: false, servers: [] }));
+    expect(unchecked).toContain("NOT CHECKED (the Worker has no UPCLOUD_TOKEN)");
+    expect(unchecked).not.toContain("no kept server is labelled");
+  });
+
+  it("sorts the Worker's real reasons into the groups, with a fallback", () => {
+    const g = (reason: string) => dnsKeepGroup({ reason });
+    expect(g("outside the services zone apex")).toBe("unrecognised");
+    expect(g("android-relay-fallback is reserved for the Android relay fallback; a record here is wrong")).toBe("unrecognised");
+    expect(g("the zone's root wildcard is not in place yet, so this record still resolves the account")).toBe("live");
+    expect(g("a challenge in flight for a live account")).toBe("live");
+    expect(g("something new")).toBe("other");
+  });
+
+  it("rejects a file that is not a plan", () => {
+    expect(() => checkPlanShape({ version: 2 })).toThrow(/not a reap plan/);
+    expect(() => checkPlanShape(null)).toThrow(/not a reap plan/);
+  });
+});
+
+describe("--review from the command line", () => {
+  const cli = (planObj: unknown) => {
+    const dir = mkdtempSync(join(tmpdir(), "reap-review-"));
+    const file = join(dir, "plan.json");
+    writeFileSync(file, JSON.stringify(planObj));
+    return spawnSync(process.execPath, [join(__dirname, "reap-orphans.mjs"), "--review", "--plan", file], {
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "" }, // no admin secret: a review never asks for one
+    });
+  };
+  it("prints the review and exits 0 when nothing is left to delete, with no secret and an old plan", () => {
+    const r = cli(afterPlan({ generatedAt: "2020-01-01T00:00:00Z" }));
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain("Left on purpose in flagship.services");
+  });
+  it("exits 1 while the plan still lists deletions, and 2 for a file that is not a plan", () => {
+    expect(cli(afterPlan({ dns: [dns(9, "bob.flagship.services", "CAA", "bob")] })).status).toBe(1);
+    expect(cli({ nope: true }).status).toBe(2);
   });
 });

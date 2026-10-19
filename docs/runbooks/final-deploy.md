@@ -806,18 +806,46 @@ with the go/no-go points:
 4. Verify with the runbook's step 4 (the four orphan counts are 0; the review
    login signs in).
 5. **Reap** DNS and demo servers of removed accounts (needs the `.com` deploy of
-   step 7, which contains the reap rules): gym leftovers
-   (`npx tsx tools/live-e2e/sweep-cli.ts`, then `--destroy`), then prod:
+   step 7, which contains the reap rules). `release.sh` step 19 runs all of this:
+   the gym sweep is part of it by default (`npx tsx tools/live-e2e/sweep-cli.ts`,
+   then `--destroy`; the step asks you to type `sweep`, or `skip-gym` to skip it,
+   and refuses the sweep while `/private/tmp/claude-501/flagship-locks/gym.lock`
+   exists), then prod:
 
    ```sh
    node scripts/reap-orphans.mjs --show --out ~/pre-ga-reap-plan.json    # dry run; read it
    node scripts/reap-orphans.mjs --apply --plan ~/pre-ga-reap-plan.json  # types "delete N records and M servers"
+   node scripts/reap-orphans.mjs --show --out ~/pre-ga-reap-plan-after.json
+   node scripts/reap-orphans.mjs --review --plan ~/pre-ga-reap-plan-after.json
    ```
 
    Step 6a (the root wildcard) must be in the zone first: the plan keeps live
-   accounts' records until it is. Re-run the dry run: 0 orphaned records and
-   servers, zone count a handful, then `npm run zone-health` is OK. The same pass
-   trims every record at an account or box name (`docs/wildcard-dns.md` section 5).
+   accounts' records until it is. The second dry run must list 0 orphaned records
+   and servers, the zone count a handful, then `npm run zone-health` is OK. The same
+   pass trims every record at an account or box name (`docs/wildcard-dns.md` section 5).
+
+   **Left on purpose.** `--review` (read-only, no secret) prints, from the second
+   dry run, every DNS record the reap kept grouped by why (apex, root wildcard,
+   system or reserved label, host record, protected account, an account D1 still
+   has, unrecognised shape or not a record Flagship publishes) and every kept
+   server with its reason. It adds no deletion rule. Read it: only the protected
+   account `playstore-test-0725` and its server should be there besides the
+   apex, the wildcard and system names. `release.sh` makes you type `reviewed`
+   before the step finishes.
+
+   **Owner checklist: what the tools cannot see.** The reap sees the
+   `flagship.services` zone and UpCloud servers labelled `flagship-demo`. These
+   need your own logins; `release.sh` asks you to type `checked` or `skipped` for
+   each and records the answers:
+   - UpCloud console: servers without the `flagship-demo` label. Keep only the
+     `playstore-test-0725` server.
+   - Hetzner (suspended): servers 153213447, 153638469, 153643080, 153813669,
+     155315594 when it unlocks.
+   - Cloudflare zone `flagshipserver.com`: stale records pointing at retired
+     hosts (the old `web.` record pointed at an unclaimed Surge site).
+   - R2 buckets: per-account objects of wiped accounts (`flagship-d1-backups`
+     and `flagship-iso` stay).
+   - Fly: apps, volumes and secrets besides `flagship-services`.
 6. **Retire the wipe tooling** only after step 4 and the reap are verified: the
    ready commit is on the branch `chore/delete-wipe-tooling` (deliberately not
    on `main`; rebase it first):

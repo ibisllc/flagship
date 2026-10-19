@@ -267,6 +267,124 @@ echo "open=$(phase_open A | wc -w | tr -d ' ')"`;
   });
 });
 
+// Step 19 (the reap): the gym sweep gate, the left-on-purpose review with its typed
+// acknowledgement, and the owner checklist. The functions run for real in a sourced
+// shell; every tool that would touch Cloudflare, UpCloud or the gym is a logging stub.
+describe("release.sh step 19 (reap): cleanup review", () => {
+  const goodPlan = {
+    version: 1,
+    generatedAt: "2026-10-18T12:00:00Z",
+    apex: "flagship.services",
+    zoneRecords: 2,
+    knownAccounts: 1,
+    protectedAccounts: ["playstore-test-0725"],
+    serversChecked: true,
+    summary: { dnsTotal: 2, dnsKeep: 2, dnsOrphan: 0, serversTotal: 1, serversKeep: 1, serversOrphan: 0, zoneRecordsAfter: 2 },
+    accounts: [],
+    dns: [
+      { id: "a".repeat(32), name: "flagship.services", type: "CAA", owner: null, action: "keep", reason: "the zone apex" },
+      { id: "b".repeat(32), name: "*.flagship.services", type: "A", owner: null, action: "keep", reason: "the zone's root wildcard", content: "149.248.216.86" },
+    ],
+    servers: [{ serverId: "00000000-0000-4000-8000-0000000000a1", title: "home", state: "started", labels: {}, action: "keep", owner: "playstore-test-0725", reason: "protected account" }],
+  };
+  function reapRun(env: Env, answers: string[], plan: unknown, extra: Record<string, string> = {}) {
+    if (plan) writeFileSync(join(env.home, "pre-ga-reap-plan-after.json"), JSON.stringify(plan));
+    const log = join(env.dir, "stubs.log");
+    writeFileSync(log, "");
+    const script = `RELEASE_SOURCE_ONLY=1 source ${SCRIPT}
+WT=${ROOT}; DRY=0; PROBE_FAILS=0
+require_done() { :; }; ensure_wt() { :; }; need_admin_secret() { ADMIN_SECRET=x; }
+confirm() { echo "confirm: $1" >> ${log}; case "$1" in *"Treat the step"*) return 1 ;; esac; return 0; }
+XA() { shift; echo "XA $*" >> ${log}; }
+with_secret() { echo "with_secret $*" >> ${log}; }
+run_reap`;
+    const r = spawnSync("bash", ["-c", script], {
+      encoding: "utf8",
+      input: answers.join("\n") + "\n",
+      env: { PATH: `${join(env.dir, "bin")}:/usr/bin:/bin:${process.execPath.replace(/\/node$/, "")}`, HOME: env.home, FLAGSHIP_RELEASE_HOME: join(env.home, ".flagship-release"), NO_COLOR: "1", FLAGSHIP_GYM_LOCK: join(env.dir, "no-gym.lock"), ...extra },
+    });
+    return { code: r.status, out: r.stdout, err: r.stderr, log: readFileSync(log, "utf8"), state: () => JSON.parse(readFileSync(join(env.home, ".flagship-release", "state.json"), "utf8")) };
+  }
+  const CHECKS = ["checked", "skipped", "checked", "checked", "skipped"];
+
+  it("is a plan step with the sweep, the review and the checklist in its commands", () => {
+    const out = run(sandbox(), ["--list"]).out;
+    const reap = out.slice(out.indexOf("Reap orphaned"));
+    expect(reap).toContain("sweep-cli.ts --destroy");
+    expect(reap).not.toContain("(optional)");
+    expect(reap).toContain("flagship-locks/gym.lock");
+    expect(reap).toContain("reap-orphans.mjs --review --plan ~/pre-ga-reap-plan-after.json");
+    expect(reap).toContain("UpCloud console, Hetzner, flagshipserver.com Cloudflare zone, R2 buckets, Fly");
+  });
+
+  it("sweeps by default, reviews what is left, and finishes only after reviewed and the five checklist answers", () => {
+    const env = sandbox();
+    const r = reapRun(env, ["sweep", "reviewed", ...CHECKS], goodPlan);
+    expect(r.code, r.err).toBe(0);
+    const order = ["sweep-cli.ts", "sweep-cli.ts --destroy", "--show --out", "--apply --plan", "zone-health"].map((n) => r.log.indexOf(n));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(r.out).toContain("Left on purpose in flagship.services");
+    expect(r.out).toContain("DNS records kept: 2 of 2");
+    expect(r.out).toContain("Servers kept (UpCloud servers labelled flagship-demo): 1 of 1");
+    for (const t of ["UpCloud console", "Hetzner", "153213447", "flagshipserver.com", "R2 buckets", "Fly:"]) expect(r.out).toContain(t);
+    const st = r.state();
+    expect(st.reapGymSweep).toBe("swept");
+    expect(st.reapOwnerChecklist).toBe("upcloud=checked hetzner=skipped cfcom=checked r2=checked fly=skipped");
+    expect(st.reapReviewed).toMatch(/^2\d{3}-/);
+  });
+
+  it("refuses the sweep while the gym lock exists, and runs nothing", () => {
+    const env = sandbox();
+    const lock = join(env.dir, "gym.lock");
+    mkdirSync(lock);
+    const r = reapRun(env, ["sweep"], goodPlan, { FLAGSHIP_GYM_LOCK: lock });
+    expect(r.code).not.toBe(0);
+    expect(r.err).toContain("holds " + lock);
+    expect(r.log).not.toContain("sweep-cli");
+    expect(r.log).not.toContain("--apply");
+  });
+
+  it("lets the owner skip the gym sweep only by typing skip-gym, and records it", () => {
+    const skipped = reapRun(sandbox(), ["skip-gym", "reviewed", ...CHECKS], goodPlan);
+    expect(skipped.code, skipped.err).toBe(0);
+    expect(skipped.log).not.toContain("sweep-cli");
+    expect(skipped.state().reapGymSweep).toBe("skipped");
+    const vague = reapRun(sandbox(), ["y"], goodPlan);
+    expect(vague.code).not.toBe(0);
+    expect(vague.log).not.toContain("sweep-cli");
+  });
+
+  it("does not finish without the typed reviewed, or with a vague checklist answer", () => {
+    const noAck = reapRun(sandbox(), ["skip-gym", "ok"], goodPlan);
+    expect(noAck.code).not.toBe(0);
+    expect(noAck.err).toContain("not acknowledged");
+    const vague = reapRun(sandbox(), ["skip-gym", "reviewed", "checked", "yes"], goodPlan);
+    expect(vague.code).not.toBe(0);
+    expect(vague.err).toContain("answer checked or skipped for hetzner");
+  });
+
+  it("stops at the review while the second dry run still lists deletions", () => {
+    const left = { ...goodPlan, dns: [...goodPlan.dns, { id: "c".repeat(32), name: "bob.flagship.services", type: "CAA", owner: "bob", action: "orphan", reason: "no account of this name in D1" }] };
+    const r = reapRun(sandbox(), ["skip-gym", "reviewed", ...CHECKS], left);
+    expect(r.out).toContain("STILL LISTED FOR DELETION");
+    expect(r.err).toContain("still lists records or servers to delete");
+    expect(r.code).toBe(11);
+    expect(r.state().reapReviewed).toBeUndefined();
+  });
+
+  it("runbooks describe the same default sweep, review and checklist", () => {
+    const scrub = readFileSync(join(ROOT, "docs/runbooks/pre-ga-scrub.md"), "utf8");
+    for (const doc of [RUNBOOK, scrub]) {
+      expect(doc).toContain("--review --plan");
+      expect(doc).toContain("reviewed");
+      expect(doc).toContain("skip-gym");
+      expect(doc).toContain("gym.lock");
+      for (const t of ["Hetzner", "153213447", "R2", "Fly", "UpCloud console", "flagshipserver.com"]) expect(doc, t).toContain(t);
+    }
+  });
+});
+
 // The parsers the steps depend on, fed with REAL captured outputs of the tools
 // (scripts/release-fixtures/, captured 2026-10-18 from read-only commands; the D1
 // ledger one is synthetic in wrangler's documented --json shape because the live

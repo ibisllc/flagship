@@ -1077,7 +1077,7 @@ allowances (1M / 5M / 20M a month) are placeholders.
 
 ### Release script (2026-10-18)
 
-`bash scripts/release.sh --phase A` then `--phase B` runs `docs/runbooks/final-deploy.md` by hand (pinned commit, clean worktree, prompts before every outward step, state in `~/.flagship-release/state.json`; `--list` shows the plan, `--dry-run` runs nothing). Test: `scripts/release.test.ts`.
+`bash scripts/release.sh --phase A` then `--phase B` runs `docs/runbooks/final-deploy.md` by hand (pinned commit, clean worktree, prompts before every outward step, state in `~/.flagship-release/state.json`; `--list` shows the plan, `--dry-run` runs nothing). Test: `scripts/release.test.ts`. Step 19 (the reap) also sweeps the gym by default (typed `sweep` or `skip-gym`; refused while `/private/tmp/claude-501/flagship-locks/gym.lock` exists), prints a "left on purpose" review of every kept DNS record and server with its reason (`reap-orphans.mjs --review`, you type `reviewed`), and asks you to type `checked` or `skipped` for what no tool can see (UpCloud console, Hetzner, the flagshipserver.com zone, R2, Fly).
 
 ### Update this server (2026-10-10)
 

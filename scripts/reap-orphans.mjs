@@ -22,6 +22,12 @@
  *                                                      delete ONLY the orphans in that
  *                                                      saved plan (typed confirmation,
  *                                                      terminal only)
+ *   node scripts/reap-orphans.mjs --review --plan plan.json
+ *                                                      read-only, no secret, no network:
+ *                                                      print what a saved plan KEEPS and
+ *                                                      why (use the dry run saved after
+ *                                                      the apply); exit 1 while it still
+ *                                                      lists anything to delete
  *
  * The dry run never writes. --apply refuses a plan older than 24 hours, asks
  * you to type the counts, then deletes one item at a time; the Worker
@@ -62,19 +68,23 @@ const NEVER_ORPHAN = ["playstore-test-0725"];
 const DNS_TYPES = new Set(["CAA", "A", "AAAA", "TXT"]);
 
 export function parseArgs(argv) {
-  const opts = { apply: false, show: false, json: false, plan: null, out: null };
+  const opts = { apply: false, show: false, json: false, review: false, plan: null, out: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--apply") opts.apply = true;
     else if (a === "--show") opts.show = true;
     else if (a === "--json") opts.json = true;
+    else if (a === "--review") opts.review = true;
     else if (a === "--plan") opts.plan = argv[++i];
     else if (a === "--out") opts.out = argv[++i];
     else if (a === "-h" || a === "--help") opts.help = true;
     else throw new Error(`unknown argument: ${a}`);
   }
+  if (opts.apply && opts.review) throw new Error("--review and --apply are separate runs");
+  if (opts.review && !opts.plan) throw new Error("--review needs --plan <file> (the dry run saved after the apply)");
+  if (opts.review && opts.out) throw new Error("--out is only used for the dry run");
   if (opts.apply && !opts.plan) throw new Error("--apply needs --plan <file> (run the dry run first and review the plan)");
-  if (!opts.apply && opts.plan) throw new Error("--plan is only used with --apply");
+  if (!opts.apply && !opts.review && opts.plan) throw new Error("--plan is only used with --apply or --review");
   if (opts.apply && opts.out) throw new Error("--out is only used for the dry run");
   return opts;
 }
@@ -139,6 +149,108 @@ export function formatPlan(plan, { show = false } = {}) {
     }
   }
   return lines.join("\n");
+}
+
+const DNS_KEEP_GROUPS = [
+  ["apex", "the zone apex"],
+  ["wildcard", "the root wildcard (*) that answers every account and box name"],
+  ["system", "system or reserved label (api, www, gym, hub, ...)"],
+  ["host", "a host record at a single label that is not an account"],
+  ["protected", "protected account (the store-review login)"],
+  ["live", "an account that D1 still has (a challenge in flight, or waiting for the root wildcard)"],
+  ["unrecognised", "unrecognised shape, or not a record Flagship publishes"],
+  ["other", "kept for another reason"],
+];
+
+/** Which "left on purpose" group a kept DNS record belongs to, from the Worker's reason text. */
+export function dnsKeepGroup(d) {
+  const r = String(d.reason ?? "");
+  if (r === "the zone apex") return "apex";
+  if (r === "the zone's root wildcard") return "wildcard";
+  if (r === "system or reserved label") return "system";
+  if (r.startsWith("a host record")) return "host";
+  if (r.startsWith("protected account")) return "protected";
+  if (r.startsWith("a challenge in flight") || r.startsWith("the zone's root wildcard is not in place")) return "live";
+  if (r.startsWith("unrecognised") || r.startsWith("not a record") || r.startsWith("outside the services zone") || r.includes("reserved for the Android relay fallback")) {
+    return "unrecognised";
+  }
+  return "other";
+}
+
+function shorten(s, n) {
+  s = String(s ?? "");
+  return s.length > n ? `${s.slice(0, n - 1)}~` : s;
+}
+
+/**
+ * The "left on purpose" review of a plan (the dry run saved AFTER the apply):
+ * every kept DNS record grouped by why it is kept, and every kept server with
+ * its reason, so the owner sees what remains. Pure: it only formats the plan.
+ * Anything still marked for deletion is listed first and loudly.
+ */
+export function formatReview(plan) {
+  const lines = [];
+  const protectedNames = new Set(plan.protectedAccounts ?? []);
+  const keptDns = plan.dns.filter((d) => d.action !== "orphan");
+  const orphanDns = plan.dns.filter((d) => d.action === "orphan");
+  const keptServers = plan.servers.filter((v) => v.action !== "orphan");
+  const orphanServers = plan.servers.filter((v) => v.action === "orphan");
+  lines.push(`Left on purpose in ${plan.apex} (plan ${plan.generatedAt})`);
+  lines.push(`  protected accounts: ${[...protectedNames].join(", ") || "none"}`);
+  if (orphanDns.length + orphanServers.length > 0) {
+    lines.push("");
+    lines.push(`STILL LISTED FOR DELETION: ${orphanDns.length} records, ${orphanServers.length} servers. Apply the reap again before reviewing.`);
+    for (const d of orphanDns) lines.push(`  dns    ${pad(d.type, 5)} ${d.name}`);
+    for (const v of orphanServers) lines.push(`  server ${v.serverId}  ${v.title} (${v.owner})`);
+  }
+  lines.push("");
+  lines.push(`DNS records kept: ${keptDns.length} of ${plan.dns.length} in the zone`);
+  for (const [group, title] of DNS_KEEP_GROUPS) {
+    const rows = keptDns.filter((d) => dnsKeepGroup(d) === group);
+    if (rows.length === 0) continue;
+    lines.push("");
+    lines.push(`  ${title}: ${rows.length}`);
+    for (const d of rows) {
+      const where = d.content ? ` -> ${shorten(d.content, 48)}` : "";
+      const owner = d.owner ? ` [${d.owner}]` : "";
+      lines.push(`    ${pad(d.type, 5)} ${d.name}${where}${owner}`);
+      if (group === "unrecognised" || group === "other" || group === "live") lines.push(`          why: ${d.reason}`);
+    }
+  }
+  lines.push("");
+  if (!plan.serversChecked) {
+    lines.push("Servers kept: NOT CHECKED (the Worker has no UPCLOUD_TOKEN), so no server was looked at.");
+  } else {
+    lines.push(`Servers kept (UpCloud servers labelled flagship-demo): ${keptServers.length} of ${plan.servers.length}`);
+    if (keptServers.length === 0) lines.push("  none");
+    for (const reason of [...new Set(keptServers.map((v) => v.reason))]) {
+      lines.push("");
+      lines.push(`  ${reason}:`);
+      for (const v of keptServers.filter((x) => x.reason === reason)) {
+        lines.push(`    ${v.serverId}  ${shorten(v.title, 40)}  ${v.state}  [${v.owner ?? "no owner"}]`);
+      }
+    }
+  }
+  lines.push("");
+  const strangers = [...new Set([...keptDns, ...keptServers].map((x) => x.owner).filter((o) => o && !protectedNames.has(o)))];
+  if (strangers.length > 0) {
+    lines.push(`NOTE: kept for accounts that are NOT protected: ${strangers.join(", ")}. After the scrub only the protected account should remain; a later sign-up is the only normal reason.`);
+  }
+  if (plan.serversChecked) {
+    for (const name of protectedNames) {
+      if (!keptServers.some((v) => v.owner === name)) lines.push(`NOTE: no kept server is labelled for ${name}. Its server may be unlabelled or gone: check it in the UpCloud console.`);
+    }
+  }
+  lines.push("This tool only sees the Cloudflare zone of the services apex and UpCloud servers labelled flagship-demo. Everything else needs your own logins (the owner checklist).");
+  return lines.join("\n");
+}
+
+/** Validates a saved plan for review: shape only, no age limit (a review reads the dry run after the apply). */
+export function checkPlanShape(plan) {
+  if (!plan || plan.version !== 1 || !Array.isArray(plan.dns) || !Array.isArray(plan.servers) || typeof plan.apex !== "string") {
+    throw new Error("this is not a reap plan from this tool");
+  }
+  return plan;
 }
 
 /** The orphans in a saved plan that pass the local rules; everything else is refused here before any call. */
@@ -277,8 +389,25 @@ async function main() {
     process.exit(2);
   }
   if (opts.help) {
-    console.log("usage: node scripts/reap-orphans.mjs [--out plan.json] [--show] [--json]\n       node scripts/reap-orphans.mjs --apply --plan plan.json");
+    console.log("usage: node scripts/reap-orphans.mjs [--out plan.json] [--show] [--json]\n       node scripts/reap-orphans.mjs --apply --plan plan.json\n       node scripts/reap-orphans.mjs --review --plan plan.json");
     return;
+  }
+  if (opts.review) {
+    const reviewPath = resolve(opts.plan);
+    if (!existsSync(reviewPath)) {
+      console.error(`no such plan: ${reviewPath}`);
+      process.exit(2);
+    }
+    let reviewed;
+    try {
+      reviewed = checkPlanShape(JSON.parse(readFileSync(reviewPath, "utf8")));
+    } catch (err) {
+      console.error(err.message);
+      process.exit(2);
+    }
+    console.log(opts.json ? JSON.stringify(reviewed, null, 2) : formatReview(reviewed));
+    const left = reviewed.dns.filter((d) => d.action === "orphan").length + reviewed.servers.filter((v) => v.action === "orphan").length;
+    process.exit(left > 0 ? 1 : 0);
   }
   const secret = process.env.FLAGSHIP_ADMIN_SECRET;
   if (!secret) {
