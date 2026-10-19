@@ -1,4 +1,4 @@
-# NO-GO (updated: four of the blockers now have fixes on pushed branches; see "Update 2")
+# NO-GO (updated: the first-boot unlock bug is fixed and most blockers have fixes on pushed branches; see "Update 2" and "Update 3")
 
 Release recommendation: hold the release. The Android/iOS device-pairing gap, passcode-backup zero-byte save, Studio restart-after-UAC bug, and first-boot unlock request anomaly remain unresolved or unverified. The Android and iOS pairing fixes exist on separate unpushed branches; neither has been merged or live-validated.
 
@@ -76,3 +76,35 @@ All branches are on origin, built on `origin/main` `59dbc8cac`; none touches `ma
 - **Memory:** Studio refuses to start a VM with under 4 GiB free; a 1.5 GiB emulator plus a hosted VM does not fit on a 16 GB machine, so the phone and the VM could not run together while hosting.
 - **Not run:** the UAC retest, H (USB/ISO fallback), the "Account was removed" screen and a live two-device update.
 - **Cleanup owed:** the public repo `harrywinner2/flagship-hello-test` still exists (the token lacks `delete_repo`; run `gh auth refresh -h github.com -s delete_repo`, then delete it). Throwaway prod accounts remain: `prime-marten` and several web accounts.
+
+## Update 3 (same day, latest): the first-boot unlock bug is found and fixed; more branches
+
+### Root cause of "Waiting for you to unlock" with nothing on the phone (blocker 4)
+
+Studio starts a normal hosted VM with `-serial none`. The Debian appliance's kernel command line is `console=tty0 console=ttyS0,115200 earlyprintk=ttyS0,115200`, and with no UART the guest sat idle at about 1.9 s of kernel time and never ran `init`, so the unlock hook never posted its request. Evidence:
+
+- Every boot that worked in this round had the debug serial console switched on (the earlier "restart fixes it" was my config edit, not the restart). Boots without it (three VMs, several restarts, 7+ minutes each) never produced a card; the guest screen was frozen at the same kernel line even on the "second" boot.
+- Serial on, nothing attached: the guest's `console.log` shows the full boot, `posted unlock-key boot-request` within about 5 s, and the phone shows the card at once.
+- With the fix (a serial port whose output is discarded), the same VM, serial config off, produced the card, was approved, and reached HTTPS 200 about 90 s later.
+
+Fix: `fix/studio-serial-uart` (`324813fe2`): `-chardev null,id=ser-null -serial chardev:ser-null` in the Windows and Linux command-line builders (no console endpoint, listener or log, so the "no console without a debug grant" rule still holds). Windows tests pass (277); the Linux pytest could not be run here. Mac Studio uses Apple's framework and is not affected.
+
+### Other branches pushed since Update 2 (none merged, none touch `main`)
+
+| Branch | What |
+|---|---|
+| `fix/home-single-leader` (`e516850e4`) | Home no longer shows per-app "Leads <app>" chips on any platform (only the one leader is marked; web shell v154). Activity's third section reads "All servers" with matching hint and empty text when no server is picked (Android, iOS). Android unit tests, a debug build and the emulator checked; iOS not compiled. |
+| `fix/final-round-polish` (`34ae16ccf`) | The saved-backups test no longer leaves 5 GiB temp files (it leaked 17 directories per run; now none). Windows Studio shows its pairing code dash-grouped like the Mac and the phone hint. The web wizard enters Home when it finishes (it showed the pre-sign-in panel until a reload); shell v154, so the shell number must be renumbered if both web branches merge. |
+| `fix/studio-serial-uart` | The root-cause fix above. |
+
+### Verified live since Update 2
+
+- **Git import:** after "Check repo", typing another name clears the result; checking again and installing served the app at the chosen name (`mychosen…` 200) and not at the default name. (This was the "installed as flagship-hello-test-2" bug.)
+- **Passcode backup, restore and device pairing:** as in Update 2.
+
+### Still open
+
+- **Relay fallback does not reach the box (test E).** With the box name and `relay-fallback` both blocked, the app logs "reaching it through the relay (built-in addresses)" but the TLS handshake is then closed (`SSLHandshakeException: connection closed`) and box-direct pages (Apps list, Front page, power) fail ("This server has gone offline" / "Couldn't load"). The same addresses answer 200 from the host over IPv4 and IPv6 (`curl --resolve`), and raw TCP connects from the emulator, so the failure is in the app's TLS to the relay (not DNS, not the address). Home's Online status comes from `.com`, which is why it still looks fine. `PodDirect` now uses the shared client (unit tests pass), but that does not fix this. Needs a packet-level look at OkHttp's ClientHello to the relay.
+- **Not run / needs you:** the cancelled-UAC retest (the unit test passes), H (USB/ISO fallback), the "Account was removed" screen, a live update.
+- **Left as is:** the phone's "If it ran from a USB stick, unplug it" install copy (shared across three platforms and pinned by tests); the Cloudflare Insights beacon blocked by CSP on every web load is injected by Cloudflare's automatic Web Analytics (turn that off in the dashboard, or allow the host in the CSP); the passcode-backup dialog reopens on "Backup ready" without the passcode (by design: closing never stops the server); the Android debug-key rejection at send time is probably my keyboard injection, not the app.
+- **Cleanup owed:** the public repo `harrywinner2/flagship-hello-test` (needs `gh auth refresh -h github.com -s delete_repo`), and the throwaway prod accounts (`prime-marten` and several web ones).
