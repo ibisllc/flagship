@@ -39,15 +39,42 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     /// won't resolve; other failures pass straight through.
     private func sendWithNameRetry(_ req: URLRequest, host: String?) async throws -> (Data, URLResponse) {
         var attempt = 0
+        var triedRelay = false
         while true {
             do {
                 return try await sendPreferringLan(req, host: host)
             } catch {
-                guard Self.isNameLookupFailure(error), attempt < dnsRetryDelays.count, !Task.isCancelled else { throw error }
+                guard Self.isNameLookupFailure(error), !Task.isCancelled else { throw error }
+                // The name won't resolve: ask the relay for it directly (docs/relay-addresses.md).
+                // A hint: if it fails, in any way, the name is simply still unresolved.
+                if !triedRelay, let host {
+                    triedRelay = true
+                    if let hinted = try await sendViaRelay(req, host: host) { return hinted }
+                }
+                guard attempt < dnsRetryDelays.count else { throw error }
                 await sleep(dnsRetryDelays[attempt])
                 attempt += 1
             }
         }
+    }
+
+    /// The request through the relay's addresses, or nil when that is not possible or did not
+    /// work. A pin or certificate failure on this route says nothing about the box, so it is
+    /// not recorded as one; a failure that may have reached the box is thrown, not replayed.
+    private func sendViaRelay(_ req: URLRequest, host: String) async throws -> (Data, URLResponse)? {
+        #if canImport(Network)
+        guard let relay = await RelayRoute.shared.session(for: host) else { return nil }
+        do {
+            return try await relay.gatedData(for: req)
+        } catch {
+            if Task.isCancelled { throw error }
+            _ = CertPinMismatchSink.shared.consumeRecentMismatch(host: host)
+            guard LanDirectRegistry.mayResendOverRelay(error, method: req.httpMethod) else { throw error }
+            return nil
+        }
+        #else
+        return nil
+        #endif
     }
 
     /// LAN-direct (docs/lan-direct.md): use the box's local listener when a

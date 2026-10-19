@@ -103,7 +103,8 @@ final class UpdateLockGateTests: XCTestCase {
             dir = dir.deletingLastPathComponent()
         }
         guard let root else { throw XCTSkip("repo root not found") }
-        let allowed: Set<String> = ["UpdateLock.swift", "SecurityNoticeCenter.swift"]
+        // The two anonymous `.com` reads (the security notice, the relay addresses) must still leave while locked.
+        let allowed: Set<String> = ["UpdateLock.swift", "SecurityNoticeCenter.swift", "RelayFallback.swift"]
         let pattern = try NSRegularExpression(pattern: #"\.(data\(for:|bytes\(for:|upload\(for:|download\(for:|webSocketTask\(with|dataTask\(|uploadTask\(|downloadTask\()"#)
         var offenders: [String] = []
         for sub in ["apps/mobile/shared/Sources", "apps/mobile/ios/Sources", "apps/mobile/ios/App/Sources"] {

@@ -208,6 +208,14 @@ public final class CertPinRegistry: @unchecked Sendable {
         return nil
     }
 
+    /// One verified box name and its pin, to test a relay address with, or nil
+    /// when no box is known yet.
+    public func anyPin() -> (host: String, pin: String)? {
+        lock.lock()
+        defer { lock.unlock() }
+        return pins.first.map { (host: $0.key, pin: $0.value) }
+    }
+
     /// The last fresh, STK-verified status report for this exact box. Unlike
     /// `pinFor`, this deliberately does not inherit to service subdomains: the
     /// server-detail screen asks about one canonical box FQDN.

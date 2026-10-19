@@ -36,7 +36,7 @@ object RelayAddressRules {
         if (a.isAnyLocalAddress || a.isLoopbackAddress || a.isLinkLocalAddress || a.isSiteLocalAddress || a.isMulticastAddress) return false
         val b = a.address
         return when (a) {
-            is Inet4Address -> !((b[0].toInt() and 0xff) == 100 && (b[1].toInt() and 0xc0) == 0x40)
+            is Inet4Address -> (b[0].toInt() and 0xff) < 240 && !((b[0].toInt() and 0xff) == 100 && (b[1].toInt() and 0xc0) == 0x40)
             is Inet6Address -> (b[0].toInt() and 0xfe) != 0xfc && (b[0].toInt() and 0xe0) == 0x20
             else -> false
         }
@@ -63,13 +63,63 @@ object RelayAddressRules {
     }
 }
 
+/**
+ * Is [address] the relay, up, forwarding to the box named [sniHost]? A handshake to it
+ * under that name that ends in the box's own pinned certificate says so: a relay that
+ * is down or stale fails, and one that isn't authorized for the box cannot show the pin.
+ */
+fun interface RelayProber {
+    fun probe(address: InetAddress, sniHost: String, pinSha256: String): Boolean
+}
+
+class TlsPinRelayProber(private val timeoutMs: Int = 2_500) : RelayProber {
+    override fun probe(address: InetAddress, sniHost: String, pinSha256: String): Boolean = try {
+        val plain = java.net.Socket()
+        plain.connect(java.net.InetSocketAddress(address, 443), timeoutMs)
+        plain.soTimeout = timeoutMs
+        val ssl = (javax.net.ssl.SSLSocketFactory.getDefault() as javax.net.ssl.SSLSocketFactory)
+            .createSocket(plain, sniHost, 443, true) as javax.net.ssl.SSLSocket
+        ssl.use {
+            val params = it.sslParameters
+            params.serverNames = listOf(javax.net.ssl.SNIHostName(sniHost))
+            it.sslParameters = params
+            it.startHandshake()
+            val leaf = it.session.peerCertificates.firstOrNull()?.encoded
+            leafDerSha256Hex(leaf)?.equals(pinSha256, ignoreCase = true) == true
+        }
+    } catch (_: Throwable) {
+        false
+    }
+}
+
 class RelayAddressCenter(
     private val backend: NoticeStoreBackend,
     private val fetcher: () -> NoticeFetcher,
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    private val prober: RelayProber = TlsPinRelayProber(),
+    /** A box name and its pin to test addresses with, or null when no box is known yet. */
+    private val pinTarget: () -> Pair<String, String>? = { CertPinRegistry.shared.anyPin() },
 ) {
     private val lock = Mutex()
+    private val tested = java.util.concurrent.ConcurrentHashMap<InetAddress, Pair<Boolean, Long>>()
+
+    /**
+     * The recommended addresses (then [seed]) that pass the test right now, best first.
+     * Empty when no box is known to test with or none pass; the caller then goes on to DNS's
+     * label and the rest. Results are kept for [GOOD_MS] (passed) or [BAD_MS] (failed).
+     */
+    fun proven(seed: List<InetAddress>): List<InetAddress> {
+        val target = pinTarget() ?: return emptyList()
+        val candidates = (stored() + seed).distinct()
+        val now = clock()
+        val stale = candidates.filter { a -> tested[a]?.let { (ok, at) -> now - at >= if (ok) GOOD_MS else BAD_MS } ?: true }
+        val threads = stale.map { a ->
+            Thread { tested[a] = prober.probe(a, target.first, target.second) to clock() }.also { it.isDaemon = true; it.start() }
+        }
+        threads.forEach { it.join(PROBE_WAIT_MS) }
+        return candidates.filter { tested[it]?.first == true }
+    }
 
     @Volatile private var lastFetchAt = 0L
 
@@ -119,6 +169,9 @@ class RelayAddressCenter(
     companion object {
         const val PATH = "/api/services/endpoints"
         const val POLL_INTERVAL_MS = 24L * 3600_000
+        const val GOOD_MS = 10L * 60_000
+        const val BAD_MS = 2L * 60_000
+        private const val PROBE_WAIT_MS = 3_000L
         private const val START_DELAY_MS = 20_000L
 
         @Volatile var shared: RelayAddressCenter? = null
@@ -134,6 +187,12 @@ class RelayAddressCenter(
             )
             shared = c
             return c
+        }
+
+        /** The addresses for [apex] that were tested against a known box just now (prod apex only). */
+        fun provenFor(apex: String): List<InetAddress> {
+            if (apex != Endpoints.PROD_DATA_APEX) return emptyList()
+            return runCatching { (shared ?: return emptyList()).proven(RelayAddresses.prod) }.getOrDefault(emptyList())
         }
 
         /** The addresses for [apex] when DNS has failed: what `.com` recommends, then the compiled-in seed (prod apex only). */

@@ -102,4 +102,79 @@ class RelayAddressCenterTest {
         val b = MemoryNoticeStoreBackend("""{"addresses":["192.168.1.2","203.0.113.7"],"at":1}""")
         assertEquals(listOf(ip("203.0.113.7")) + seed, center(b).addresses(seed))
     }
+
+    // Testing first: an address is relied on only once a handshake under a known box's
+    // name to it ends in that box's pinned certificate (the relay is up and forwards for it).
+    private fun tested(prober: RelayProber, target: Pair<String, String>? = "home.alice.flagship.services" to "ab".repeat(32), now: () -> Long = { 1_000L }) =
+        RelayAddressCenter(backend, { NoticeFetcher { served } }, now, prober = prober, pinTarget = { target })
+
+    @Test fun onlyAddressesThatPassTheTestAreProven() = runBlocking {
+        val asked = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val c = tested({ a, sni, pin ->
+            asked += "${a.hostAddress}|$sni|$pin"
+            a == ip("203.0.113.7")
+        })
+        served = endpoints("203.0.113.7", "2001:db8::7")
+        c.refresh()
+        assertEquals(listOf(ip("203.0.113.7")), c.proven(seed))
+        assertTrue(asked.contains("203.0.113.7|home.alice.flagship.services|${"ab".repeat(32)}"))
+    }
+
+    @Test fun withNoKnownBoxNothingIsProvenAndNothingIsProbed() {
+        var probes = 0
+        val c = tested({ _, _, _ -> probes++; true }, target = null)
+        assertEquals(emptyList<InetAddress>(), c.proven(seed))
+        assertEquals(0, probes)
+    }
+
+    @Test fun aResultIsKeptForAWhileThenTestedAgain() {
+        var probes = 0
+        var t = 1_000L
+        val c = tested({ _, _, _ -> probes++; true }, now = { t })
+        c.proven(seed)
+        c.proven(seed)
+        assertEquals(seed.size, probes)
+        t += RelayAddressCenter.GOOD_MS + 1
+        c.proven(seed)
+        assertEquals(seed.size * 2, probes)
+    }
+
+    @Test fun aFailedTestIsRetriedSoonerThanAPassedOne() {
+        var probes = 0
+        var t = 1_000L
+        val c = tested({ _, _, _ -> probes++; false }, now = { t })
+        assertEquals(emptyList<InetAddress>(), c.proven(seed))
+        t += RelayAddressCenter.BAD_MS + 1
+        c.proven(seed)
+        assertEquals(seed.size * 2, probes)
+    }
+
+    @Test fun theFallbackPrefersProvenAddressesOverDnsAndTheSeed() {
+        val label = ip("10.0.0.7")
+        val resolver = object : okhttp3.Dns {
+            override fun lookup(hostname: String): List<InetAddress> =
+                if (hostname == "relay-fallback.flagship.services") listOf(label) else throw java.net.UnknownHostException(hostname)
+        }
+        val tested = RelayFallbackDns(resolver, { "flagship.services" }, { }, { seed }, { listOf(ip("203.0.113.7")) })
+        assertEquals(listOf(ip("203.0.113.7")), tested.lookup("home.alice.flagship.services"))
+        val none = RelayFallbackDns(resolver, { "flagship.services" }, { }, { seed }, { emptyList() })
+        assertEquals(listOf(label), none.lookup("home.alice.flagship.services"))
+    }
+
+    // The rule shared with iOS: apps/mobile/test-vectors/relay-addresses.json.
+    @Test fun everySharedVectorGivesTheSameAddresses() {
+        val root = kotlinx.serialization.json.Json.parseToJsonElement(
+            SecurityNoticeVectorsTest.repoFile("apps/mobile/test-vectors/relay-addresses.json").readText(),
+        ) as kotlinx.serialization.json.JsonObject
+        val list = root["endpoints"] as kotlinx.serialization.json.JsonArray
+        assertTrue(list.size >= 10)
+        for (e in list) {
+            val v = e as kotlinx.serialization.json.JsonObject
+            val want = (v["expect"] as kotlinx.serialization.json.JsonArray).map { ip((it as kotlinx.serialization.json.JsonPrimitive).content) }
+            assertEquals(v["name"].toString(), want, RelayAddressRules.fromEndpoints(v["body"].toString()))
+        }
+        for (junk in root["notJson"] as kotlinx.serialization.json.JsonArray) {
+            assertEquals(emptyList<InetAddress>(), RelayAddressRules.fromEndpoints((junk as kotlinx.serialization.json.JsonPrimitive).content))
+        }
+    }
 }

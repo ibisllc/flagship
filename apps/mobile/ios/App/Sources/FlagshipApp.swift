@@ -125,6 +125,14 @@ struct FlagshipApp: App {
             activeBox: { await store.podBaseUrl.flatMap { URL(string: $0)?.host } },
             fetchHint: { try? await lanClient.lanHint() }
         )
+        // Relay addresses (docs/relay-addresses.md): when a box's name won't resolve, ask `.com`
+        // where the relay is, test it against a known box, and reach the box through it.
+        RelayAddressRegistry.shared.configure(
+            fetchBody: { await RelayAddressFetcher.fetch() },
+            pinTarget: { CertPinRegistry.shared.anyPin() }
+        )
+        RelayRoute.shared.configure(pinFor: { CertPinRegistry.shared.pinFor(host: $0) })
+        RelayAddressRegistry.shared.startIfDue()
         let podClients = PodScreensClientFactory.live(urlSession: pinnedSession, store: store)
         self.livePodClients = podClients
         // The phone's copy of each phone-side server's newest backup, fetched

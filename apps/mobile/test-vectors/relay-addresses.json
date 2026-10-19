@@ -1,0 +1,18 @@
+{
+  "description": "Which relay addresses a phone keeps from GET /api/services/endpoints (docs/relay-addresses.md). Read by the Android and iOS tests; the rule is phone-only, so it lives outside the protocol vectors.",
+  "endpoints": [
+    { "name": "the prod answer", "body": {"version":1,"passthroughIPv4":"149.248.216.86","passthroughIPv6":"2a09:8280:1::110:d2b6:0"}, "expect": ["149.248.216.86", "2a09:8280:1::110:d2b6:0"] },
+    { "name": "ipv4 only", "body": {"passthroughIPv4":"203.0.113.7","passthroughIPv6":null}, "expect": ["203.0.113.7"] },
+    { "name": "ipv6 only", "body": {"passthroughIPv6":"2001:db8::7"}, "expect": ["2001:db8::7"] },
+    { "name": "nothing recommended", "body": {"passthroughIPv4":null,"passthroughIPv6":null}, "expect": [] },
+    { "name": "a hostname is never looked up", "body": {"passthroughIPv4":"relay.example.com","passthroughIPv6":"example.com"}, "expect": [] },
+    { "name": "the local network is refused", "body": {"passthroughIPv4":"192.168.1.2","passthroughIPv6":"fd00::1"}, "expect": [] },
+    { "name": "loopback and link-local are refused", "body": {"passthroughIPv4":"127.0.0.1","passthroughIPv6":"fe80::1"}, "expect": [] },
+    { "name": "shared (CGNAT) space is refused", "body": {"passthroughIPv4":"100.64.0.1"}, "expect": [] },
+    { "name": "the reserved top of the v4 space is refused", "body": {"passthroughIPv4":"240.0.0.1"}, "expect": [] },
+    { "name": "multicast is refused", "body": {"passthroughIPv4":"224.0.0.1","passthroughIPv6":"ff02::1"}, "expect": [] },
+    { "name": "one good one bad", "body": {"passthroughIPv4":"10.0.0.7","passthroughIPv6":"2001:db8::7"}, "expect": ["2001:db8::7"] },
+    { "name": "not strings", "body": {"passthroughIPv4":7,"passthroughIPv6":["2001:db8::7"]}, "expect": [] }
+  ],
+  "notJson": ["not json {", "[]", "\"x\"", ""]
+}

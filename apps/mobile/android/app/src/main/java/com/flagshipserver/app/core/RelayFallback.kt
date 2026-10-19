@@ -56,6 +56,8 @@ class RelayFallbackDns(
     private val log: (String) -> Unit = { m -> runCatching { android.util.Log.i("RelayFallback", m) } },
     /** Last resort when `relay-fallback.<apex>` doesn't resolve either. */
     private val lastResort: (String) -> List<InetAddress> = RelayAddressCenter.Companion::addressesFor,
+    /** The addresses `.com` recommends that a test just showed to be the relay answering for a box: tried before DNS's label. */
+    private val proven: (String) -> List<InetAddress> = RelayAddressCenter.Companion::provenFor,
 ) : Dns {
     private val viaHint = ConcurrentHashMap<String, Long>()
 
@@ -73,14 +75,15 @@ class RelayFallbackDns(
             val name = hostname.lowercase()
             val label = "$LABEL.$base"
             if (!name.endsWith(".$base") || name == label) throw e
-            val resolved = try {
+            val tested = proven(base)
+            val resolved = if (tested.isNotEmpty()) tested else try {
                 delegate.lookup(label)
             } catch (_: UnknownHostException) {
                 emptyList()
             }
             val addresses = resolved.ifEmpty { lastResort(base) }
             if (addresses.isEmpty()) throw e
-            log("$hostname didn't resolve; reaching it through the relay (${if (resolved.isEmpty()) "built-in addresses" else label})")
+            log("$hostname didn't resolve; reaching it through the relay (${if (tested.isNotEmpty()) "addresses .com recommended, tested" else if (resolved.isEmpty()) "built-in addresses" else label})")
             viaHint[name] = System.currentTimeMillis()
             return addresses
         }

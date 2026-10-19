@@ -45,14 +45,15 @@ accounts' name space and stay as they are.
 `*.flagship.services` also makes `relay-fallback.flagship.services` resolve to
 the relay. Android's `RelayFallbackDns` (`core/RelayFallback.kt`) uses that
 name when a box name does not resolve (a home router's cached "no such name"),
-then falls back to the relay's two addresses compiled into the app
-(`RelayAddresses`, the same values as `SERVICES_PASSTHROUGH_IPV4/IPV6`; changed
-by a release plus a security notice if Fly ever re-addresses the relay). It
+then the addresses `.com` recommends (`GET /api/services/endpoints`, tested against a
+known box first; `docs/relay-addresses.md`), then the relay's two addresses compiled into the
+app (`RelayAddresses`, the same values as `SERVICES_PASSTHROUGH_IPV4/IPV6`; only a last
+resort, so re-addressing the relay needs no release). It
 never uses the apex's own addresses (those are Cloudflare's proxy, not the
 relay). The request keeps the box's name, so SNI, hostname verification and the
 cert pin run against the box and a wrong address can only fail. Do not put a
-record at `relay-fallback` (it would stop the wildcard answering it): the label is reserved as an account and server name, the reap tool always keeps a record there, and `npm run zone-health` FAILS (`reserved-name`) if one exists, so remove it by hand. iOS has
-no relay fallback by design (it retries the lookup 0.5/1.5/3 s) and the webapp
+record at `relay-fallback` (it would stop the wildcard answering it): the label is reserved as an account and server name, the reap tool always keeps a record there, and `npm run zone-health` FAILS (`reserved-name`) if one exists, so remove it by hand. iOS does the same through
+a loopback CONNECT proxy (`RelayForwarder`), after retrying the lookup; the webapp
 cannot override DNS.
 
 `.com` writes **no address record and no CAA record for anybody** (not at

@@ -136,6 +136,9 @@ class CertPinRegistry {
         return null
     }
 
+    /** One verified box name and its pin, for testing a relay address against a box that is known, or null. */
+    fun anyPin(): Pair<String, String>? = synchronized(pins) { pins.entries.firstOrNull()?.let { it.key to it.value } }
+
     fun clear() {
         synchronized(pins) { pins.clear() }
     }
