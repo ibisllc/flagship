@@ -1,0 +1,52 @@
+<!-- The FAQ "Money & subscriptions" section, taken off main on 2026-10-20 (nothing is sold at launch).
+     Put it back in apps/web/public/faq.html before <section id="endgame">, add <a href="#money">Money &amp; subscriptions</a> to the
+     jump links, and re-check every answer (hardware refunds, Stripe, proration, peer-backup pool) against what is for sale. -->
+  <section class="faq-section" id="money" aria-label="Money and subscriptions">
+    <h2>Money &amp; subscriptions</h2>
+    <p class="section-lede">Hardware is one-time. Subscriptions are optional. Bring-your-own-hardware is free forever.</p>
+    <div class="qlist">
+      <details class="q">
+        <summary>What does Flagship cost?</summary>
+        <div class="answer">
+          <p>Bring-your-own-hardware: $0. We're not selling boxes or subscriptions yet; when we are, we'll publish the details and they'll be opt-in for power-user surfaces only. Most people pay nothing, forever.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Why charge anything if it's "your hardware"?</summary>
+        <div class="answer">
+          <p>Three real costs: shipping the pre-built boxes (margin, not profit-from-pricing), running the tunnel hub on Fly (a few cents per server per month at our scale), and running the registrar of <code>flagship.services</code> wildcard DNS. The free tier covers the steady-state for an individual on their own hardware. Subscriptions cover the things we'd otherwise have to subsidize.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Can I cancel anytime?</summary>
+        <div class="answer">
+          <p>Yes. Cancellation is one tap from the phone. We prorate the unused portion of the current period. Your subdomain stays yours; the routing entry continues to work; only the billed add-ons (push at scale, peer-backup pool, etc.) shut off. We don't ransom your DNS.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>What's your refund policy on hardware?</summary>
+        <div class="answer">
+          <p>30 days, full refund, you ship it back. We pay return shipping inside the US; outside the US it's on you. If the box arrived dead or DOA we pay both ways. We don't restock-fee. Full terms at <a href="/terms">/terms</a>.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Do you take crypto?</summary>
+        <div class="answer">
+          <p>Not yet. Stripe takes cards (USD, EUR, GBP). We're exploring monero / lightning for the privacy-conscious, but it's not on the immediate roadmap. If this matters to you, mail <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a> and tell us. That's how features get prioritized.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Will the price change?</summary>
+        <div class="answer">
+          <p>Hardware: probably, with component costs. Existing orders are locked in. Subscriptions: we'll grandfather every existing subscriber on a price change for at least 12 months and we'll tell you at signup if a plan is "introductory." We don't do "your renewal is now triple."</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>How do you make money long-term?</summary>
+        <div class="answer">
+          <p>Hardware margin, subscriptions on the optional add-ons. We don't sell ads, telemetry, model-training rights, or your data: partly because it's the right thing, mostly because we structurally can't.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
