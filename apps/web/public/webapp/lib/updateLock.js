@@ -42,14 +42,32 @@ export function subscribeUpdateLock(fn) {
 }
 
 /**
+ * The two writes that answer a box's boot-unlock request: the secret request on
+ * .com and the response on boot.<apex>. A locked browser must still be able to
+ * let the owner's own server start (mirror of the phones' `isBootUnlock`).
+ */
+function isBootUnlock(url, method, controlHost) {
+  if (method !== "POST") return false;
+  try {
+    const u = new URL(url);
+    if (controlHost && u.pathname === "/api/secret-requests") return true;
+    return u.hostname.startsWith("boot.") && u.pathname === "/api/boot/response";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * May this request go out while locked? Same-origin always (the shell and its
  * update); a GET or HEAD to the control server (nothing it answers changes
- * anything); nothing else (boxes, data plane, any write).
+ * anything); the two boot-unlock writes; nothing else (boxes, data plane, any
+ * other write).
  * @param {{url:string, method?:string, sameOrigin:boolean, controlHost:boolean}} req
  */
 export function updateLockAllows(req) {
   if (!locked) return true;
   if (req.sameOrigin) return true;
   const method = String(req.method || "GET").toUpperCase();
+  if (isBootUnlock(req.url, method, req.controlHost)) return true;
   return req.controlHost && (method === "GET" || method === "HEAD");
 }

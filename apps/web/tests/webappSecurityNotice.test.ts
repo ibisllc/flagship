@@ -135,6 +135,12 @@ describe("a verified update-required notice", () => {
     expect(allow({ url: "https://webapp.x/lib/a.js", method: "GET", sameOrigin: true, controlHost: false })).toBe(true);
     expect(allow({ url: "https://flagshipserver.com/api/notices", method: "GET", sameOrigin: false, controlHost: true })).toBe(true);
     expect(allow({ url: "https://flagshipserver.com/api/x", method: "POST", sameOrigin: false, controlHost: true })).toBe(false);
+    // The two writes that answer a box's boot-unlock request still go out; other writes to those hosts do not.
+    expect(allow({ url: "https://flagshipserver.com/api/secret-requests", method: "POST", sameOrigin: false, controlHost: true })).toBe(true);
+    expect(allow({ url: "https://boot.flagshipserver.com/api/boot/response", method: "POST", sameOrigin: false, controlHost: false })).toBe(true);
+    expect(allow({ url: "https://boot.flagshipserver.com/api/boot/other", method: "POST", sameOrigin: false, controlHost: false })).toBe(false);
+    expect(allow({ url: "https://home.u.flagship.services/api/boot/response", method: "POST", sameOrigin: false, controlHost: false })).toBe(false);
+    expect(allow({ url: "https://home.u.flagship.services/api/secret-requests", method: "POST", sameOrigin: false, controlHost: false })).toBe(false);
     expect(allow({ url: "https://home.u.flagship.services/api/screens/x", method: "GET", sameOrigin: false, controlHost: false })).toBe(false);
     expect(allow({ url: "https://home.u.flagship.services/api/orders", method: "POST", sameOrigin: false, controlHost: false })).toBe(false);
   });
