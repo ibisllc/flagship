@@ -1,0 +1,60 @@
+name: ios (unit tests + release-clean)
+
+# iOS had no CI of its own: the shared Swift suite, the app's unit tests and the check that a
+# Release build carries no mock clients, gym seams or developer mode ran only on the owner's Mac.
+# Runs on a macOS runner, so it costs more than the Linux jobs; limited to changes that can
+# affect the iOS apps.
+
+on:
+  pull_request:
+    paths:
+      - "apps/mobile/ios/**"
+      - "apps/mobile/shared/**"
+      - "apps/mobile/test-vectors/**"
+      - "scripts/ios-release-clean.mjs"
+      - ".github/workflows/ios.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/mobile/ios/**"
+      - "apps/mobile/shared/**"
+      - "apps/mobile/test-vectors/**"
+      - "scripts/ios-release-clean.mjs"
+      - ".github/workflows/ios.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-release-clean:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+
+      # Release sources hold no gym or mock symbol (the source half of the check).
+      - name: Release source check
+        run: node scripts/ios-release-clean.mjs
+
+      - name: Shared Swift suite
+        working-directory: apps/mobile/shared
+        run: swift test
+
+      - name: Pick an iPhone simulator
+        id: sim
+        run: |
+          id=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k in sorted(d, reverse=True) if 'iOS' in k for x in d[k] if 'iPhone' in x['name']))")
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+      - name: App unit tests (simulator)
+        working-directory: apps/mobile/ios
+        run: xcodebuild test -scheme FlagshipMobile-Package -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.id }}" -quiet
+
+      # A Release build for a device, then `strings` over every binary in the bundle.
+      - name: Release build carries no mock data, gym seams or developer mode
+        run: node scripts/ios-release-clean.mjs --build
