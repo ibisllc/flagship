@@ -334,15 +334,14 @@ export const WEB_ARCHIVE: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-backups-sentences",
-    "A failed scheduled run and an over-limit server show the box's own sentences; a phone reserve smaller than the data is refused in the box's words; Peer-distributed is signed under the admin root and the peer engine's status shows.",
+    "A failed scheduled run and an over-limit server show the box's own sentences; a phone reserve smaller than the data is refused in the box's words; the policy editor does not offer Peer-distributed while peer backup is off.",
     "gym backups a failed run, an over-limit server and a refused policy show the box's own sentences",
     {
       steps: [
         { kind: "tap", describe: "Change backup policy → Save (refused).", handle: "#bk-policy-save" },
-        { kind: "tap", describe: "Peer-distributed → Save.", handle: "#bk-policy-save" },
       ],
       assertions: [{ describe: "Failure", handle: "#bk-failed", expect: "text", text: "The last backup failed" }],
-      screenshots: [shot("backups-failed-over-limit", "Failure and over limit."), shot("backups-peer-policy", "Peer policy.")],
+      screenshots: [shot("backups-failed-over-limit", "Failure and over limit.")],
       dimension: "D1",
     },
   ),
@@ -359,7 +358,7 @@ export const WEB_ARCHIVE: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-backups-create-policy",
-    "The create form's three backup choices (No backup, On my devices, On other servers) start with nothing picked and Create off until one is; On my devices with a 24 GB reserve and On other servers (no reserve) are each signed under the admin root beside the pairing order.",
+    "The create form's two backup choices (No backup, On my devices) start with nothing picked and Create off until one is, and On other servers is not offered while peer backup is off; On my devices with a 24 GB reserve is signed under the admin root beside the pairing order.",
     "gym backups the create form's policy is signed beside the pairing order",
     {
       steps: [{ kind: "tap", describe: "Download the recipe.", handle: "#cs-download-recipe" }],

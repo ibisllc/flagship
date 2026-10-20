@@ -65,7 +65,10 @@ install -Dm644 "${LINUX_DIR}/wifi_store.py"        "${APPDIR}/usr/share/flagship
 install -Dm644 "${LINUX_DIR}/tray.py"              "${APPDIR}/usr/share/flagship-builder/tray.py"
 if [ -n "${FLAGSHIP_STUDIO_VERSION:-}" ]; then
   [[ "${FLAGSHIP_STUDIO_VERSION}" =~ ^[0-9A-Za-z.+-]+$ ]] || { echo "bad FLAGSHIP_STUDIO_VERSION" >&2; exit 2; }
-  printf 'VERSION = "%s"\n' "${FLAGSHIP_STUDIO_VERSION}" > "${APPDIR}/usr/share/flagship-builder/version.py"
+  # Stamp a copy of the source file, so LABEL and display_version() (wizard.py imports both) stay.
+  install -Dm644 "${LINUX_DIR}/version.py"         "${APPDIR}/usr/share/flagship-builder/version.py"
+  sed -i "s/^VERSION = \".*\"/VERSION = \"${FLAGSHIP_STUDIO_VERSION}\"/" "${APPDIR}/usr/share/flagship-builder/version.py"
+  grep -qx "VERSION = \"${FLAGSHIP_STUDIO_VERSION}\"" "${APPDIR}/usr/share/flagship-builder/version.py" || { echo "could not stamp version.py" >&2; exit 2; }
 else
   install -Dm644 "${LINUX_DIR}/version.py"         "${APPDIR}/usr/share/flagship-builder/version.py"
 fi

@@ -284,19 +284,8 @@ test.describe("gym webapp backups", () => {
     await page.fill("#bk-reserve-gb", "4");
     await page.click("#bk-policy-save");
     await expect(page.locator("#bk-policy-error")).toHaveText("This server holds 6.0 GB of app data, more than the 4.0 GB your device would keep. Reserve at least 6.0 GB on that device, or remove apps or data first.");
-    // Peer-distributed: signed under the admin root, and the peer engine's status shows.
-    await page.check('input[name="bk-policy"][value="peer"]');
-    await expect(page.locator("#bk-reserve-row")).toBeHidden();
-    await page.click("#bk-policy-save");
-    await expect(page.locator("#bk-policy-value")).toHaveText("Peer-distributed backups · up to 40 GB");
-    await expect(page.locator("#bk-usage-line")).toHaveText("Apps use 6.0 GB of 40 GB (a third of this server's disk)");
-    await expect(page.locator("#bk-peer")).toContainText("At risk: two servers holding pieces went away.");
-    await expect(page.locator("#bk-peer")).toContainText("3 of 5 pieces safe on 4 servers");
-    const post = box.policyPosts.at(-1)!.body as { order: { policy: string; phoneReserveBytes: number; serverDomain: string }; signatureHex: string };
-    expect(post.order).toMatchObject({ policy: "peer", phoneReserveBytes: 0, serverDomain: HOME });
-    expect(await signer(page, keys, POLICY_CANON, post.order, post.signatureHex)).toBe("admin");
-    await sawToast(page, "Backup policy: Peer-distributed backups");
-    await shot(page, testInfo, "backups-peer-policy");
+    // Peer-distributed is not offered while peer backup is off (the policy is phone, so no Peer radio).
+    await expect(page.locator('[data-bk-policy-option="peer"]')).toBeHidden();
   });
 
   test("gym backups the schedule is set in local time and sent in UTC", async ({ page }, testInfo) => {
@@ -332,9 +321,11 @@ test.describe("gym webapp backups", () => {
     await page.click("#home-add-server");
     await page.locator('dialog[aria-label="Add or restore a server"] [data-choice-add]').click();
     await expect(page.locator("#view-create-server")).toBeVisible({ timeout: 10_000 });
-    // Nothing is preselected; Create stays off until the owner picks, and the three choices come in order.
-    for (const v of ["none", "phone-only", "peer"]) await expect(page.locator(`input[name="cs-backup-policy"][value="${v}"]`)).not.toBeChecked();
-    await expect(page.locator("#cs-backup-policy .boot-unlock-title")).toHaveText(["No backup", "On my devices", "On other servers"]);
+    // Nothing is preselected; Create stays off until the owner picks, and the two choices come in order
+    // (On other servers is not offered while peer backup is off).
+    for (const v of ["none", "phone-only"]) await expect(page.locator(`input[name="cs-backup-policy"][value="${v}"]`)).not.toBeChecked();
+    await expect(page.locator('input[name="cs-backup-policy"][value="peer"]')).toHaveCount(0);
+    await expect(page.locator("#cs-backup-policy .boot-unlock-title")).toHaveText(["No backup", "On my devices"]);
     await expect(page.locator("#cs-backup-policy")).toContainText("Nothing is copied. You can turn backups on later.");
     await expect(page.locator("#cs-backup-policy-hint")).toContainText("You can change it any time in the server's Backups section.");
     await expect(page.locator("#cs-reserve-row")).toBeHidden();
@@ -352,15 +343,5 @@ test.describe("gym webapp backups", () => {
     const bp = JSON.parse(pairing as string).backupPolicy as { order: { serverDomain: string; policy: string; phoneReserveBytes: number; issuedAt: number }; signatureHex: string };
     expect(bp.order).toMatchObject({ serverDomain: NEW, policy: "phone", phoneReserveBytes: 24 * GB });
     expect(await signer(page, keys, POLICY_CANON, bp.order, bp.signatureHex)).toBe("admin");
-
-    // Peer: no reserve.
-    await page.click("#cs-new");
-    await expect(page.locator("#cs-download-recipe")).toBeDisabled();
-    await page.check('input[name="cs-backup-policy"][value="peer"]');
-    await expect(page.locator("#cs-reserve-row")).toBeHidden();
-    await page.fill("#cs-server-name", "loft");
-    await Promise.all([page.waitForEvent("download"), page.click("#cs-download-recipe")]);
-    const p2 = await page.evaluate(async (fqdn) => (await import("/lib/pairingDeposit.js")).pendingPairingOrder(fqdn), "loft.smoketest.flagship.services");
-    expect(JSON.parse(p2 as string).backupPolicy.order).toMatchObject({ policy: "peer", phoneReserveBytes: 0 });
   });
 });

@@ -35,15 +35,21 @@ describe("D1 backup freshness", () => {
   });
 
   it("the CLI exits 1 on a stale file and 0 on a fresh one", () => {
-    const run = (iso: string) =>
-      spawnSync("node", [join(root, "scripts/d1-backup-freshness.mjs"), "/dev/stdin", "--now", "2026-10-18T12:00:00Z"], {
-        input: latest(iso),
-        encoding: "utf8",
-      });
-    expect(run("2026-10-18T03:00:00Z").status).toBe(0);
-    const stale = run("2026-10-15T03:00:00Z");
-    expect(stale.status).toBe(1);
-    expect(stale.stdout).toMatch(/STALE/);
+    // A real file: /dev/stdin cannot be opened when stdin is a socket, which is what spawnSync gives on Linux CI.
+    const dir = mkdtempSync(join(tmpdir(), "d1-fresh-"));
+    try {
+      const run = (iso: string) => {
+        const file = join(dir, "latest.json");
+        writeFileSync(file, latest(iso));
+        return spawnSync("node", [join(root, "scripts/d1-backup-freshness.mjs"), file, "--now", "2026-10-18T12:00:00Z"], { encoding: "utf8" });
+      };
+      expect(run("2026-10-18T03:00:00Z").status).toBe(0);
+      const stale = run("2026-10-15T03:00:00Z");
+      expect(stale.status).toBe(1);
+      expect(stale.stdout).toMatch(/STALE/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
