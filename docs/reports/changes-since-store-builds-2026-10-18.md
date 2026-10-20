@@ -153,6 +153,49 @@ Windows first-boot retests. **Watch:** the Worker tail listed `GET /api/server/:
 CPU and `POST /api/dev/sample-user/create` at 111 ms, far over the 10 ms Free-plan budget; neither
 failed the run, and the migration read may matter for GA (`docs/runbooks/workers-cpu-budget.md`).
 
+### 0.3 Revision 4 (2026-10-20): the principal-engineer review round
+
+A skeptical review of revision 3 (30 commit-sized items) was read, argued with the owner, and
+applied; the review document was then deleted. Where the owner's view differed from the review, the
+owner's view won. Baseline of this revision `ee70cc4c1`; about 25 commits to `48275f809`. Tags as in section 0.
+
+**Decisions.** (1) Relay addresses: no signed manifest; the relay answers "which address did you
+reach me at" and the phone drops an address whose answer is not itself (an owner idea). (2) A failed
+relay hint keeps its calm sentence and keeps its real reason in a log. (3) `.com` stays on the Workers
+Free plan for now; a command-line tool replaces a dashboard. (4) Everything else built, with peer
+backup and the notice lock gated off. (5) Migrate unchanged: it ends with the old server gone; the
+careful path is the downloadable `.flagship` file (kept next to Migrate on the server page). (6) Outbound
+AI calls get a host list in the database. (7) Bright teal for state borders stays (owner decision of
+2026-10-17); the review calls it a contrast defect (2.3:1) and ships it as a known issue.
+
+| Review item | What landed | Where | Evidence |
+|---|---|---|---|
+| Relay claim overstated (a pin proves the far end, not the first hop) | Echo on the relay (`:8444`, Fly PROXY header); phones require it of any address `.com` recommends; the compiled-in pair is exempt; an untested recommended address is never a last resort; docs corrected | `apps/web/src/lib/addressEcho.ts`, `fly.toml`, Android `RelayAddressCenter.kt`, iOS `RelayFallback.swift`, `docs/relay-addresses.md` | [V] unit tests on all three; [N] that Fly's PROXY header carries the dedicated public address: check right after the first `.services` deploy |
+| Hidden real errors | `DiagnosticCode` (same codes on both apps) and a 50-entry `DiagnosticsLog`; `relay-route-unverified`, `relay-pin-mismatch` | `Diagnostics.swift`, `DiagnosticCode.kt` | [V] tests; [N] no screen shows or copies the log yet |
+| iOS loopback proxy: background, port reuse, other apps | Renamed `LoopbackAddressShim`; closes on background; cap of 32 clients, 5 s to send the request, 60 s idle; **found and fixed a crash path**: invalidating a session someone is about to use is an Objective-C exception, so it is finished a minute later instead | `RelayFallback.swift`, `FlagshipApp.swift` | [V] tests incl. cap and deadline; [N] whether iOS lets another app reach the port; [N] on a device |
+| CPU over 10 ms | Harness scenarios for the live migration reads; steady state is 0.06 ms of JavaScript plus 2 D1 calls, so the gym's 114 ms is a cold isolate, not the handler; the gym now fails a route that is over 10 ms in a fifth of 5+ requests, and notes single cold requests; `npm run ops -- workers` shows Cloudflare's own outcome and CPU numbers | `scripts/cpuHarness.ts`, `tools/live-e2e` | [V] harness; [N] production p99 and `exceededCpu` count: run `npm run ops -- workers --hours 72` |
+| Loop-volume conversion | Copy is fingerprinted (type, mode, size, path) against the original before the old folder goes; a cut at every step ends in the old folder or the image | `loopVolumes.ts` | [V] unit tests over a fake host; [N] the real `find` fingerprint runs only in the Linux CI integration test |
+| "Backup complete" is not proof | Every backup (scheduled, Back up now, and the one-off file) is read back and opened (size, hash, every frame) before it counts as ready; failure means not kept | `serverArchive/format.ts`, `service.ts` | [V] tests |
+| Peer backup | The box refuses the choice (`FLAGSHIP_PEER_BACKUP=on` enables), apps stop offering it (a server already on it keeps showing it) | `backupPolicy/http.ts`, both apps | [V] tests |
+| Notice lock | Release builds show the update nag only; a locked phone can still answer a boot unlock (`POST /api/secret-requests`, `POST /api/boot/response`) | `SecurityNoticeFeatures.swift`, `Variant.noticeLockEnabled()`, `UpdateLock` | [V] tests; [N] a locked phone approving a real boot |
+| Routing writers | **Found and fixed a race**: two different keys registering the same new name could overwrite each other; the write now refuses to change a key; a test lists every writer | `packages/storage/src/d1.ts`, `routingWriters.test.ts` | [V] the test fails on the old code |
+| Outbound AI calls (the hub opens `host:443` for a box) | Host list in D1 (seeded with the providers baked into the apps; new hosts allowed, one flag blocks), per-host totals with no user column, a hub-side check with an offline fallback to the known providers, a plain "address couldn't be reached" message, `npm run outbound-hosts` | migration **0106**, `outboundHosts.ts`, `outboundHostPolicy.ts`, `docs/outbound-hosts.md` | [V] tests; TODO recorded: a heuristic blocker if manual review gets too slow |
+| A way to see what is slow or failing | `npm run ops` (health, relay counters including missed redirections, Worker numbers, live CPU tail, wildcard DNS); a 30-minute CI canary on the wildcard | `scripts/ops.ts`, `.github/workflows/dns-canary.yml`, `/api/stats` on `.services` | [V] tests; [N] the Cloudflare GraphQL field names against the live API |
+| CI | iOS workflow (shared suite, app tests, release-clean); the Android every-merge gym on an emulator | `.github/workflows/ios.yml`, `android.yml` | [N] neither has run on GitHub yet |
+| Release evidence | `npm run release-manifest`: 15 receipts, the files that make each stale, lease/schema/version checks; 14 receipts are MISSING today | `scripts/release-manifest.mjs`, `release/freeze-map.json` | [V] tests |
+| Metadata and Preview undefined | `docs/metadata-threat-model.md`, `docs/preview-criteria.md` | | |
+
+**Needs a deploy:** `.com` (migration 0106 first, then the Worker), `.services` (the echo port and
+`/api/stats`), an endorsed box release (backup check, loop-volume check, peer gate, outbound
+wording), the webapp is unchanged. Apps: new store builds for the relay echo, the lock, peer gate.
+
+**Not done, and why.** Sample-user create made asynchronous (its 111 ms looks like a cold isolate;
+measure first). A signed relay manifest (replaced by the echo). A Migrate hold or restore receipt
+(owner: Migrate deletes the old server by design). Teal state borders (owner decision). Surfacing the
+diagnostics log in a screen. A guard that holds `.com` enforcement until store builds are live: the
+order of the admin-root enforcement against the store builds is a release decision for the owner.
+Review items that are hardware or production proof stay open and are tracked by the manifest.
+
 ## 1. Scope, baselines and size
 
 | | iOS baseline | Android baseline |
