@@ -37,13 +37,24 @@ public final class UpdateLock: @unchecked Sendable {
         mutex.unlock()
     }
 
-    /// May this request go out while locked? Only a GET or HEAD to the control
-    /// apex: nothing it answers changes anything. Boxes, the data plane and
-    /// every write are refused.
-    public static func permits(method: String?, host: String?, controlHost: String) -> Bool {
+    /// The two writes that answer a box's boot-unlock request. A locked phone must still be able
+    /// to let the owner's own server start: the lock is about the app, not about whether the
+    /// owner's disk can be opened (docs/security-notices.md, "Honest weak spots").
+    public static func isBootUnlock(method: String, host: String, path: String?, controlHost: String) -> Bool {
+        guard method == "POST", let path else { return false }
+        let h = host.lowercased()
+        let control = controlHost.lowercased()
+        return (h == control && path == "/api/secret-requests") || (h == "boot.\(control)" && path == "/api/boot/response")
+    }
+
+    /// May this request go out while locked? A GET or HEAD to the control apex (nothing it
+    /// answers changes anything), and the two boot-unlock writes. Boxes, the data plane and
+    /// every other write are refused.
+    public static func permits(method: String?, host: String?, controlHost: String, path: String? = nil) -> Bool {
         let m = (method ?? "GET").uppercased()
-        guard m == "GET" || m == "HEAD" else { return false }
         guard let host else { return false }
+        if isBootUnlock(method: m, host: host, path: path, controlHost: controlHost) { return true }
+        guard m == "GET" || m == "HEAD" else { return false }
         return host.lowercased() == controlHost.lowercased()
     }
 
@@ -51,8 +62,10 @@ public final class UpdateLock: @unchecked Sendable {
     /// the reads above.
     public func check(_ request: URLRequest) throws {
         guard isLocked else { return }
-        let ok = request.httpBody == nil && request.httpBodyStream == nil
-            && Self.permits(method: request.httpMethod, host: request.url?.host, controlHost: Endpoints.controlHost)
+        let bootUnlock = Self.isBootUnlock(method: (request.httpMethod ?? "GET").uppercased(), host: request.url?.host ?? "",
+                                           path: request.url?.path, controlHost: Endpoints.controlHost)
+        let ok = bootUnlock || (request.httpBody == nil && request.httpBodyStream == nil
+            && Self.permits(method: request.httpMethod, host: request.url?.host, controlHost: Endpoints.controlHost))
         if !ok { throw UpdateRequiredError() }
     }
 

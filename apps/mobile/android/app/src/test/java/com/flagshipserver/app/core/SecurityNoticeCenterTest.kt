@@ -36,13 +36,14 @@ class SecurityNoticeCenterTest {
     private var served: NoticeFetch = NoticeFetch.NoNotice
     private val backend = MemoryNoticeStoreBackend()
 
-    private fun center(build: Long = 8, b: NoticeStoreBackend = backend, pin: String = a.pin) = SecurityNoticeCenter(
+    private fun center(build: Long = 8, b: NoticeStoreBackend = backend, pin: String = a.pin, lockEnabled: Boolean = true) = SecurityNoticeCenter(
         backend = b,
         fetcher = { NoticeFetcher { served } },
         client = NoticeClient("android", build, SecurityNoticeProtocol.CLIENT_PROTOCOL_LEVEL),
         pin = { pin },
         clock = { clock },
         jitterMs = { 0 },
+        lockEnabled = { lockEnabled },
     )
 
     private fun lockNotice(seq: Long = 3, lockFrom: Long = t0, auth: NoticeGymAuthority = a) = auth.notice(
@@ -59,6 +60,26 @@ class SecurityNoticeCenterTest {
 
     @Before fun fresh() = UpdateLock.set(false)
     @After fun cleanup() = UpdateLock.set(false)
+
+    @Test fun withTheLockSwitchedOffAnUpdateRequiredNoticeOnlyNags() = runBlocking {
+        val c = center(lockEnabled = false)
+        serve(a, lockNotice())
+        assertTrue(c.refresh().fetched)
+        assertTrue(c.outcome.value is NoticeOutcome.Banner)
+        assertFalse(UpdateLock.isLocked)
+    }
+
+    @Test fun aLockedPhoneStillLetsTheOwnersServerStart() {
+        UpdateLock.set(true)
+        val apex = Endpoints.controlHost
+        assertTrue(UpdateLock.allows("POST", apex, path = "/api/secret-requests"))
+        assertTrue(UpdateLock.allows("POST", "boot.$apex", path = "/api/boot/response"))
+        assertFalse(UpdateLock.allows("POST", apex, path = "/api/accounts/x/server-order"))
+        assertFalse(UpdateLock.allows("POST", "boot.$apex", path = "/api/boot/lease"))
+        assertFalse(UpdateLock.allows("POST", "evil.$apex", path = "/api/boot/response"))
+        assertFalse(UpdateLock.allows("PUT", "boot.$apex", path = "/api/boot/response"))
+        assertTrue(UpdateLock.allows("GET", apex))
+    }
 
     @Test fun aVerifiedUpdateRequiredNoticeLocksAndIsRemembered() = runBlocking {
         val c = center()

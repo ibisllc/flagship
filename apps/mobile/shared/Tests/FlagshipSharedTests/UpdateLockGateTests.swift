@@ -47,6 +47,13 @@ final class UpdateLockGateTests: XCTestCase {
         XCTAssertFalse(UpdateLock.permits(method: "GET", host: "flagship.services", controlHost: apex))
         XCTAssertFalse(UpdateLock.permits(method: "GET", host: "evil-flagshipserver.com", controlHost: apex))
         XCTAssertFalse(UpdateLock.permits(method: "GET", host: nil, controlHost: apex))
+        // A locked phone can still let the owner's own server start, and nothing else.
+        XCTAssertTrue(UpdateLock.permits(method: "POST", host: apex, controlHost: apex, path: "/api/secret-requests"))
+        XCTAssertTrue(UpdateLock.permits(method: "POST", host: "boot.\(apex)", controlHost: apex, path: "/api/boot/response"))
+        XCTAssertFalse(UpdateLock.permits(method: "POST", host: apex, controlHost: apex, path: "/api/accounts/x/server-order"))
+        XCTAssertFalse(UpdateLock.permits(method: "POST", host: "boot.\(apex)", controlHost: apex, path: "/api/boot/lease"))
+        XCTAssertFalse(UpdateLock.permits(method: "POST", host: "evil.\(apex)", controlHost: apex, path: "/api/boot/response"))
+        XCTAssertFalse(UpdateLock.permits(method: "PUT", host: "boot.\(apex)", controlHost: apex, path: "/api/boot/response"))
     }
 
     func testUnlockedNothingIsRefused() async throws {

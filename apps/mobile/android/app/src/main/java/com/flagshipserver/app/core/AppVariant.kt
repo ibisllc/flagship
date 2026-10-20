@@ -77,6 +77,10 @@ interface AppVariant {
      *  one. A debug gym run may stand in a throwaway authority's. */
     val noticePin: String
 
+    /** May a signed "update required" notice lock the app? Off in release until the lock is fit to
+     *  ship (docs/security-notices.md); the gym keeps it on in debug. */
+    fun noticeLockEnabled(): Boolean
+
     /** The clock a security notice is judged by. */
     fun noticeNowMs(): Long
 

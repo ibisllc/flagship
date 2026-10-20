@@ -34,14 +34,14 @@ final class SecurityNoticeCenterTests: XCTestCase {
     }
 
     private func make(_ names: [String], at ms: Int64, build: Int64 = 4, protocolLevel: Int64 = 1, pin: String? = nil,
-                      lock: UpdateLock = UpdateLock(), clock: Clock? = nil)
+                      lock: UpdateLock = UpdateLock(), clock: Clock? = nil, lockEnabled: Bool = true)
         -> (center: SecurityNoticeCenter, feed: SecurityNoticeGym.Feed, clock: Clock, lock: UpdateLock) {
         let clock = clock ?? Clock(ms)
         let feed = SecurityNoticeGym.Feed(SecurityNoticeGym.answers(names, mandates: chain.mandates))
         let center = SecurityNoticeCenter(
             storage: storage, fetcher: feed, lock: lock,
             client: SecurityNoticeClient(platform: "ios", build: build, protocolLevel: protocolLevel),
-            pin: pin ?? chain.pin, minInterval: 900, maxJitter: 0, now: { clock.now() }
+            pin: pin ?? chain.pin, minInterval: 900, maxJitter: 0, lockEnabled: lockEnabled, now: { clock.now() }
         )
         return (center, feed, clock, lock)
     }
@@ -61,6 +61,15 @@ final class SecurityNoticeCenterTests: XCTestCase {
         let b = make([], at: t0 + 86_400_000)
         b.center.evaluate()
         XCTAssertFalse(b.center.bannerVisible)
+    }
+
+    func testWithTheLockSwitchedOffTheLockDateOnlyKeepsTheNag() async throws {
+        let a = make(["lock"], at: lockFrom + 3_600_000, lockEnabled: false)
+        await a.center.refresh()
+        guard case let .banner(style, _) = a.center.outcome else { return XCTFail("expected the nag: \(a.center.outcome)") }
+        XCTAssertEqual(style, .update)
+        XCTAssertFalse(a.center.isLocked)
+        XCTAssertFalse(a.lock.isLocked)
     }
 
     func testAnUpdateRequiredNoticeNagsUntilItsLockDateThenLocks() async throws {

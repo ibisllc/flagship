@@ -40,15 +40,28 @@ object UpdateLock {
      * (nothing it answers changes anything); nothing else (boxes, the data
      * plane, any write, any other host).
      */
-    fun allows(method: String, host: String?, controlHost: String = Endpoints.controlHost): Boolean {
+    fun allows(method: String, host: String?, controlHost: String = Endpoints.controlHost, path: String? = null): Boolean {
         if (!isLocked) return true
         val m = method.uppercase()
-        return host != null && host.equals(controlHost, ignoreCase = true) && (m == "GET" || m == "HEAD")
+        if (host == null) return false
+        if (isBootUnlock(m, host, path, controlHost)) return true
+        return host.equals(controlHost, ignoreCase = true) && (m == "GET" || m == "HEAD")
+    }
+
+    /**
+     * The two writes that answer a box's boot-unlock request. A locked phone must still be able to
+     * let the owner's own server start: the lock is about the app, not about whether the owner's
+     * disk can be opened (docs/security-notices.md, "Honest weak spots").
+     */
+    fun isBootUnlock(method: String, host: String, path: String?, controlHost: String = Endpoints.controlHost): Boolean {
+        if (method != "POST" || path == null) return false
+        return (host.equals(controlHost, ignoreCase = true) && path == "/api/secret-requests") ||
+            (host.equals("boot.$controlHost", ignoreCase = true) && path == "/api/boot/response")
     }
 
     /** Throws [UpdateRequiredException] when the lock refuses this request. */
     fun check(request: Request) {
-        if (!allows(request.method, request.url.host)) throw UpdateRequiredException()
+        if (!allows(request.method, request.url.host, path = request.url.encodedPath)) throw UpdateRequiredException()
     }
 
     /** Guard for work with no HTTP request of its own (a signed approval, a socket). */

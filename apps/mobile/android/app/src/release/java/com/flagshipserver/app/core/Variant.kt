@@ -30,6 +30,7 @@ object Variant : AppVariant {
     override val stubCamera: Boolean get() = false
     override val gymImportBackupFile: java.io.File? get() = null
     override val noticePin: String get() = MaintainersTrust.bakedPin
+    override fun noticeLockEnabled(): Boolean = false
     override fun noticeNowMs(): Long = System.currentTimeMillis()
     override fun noticeFetcher(): NoticeFetcher? = null
 

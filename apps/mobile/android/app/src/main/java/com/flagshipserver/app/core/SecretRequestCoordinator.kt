@@ -178,10 +178,11 @@ class SecretRequestCoordinator(
         verified: VerifiedRequest,
         depositAutoLease: Boolean = false,
     ): String? {
-        // A security notice has this app locked until it is updated: no approval is signed.
-        UpdateLock.requireUnlocked()
         val purpose = verified.purpose
             ?: throw CoordinatorException.PurposeUnsupported(verified.pending.purpose)
+        // A security notice has this app locked until it is updated: no approval is signed, except
+        // the one that lets the owner's own server start.
+        if (purpose != SecretPurpose.UNLOCK_KEY) UpdateLock.requireUnlocked()
         val stkPub = HexUtil.decode(verified.directoryStkPubHex)
             ?.takeIf { it.size == 32 }
             ?: throw CoordinatorException.DirectoryMissingServer(verified.serverDomain)

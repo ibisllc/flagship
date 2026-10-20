@@ -577,7 +577,8 @@ public final class RelayRoute: @unchecked Sendable {
     /// The app is about to be suspended (or is leaving the foreground): a listener left open
     /// across suspension is not guaranteed to work after it, and a session that remembers its
     /// port could meet another listener there. Stop the forwarder and drop the session; the
-    /// next request that needs the relay starts a fresh pair on a fresh port.
+    /// next request that needs the relay starts a fresh pair on a fresh port. A request still
+    /// holding the old session fails at once (nothing listens on its port any more).
     public func suspend() {
         let (f, s): (LoopbackAddressShim?, URLSession?) = lock.withLock {
             let pair = (forwarder, session)
@@ -586,7 +587,11 @@ public final class RelayRoute: @unchecked Sendable {
             return pair
         }
         f?.stop()
-        s?.invalidateAndCancel()
+        // A caller may be about to start a request on the session it just got, and a task started
+        // on an invalidated session is an Objective-C exception, not an error. So the session is
+        // not invalidated here: with its listener gone, a request on it simply fails (and reads as
+        // an unresolved name). It is finished a minute later, when nothing can still be using it.
+        if let s { DispatchQueue.global().asyncAfter(deadline: .now() + 60) { s.finishTasksAndInvalidate() } }
     }
 
     /// The port the forwarder is listening on now, if there is one (for tests and diagnostics).

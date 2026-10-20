@@ -178,6 +178,7 @@ object Variant : AppVariant {
     override val stubCamera: Boolean get() = mockRun
     override val gymImportBackupFile: java.io.File? get() = GymSeams.importBackupFile
     override val noticePin: String get() = GymSeams.noticePin ?: MaintainersTrust.bakedPin
+    override fun noticeLockEnabled(): Boolean = true
     override fun noticeNowMs(): Long = System.currentTimeMillis() + GymSeams.noticeClockOffsetMs
     // A mock run has no `.com`: the poll finds no notice unless a scenario serves one.
     override fun noticeFetcher(): NoticeFetcher? = GymSeams.noticeFetcher ?: if (mockRun) NoticeFetcher { NoticeFetch.NoNotice } else null

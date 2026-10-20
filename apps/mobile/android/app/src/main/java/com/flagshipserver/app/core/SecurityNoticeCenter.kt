@@ -168,6 +168,7 @@ class SecurityNoticeCenter(
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val jitterMs: () -> Long = { (Math.random() * JITTER_MS).toLong() },
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    private val lockEnabled: () -> Boolean = { Variant.noticeLockEnabled() },
 ) {
     private val lock = Mutex()
     private val inFlight = AtomicBoolean(false)
@@ -206,6 +207,8 @@ class SecurityNoticeCenter(
                 outcome = SecurityNoticeProtocol.storedOutcome(NoticeStore(store.highestSeq, notice), auth.keys, client, now)
             }
         }
+        // With the lock switched off a lock notice is only the update nag.
+        if (!lockEnabled() && outcome is NoticeOutcome.Lock) outcome = NoticeOutcome.Banner("update", outcome.notice)
         publish(outcome, store, now)
         scheduleNextBoundary(notice, now)
         return outcome

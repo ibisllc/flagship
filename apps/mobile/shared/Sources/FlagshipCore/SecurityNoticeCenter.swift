@@ -173,6 +173,7 @@ public final class SecurityNoticeCenter {
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private let minInterval: TimeInterval
     @ObservationIgnored private let maxJitter: TimeInterval
+    @ObservationIgnored private let lockEnabled: Bool
     @ObservationIgnored private var inFlight = false
     @ObservationIgnored private var lastAttempt: Date?
     @ObservationIgnored private var boundary: Task<Void, Never>?
@@ -188,8 +189,10 @@ public final class SecurityNoticeCenter {
         pin: String = MaintainersTrust.bakedPin,
         minInterval: TimeInterval = 15 * 60,
         maxJitter: TimeInterval = 10,
+        lockEnabled: Bool = SecurityNoticeFeatures.lockEnabled,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
+        self.lockEnabled = lockEnabled
         self.storage = storage
         self.fetcher = fetcher
         self.lock = lock
@@ -220,6 +223,8 @@ public final class SecurityNoticeCenter {
                 nowMs: Self.ms(now())
             )
         }
+        // With the lock switched off a lock notice is only the update nag.
+        if !lockEnabled, case let .lock(notice) = decided { decided = .banner(style: .update, notice: notice) }
         publish(decided)
         scheduleNextBoundary(parsed)
         return decided

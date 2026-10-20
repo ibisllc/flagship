@@ -329,7 +329,8 @@ final class RelayFallbackTests: XCTestCase {
         let port1 = try XCTUnwrap(route.forwarderPort)
         route.suspend()
         XCTAssertNil(route.forwarderPort)
-        // The old session is invalid: a caller that kept it fails instead of meeting a stranger on that port.
+        // A caller that kept the old session fails (nothing listens on its port) rather than crashing
+        // or reaching a stranger there.
         let stale = try? await first?.data(from: URL(string: "https://home.alice.flagship.services/")!)
         XCTAssertNil(stale)
         let second = await route.session(for: "home.alice.flagship.services")
