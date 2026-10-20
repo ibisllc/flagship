@@ -10,7 +10,10 @@ final class DeadManRemindersAndStoresTests: XCTestCase {
         // Lease expires at 100h; now = 0.
         let expiry: Int64 = 100 * 3600_000
         let pending = DeadManReminders.pendingFireDates(leaseExpiryMs: expiry, nowMs: 0)
-        XCTAssertEqual(pending.map { $0.leadMs }, [6 * 3600_000, 1 * 3600_000, 15 * 60_000])
+        let hour: Int64 = 3600_000
+        let minute: Int64 = 60_000
+        let leads: [Int64] = [6 * hour, 1 * hour, 15 * minute]
+        XCTAssertEqual(pending.map { $0.leadMs }, leads)
         XCTAssertEqual(pending.map { $0.fireAtMs }, [
             expiry - 6 * 3600_000,
             expiry - 1 * 3600_000,
@@ -23,7 +26,8 @@ final class DeadManRemindersAndStoresTests: XCTestCase {
         let now: Int64 = 1_000_000
         let expiry = now + 30 * 60_000
         let pending = DeadManReminders.pendingFireDates(leaseExpiryMs: expiry, nowMs: now)
-        XCTAssertEqual(pending.map { $0.leadMs }, [15 * 60_000])
+        let leads: [Int64] = [15 * 60_000]
+        XCTAssertEqual(pending.map { $0.leadMs }, leads)
     }
 
     func testReminderEmptyWhenLeaseImminent() {
