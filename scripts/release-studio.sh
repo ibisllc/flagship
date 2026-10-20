@@ -52,9 +52,9 @@ cd "$mac"
 if [ -n "${FLAGSHIP_NOTARY_KEY:-}" ]; then
   make release                                          # API-key path (make's check-env)
 elif [ -n "${FLAGSHIP_NOTARY_PASSWORD:-}" ]; then
-  make package-app sign notarize-with-password staple dmg
+  make package-app sign notarize-with-password staple dmg notarize-dmg-with-password staple-dmg
 else
-  make package-app sign notarize-with-keychain staple dmg
+  make package-app sign notarize-with-keychain staple dmg notarize-dmg-with-keychain staple-dmg
 fi
 
 echo "▸ Staging the DMG into the site…"

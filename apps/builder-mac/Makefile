@@ -46,7 +46,7 @@ build-release:
 # Single command — does the whole release: build, package as .app,
 # sign, notarize, staple, dmg. Reads env vars at the top of this
 # Makefile.
-release: check-env build-release sign notarize staple dmg
+release: check-env build-release sign notarize staple dmg notarize-dmg staple-dmg
 	@echo "✓ Signed + notarized + DMG: $(DMG_FILE)"
 
 # Verify all required env vars are present before doing anything
@@ -164,7 +164,32 @@ dmg:
 	hdiutil create -volname "$(APP_NAME)" \
 	    -srcfolder "$(APP_BUNDLE)" \
 	    -ov -format UDZO "$(DMG_FILE)"
+	@# Gatekeeper's install check (spctl -t install) wants the disk image itself signed.
+	codesign --force --timestamp --sign "$$FLAGSHIP_SIGNING_ID" "$(DMG_FILE)"
 	@echo "✓ DMG: $(DMG_FILE)"
+
+# The disk image gets its own notarization ticket, so the download passes Gatekeeper offline.
+# Run after `dmg`, with the same credentials as the app's notarization.
+notarize-dmg:
+	xcrun notarytool submit "$(DMG_FILE)" \
+	    --key "$$FLAGSHIP_NOTARY_KEY" \
+	    --key-id "$$FLAGSHIP_NOTARY_KEY_ID" \
+	    --issuer "$$FLAGSHIP_NOTARY_ISSUER" \
+	    --wait
+notarize-dmg-with-keychain:
+	xcrun notarytool submit "$(DMG_FILE)" \
+	    --keychain-profile "$${FLAGSHIP_NOTARY_PROFILE:-flagship-studio}" \
+	    --wait
+notarize-dmg-with-password:
+	xcrun notarytool submit "$(DMG_FILE)" \
+	    --apple-id "$$FLAGSHIP_APPLE_ID" \
+	    --team-id "$$FLAGSHIP_TEAM_ID" \
+	    --password "$$FLAGSHIP_NOTARY_PASSWORD" \
+	    --wait
+staple-dmg:
+	xcrun stapler staple "$(DMG_FILE)"
+	xcrun stapler validate "$(DMG_FILE)"
+	@echo "✓ DMG notarized and stapled"
 
 clean:
 	rm -rf .build
