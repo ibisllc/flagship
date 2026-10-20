@@ -1,6 +1,6 @@
 import { BlockList, connect as netConnect, isIP, type Socket } from "node:net";
 import { promises as dns } from "node:dns";
-import { KnownHostsPolicy, type HostPolicy } from "./outboundHostPolicy.js";
+import { KNOWN_AI_HOSTS as KNOWN_PROVIDER_HOSTS, KnownHostsPolicy, type HostPolicy } from "./outboundHostPolicy.js";
 import {
   closeFrame,
   dataFrame,
@@ -70,6 +70,12 @@ export interface OutboundRelayOptions {
   maxStreamsPerBox?: number;
   /** New outbound opens per box per minute. Default 120. */
   opensPerMinute?: number;
+  /**
+   * Hosts a box may ask about for the first time (not a known provider) per hour. A box that is
+   * only a harness asks about a handful; more is a box spending `.com`'s requests on made-up
+   * names, and is refused here without asking. Default 10.
+   */
+  newHostsPerHour?: number;
   /** Sustained bytes/second per box, both directions combined. Default 4 MiB/s. */
   bytesPerSecond?: number;
   /** Bucket size for `bytesPerSecond`. Default 16 MiB. */
@@ -123,6 +129,7 @@ export interface OutboundSession {
 const DEFAULTS = {
   maxStreamsPerBox: 8,
   opensPerMinute: 120,
+  newHostsPerHour: 10,
   bytesPerSecond: 4 * 1024 * 1024,
   burstBytes: 16 * 1024 * 1024,
   connectTimeoutMs: 10_000,
@@ -151,6 +158,7 @@ export class OutboundRelay {
     this.o = {
       maxStreamsPerBox: opts.maxStreamsPerBox ?? DEFAULTS.maxStreamsPerBox,
       opensPerMinute: opts.opensPerMinute ?? DEFAULTS.opensPerMinute,
+      newHostsPerHour: opts.newHostsPerHour ?? DEFAULTS.newHostsPerHour,
       bytesPerSecond: opts.bytesPerSecond ?? DEFAULTS.bytesPerSecond,
       burstBytes: opts.burstBytes ?? DEFAULTS.burstBytes,
       connectTimeoutMs: opts.connectTimeoutMs ?? DEFAULTS.connectTimeoutMs,
@@ -196,7 +204,7 @@ export class OutboundRelay {
     const key = podCanonical.toLowerCase();
     let budget = this.budgets.get(key);
     if (!budget) {
-      budget = new BoxBudget(this.o.bytesPerSecond, this.o.burstBytes, this.o.opensPerMinute, this.o.now);
+      budget = new BoxBudget(this.o.bytesPerSecond, this.o.burstBytes, this.o.opensPerMinute, this.o.newHostsPerHour, this.o.now);
       this.budgets.set(key, budget);
     }
     budget.sessions += 1;
@@ -333,9 +341,29 @@ class BoxBudget {
   streams = 0;
   readonly bytes: TokenBucket;
   readonly opens: TokenBucket;
-  constructor(bytesPerSecond: number, burst: number, opensPerMinute: number, now: () => number) {
+  /** Hosts this box asked about in the last hour (first-seen time), for the new-host limit. */
+  private readonly seen = new Map<string, number>();
+  constructor(
+    bytesPerSecond: number,
+    burst: number,
+    opensPerMinute: number,
+    private readonly newHostsPerHour: number,
+    private readonly now: () => number,
+  ) {
     this.bytes = new TokenBucket(bytesPerSecond, burst, now);
     this.opens = new TokenBucket(opensPerMinute / 60, opensPerMinute, now);
+  }
+
+  /** False when this would be one new host too many in the hour; a known provider or a repeat always passes. */
+  admitHost(host: string): boolean {
+    const h = host.toLowerCase();
+    if (KNOWN_PROVIDER_HOSTS.has(h)) return true;
+    const t = this.now();
+    for (const [k, at] of this.seen) if (t - at >= 3_600_000) this.seen.delete(k);
+    if (this.seen.has(h)) return true;
+    if (this.seen.size >= this.newHostsPerHour) return false;
+    this.seen.set(h, t);
+    return true;
   }
 }
 
@@ -445,6 +473,7 @@ class HubOutboundSession implements OutboundSession {
   }
 
   private async dial(s: HubStream, port: number): Promise<void> {
+    if (!this.budget.admitHost(s.host)) return this.fail(s, "forbidden-host");
     if (!(await this.o.hostPolicy.allowed(s.host).catch(() => false))) return this.fail(s, "forbidden-host");
     if (s.done) return;
     let addrs: string[];

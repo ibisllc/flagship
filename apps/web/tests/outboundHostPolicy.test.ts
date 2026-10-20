@@ -2,9 +2,9 @@ import { createServer, type Server, type Socket } from "node:net";
 import type { AddressInfo } from "node:net";
 import { connect as netConnect } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { FRAME_OUTBOUND_RESULT, outboundOpenFrame, parseOutboundResult, type Frame } from "@flagship/tunnel-protocol";
+import { closeFrame, FRAME_OUTBOUND_RESULT, outboundOpenFrame, parseOutboundResult, type Frame } from "@flagship/tunnel-protocol";
 import { OutboundRelay } from "../src/tunnel/outboundRelay.js";
-import { ComHostPolicy, KnownHostsPolicy, type HostReportRow } from "../src/tunnel/outboundHostPolicy.js";
+import { ComHostPolicy, KnownHostsPolicy, nextUtcMidnight, type HostReportRow } from "../src/tunnel/outboundHostPolicy.js";
 
 const servers: Server[] = [];
 const sockets: Socket[] = [];
@@ -119,5 +119,74 @@ describe("outbound host policy", () => {
     expect(rows.find((r) => r.host === "bad.example.org")?.refused).toBe(1);
     for (const r of rows) expect(Object.keys(r).sort()).toEqual(["down", "host", "refused", "streams", "up"]);
     expect(JSON.stringify(com.state.reports)).not.toContain("alice");
+  });
+
+  it("a box asking about too many new names in an hour is refused here, without costing .com a request", async () => {
+    const port = await upstream();
+    const com = fakeCom(new Set());
+    let t = Date.UTC(2026, 9, 20, 10);
+    const relay = new OutboundRelay({
+      hostPolicy: new ComHostPolicy({ baseUrl: "https://com", secret: "s", fetch: com.fetchFn, now: () => t }),
+      resolve: async () => ["93.184.215.14"],
+      connect: () => netConnect({ host: "127.0.0.1", port }),
+      log: () => {},
+      statsIntervalMs: 0,
+      newHostsPerHour: 3,
+      now: () => t,
+    });
+    const frames: Frame[] = [];
+    const session = relay.session("home.alice.flagship.services", (f) => frames.push(f));
+    const open = async (id: number, host: string) => {
+      const from = frames.length;
+      session.handleFrame(outboundOpenFrame(id, { host, port: 443 }));
+      for (let i = 0; i < 100; i++) {
+        const f = frames.slice(from).find((x) => x.type === FRAME_OUTBOUND_RESULT && x.streamId === id);
+        if (f) {
+          session.handleFrame(closeFrame(id, false));
+          return parseOutboundResult(f.payload)!;
+        }
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      throw new Error("no result");
+    };
+    for (let i = 0; i < 3; i++) expect((await open(ID + i, `a${i}.example.org`)).ok).toBe(true);
+    const checks = com.state.checks.length;
+    expect(await open(ID + 10, "a3.example.org")).toEqual({ ok: false, reason: "forbidden-host" });
+    expect(await open(ID + 11, "a4.example.org")).toEqual({ ok: false, reason: "forbidden-host" });
+    expect(com.state.checks.length).toBe(checks);
+    // A name already asked about, and a known provider, still go through.
+    expect((await open(ID + 12, "a1.example.org")).ok).toBe(true);
+    expect((await open(ID + 13, "api.anthropic.com")).ok).toBe(true);
+    // An hour later the box has a new allowance.
+    t += 3_600_001;
+    expect((await open(ID + 14, "a3.example.org")).ok).toBe(true);
+  });
+
+  it("once .com says today's new-host cap is reached, unseen names are refused here until 00:00 UTC", async () => {
+    let t = Date.UTC(2026, 9, 20, 22);
+    const checks: string[] = [];
+    const policy = new ComHostPolicy({
+      baseUrl: "https://com",
+      secret: "s",
+      now: () => t,
+      fetch: (async (_u: string, init: RequestInit) => {
+        const host = JSON.parse(String(init.body)).host as string;
+        checks.push(host);
+        return new Response(JSON.stringify(host === "known.example.org" ? { allowed: true } : { allowed: false, reason: "new-host-cap" }), { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    expect(await policy.allowed("known.example.org")).toBe(true);
+    expect(await policy.allowed("new1.example.org")).toBe(false);
+    const asked = checks.length;
+    for (let i = 0; i < 50; i++) expect(await policy.allowed(`new${i + 2}.example.org`)).toBe(false);
+    expect(checks.length).toBe(asked);
+    // A name `.com` answered for still has its answer, and the known providers are not affected.
+    expect(await policy.allowed("known.example.org")).toBe(true);
+    // A known provider is still put to `.com` (in this fake it says no, which is the fake's doing).
+    await policy.allowed("api.openai.com");
+    expect(checks.length).toBe(asked + 1);
+    t = nextUtcMidnight(t) + 1;
+    await policy.allowed("new-day.example.org");
+    expect(checks.length).toBe(asked + 2);
   });
 });

@@ -118,12 +118,13 @@ describe("create-server view — words for a browser", () => {
     expect(visible).toContain("open it in Flagship Studio");
   });
 
-  it("offers the three backup choices in order with nothing preselected", () => {
+  it("offers the backup choices in order with nothing preselected (not 'On other servers' while that is off)", () => {
     expect(section).not.toMatch(/name="cs-backup-policy"[^>]*checked/);
     const order = [...section.matchAll(/name="cs-backup-policy" value="([\w-]+)"/g)].map((m) => m[1]);
-    expect(order).toEqual(["none", "phone-only", "peer"]);
+    expect(order).toEqual(["none", "phone-only"]);
     const titles = [...section.matchAll(/<span class="boot-unlock-title">([^<]+)<\/span>/g)].map((m) => m[1]);
-    expect(titles.slice(0, 3)).toEqual(["No backup", "On my devices", "On other servers"]);
+    expect(titles.slice(0, 2)).toEqual(["No backup", "On my devices"]);
+    expect(titles).not.toContain("On other servers");
     expect(section).toContain("Nothing is copied. You can turn backups on later.");
     expect(section).toContain("You can change it any time in the server's Backups section.");
     expect(VIEW_SRC).toContain('"phone-only": "On my devices"');

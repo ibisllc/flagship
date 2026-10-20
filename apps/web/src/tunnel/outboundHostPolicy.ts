@@ -56,6 +56,8 @@ export interface ComHostPolicyOptions {
 
 export class ComHostPolicy implements HostPolicy {
   private readonly cache = new Map<string, { ok: boolean; until: number }>();
+  /** Set when `.com` says today's new-host cap is reached: unseen hosts are refused here until then. */
+  private capUntil = 0;
   private readonly f: typeof fetch;
   private readonly now: () => number;
 
@@ -68,6 +70,9 @@ export class ComHostPolicy implements HostPolicy {
     const host = rawHost.toLowerCase();
     const hit = this.cache.get(host);
     if (hit && hit.until > this.now()) return hit.ok;
+    // Once `.com` has said the day's new hosts are used up, a name it has not just answered for
+    // is refused here: asking again would cost it a request each and change nothing.
+    if (this.capUntil > this.now() && !hit && !KNOWN_AI_HOSTS.has(host)) return false;
     try {
       const res = await this.f(`${this.o.baseUrl}/api/outbound/check`, {
         method: "POST",
@@ -76,7 +81,9 @@ export class ComHostPolicy implements HostPolicy {
         signal: AbortSignal.timeout(this.o.timeoutMs ?? 3_000),
       });
       if (!res.ok) throw new Error(`check ${res.status}`);
-      const ok = ((await res.json()) as { allowed?: unknown }).allowed === true;
+      const answer = (await res.json()) as { allowed?: unknown; reason?: unknown };
+      const ok = answer.allowed === true;
+      if (!ok && answer.reason === "new-host-cap") this.capUntil = nextUtcMidnight(this.now());
       this.remember(host, ok);
       return ok;
     } catch {
@@ -104,4 +111,10 @@ export class ComHostPolicy implements HostPolicy {
       // Totals are best-effort: a lost report is a lost count, never a failed call.
     }
   }
+}
+
+/** 00:00 UTC after `ms`: `.com` counts new hosts per UTC day. */
+export function nextUtcMidnight(ms: number): number {
+  const d = new Date(ms);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1);
 }
