@@ -265,12 +265,26 @@ of the last check here: **not yet checked**.
   fails when the newest lease is within 14 days of its end. A box reads the lease from its own
   checkout, so a box that has not updated since before `072ee32de` loses CA-checked features
   (share accept, relay blessing) after 2026-11-05: every box needs an update at least every ~90 days.
-- **Workers Free ceiling (owner decision 2026-10-20: stay on Free for now).** 100,000 `.com`
-  requests a day is a hard stop for boot unlock, recovery and `voi.ci` until 00:00 UTC; about 75
-  accounts reach it alone (`docs/runbooks/workers-cpu-budget.md`). **Remind the owner at the start of
-  every session**, and as soon as users arrive, to upgrade to Workers Paid or move `.com` to another
-  host (the owner has a free Oracle server and others). Check with `npm run ops -- workers --hours 72`;
-  past about 50,000 a day, do it now.
+- **Workers plan: Paid since 2026-10-20 (was Free).** The gym showed `GET /pods`, order status,
+  health and `read-token` over the Free plan's 10 ms CPU, so the owner upgraded to Workers Paid
+  ($5 a month; no 100,000-a-day hard stop). The gym's CPU check reports instead of failing when
+  `WORKERS_PLAN=paid`. Look at production with `npm run ops -- workers --hours 72` after launch; moving
+  `.com` to another host is still possible (the owner has a free Oracle server and others) but is
+  weeks of work (Durable Objects, R2, crons, a SQLite adapter) and not needed for launch.
+
+- **Make Fly redundant (owner request 2026-10-20; planned, not started).** The relay
+  (`flagship-services`, one `shared-cpu-1x:512MB` machine in iad, one dedicated IPv4 at $2 a month)
+  is a single point of failure for box tunnels, the address echo and outbound AI streams.
+  Suggestions from the owner, to be turned into a plan:
+  1. Gym: one IPv6 endpoint only, no IPv4 (drops the gym's dedicated address).
+  2. Production: every endpoint IPv6 except one IPv4 (the single IPv4 stays so IPv4-only networks
+     still reach a relay; phones need the echo to match for any address `.com` recommends).
+  3. Get an ASN and our own IPv6 space, so every server (relay hosts and boxes) can have a directly
+     reachable IPv6 address, not one that depends on Fly. To cost out: the regional registry's
+     membership and fees, an IPv6 allocation, and an upstream or colo that will announce it.
+  Keep: SNI passthrough with the box terminating TLS, the PROXY-header echo on `:8444`, and the
+  release.sh relay-echo check after any relay deploy. Cheap first step before any of this:
+  `flyctl scale count 2` for a second machine.
 
 - **The `flagship.services` DNS zone is nearly full (2026-10-16); the fix is on
   `main`, not deployed (2026-10-18).** Cloudflare Free caps the zone at 200
