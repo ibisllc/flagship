@@ -143,8 +143,8 @@
     "lost-phone-recovery": {
       "label": "Losing a phone and recovering the account (docs/launch-mvp.md)",
       "paths": [
-        "apps/com/src/recovery*.ts",
-        "packages/control-plane/src/recovery*.ts"
+        "packages/control-plane/src/recoveryProof.ts",
+        "packages/control-plane/src/webauthnRecovery.ts"
       ]
     },
     "lan-direct-metal": {
