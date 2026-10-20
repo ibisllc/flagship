@@ -97,7 +97,7 @@ public struct MigrateServerScreen: View {
                     .font(FS.font.caption()).foregroundColor(c.danger)
             }
 
-            Text("The old server is retired and wiped only after the new one has restored the data and taken over the name: from then on it can't unlock or connect, and it wipes itself as soon as it is reachable. If anything fails first, the old server keeps serving with all its data.")
+            Text("The old server is retired and wiped only after the new one has restored the data and taken over the name: from then on it can't unlock or connect, and it wipes itself as soon as it is reachable. If anything fails first, the old server keeps serving with all its data. Want a copy you keep yourself? Download a backup file from this server's Backups section before you start.")
                 .font(FS.font.caption()).foregroundColor(c.textMuted)
 
             if let err = vm.errorMessage {

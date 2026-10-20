@@ -171,7 +171,7 @@ private fun InitiateMode(vm: MigrationViewModel) {
     }
 
     Text(
-        "The old server is retired and wiped only after the new one has restored the data and taken over the name: from then on it can't unlock or connect, and it wipes itself as soon as it is reachable. If anything fails first, the old server keeps serving with all its data.",
+        "The old server is retired and wiped only after the new one has restored the data and taken over the name: from then on it can't unlock or connect, and it wipes itself as soon as it is reachable. If anything fails first, the old server keeps serving with all its data. Want a copy you keep yourself? Download a backup file from this server's Backups section before you start.",
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.bodyMedium,
     )
