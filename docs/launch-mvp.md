@@ -18,8 +18,8 @@ launch (`anonymous-vouchers.md`).
    green padlock; the AI builds apps on a staging copy, then they go live;
    updates, backups, recovery and Delete.
 2. **Apps:** iOS and Android through store review, the webapp, and the
-   notarized Mac Studio. **Windows and Linux Studio ship marked "preview"**
-   (not yet run on a real PC).
+   notarized Mac Studio. **Windows and Linux Studio ship marked "Experimental"**
+   (owner, 2026-10-20; not yet run on every kind of PC; see `docs/preview-criteria.md`).
 3. **Free tier: 25 GB/month, slowed down (not cut off) when exceeded.**
 4. **Free AI credits** so people can try building apps without their own AI
    key: on by default for new users, with a clear "used / remaining" line and

@@ -191,7 +191,7 @@ jobs:
             echo "Flagship Studio $v ${{ needs.version.outputs.label }} for Windows and Linux, built from ${GITHUB_SHA}."
             echo
             echo "- Windows: unzip and run \`Flagship Studio.exe\` (keep the \`tools\` folder beside it). Not code-signed yet, so SmartScreen will warn."
-            echo "- Linux: \`chmod +x\` the AppImage and run it. Needs Node.js 20+ and pkexec."
+            echo "- Linux: \`chmod +x\` the AppImage and run it. Needs Node.js 22+ and pkexec."
             echo
             echo '```'
             cat SHA256SUMS.txt

@@ -219,7 +219,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 Scope agreed 2026-10-13 in `docs/launch-mvp.md` (date to be set): free only,
 no payments; free AI credits on by default; free tier slowed, not cut, past
 25 GB; custom domains, name change + dibs, marketplace and payments come
-after. Windows/Linux Studio ship as "preview". **Share this server** (another
+after. Windows/Linux Studio ship as "Experimental" (owner, 2026-10-20). **Share this server** (another
 account can view or co-manage a server, never destroy it) is in the MVP
 (`docs/share-a-server.md`; on `main`).
 
@@ -537,7 +537,7 @@ of the last check here: **not yet checked**.
   `~/.config/flagship/deepinfra-eval.key` and run `npm run build-eval` (stops
   at $5), or add the `DEEPINFRA_API_KEY` repo secret and run the
   `build-eval.yml` workflow (Docker build check + Postgres).
-- **Flagship Inference (2026-10-13): built on `main`, not live.** A launch
+- **Flagship Inference (2026-10-13): built on `main`; shim deployed (`inference.flagshipserver.com` answers 401 without a pass, secrets set on the shim and on `.com`, read 2026-10-20); an end-to-end build is the open receipt `flagship-inference-live`.** A launch
   promotion ("for a limited time, building your apps is free"). Per account:
   a one-time starter reserve plus a weekly top-up (ISO week, not
   accumulating, spent first), only while the account has a server that
@@ -1221,7 +1221,7 @@ release, and applies to a VM from its next start).
   on-demand `studio-release.yml` (pass `publish=true` to release; it now
   stamps the version into both apps and checks it). Windows is a zip with
   `xorriso` bundled in `tools\`, **unsigned** (no code-signing cert). Linux is
-  an x86-64 AppImage that needs Node.js 20+, pkexec and xorriso. **In 0.1.3,
+  an x86-64 AppImage that needs Node.js 22+, pkexec and xorriso. **In 0.1.3,
   level with the Mac:** hosting from
   the published prebuilt appliance by default (verified qcow2 archive kept as
   the base, a qcow2 overlay + install-blob seed per server, installer-ISO

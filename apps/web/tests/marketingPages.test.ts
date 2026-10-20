@@ -328,3 +328,29 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(r.body).not.toContain("/api/aliases/");
   });
 });
+
+describe("Studio platforms that have not passed a hardware run say so", () => {
+  const pub = join(__dirname, "../public");
+  it("the Windows downloads on the home page and /studio, and the Linux AppImage, are labelled Experimental", () => {
+    const home = readFileSync(join(pub, "index.html"), "utf8");
+    const windowsLinks = home.match(/data-studio-platform="windows"[^>]*>[^<]*<span class="studio-tag">Experimental<\/span>/g) ?? [];
+    expect(windowsLinks.length).toBe(2);
+    expect(home).not.toMatch(/data-studio-platform="mac"[^>]*>[^<]*Experimental/);
+    const studio = readFileSync(join(pub, "studio/index.html"), "utf8");
+    expect(studio).toMatch(/Download for Windows <em class="tag">Experimental<\/em>/);
+    expect(studio).toMatch(/Get the AppImage<\/a> <em class="tag">Experimental<\/em>/);
+    expect(studio).not.toMatch(/Download for macOS[^]{0,40}Experimental/);
+  });
+  it("the floors on /studio are the ones the owner set: Windows 11, Node.js 22", () => {
+    const studio = readFileSync(join(pub, "studio/index.html"), "utf8");
+    expect(studio).not.toContain("Windows 10");
+    expect(studio).toContain("Windows 11");
+    expect(studio).toContain("Node.js 22");
+    expect(studio).not.toContain("Node.js 20");
+  });
+  it("the Windows and Linux window titles carry the label", () => {
+    const root = join(__dirname, "../../");
+    expect(readFileSync(join(root, "builder-windows/src/MainWindow.xaml"), "utf8")).toContain('Title="Flagship Studio (Experimental)"');
+    expect(readFileSync(join(root, "builder-linux/wizard.py"), "utf8")).toContain('window.set_title("Flagship Studio (Experimental)")');
+  });
+});

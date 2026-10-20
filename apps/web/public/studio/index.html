@@ -41,6 +41,7 @@
     .download:hover, .download.is-preferred { border-color: var(--accent-graphic); }
     .download.is-preferred { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
     .download strong { font-size: 17px; }
+    .tag { font-style: normal; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 1px 6px; border: 1px solid currentColor; border-radius: 999px; opacity: .8; vertical-align: 2px; }
     .download span { color: var(--ink-muted); font-size: var(--body-sm-size); }
     .download .recommended { display: none; color: var(--ink); font-weight: 600; font-family: var(--font-mono); font-size: 11px; }
     .download.is-preferred .recommended { display: block; }
@@ -92,8 +93,8 @@
       </a>
       <a class="download" data-platform="windows" href="/download/windows">
         <span class="recommended">Recommended for this computer</span>
-        <strong>Download for Windows</strong>
-        <span>Windows 10 and 11 · ZIP</span>
+        <strong>Download for Windows <em class="tag">Experimental</em></strong>
+        <span>Windows 11 · ZIP · not yet proven on every PC</span>
       </a>
     </div>
 
@@ -103,7 +104,7 @@
       <li><div><strong>Write and boot the USB.</strong><p>Choose the target drive in Studio. Your phone approves the recipe; Studio handles the operating-system image and USB.</p></div></li>
     </ol>
 
-    <p class="footnote">Already downloaded a recipe from the webapp? Open or paste it in Studio. On Linux? <a href="/download/linux">Get the AppImage</a> (x86-64; needs Node.js 20 or later).</p>
+    <p class="footnote">Already downloaded a recipe from the webapp? Open or paste it in Studio. On Linux? <a href="/download/linux">Get the AppImage</a> <em class="tag">Experimental</em> (x86-64; needs Node.js 22 or later).</p>
   </main>
 
   <footer class="colophon"><span>© 2026 Flagship · Patent Pending</span><span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></span></footer>

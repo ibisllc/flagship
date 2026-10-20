@@ -1345,7 +1345,7 @@ def build_window(application, model: Optional[WizardModel] = None):
     wizard_model = model if model is not None else WizardModel(mode=MODE_SIMPLE, auto_pair=True)
 
     window = Adw.ApplicationWindow(application=application)
-    window.set_title("Flagship Studio")
+    window.set_title("Flagship Studio (Experimental)")
     window.set_default_size(960, 820)
 
     header = Adw.HeaderBar()

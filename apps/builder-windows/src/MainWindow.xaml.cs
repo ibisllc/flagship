@@ -139,7 +139,7 @@ public partial class MainWindow : Window
     private void RestoreAfterShutdown()
     {
         _wizard.Vm.CancelQuit();
-        Title = "Flagship Studio";
+        Title = "Flagship Studio (Experimental)";
         IsEnabled = true;
         _trayIcon.SetStatus(null);
     }

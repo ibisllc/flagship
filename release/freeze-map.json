@@ -161,6 +161,14 @@
       "paths": [
         "apps/builder-mac/Sources/FlagshipBuilder/VZHost.swift"
       ]
+    },
+    "flagship-inference-live": {
+      "label": "A fresh account with a running server and no AI key builds an app on Flagship Inference: Settings shows the allowance, a build runs, the allowance drops",
+      "paths": [
+        "infra/inference/shim/src/**",
+        "packages/control-plane/src/inferenceModels.ts",
+        "apps/com/src/inferenceModelRoutes.ts"
+      ]
     }
   }
 }

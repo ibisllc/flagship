@@ -5,7 +5,7 @@
         mc:Ignorable="d"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        Title="Flagship Studio"
+        Title="Flagship Studio (Experimental)"
         Icon="/assets/Flagship.ico"
         Width="940" Height="660"
         ResizeMode="NoResize"

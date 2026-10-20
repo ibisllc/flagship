@@ -711,7 +711,7 @@ version into both apps and fails if the built exe or AppImage reports a
 different one. Then update the two URLs in
 `apps/com/src/route.ts` (`INSTALLER_DOWNLOADS.windows` / `.linux`, they pin
 `studio-v0.1.3`, to `studio-v0.2.0` and the `0.2.0` file names), land, and redeploy `.com` (step 7). They ship marked
-"preview"; neither has been run on a real Windows PC or Linux desktop beyond the
+"Experimental"; neither has been run on a real Windows PC or Linux desktop beyond the
 2026-10-18 Windows run recorded in AGENTS.md.
 
 **Mac** (`scripts/release-studio.sh`, needs the notary credentials in the
@@ -900,7 +900,7 @@ account. The plan file and its `.log.jsonl` list exactly what went.
 - The arm64 appliance needs a green `main` run published (step 9): until then
   Apple Silicon hosting gets the 2026-10-13 image, which stops at first boot.
 - Windows and Linux Studio have not run end to end on real hardware; ship them
-  as preview (already the plan).
+  as Experimental (owner, 2026-10-20).
 - Mac Studio reports version 0.2.0 (step 10; stamped from `release/version.json`).
 - Not run by anyone yet, per AGENTS.md: the whole server restore, docker
   save/load and pg_dump/restore against a real box, and the final root-wildcard
