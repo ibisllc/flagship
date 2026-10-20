@@ -54,7 +54,7 @@ import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import { ARCHIVE_EXCLUDES, ARCHIVE_INCLUDES, buildServerArchive, estimateServerArchive, type ArchiveBuildDeps } from "./build.js";
-import { ARCHIVE_FRAME_BYTES, ArchiveError, writeBackupFile } from "./format.js";
+import { ARCHIVE_FRAME_BYTES, ArchiveError, checkDataFile, writeBackupFile } from "./format.js";
 import { installArchive, unpackArchive, type ArchiveRestoreDeps, type RestoreAppResult } from "./restore.js";
 import type { RestoreWait } from "./restoreWait.js";
 import { KEY_POOL_LOW, KEY_POOL_MAX, SAVED_BACKUP_FILE, SAVED_DATA_FILE, SavedBackups, type SavedBackupMeta, type SavedState } from "./saved.js";
@@ -857,9 +857,16 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       });
     })()
       .then(async (r) => {
+        // "Saved" means read back and opened, not just written.
+        try {
+          await checkDataFile(join(dir, SAVED_DATA_FILE), key, k.archiveId, { bytes: r.bytes, sha256: r.sha256 });
+        } catch (e) {
+          throw new Error(`the backup was written but did not pass its check, so it was not kept: ${(e as Error).message}`);
+        }
         const meta: SavedBackupMeta = {
           archiveId: k.archiveId,
           createdAt: startedAt,
+          checkedAt: now(),
           trigger,
           bytes: r.bytes,
           sha256: r.sha256,
@@ -888,7 +895,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
         await applyRetention();
         note(
           "server.backup.created",
-          `${trigger === "schedule" ? "Scheduled backup" : "Backup"} saved on this server: ${r.apps.length} app${r.apps.length === 1 ? "" : "s"}.` +
+          `${trigger === "schedule" ? "Scheduled backup" : "Backup"} saved and checked on this server: ${r.apps.length} app${r.apps.length === 1 ? "" : "s"}.` +
             (r.left.length > 0 ? ` Left out: ${r.left.map((x) => x.name).join(", ")} (no source to rebuild from).` : ""),
           r.left.length === 0,
         );

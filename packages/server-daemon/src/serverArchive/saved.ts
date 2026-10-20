@@ -24,6 +24,8 @@ export interface SavedBackupMeta {
   createdAt: number;
   /** "schedule" for a scheduled run, "now" for Back up now. */
   trigger: "schedule" | "now";
+  /** When the finished file was read back and opened (every frame, the hash). Absent on older backups. */
+  checkedAt?: number;
   bytes: number;
   sha256: string;
   backupBytes: number;

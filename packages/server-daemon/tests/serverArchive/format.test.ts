@@ -5,7 +5,7 @@ import { Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import { BACKUP_DATA_MAGIC, openBackupWithPasscode, parseBackupFile, wrapPasscodeSlot } from "@flagship/protocol";
-import { ArchiveError, openDataFile, sealDataFile, writeBackupFile } from "../../src/serverArchive/format.js";
+import { ArchiveError, checkDataFile, openDataFile, sealDataFile, writeBackupFile } from "../../src/serverArchive/format.js";
 
 let dir: string;
 beforeEach(async () => {
@@ -102,5 +102,29 @@ describe("the backup file the box writes", () => {
     expect(out.text).toBe(text);
     expect(text).not.toContain("Wiki");
     expect(openBackupWithPasscode(parseBackupFile(text), "correct horse battery staple").body).toEqual(body);
+  });
+});
+
+describe("checking a backup that was just written", () => {
+  it("passes a good file, and says what is wrong with a changed, cut or wrongly keyed one", async () => {
+    const path = join(dir, "c.flagship-data");
+    const out = await sealDataFile(Readable.from([data(9000)]), KEY, ID, path, FRAME);
+    expect(await checkDataFile(path, KEY, ID, out)).toEqual({ plainBytes: 9000 });
+    // Not the file that was written: a different size, then the same size with one byte changed.
+    await expect(checkDataFile(path, KEY, ID, { ...out, bytes: out.bytes + 1 })).rejects.toThrow(/not the .* written/);
+    await expect(checkDataFile(path, KEY, ID, { ...out, sha256: "0".repeat(64) })).rejects.toThrow(/does not match the hash/);
+    const raw = await readFile(path);
+    raw[raw.length - 20] ^= 0xff;
+    await writeFile(path, raw);
+    const damaged = { bytes: raw.length, sha256: createHash("sha256").update(raw).digest("hex") };
+    await expect(checkDataFile(path, KEY, ID, damaged)).rejects.toBeInstanceOf(Error);
+    // The right bytes but the wrong key never opens.
+    const fresh = join(dir, "d.flagship-data");
+    const o2 = await sealDataFile(Readable.from([data(100)]), KEY, ID, fresh, FRAME);
+    await expect(checkDataFile(fresh, Buffer.alloc(32, 9), ID, o2)).rejects.toBeInstanceOf(Error);
+    // A backup of nothing is not a backup.
+    const empty = join(dir, "e.flagship-data");
+    const o3 = await sealDataFile(Readable.from([Buffer.alloc(0)]), KEY, ID, empty, FRAME);
+    await expect(checkDataFile(empty, KEY, ID, o3)).rejects.toThrow(/opens to nothing/);
   });
 });
