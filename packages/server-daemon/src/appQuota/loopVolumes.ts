@@ -48,6 +48,10 @@ export function ext4ReservedBlocks(blocks: number): number {
   return Math.min(Math.floor(blocks / 50), 4096);
 }
 
+/** `sh -c` script: a fingerprint of the tree at "$1" (GNU find). Run on both sides of a move. */
+export const FOLDER_FINGERPRINT_SCRIPT =
+  `find "$1" \\( -type f -printf 'f %m %s %P\\n' \\) -o \\( -type d -printf 'd %m %P\\n' \\) -o \\( -printf '%y %P\\n' \\) | LC_ALL=C sort | sha256sum | cut -d' ' -f1`;
+
 export interface FsUsage {
   /** Filesystem capacity (ext4's metadata already left out). */
   sizeBytes: number;
@@ -356,9 +360,27 @@ export class LoopVolumes {
       await this.dropImage(volume).catch(() => {});
       throw new Error(`couldn't move ${volume} into its own disk image: ${(e as Error).message}`);
     }
+    // The old folder is the only copy until the swap below, so it goes only once the new one is
+    // seen to hold the same files, sizes and modes. A mismatch drops the image and leaves the
+    // volume as it was; the next start tries again.
+    try {
+      const [before, after] = [await this.manifest(old), await this.manifest(this.dataPath(volume))];
+      if (before !== after) throw new Error("the copy does not match the original");
+    } catch (e) {
+      await this.dropImage(volume).catch(() => {});
+      throw new Error(`couldn't verify the move of ${volume} into its own disk image, so it was left as it was: ${(e as Error).message}`);
+    }
     await this.docker(["volume", "rm", volume]);
     await this.createBindVolume(volume, labels);
     this.log(`[app-quota] moved ${volume} into its own disk image`);
+  }
+
+  /**
+   * A fingerprint of a folder's files: every entry's type, mode, path and (for files) size, sorted and
+   * hashed. Equal fingerprints mean the same tree; contents are the copy's own job (cp -a fails loudly).
+   */
+  private async manifest(dir: string): Promise<string> {
+    return (await this.sh("sh", ["-c", FOLDER_FINGERPRINT_SCRIPT, "_", dir], 30 * 60_000)).trim();
   }
 
   private async duBytes(path: string): Promise<number> {

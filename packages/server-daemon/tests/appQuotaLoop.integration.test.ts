@@ -11,9 +11,10 @@
  */
 import { execFileSync } from "node:child_process";
 import { chmodSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { LoopVolumes, MIN_IMAGE_BYTES } from "../src/appQuota/index.js";
+import { FOLDER_FINGERPRINT_SCRIPT, LoopVolumes, MIN_IMAGE_BYTES } from "../src/appQuota/index.js";
 import { realCommandRunner, type CommandRunner } from "../src/serviceRunner.js";
 
 const RUN = process.platform === "linux" && process.env.FLAGSHIP_TEST_LOOP === "1" && process.getuid?.() === 0;
@@ -162,6 +163,29 @@ describe.skipIf(!RUN)("files folders as sized disk images (real loop mounts)", (
     expect(readdirSync(join(root, "orphaned"))).toHaveLength(1);
     expect((await lv.sweepOrphans({ keep: new Set([VOL]), now: Date.now() + 10 * day })).deleted).toEqual([ORPH]);
     expect(readdirSync(join(root, "orphaned"))).toHaveLength(0);
+  });
+
+  it("the move's fingerprint tells a faithful copy from one with a file missing, changed or resized", () => {
+    const fp = (d: string) => execFileSync("sh", ["-c", FOLDER_FINGERPRINT_SCRIPT, "_", d]).toString().trim();
+    const a = mkdtempSync(join(tmpdir(), "fp-a-"));
+    const b = mkdtempSync(join(tmpdir(), "fp-b-"));
+    try {
+      execFileSync("sh", ["-c", 'mkdir -p "$1/sub" && echo hello > "$1/sub/f" && echo x > "$1/g" && ln -s g "$1/link" && chmod 640 "$1/g"', "_", a]);
+      execFileSync("cp", ["-a", "--", `${a}/.`, `${b}/`]);
+      expect(fp(a)).toBe(fp(b));
+      rmSync(join(b, "sub", "f"));
+      expect(fp(a)).not.toBe(fp(b));
+      execFileSync("cp", ["-a", "--", `${a}/sub/f`, `${b}/sub/f`]);
+      expect(fp(a)).toBe(fp(b));
+      execFileSync("sh", ["-c", 'echo more >> "$1/g"', "_", b]);
+      expect(fp(a)).not.toBe(fp(b));
+      execFileSync("cp", ["-a", "--", `${a}/g`, `${b}/g`]);
+      execFileSync("chmod", ["600", join(b, "g")]);
+      expect(fp(a)).not.toBe(fp(b));
+    } finally {
+      rmSync(a, { recursive: true, force: true });
+      rmSync(b, { recursive: true, force: true });
+    }
   });
 
   it("removing it deletes the image", async () => {

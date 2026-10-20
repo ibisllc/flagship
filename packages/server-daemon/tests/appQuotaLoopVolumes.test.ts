@@ -281,6 +281,77 @@ describe("LoopVolumes", () => {
     expect(await lv.prepare("flagship-files-bob--x", MiB)).toBe("absent");
   });
 
+  it("checks the copy against the original before the old folder goes", async () => {
+    const w = world();
+    w.volumes.set(VOL, { device: "", mountpoint: `/var/lib/docker/volumes/${VOL}/_data`, labels: {} });
+    const manifests: string[] = [];
+    const runner: CommandRunner = {
+      run: w.runner.run,
+      capture: async (c, a, o) => {
+        if (c === "sh" && a[0] === "-c") {
+          manifests.push(a[3]!);
+          // The original and the copy fingerprint differently: a file is missing from the copy.
+          return { stdout: a[3] === `${ROOT}/${VOL}/data` ? "aaaa\n" : "bbbb\n", stderr: "" };
+        }
+        return w.runner.capture!(c, a, o);
+      },
+    };
+    const lv = new LoopVolumes(runner, { host: w.host, log: () => {} });
+    expect(await lv.prepare(VOL, 64 * MiB)).toBe("plain");
+    expect(manifests).toEqual([`/var/lib/docker/volumes/${VOL}/_data`, `${ROOT}/${VOL}/data`]);
+    // The original is untouched, the half-made image is gone, and nothing is left marked.
+    expect(w.volumes.get(VOL)?.device).toBe("");
+    expect(w.files.size).toBe(0);
+    expect(w.calls.some((c) => c === `docker volume rm ${VOL}`)).toBe(false);
+  });
+
+  it("moves the folder only when the copy fingerprints the same as the original", async () => {
+    const w = world();
+    w.volumes.set(VOL, { device: "", mountpoint: `/var/lib/docker/volumes/${VOL}/_data`, labels: {} });
+    const runner: CommandRunner = {
+      run: w.runner.run,
+      capture: async (c, a, o) => (c === "sh" && a[0] === "-c" ? { stdout: "same\n", stderr: "" } : w.runner.capture!(c, a, o)),
+    };
+    const lv = new LoopVolumes(runner, { host: w.host, log: () => {} });
+    expect(await lv.prepare(VOL, 64 * MiB)).toBe("adopted");
+    expect(w.volumes.get(VOL)?.device).toBe(`${ROOT}/${VOL}/data`);
+  });
+
+  it("survives a cut at every step of the move: the old folder is there until the swap, the image after", async () => {
+    for (const cutAt of ["mkfs.ext4", "cp", "docker volume rm", "docker volume create"]) {
+      const w = world();
+      w.volumes.set(VOL, { device: "", mountpoint: `/var/lib/docker/volumes/${VOL}/_data`, labels: {} });
+      let cut = true;
+      const runner: CommandRunner = {
+        run: w.runner.run,
+        capture: async (c, a, o) => {
+          const name = c === "docker" ? `docker ${a[0]} ${a[1]}` : c;
+          if (cut && name === cutAt) {
+            cut = false;
+            throw new Error(`power cut at ${cutAt}`);
+          }
+          return w.runner.capture!(c, a, o);
+        },
+      };
+      const lv = new LoopVolumes(runner, { host: w.host, log: () => {} });
+      const first = await lv.prepare(VOL, 64 * MiB).catch((e: Error) => e);
+      const afterSwap = cutAt === "docker volume create";
+      if (afterSwap) {
+        // The old volume is gone, so the files must be in the image and the start must fail, not run on an empty folder.
+        expect(first).toBeInstanceOf(Error);
+        expect(w.volumes.has(VOL)).toBe(false);
+        expect(w.files.has(`${ROOT}/${VOL}.img`)).toBe(true);
+      } else {
+        expect(first).toBe("plain");
+        expect(w.volumes.get(VOL)?.device).toBe("");
+      }
+      // The next start finishes the job whichever step was cut.
+      const second = await lv.prepare(VOL, 64 * MiB);
+      expect(["adopted", "mounted"], cutAt).toContain(second);
+      expect(w.volumes.get(VOL)?.device, cutAt).toBe(`${ROOT}/${VOL}/data`);
+    }
+  });
+
   it("never takes Docker being down for a missing volume", async () => {
     const w = world();
     const lv = new LoopVolumes(w.runner, { host: w.host, log: () => {} });
