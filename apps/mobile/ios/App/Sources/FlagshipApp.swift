@@ -780,7 +780,13 @@ struct FlagshipApp: App {
                     #endif
                 }
                 .onChange(of: scenePhase) { _, phase in
-                    if phase == .active { noticesForeground() }
+                    if phase == .active {
+                        noticesForeground()
+                        RelayAddressRegistry.shared.startIfDue()
+                    }
+                    // The relay forwarder is a listener on this phone's loopback: close it (and the
+                    // session that remembers its port) before suspension; the next need starts a new one.
+                    if phase == .background { RelayRoute.shared.suspend() }
                 }
                 .onOpenURL { url in
                     if let link = DeepLink.parse(url) { linker.enqueue(link) }

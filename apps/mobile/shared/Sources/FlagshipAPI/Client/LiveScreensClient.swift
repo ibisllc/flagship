@@ -68,7 +68,11 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
             return try await relay.gatedData(for: req)
         } catch {
             if Task.isCancelled { throw error }
-            _ = CertPinMismatchSink.shared.consumeRecentMismatch(host: host)
+            // The calm outcome stays (the name is still unresolved), but the real class is kept.
+            let pinMismatch = CertPinMismatchSink.shared.consumeRecentMismatch(host: host)
+            DiagnosticsLog.shared.record(
+                code: pinMismatch ? DiagnosticCode.relayPinMismatch : DiagnosticCode.relayRouteUnverified,
+                host: host, detail: DiagnosticCode.of(error))
             guard LanDirectRegistry.mayResendOverRelay(error, method: req.httpMethod) else { throw error }
             return nil
         }

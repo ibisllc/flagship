@@ -128,7 +128,7 @@ pair only last. No protocol, no new signed document: a signed relay hint was bui
 removed on the owner's direction (`904b512ec`). Android: `RelayFallbackDns`,
 `RelayAddressCenter`, `TlsPinRelayProber`, `RelayHintFailureInterceptor` (a failed hint reads as an
 unresolved name). iOS: `RelayFallback.swift`; URLSession cannot choose an address, so a loopback
-CONNECT proxy (`RelayForwarder`) forwards ciphertext and serves only names under the data apex.
+CONNECT proxy (`LoopbackAddressShim`) forwards ciphertext and serves only names under the data apex.
 Shared rule vectors: `apps/mobile/test-vectors/relay-addresses.json`. The webapp (browser DNS)
 and the Studios (they only call `.com`) have nothing to feed. [V: Android 1,879+ unit tests, 0
 failures; shared Swift suite 351 tests, 0 failures; iOS app target builds.] **Not verified on a

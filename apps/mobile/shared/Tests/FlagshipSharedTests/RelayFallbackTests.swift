@@ -48,8 +48,14 @@ final class RelayFallbackTests: XCTestCase {
 
     private final class Clock: @unchecked Sendable { var now: Int64 = 1_000 }
 
-    private func registry(_ prober: Prober, clock: Clock = Clock(), body: String? = nil, target: Bool = true) -> RelayAddressRegistry {
-        let r = RelayAddressRegistry(defaults: UserDefaults(suiteName: "relay-\(UUID().uuidString)")!, clock: { clock.now }, prober: prober)
+    /// Answers the relay echo: itself by default, or whatever `says` maps an address to (nil = no answer).
+    private struct Echoes: RelayEcho {
+        var says: @Sendable (String) -> String? = { $0 }
+        func reachedAt(address: String) async -> String? { says(address) }
+    }
+
+    private func registry(_ prober: Prober, clock: Clock = Clock(), body: String? = nil, target: Bool = true, echo: Echoes = Echoes()) -> RelayAddressRegistry {
+        let r = RelayAddressRegistry(defaults: UserDefaults(suiteName: "relay-\(UUID().uuidString)")!, clock: { clock.now }, prober: prober, echo: echo)
         r.configure(
             fetchBody: { body.map { Data($0.utf8) } },
             pinTarget: { target ? (host: "home.alice.flagship.services", pin: String(repeating: "ab", count: 32)) : nil }
@@ -60,25 +66,28 @@ final class RelayFallbackTests: XCTestCase {
     private let seed = RelayAddresses.prod
     private let endpoints = #"{"version":1,"passthroughIPv4":"203.0.113.7","passthroughIPv6":"2001:db8::7"}"#
 
-    func test_aRecommendationIsKeptAndTriedBeforeTheSeed() async {
+    // A recommendation is kept, but only used once it has passed the test: the untested
+    // last resort is the compiled-in seed alone.
+    func test_aRecommendationIsKeptButNeverUsedUntested() async {
         let r = registry(Prober(passes: []), body: endpoints)
         XCTAssertEqual(r.addresses(seed: seed), seed)
         let kept = await r.refresh()
         XCTAssertTrue(kept)
-        XCTAssertEqual(r.addresses(seed: seed), ["203.0.113.7", "2001:db8::7"] + seed)
+        XCTAssertEqual(r.stored(), ["203.0.113.7", "2001:db8::7"])
+        XCTAssertEqual(r.addresses(seed: seed), seed)
     }
 
     func test_aFailedFetchOrJunkChangesNothing() async {
         let good = registry(Prober(passes: []), body: endpoints)
         _ = await good.refresh()
-        let before = good.addresses(seed: seed)
+        let before = good.stored()
         good.configure(fetchBody: { Data("not json".utf8) }, pinTarget: { nil })
         let junk = await good.refresh()
         XCTAssertFalse(junk)
         good.configure(fetchBody: { nil }, pinTarget: { nil })
         let none = await good.refresh()
         XCTAssertFalse(none)
-        XCTAssertEqual(good.addresses(seed: seed), before)
+        XCTAssertEqual(good.stored(), before)
     }
 
     func test_onlyAddressesThatPassTheTestAreProven() async {
@@ -88,6 +97,40 @@ final class RelayFallbackTests: XCTestCase {
         let proven = await r.proven(seed: seed)
         XCTAssertEqual(proven, ["203.0.113.7"])
         XCTAssertTrue(prober.calls.contains("203.0.113.7|home.alice.flagship.services|443|\(String(repeating: "ab", count: 32))"))
+    }
+
+    // The echo: an address `.com` recommended must say it is itself. A forwarder in front of
+    // the relay passes the pinned handshake, but its echo names the relay behind it.
+    func test_aForwarderThatPassesTheHandshakeButEchoesAnotherAddressIsDropped() async {
+        let r = registry(Prober(passes: Set(["203.0.113.7"] + seed)), body: endpoints,
+                         echo: Echoes(says: { $0 == "203.0.113.7" ? RelayAddresses.prod[0] : $0 }))
+        _ = await r.refresh()
+        let proven = await r.proven(seed: seed)
+        XCTAssertEqual(proven, seed)
+    }
+
+    func test_anAddressWithNoEchoIsDroppedButTheSeedNeedsNone() async {
+        let r = registry(Prober(passes: Set(["203.0.113.7"] + seed)), body: endpoints, echo: Echoes(says: { _ in nil }))
+        _ = await r.refresh()
+        let proven = await r.proven(seed: seed)
+        XCTAssertEqual(proven, seed)
+    }
+
+    func test_anAddressThatEchoesItselfIsProvenWhicheverWayItIsWritten() async {
+        let r = registry(Prober(passes: ["2001:db8::7"]), body: #"{"passthroughIPv6":"2001:db8::7"}"#,
+                         echo: Echoes(says: { _ in "2001:0db8:0000:0000:0000:0000:0000:0007" }))
+        _ = await r.refresh()
+        let proven = await r.proven(seed: seed)
+        XCTAssertEqual(proven, ["2001:db8::7"])
+    }
+
+    func test_anEchoReplyIsReadStrictly() {
+        func reply(_ json: String) -> Data { Data("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n\r\n\(json)".utf8) }
+        XCTAssertEqual(RelayAddressRules.parseEchoReply(reply(#"{"relay":"flagship.services","reachedAt":"149.248.216.86"}"#)), "149.248.216.86")
+        XCTAssertNil(RelayAddressRules.parseEchoReply(reply(#"{"reachedAt":null}"#)))
+        XCTAssertNil(RelayAddressRules.parseEchoReply(reply(#"{"reachedAt":"10.0.0.7"}"#)))
+        XCTAssertNil(RelayAddressRules.parseEchoReply(reply(#"{"reachedAt":"relay.example.com"}"#)))
+        XCTAssertNil(RelayAddressRules.parseEchoReply(Data("garbage".utf8)))
     }
 
     func test_withNoKnownBoxNothingIsProvenAndNothingIsProbed() async {
@@ -222,7 +265,7 @@ final class RelayFallbackTests: XCTestCase {
 
     func test_theProxyPassesBytesBothWaysToTheFirstAddressThatAnswers() async throws {
         let echo = try Echo()
-        let started = await RelayForwarder.start(apex: "flagship.services", connectTimeout: 1, upstreamPort: Int(echo.port)) { ["127.0.0.1"] }
+        let started = await LoopbackAddressShim.start(apex: "flagship.services", connectTimeout: 1, upstreamPort: Int(echo.port)) { ["127.0.0.1"] }
         let proxy = try XCTUnwrap(started)
         defer { proxy.stop(); echo.listener.cancel() }
         let out = await talk(to: proxy.port, send: ["CONNECT home.alice.flagship.services:443 HTTP/1.1\r\n\r\n", "ping-through"], until: "ping-through")
@@ -231,7 +274,7 @@ final class RelayFallbackTests: XCTestCase {
     }
 
     func test_theProxyServesOnlyNamesUnderTheApexAndAnswersBadGatewayWhenNothingAnswers() async throws {
-        let started = await RelayForwarder.start(apex: "flagship.services", connectTimeout: 1, upstreamPort: 9) { [] }
+        let started = await LoopbackAddressShim.start(apex: "flagship.services", connectTimeout: 1, upstreamPort: 9) { [] }
         let proxy = try XCTUnwrap(started)
         defer { proxy.stop() }
         let other = await talk(to: proxy.port, send: ["CONNECT example.com:443 HTTP/1.1\r\n\r\n"], until: "\r\n\r\n")
@@ -240,4 +283,71 @@ final class RelayFallbackTests: XCTestCase {
         XCTAssertTrue(none.hasPrefix("HTTP/1.1 502"), none)
     }
 
+    // MARK: the proxy's limits and lifecycle
+
+    func test_aClientThatNeverFinishesItsRequestIsClosed() async throws {
+        let started = await LoopbackAddressShim.start(apex: "flagship.services", connectTimeout: 1, upstreamPort: 9) { [] }
+        let proxy = try XCTUnwrap(started)
+        defer { proxy.stop() }
+        let conn = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: proxy.port)!, using: .tcp)
+        let closed = XCTestExpectation(description: "closed by the proxy")
+        conn.stateUpdateHandler = { state in
+            if case .ready = state {
+                conn.send(content: Data("CONNECT home.alice".utf8), completion: .contentProcessed { _ in })
+                conn.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, _, _ in closed.fulfill() }
+            }
+        }
+        conn.start(queue: DispatchQueue(label: "slow-client"))
+        await fulfillment(of: [closed], timeout: LoopbackAddressShim.headDeadline + 3)
+        conn.cancel()
+    }
+
+    func test_clientsPastTheCapAreRefusedAndTheCountComesBackDown() async throws {
+        let started = await LoopbackAddressShim.start(apex: "flagship.services", connectTimeout: 1, upstreamPort: 9) { [] }
+        let proxy = try XCTUnwrap(started)
+        defer { proxy.stop() }
+        var held: [NWConnection] = []
+        for _ in 0..<LoopbackAddressShim.maxClients {
+            let c = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: proxy.port)!, using: .tcp)
+            c.start(queue: DispatchQueue(label: "holder"))
+            held.append(c)
+        }
+        try await Task.sleep(nanoseconds: 800_000_000)
+        XCTAssertLessThanOrEqual(proxy.clientCount, LoopbackAddressShim.maxClients)
+        let over = await talk(to: proxy.port, send: ["CONNECT home.alice.flagship.services:443 HTTP/1.1\r\n\r\n"], until: "\r\n\r\n")
+        XCTAssertFalse(over.hasPrefix("HTTP/1.1 502"), "a client past the cap must not be served: \(over)")
+        held.forEach { $0.cancel() }
+        try await Task.sleep(nanoseconds: 800_000_000)
+        XCTAssertEqual(proxy.clientCount, 0)
+    }
+
+    func test_suspendingStopsTheListenerAndTheNextNeedStartsANewOne() async throws {
+        let route = RelayRoute(registry: registry(Prober(passes: Set(seed))), apex: { "flagship.services" })
+        route.configure(pinFor: { _ in String(repeating: "ab", count: 32) })
+        let first = await route.session(for: "home.alice.flagship.services")
+        XCTAssertNotNil(first)
+        let port1 = try XCTUnwrap(route.forwarderPort)
+        route.suspend()
+        XCTAssertNil(route.forwarderPort)
+        // The old session is invalid: a caller that kept it fails instead of meeting a stranger on that port.
+        let stale = try? await first?.data(from: URL(string: "https://home.alice.flagship.services/")!)
+        XCTAssertNil(stale)
+        let second = await route.session(for: "home.alice.flagship.services")
+        XCTAssertNotNil(second)
+        XCTAssertNotNil(route.forwarderPort)
+        _ = port1
+        route.suspend()
+    }
+
+    func test_theDiagnosticsLogKeepsTheRealReasonAndStaysSmall() {
+        let log = DiagnosticsLog()
+        for i in 0..<(DiagnosticsLog.capacity + 5) { log.record(code: DiagnosticCode.relayRouteUnverified, host: "h\(i)", detail: "net-dropped") }
+        XCTAssertEqual(log.recent().count, DiagnosticsLog.capacity)
+        XCTAssertEqual(log.recent().first?.host, "h5")
+        XCTAssertTrue(log.text().contains("relay-route-unverified h54 net-dropped"))
+        XCTAssertEqual(DiagnosticCode.of(URLError(.cannotFindHost)), "net-name-lookup")
+        XCTAssertEqual(DiagnosticCode.of(URLError(.serverCertificateUntrusted)), "tls-failed")
+        XCTAssertEqual(DiagnosticCode.of(ScreensClientError.certPinMismatch(host: "h")), "tls-pin-mismatch")
+        XCTAssertEqual(DiagnosticCode.of(ScreensClientError.http(status: 503, message: "")), "http-503")
+    }
 }

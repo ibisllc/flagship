@@ -61,7 +61,7 @@ import {
   type PushTokenStore,
 } from "./routes/pushRelay.js";
 import { startSniRouter, type RunningSniRouter } from "./tunnel/sniRouter.js";
-import { startRelayEcho, type RunningRelayEcho } from "./tunnel/relayEcho.js";
+import { startAddressEcho, type RunningAddressEcho } from "./lib/addressEcho.js";
 import { UsageMeter } from "./tunnel/usageMeter.js";
 import { overQuotaBytesPerSec } from "./tunnel/throttle.js";
 import { startTunnelHub } from "./tunnel/tunnelHub.js";
@@ -499,9 +499,9 @@ export async function start(opts: {
     console.log(`SNI router listening on :${router.port} (raw TCP / TLS passthrough)`);
   }
 
-  let echo: RunningRelayEcho | null = null;
+  let echo: RunningAddressEcho | null = null;
   if (opts.relayEchoPort !== undefined) {
-    echo = await startRelayEcho({ port: opts.relayEchoPort, host });
+    echo = await startAddressEcho({ port: opts.relayEchoPort, host });
     console.log(`relay echo listening on :${echo.port} (PROXY protocol)`);
   }
 

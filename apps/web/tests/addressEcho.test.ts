@@ -1,6 +1,6 @@
 import { connect } from "node:net";
 import { describe, expect, it } from "vitest";
-import { echoBody, parseProxyHeader, startRelayEcho } from "../src/tunnel/relayEcho.js";
+import { echoBody, parseProxyHeader, startAddressEcho } from "../src/lib/addressEcho.js";
 
 function ask(port: number, prefix: Buffer): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -26,7 +26,7 @@ function v2Ipv4(dst: number[], dport: number): Buffer {
   return Buffer.concat([v2Sig, head, body]);
 }
 
-describe("relay echo", () => {
+describe("address echo", () => {
   it("parses a v1 header and leaves the rest", () => {
     const r = parseProxyHeader(Buffer.from("PROXY TCP4 1.2.3.4 149.248.216.86 5555 8444\r\nGET"))!;
     expect(r.header).toEqual({ src: "1.2.3.4", dst: "149.248.216.86", srcPort: 5555, dstPort: 8444 });
@@ -45,7 +45,7 @@ describe("relay echo", () => {
   });
 
   it("answers the address the PROXY header names", async () => {
-    const echo = await startRelayEcho({ port: 0, host: "127.0.0.1" });
+    const echo = await startAddressEcho({ port: 0, host: "127.0.0.1" });
     try {
       const out = await ask(echo.port, Buffer.from("PROXY TCP4 1.2.3.4 149.248.216.86 5555 8444\r\n"));
       expect(out).toContain("200 OK");
@@ -59,7 +59,7 @@ describe("relay echo", () => {
 
   it("says nothing it does not know, and drops a connection with no header", async () => {
     expect(JSON.parse(echoBody(null)).reachedAt).toBeNull();
-    const echo = await startRelayEcho({ port: 0, host: "127.0.0.1" });
+    const echo = await startAddressEcho({ port: 0, host: "127.0.0.1" });
     try {
       expect(await ask(echo.port, Buffer.alloc(0))).toBe("");
     } finally {

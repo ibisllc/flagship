@@ -12,9 +12,11 @@ import Network
 // relay is comes from `.com` (`GET /api/services/endpoints`, over ordinary TLS), and
 // each address is tested first: a handshake under a known box's name that ends in the
 // box's own pinned certificate shows the relay is up and forwarding for it. The
-// compiled-in seed is only the last resort. Nothing here is trusted with the box: a
-// wrong address can only fail to connect, and a failed attempt reads as the unresolved
-// name it was before, never as a TLS or trust error.
+// compiled-in seed is only the last resort. An address `.com` recommends must also answer
+// the relay echo with itself (it is the relay, not a forwarder in front of it). Nothing here
+// is trusted with the box: a wrong address can only fail to connect, and a failed attempt
+// reads as the unresolved name it was before, never as a TLS or trust error (the real
+// reason is kept in `RelayDiagnostics`).
 
 /// The relay's addresses (Fly dedicated pair, the same as SERVICES_PASSTHROUGH_IPV4/6
 /// in apps/com/wrangler.toml). The last resort, for the prod apex only.
@@ -58,6 +60,14 @@ public enum RelayAddressRules {
         return nil
     }
 
+    /// The address named in a relay echo reply (an HTTP response with a JSON `reachedAt`), or nil.
+    public static func parseEchoReply(_ raw: Data) -> String? {
+        guard let split = raw.range(of: Data("\r\n\r\n".utf8)),
+              let o = (try? JSONSerialization.jsonObject(with: raw[split.upperBound...])) as? [String: Any],
+              let text = o["reachedAt"] as? String else { return nil }
+        return parse(text)
+    }
+
     /// The recommended addresses in a `/api/services/endpoints` body: IPv4 then IPv6, public ones only.
     public static func fromEndpoints(_ body: Data) -> [String] {
         guard let o = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else { return [] }
@@ -71,6 +81,76 @@ public enum RelayAddressRules {
     }
 }
 
+/// Which address does `address` say it was reached at? A forwarder in front of the relay has to
+/// dial the relay's own address, so its answer names that one. It is read over TLS with the
+/// relay's own public certificate, so a forwarder cannot write it.
+public protocol RelayEcho: Sendable {
+    func reachedAt(address: String) async -> String?
+}
+
+#if canImport(Network)
+public struct TlsRelayEcho: RelayEcho {
+    public static let host = "flagship-services.fly.dev"
+    public static let port: UInt16 = 8444
+    public let timeout: TimeInterval
+    public init(timeout: TimeInterval = 2.5) { self.timeout = timeout }
+
+    public func reachedAt(address: String) async -> String? {
+        guard let nwPort = NWEndpoint.Port(rawValue: Self.port) else { return nil }
+        let tls = NWProtocolTLS.Options()
+        let queue = DispatchQueue(label: "flagship.relay-echo")
+        sec_protocol_options_set_tls_server_name(tls.securityProtocolOptions, Self.host)
+        sec_protocol_options_set_verify_block(tls.securityProtocolOptions, { _, trustRef, complete in
+            let trust = sec_trust_copy_ref(trustRef).takeRetainedValue()
+            SecTrustSetPolicies(trust, SecPolicyCreateSSL(true, Self.host as CFString))
+            complete(SecTrustEvaluateWithError(trust, nil))
+        }, queue)
+        let conn = NWConnection(host: NWEndpoint.Host(address), port: nwPort, using: NWParameters(tls: tls))
+        let reply: Data? = await withCheckedContinuation { (cont: CheckedContinuation<Data?, Never>) in
+            let once = EchoOnce(cont)
+            conn.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    let ask = Data("GET /echo HTTP/1.1\r\nHost: \(Self.host)\r\nConnection: close\r\n\r\n".utf8)
+                    conn.send(content: ask, completion: .contentProcessed { err in
+                        if err != nil { return once.resume(nil) }
+                        Self.collect(conn, into: Data(), once: once)
+                    })
+                case .failed, .waiting, .cancelled: once.resume(nil)
+                default: break
+                }
+            }
+            conn.start(queue: queue)
+            queue.asyncAfter(deadline: .now() + timeout) { once.resume(nil) }
+        }
+        conn.cancel()
+        return reply.flatMap(RelayAddressRules.parseEchoReply)
+    }
+
+    private static func collect(_ conn: NWConnection, into acc: Data, once: EchoOnce) {
+        conn.receive(minimumIncompleteLength: 1, maximumLength: 4096) { data, _, isComplete, error in
+            let all = acc + (data ?? Data())
+            if all.count > 4096 { return once.resume(nil) }
+            if isComplete || error != nil { return once.resume(all) }
+            collect(conn, into: all, once: once)
+        }
+    }
+}
+
+private final class EchoOnce: @unchecked Sendable {
+    private var cont: CheckedContinuation<Data?, Never>?
+    private let lock = NSLock()
+    init(_ c: CheckedContinuation<Data?, Never>) { cont = c }
+    func resume(_ v: Data?) {
+        lock.lock()
+        let c = cont
+        cont = nil
+        lock.unlock()
+        c?.resume(returning: v)
+    }
+}
+#endif
+
 public final class RelayAddressRegistry: @unchecked Sendable {
     public static let shared = RelayAddressRegistry()
     public static let storeKey = "flagship.relayAddresses.v1"
@@ -81,6 +161,7 @@ public final class RelayAddressRegistry: @unchecked Sendable {
     private let defaults: UserDefaults
     private let clock: @Sendable () -> Int64
     private let prober: LanProber
+    private let echo: RelayEcho
     private let lock = NSLock()
     private var tested: [Data: (ok: Bool, at: Int64)] = [:]
     private var fetchBody: (@Sendable () async -> Data?)?
@@ -90,18 +171,22 @@ public final class RelayAddressRegistry: @unchecked Sendable {
     #if canImport(Network)
     public init(defaults: UserDefaults = .standard,
                 clock: @escaping @Sendable () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
-                prober: LanProber = TlsPinProber(timeout: 2.5)) {
+                prober: LanProber = TlsPinProber(timeout: 2.5),
+                echo: RelayEcho = TlsRelayEcho()) {
         self.defaults = defaults
         self.clock = clock
         self.prober = prober
+        self.echo = echo
     }
     #else
     public init(defaults: UserDefaults = .standard,
                 clock: @escaping @Sendable () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
-                prober: LanProber) {
+                prober: LanProber,
+                echo: RelayEcho) {
         self.defaults = defaults
         self.clock = clock
         self.prober = prober
+        self.echo = echo
     }
     #endif
 
@@ -122,8 +207,14 @@ public final class RelayAddressRegistry: @unchecked Sendable {
         return list.compactMap(RelayAddressRules.parse)
     }
 
-    /// What to try when DNS fails: what `.com` last recommended, then `seed`. Never throws.
+    /// What to try when DNS fails and nothing could be tested: the compiled-in `seed` only. An
+    /// address `.com` recommended is used only once it has passed the test, never untested.
     public func addresses(seed: [String]) -> [String] {
+        var seen = Set<Data>()
+        return seed.filter { a in RelayAddressRules.key(a).map { seen.insert($0).inserted } ?? false }
+    }
+
+    private func candidateList(seed: [String]) -> [String] {
         var seen = Set<Data>()
         return (stored() + seed).filter { a in RelayAddressRules.key(a).map { seen.insert($0).inserted } ?? false }
     }
@@ -150,11 +241,13 @@ public final class RelayAddressRegistry: @unchecked Sendable {
     }
 
     /// The candidates (then `seed`) that pass the test right now, best first: a handshake under a
-    /// known box's name that ends in its pinned certificate. Empty when no box is known to test
-    /// with or none pass. Results are kept for `goodMs` (passed) or `badMs` (failed).
+    /// known box's name that ends in its pinned certificate. An address `.com` recommended that is
+    /// not in `seed` must also answer the relay echo with itself. Empty when no box is known to
+    /// test with or none pass. Results are kept for `goodMs` (passed) or `badMs` (failed).
     public func proven(seed: [String]) async -> [String] {
         guard let target = locked({ pinTarget })?() else { return [] }
-        let candidates = addresses(seed: seed)
+        let candidates = candidateList(seed: seed)
+        let seedKeys = Set(seed.compactMap(RelayAddressRules.key))
         let now = clock()
         let stale = candidates.filter { a in
             guard let k = RelayAddressRules.key(a), let t = locked({ tested[k] }) else { return true }
@@ -163,7 +256,11 @@ public final class RelayAddressRegistry: @unchecked Sendable {
         await withTaskGroup(of: (Data, Bool).self) { group in
             for a in stale {
                 guard let k = RelayAddressRules.key(a) else { continue }
-                group.addTask { [prober] in (k, await prober.probe(sniHost: target.host, address: a, port: 443, certSha256: target.pin)) }
+                group.addTask { [prober, echo] in
+                    guard await prober.probe(sniHost: target.host, address: a, port: 443, certSha256: target.pin) else { return (k, false) }
+                    if seedKeys.contains(k) { return (k, true) }
+                    return (k, await echo.reachedAt(address: a).flatMap(RelayAddressRules.key) == k)
+                }
             }
             for await (k, ok) in group { locked { tested[k] = (ok, now) } }
         }
@@ -211,26 +308,35 @@ public enum RelayConnectRequest {
 /// that answers, and passes the bytes through. TLS stays between URLSession and the box (SNI,
 /// hostname check and the pin all run on the box's name), so this sees only ciphertext. It
 /// serves names under the data apex and nothing else.
-public final class RelayForwarder: @unchecked Sendable {
+public final class LoopbackAddressShim: @unchecked Sendable {
     private let listener: NWListener
-    private let queue = DispatchQueue(label: "flagship.relay-forwarder")
+    private let queue = DispatchQueue(label: "flagship.address-shim")
     private let addresses: @Sendable () -> [String]
     private let apex: String
     private let connectTimeout: TimeInterval
     private let upstreamPort: Int
     private let lock = NSLock()
     private var alive = true
+    private var open = Set<ObjectIdentifier>()
+    private var connections: [ObjectIdentifier: [NWConnection]] = [:]
     public let port: UInt16
+
+    /// At most this many clients at once; more are refused, never queued.
+    public static let maxClients = 32
+    /// A client must finish its CONNECT line within this long.
+    public static let headDeadline: TimeInterval = 5
+    /// A tunnel with nothing moving either way for this long is closed.
+    public static let idleDeadline: TimeInterval = 60
 
     public var isAlive: Bool { lock.lock(); defer { lock.unlock() }; return alive }
 
     /// Starts listening on 127.0.0.1; nil if it cannot (the system took the listener away).
     public static func start(apex: String, connectTimeout: TimeInterval = 3, upstreamPort: Int = 443,
-                             addresses: @escaping @Sendable () -> [String]) async -> RelayForwarder? {
+                             addresses: @escaping @Sendable () -> [String]) async -> LoopbackAddressShim? {
         let params = NWParameters.tcp
         params.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
         guard let listener = try? NWListener(using: params) else { return nil }
-        let queue = DispatchQueue(label: "flagship.relay-forwarder.start")
+        let queue = DispatchQueue(label: "flagship.address-shim.start")
         let port: UInt16? = await withCheckedContinuation { (cont: CheckedContinuation<UInt16?, Never>) in
             let once = PortOnce(cont)
             listener.stateUpdateHandler = { state in
@@ -245,7 +351,7 @@ public final class RelayForwarder: @unchecked Sendable {
             queue.asyncAfter(deadline: .now() + 2) { once.resume(nil) }
         }
         guard let port else { listener.cancel(); return nil }
-        let f = RelayForwarder(listener: listener, port: port, apex: apex, connectTimeout: connectTimeout, upstreamPort: upstreamPort, addresses: addresses)
+        let f = LoopbackAddressShim(listener: listener, port: port, apex: apex, connectTimeout: connectTimeout, upstreamPort: upstreamPort, addresses: addresses)
         listener.newConnectionHandler = { [weak f] conn in f?.accept(conn) }
         listener.stateUpdateHandler = { [weak f] state in
             if case .failed = state { f?.stop() }
@@ -266,13 +372,57 @@ public final class RelayForwarder: @unchecked Sendable {
     public func stop() {
         lock.lock()
         alive = false
+        let all = connections.values.flatMap { $0 }
+        connections.removeAll()
+        open.removeAll()
         lock.unlock()
         listener.cancel()
+        all.forEach { $0.cancel() }
     }
 
+    /// How many clients are being served right now.
+    public var clientCount: Int { lock.lock(); defer { lock.unlock() }; return open.count }
+
     private func accept(_ client: NWConnection) {
+        let id = ObjectIdentifier(client)
+        let admitted: Bool = lock.withLock {
+            guard alive, open.count < Self.maxClients else { return false }
+            open.insert(id)
+            connections[id] = [client]
+            return true
+        }
+        guard admitted else { client.start(queue: queue); return client.cancel() }
+        client.stateUpdateHandler = { [weak self] state in
+            if case .cancelled = state { self?.release(id) }
+        }
         client.start(queue: queue)
+        let deadline = DispatchWorkItem { [weak client] in client?.cancel() }
+        queue.asyncAfter(deadline: .now() + Self.headDeadline, execute: deadline)
+        headTimers.lock.withLock { headTimers.items[id] = deadline }
         readHead(client, buffer: Data())
+    }
+
+    private let headTimers = HeadTimers()
+
+    private func release(_ id: ObjectIdentifier) {
+        lock.withLock {
+            open.remove(id)
+            connections.removeValue(forKey: id)
+        }
+        headTimers.lock.withLock { _ = headTimers.items.removeValue(forKey: id)?.cancel() }
+    }
+
+    /// The head is read: the deadline no longer applies.
+    private func headRead(_ client: NWConnection) {
+        headTimers.lock.withLock { _ = headTimers.items.removeValue(forKey: ObjectIdentifier(client))?.cancel() }
+    }
+
+    private func track(_ client: NWConnection, _ upstream: NWConnection) {
+        lock.withLock { connections[ObjectIdentifier(client)] = [client, upstream] }
+        upstream.stateUpdateHandler = { [weak client] state in
+            if case .cancelled = state { client?.cancel() }
+            if case .failed = state { client?.cancel() }
+        }
     }
 
     private func readHead(_ client: NWConnection, buffer: Data) {
@@ -285,6 +435,7 @@ public final class RelayForwarder: @unchecked Sendable {
             case .refused:
                 reply(client, "HTTP/1.1 400 Bad Request\r\n\r\n")
             case let .target(host, port, rest):
+                headRead(client)
                 guard port == 443, host.hasSuffix(".\(apex)") else { return reply(client, "HTTP/1.1 403 Forbidden\r\n\r\n") }
                 connectUpstream(client, port: upstreamPort, candidates: addresses(), rest: rest)
             }
@@ -308,8 +459,11 @@ public final class RelayForwarder: @unchecked Sendable {
                 client.send(content: Data("HTTP/1.1 200 Connection Established\r\n\r\n".utf8), completion: .contentProcessed { [self] err in
                     guard err == nil else { upstream.cancel(); return client.cancel() }
                     if !rest.isEmpty { upstream.send(content: rest, completion: .contentProcessed { _ in }) }
-                    pump(from: client, to: upstream)
-                    pump(from: upstream, to: client)
+                    track(client, upstream)
+                    let idle = IdleClock()
+                    pump(from: client, to: upstream, idle: idle)
+                    pump(from: upstream, to: client, idle: idle)
+                    watchIdle(idle, client: client, upstream: upstream)
                 })
             case .failed, .waiting, .cancelled:
                 guard once.first() else { return }
@@ -327,11 +481,24 @@ public final class RelayForwarder: @unchecked Sendable {
         }
     }
 
-    private func pump(from: NWConnection, to: NWConnection) {
+    private func watchIdle(_ idle: IdleClock, client: NWConnection, upstream: NWConnection) {
+        queue.asyncAfter(deadline: .now() + Self.idleDeadline) { [weak self] in
+            guard let self, self.isAlive else { return }
+            let quiet = Date().timeIntervalSince(idle.last)
+            if quiet >= Self.idleDeadline {
+                client.cancel(); upstream.cancel()
+            } else {
+                self.watchIdle(idle, client: client, upstream: upstream)
+            }
+        }
+    }
+
+    private func pump(from: NWConnection, to: NWConnection, idle: IdleClock) {
         from.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [self] data, _, isComplete, error in
             if let data, !data.isEmpty {
+                idle.touch()
                 to.send(content: data, completion: .contentProcessed { err in
-                    if err != nil { from.cancel(); to.cancel() } else if !isComplete && error == nil { self.pump(from: from, to: to) }
+                    if err != nil { from.cancel(); to.cancel() } else if !isComplete && error == nil { self.pump(from: from, to: to, idle: idle) }
                 })
             }
             if error != nil {
@@ -339,10 +506,22 @@ public final class RelayForwarder: @unchecked Sendable {
             } else if isComplete {
                 to.send(content: nil, contentContext: .finalMessage, isComplete: true, completion: .idempotent)
             } else if data == nil || data!.isEmpty {
-                pump(from: from, to: to)
+                pump(from: from, to: to, idle: idle)
             }
         }
     }
+}
+
+private final class HeadTimers: @unchecked Sendable {
+    let lock = NSLock()
+    var items: [ObjectIdentifier: DispatchWorkItem] = [:]
+}
+
+private final class IdleClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var at = Date()
+    func touch() { lock.lock(); at = Date(); lock.unlock() }
+    var last: Date { lock.lock(); defer { lock.unlock() }; return at }
 }
 
 private final class PortOnce: @unchecked Sendable {
@@ -379,7 +558,7 @@ public final class RelayRoute: @unchecked Sendable {
     private let registry: RelayAddressRegistry
     private let apex: @Sendable () -> String
     private let lock = NSLock()
-    private var forwarder: RelayForwarder?
+    private var forwarder: LoopbackAddressShim?
     private var current: [String] = []
     private var session: URLSession?
     private var pinFor: (@Sendable (String) -> String?)?
@@ -395,6 +574,24 @@ public final class RelayRoute: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// The app is about to be suspended (or is leaving the foreground): a listener left open
+    /// across suspension is not guaranteed to work after it, and a session that remembers its
+    /// port could meet another listener there. Stop the forwarder and drop the session; the
+    /// next request that needs the relay starts a fresh pair on a fresh port.
+    public func suspend() {
+        let (f, s): (LoopbackAddressShim?, URLSession?) = lock.withLock {
+            let pair = (forwarder, session)
+            forwarder = nil
+            session = nil
+            return pair
+        }
+        f?.stop()
+        s?.invalidateAndCancel()
+    }
+
+    /// The port the forwarder is listening on now, if there is one (for tests and diagnostics).
+    public var forwarderPort: UInt16? { lock.withLock { forwarder?.port } }
+
     /// Prod apex only, like the seed: a gym run's relay is not in the built-in list.
     public func eligible(host: String) -> Bool {
         let a = apex().lowercased()
@@ -408,12 +605,12 @@ public final class RelayRoute: @unchecked Sendable {
         let tested = await registry.proven(seed: RelayAddresses.prod)
         let order = tested.isEmpty ? registry.addresses(seed: RelayAddresses.prod) : tested
         guard !order.isEmpty, lock.withLock({ pinFor != nil }) else { return nil }
-        let live: RelayForwarder? = lock.withLock { current = order; return forwarder.flatMap { $0.isAlive ? $0 : nil } }
-        let f: RelayForwarder
+        let live: LoopbackAddressShim? = lock.withLock { current = order; return forwarder.flatMap { $0.isAlive ? $0 : nil } }
+        let f: LoopbackAddressShim
         if let live {
             f = live
         } else {
-            guard let started = await RelayForwarder.start(apex: apex(), addresses: { [weak self] in self?.lock.withLock { self?.current ?? [] } ?? [] }) else { return nil }
+            guard let started = await LoopbackAddressShim.start(apex: apex(), addresses: { [weak self] in self?.lock.withLock { self?.current ?? [] } ?? [] }) else { return nil }
             lock.withLock { forwarder = started; session = nil }
             f = started
         }

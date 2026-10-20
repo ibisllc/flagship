@@ -311,7 +311,7 @@ of the last check here: **not yet checked**.
   for the relay's current addresses, keep the last answer, and test each one (a handshake under a
   known box's name that must end in the box's pinned certificate: the relay is up and authorized)
   before relying on it; the compiled-in pair is the last resort. iOS reaches the relay through a
-  loopback CONNECT proxy (`RelayForwarder`), since URLSession can't choose an address. A failed
+  loopback CONNECT proxy (`LoopbackAddressShim`), since URLSession can't choose an address. A failed
   attempt reads as an unresolved name, never as a box error. The webapp (browser DNS) and the
   Studios (they only call `.com`) have nothing to feed. Only a live run through a real DNS block
   proves the iOS path on a device.

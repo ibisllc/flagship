@@ -41,7 +41,7 @@ pass. Results are kept 10 minutes (passed) or 2 minutes (failed). With no box kn
 | app | uses relay addresses | how |
 |---|---|---|
 | Android | yes | `RelayFallbackDns` (OkHttp `Dns`), `RelayAddressCenter`, `TlsPinRelayProber` |
-| iOS | yes | URLSession cannot choose an address, so `RelayForwarder` is a CONNECT proxy on the phone's own loopback (the same `ProxyConfiguration` route as LAN-direct); TLS still runs between URLSession and the box, the forwarder sees ciphertext and serves only names under the data apex. `RelayRoute`, `RelayAddressRegistry`, `RelayAddressFetcher` |
+| iOS | yes | URLSession cannot choose an address, so `LoopbackAddressShim` is a CONNECT proxy on the phone's own loopback (the same `ProxyConfiguration` route as LAN-direct); TLS still runs between URLSession and the box, the forwarder sees ciphertext and serves only names under the data apex. `RelayRoute`, `RelayAddressRegistry`, `RelayAddressFetcher` |
 | webapp | no | a browser cannot choose an address for a name; it needs DNS |
 | Studios (Mac, Windows, Linux) | no | they only call `.com` (order status, health) and never dial `.flagship.services` |
 | box daemon | already | reads the hub from the same `/api/services/endpoints` answer (`servicesEndpoints.ts`), with a compiled-in default |

@@ -93,12 +93,12 @@ export function echoBody(header: ProxyHeader | null): string {
 
 const HEADER_TIMEOUT_MS = 5_000;
 
-export interface RunningRelayEcho {
+export interface RunningAddressEcho {
   port: number;
   close(): Promise<void>;
 }
 
-export async function startRelayEcho(opts: { port: number; host?: string }): Promise<RunningRelayEcho> {
+export async function startAddressEcho(opts: { port: number; host?: string }): Promise<RunningAddressEcho> {
   const sockets = new Set<Socket>();
   const server: Server = createServer((sock) => {
     sockets.add(sock);
