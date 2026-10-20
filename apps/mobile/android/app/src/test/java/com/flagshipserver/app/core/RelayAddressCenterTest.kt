@@ -29,27 +29,29 @@ class RelayAddressCenterTest {
         assertEquals(seed, center().addresses(seed))
     }
 
-    @Test fun aRecommendationIsKeptAndTriedBeforeTheSeed() = runBlocking {
+    // A recommendation is kept, but only used once it has passed the test: the untested
+    // last resort is the compiled-in seed alone.
+    @Test fun aRecommendationIsKeptButNeverUsedUntested() = runBlocking {
         val c = center()
         served = endpoints("203.0.113.7", "2001:db8::7")
         assertTrue(c.refresh())
-        assertEquals(listOf(ip("203.0.113.7"), ip("2001:db8::7")) + seed, c.addresses(seed))
-        // A fresh process decides the same from the store alone.
-        assertEquals(c.addresses(seed), center().addresses(seed))
+        assertEquals(listOf(ip("203.0.113.7"), ip("2001:db8::7")), c.stored())
+        assertEquals(seed, c.addresses(seed))
+        assertEquals(c.stored(), center().stored())
     }
 
     @Test fun anAddressAlsoInTheSeedIsNotRepeated() = runBlocking {
         val c = center()
         served = endpoints("149.248.216.86", "2a09:8280:1::110:d2b6:0")
         assertTrue(c.refresh())
-        assertEquals(seed, c.addresses(seed))
+        assertEquals(seed, c.stored())
     }
 
     @Test fun aFailedFetchJunkAndEmptyAnswersChangeNothing() = runBlocking {
         val c = center()
         served = endpoints("203.0.113.7", null)
         c.refresh()
-        val before = c.addresses(seed)
+        val before = c.stored()
         for (bad in listOf(
             NoticeFetch.Failed,
             NoticeFetch.NoNotice,
@@ -59,7 +61,7 @@ class RelayAddressCenterTest {
         )) {
             served = bad
             assertFalse(c.refresh())
-            assertEquals(before, c.addresses(seed))
+            assertEquals(before, c.stored())
         }
     }
 
@@ -73,7 +75,7 @@ class RelayAddressCenterTest {
         val c = center()
         served = endpoints("192.168.1.2", "fd00::1")
         assertFalse(c.refresh())
-        assertEquals(seed, c.addresses(seed))
+        assertEquals(emptyList<InetAddress>(), c.stored())
     }
 
     @Test fun aHostnameIsNeverLookedUp() {
@@ -87,7 +89,7 @@ class RelayAddressCenterTest {
         assertEquals(seed, center(MemoryNoticeStoreBackend("{{{")).addresses(seed))
     }
 
-    @Test fun theFallbackTriesWhatComRecommendsBeforeTheSeed() = runBlocking {
+    @Test fun theLastResortIgnoresWhatComRecommendedAndNobodyTested() = runBlocking {
         val c = center()
         served = endpoints("203.0.113.7", null)
         c.refresh()
@@ -95,18 +97,22 @@ class RelayAddressCenterTest {
             override fun lookup(hostname: String): List<InetAddress> = throw java.net.UnknownHostException(hostname)
         }
         val dns = RelayFallbackDns(resolver, { "flagship.services" }, { }, { _ -> c.addresses(seed) })
-        assertEquals(ip("203.0.113.7"), dns.lookup("home.alice.flagship.services").first())
+        assertEquals(seed, dns.lookup("home.alice.flagship.services"))
     }
 
     @Test fun aStoredAddressIsRecheckedWhenRead() {
         val b = MemoryNoticeStoreBackend("""{"addresses":["192.168.1.2","203.0.113.7"],"at":1}""")
-        assertEquals(listOf(ip("203.0.113.7")) + seed, center(b).addresses(seed))
+        assertEquals(listOf(ip("203.0.113.7")), center(b).stored())
     }
 
     // Testing first: an address is relied on only once a handshake under a known box's
     // name to it ends in that box's pinned certificate (the relay is up and forwards for it).
-    private fun tested(prober: RelayProber, target: Pair<String, String>? = "home.alice.flagship.services" to "ab".repeat(32), now: () -> Long = { 1_000L }) =
-        RelayAddressCenter(backend, { NoticeFetcher { served } }, now, prober = prober, pinTarget = { target })
+    private fun tested(
+        prober: RelayProber,
+        target: Pair<String, String>? = "home.alice.flagship.services" to "ab".repeat(32),
+        now: () -> Long = { 1_000L },
+        echo: RelayEcho = RelayEcho { it },
+    ) = RelayAddressCenter(backend, { NoticeFetcher { served } }, now, prober = prober, echo = echo, pinTarget = { target })
 
     @Test fun onlyAddressesThatPassTheTestAreProven() = runBlocking {
         val asked = java.util.concurrent.CopyOnWriteArrayList<String>()
@@ -118,6 +124,39 @@ class RelayAddressCenterTest {
         c.refresh()
         assertEquals(listOf(ip("203.0.113.7")), c.proven(seed))
         assertTrue(asked.contains("203.0.113.7|home.alice.flagship.services|${"ab".repeat(32)}"))
+    }
+
+    // The echo: an address `.com` recommended must say it is itself. A forwarder in front of
+    // the relay passes the pinned handshake but its echo names the relay behind it.
+    @Test fun aForwarderThatPassesTheHandshakeButEchoesAnotherAddressIsDropped() = runBlocking {
+        val forwarder = ip("203.0.113.7")
+        val c = tested({ _, _, _ -> true }, echo = { a -> if (a == forwarder) seed[0] else a })
+        served = endpoints("203.0.113.7", null)
+        c.refresh()
+        assertEquals(seed, c.proven(seed))
+    }
+
+    @Test fun anAddressWithNoEchoIsDroppedButTheSeedNeedsNone() = runBlocking {
+        val c = tested({ _, _, _ -> true }, echo = { null })
+        served = endpoints("203.0.113.7", null)
+        c.refresh()
+        assertEquals(seed, c.proven(seed))
+    }
+
+    @Test fun anAddressThatEchoesItselfIsProven() = runBlocking {
+        val c = tested({ _, _, _ -> true })
+        served = endpoints("203.0.113.7", null)
+        c.refresh()
+        assertEquals(listOf(ip("203.0.113.7")) + seed, c.proven(seed))
+    }
+
+    @Test fun anEchoReplyIsReadStrictly() {
+        fun reply(json: String) = "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n\r\n$json"
+        assertEquals(ip("149.248.216.86"), RelayAddressRules.parseEchoReply(reply("""{"relay":"flagship.services","reachedAt":"149.248.216.86"}""")))
+        assertNull(RelayAddressRules.parseEchoReply(reply("""{"reachedAt":null}""")))
+        assertNull(RelayAddressRules.parseEchoReply(reply("""{"reachedAt":"10.0.0.7"}""")))
+        assertNull(RelayAddressRules.parseEchoReply(reply("""{"reachedAt":"relay.example.com"}""")))
+        assertNull(RelayAddressRules.parseEchoReply("garbage"))
     }
 
     @Test fun withNoKnownBoxNothingIsProvenAndNothingIsProbed() {

@@ -52,6 +52,14 @@ object RelayAddressRules {
         return a.takeIf(::isPublic)
     }
 
+    /** The address named in a relay echo reply (an HTTP response with a JSON `reachedAt`), or null. */
+    fun parseEchoReply(raw: String): InetAddress? {
+        val body = raw.substringAfter("\r\n\r\n", "")
+        val o = runCatching { SecurityNoticeProtocol.json.parseToJsonElement(body) as? JsonObject }.getOrNull() ?: return null
+        val text = (o["reachedAt"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null
+        return parse(text)
+    }
+
     /** The recommended addresses in a `/api/services/endpoints` body: IPv4 then IPv6, public ones only. */
     fun fromEndpoints(body: String): List<InetAddress> {
         val o = runCatching { SecurityNoticeProtocol.json.parseToJsonElement(body) as? JsonObject }.getOrNull() ?: return emptyList()
@@ -92,12 +100,51 @@ class TlsPinRelayProber(private val timeoutMs: Int = 2_500) : RelayProber {
     }
 }
 
+/**
+ * Did [address] answer "which address did you reach me at" with itself? A forwarder in front
+ * of the relay has to dial the relay's own address, so its answer names that one instead. The
+ * answer is read over TLS with the relay's own public certificate, so a forwarder cannot write it.
+ */
+fun interface RelayEcho {
+    fun reachedAt(address: InetAddress): InetAddress?
+}
+
+class TlsRelayEcho(private val timeoutMs: Int = 2_500) : RelayEcho {
+    override fun reachedAt(address: InetAddress): InetAddress? = try {
+        val plain = java.net.Socket()
+        plain.connect(java.net.InetSocketAddress(address, PORT), timeoutMs)
+        plain.soTimeout = timeoutMs
+        val ssl = (javax.net.ssl.SSLSocketFactory.getDefault() as javax.net.ssl.SSLSocketFactory)
+            .createSocket(plain, HOST, PORT, true) as javax.net.ssl.SSLSocket
+        ssl.use {
+            val params = it.sslParameters
+            params.serverNames = listOf(javax.net.ssl.SNIHostName(HOST))
+            params.endpointIdentificationAlgorithm = "HTTPS"
+            it.sslParameters = params
+            it.startHandshake()
+            it.outputStream.write("GET /echo HTTP/1.1\r\nHost: $HOST\r\nConnection: close\r\n\r\n".toByteArray())
+            it.outputStream.flush()
+            val raw = it.inputStream.readNBytes(MAX_REPLY).toString(Charsets.UTF_8)
+            RelayAddressRules.parseEchoReply(raw)
+        }
+    } catch (_: Throwable) {
+        null
+    }
+
+    companion object {
+        const val HOST = "flagship-services.fly.dev"
+        const val PORT = 8444
+        private const val MAX_REPLY = 4096
+    }
+}
+
 class RelayAddressCenter(
     private val backend: NoticeStoreBackend,
     private val fetcher: () -> NoticeFetcher,
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val prober: RelayProber = TlsPinRelayProber(),
+    private val echo: RelayEcho = TlsRelayEcho(),
     /** A box name and its pin to test addresses with, or null when no box is known yet. */
     private val pinTarget: () -> Pair<String, String>? = { CertPinRegistry.shared.anyPin() },
 ) {
@@ -106,8 +153,11 @@ class RelayAddressCenter(
 
     /**
      * The recommended addresses (then [seed]) that pass the test right now, best first.
-     * Empty when no box is known to test with or none pass; the caller then goes on to DNS's
-     * label and the rest. Results are kept for [GOOD_MS] (passed) or [BAD_MS] (failed).
+     * An address `.com` recommended that is not in [seed] must also answer the relay echo with
+     * itself (it is the relay, not a forwarder in front of it); the compiled-in seed needs the
+     * box's pinned handshake only. Empty when no box is known to test with or none pass; the
+     * caller then goes on to DNS's label and the rest. Results are kept for [GOOD_MS] (passed)
+     * or [BAD_MS] (failed).
      */
     fun proven(seed: List<InetAddress>): List<InetAddress> {
         val target = pinTarget() ?: return emptyList()
@@ -115,7 +165,7 @@ class RelayAddressCenter(
         val now = clock()
         val stale = candidates.filter { a -> tested[a]?.let { (ok, at) -> now - at >= if (ok) GOOD_MS else BAD_MS } ?: true }
         val threads = stale.map { a ->
-            Thread { tested[a] = prober.probe(a, target.first, target.second) to clock() }.also { it.isDaemon = true; it.start() }
+            Thread { tested[a] = (prober.probe(a, target.first, target.second) && (a in seed || echo.reachedAt(a) == a)) to clock() }.also { it.isDaemon = true; it.start() }
         }
         threads.forEach { it.join(PROBE_WAIT_MS) }
         return candidates.filter { tested[it]?.first == true }
@@ -131,8 +181,12 @@ class RelayAddressCenter(
         emptyList()
     }
 
-    /** What to try when DNS fails: what `.com` last recommended, then [seed]. Never throws. */
-    fun addresses(seed: List<InetAddress>): List<InetAddress> = (stored() + seed).distinct()
+    /**
+     * What to try when DNS fails and nothing could be tested: the compiled-in [seed] only. An
+     * address `.com` recommended is used only once it has passed the test, never untested.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun addresses(seed: List<InetAddress>): List<InetAddress> = seed
 
     /** One anonymous GET; a usable answer replaces the stored one, anything else leaves it. Never throws. */
     suspend fun refresh(): Boolean = try {
@@ -195,7 +249,7 @@ class RelayAddressCenter(
             return runCatching { (shared ?: return emptyList()).proven(RelayAddresses.prod) }.getOrDefault(emptyList())
         }
 
-        /** The addresses for [apex] when DNS has failed: what `.com` recommends, then the compiled-in seed (prod apex only). */
+        /** The addresses for [apex] when DNS has failed and none could be tested: the compiled-in seed (prod apex only). */
         fun addressesFor(apex: String): List<InetAddress> {
             if (apex != Endpoints.PROD_DATA_APEX) return emptyList()
             return shared?.addresses(RelayAddresses.prod) ?: RelayAddresses.prod
