@@ -12,6 +12,8 @@
  *                                     and every outcome, including exceededCpu (the 10 ms Free limit)
  *   npm run ops -- slow [--seconds 60]
  *                                     live: tail the Worker and show CPU per route, worst first
+ *   npm run ops -- dns                a random name under flagship.services must answer with the relay's
+ *                                     addresses on public resolvers: no NODATA or NXDOMAIN (needs nothing)
  *   npm run ops -- limits             who is hitting a rate limit (npm run rate-limits)
  *   npm run ops -- outbound           where boxes' AI calls leave (npm run outbound-hosts)
  *
@@ -22,6 +24,8 @@
  */
 
 import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { Resolver } from "node:dns/promises";
 import { fileURLToPath } from "node:url";
 import { WorkerTail } from "../tools/live-e2e/lib/workerTail.js";
 
@@ -46,7 +50,7 @@ export function parseArgs(argv: string[]): Options {
     else if (a === "-h" || a === "--help") o.command = "help";
     else throw new Error(`unknown argument: ${a}`);
   }
-  if (!["all", "health", "services", "workers", "slow", "limits", "outbound", "help"].includes(o.command)) {
+  if (!["all", "health", "services", "dns", "workers", "slow", "limits", "outbound", "help"].includes(o.command)) {
     throw new Error(`unknown command: ${o.command}`);
   }
   if (!Number.isInteger(o.hours) || o.hours < 1 || o.hours > 72) throw new Error("--hours takes a whole number from 1 to 72");
@@ -79,6 +83,86 @@ export async function checkHealth(name: string, url: string, fetchFn: typeof fet
 
 export function formatHealth(rs: HealthResult[]): string[] {
   return ["Health", ...rs.map((r) => `  ${r.ok ? "ok  " : "DOWN"}  ${r.name.padEnd(22)} ${String(r.ms).padStart(5)} ms  ${r.detail}`)];
+}
+
+/* ------------------------------------------------------------------- dns */
+
+export interface DnsProbe {
+  server: string;
+  name: string;
+  v4: string[];
+  v6: string[];
+  error?: string;
+}
+
+export type DnsLookup = (server: string, name: string, type: "A" | "AAAA") => Promise<string[]>;
+
+const defaultLookup: DnsLookup = async (server, name, type) => {
+  const r = new Resolver({ timeout: 4000, tries: 2 });
+  r.setServers([server]);
+  return type === "A" ? r.resolve4(name) : r.resolve6(name);
+};
+
+/**
+ * A name nobody registered, under the apex and one level below it, asked of public resolvers: the
+ * zone's root wildcard must answer both (docs/wildcard-dns.md). A resolver that says "no such name"
+ * or "no data" while an ACME challenge is in flight is the outage that turns into 30 minutes of
+ * negative caching for a real user.
+ */
+export async function probeWildcard(
+  apex: string,
+  servers: string[],
+  lookup: DnsLookup = defaultLookup,
+  rand: () => string = () => randomBytes(5).toString("hex"),
+): Promise<DnsProbe[]> {
+  const label = `canary-${rand()}`;
+  const names = [`${label}.${apex}`, `home.${label}.${apex}`];
+  const out: DnsProbe[] = [];
+  for (const server of servers) {
+    for (const name of names) {
+      const p: DnsProbe = { server, name, v4: [], v6: [] };
+      try {
+        p.v4 = await lookup(server, name, "A");
+      } catch (e) {
+        p.error = (e as { code?: string }).code ?? (e as Error).message;
+      }
+      try {
+        p.v6 = await lookup(server, name, "AAAA");
+      } catch (e) {
+        p.error ??= `AAAA ${(e as { code?: string }).code ?? (e as Error).message}`;
+      }
+      out.push(p);
+    }
+  }
+  return out;
+}
+
+export function formatDns(probes: DnsProbe[], expectV4: string | null, expectV6: string | null): { lines: string[]; hints: string[] } {
+  const lines = ["Wildcard DNS (names nobody registered)"];
+  const hints: string[] = [];
+  for (const p of probes) {
+    const wrong =
+      p.error !== undefined ||
+      (expectV4 !== null && !p.v4.includes(expectV4)) ||
+      (expectV6 !== null && p.v6.length > 0 && !p.v6.includes(expectV6));
+    lines.push(`  ${wrong ? "BAD" : "ok "}  ${p.server.padEnd(9)} ${p.name}  ${p.error ? p.error : [...p.v4, ...p.v6].join(", ")}`);
+    if (wrong) hints.push(`${p.server} answered ${p.name} with ${p.error ?? ([...p.v4, ...p.v6].join(", ") || "nothing")}; the relay is ${expectV4 ?? "unknown"}. A real box name could fail the same way.`);
+  }
+  return { lines, hints };
+}
+
+async function dnsReport(com: string): Promise<{ lines: string[]; hints: string[] }> {
+  let v4: string | null = null;
+  let v6: string | null = null;
+  try {
+    const res = await fetch(`${com}/api/services/endpoints`, { signal: AbortSignal.timeout(10_000) });
+    const j = (await res.json()) as { passthroughIPv4?: string | null; passthroughIPv6?: string | null };
+    v4 = j.passthroughIPv4 ?? null;
+    v6 = j.passthroughIPv6 ?? null;
+  } catch {
+    // Without the expected address the probe still catches NXDOMAIN and NODATA.
+  }
+  return formatDns(await probeWildcard("flagship.services", ["1.1.1.1", "8.8.8.8", "9.9.9.9"]), v4, v6);
 }
 
 /* -------------------------------------------------------------- services */
@@ -248,7 +332,7 @@ async function main(): Promise<void> {
   const all = o.command === "all";
 
   if (o.command === "help") {
-    console.log("usage: npm run ops -- [health | services | workers [--hours N] [--script NAME] | slow [--seconds N] | limits | outbound]");
+    console.log("usage: npm run ops -- [health | services | dns | workers [--hours N] [--script NAME] | slow [--seconds N] | limits | outbound]");
     return;
   }
   if (all || o.command === "health") {
@@ -268,6 +352,7 @@ async function main(): Promise<void> {
       }
     }
   }
+  if (all || o.command === "dns") out(await dnsReport(com).catch((e) => `Wildcard DNS: ${(e as Error).message}`));
   if (all || o.command === "workers") out(await workersReport(o, process.env).catch((e) => `Worker numbers: ${(e as Error).message}`));
   if (o.command === "slow") out(await slowReport(o));
   if (o.command === "limits") delegate("./rate-limit-report.mjs");

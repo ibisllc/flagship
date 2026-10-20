@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { WorkerTail } from "../tools/live-e2e/lib/workerTail.js";
-import { checkHealth, formatHealth, formatServices, formatSlow, formatWorkers, parseArgs, rowsFromAnalytics, type ServicesStats } from "./ops.js";
+import { checkHealth, formatDns, formatHealth, formatServices, formatSlow, formatWorkers, parseArgs, probeWildcard, rowsFromAnalytics, type DnsLookup, type ServicesStats } from "./ops.js";
 
 describe("ops", () => {
   it("reads its arguments", () => {
@@ -64,5 +64,24 @@ describe("ops", () => {
     expect(lines.join("\n").indexOf("migration")).toBeLessThan(lines.join("\n").indexOf("/api/health"));
     expect(hints.join(" ")).toMatch(/114\.0 ms of CPU/);
     expect(formatSlow(new WorkerTail({ cwd: "." }).summary(), 60).lines[0]).toContain("unavailable");
+  });
+
+  it("asks public resolvers for a name nobody registered and flags NXDOMAIN, NODATA and a wrong address", async () => {
+    const lookup: DnsLookup = async (server, name, type) => {
+      if (server === "8.8.8.8" && name.startsWith("home.")) throw Object.assign(new Error("no"), { code: "ENODATA" });
+      if (server === "9.9.9.9" && type === "A") return ["203.0.113.9"];
+      if (type === "AAAA") return ["2a09:8280:1::110:d2b6:0"];
+      return ["149.248.216.86"];
+    };
+    const probes = await probeWildcard("flagship.services", ["1.1.1.1", "8.8.8.8", "9.9.9.9"], lookup, () => "abc");
+    expect(probes).toHaveLength(6);
+    expect(probes[0]!.name).toBe("canary-abc.flagship.services");
+    expect(probes[1]!.name).toBe("home.canary-abc.flagship.services");
+    const { lines, hints } = formatDns(probes, "149.248.216.86", "2a09:8280:1::110:d2b6:0");
+    expect(lines.filter((l) => l.includes("BAD"))).toHaveLength(3);
+    expect(hints.join(" ")).toMatch(/8\.8\.8\.8 answered home\.canary-abc\.flagship\.services with ENODATA/);
+    expect(hints.join(" ")).toMatch(/9\.9\.9\.9 answered .* with 203\.0\.113\.9/);
+    const clean = formatDns(await probeWildcard("flagship.services", ["1.1.1.1"], async (_s, _n, t) => (t === "A" ? ["149.248.216.86"] : ["2a09:8280:1::110:d2b6:0"])), "149.248.216.86", "2a09:8280:1::110:d2b6:0");
+    expect(clean.hints).toEqual([]);
   });
 });

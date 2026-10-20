@@ -1,0 +1,29 @@
+name: DNS canary (flagship.services wildcard)
+
+# A name nobody registered, under flagship.services, must resolve to the relay on public resolvers.
+# A NODATA or NXDOMAIN there is what turns a five-second DNS inconsistency (an ACME challenge
+# being added or removed) into half an hour of "server not found" for a real person, through
+# negative caching (docs/wildcard-dns.md). A failed run is GitHub's alarm: it emails the repo
+# owner. It reads public DNS and `GET /api/services/endpoints`; it needs no secret.
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wildcard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Probe the wildcard
+        run: npx tsx scripts/ops.ts dns
