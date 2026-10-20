@@ -1212,6 +1212,16 @@ run_services() {
   info_code "status page" "$COM_URL/status/"
   say "  watch $COM_URL/status/ until every box is back online (about a minute)."
   probe_end
+  # The relay echo (docs/relay-addresses.md): the phones drop any address whose echo is not itself.
+  local v4 v6; read -r v4 v6 < <(relay_ips)
+  hdr "Relay echo (:8444) on the dedicated address"
+  if command -v openssl >/dev/null 2>&1 && [ -n "$v4" ]; then
+    local e; e=$(printf 'GET /echo HTTP/1.1\r\nHost: flagship-services.fly.dev\r\nConnection: close\r\n\r\n' | openssl s_client -quiet -connect "$v4:8444" -servername flagship-services.fly.dev 2>/dev/null | tr -d '\r' | tail -3)
+    say "  echo answered: ${e:-nothing}"
+    if echo "$e" | grep -q "$v4"; then ok "the echo names the dedicated address $v4"
+    else warn "the echo did not name $v4. If it names something else (or an IPv4-mapped IPv6 form), .com's addresses will fail the phones' echo check and they fall back to the built-in pair (safe); fix before relying on .com's list. Record the result: npm run release-manifest -- receipt relay-echo-live <note>"; fi
+  else warn "openssl or the relay address is missing; run the echo check by hand (docs/relay-addresses.md)"; fi
+  say "  /api/stats needs USAGE_REPORT_SECRET on Fly (503 = not set): check by hand: curl -H 'x-usage-secret: <secret>' $SERVICES_URL/api/stats"
 }
 
 relay_ips() { # prints "<v4> <v6>" from apps/com/wrangler.toml
@@ -1714,6 +1724,12 @@ run_final() {
     say "  zone-health:"; with_secret bash -c "cd '$WT' && npm run -s zone-health" || { err "zone-health not OK"; PROBE_FAILS=$((PROBE_FAILS + 1)); }
     say "  schema-status:"; admin_curl "$COM_URL/api/admin/schema-status" | head -c 600; echo
   fi
+  hdr "release-manifest (receipts and checks)"
+  if wt_exists; then
+    ( cd "$WT" && npm run -s release-manifest ) || { err "release-manifest lists blockers: each MISSING or STALE receipt is a real-device or production proof still owed"; PROBE_FAILS=$((PROBE_FAILS + 1)); }
+  fi
+  say "  Cloudflare Universal SSL on flagship.services must be OFF so the apex CAA lists only Let's Encrypt (dashboard -> SSL/TLS -> Edge Certificates). zone-health above fails on extra issuers."
+  say "  Workers Free: re-read AGENTS.md 'Workers Free ceiling' and decide upgrade or move before real users arrive."
   local e; e=$(st_get endorsed)
   if [ -n "$e" ] && wt_exists; then
     say "  box code changed on main since the endorsed release $(short "$e"):"
