@@ -62,3 +62,28 @@ exits 1 when any phase is red; amber is a warning.
 `parity/features.json` is the feature matrix (`npm run parity -- --report`
 prints it). Keep it current: when a feature lands on a surface, flip its
 status and give it an anchor in the same commit.
+
+## Receipts: what has been done on real hardware, and what a change has made stale
+
+`npm run release-manifest` lists the hardware and production proofs the release rests on
+(`release/freeze-map.json`: iOS and Android relay under a DNS block, the relay echo on the deployed
+relay, iOS two-device pairing, Windows first boot and UAC, loop-volume interruption, the destructive
+restore drill, an old account creating a server, Android auto-unlock, a reboot with `.services` and
+`.com` blocked, a real YubiKey banner notice, store build numbers, a D1 export) and, for each, whether
+it is `ok`, `MISSING`, or `STALE`: a file that matters to it changed after it was recorded. It also
+checks the CA lease has 14+ days left, that the control plane's schema ledger knows the newest
+migration, and that `release/version.json` is there. It exits 1 while anything blocks.
+
+```
+npm run release-manifest                       status
+npm run release-manifest -- receipt <id> note  record that <id> was done at the current commit (then commit release/receipts.json)
+npm run release-manifest -- manifest --out f   the facts as JSON (commit, endorsed box commit, version, checks, receipts)
+```
+
+The rule it enforces (the review's "freeze rule"): after a receipt is recorded, any change to a
+file listed for it invalidates it, so the proof is redone rather than assumed. Run it before Phase B,
+next to the owner's typed `windows-ok`.
+
+Evidence of the Cloudflare plan and CPU: `npm run ops -- workers --hours 72` (Cloudflare's own
+outcome counts and CPU quantiles, including `exceededCpu`) and the gym's Worker-tail checks. The plan
+itself (Free or Paid) is an account setting and is not in the repo; write it in the receipt note.

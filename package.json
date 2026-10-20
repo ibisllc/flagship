@@ -40,6 +40,7 @@
     "rate-limits": "node scripts/rate-limit-report.mjs",
     "outbound-hosts": "node scripts/outbound-hosts.mjs",
     "ops": "tsx scripts/ops.ts",
+    "release-manifest": "node scripts/release-manifest.mjs",
     "reap-orphans": "node scripts/reap-orphans.mjs",
     "zone-health": "node scripts/dns-zone-health.mjs",
     "inference-settings": "node scripts/inference-settings.mjs",
