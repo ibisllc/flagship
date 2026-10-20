@@ -232,6 +232,15 @@ version must climb), Android versionCode 9 (wear +1,000,000), Studio 0.2.0.
 About reads "Flagship 0.2 Beta (iOS 1.1, build 5)" / "(build 9)". Protocol
 levels and the webapp shell number are separate and unchanged.
 
+**Live state read 2026-10-20 (reviewer, read-only):** `.com` runs code from 2026-10-18 or later
+(webapp shell **v153**, `account-not-found` answered, admin-only add-server already refusing the
+old store builds, which is accepted: no users yet, everything is updated at GA); the relay echo is
+not deployed (`:8444` resets, `/api/stats` 404); the root wildcard is live; the apex CAA also lists
+`digicert.com`, `pki.goog`, `ssl.com`, `comodoca.com` (probably Cloudflare Universal SSL: switch it
+off, then `npm run zone-health`); the newest endorsed box release is `875ad977`, which has none of
+the 2026-10-20 box changes (peer gate, backup check, loop-volume check, restore-only-when-all-apps-in):
+endorse a new release at or after the last box commit before store builds go out.
+
 **Release readiness (2026-10-15):** `npm run ready` is the scoreboard to re-run
 after each batch of fixes (branch drift, tsc, vitest, e2e, locked gym, cross-
 client parity; `-- --native --live` before a release candidate). Loop and
@@ -249,11 +258,16 @@ of the last check here: **not yet checked**.
 
 ### Urgent
 
-- **Renew the CA endorsement lease before 2026-11-05.** The production CA's
-  only live lease (`.maintainers/ca-endorsements/bundle.json`) expires then, and
-  every CA-chain check fails closed after it (app trust checks, relay blessing,
-  Alpine bootstrap). Needs the owner's YubiKey: mint a `CaEndorsement` with the
-  maintainers CLI, commit it, redeploy `.com`.
+- **CA endorsement lease: renewed (`072ee32de`, ends 2027-01-17).** `npm run release-manifest`
+  fails when the newest lease is within 14 days of its end. A box reads the lease from its own
+  checkout, so a box that has not updated since before `072ee32de` loses CA-checked features
+  (share accept, relay blessing) after 2026-11-05: every box needs an update at least every ~90 days.
+- **Workers Free ceiling (owner decision 2026-10-20: stay on Free for now).** 100,000 `.com`
+  requests a day is a hard stop for boot unlock, recovery and `voi.ci` until 00:00 UTC; about 75
+  accounts reach it alone (`docs/runbooks/workers-cpu-budget.md`). **Remind the owner at the start of
+  every session**, and as soon as users arrive, to upgrade to Workers Paid or move `.com` to another
+  host (the owner has a free Oracle server and others). Check with `npm run ops -- workers --hours 72`;
+  past about 50,000 a day, do it now.
 
 - **The `flagship.services` DNS zone is nearly full (2026-10-16); the fix is on
   `main`, not deployed (2026-10-18).** Cloudflare Free caps the zone at 200
@@ -589,12 +603,10 @@ of the last check here: **not yet checked**.
   `scripts/publish-vm-appliance.sh <run-id>…` (one image at a time, checked
   against its manifest), manifests in `apps/web/public/downloads/`. A new
   server's first boot moves it to the newest endorsed release.
-  **Both are stale since 2026-10-18:** the amd64 one stops at its login prompt on
-  first boot (disk resize without the build key, found on Windows; fixed on
-  `main`). Rebuilt from `d4c7ef4c0` as runs `39142014433` (amd64) and
-  `39142016230` (arm64); the owner publishes them
-  (`docs/runbooks/republish-vm-appliance.md`). Until then "Host on this PC"
-  stalls on every Studio.
+  **Republished from `072ee32de`** (both manifests in `apps/web/public/downloads/` name it; it
+  has the 2026-10-18 first-boot fix and the LUKS passphrase fix). The published Studios are older
+  (Mac DMG 2026-10-14, Windows/Linux `studio-v0.1.3` 2026-10-15) and predate the LUKS fix: republish
+  them before GA (`release-manifest` blocks on it).
 - **AI privacy, staging and egress (2026-10-12): built, endorsed as
   `37ba277d`; apps on `main`.** Follows the rule in Conventions. The AI works
   on a fenced staging copy (neutral identity, placeholder secrets, sample

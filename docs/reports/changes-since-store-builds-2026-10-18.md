@@ -196,6 +196,38 @@ diagnostics log in a screen. A guard that holds `.com` enforcement until store b
 order of the admin-root enforcement against the store builds is a release decision for the owner.
 Review items that are hardware or production proof stay open and are tracked by the manifest.
 
+### 0.4 Revision 5 (2026-10-20, later): the final GA review
+
+A second reviewer read `main` at `a0f167c2b` for GA and answered "not ready" on four counts. The owner
+decided the questions it raised (Free plan stays and the owner is reminded to upgrade or move; outbound
+hosts stay allow-by-default; no installed boxes exist so no scrub of the old LUKS slot; Windows, Linux
+and Wear are labelled Experimental; free AI is deployed; floors change in site text only; the
+admin-only enforcement against older store builds is accepted; the money FAQ moves to
+`feat/marketplace`). Code findings were fixed with a test that fails on the old code.
+
+| Finding | What landed | Evidence |
+|---|---|---|
+| B1 Migrate could wipe the old server after a failed restore | A restore ends the waiting only when every app is in; a partial one keeps waiting, lists the failures and can be sent again (apps already in are skipped), so Migrate never posts pre-seeded and the old box is never told to wipe | `serverArchive/service.ts`; service test sends the file again after the cause is gone |
+| B6 Peer policy got in at create time | `BackupPolicyStore.adopt` refuses a new Peer policy while peer backup is off, on every path; the webapp no longer offers it (shell v156); the phones drop a saved Peer draft | box, webapp, iOS and Android tests |
+| B4 One box could spend `.com`'s request budget | At most 10 unseen hosts per box per hour; after `.com` says `new-host-cap` the hub refuses unseen names itself until 00:00 UTC | `outboundHostPolicy.test.ts` |
+| Webapp notice lock had no boot-unlock exemption | The two boot-unlock writes pass the lock, as on the phones (the webapp lock itself stays on: it updates itself) | `webappSecurityNotice.test.ts` |
+| iOS shim race | Two first callers no longer leave an orphaned loopback listener (8 before, 1 after) | `RelayFallbackTests` |
+| `.services` deploy strategy | `rolling`, as `fly.toml` says | `release.sh`, runbooks |
+| `release-guard` hung with worktrees | Reads git's file list; 19 s instead of more than 150 s | `release-guard.test.ts` |
+| Dead freeze-map globs | Two matched no file; a test now fails on any dead glob; added receipts for the launch-MVP hardware list and Flagship Inference | `release-manifest.test.ts` |
+| B2 published Studios predate the LUKS fix | `release-manifest` blocks while the Mac DMG, `studio-v0.1.3` or an appliance is older than `09efc52a5` | blocks today; owner republishes |
+| Backup check was narrower than it sounded | Also re-reads the `.flagship-backup` (parses, has a slot, sealed body opens and names the data file and apps) and streams the tar without writing it, checking every part's hash; slot opening stays a phone-side check (the box never holds the passcode or account key) | `format.test.ts`, `service.test.ts` |
+| B7 false public claims | FAQ, privacy, home, docs, security and abuse pages rewritten from `docs/metadata-threat-model.md` | `marketingPages.test.ts` |
+| B8 Preview | Windows, Linux and Wear are Experimental (site, window titles, criteria doc) | `marketingPages.test.ts` |
+
+**Not code, still the owner's:** republish the three Studios; new store builds; an endorsed box release
+at or after the last box commit (`875ad977` has none of this); the `.com` deploy (migration 0106 first)
+and the `.services` deploy; switch off Cloudflare Universal SSL on `flagship.services`; the receipts
+`npm run release-manifest` lists; an end-to-end Flagship Inference build; the Workers Free ceiling.
+
+**Considered and not built:** a hand-off screen listing failed apps (B1 now stops before that step); an
+account cap (owner: stay on Free, be reminded); the .NET 10 and Node 22 migrations (text only for now).
+
 ## 1. Scope, baselines and size
 
 | | iOS baseline | Android baseline |

@@ -38,8 +38,12 @@ accept for the privacy it buys, and manage with the list below.
 - **`.com` unreachable:** the hub keeps its last answer, and an unseen host is allowed only if it
   is one of the known AI providers compiled into the hub.
 - **No `.com` secret on the hub:** the known providers only.
-- Per-box limits are unchanged: 8 streams, 120 opens a minute, about 4 MiB/s, port 443, public
-  addresses only.
+- Per-box limits: 8 streams, 120 opens a minute, about 4 MiB/s, port 443, public addresses only,
+  and **at most 10 hosts a box has not asked about in the last hour** (known providers and repeats
+  pass). Each unseen name costs `.com` a request, so this is what stops one box from spending
+  `.com`'s Workers Free daily request budget; the 11th is refused at the hub without asking.
+- When `.com` answers `new-host-cap` (100 new hosts that day), the hub refuses every unseen name
+  itself until 00:00 UTC instead of asking again.
 
 ## Nothing here names a user
 
