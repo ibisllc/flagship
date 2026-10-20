@@ -23,6 +23,11 @@ export function isBackupPolicyPath(path: string): boolean {
 export function buildBackupPolicyHttp(deps: {
   policy: BackupPolicyStore;
   cap: BackupCap;
+  /**
+   * May a server choose the Peer policy? The wiring answers from FLAGSHIP_PEER_BACKUP (off at GA:
+   * no live cross-account restore has run). A server already on Peer is left alone. Omitted = yes.
+   */
+  peerAllowed?: () => boolean;
   note?: (kind: string, detail: string, ok?: boolean) => void;
 }) {
   let peerStatus: (() => Promise<unknown>) | null = null;
@@ -60,6 +65,9 @@ export function buildBackupPolicyHttp(deps: {
         return json(400, { error: "invalid json" });
       }
       const before = deps.policy.current().policy;
+      if (before !== "peer" && deps.peerAllowed && !deps.peerAllowed() && parseBackupPolicy(b.order)?.policy === "peer") {
+        return json(409, { error: "Backups on other servers aren't available yet. Choose another policy.", code: "peer-backup-not-available" });
+      }
       // A policy whose limit the server is already over can't be chosen.
       const asked = parseBackupPolicy(b.order);
       const used = deps.cap.usedBytes();

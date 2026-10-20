@@ -26,6 +26,15 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
+/**
+ * Backup choices that are built but not offered yet. Peer backup stays off until a live
+ * cross-account restore has passed; a server already on it keeps showing it. The box refuses the
+ * choice too (FLAGSHIP_PEER_BACKUP).
+ */
+object BackupFeatures {
+    const val PEER_BACKUP = false
+}
+
 object BackupsText {
     const val GB: Long = 1024L * 1024 * 1024
 

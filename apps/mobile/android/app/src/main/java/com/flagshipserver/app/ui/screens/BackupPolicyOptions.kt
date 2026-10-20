@@ -29,6 +29,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.flagshipserver.app.core.BackupFeatures
 import com.flagshipserver.app.core.BackupsText
 import com.flagshipserver.app.core.ServerArchive
 import com.flagshipserver.app.ui.theme.FS
@@ -78,7 +79,7 @@ internal fun BackupPolicyOptions(
                 modifier = Modifier.padding(start = FS.space.s4),
             )
         }
-        PolicyOption(policy == "peer", if (forCreate) BackupsText.CREATE_PEER_TITLE else BackupsText.PEER_TITLE, if (forCreate) BackupsText.CREATE_PEER_BODY else BackupsText.PEER_BODY, warn = false, tag = "$tagPrefix-peer") { onPolicy("peer") }
+        if (BackupFeatures.PEER_BACKUP || policy == "peer") PolicyOption(policy == "peer", if (forCreate) BackupsText.CREATE_PEER_TITLE else BackupsText.PEER_TITLE, if (forCreate) BackupsText.CREATE_PEER_BODY else BackupsText.PEER_BODY, warn = false, tag = "$tagPrefix-peer") { onPolicy("peer") }
         if (!forCreate) {
             PolicyOption(policy == "none", BackupsText.NONE_TITLE, BackupsText.NONE_BODY, warn = true, tag = "$tagPrefix-none") { onPolicy("none") }
         }

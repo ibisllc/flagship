@@ -2939,6 +2939,8 @@ async function wireRuntimeSurfaces(deps: {
       ? buildBackupPolicyHttp({
           policy: deps.backupPolicy,
           cap: backupCap,
+          // Peer backup stays off until a live cross-account restore has passed (docs/peer-backup.md).
+          peerAllowed: () => process.env.FLAGSHIP_PEER_BACKUP === "on",
           note: (kind, detail, ok) => deps.activityLog.note(kind, detail, { ok: ok ?? true }),
         })
       : null;

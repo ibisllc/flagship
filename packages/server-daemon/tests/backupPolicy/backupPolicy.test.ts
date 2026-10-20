@@ -169,4 +169,25 @@ describe("GET/POST /api/screens/backup-policy", () => {
     expect(s.current().policy).toBe("peer");
     expect(await http.handle("/api/screens/other", "GET", req("GET"), { companion: false })).toBeNull();
   });
+
+  it("refuses the Peer policy while peer backup is off, but leaves a server already on it alone", async () => {
+    const s = store();
+    const cap = new BackupCap({ policy: s, measure: async () => new Map([["a", app(GB, 0)]]), diskBytes: async () => 90 * GB });
+    await cap.refresh();
+    const off = buildBackupPolicyHttp({ policy: s, cap, peerAllowed: () => false });
+    const asked = await off.handle("/api/screens/backup-policy", "POST", req("POST", signed({ policy: "peer", phoneReserveBytes: 0 })), { companion: false });
+    expect(asked!.status).toBe(409);
+    expect(JSON.parse(String(asked!.body))).toMatchObject({ code: "peer-backup-not-available" });
+    expect(s.current().policy).toBe("unset");
+    const phone = await off.handle("/api/screens/backup-policy", "POST", req("POST", signed()), { companion: false });
+    expect(phone!.status).toBe(200);
+    // Already on Peer (chosen before the gate): changing within it, or away, still works.
+    const s2 = store();
+    const p = signed({ policy: "peer", phoneReserveBytes: 0 });
+    await s2.adopt(p.order, p.signatureHex);
+    const cap2 = new BackupCap({ policy: s2, measure: async () => new Map([["a", app(GB, 0)]]), diskBytes: async () => 90 * GB });
+    await cap2.refresh();
+    const stay = await buildBackupPolicyHttp({ policy: s2, cap: cap2, peerAllowed: () => false }).handle("/api/screens/backup-policy", "POST", req("POST", signed({ policy: "peer", phoneReserveBytes: 0, issuedAt: 5000 })), { companion: false });
+    expect(stay!.status).toBe(200);
+  });
 });

@@ -37,7 +37,9 @@ struct BackupPolicyOptions: View {
             option(.none, "No backup", Self.noneText, c: c)
             option(.phoneOnly, "On my phone", Self.phoneText, c: c)
             if policy == .phoneOnly { reservePicker(c) }
-            option(.peer, "On other servers", Self.peerText, c: c)
+            if BackupFeatures.peerBackup || policy == .peer {
+                option(.peer, "On other servers", Self.peerText, c: c)
+            }
         }
     }
 
