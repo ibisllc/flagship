@@ -165,7 +165,8 @@ final class ServerArchiveViewModelTests: XCTestCase {
         vm.leaveCreate(fqdn: "home.alice.flagship.services")
         try await waitFor { if case .done = vm.phase { return true }; return false }
         XCTAssertEqual(c.restoreStarts.first, ServerRestoreStartRequest(archiveId: b.archiveId, bytes: b.dataBytes))
-        XCTAssertEqual(c.restoreChunks.map(\.offset), [0, 4 * 1024 * 1024, 8 * 1024 * 1024])
+        let offsets: [Int64] = [0, 4 * 1024 * 1024, 8 * 1024 * 1024]
+        XCTAssertEqual(c.restoreChunks.map(\.offset), offsets)
         XCTAssertEqual(c.restoreChunks.map { Int64($0.count) }.reduce(0, +), b.dataBytes)
         XCTAssertEqual(c.restoreCommits, [ServerRestoreCommitRequest(key: HexUtil.encode(b.contentKey))])
         XCTAssertEqual(restored, ["home.alice.flagship.services"])
@@ -238,7 +239,8 @@ final class ServerArchiveViewModelTests: XCTestCase {
         await vm.choose([b.url])
         vm.send(to: "clone.alice.flagship.services")
         try await waitFor { if case .done = vm.phase { return true }; return false }
-        XCTAssertEqual(c.restoreChunks.map(\.offset), [4 * 1024 * 1024, 8 * 1024 * 1024])
+        let offsets: [Int64] = [4 * 1024 * 1024, 8 * 1024 * 1024]
+        XCTAssertEqual(c.restoreChunks.map(\.offset), offsets)
     }
 
     func testAFailedRestoreSaysTheServerKeepsWaiting() async throws {
