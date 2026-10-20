@@ -146,3 +146,25 @@ export async function writeBackupFile(
   await writeFile(path, text, { mode: 0o600 });
   return { bytes: Buffer.byteLength(text), text };
 }
+
+/**
+ * Read a data file back the way a restore will: its size and SHA-256 are the ones just written,
+ * and every frame opens (right key, right place, last frame last). The plain bytes are counted
+ * and thrown away, so it needs no disk. A backup that fails this is not "saved".
+ */
+export async function checkDataFile(
+  path: string,
+  key: Buffer,
+  archiveId: string,
+  expected: { bytes: number; sha256: string },
+): Promise<{ plainBytes: number }> {
+  const size = (await stat(path)).size;
+  if (size !== expected.bytes) throw new ArchiveError(`the data file is ${size} bytes, not the ${expected.bytes} written`);
+  const hash = createHash("sha256");
+  for await (const chunk of (await import("node:fs")).createReadStream(path)) hash.update(chunk as Buffer);
+  if (hash.digest("hex") !== expected.sha256) throw new ArchiveError("the data file does not match the hash written for it");
+  let plainBytes = 0;
+  for await (const chunk of openDataFile(path, key, archiveId)) plainBytes += (chunk as Buffer).length;
+  if (plainBytes === 0) throw new ArchiveError("the data file opens to nothing");
+  return { plainBytes };
+}
