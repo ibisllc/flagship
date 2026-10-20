@@ -69,6 +69,46 @@ function readJson(path, fallback) {
 }
 
 /** Checks that come from files in the tree (nothing is fetched). */
+/**
+ * The commit that stopped the USB/ISO installer from burning a public LUKS passphrase into an
+ * install (docs/luks-burn-passphrase-removal.md). Anything published from before it still writes
+ * installs that a string from the public repo opens.
+ */
+export const LUKS_FIX_COMMIT = "09efc52a5";
+
+/**
+ * Each published Studio and VM appliance against that fix. `built` is [{what, commit}] (a commit or
+ * tag); `isAncestor(fix, commit)` says whether the build contains the fix; a build that cannot be
+ * placed counts as not containing it.
+ */
+export function publishedBuildCheck(built, isAncestor) {
+  const old = built.filter((b) => !b.commit || !isAncestor(LUKS_FIX_COMMIT, b.commit)).map((b) => b.what);
+  return {
+    id: "published-builds",
+    ok: old.length === 0,
+    detail: old.length ? `built before the LUKS passphrase fix (${LUKS_FIX_COMMIT}): ${old.join(", ")}; republish them` : `${built.length} published build(s) all contain the LUKS passphrase fix`,
+  };
+}
+
+function publishedBuilds() {
+  const out = [];
+  const dmg = (() => {
+    try {
+      return git(["log", "-1", "--format=%H", "--", "apps/web/public/downloads/FlagshipStudio.dmg"]) || null;
+    } catch {
+      return null;
+    }
+  })();
+  out.push({ what: "Mac Studio (the DMG on the site)", commit: dmg });
+  const route = existsSync(join(ROOT, "apps/com/src/route.ts")) ? readFileSync(join(ROOT, "apps/com/src/route.ts"), "utf8") : "";
+  for (const tag of new Set([...route.matchAll(/releases\/download\/(studio-v[0-9.]+)\//g)].map((m) => m[1]))) out.push({ what: `Windows/Linux Studio ${tag}`, commit: tag });
+  for (const arch of ["amd64", "arm64"]) {
+    const m = readJson(`apps/web/public/downloads/FlagshipVMAppliance-${arch}.json`, null);
+    if (m) out.push({ what: `${arch} VM appliance`, commit: m.commit ?? null });
+  }
+  return out;
+}
+
 export function checks(now = new Date()) {
   const out = [];
   const lease = readJson(".maintainers/ca-endorsements/bundle.json", []);
@@ -84,6 +124,15 @@ export function checks(now = new Date()) {
   out.push({ id: "schema-ledger", ok: !!head && known.includes(`"${head}"`), detail: `newest migration ${head}; the control plane's ledger ${known.includes(`"${head}"`) ? "knows it" : "does not know it"}` });
   const v = readJson("release/version.json", null);
   out.push({ id: "versions", ok: !!v, detail: v ? `product ${v.product} ${v.label}, iOS ${v.iosVersion} (${v.iosBuild}), Android code ${v.androidVersionCode}, Studio ${v.studio}` : "release/version.json missing" });
+  const isAncestor = (a, b) => {
+    try {
+      execFileSync("git", ["-C", ROOT, "merge-base", "--is-ancestor", a, b], { stdio: "ignore" });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  out.push(publishedBuildCheck(publishedBuilds(), isAncestor));
   return out;
 }
 

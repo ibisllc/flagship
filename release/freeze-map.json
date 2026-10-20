@@ -3,64 +3,164 @@
   "receipts": {
     "ios-relay-dns-block": {
       "label": "iOS reaches a box through the relay under a real DNS block",
-      "paths": ["apps/mobile/shared/Sources/FlagshipAPI/Client/RelayFallback.swift", "apps/mobile/shared/Sources/FlagshipAPI/Client/LiveScreensClient.swift", "apps/mobile/shared/Sources/FlagshipCore/CertPinRegistry.swift", "apps/web/src/lib/addressEcho.ts", "fly.toml"]
+      "paths": [
+        "apps/mobile/shared/Sources/FlagshipAPI/Client/RelayFallback.swift",
+        "apps/mobile/shared/Sources/FlagshipAPI/Client/LiveScreensClient.swift",
+        "apps/mobile/shared/Sources/FlagshipCore/CertPinRegistry.swift",
+        "apps/web/src/lib/addressEcho.ts",
+        "fly.toml"
+      ]
     },
     "android-relay-dns-block": {
       "label": "Android reaches a box through the relay under a real DNS block (handshake no longer closed)",
-      "paths": ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/RelayFallback.kt", "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/RelayAddressCenter.kt", "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/CertPinRegistry.kt", "apps/web/src/lib/addressEcho.ts", "fly.toml"]
+      "paths": [
+        "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/RelayFallback.kt",
+        "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/RelayAddressCenter.kt",
+        "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/CertPinRegistry.kt",
+        "apps/web/src/lib/addressEcho.ts",
+        "fly.toml"
+      ]
     },
     "relay-echo-live": {
       "label": "The deployed relay's echo names its own dedicated address (openssl s_client to :8444, GET /echo)",
-      "paths": ["apps/web/src/lib/addressEcho.ts", "fly.toml", "Dockerfile"]
+      "paths": [
+        "apps/web/src/lib/addressEcho.ts",
+        "fly.toml",
+        "Dockerfile"
+      ]
     },
     "ios-two-device-pairing": {
       "label": "iOS pairing between two real devices",
-      "paths": ["apps/mobile/shared/Sources/**/*Pairing*", "apps/mobile/shared/Sources/**/*QrRelay*", "apps/mobile/ios/Sources/**/*Pairing*", "apps/mobile/ios/Sources/**/*AddDevice*", "apps/com/src/**/*qr*"]
+      "paths": [
+        "apps/mobile/shared/Sources/**/*Pairing*",
+        "apps/mobile/shared/Sources/**/*QrRelay*",
+        "apps/mobile/ios/Sources/**/*Pairing*",
+        "apps/mobile/ios/Sources/**/*AddDevice*",
+        "apps/com/src/**/*qr*"
+      ]
     },
     "windows-hosted-vm-first-boot": {
       "label": "A fresh Windows hosted-VM first boot on the published appliance",
-      "paths": ["installer/**", "apps/builder-windows/**", "apps/desktop-shared/**", "packages/boot-core/**", "scripts/build-vm-appliance*.sh", "scripts/publish-vm-appliance.sh"]
+      "paths": [
+        "installer/**",
+        "apps/builder-windows/**",
+        "apps/desktop-shared/**",
+        "packages/boot-core/**",
+        "scripts/build-vm-appliance*.sh",
+        "scripts/publish-vm-appliance.sh"
+      ]
     },
     "windows-uac-restart": {
       "label": "Windows 'Restart as administrator' after cancelling UAC",
-      "paths": ["apps/builder-windows/**", "apps/desktop-shared/**"]
+      "paths": [
+        "apps/builder-windows/**",
+        "apps/desktop-shared/**"
+      ]
     },
     "loop-volume-interruption": {
       "label": "A populated disk converted to loop images, cut at each step, then checked",
-      "paths": ["packages/server-daemon/src/appQuota/**"]
+      "paths": [
+        "packages/server-daemon/src/appQuota/**"
+      ]
     },
     "destructive-restore-drill": {
       "label": "Destroy a source server with real files and PostgreSQL, restore from its backup file, compare",
-      "paths": ["packages/server-daemon/src/serverArchive/**", "packages/protocol/src/serverBackup*.ts", "packages/server-daemon/src/dataLayer/**"]
+      "paths": [
+        "packages/server-daemon/src/serverArchive/**",
+        "packages/protocol/src/serverBackup*.ts",
+        "packages/server-daemon/src/dataLayer/**"
+      ]
     },
     "old-account-create-server": {
       "label": "The oldest production-format account creates a server against the admin-root enforcement",
-      "paths": ["apps/com/src/**", "packages/control-plane/src/**", "packages/storage/src/**", "apps/mobile/shared/Sources/**/*CreateServer*", "apps/mobile/ios/Sources/**/*CreateServer*"]
+      "paths": [
+        "apps/com/src/**",
+        "packages/control-plane/src/**",
+        "packages/storage/src/**",
+        "apps/mobile/shared/Sources/**/*CreateServer*",
+        "apps/mobile/ios/Sources/**/*CreateServer*"
+      ]
     },
     "android-auto-unlock": {
       "label": "Android: approve, two automatic reboots, revoke, then approval required again",
-      "paths": ["apps/mobile/android/app/src/main/**/*AutoUnlock*", "apps/mobile/android/app/src/main/**/*SecretRequest*", "packages/server-daemon/src/**/*utoUnlock*", "packages/boot-core/**"]
+      "paths": [
+        "apps/mobile/android/app/src/main/**/PendingLeaseStore.kt",
+        "apps/mobile/android/app/src/main/**/PhoneEndpoint.kt",
+        "apps/mobile/android/app/src/main/**/*SecretRequest*",
+        "apps/mobile/android/app/src/main/**/DeadManViewModel.kt",
+        "apps/mobile/shared/Sources/FlagshipCore/PhoneEndpoint.swift",
+        "apps/mobile/shared/Sources/FlagshipCore/SecretRequestCoordinator.swift",
+        "packages/server-daemon/src/deadMan*.ts",
+        "packages/boot-core/**"
+      ]
     },
     "boot-relay-blocked": {
       "label": "Reboot with .services and .com blocked, then restore the network and see the box recover",
-      "paths": ["packages/boot-core/**", "apps/boot/**", "packages/server-daemon/src/tunnel/**"]
+      "paths": [
+        "packages/boot-core/**",
+        "apps/boot/**",
+        "packages/server-daemon/src/tunnel/**"
+      ]
     },
     "locked-phone-boot-unlock": {
       "label": "Only if the notice lock is switched on: a locked phone approves a real boot",
-      "paths": ["apps/mobile/shared/Sources/FlagshipAPI/Client/UpdateLock.swift", "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/UpdateLock.kt", "apps/mobile/shared/Sources/FlagshipCore/SecurityNoticeFeatures.swift"],
+      "paths": [
+        "apps/mobile/shared/Sources/FlagshipAPI/Client/UpdateLock.swift",
+        "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/UpdateLock.kt",
+        "apps/mobile/shared/Sources/FlagshipCore/SecurityNoticeFeatures.swift"
+      ],
       "optional": true
     },
     "notice-yubikey-banner": {
       "label": "A harmless banner notice signed with the real YubiKey, received, then retracted",
-      "paths": ["scripts/security-notice.mjs", ".maintainers/notices/**", "apps/com/src/securityNotices.ts"]
+      "paths": [
+        "scripts/security-notice.mjs",
+        ".maintainers/notices/**",
+        "apps/com/src/securityNotices.ts"
+      ]
     },
     "store-builds": {
       "label": "Store build numbers checked against App Store Connect and Play Console, release builds installed on hardware",
-      "paths": ["release/version.json"]
+      "paths": [
+        "release/version.json"
+      ]
     },
     "d1-export": {
       "label": "A manual D1 export and a verified off-Worker copy, taken before the irreversible production scrub",
-      "paths": ["packages/storage/migrations/**"]
+      "paths": [
+        "packages/storage/migrations/**"
+      ]
+    },
+    "phone-box-lifecycle": {
+      "label": "A phone-created box on current code: unlock, pairing, update from iOS, Android and the webapp, then Delete (docs/launch-mvp.md)",
+      "paths": [
+        "packages/server-daemon/src/update*.ts",
+        "packages/server-daemon/src/firstBootUpdate.ts",
+        "packages/control-plane/src/serverMigration.ts",
+        "apps/com/src/releaseCatalog.ts"
+      ]
+    },
+    "lost-phone-recovery": {
+      "label": "Losing a phone and recovering the account (docs/launch-mvp.md)",
+      "paths": [
+        "apps/com/src/recovery*.ts",
+        "packages/control-plane/src/recovery*.ts"
+      ]
+    },
+    "lan-direct-metal": {
+      "label": "LAN-direct from an iPhone and an Android phone on a metal box's Wi-Fi (LAN route taken, relay after leaving), and an app copy between two boxes on one network",
+      "paths": [
+        "packages/server-daemon/src/lanDirect.ts",
+        "packages/server-daemon/src/lanFallback.ts",
+        "apps/mobile/shared/Sources/FlagshipAPI/Client/LanDirect*.swift",
+        "apps/mobile/android/app/src/main/**/LanDirect.kt"
+      ]
+    },
+    "mac-vm-memory-corruption": {
+      "label": "Diagnosis of the guest memory corruption seen in home2's VM on a Mac (docs/launch-mvp.md): the cache-mode change cures it, or the cause is found",
+      "paths": [
+        "apps/builder-mac/Sources/FlagshipBuilder/VZHost.swift"
+      ]
     }
   }
 }
