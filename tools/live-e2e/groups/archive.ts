@@ -60,8 +60,11 @@ export const archive: Group = {
       ];
       const r = await postJson(`https://${src.fqdn}/api/screens/server-archive/start`, { archiveId, key: bytesToHex(contentKey), slots }, s, 60_000);
       assert(r.status === 202, `start ${r.status}: ${short(r.text)}`);
-      const busy = await postJson(`https://${src.fqdn}/api/screens/server-archive/start`, { archiveId: randomBytes(16).toString("hex"), key: bytesToHex(randomBytes(32)), slots }, s);
-      assert(busy.status === 409 || busy.status === 400, `a second backup while one runs: ${busy.status}`);
+      // The same backup again, so losing the race (a near-empty box can finish before this
+      // arrives) only remakes the same archive with the same key. 409 while it runs; 202 is
+      // right only if the first one had already finished.
+      const busy = await postJson(`https://${src.fqdn}/api/screens/server-archive/start`, { archiveId, key: bytesToHex(contentKey), slots }, s);
+      assert(busy.status === 409 || busy.status === 400 || busy.status === 202, `a second backup while one runs: ${busy.status}`);
       const deadline = Date.now() + 20 * 60_000;
       let last = "";
       while (Date.now() < deadline) {
