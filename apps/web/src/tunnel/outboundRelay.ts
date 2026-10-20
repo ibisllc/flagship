@@ -1,5 +1,6 @@
 import { BlockList, connect as netConnect, isIP, type Socket } from "node:net";
 import { promises as dns } from "node:dns";
+import { KnownHostsPolicy, type HostPolicy } from "./outboundHostPolicy.js";
 import {
   closeFrame,
   dataFrame,
@@ -83,6 +84,8 @@ export interface OutboundRelayOptions {
   resolve?: (host: string) => Promise<string[]>;
   /** Test seam: open the TCP connection to an already-vetted address. */
   connect?: (address: string, port: number) => Socket;
+  /** Which hosts may be reached (docs/outbound-hosts.md). Default: the known AI providers only. */
+  hostPolicy?: HostPolicy;
   /** Default console.log. */
   log?: (line: string) => void;
   /** How often the totals are logged. Default 15 min; 0 = only via flushStats(). */
@@ -90,7 +93,18 @@ export interface OutboundRelayOptions {
   now?: () => number;
 }
 
+interface HostTotals {
+  streams: number;
+  up: number;
+  down: number;
+  refused: number;
+}
+
+/** Hosts totalled per flush; more than this in 15 minutes are not counted by name. */
+const MAX_HOSTS_PER_FLUSH = 500;
+
 interface RelayStats {
+  byHost: Map<string, HostTotals>;
   streams: number;
   byDestination: Map<string, number>;
   up: number;
@@ -119,13 +133,14 @@ const DEFAULTS = {
 type ResolvedOptions = typeof DEFAULTS & {
   resolve: (host: string) => Promise<string[]>;
   connect: (address: string, port: number) => Socket;
+  hostPolicy: HostPolicy;
   log: (line: string) => void;
   now: () => number;
   stats: RelayStats;
 };
 
 function emptyStats(): RelayStats {
-  return { streams: 0, byDestination: new Map(), up: 0, down: 0, refused: new Map() };
+  return { byHost: new Map(), streams: 0, byDestination: new Map(), up: 0, down: 0, refused: new Map() };
 }
 
 export class OutboundRelay {
@@ -143,6 +158,7 @@ export class OutboundRelay {
       allowedPorts: opts.allowedPorts ?? DEFAULTS.allowedPorts,
       resolve: opts.resolve ?? systemResolve,
       connect: opts.connect ?? ((address, port) => netConnect({ host: address, port })),
+      hostPolicy: opts.hostPolicy ?? new KnownHostsPolicy(),
       log: opts.log ?? ((line) => console.log(line)),
       now: opts.now ?? (() => Date.now()),
       stats: emptyStats(),
@@ -163,6 +179,10 @@ export class OutboundRelay {
       `[outbound-relay] streams=${t.streams}${to ? ` to=${to}` : ""} up=${t.up} down=${t.down}` +
       (refused ? ` refused=${refused}` : "");
     this.o.log(line);
+    // Per-host totals go to `.com` (docs/outbound-hosts.md): a host and counts across every
+    // box, with nothing that names one.
+    const rows = [...t.byHost].map(([host, v]) => ({ host, ...v }));
+    if (rows.length > 0) void this.o.hostPolicy.report(rows).catch(() => {});
     this.o.stats = emptyStats();
     return line;
   }
@@ -425,6 +445,8 @@ class HubOutboundSession implements OutboundSession {
   }
 
   private async dial(s: HubStream, port: number): Promise<void> {
+    if (!(await this.o.hostPolicy.allowed(s.host).catch(() => false))) return this.fail(s, "forbidden-host");
+    if (s.done) return;
     let addrs: string[];
     try {
       addrs = await this.o.resolve(s.host);
@@ -555,6 +577,8 @@ class HubOutboundSession implements OutboundSession {
   private fail(s: HubStream, reason: OutboundRefusal): void {
     if (s.done) return;
     this.countRefusal(reason);
+    const h = this.hostTotals(s.host);
+    if (h) h.refused += 1;
     this.send(outboundResultFrame(s.id, { ok: false, reason }));
     this.cleanup(s);
     s.sock?.destroy();
@@ -570,8 +594,25 @@ class HubOutboundSession implements OutboundSession {
     t.byDestination.set(dest, (t.byDestination.get(dest) ?? 0) + 1);
     t.up += s.up;
     t.down += s.down;
+    const h = this.hostTotals(s.host);
+    if (h) {
+      h.streams += 1;
+      h.up += s.up;
+      h.down += s.down;
+    }
     this.cleanup(s);
     if (!s.boxClosed) s.sock?.destroy();
+  }
+
+  private hostTotals(host: string): HostTotals | null {
+    const m = this.o.stats.byHost;
+    let h = m.get(host);
+    if (!h) {
+      if (m.size >= MAX_HOSTS_PER_FLUSH) return null;
+      h = { streams: 0, up: 0, down: 0, refused: 0 };
+      m.set(host, h);
+    }
+    return h;
   }
 
   private countRefusal(reason: OutboundRefusal): void {

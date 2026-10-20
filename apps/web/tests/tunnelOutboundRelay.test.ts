@@ -14,6 +14,7 @@ import { deriveSTK, deriveSWK, ed, mintDevEntitlements } from "@flagship/protoco
 import { TunnelRegistry } from "../src/tunnel/registry.js";
 import { startTunnelHub } from "../src/tunnel/tunnelHub.js";
 import { OutboundRelay } from "../src/tunnel/outboundRelay.js";
+import { allowEveryHost } from "./support/allowEveryHost.js";
 
 const SERVER_FQDN = "home.harry.flagship.services";
 const PROVIDER = "api.provider.test";
@@ -100,6 +101,7 @@ async function startEnv(opts: { relay: boolean; records?: string[] }): Promise<E
     ...(opts.relay
       ? {
           outboundRelay: new OutboundRelay({
+            hostPolicy: allowEveryHost,
             resolve: async () => opts.records ?? ["93.184.215.14"],
             // The vetted public address stands in for the provider here.
             connect: () => netConnect({ host: "127.0.0.1", port: providerPort }),

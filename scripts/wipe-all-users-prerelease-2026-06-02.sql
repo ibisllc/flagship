@@ -42,7 +42,8 @@
 -- health report per server). PRESERVED: adapter_insights (0086, anonymous),
 -- model_capabilities (0095, a public model catalog cache), rate_limit_log
 -- (0101, hourly counts with nothing about any caller) and inference_settings
--- (0103, operator config). Through 0104: the pb_* peer-backup tables are
+-- (0103, operator config), outbound_hosts and outbound_host_daily (0106, the
+-- hub's AI-call host list and per-host totals, which name no account). Through 0104: the pb_* peer-backup tables are
 -- wiped (holders, leases, spent serials, token counts, sealed roots).
 -- wipe-all-users.test.ts now fails when a migration
 -- adds a table that is neither wiped here nor named on the line below.
@@ -52,7 +53,7 @@
 -- Every table listed below therefore also needs a rule in that script's
 -- pred_of (by account, wipe all, or keep all); the script refuses to run with
 -- a table that has none. Walk-through: docs/runbooks/pre-ga-scrub.md.
--- PRESERVED-TABLES: marketplace_listings schema_version username_suggestion_queue repo_adapters adapter_blocklist adapter_attempts adapter_complaints adapter_insights model_capabilities rate_limit_log inference_settings
+-- PRESERVED-TABLES: marketplace_listings schema_version username_suggestion_queue repo_adapters adapter_blocklist adapter_attempts adapter_complaints adapter_insights model_capabilities rate_limit_log inference_settings outbound_hosts outbound_host_daily
 --
 -- ⚠️ DO NOT run this file via `wrangler d1 execute --file`. Prod D1's schema
 -- DRIFTS from the repo (migrations are applied by hand; e.g. nfc_rendezvous/0040

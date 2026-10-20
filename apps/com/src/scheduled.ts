@@ -42,6 +42,7 @@ import { runAdapterPublish } from "./adapterPublish.js";
 import { runAdapterInsights } from "./adapterInsights.js";
 import { cronPlan, SUGGESTION_ATTEMPTS_PER_TICK, type CronJobId, type CronPlan } from "./cronPlan.js";
 import { pruneRateLimitLog } from "./rateLimitLog.js";
+import { pruneOutboundDaily } from "./outboundHosts.js";
 import { protectedAccountsFrom } from "./prodReap.js";
 import type { AdapterBucketLike } from "./adapterIndex.js";
 import { pruneLateLogs, type LateLogBucket } from "./legacyLateLogs.js";
@@ -132,7 +133,7 @@ async function runJob(id: CronJobId, env: ScheduledEnv, now: Date, plan: CronPla
     case "ca-lease-warning":
       return runCaLeaseWarning(env, now);
     case "prune-rate-limit-log":
-      return env.DB ? pruneRateLimitLog(env.DB, now) : null;
+      return env.DB ? Promise.all([pruneRateLimitLog(env.DB, now), pruneOutboundDaily(env.DB, now)]) : null;
     case "prune-late-logs":
       return env.ISO_TEMP_BUCKET ? pruneLateLogs(env.ISO_TEMP_BUCKET, now) : null;
     case "demo":

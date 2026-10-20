@@ -66,6 +66,7 @@ import { UsageMeter } from "./tunnel/usageMeter.js";
 import { overQuotaBytesPerSec } from "./tunnel/throttle.js";
 import { startTunnelHub } from "./tunnel/tunnelHub.js";
 import { OutboundRelay } from "./tunnel/outboundRelay.js";
+import { ComHostPolicy, KnownHostsPolicy } from "./tunnel/outboundHostPolicy.js";
 import { MailboxRegistry } from "./tunnel/mailboxRelay.js";
 import { registerMailboxRelay } from "./routes/mailboxRelayRoute.js";
 import {
@@ -458,8 +459,15 @@ export async function start(opts: {
   // AI provider relay (docs/ai-privacy-and-staging.md §4): boxes reach public
   // host:443 through this hub over their tunnel. FLAGSHIP_OUTBOUND_RELAY=off
   // stops advertising it; boxes then refuse relay-on AI calls.
+  // Which hosts it may reach comes from `.com`'s list (docs/outbound-hosts.md); without the
+  // shared secret only the known AI providers are allowed.
+  const outboundSecret = process.env.USAGE_REPORT_SECRET;
   const outboundRelay =
-    process.env.FLAGSHIP_OUTBOUND_RELAY === "off" ? undefined : new OutboundRelay();
+    process.env.FLAGSHIP_OUTBOUND_RELAY === "off"
+      ? undefined
+      : new OutboundRelay({
+          hostPolicy: outboundSecret ? new ComHostPolicy({ baseUrl: comBaseUrl, secret: outboundSecret }) : new KnownHostsPolicy(),
+        });
   const stopHub = startTunnelHub(app.server, registry, {
     surface,
     apex: servicesApex,

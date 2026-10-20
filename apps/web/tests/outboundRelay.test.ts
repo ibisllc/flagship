@@ -16,6 +16,7 @@ import {
   type Frame,
 } from "@flagship/tunnel-protocol";
 import { destinationLabel, isPublicUnicast, OutboundRelay, vetOutboundHost, type OutboundRelayOptions } from "../src/tunnel/outboundRelay.js";
+import { allowEveryHost } from "./support/allowEveryHost.js";
 
 const ID = OUTBOUND_STREAM_ID_BASE + 1;
 const PUBLIC_IP = "93.184.215.14";
@@ -112,6 +113,7 @@ function harness(port: number, opts: OutboundRelayOptions = {}, records: string[
   const logs: string[] = [];
   const waiters: Array<{ pred: (f: Frame) => boolean; resolve: (f: Frame) => void }> = [];
   const relay = new OutboundRelay({
+    hostPolicy: allowEveryHost,
     resolve: async () => records,
     connect: () => netConnect({ host: "127.0.0.1", port }),
     log: (l) => logs.push(l),

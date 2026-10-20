@@ -36,6 +36,7 @@ import { handleInferenceModelRoutes, isInferenceModelPath } from "./inferenceMod
 import { handleSecurityNotices, isSecurityNoticesPath } from "./securityNotices.js";
 import { handlePeerBackupNetRoute, isPeerBackupNetPath } from "./peerBackupNetworkRoutes.js";
 import { handleRateLimitReport, RATE_LIMIT_REPORT_PATH } from "./rateLimitReport.js";
+import { handleOutboundHosts, isOutboundHostsPath } from "./outboundHosts.js";
 import { handleReapRoute, REAP_PATH_PREFIX } from "./prodReap.js";
 import { CloudflareDnsClient } from "@flagship/control-plane";
 import { createUpCloudClient } from "./upcloud.js";
@@ -676,6 +677,11 @@ async function routeImpl(
   // Public, cacheable, keyed to nobody; the admin view checks its secret.
   if (url.pathname === RATE_LIMIT_REPORT_PATH) {
     return handleRateLimitReport(request, env);
+  }
+  // Which hosts boxes' AI calls may leave through the hub: the hub asks and reports
+  // (x-usage-secret); the owner reads and blocks (x-admin-secret). docs/outbound-hosts.md.
+  if (isOutboundHostsPath(url.pathname)) {
+    return handleOutboundHosts(request, env);
   }
   // Owner-run prod reap of what the pre-GA scrub leaves (DNS + demo servers);
   // docs/runbooks/pre-ga-scrub.md. Admin secret; classifies, deletes one item.
