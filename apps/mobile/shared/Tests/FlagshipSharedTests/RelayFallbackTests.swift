@@ -340,6 +340,19 @@ final class RelayFallbackTests: XCTestCase {
         route.suspend()
     }
 
+    func test_concurrentFirstCallersShareOneForwarderAndNoListenerIsLost() async throws {
+        let before = LoopbackAddressShim.liveListeners
+        let route = RelayRoute(registry: registry(Prober(passes: Set(seed))), apex: { "flagship.services" })
+        route.configure(pinFor: { _ in String(repeating: "ab", count: 32) })
+        await withTaskGroup(of: Bool.self) { group in
+            for _ in 0..<8 { group.addTask { await route.session(for: "home.alice.flagship.services") != nil } }
+            for await ok in group { XCTAssertTrue(ok) }
+        }
+        XCTAssertEqual(LoopbackAddressShim.liveListeners, before + 1, "only the forwarder the route holds may be listening")
+        route.suspend()
+        XCTAssertEqual(LoopbackAddressShim.liveListeners, before, "suspending stops every listener the route started")
+    }
+
     func test_theDiagnosticsLogKeepsTheRealReasonAndStaysSmall() {
         let log = DiagnosticsLog()
         for i in 0..<(DiagnosticsLog.capacity + 5) { log.record(code: DiagnosticCode.relayRouteUnverified, host: "h\(i)", detail: "net-dropped") }

@@ -330,6 +330,11 @@ public final class LoopbackAddressShim: @unchecked Sendable {
 
     public var isAlive: Bool { lock.lock(); defer { lock.unlock() }; return alive }
 
+    /// Listeners started and not yet stopped, process-wide (tests and diagnostics: more than one
+    /// means a forwarder was lost track of).
+    public static var liveListeners: Int { counter.withLock { $0 } }
+    private static let counter = NSLock_Counter()
+
     /// Starts listening on 127.0.0.1; nil if it cannot (the system took the listener away).
     public static func start(apex: String, connectTimeout: TimeInterval = 3, upstreamPort: Int = 443,
                              addresses: @escaping @Sendable () -> [String]) async -> LoopbackAddressShim? {
@@ -357,6 +362,7 @@ public final class LoopbackAddressShim: @unchecked Sendable {
             if case .failed = state { f?.stop() }
             if case .cancelled = state { f?.stop() }
         }
+        counter.withLock { $0 += 1 }
         return f
     }
 
@@ -371,7 +377,9 @@ public final class LoopbackAddressShim: @unchecked Sendable {
 
     public func stop() {
         lock.lock()
+        let wasAlive = alive
         alive = false
+        if wasAlive { Self.counter.withLock { $0 -= 1 } }
         let all = connections.values.flatMap { $0 }
         connections.removeAll()
         open.removeAll()
@@ -616,8 +624,16 @@ public final class RelayRoute: @unchecked Sendable {
             f = live
         } else {
             guard let started = await LoopbackAddressShim.start(apex: apex(), addresses: { [weak self] in self?.lock.withLock { self?.current ?? [] } ?? [] }) else { return nil }
-            lock.withLock { forwarder = started; session = nil }
-            f = started
+            // Two first callers can both get here; the one that finds a live forwarder already
+            // set uses it and stops its own, so no listener is left that nothing knows about.
+            let winner: LoopbackAddressShim = lock.withLock {
+                if let existing = forwarder, existing.isAlive { return existing }
+                forwarder = started
+                session = nil
+                return started
+            }
+            if winner !== started { started.stop() }
+            f = winner
         }
         return lock.withLock { () -> URLSession? in
             if let session { return session }
@@ -633,6 +649,13 @@ public final class RelayRoute: @unchecked Sendable {
     }
 }
 #endif
+
+/// A counter behind a lock (the shim's live-listener count).
+final class NSLock_Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func withLock<R>(_ body: (inout Int) -> R) -> R { lock.lock(); defer { lock.unlock() }; return body(&value) }
+}
 
 /// The one anonymous GET to `.com` for the relay's addresses: nothing in it, no cookies, no
 /// redirects followed, a small answer or none.
