@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
-import { BACKUP_DATA_MAGIC, openBackupWithPasscode, parseBackupFile, wrapPasscodeSlot } from "@flagship/protocol";
-import { ArchiveError, checkDataFile, openDataFile, sealDataFile, writeBackupFile } from "../../src/serverArchive/format.js";
+import { BACKUP_DATA_MAGIC, openBackupWithPasscode, parseBackupFile, sealBackupFile, serializeBackupFile, wrapPasscodeSlot } from "@flagship/protocol";
+import { ArchiveError, checkBackupFile, checkDataFile, openDataFile, sealDataFile, writeBackupFile } from "../../src/serverArchive/format.js";
 
 let dir: string;
 beforeEach(async () => {
@@ -126,5 +126,40 @@ describe("checking a backup that was just written", () => {
     const empty = join(dir, "e.flagship-data");
     const o3 = await sealDataFile(Readable.from([Buffer.alloc(0)]), KEY, ID, empty, FRAME);
     await expect(checkDataFile(empty, KEY, ID, o3)).rejects.toThrow(/opens to nothing/);
+  });
+});
+
+describe("checking the small backup file that was just written", () => {
+  const slot = () => wrapPasscodeSlot(ID, KEY, "correct horse battery staple", new Uint8Array(16), new Uint8Array(12), { m: 64, t: 1, p: 1 });
+  const body = (over: Record<string, unknown> = {}) => ({
+    createdAt: 1,
+    server: { name: "home", domain: "home.alice.flagship.services", bootUnlockMode: "auto" as const, diskEncryption: "luks" as const },
+    apps: [{ serviceId: "alice--wiki", name: "Wiki" }],
+    left: [],
+    includes: [],
+    excludes: [],
+    data: { fileName: "d.flagship-data", bytes: 100, sha256: "ab".repeat(32), frameBytes: FRAME },
+    ...over,
+  });
+  const expected = { dataBytes: 100, dataSha256: "ab".repeat(32), apps: 1 };
+
+  it("passes a good file and names what is wrong with a bad one", async () => {
+    const path = join(dir, "b.flagship-backup");
+    await writeBackupFile(path, { archiveId: ID, key: KEY, slots: [slot()], body: body(), nonce: Buffer.alloc(12, 1) });
+    await expect(checkBackupFile(path, KEY, ID, expected)).resolves.toBeUndefined();
+
+    await expect(checkBackupFile(path, Buffer.alloc(32, 8), ID, expected)).rejects.toThrow(/sealed part does not open/);
+    await expect(checkBackupFile(path, KEY, "ff".repeat(16), expected)).rejects.toThrow(/another backup/);
+    await expect(checkBackupFile(path, KEY, ID, { ...expected, dataBytes: 101 })).rejects.toThrow(/different data file/);
+    await expect(checkBackupFile(path, KEY, ID, { ...expected, dataSha256: "cd".repeat(32) })).rejects.toThrow(/different data file/);
+    await expect(checkBackupFile(path, KEY, ID, { ...expected, apps: 2 })).rejects.toThrow(/number of apps/);
+
+    const text = await readFile(path, "utf8");
+    await writeFile(path, text.slice(0, text.length - 40));
+    await expect(checkBackupFile(path, KEY, ID, expected)).rejects.toThrow(/does not read back/);
+
+    const slotless = join(dir, "n.flagship-backup");
+    await writeFile(slotless, serializeBackupFile({ ...sealBackupFile(ID, KEY, [slot()], body(), Buffer.alloc(12, 1)), slots: [] }));
+    await expect(checkBackupFile(slotless, KEY, ID, expected)).rejects.toThrow();
   });
 });

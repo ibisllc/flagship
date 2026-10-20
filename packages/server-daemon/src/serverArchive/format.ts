@@ -15,7 +15,7 @@
  */
 import { createCipheriv, createDecipheriv, createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { open, stat, writeFile } from "node:fs/promises";
+import { open, readFile, stat, writeFile } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import {
@@ -23,6 +23,8 @@ import {
   BACKUP_FRAME_BYTES,
   backupFrameAad,
   backupFrameNonce,
+  openBackupBody,
+  parseBackupFile,
   sealBackupFile,
   serializeBackupFile,
   type BackupBody,
@@ -167,4 +169,37 @@ export async function checkDataFile(
   for await (const chunk of openDataFile(path, key, archiveId)) plainBytes += (chunk as Buffer).length;
   if (plainBytes === 0) throw new ArchiveError("the data file opens to nothing");
   return { plainBytes };
+}
+
+/**
+ * Read the small backup file back from disk the way a restore will: it parses, it carries at
+ * least one key slot, and its sealed body opens under the content key and names the data file
+ * just made (size, SHA-256) and the apps just put in it. The slots themselves are made by the
+ * owner's app from secrets this server never holds (a passcode, the account key), so whether a
+ * slot opens is checked on the phone that made it, not here.
+ */
+export async function checkBackupFile(
+  path: string,
+  key: Buffer,
+  archiveId: string,
+  expected: { dataBytes: number; dataSha256: string; apps: number },
+): Promise<void> {
+  let file;
+  try {
+    file = parseBackupFile(await readFile(path, "utf8"));
+  } catch {
+    throw new ArchiveError("the backup file does not read back");
+  }
+  if (file.archiveId !== archiveId) throw new ArchiveError("the backup file names another backup");
+  if (file.slots.length === 0) throw new ArchiveError("the backup file has no key slot");
+  let body;
+  try {
+    body = openBackupBody(file, key);
+  } catch {
+    throw new ArchiveError("the backup file's sealed part does not open with the backup's key");
+  }
+  if (body.data.bytes !== expected.dataBytes || body.data.sha256 !== expected.dataSha256) {
+    throw new ArchiveError("the backup file describes a different data file than the one written");
+  }
+  if (body.apps.length !== expected.apps) throw new ArchiveError("the backup file lists a different number of apps than the data file holds");
 }

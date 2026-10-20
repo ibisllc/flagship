@@ -42,6 +42,10 @@ import { Duplex } from "node:stream";
 import type { HttpRequest } from "../../src/runtime.js";
 import { swkOps, testCustodian } from "../helpers/keyCustody.js";
 import { writeSourceTree } from "../../src/llm/serviceSource.js";
+import tar from "tar-stream";
+import { Readable as NodeReadable } from "node:stream";
+import { checkArchiveContents } from "../../src/serverArchive/restore.js";
+import { checkDataFile, openDataFile, sealDataFile } from "../../src/serverArchive/format.js";
 
 const owner = deriveIRK({ seed: new Uint8Array(32).fill(42) });
 const srcBox = testCustodian({ identityPriv: new Uint8Array(32).fill(3), swk: new Uint8Array(32).fill(4), cgk: new Uint8Array(32).fill(5) });
@@ -624,6 +628,42 @@ describe("Backup/clone server", () => {
     expect(w.targetWait.current.restoredAny()).toBe(true);
     expect(asJson(await call(w.targetService, "GET", RESTORE_PATH)).waiting).toBeNull();
     expect(w.dst.platform.byServiceId(SERVICE)).toBeDefined();
+  });
+
+  it("the backup check reads inside the tar: a dump or file part cut out of a still-decryptable file is caught", async () => {
+    const w = await world();
+    const file = await backUp(w);
+    const path = join(w.dir, "inside.flagship-data");
+    await writeFile(path, file);
+    expect((await checkArchiveContents(path, CONTENT_KEY, ARCHIVE_ID)).apps).toBe(1);
+
+    // Re-seal the same tar without one app part: every frame still decrypts and the size and hash
+    // are the new file's own, so only reading the tar notices.
+    const entries: Array<{ name: string; data: Buffer }> = [];
+    const extract = tar.extract();
+    const read = new Promise<void>((resolve, reject) => {
+      extract.on("entry", (h, st, next) => {
+        const parts: Buffer[] = [];
+        st.on("data", (d: Buffer) => parts.push(d));
+        st.on("end", () => {
+          entries.push({ name: h.name, data: Buffer.concat(parts) });
+          next();
+        });
+      });
+      extract.on("finish", () => resolve());
+      extract.on("error", reject);
+    });
+    openDataFile(path, CONTENT_KEY, ARCHIVE_ID).pipe(extract);
+    await read;
+    const part = entries.find((e) => e.name !== "manifest.json" && !e.name.endsWith("/meta.json"));
+    expect(part, "the test app should have at least one data part").toBeDefined();
+    const pack = tar.pack();
+    for (const e of entries.filter((x) => x !== part)) pack.entry({ name: e.name }, e.data);
+    pack.finalize();
+    const cut = join(w.dir, "cut.flagship-data");
+    const sealed = await sealDataFile(NodeReadable.from(pack), CONTENT_KEY, ARCHIVE_ID, cut);
+    await expect(checkDataFile(cut, CONTENT_KEY, ARCHIVE_ID, sealed)).resolves.toBeDefined();
+    await expect(checkArchiveContents(cut, CONTENT_KEY, ARCHIVE_ID)).rejects.toThrow(/damaged or missing/);
   });
 
   it("an app that is already on the server is skipped, not overwritten", async () => {

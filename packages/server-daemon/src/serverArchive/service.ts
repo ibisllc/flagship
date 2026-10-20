@@ -54,8 +54,8 @@ import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import { ARCHIVE_EXCLUDES, ARCHIVE_INCLUDES, buildServerArchive, estimateServerArchive, type ArchiveBuildDeps } from "./build.js";
-import { ARCHIVE_FRAME_BYTES, ArchiveError, checkDataFile, writeBackupFile } from "./format.js";
-import { installArchive, unpackArchive, type ArchiveRestoreDeps, type RestoreAppResult } from "./restore.js";
+import { ARCHIVE_FRAME_BYTES, ArchiveError, checkBackupFile, checkDataFile, writeBackupFile } from "./format.js";
+import { checkArchiveContents, installArchive, unpackArchive, type ArchiveRestoreDeps, type RestoreAppResult } from "./restore.js";
 import type { RestoreWait } from "./restoreWait.js";
 import { KEY_POOL_LOW, KEY_POOL_MAX, SAVED_BACKUP_FILE, SAVED_DATA_FILE, SavedBackups, type SavedBackupMeta, type SavedState } from "./saved.js";
 import { isDue, nextRunAt, parseSchedule, retained, slotStartAtOrBefore } from "./schedule.js";
@@ -329,6 +329,11 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     // is not kept.
     try {
       await checkDataFile(a.dataPath, a.key, a.archiveId, { bytes: r.bytes, sha256: r.sha256 });
+      // The tar inside, read without writing it out: every app and every part the metas name is
+      // there with the hash recorded when it was made (a cut or missing dump fails here).
+      const inside = await checkArchiveContents(a.dataPath, a.key, a.archiveId);
+      // And the small file, read back from disk: it parses, has a slot, and its sealed part opens.
+      await checkBackupFile(a.backupPath, a.key, a.archiveId, { dataBytes: r.bytes, dataSha256: r.sha256, apps: inside.apps });
     } catch (e) {
       throw new Error(`the backup was written but did not pass its check, so it was not kept: ${(e as Error).message}`);
     }

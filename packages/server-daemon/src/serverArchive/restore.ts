@@ -148,6 +148,67 @@ function validMeta(v: unknown, serviceId: string): ArchiveAppMeta {
   return m as ArchiveAppMeta;
 }
 
+/**
+ * Read a data file the way `unpackArchive` does, but into memory and the bin: every entry is
+ * an expected one, the manifest and each app's meta read, and every part named in a meta is
+ * present with the SHA-256 recorded for it when it was made. Needs no disk. A backup whose
+ * apps or database dumps are cut or missing fails here instead of at the restore.
+ */
+export async function checkArchiveContents(archivePath: string, key: Buffer, archiveId: string): Promise<{ apps: number }> {
+  const sums = new Map<string, string>();
+  const texts = new Map<string, string>();
+  const extract = tar.extract();
+  const done = new Promise<void>((resolve, reject) => {
+    extract.on("entry", (header, stream, next) => {
+      const name = header.name;
+      if (header.type !== "file" || !ENTRY_RE.test(name)) {
+        stream.resume();
+        extract.destroy(new ArchiveError(`the archive holds something unexpected (${name.slice(0, 80)})`));
+        return;
+      }
+      const h = createHash("sha256");
+      const keep: Buffer[] = [];
+      const small = name === "manifest.json" || name.endsWith("/meta.json");
+      stream.on("data", (d: Buffer) => {
+        h.update(d);
+        if (small) keep.push(d);
+      });
+      stream.on("error", (e) => extract.destroy(e));
+      stream.on("end", () => {
+        sums.set(name, h.digest("hex"));
+        if (small) texts.set(name, Buffer.concat(keep).toString("utf8"));
+        next();
+      });
+    });
+    extract.on("finish", () => resolve());
+    extract.on("error", reject);
+  });
+  const src = openDataFile(archivePath, key, archiveId);
+  src.on("error", (e) => extract.destroy(e));
+  extract.on("error", () => src.destroy());
+  src.pipe(extract);
+  await done;
+  let manifest: ArchiveManifest;
+  try {
+    manifest = JSON.parse(texts.get("manifest.json") ?? "") as ArchiveManifest;
+  } catch {
+    throw new ArchiveError("the archive has no manifest");
+  }
+  if (manifest.v !== 1 || !Array.isArray(manifest.apps) || manifest.archiveId !== archiveId) throw new ArchiveError("the archive manifest is damaged");
+  for (const a of manifest.apps) {
+    if (!parseServiceId(a.serviceId)) throw new ArchiveError("the archive manifest is damaged");
+    let raw: unknown;
+    try {
+      raw = JSON.parse(texts.get(`apps/${a.serviceId}/meta.json`) ?? "");
+    } catch {
+      throw new ArchiveError(`the archive is missing ${a.serviceId}`);
+    }
+    const meta = validMeta(raw, a.serviceId);
+    for (const p of meta.parts) if (sums.get(p.file) !== p.sha256) throw new ArchiveError(`${a.serviceId}: ${p.name} is damaged or missing`);
+  }
+  return { apps: manifest.apps.length };
+}
+
 export interface ArchiveContents {
   manifest: ArchiveManifest;
   metas: ArchiveAppMeta[];
