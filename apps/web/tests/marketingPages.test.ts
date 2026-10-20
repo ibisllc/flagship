@@ -310,7 +310,7 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(priv).toContain("aren't responsible for how it behaves");
     expect(priv).toContain("We may change provider at any time");
     expect(priv).not.toMatch(/to be named|to be confirmed|free AI/i);
-    expect(priv).toContain("Last updated: 2026-10-14");
+    expect(priv).toContain("Last updated: 2026-10-20");
   });
 
   it("privacy + terms include real contact addresses", async () => {
@@ -352,5 +352,36 @@ describe("Studio platforms that have not passed a hardware run say so", () => {
     const root = join(__dirname, "../../");
     expect(readFileSync(join(root, "builder-windows/src/MainWindow.xaml"), "utf8")).toContain('Title="Flagship Studio (Experimental)"');
     expect(readFileSync(join(root, "builder-linux/wizard.py"), "utf8")).toContain('window.set_title("Flagship Studio (Experimental)")');
+  });
+});
+
+describe("public claims match what the product does (GA review, B7)", () => {
+  const pub = join(__dirname, "../public");
+  const page = (p: string) => readFileSync(join(pub, p), "utf8");
+  it("nobody is told that only a username can leak, or that every key is in the Secure Enclave", () => {
+    for (const p of ["faq.html", "index.html", "docs/index.html", "security.html"]) {
+      const t = page(p);
+      expect(t, p).not.toMatch(/worst thing leaked|all we can leak is your username/);
+      expect(t, p).not.toMatch(/every key sits in the Secure Enclave/);
+      expect(t, p).not.toMatch(/holds the only key\./);
+    }
+    expect(page("faq.html")).toContain("metadata");
+  });
+  it("the FAQ sells nothing and promises nothing we have not built", () => {
+    const t = page("faq.html");
+    expect(t).not.toMatch(/Stripe|refund|prorate|peer-backup pool|pre-built box|self-hosting playbook|escrow/i);
+    expect(t).not.toMatch(/id="money"|Money &amp; subscriptions/);
+  });
+  it("privacy names the metadata we see, the relay's AI path, and no longer says BYOK goes directly", () => {
+    const t = page("privacy.html");
+    expect(t).toContain('id="metadata"');
+    expect(t).toContain('id="outbound-ai"');
+    expect(t).not.toContain("prompts go directly from your daemon");
+    expect(t).not.toMatch(/SNI hostname; bytes in\/out/);
+  });
+  it("the abuse page says what to do about a connection that seems to come from the relay's address", () => {
+    const t = page("abuse.html");
+    expect(t).toContain("149.248.216.86");
+    expect(t).toContain("security@flagshipserver.com");
   });
 });

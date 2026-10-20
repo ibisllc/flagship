@@ -88,7 +88,7 @@
   <section class="page-hero">
     <h1>Privacy policy.</h1>
     <p class="lede">Flagship is built so we can't read your data. This page is the formal version of that promise: what we collect, what we don't, why, and how to ask for it back.</p>
-    <div class="meta">Last updated: 2026-10-14 · Effective: 2026-10-14</div>
+    <div class="meta">Last updated: 2026-10-20 · Effective: 2026-10-20</div>
   </section>
 
   <div class="summary-card">
@@ -98,8 +98,9 @@
       <div>
         <h4>What we collect</h4>
         <ul>
-          <li>Your <span class="yes">username</span></li>
-          <li>Your server's <span class="yes">public key</span></li>
+          <li>Your <span class="yes">username</span> and your devices' <span class="yes">public keys</span></li>
+          <li>Your servers' <span class="yes">names, public keys, health reports and the address they connect from</span></li>
+          <li>Per-account <span class="yes">traffic and AI-usage counts</span></li>
           <li>A <span class="yes">sealed LUKS blob</span> (we can't open it)</li>
           <li><span class="yes">Push tokens</span>, if you opt into push</li>
           <li><span class="yes">Billing data</span>, if you pay us</li>
@@ -114,7 +115,7 @@
           <li><span class="no">Stored LLM prompts or completions</span></li>
           <li><span class="no">Web traffic content</span></li>
           <li><span class="no">Browsing history</span></li>
-          <li><span class="no">Telemetry, analytics, fingerprints</span></li>
+          <li><span class="no">Analytics, ad pixels, fingerprints</span></li>
         </ul>
       </div>
     </div>
@@ -157,9 +158,14 @@
             <td>30 days</td>
           </tr>
           <tr>
-            <td>Fly (<code>flagship.services</code>)</td>
-            <td>TCP connection metadata; SNI hostname; bytes in/out</td>
-            <td>30 days</td>
+            <td>Our relay on Fly (<code>flagship.services</code>)</td>
+            <td>No per-connection log. In-memory counters (bytes, streams, and destination names for box-initiated AI calls), written as totals every 15 minutes with no account or box; an error line naming a box's address when its connection is held too long</td>
+            <td>Fly's log buffer; the counters are not kept</td>
+          </tr>
+          <tr>
+            <td>Fly (the hosting platform)</td>
+            <td>Whatever connection metadata Fly itself records for its customers</td>
+            <td>Per Fly's policy; not set by us</td>
           </tr>
           <tr>
             <td>Stripe</td>
@@ -197,6 +203,10 @@
         <li><strong>We may change provider at any time</strong>, based on the best offer available.</li>
       </ul>
       <p>You can add your own AI key at any time, and your server uses that instead.</p>
+      <h3 id="metadata">2.9 What our systems can see: metadata</h3>
+      <p>We cannot read your content, but we do see who talks to whom, when and how much. <code>flagshipserver.com</code> sees account names, account and device public keys, which devices are admin devices, push tokens, each server's name, public keys, the address its heartbeat arrives from, last-seen times, running software version, health reports and the orders posted for it, per-account traffic and AI-usage counts, and the audit events your devices post. <code>flagship.services</code> sees, for each connection while it is open, the client's address, the name of the box asked for (TLS names are sent in the clear), the time and the bytes each way, and which boxes are online. Each box's certificate names the box, so account and box names are visible in public Certificate Transparency logs. A network between you and a box can see which box you contact. The complete list is in our <a href="https://github.com/ibisllc/flagship/blob/main/docs/metadata-threat-model.md">metadata page</a>.</p>
+      <h3 id="outbound-ai">2.10 AI calls that leave your box through our relay</h3>
+      <p>By default, when your server calls an AI provider with your own key, the call leaves your box through our relay address instead of your home address. The connection is encrypted between your box and the provider: the relay cannot read it. It sees the provider's hostname and the amount of data, and it limits how many connections a box may open. We keep a list of provider hostnames boxes have reached, with daily totals; the list has no account, server or address in it. You can switch this off per key. A provider that cannot be reached this way is reported to you as an address that couldn't be reached.</p>
     </section>
 
     <section id="processors">
@@ -208,7 +218,7 @@
           <tr><td>Cloudflare</td><td>Worker, D1, R2 (sealed blobs, screenshots, repo adaptations waiting to be published), DNS</td><td>Global edge</td></tr>
           <tr><td>GitHub</td><td>The public repo of shared repo adaptations (no personal data)</td><td>US</td></tr>
           <tr><td>Fly.io</td><td>Stateless tunnel hub on <code>flagship.services</code></td><td>US/EU regions</td></tr>
-          <tr><td>Stripe</td><td>Payments and subscriptions</td><td>US/EU</td></tr>
+          <tr><td>Stripe</td><td>Payments and subscriptions, only if we ever start selling something (§2.4)</td><td>US/EU</td></tr>
           <tr><td>Apple (APNs)</td><td>iOS push delivery</td><td>US</td></tr>
           <tr><td>Google (FCM)</td><td>Android push delivery</td><td>US</td></tr>
           <tr><td>Let's Encrypt (ISRG)</td><td>TLS certificate issuance</td><td>US</td></tr>
@@ -216,7 +226,7 @@
           <tr><td>Anthropic</td><td>Checks shared repo adaptations, and summarizes retired ones, when that review is on (§2.6)</td><td>US</td></tr>
         </tbody>
       </table>
-      <p>If you BYOK (bring your own key), prompts go directly from your daemon to the provider you chose. We are not a sub-processor in that flow.</p>
+      <p>If you BYOK (bring your own key), prompts go from your daemon to the provider you chose, inside an encrypted connection that, by default, passes through our relay without being readable (§2.10). The provider, not us, receives and handles them; we are not a sub-processor of their content.</p>
     </section>
 
     <section id="retain">

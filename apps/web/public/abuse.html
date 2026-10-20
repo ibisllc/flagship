@@ -65,7 +65,11 @@
         We cannot read the content of a user's TLS-encrypted traffic, so requests for content monitoring or interception cannot be honored, by design.
       </p>
 
-      <h2>Security vulnerabilities</h2>
+      <h2>Connections that seem to come from our address</h2>
+<p>
+  Servers on Flagship can make outbound calls to AI providers through our relay, so a provider may see such a call arriving from the relay's address instead of the user's. Only the box's own AI-building software makes these calls, only on port 443, and only to public internet hosts; the relay cannot read them. If you see an attack or abuse that seems to come from our address (<code>149.248.216.86</code> or <code>2a09:8280:1::110:d2b6:0</code>), write to <a href="mailto:security@flagshipserver.com">security@flagshipserver.com</a> with the address and the time. We will look at the host, and if it should not be reachable this way we remove it from the list of hosts boxes may reach.
+</p>
+<h2>Security vulnerabilities</h2>
       <p>
         For security issues in Flagship itself (the protocol, daemon, control plane, or clients), please use the <a href="/security#disclosure">security disclosure process</a> instead.
       </p>

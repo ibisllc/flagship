@@ -114,7 +114,6 @@
       <a href="#setup">Setup &amp; install</a>
       <a href="#privacy">Privacy &amp; security</a>
       <a href="#apps">Services</a>
-      <a href="#money">Money &amp; subscriptions</a>
       <a href="#endgame">If Flagship goes away</a>
     </nav>
   </section>
@@ -126,7 +125,7 @@
       <details class="q">
         <summary>What hardware do I actually need?</summary>
         <div class="answer">
-          <p>Any x86_64 machine with at least 2 GB of RAM, 32 GB of disk, and a working ethernet port. An old laptop, a NUC, an Optiplex from 2014, our pre-built box. All fine. The builder handles the OS for you, so you don't need to know or care what it runs.</p>
+          <p>Any x86_64 machine with at least 2 GB of RAM, 32 GB of disk, and a working ethernet port. An old laptop, a NUC, an Optiplex from 2014. All fine. (You can also host a server on a computer you already use, from Flagship Studio.) The builder handles the OS for you, so you don't need to know or care what it runs.</p>
         </div>
       </details>
       <details class="q">
@@ -175,25 +174,25 @@
       <details class="q">
         <summary>Can Flagship read my data?</summary>
         <div class="answer">
-          <p>No, and structurally we can't. TLS terminates on your hardware against a Let's Encrypt cert that only your box holds the private key for. <code>flagship.services</code> sees encrypted bytes go past on a TCP pipe. <code>flagshipserver.com</code> only ever sees your username, your sealed LUKS blob (useless without your phone), and routing metadata. If we get hacked tomorrow, the worst thing leaked about you is your username.</p>
+          <p>Not the content of your data: files, messages, app data and AI prompts never reach us in a readable form. TLS ends on your own box, against a Let's Encrypt certificate whose private key only your box holds, so <code>flagship.services</code> sees encrypted bytes go past on a TCP pipe. What we <em>can</em> see is metadata: that your account exists, which servers it has and when they are online, roughly how much traffic they carry, and the other items listed under "What does Flagship the company actually store?" below. Because we run the <code>flagship.services</code> DNS zone we could also obtain a certificate for a box's name; the apps pin your box's own signed certificate and would refuse it, and any such certificate would be visible in public Certificate Transparency logs, but a plain web browser would not notice. The full list of who sees what is in our <a href="https://github.com/ibisllc/flagship/blob/main/docs/metadata-threat-model.md">metadata page</a>.</p>
         </div>
       </details>
       <details class="q">
         <summary>What does Flagship the company actually store?</summary>
         <div class="answer">
-          <p>Username, your server's public key, a sealed LUKS-unlock blob (encrypted to your phone), DNS records for <code>your.flagship.services</code>, push-notification tokens, billing data if you paid us money. That's it. No file content, no prompts, no chats, no service traffic. The full inventory lives in <a href="/privacy">/privacy</a>.</p>
+          <p>Your username and your devices' public keys; each server's name, public keys, the address its heartbeat arrives from, last-seen times, health reports and the orders sent to it (updates, backup policy, moves); a sealed LUKS-unlock blob (encrypted to your phone); push-notification tokens; the audit events your devices post; and per-account counts of traffic and AI usage. We also keep one list of the outside AI hosts boxes have reached, with totals and no account or box. No file content, no prompts, no chats, no service traffic. The full inventory lives in <a href="/privacy">/privacy</a>.</p>
         </div>
       </details>
       <details class="q">
         <summary>What if my phone is compromised?</summary>
         <div class="answer">
-          <p>Game over for that account, the same way it's game over for your bank app. The phone is the trust root; a compromised root can sign whatever it wants. That's why every key sits in the Secure Enclave / StrongBox behind a biometric, never leaves the chip unwrapped, and every sensitive action requires a fresh biometric prompt. If you suspect a compromise, use any other paired device to revoke the phone's identity key.</p>
+          <p>Game over for that account, the same way it's game over for your bank app. The phone is the trust root; a compromised root can sign whatever it wants. That's why the keys are wrapped by a key held in the phone's secure hardware (the Secure Enclave on iPhone, the hardware-backed Keystore on Android), and sensitive actions such as approving a server's start or signing as an admin ask for your biometric. While the app is unlocked, some keys are held in the phone's memory, so a phone that is already hacked and unlocked is not protected. If you suspect a compromise, use any other paired device to revoke the phone's identity key.</p>
         </div>
       </details>
       <details class="q">
         <summary>What encryption do you use?</summary>
         <div class="answer">
-          <p>Standard primitives only: Ed25519 signatures, X25519 + AES-256-GCM for sealed blobs, HKDF-SHA-256 for key derivation, LUKS2/argon2id for the disk. Real Let's Encrypt certs (TLS-ALPN-01 today, DNS-01 wildcard rolling out) for transport. If we ever invent our own crypto, please report it as a bug.</p>
+          <p>Standard primitives only: Ed25519 signatures, X25519 + AES-256-GCM for sealed blobs, HKDF-SHA-256 for key derivation, LUKS2/argon2id for the disk. Real Let's Encrypt certificates, requested by your box itself, for transport. If we ever invent our own crypto, please report it as a bug.</p>
         </div>
       </details>
       <details class="q">
@@ -205,13 +204,13 @@
       <details class="q">
         <summary>Can a court compel you to hand over my data?</summary>
         <div class="answer">
-          <p>They can compel us to hand over what we have, and what we have is a username, a sealed blob, and routing metadata. We can't decrypt your traffic because we don't terminate it. We can revoke the routing entry for your subdomain (which takes your services offline); that's a power we have and we'd resist abusing. We'll publish a transparency report annually once we have any requests to report.</p>
+          <p>They can compel us to hand over what we have, and what we have is account and server metadata (see above), a sealed blob, and routing records. We can't decrypt your traffic because we don't terminate it. We can revoke the routing entry for your subdomain (which takes your services offline); that's a power we have and we'd resist abusing. We'll publish a transparency report annually once we have any requests to report.</p>
         </div>
       </details>
       <details class="q">
         <summary>What do you log?</summary>
         <div class="answer">
-          <p>Cloudflare gets normal request logs (IP, path, status) for <code>flagshipserver.com</code> on a 30-day window; we don't extend them. Fly gets TCP connection metadata for <code>flagship.services</code>. Your daemon logs locally on your box and never ships those logs anywhere. We don't run analytics, ad pixels, or session-replay on the marketing site or the dashboard.</p>
+          <p>Cloudflare gets normal request logs (IP, path, status) for <code>flagshipserver.com</code> on a 30-day window; we don't extend them. Our relay on <code>flagship.services</code> writes no per-connection log: it keeps counters in memory (totals every 15 minutes) and shows an error line only when a box's connection is parked too long. Its hosting platform (Fly) may keep connection metadata under its own policy. Your daemon logs locally on your box and never ships those logs anywhere. We don't run analytics, ad pixels, or session-replay on the marketing site or the dashboard.</p>
         </div>
       </details>
     </div>
@@ -230,74 +229,25 @@
       <details class="q">
         <summary>Can I share a service with a friend?</summary>
         <div class="answer">
-          <p>Yes. Generate a signed invite token from your phone; your friend's box pulls the source from your pod and runs its own copy under their namespace. Their data stays on their box; yours stays on yours. No central database, no shared backend.</p>
+          <p>Yes, two ways. Invite people to use one app with a link you create on your phone; each person joins with their own key and you set their rank. Or share the whole server with another account, to view it or to co-manage it (a co-manager can never destroy it). There is no central database: the lists live on your servers, and changes are signed by your admin device.</p>
         </div>
       </details>
       <details class="q">
         <summary>What stops a malicious service from stealing my data?</summary>
         <div class="answer">
-          <p>The data-layer is per-service and per-user-namespaced: a service declares which Postgres tables and which object-storage buckets it wants in its manifest, and the daemon enforces it. A service for "plant watering" can't read your photos. Outbound network access is allowlisted in the manifest; the browser feature has a domain gate. Nothing stops a malicious service from being terrible inside its own scope, which is why you should think before installing one.</p>
+          <p>The data-layer is per-service and per-user-namespaced: each app gets its own Postgres database and its own files folder, runs in a sandbox (gVisor), and can reach the internet only at hosts you approve. A service for "plant watering" can't read your photos. Nothing stops a malicious service from being terrible inside its own scope, which is why you should think before installing one.</p>
         </div>
       </details>
       <details class="q">
         <summary>Which AI providers can services use?</summary>
         <div class="answer">
-          <p>Whichever you've configured. BYOK to Anthropic, OpenAI, Mistral, anyone with an API. Keys live on your daemon, encrypted at rest, scoped per service. Services never see the raw key. We also ship a one-shot promo path that shows a fresh key at first run for the supported providers, useful for "try Flagship without a credit card" but cosmetically rate-limited.</p>
+          <p>Whichever you've configured: bring your own key for Anthropic, OpenAI, Google, OpenRouter or any OpenAI-compatible API. Keys live on your daemon, encrypted at rest. By default your box reaches the provider through our relay address, which carries the encrypted connection and sees the provider's hostname and the amount of data, not the prompts; you can turn that off per key. With no key, building an app uses Flagship Inference, our built-in AI: it passes requests to a third-party model provider without keeping them (see <a href="/privacy#flagship-inference">/privacy</a>).</p>
         </div>
       </details>
       <details class="q">
         <summary>Can I uninstall a service cleanly?</summary>
         <div class="answer">
-          <p>Yes. Uninstall drops its container, its Postgres schema, its object-storage bucket, its DNS entry, and its cert. You can keep a snapshot before uninstall if you want to come back to the data later.</p>
-        </div>
-      </details>
-    </div>
-  </section>
-
-  <section class="faq-section" id="money" aria-label="Money and subscriptions">
-    <h2>Money &amp; subscriptions</h2>
-    <p class="section-lede">Hardware is one-time. Subscriptions are optional. Bring-your-own-hardware is free forever.</p>
-    <div class="qlist">
-      <details class="q">
-        <summary>What does Flagship cost?</summary>
-        <div class="answer">
-          <p>Bring-your-own-hardware: $0. We're not selling boxes or subscriptions yet; when we are, we'll publish the details and they'll be opt-in for power-user surfaces only. Most people pay nothing, forever.</p>
-        </div>
-      </details>
-      <details class="q">
-        <summary>Why charge anything if it's "your hardware"?</summary>
-        <div class="answer">
-          <p>Three real costs: shipping the pre-built boxes (margin, not profit-from-pricing), running the tunnel hub on Fly (a few cents per server per month at our scale), and running the registrar of <code>flagship.services</code> wildcard DNS. The free tier covers the steady-state for an individual on their own hardware. Subscriptions cover the things we'd otherwise have to subsidize.</p>
-        </div>
-      </details>
-      <details class="q">
-        <summary>Can I cancel anytime?</summary>
-        <div class="answer">
-          <p>Yes. Cancellation is one tap from the phone. We prorate the unused portion of the current period. Your subdomain stays yours; the routing entry continues to work; only the billed add-ons (push at scale, peer-backup pool, etc.) shut off. We don't ransom your DNS.</p>
-        </div>
-      </details>
-      <details class="q">
-        <summary>What's your refund policy on hardware?</summary>
-        <div class="answer">
-          <p>30 days, full refund, you ship it back. We pay return shipping inside the US; outside the US it's on you. If the box arrived dead or DOA we pay both ways. We don't restock-fee. Full terms at <a href="/terms">/terms</a>.</p>
-        </div>
-      </details>
-      <details class="q">
-        <summary>Do you take crypto?</summary>
-        <div class="answer">
-          <p>Not yet. Stripe takes cards (USD, EUR, GBP). We're exploring monero / lightning for the privacy-conscious, but it's not on the immediate roadmap. If this matters to you, mail <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a> and tell us. That's how features get prioritized.</p>
-        </div>
-      </details>
-      <details class="q">
-        <summary>Will the price change?</summary>
-        <div class="answer">
-          <p>Hardware: probably, with component costs. Existing orders are locked in. Subscriptions: we'll grandfather every existing subscriber on a price change for at least 12 months and we'll tell you at signup if a plan is "introductory." We don't do "your renewal is now triple."</p>
-        </div>
-      </details>
-      <details class="q">
-        <summary>How do you make money long-term?</summary>
-        <div class="answer">
-          <p>Hardware margin, subscriptions on the optional add-ons. We don't sell ads, telemetry, model-training rights, or your data: partly because it's the right thing, mostly because we structurally can't.</p>
+          <p>Yes. Uninstall drops its container, its Postgres database, its files folder and its access list. You can keep a snapshot before uninstall if you want to come back to the data later.</p>
         </div>
       </details>
     </div>
@@ -310,19 +260,19 @@
       <details class="q">
         <summary>What happens to my server if you shut down?</summary>
         <div class="answer">
-          <p>It keeps running. Your services keep running. Your TLS cert keeps renewing through Let's Encrypt as long as DNS resolves. The two things that would break: routing through <code>flagship.services</code> (because the tunnel hub is ours) and the build pipeline at <code>flagshipserver.com</code> (because that's our Worker). The fix in both cases is a self-hosting playbook we've already drafted: you'd run your own services-zone or point your subdomain at your own IP via DDNS.</p>
+          <p>It keeps running, and so do your services, until its certificate runs out (certificates last about 90 days). Several things need us: routing through <code>flagship.services</code> (the tunnel hub is ours), renewing the certificate (our DNS zone is used for the challenge), setting up a new server, pairing a new device, account recovery and any routing change. The code is open, so someone could run their own copies, but we have not built a handover for that, and we don't promise one.</p>
         </div>
       </details>
       <details class="q">
         <summary>What about my data and identity?</summary>
         <div class="answer">
-          <p>The data is on your disk; it was never anywhere else. The identity is your phone's keypair; it doesn't depend on us being alive. The username at <code>flagshipserver.com</code> goes away if the company does, but the underlying public key is yours forever. Migrating to a self-hosted control plane would be one DNS change away.</p>
+          <p>The data is on your disk; it was never anywhere else. The identity is your phone's keypair; it doesn't depend on us being alive. The username at <code>flagshipserver.com</code> goes away if the company does, but the underlying public key is yours. Keep a backup of your account key and of your server (Back up now) so you can rebuild elsewhere.</p>
         </div>
       </details>
       <details class="q">
         <summary>Will the source survive you?</summary>
         <div class="answer">
-          <p>Yes. BUSL-1.1 with a Change Date of 2030-05-03: even if the company evaporates tomorrow, the entire codebase becomes Apache 2.0 in 2030 by license, and the GitHub mirror stays up regardless. We'll publish escrow instructions for the build pipeline before public launch.</p>
+          <p>Yes. BUSL-1.1 with a Change Date of 2030-05-03: even if the company evaporates tomorrow, the entire codebase becomes Apache 2.0 in 2030 by license, and the GitHub mirror stays up regardless.</p>
         </div>
       </details>
     </div>

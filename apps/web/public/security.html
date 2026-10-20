@@ -69,8 +69,9 @@
 
         <h3>Threat model in one paragraph</h3>
         <p>
-          Your phone holds your User Master Key (UMK) inside the Secure Enclave / StrongBox.
-          It never leaves the phone unwrapped. Derived keys do specific jobs:
+          Your phone holds your User Master Key (UMK), wrapped by a key in its secure hardware
+          (Secure Enclave on iPhone, hardware-backed Keystore on Android); while the app is
+          unlocked it is held in the phone's memory. It never leaves the phone unwrapped. Derived keys do specific jobs:
           <strong>BAK</strong> gates server boot, <strong>IRK</strong> signs account-level
           operations like image-rebuild and revocation, and <strong>SWK</strong> is provisioned
           to the server so backup runs autonomously without keeping your phone awake. Peer
