@@ -1,1 +1,8 @@
-[]
+[
+  {
+    "id": "d1-export",
+    "commit": "e9155777ead0928c930ca0afe203f9097916ff03",
+    "at": "2026-10-20T21:29:14.316Z",
+    "note": "export ~/d1-before-scrub-20261020T173045Z.sql taken 2026-10-20 before the scrub (file present, 528283 bytes)"
+  }
+]
