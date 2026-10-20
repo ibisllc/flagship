@@ -277,7 +277,7 @@ meta_services() {
   WHAT="Deploys the relay image (the uniform drop timing for unregistered names) FIRST, before the DNS wildcard and before .com, so the relay already drops unknown names uniformly when the wildcard starts answering them. Every box's tunnel drops for about 20 seconds."
   read -r -d '' CMDS <<'EOF' || true
 flyctl releases -a flagship-services | head -5
-flyctl deploy --remote-only --strategy=immediate --yes -a flagship-services
+flyctl deploy --remote-only --strategy=rolling --yes -a flagship-services
 curl -s -o /dev/null -w "%{http_code}" https://flagship.services/api/health
 EOF
   GATE="https://flagship.services/api/health answers 200 and https://flagshipserver.com/status/ shows boxes back online within a minute."
@@ -1204,9 +1204,9 @@ run_services() {
   ensure_wt
   say "  recent Fly releases:"; flyctl releases -a flagship-services 2>&1 | head -5 | sed 's/^/    /' || true
   say "  last relay-path commit on the pin:"; wt_git log -1 --format='    %h %cI %s' -- apps/web/src packages Dockerfile fly.toml billing
-  warn "--strategy=immediate drops EVERY box's tunnel for about 20 seconds. Do it when nobody is mid-unlock."
+  say "  --strategy=rolling (fly.toml): one machine at a time, the old hub sends DrainNotice so tunnels move over; with two machines running there is no gap."
   confirm "Deploy .services to Fly now?" || return 10
-  XA "$WT" flyctl deploy --remote-only --strategy=immediate --yes -a flagship-services
+  XA "$WT" flyctl deploy --remote-only --strategy=rolling --yes -a flagship-services
   PROBE_FAILS=0
   probe_code ".services health" "$SERVICES_URL/api/health" 200 8
   info_code "status page" "$COM_URL/status/"

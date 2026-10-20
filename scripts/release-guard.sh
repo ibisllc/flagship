@@ -109,10 +109,23 @@ scan() {
     exclude_path "$file" && continue
     [ "$allow_gate" = "allow-debug-gate" ] && exempt_debug_gate "$file" && continue
     findings+=("$label"$'\t'"$hit")
-  done < <(grep -rInE "$pattern" \
+  done < <(scan_source_files "$pattern")
+}
+
+# Every source file's matches as "<abs path>:<line>:<text>". In a git checkout only the files git
+# knows (tracked, or untracked and not ignored): walking the tree also walks .claude/worktrees,
+# node_modules and build output, which hangs the guard in a checkout with many worktrees.
+scan_source_files() {
+  local pattern="$1"
+  if git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1 && [ -z "$(git -C "$root" rev-parse --show-prefix)" ]; then
+    (cd "$root" && git ls-files -z --cached --others --exclude-standard -- '*.ts' '*.swift' '*.kt' '*.sh' '*.mjs' '*.js' \
+      | xargs -0 grep -InE "$pattern" /dev/null 2>/dev/null | sed "s#^#$root/#")
+  else
+    grep -rInE "$pattern" \
       --include="*.ts" --include="*.swift" --include="*.kt" --include="*.sh" \
       --include="*.mjs" --include="*.js" \
-      "$root" 2>/dev/null)
+      "$root" 2>/dev/null
+  fi
 }
 
 # (L1) No constant install-time LUKS passphrase, in any form. Fails every run.

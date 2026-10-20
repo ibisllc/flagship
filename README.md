@@ -60,7 +60,7 @@ See `CLAUDE.md` for the full set of commands. TL;DR:
 ```sh
 cd apps/com && npx wrangler deploy                      # Worker
 export PATH="$HOME/.fly/bin:$PATH"
-flyctl deploy --remote-only --strategy=immediate --yes -a flagship-services
+flyctl deploy --remote-only --strategy=rolling --yes -a flagship-services
 ```
 
 ## License

@@ -593,11 +593,13 @@ flyctl releases -a flagship-services | head -5          # when was the last imag
 git -C ~/flagship-deploy log -1 --format='%h %cI' -- apps/web/src packages Dockerfile fly.toml billing
 export PATH="$HOME/.fly/bin:$PATH"
 cd ~/flagship-deploy
-flyctl deploy --remote-only --strategy=immediate --yes -a flagship-services
+flyctl deploy --remote-only --strategy=rolling --yes -a flagship-services
 ```
 
-`--strategy=immediate` drops every box's tunnel for about 20 seconds; that is
-expected. Do it when nobody is mid-unlock.
+`--strategy=rolling` is what `fly.toml` asks for: one machine at a time (two are kept
+running), and the old hub sends each box a DrainNotice so its tunnel moves to the new
+machine. Do not use `--strategy=immediate`: it stops the only healthy machine and drops
+every box's tunnel for about 20 seconds.
 
 Check:
 

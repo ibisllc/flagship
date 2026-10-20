@@ -83,6 +83,23 @@ describe("release-guard.sh — against a clean tree (post-GA, backdoors removed)
     return d;
   }
 
+  it("in a git checkout it reads only files git knows: ignored folders (worktrees, build output) are never walked", () => {
+    dir = makeCleanTree();
+    const git = (...a: string[]) => spawnSync("git", ["-C", dir, ...a], { encoding: "utf8" });
+    git("init", "-q");
+    writeFileSync(join(dir, ".gitignore"), "bulk/\n");
+    const bad = 'export const BURN_PASSPHRASE = "flagship-build-time-luks-rekey-me-immediately";\n';
+    mkdirSync(join(dir, "bulk"), { recursive: true });
+    writeFileSync(join(dir, "bulk", "stale.ts"), bad);
+    expect(run({ RELEASE: "", RELEASE_GUARD_ROOT: dir }).code).toBe(0);
+    // A file that is not ignored is still found, tracked or not yet added.
+    writeFileSync(join(dir, "packages", "flagship-builder", "src", "burn.ts"), bad);
+    const r = run({ RELEASE: "", RELEASE_GUARD_ROOT: dir });
+    expect(r.code).not.toBe(0);
+    expect(r.stderr).toContain("burn.ts");
+    expect(r.stderr).not.toContain("stale.ts");
+  });
+
   it("dev build on a clean tree: exits 0 and reports OK", () => {
     dir = makeCleanTree();
     const r = run({ RELEASE: "", RELEASE_GUARD_ROOT: dir });

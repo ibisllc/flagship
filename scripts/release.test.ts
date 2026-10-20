@@ -139,7 +139,7 @@ describe("release.sh", () => {
     const steps = planSteps(r.out);
     expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 16 }, (_, i) => i + 1));
     expect(r.out).toContain("npm run deploy");
-    expect(r.out).toContain("flyctl deploy --remote-only --strategy=immediate --yes -a flagship-services");
+    expect(r.out).toContain("flyctl deploy --remote-only --strategy=rolling --yes -a flagship-services");
     expect(r.out).toContain("endorse-release.mjs --to <PIN> --from <endorsed> --sign");
     expect(r.out).toContain("wrangler tail flagship-com --format json");
     // the two-Worker deploy: terminal-attached, domain prompt, webapp/remote post-checks, backup first
