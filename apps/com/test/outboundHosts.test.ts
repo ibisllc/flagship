@@ -35,6 +35,16 @@ describe("outbound hosts", () => {
     }
   });
 
+  it("lets the gym's scripted provider through only under the gym apex", () => {
+    const stub = "aistub.home.abc.gym.flagship.services";
+    expect(normalizeOutboundHost(stub, "gym.flagship.services")).toBe(stub);
+    expect(normalizeOutboundHost(stub)).toBeNull();
+    expect(normalizeOutboundHost(stub, "flagship.services")).toBeNull();
+    for (const bad of ["home.abc.gym.flagship.services", "aistub.home.abc.flagship.services", "aistub.x.flagshipserver.com"]) {
+      expect(normalizeOutboundHost(bad, "gym.flagship.services"), bad).toBeNull();
+    }
+  });
+
   it("allows a new host by default, remembers it, and refuses it once blocked", withDb(async (db) => {
     expect(await checkOutboundHost(db, "api.new-ai.example.org")).toEqual({ allowed: true });
     const seen = await readOutboundHosts(db, 1);

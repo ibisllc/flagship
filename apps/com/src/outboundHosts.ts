@@ -30,10 +30,12 @@ export interface OutboundHostsEnv {
   DB?: D1Database;
   FLAGSHIP_ADMIN_SECRET?: string;
   USAGE_REPORT_SECRET?: string;
+  /** "flagship.services" in production; the gym Worker sets "gym.flagship.services". */
+  SERVICES_APEX?: string;
 }
 
 /** A lower-case public DNS name the hub could dial on 443, or null. Never an IP literal or one of our own names. */
-export function normalizeOutboundHost(raw: unknown): string | null {
+export function normalizeOutboundHost(raw: unknown, servicesApex?: string): string | null {
   if (typeof raw !== "string") return null;
   const h = raw.trim().toLowerCase().replace(/\.$/, "");
   if (h.length < 4 || h.length > 253) return null;
@@ -42,7 +44,10 @@ export function normalizeOutboundHost(raw: unknown): string | null {
   if (!labels.every((l) => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(l))) return null;
   if (/^\d+$/.test(labels[labels.length - 1]!)) return null;
   if (/\.(local|internal|localhost|invalid|test|example|lan|home|corp)$/.test(h)) return null;
-  if (h === "flagship.services" || h.endsWith(".flagship.services")) return null;
+  // The gym's scripted AI provider sits under the gym apex; production never allows it, and no
+  // other name under either apex is let through.
+  const gymStub = !!servicesApex && servicesApex !== "flagship.services" && h.startsWith("aistub.") && h.endsWith(`.${servicesApex}`);
+  if (!gymStub && (h === "flagship.services" || h.endsWith(".flagship.services"))) return null;
   if (h === "flagshipserver.com" || h.endsWith(".flagshipserver.com")) return null;
   return h;
 }
@@ -76,12 +81,12 @@ export interface OutboundReportRow {
 
 const count = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.min(Math.floor(v), 2 ** 50) : 0);
 
-export function parseReportRows(body: unknown): OutboundReportRow[] | null {
+export function parseReportRows(body: unknown, servicesApex?: string): OutboundReportRow[] | null {
   const rows = (body as { rows?: unknown } | null)?.rows;
   if (!Array.isArray(rows) || rows.length > MAX_REPORT_ROWS) return null;
   const out: OutboundReportRow[] = [];
   for (const r of rows as Record<string, unknown>[]) {
-    const host = normalizeOutboundHost(r?.host);
+    const host = normalizeOutboundHost(r?.host, servicesApex);
     if (!host) continue;
     out.push({ host, streams: count(r.streams), up: count(r.up), down: count(r.down), refused: count(r.refused) });
   }
@@ -179,12 +184,12 @@ export async function handleOutboundHosts(request: Request, env: OutboundHostsEn
 
   if (path === OUTBOUND_CHECK_PATH) {
     const body = (await request.json().catch(() => null)) as { host?: unknown } | null;
-    const host = normalizeOutboundHost(body?.host);
+    const host = normalizeOutboundHost(body?.host, env.SERVICES_APEX);
     if (!host) return json({ allowed: false, reason: "bad-host" }, 200);
     return json(await checkOutboundHost(env.DB, host), 200);
   }
   if (path === OUTBOUND_REPORT_PATH) {
-    const rows = parseReportRows(await request.json().catch(() => null));
+    const rows = parseReportRows(await request.json().catch(() => null), env.SERVICES_APEX);
     if (!rows) return json({ error: "bad report" }, 400);
     await recordOutboundReport(env.DB, rows);
     return json({ ok: true, rows: rows.length }, 200);
@@ -196,7 +201,7 @@ export async function handleOutboundHosts(request: Request, env: OutboundHostsEn
   }
   if (request.method === "POST") {
     const body = (await request.json().catch(() => null)) as { host?: unknown; status?: unknown; note?: unknown } | null;
-    const host = normalizeOutboundHost(body?.host);
+    const host = normalizeOutboundHost(body?.host, env.SERVICES_APEX);
     if (!host) return json({ error: "host must be a public DNS name" }, 400);
     if (body?.status !== "allowed" && body?.status !== "blocked") return json({ error: "status must be allowed or blocked" }, 400);
     await setOutboundHostStatus(env.DB, host, body.status, typeof body.note === "string" ? body.note : "");
