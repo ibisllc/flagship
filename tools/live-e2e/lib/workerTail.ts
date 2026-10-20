@@ -92,7 +92,12 @@ export interface TailSummary {
   outcomes: Record<string, number>;
   exceeded: Array<{ at: string; method: string; route: string; outcome: string; status: number | null; exceptions: string[] }>;
   error1102: number;
-  routes: Array<{ route: string; method: string; n: number; cpuMsMax: number | null; cpuMsP50: number | null; cpuMsP95: number | null; wallMsMax: number | null; statuses: Record<string, number> }>;
+  routes: Array<{ route: string; method: string; n: number; over10: number; cpuMsMax: number | null; cpuMsP50: number | null; cpuMsP95: number | null; wallMsMax: number | null; statuses: Record<string, number> }>;
+  /**
+   * Routes where a fifth or more of at least 5 requests used over the Free plan's 10 ms of CPU: the
+   * route itself is too heavy, not one cold isolate. (A single slow first request is in `nearBudget`.)
+   */
+  systematicOver: Array<{ route: string; method: string; n: number; over10: number }>;
   /** Routes whose slowest request used more than 8 of the Free plan's 10 ms CPU (only when wrangler reports cpuTime). */
   nearBudget: Array<{ route: string; method: string; cpuMsMax: number }>;
 }
@@ -194,7 +199,7 @@ export class WorkerTail {
   }
 
   summary(): TailSummary {
-    if (!this.started) return { available: false, reason: this.reason ?? "not started", events: 0, outcomes: {}, exceeded: [], error1102: 0, routes: [], nearBudget: [] };
+    if (!this.started) return { available: false, reason: this.reason ?? "not started", events: 0, outcomes: {}, exceeded: [], error1102: 0, routes: [], systematicOver: [], nearBudget: [] };
     const outcomes: Record<string, number> = {};
     const routes = new Map<string, TailSummary["routes"][number]>();
     const cpus = new Map<string, number[]>();
@@ -203,10 +208,11 @@ export class WorkerTail {
     for (const e of this.events) {
       outcomes[e.outcome] = (outcomes[e.outcome] ?? 0) + 1;
       const k = `${e.method} ${e.route}`;
-      const r = routes.get(k) ?? { route: e.route, method: e.method, n: 0, cpuMsMax: null, cpuMsP50: null, cpuMsP95: null, wallMsMax: null, statuses: {} };
+      const r = routes.get(k) ?? { route: e.route, method: e.method, n: 0, over10: 0, cpuMsMax: null, cpuMsP50: null, cpuMsP95: null, wallMsMax: null, statuses: {} };
       if (e.cpuMs !== null) cpus.set(k, [...(cpus.get(k) ?? []), e.cpuMs]);
       r.n += 1;
       if (e.cpuMs !== null) r.cpuMsMax = Math.max(r.cpuMsMax ?? 0, e.cpuMs);
+      if (e.cpuMs !== null && e.cpuMs > 10) r.over10 += 1;
       if (e.wallMs !== null) r.wallMsMax = Math.max(r.wallMsMax ?? 0, e.wallMs);
       if (e.status !== null) r.statuses[String(e.status)] = (r.statuses[String(e.status)] ?? 0) + 1;
       routes.set(k, r);
@@ -230,6 +236,9 @@ export class WorkerTail {
         })
         .sort((a, b) => b.n - a.n)
         .slice(0, 80),
+      systematicOver: [...routes.values()]
+        .filter((r) => r.n >= 5 && r.over10 / r.n >= 0.2)
+        .map((r) => ({ route: r.route, method: r.method, n: r.n, over10: r.over10 })),
       nearBudget: [...routes.values()]
         .filter((r) => r.cpuMsMax !== null && r.cpuMsMax > 8)
         .map((r) => ({ route: r.route, method: r.method, cpuMsMax: r.cpuMsMax! }))

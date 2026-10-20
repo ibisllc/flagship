@@ -565,7 +565,41 @@ function http(
   };
 }
 
+/** A migration session of the first server onto the second, in the phase a box polls it. */
+async function seedMigration(w: World): Promise<void> {
+  const [from, to] = w.servers;
+  await w.raw
+    .prepare(
+      "INSERT OR REPLACE INTO server_migrations (server_domain, username, old_stk_pub_hex, order_json, order_signature_hex, " +
+        "disposition, phase, initiated_at, new_server_domain, new_stk_pub_hex, attached_at, pre_seeded_at, ready_at, freeze_at) " +
+        "VALUES (?, ?, ?, ?, ?, 'wipe', 'pre-seeded', ?, ?, ?, ?, ?, ?, NULL)",
+    )
+    .bind(from!.domain, ACCOUNT, "11".repeat(32), "{}", "22".repeat(64), 1, to!.domain, "33".repeat(32), 2, 3, 4)
+    .run();
+}
+
+/** Routes the final gym recorded far over the Free plan's 10 ms (migration reads, health, usage, eviction chain). */
+const migrationScenarios: Scenario[] = [
+  {
+    ...http("migration-read", "GET /api/server/<d>/migration (the phone and both boxes poll a live migration)", "apps and both boxes, every few seconds during a move", (w) =>
+      new Request(`${ORIGIN}/api/server/${w.servers[0]!.domain}/migration`)),
+    prepare: async (w) => {
+      await seedMigration(w);
+      return new Request(`${ORIGIN}/api/server/${w.servers[0]!.domain}/migration`);
+    },
+  },
+  {
+    ...http("migration-assignment-live", "GET /api/server/<d>/migration-assignment on the new box (a session names it)", "the new box, every few seconds during a move", (w) =>
+      new Request(`${ORIGIN}/api/server/${w.servers[1]!.domain}/migration-assignment`)),
+    prepare: async (w) => {
+      await seedMigration(w);
+      return new Request(`${ORIGIN}/api/server/${w.servers[1]!.domain}/migration-assignment`);
+    },
+  },
+];
+
 export const SCENARIOS: Scenario[] = [
+  ...migrationScenarios,
   http("directory", "GET /api/accounts/<u>/directory (Trusted devices)", "apps, on opening Trusted devices", (w) =>
     directoryRequest(w)),
   http("directory-member", "directory read by a non-admin view-directory device", "apps", (w) =>

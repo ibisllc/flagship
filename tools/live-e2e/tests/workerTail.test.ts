@@ -104,3 +104,20 @@ describe("WorkerTail", () => {
     expect(t.summary()).toMatchObject({ available: false });
   });
 });
+
+describe("WorkerTail tells a heavy route from one cold start", () => {
+  const run = async (cpus: number[]) => {
+    const lines = cpus.map((cpu) => JSON.stringify({ outcome: "ok", cpuTime: cpu, eventTimestamp: 1, event: { request: { url: "https://x/api/server/abc/migration", method: "GET" }, response: { status: 200 } } }));
+    const t = new WorkerTail({ cwd: ".", source: (on) => { for (const l of lines) on(l); return { stop() {} }; } });
+    await t.start();
+    return t.summary();
+  };
+  it("flags a route that is over 10 ms in a fifth of 5 or more requests", async () => {
+    const s = await run([2, 2, 12, 14, 3, 2]);
+    expect(s.systematicOver).toEqual([{ route: "/api/server/:x/migration", method: "GET", n: 6, over10: 2 }]);
+  });
+  it("only notes one slow request among many, or a route with too few requests", async () => {
+    expect((await run([2, 2, 2, 2, 2, 2, 2, 2, 2, 114])).systematicOver).toEqual([]);
+    expect((await run([114, 120])).systematicOver).toEqual([]);
+  });
+});

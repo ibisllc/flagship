@@ -391,6 +391,21 @@ async function main(): Promise<number> {
         return `${s.events} Worker invocations, outcomes ${JSON.stringify(s.outcomes)}${s.nearBudget.length ? `; over 8 ms CPU: ${s.nearBudget.slice(0, 5).map((r) => `${r.method} ${r.route} ${r.cpuMsMax} ms`).join(", ")}` : ""}`;
       });
     }
+    if (tail && tail.summary().available) {
+      // The outcome label says "ok" for a request that used 100 ms of CPU on a Worker without a
+      // CPU cap, so this reads the CPU itself (docs/runbooks/workers-cpu-budget.md). One slow first
+      // request on a cold isolate is only reported; a route that is over often enough is a failure.
+      await fleetRec.check("Worker tail: no route is systematically over the Free plan's 10 ms CPU", async () => {
+        const s = tail!.summary();
+        if (s.systematicOver.length) {
+          throw new Error(s.systematicOver.slice(0, 5).map((r) => `${r.method} ${r.route} ${r.over10}/${r.n} over 10 ms`).join("; "));
+        }
+        const once = s.nearBudget.filter((r) => r.cpuMsMax > 10);
+        return once.length
+          ? `only single slow requests (cold isolates): ${once.slice(0, 5).map((r) => `${r.method} ${r.route} ${r.cpuMsMax} ms`).join(", ")}`
+          : "every route stayed within 10 ms";
+      });
+    }
     writeJson(dir, "fleet-checks.json", fleetRec.results);
     summary.fleet = { pass: fleetRec.passed, fail: fleetRec.failed, skip: fleetRec.skipped };
     await doTeardown("end of run");

@@ -64,6 +64,10 @@ const BUDGETS: Record<string, Budget> = {
   "daemon-status": { d1: 5, ratio: DEFAULT_RATIO },
   "edge-pods": { d1: 3, ratio: DEFAULT_RATIO },
   "edge-directory": { d1: 4, ratio: DEFAULT_RATIO },
+  // session, then the eviction row it joins live
+  "migration-read": { d1: 2, ratio: DEFAULT_RATIO },
+  // the new box's registration, the account's sessions, then the eviction row
+  "migration-assignment-live": { d1: 3, ratio: DEFAULT_RATIO },
 };
 
 describe("Workers CPU budget (Free plan)", () => {
