@@ -61,6 +61,7 @@ import {
   type PushTokenStore,
 } from "./routes/pushRelay.js";
 import { startSniRouter, type RunningSniRouter } from "./tunnel/sniRouter.js";
+import { startRelayEcho, type RunningRelayEcho } from "./tunnel/relayEcho.js";
 import { UsageMeter } from "./tunnel/usageMeter.js";
 import { overQuotaBytesPerSec } from "./tunnel/throttle.js";
 import { startTunnelHub } from "./tunnel/tunnelHub.js";
@@ -328,6 +329,8 @@ declare module "fastify" {
 export async function start(opts: {
   httpPort?: number;
   tunnelTcpPort?: number;
+  /** Port for the "which address did you reach me at" echo (PROXY protocol); off when unset. */
+  relayEchoPort?: number;
   host?: string;
 } = {}): Promise<ServerHandle> {
   const httpPort = opts.httpPort ?? Number(process.env.PORT) ?? 3000;
@@ -496,6 +499,12 @@ export async function start(opts: {
     console.log(`SNI router listening on :${router.port} (raw TCP / TLS passthrough)`);
   }
 
+  let echo: RunningRelayEcho | null = null;
+  if (opts.relayEchoPort !== undefined) {
+    echo = await startRelayEcho({ port: opts.relayEchoPort, host });
+    console.log(`relay echo listening on :${echo.port} (PROXY protocol)`);
+  }
+
   console.log(`flagshipserver.com listening on :${httpPort}`);
   console.log(`tunnel hub: ws://${host}:${httpPort}/tunnel`);
 
@@ -509,6 +518,7 @@ export async function start(opts: {
       meter?.stop();
       blessingProvider?.stop();
       if (router) await router.close();
+      if (echo) await echo.close();
       await stopHub();
       await app.close();
     },
@@ -520,7 +530,8 @@ if (invokedDirectly) {
   const tunnelTcpPort = process.env.TUNNEL_TCP_PORT
     ? Number(process.env.TUNNEL_TCP_PORT)
     : undefined;
-  start({ tunnelTcpPort }).catch((e) => {
+  const relayEchoPort = process.env.RELAY_ECHO_PORT ? Number(process.env.RELAY_ECHO_PORT) : undefined;
+  start({ tunnelTcpPort, relayEchoPort }).catch((e) => {
     console.error(e);
     process.exit(1);
   });

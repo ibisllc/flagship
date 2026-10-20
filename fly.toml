@@ -33,6 +33,7 @@ kill_timeout = "30s"
   NODE_ENV = "production"
   PORT = "3000"
   TUNNEL_TCP_PORT = "8443"
+  RELAY_ECHO_PORT = "3001"
   FLAGSHIP_SURFACE = "services"
 
 # External :443 → internal :8443 (raw TCP). The SNI router peeks the
@@ -81,6 +82,22 @@ kill_timeout = "30s"
     interval = "30s"
     timeout = "5s"
     grace_period = "10s"
+
+# External :8444 → internal :3001, TLS ended by Fly (the app's fly.dev
+# certificate) with a PROXY-protocol header in front: the relay-address echo.
+# It answers which address the connection REALLY arrived at, so a phone can drop a
+# `.com`-recommended address that is a forwarder in front of this app
+# (docs/relay-addresses.md). It reads no user data and has no state.
+[[services]]
+  protocol = "tcp"
+  internal_port = 3001
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 2
+
+  [[services.ports]]
+    port = 8444
+    handlers = ["tls", "proxy_proto"]
 
 [[vm]]
   cpu_kind = "shared"
