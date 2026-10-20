@@ -140,6 +140,19 @@ Windows round saw closed under a DNS block (cause still unknown).** [iOS] [AND]
 passes 18 of 18 in a clean worktree (it never finishes in a checkout that holds stale
 `.claude/worktrees/agent-*` folders); `npm run parity` 0 red.
 
+**Final gym (2026-10-20, gym built from `main` after the endorsement `4be5aae88`)** [V by the
+run's own summaries, `gym-results/live-run-2026-10-20T01-13-51-627Z` and `...T02-34-44-490Z`]:
+migrate 10/10, backups 8/8, one-list 6/6, update 5/5, fleet 19/19, runtimes 10/10, archive 8/8.
+The update check took a box from the previous endorsed release to `875ad977` (reported applied, 4.6
+min, inside the 12 min doorbell budget). One archive check was a race in the test (a near-empty box
+finishes its backup before the "busy" probe arrives, so the daemon rightly accepted a second one);
+the probe now repeats the same archive and key (`19d043da6`). The `archive` group needs `runtimes` in
+the same run (it expects the python app). No server or DNS record was left behind. **Not covered by
+this gym:** the iOS and Android relay route under a real DNS block, anything on a device, the UAC and
+Windows first-boot retests. **Watch:** the Worker tail listed `GET /api/server/:x/migration` at 114 ms
+CPU and `POST /api/dev/sample-user/create` at 111 ms, far over the 10 ms Free-plan budget; neither
+failed the run, and the migration read may matter for GA (`docs/runbooks/workers-cpu-budget.md`).
+
 ## 1. Scope, baselines and size
 
 | | iOS baseline | Android baseline |
