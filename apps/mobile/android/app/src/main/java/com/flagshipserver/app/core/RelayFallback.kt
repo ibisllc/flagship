@@ -128,6 +128,7 @@ class DnsRetryInterceptor(
 class RelayHintFailureInterceptor(
     private val dns: RelayFallbackDns,
     private val log: (String) -> Unit = { m -> runCatching { android.util.Log.i("RelayFallback", m) } },
+    private val diagnostics: DiagnosticsLog = DiagnosticsLog.shared,
 ) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val host = chain.request().url.host
@@ -138,6 +139,11 @@ class RelayHintFailureInterceptor(
         } catch (e: IOException) {
             if (!dns.servedByHint(host)) throw e
             log("the relay hint for $host didn't work (${e.javaClass.simpleName}); treating the name as unresolved")
+            // The sentence stays calm; the real class is kept for whoever is asked what went wrong.
+            diagnostics.record(
+                if (e is javax.net.ssl.SSLPeerUnverifiedException) DiagnosticCode.RELAY_PIN_MISMATCH else DiagnosticCode.RELAY_ROUTE_UNVERIFIED,
+                host, DiagnosticCode.of(e),
+            )
             throw UnknownHostException("Unable to resolve host \"$host\"").also { it.initCause(e) }
         }
     }

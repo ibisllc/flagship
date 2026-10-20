@@ -185,6 +185,22 @@ class RelayFallbackTest {
         }
     }
 
+    @Test fun aFailedHintKeepsItsRealReasonInTheDiagnosticsLog() {
+        val log = DiagnosticsLog()
+        RelayHintFailureInterceptor(hintDns(), { }, log).let {
+            assertThrows(UnknownHostException::class.java) { it.intercept(Failing(req, java.net.SocketTimeoutException("t"))) }
+            assertThrows(UnknownHostException::class.java) { it.intercept(Failing(req, javax.net.ssl.SSLPeerUnverifiedException("pin"))) }
+        }
+        assertEquals(
+            listOf(DiagnosticCode.RELAY_ROUTE_UNVERIFIED to "net-timeout", DiagnosticCode.RELAY_PIN_MISMATCH to "tls-pin-mismatch"),
+            log.recent().map { it.code to it.detail },
+        )
+        for (i in 0..DiagnosticsLog.CAPACITY) log.record("x", "h$i")
+        assertEquals(DiagnosticsLog.CAPACITY, log.recent().size)
+        assertEquals("net-name-lookup", DiagnosticCode.of(UnknownHostException()))
+        assertEquals("tls-failed", DiagnosticCode.of(javax.net.ssl.SSLHandshakeException("x")))
+    }
+
     @Test fun aNameDnsAnsweredKeepsItsRealErrors() {
         val own = InetAddress.getByAddress(byteArrayOf(10, 0, 0, 9))
         val d = dns(Resolver(mapOf(box to listOf(own))))
