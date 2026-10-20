@@ -397,6 +397,10 @@ async function main(): Promise<number> {
       // request on a cold isolate is only reported; a route that is over often enough is a failure.
       await fleetRec.check("Worker tail: no route is systematically over the Free plan's 10 ms CPU", async () => {
         const s = tail!.summary();
+        // On Workers Paid the cap is 30 s, so 10 ms is a number to watch, not a limit: set WORKERS_PLAN=paid.
+        if (s.systematicOver.length && process.env.WORKERS_PLAN === "paid") {
+          return `Workers Paid (no 10 ms cap); routes over 10 ms: ${s.systematicOver.slice(0, 5).map((r) => `${r.method} ${r.route} ${r.over10}/${r.n}`).join(", ")}`;
+        }
         if (s.systematicOver.length) {
           throw new Error(s.systematicOver.slice(0, 5).map((r) => `${r.method} ${r.route} ${r.over10}/${r.n} over 10 ms`).join("; "));
         }
