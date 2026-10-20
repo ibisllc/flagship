@@ -15,15 +15,31 @@ name: CI (tsc + vitest)
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, "release/**"]
+  # The full web gym (about 25 minutes) runs here once a day, not on every push.
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# A newer push to the same branch makes the older run pointless.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # The unit suite runs in four parallel shards; the typecheck, the vectors and the
+  # root-only loop-image test run once, in shard 1.
   gate:
+    name: gate (${{ matrix.shard }}/4)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     services:
       # The box's Postgres image, for the database size-limit tests
       # (packages/server-daemon/tests/appQuotaPg.integration.test.ts).
@@ -64,14 +80,16 @@ jobs:
       # vitest suite also covers this via canonicalBytesVectorsFresh.test.ts; this
       # is a fast, standalone belt-and-braces check that runs before the suite.)
       - name: Canonical-byte vectors are fresh
+        if: matrix.shard == 1
         run: npx tsx tools/test-vectors.ts --check
 
-      - name: Run the unit suite
-        run: npx vitest run
+      - name: Run the unit suite (shard ${{ matrix.shard }} of 4)
+        run: npx vitest run --shard=${{ matrix.shard }}/4
 
       # Cross-client parity (docs/runbooks/release-readiness.md). Report-only
       # while the known gaps it lists get fixed; make it a gate once it is green.
       - name: Cross-client parity (report only)
+        if: matrix.shard == 1
         continue-on-error: true
         run: npm run parity -- --report >> "$GITHUB_STEP_SUMMARY"
 
@@ -79,13 +97,15 @@ jobs:
       # container on one: needs root (packages/server-daemon/tests/
       # appQuotaLoop.integration.test.ts). Last, as it runs as root.
       - name: Files-folder limits on real loop images (root)
+        if: matrix.shard == 1
         run: sudo -E env "PATH=$PATH" FLAGSHIP_TEST_LOOP=1 FLAGSHIP_TEST_LOOP_DOCKER=1 npx vitest run packages/server-daemon/tests/appQuotaLoop.integration.test.ts
 
   # The web gym (docs/ui-test-gym.md, tools/gym/README.md): the real webapp
   # in chromium against a static server with every .com/box call stubbed, so
   # it needs no wrangler, pod-sim or secrets. Pull requests and pushes run
-  # the every-merge tranche; pushes to main also run the full mock tier
-  # (`gym total --mock-only`), the same set `npm run gym:locked` runs here.
+  # the every-merge tranche; the daily schedule, a manual run and pushes to a
+  # release/** branch also run the full mock tier (`gym total --mock-only`),
+  # the same set `npm run gym:locked` runs here.
   web-gym:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -115,7 +135,7 @@ jobs:
         run: npm run gym:every-merge -- --surface web
 
       - name: Web gym, full mock tier
-        if: github.event_name == 'push'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/release/')
         env:
           CI: "1"
         run: npm run gym:locked -- --surface web
