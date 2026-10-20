@@ -418,10 +418,12 @@ describe("release.sh parsers against captured tool output", () => {
   it("schema_version ledger -> pending migration files", () => {
     const dir = join(ROOT, "packages/storage/migrations");
     const r = sh(`pending_migrations ${dir}`, fx("wrangler-d1-ledger.synthetic.json"));
+    // The fixture ledger ends at 0104, so everything after it is pending.
     expect(r.out).toMatch(/^0105_re_pair_proof\.sql$/m);
-    expect(r.out.split("\n")).toHaveLength(1);
+    expect(r.out).toMatch(/^0106_outbound_hosts\.sql$/m);
+    expect(r.out.split("\n")).toHaveLength(2);
     // a ledger that has everything -> nothing pending
-    const all = JSON.stringify([{ results: ["0105", ...JSON.parse(fx("wrangler-d1-ledger.synthetic.json"))[0].results.map((x: { version: string }) => x.version)].map((version) => ({ version })) }]);
+    const all = JSON.stringify([{ results: ["0105", "0106", ...JSON.parse(fx("wrangler-d1-ledger.synthetic.json"))[0].results.map((x: { version: string }) => x.version)].map((version) => ({ version })) }]);
     expect(sh(`pending_migrations ${dir}`, all).out).toBe("");
   });
 
