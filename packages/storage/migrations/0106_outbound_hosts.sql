@@ -28,18 +28,11 @@ CREATE TABLE IF NOT EXISTS outbound_host_daily (
   PRIMARY KEY (day, host)
 );
 
+-- Seeded with the providers that come baked into the apps (packages/llm-providers:
+-- anthropic, openai, google, openrouter; ollama is local and never uses the hub). Every other
+-- host, including Flagship's own inference host, is added the first time a box asks for it.
 INSERT OR IGNORE INTO outbound_hosts (host, status, first_seen_day, note) VALUES
-  ('api.openai.com', 'allowed', 'seed', 'seed'),
-  ('api.anthropic.com', 'allowed', 'seed', 'seed'),
-  ('generativelanguage.googleapis.com', 'allowed', 'seed', 'seed'),
-  ('openrouter.ai', 'allowed', 'seed', 'seed'),
-  ('api.mistral.ai', 'allowed', 'seed', 'seed'),
-  ('api.groq.com', 'allowed', 'seed', 'seed'),
-  ('api.together.xyz', 'allowed', 'seed', 'seed'),
-  ('api.deepseek.com', 'allowed', 'seed', 'seed'),
-  ('api.x.ai', 'allowed', 'seed', 'seed'),
-  ('api.fireworks.ai', 'allowed', 'seed', 'seed'),
-  ('api.perplexity.ai', 'allowed', 'seed', 'seed'),
-  ('api.cohere.com', 'allowed', 'seed', 'seed'),
-  ('api.cerebras.ai', 'allowed', 'seed', 'seed'),
-  ('router.huggingface.co', 'allowed', 'seed', 'seed');
+  ('api.anthropic.com', 'allowed', 'seed', 'baked-in provider'),
+  ('api.openai.com', 'allowed', 'seed', 'baked-in provider'),
+  ('generativelanguage.googleapis.com', 'allowed', 'seed', 'baked-in provider'),
+  ('openrouter.ai', 'allowed', 'seed', 'baked-in provider');

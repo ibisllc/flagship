@@ -69,6 +69,11 @@ npx tsc -b && (cd apps/com && npm run deploy)   # Worker — it bundles the BUIL
 export PATH="$HOME/.fly/bin:$PATH"
 flyctl deploy --remote-only --strategy=immediate --yes -a flagship-services
 
+# What is slow or failing (docs/ops-command.md): health, relay counters incl. missed
+# redirections, Worker timings and errors, a live per-route CPU tail
+npm run ops                                     # also: -- health | services | workers | slow | limits | outbound
+npm run outbound-hosts                          # where boxes' AI calls leave; -- block <host> <why> (docs/outbound-hosts.md)
+
 # D1 schema migrations
 cd apps/com && npx wrangler d1 execute flagship-state \
     --file=../../packages/storage/migrations/0003_install_events.sql --remote
@@ -306,6 +311,16 @@ of the last check here: **not yet checked**.
   Insights beacon (Cloudflare dashboard setting), "Software 0.0.0" on Android's server page;
   (4) throwaway prod accounts (prime-marten, several web ones) go in the Phase B wipe; never
   touch playstore-test-0725.
+  **Principal-engineer review round (2026-10-20):** relay addresses must now also pass the
+  **relay echo** (a TLS question to the relay's :8444, answered from Fly's PROXY header with the
+  address the connection really arrived at; a forwarder in front of the relay answers with the
+  relay's own address and is dropped); untested `.com` addresses are no longer a last resort;
+  the iOS loopback shim (`LoopbackAddressShim`) closes on background, caps clients, and has head
+  and idle deadlines; a failed relay hint keeps its real reason in `DiagnosticsLog` /
+  `DiagnosticCode` (same codes on iOS and Android). Outbound AI calls through the hub use a host
+  list in D1 (migration **0106**, `docs/outbound-hosts.md`, `npm run outbound-hosts`); `.services`
+  needs a deploy for the echo port (`fly.toml` :8444) and `/api/stats`. TODO there: a heuristic
+  blocker if manual review gets too slow.
   **Relay addresses (2026-10-19, `docs/relay-addresses.md`):** when DNS can't resolve a box's name,
   Android and iOS ask `.com` (`GET /api/services/endpoints`, which already returns `passthroughIPv4/6`)
   for the relay's current addresses, keep the last answer, and test each one (a handshake under a

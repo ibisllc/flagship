@@ -9,6 +9,7 @@ import type { RegisteredTunnel, TunnelRegistry } from "./registry.js";
 import { fanOutNudge } from "./gossipFanout.js";
 import { accountFromCanonical, type UsageMeter } from "./usageMeter.js";
 import { SourcePauser } from "./throttle.js";
+import { routerStats } from "./routerStats.js";
 
 /**
  * How long the hub holds a parked client stream — after nudging the user's
@@ -160,10 +161,12 @@ function handleConnection(
     clearTimeout(peekTimer);
     client.off("data", onData);
     if (r.kind === "error") {
+      routerStats.bad += 1;
       bail(`ClientHello error: ${r.reason}`);
       return;
     }
     if (r.sni === null) {
+      routerStats.bad += 1;
       bail("no SNI — refusing to route");
       return;
     }
@@ -195,6 +198,7 @@ function routeToTunnel(
 ): void {
   const tunnel = hold.registry.findBySni(sni);
   if (tunnel) {
+    routerStats.routed += 1;
     pipeToTunnel(client, tunnel, sni, initialBytes, hold.meter);
     return;
   }
@@ -209,9 +213,12 @@ function routeToTunnel(
   // same wait a nudged one gets, so the time to close tells a prober nothing
   // about whether the account exists, has a box online, or ever had this box.
   if (hold.registry.userOfSni(sni)) {
+    routerStats.noBoxRegistered += 1;
+    routerStats.missed("no-box-registered", sni.toLowerCase());
     delayedDrop(client, sni, hold);
     return;
   }
+  routerStats.noUser += 1;
   client.destroy(new Error(`no tunnel for ${sni}`));
 }
 
@@ -258,6 +265,7 @@ function parkAndNudge(
   // Hold the raw TLS stream: we only peeked the ClientHello, never decrypt.
   // Pause reads (TCP backpressure) but still capture any early post-hello
   // bytes so we can replay them in-order once we pipe.
+  routerStats.parked += 1;
   const waiter: Waiter = { client, initialBytes, buffered: [] };
   const onParkData = (chunk: Buffer) => waiter.buffered.push(bufferToBytes(chunk));
   client.on("data", onParkData);
@@ -326,6 +334,7 @@ function releaseGroup(
   clearInterval(group.poll);
   clearTimeout(group.deadlineTimer);
   parkLot.delete(domain);
+  routerStats.released += group.waiters.length;
   for (const w of group.waiters) {
     w.detach?.();
     // Replay: ClientHello + any bytes that arrived while parked, then live.
@@ -342,6 +351,8 @@ function dropGroup(parkLot: ParkLot, domain: string, group: ParkGroup): void {
   clearInterval(group.poll);
   clearTimeout(group.deadlineTimer);
   parkLot.delete(domain);
+  routerStats.holdTimeouts += group.waiters.length;
+  routerStats.missed("hold-timeout", domain);
   for (const w of group.waiters) {
     w.detach?.();
     // No literal 503 under SNI passthrough — a dropped connection IS

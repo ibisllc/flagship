@@ -45,9 +45,9 @@ describe("outbound hosts", () => {
     expect(await checkOutboundHost(db, "api.new-ai.example.org")).toEqual({ allowed: true });
   }));
 
-  it("comes seeded with the known AI providers", withDb(async (db) => {
-    const names = (await readOutboundHosts(db, 1)).map((h) => h.host);
-    expect(names).toContain("api.anthropic.com");
+  it("comes seeded with exactly the providers baked into the apps", withDb(async (db) => {
+    const names = (await readOutboundHosts(db, 1)).map((h) => h.host).sort();
+    expect(names).toEqual(["api.anthropic.com", "api.openai.com", "generativelanguage.googleapis.com", "openrouter.ai"]);
     expect(await checkOutboundHost(db, "api.anthropic.com")).toEqual({ allowed: true });
   }));
 
@@ -63,12 +63,12 @@ describe("outbound hosts", () => {
   it("adds the hub's totals per host and day, and the review lists them busiest first", withDb(async (db) => {
     await recordOutboundReport(db, [
       { host: "api.openai.com", streams: 3, up: 100, down: 900, refused: 0 },
-      { host: "api.groq.com", streams: 1, up: 10, down: 10, refused: 1 },
+      { host: "api.newhost.example.org", streams: 1, up: 10, down: 10, refused: 1 },
     ]);
     await recordOutboundReport(db, [{ host: "api.openai.com", streams: 2, up: 50, down: 50, refused: 0 }]);
     const [first, second] = await readOutboundHosts(db, 1);
     expect(first).toMatchObject({ host: "api.openai.com", streams: 5, bytesUp: 150, bytesDown: 950 });
-    expect(second).toMatchObject({ host: "api.groq.com", refused: 1 });
+    expect(second).toMatchObject({ host: "api.newhost.example.org", refused: 1 });
   }));
 
   it("keeps nothing that could name a user", withDb(async (db) => {

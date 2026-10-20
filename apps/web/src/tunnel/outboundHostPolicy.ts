@@ -8,22 +8,15 @@
  * if it is one of the known AI providers below.
  */
 
-/** Provider API hosts that are allowed even when `.com` cannot be asked. */
+/**
+ * The providers baked into the apps (packages/llm-providers), allowed even when `.com` cannot
+ * be asked. Keep in step with the seed in migration 0106.
+ */
 export const KNOWN_AI_HOSTS: ReadonlySet<string> = new Set([
-  "api.openai.com",
   "api.anthropic.com",
+  "api.openai.com",
   "generativelanguage.googleapis.com",
   "openrouter.ai",
-  "api.mistral.ai",
-  "api.groq.com",
-  "api.together.xyz",
-  "api.deepseek.com",
-  "api.x.ai",
-  "api.fireworks.ai",
-  "api.perplexity.ai",
-  "api.cohere.com",
-  "api.cerebras.ai",
-  "router.huggingface.co",
 ]);
 
 export interface HostReportRow {

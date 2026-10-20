@@ -44,7 +44,7 @@ export function relayRefused(host: string, reason: OutboundRefusal): RelayError 
   const why: Record<OutboundRefusal, string> = {
     "bad-request": "it couldn't read the request",
     "forbidden-port": "it only carries port 443",
-    "forbidden-host": "it only carries public host names",
+    "forbidden-host": "that outbound address couldn't be reached from here (try again later, or turn the relay off for this key to connect directly)",
     "forbidden-address": "the name points at a private address (turn the relay off for this key to reach a local server)",
     "dns-failed": "the name didn't resolve",
     "connect-failed": "the provider didn't answer",

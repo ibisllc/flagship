@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import Fastify, { type FastifyInstance } from "fastify";
 import fastifyStatic from "@fastify/static";
 import { dirname, resolve } from "node:path";
@@ -61,6 +62,7 @@ import {
   type PushTokenStore,
 } from "./routes/pushRelay.js";
 import { startSniRouter, type RunningSniRouter } from "./tunnel/sniRouter.js";
+import { routerStats } from "./tunnel/routerStats.js";
 import { startAddressEcho, type RunningAddressEcho } from "./lib/addressEcho.js";
 import { UsageMeter } from "./tunnel/usageMeter.js";
 import { overQuotaBytesPerSec } from "./tunnel/throttle.js";
@@ -359,6 +361,28 @@ export async function start(opts: {
   // #87 — custom-domain control channel. Must register before listen.
   const servicesControlSecret = process.env.SERVICES_CONTROL_SECRET;
   registerControlRedirections(app, { registry, secret: servicesControlSecret });
+
+  // What the router has done since this machine started (docs/ops-command.md). Guarded by the
+  // hub's shared secret; off when there is none.
+  if (surface === "services" || surface === "both") {
+    app.get("/api/stats", async (req, reply) => {
+      const secret = process.env.USAGE_REPORT_SECRET;
+      const given = String(req.headers["x-usage-secret"] ?? "");
+      const a = Buffer.from(given);
+      const b = Buffer.from(secret ?? "");
+      if (!secret || a.length !== b.length || !timingSafeEqual(a, b)) {
+        return reply.code(secret ? 403 : 503).send({ error: secret ? "forbidden" : "stats are off (USAGE_REPORT_SECRET missing)" });
+      }
+      return {
+        service: "flagship.services",
+        uptimeSec: Math.round(process.uptime()),
+        tunnelsOnline: registry.size(),
+        router: routerStats.snapshot(),
+        now: new Date().toISOString(),
+      };
+    });
+  }
+
   // Per-account gossip fan-out (Phase 4): recognize
   // `broadcast--<user>.<apex>` at this TLS-terminating surface and mirror the
   // verbatim opaque body to every connected box of that account. Only on the

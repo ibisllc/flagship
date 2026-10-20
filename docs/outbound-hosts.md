@@ -61,6 +61,30 @@ npm run outbound-hosts -- allow <host>
 It points out new hosts, a host that took a lot of uploaded data (AI calls are mostly download),
 and allowed hosts that do not look like API hosts. Look at it at least weekly.
 
+## What a person sees
+
+When the hub will not open an address (blocked, or one the hub cannot dial), the box says: "the
+Flagship relay didn't connect to <host> because that outbound address couldn't be reached from
+here (try again later, or turn the relay off for this key to connect directly), so the AI call
+wasn't sent." It never says the host was blocked; a legitimate user learns what to try next.
+
+## The starting list
+
+The providers that come baked into the apps (`packages/llm-providers`): `api.anthropic.com`,
+`api.openai.com`, `generativelanguage.googleapis.com`, `openrouter.ai`. (Ollama is local and
+never uses the hub.) Every other host, including Flagship's own inference host, is added the
+first time a box asks for it.
+
+## TODO: a heuristic blocker
+
+Blocking by hand (`npm run outbound-hosts -- block <host>`) is the whole system today. If the
+number of hosts or complaints makes that too slow, design a heuristic system that flags or blocks
+by itself, without learning who is calling. Ideas to weigh then: upload-heavy hosts (AI calls are
+mostly download); a host that is new, busy and not an API-looking name; many different boxes
+reaching a host nobody else uses (we cannot count boxes, so this needs a coarse, non-identifying
+signal); a host that appears on abuse lists. Until then the review command's "worth a look"
+lines are the heuristic.
+
 ## If you see an attack from us
 
 Tell `security@flagshipserver.com` the address and the time. We will look at the host, and if it
