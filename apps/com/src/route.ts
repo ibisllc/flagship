@@ -420,8 +420,8 @@ function isRetiredApiPath(pathname: string): boolean {
 // i.e. coming soon). Set each once that platform's build is published.
 const INSTALLER_DOWNLOADS: Record<string, string> = {
   mac: "/downloads/FlagshipStudio.dmg",
-  windows: "https://github.com/ibisllc/flagship/releases/download/studio-v0.1.3/FlagshipStudio-Windows-x64-0.1.3.zip",
-  linux: "https://github.com/ibisllc/flagship/releases/download/studio-v0.1.3/FlagshipStudio-Linux-x86_64-0.1.3.AppImage",
+  windows: "https://github.com/ibisllc/flagship/releases/download/studio-v0.2.0/FlagshipStudio-Windows-x64-0.2.0.zip",
+  linux: "https://github.com/ibisllc/flagship/releases/download/studio-v0.2.0/FlagshipStudio-Linux-x86_64-0.2.0.AppImage",
 };
 
 const STATUS_PROBE_PATH = "/api/_status/probe";
