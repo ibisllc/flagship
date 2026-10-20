@@ -1198,6 +1198,7 @@ async function main(): Promise<void> {
     ? new BackupPolicyStore({
         path: `${dataDir}/backup-policy.json`,
         serverDomain: env.serverFqdn!,
+        peerAllowed: () => process.env.FLAGSHIP_PEER_BACKUP === "on",
         authorize: (order, sig) =>
           authorizeSensitiveOrder({
             ownerIrkPub: cfg.irkPublicKey,

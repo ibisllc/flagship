@@ -92,11 +92,21 @@ final class CreateServerDraftFieldsTests: XCTestCase {
         let d = freshDefaults()
         do {
             let (vm, _) = makeVM(defaults: d)
-            vm.backupPolicy = .peer
+            vm.backupPolicy = .phoneOnly
         }
         // New VM same defaults — should hydrate the prior value.
         let (vm2, _) = makeVM(defaults: d)
-        XCTAssertEqual(vm2.backupPolicy, .peer)
+        XCTAssertEqual(vm2.backupPolicy, .phoneOnly)
+    }
+
+    /// Backups on other servers are off: an old draft that saved "peer" must not come back as a choice.
+    func test_aSavedPeerDraftIsDropped() {
+        XCTAssertFalse(BackupFeatures.peerBackup)
+        let d = freshDefaults()
+        d.set("peer", forKey: "flagship.createServerDraft.backupPolicy")
+        XCTAssertNil(CreateServerDraftStore(defaults: d).backupPolicy())
+        let (vm, _) = makeVM(defaults: d)
+        XCTAssertNotEqual(vm.backupPolicy, .peer)
     }
 
     // MARK: - InstallBlob has NO trace of these fields

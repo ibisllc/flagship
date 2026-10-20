@@ -72,7 +72,7 @@ describe("backup-policy in the webapp (shared vectors)", () => {
     expect(o.backupPolicy.signatureHex).toBe(P.cases[0].signature);
     expect(ed25519.verify(seed(o.backupPolicy.signatureHex), policy.backupPolicyCanonicalBytes(o.backupPolicy.order), seed(P.pub))).toBe(true);
     expect(policy.policyFromDraft("none")).toBe("none");
-    expect(policy.policyFromDraft("peer")).toBe("peer");
+    expect(policy.policyFromDraft("peer")).toBe("phone"); // not offered while backups on other servers are off
     expect(policy.policyFromDraft(undefined)).toBe("phone");
   });
   it("describes the policy, the usage and the peer engine", () => {

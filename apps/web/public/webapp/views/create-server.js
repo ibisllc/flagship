@@ -394,7 +394,8 @@ function readBackupPolicyChoice() {
   return checked ? checked.value : null;
 }
 function setBackupPolicyChoice(v) {
-  const want = v === "peer" || v === "none" || v === "phone-only" ? v : null;
+  // A saved "peer" draft is dropped: backups on other servers aren't offered yet (lib/backupPolicy.js).
+  const want = v === "none" || v === "phone-only" ? v : null;
   for (const el of document.querySelectorAll('input[name="cs-backup-policy"]')) el.checked = el.value === want;
   syncReserveVisibility();
 }

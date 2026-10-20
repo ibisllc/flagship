@@ -1192,16 +1192,23 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
         });
         job.apps = results;
         job.state = "done";
-        await opts.wait?.finish(w.archiveId);
         const ok = results.filter((r) => r.state === "done").length;
         const failed = results.filter((r) => r.state === "failed").length;
+        // Waiting ends only when every app is in. A move (Migrate) treats the end
+        // of waiting as "the data is here" and then lets the old server be wiped,
+        // so a partly failed restore keeps waiting: the owner sends the file again
+        // (apps already in are skipped) or deletes the server.
+        if (failed === 0) await opts.wait?.finish(w.archiveId);
+        else opts.wait?.setRestoring(false);
         const failedText = results
           .filter((r) => r.state === "failed")
           .map((r) => `${r.name} (${(r.reason ?? "it couldn't be restored").replace(/[.\s]+$/, "")})`)
           .join(", ");
         note(
           "server.restore.finished",
-          `Backup restored: ${ok} app${ok === 1 ? "" : "s"}.` + (failed > 0 ? ` Couldn't restore: ${failedText}.` : ""),
+          failed === 0
+            ? `Backup restored: ${ok} app${ok === 1 ? "" : "s"}.`
+            : `Backup partly restored: ${ok} app${ok === 1 ? "" : "s"}. Couldn't restore: ${failedText}. This server is still waiting for its backup.`,
           failed === 0,
         );
       } catch (e) {

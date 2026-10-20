@@ -599,7 +599,7 @@ describe("Backup/clone server", () => {
     expect(asJson(r)).toMatchObject({ code: "passcode-required" });
   });
 
-  it("an app that fails to restore is named with its reason, and the server stops waiting anyway", async () => {
+  it("an app that fails to restore is named with its reason, and the server keeps waiting (a move must not count it as done)", async () => {
     const w = await world();
     const file = await backUp(w);
     w.targetWait.current = await waitingFor(w.dir, DST, file);
@@ -609,10 +609,21 @@ describe("Backup/clone server", () => {
     await w.targetService.settle();
     const view = asJson(await call(w.targetService, "GET", RESTORE_PATH));
     expect(view.restore).toMatchObject({ state: "done", apps: [{ serviceId: SERVICE, name: "notes", state: "failed", reason: expect.stringMatching(/over its backup limit/) }] });
-    // Every app was tried: the server is a normal server now, not "Waiting for its backup".
-    expect(view.waiting).toBeNull();
-    expect(w.targetWait.current.heartbeatView()).toBeNull();
+    // Not every app is in: the server still waits, and Migrate's "restored" stays false so the old server is never told to wipe.
+    expect(view.waiting).not.toBeNull();
+    expect(w.targetWait.current.heartbeatView()).toEqual({ archiveId: ARCHIVE_ID, state: "waiting" });
+    expect(w.targetWait.current.restoredAny()).toBe(false);
     expect(w.dst.platform.byServiceId(SERVICE)).toBeUndefined();
+    expect(w.events).toContain("server.restore.finished");
+
+    // Sent again once the cause is gone, the apps already in are skipped and the rest come in: now it ends.
+    w.dst.platform.setAdmitNewApp(() => null);
+    await upload(w.targetService, file);
+    expect((await call(w.targetService, "POST", `${RESTORE_PATH}/commit`, { key: keyHex() })).status).toBe(202);
+    await w.targetService.settle();
+    expect(w.targetWait.current.restoredAny()).toBe(true);
+    expect(asJson(await call(w.targetService, "GET", RESTORE_PATH)).waiting).toBeNull();
+    expect(w.dst.platform.byServiceId(SERVICE)).toBeDefined();
   });
 
   it("an app that is already on the server is skipped, not overwritten", async () => {

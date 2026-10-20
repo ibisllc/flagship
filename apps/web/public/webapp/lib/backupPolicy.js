@@ -10,6 +10,13 @@
 export const TAG_BACKUP_POLICY = "flagship/backup-policy/v1";
 export const BACKUP_POLICY_PATH = "/api/screens/backup-policy";
 export const POLICIES = ["phone", "peer", "none"];
+/**
+ * Backups on other servers stay off until the cross-account proof has run
+ * (docs/preview-criteria.md): the box refuses a new Peer policy too, so this only
+ * keeps the choice from being offered. A server already on Peer still shows it.
+ */
+export const PEER_BACKUP_OFFERED = false;
+export const policiesOffered = (current) => POLICIES.filter((p) => p !== "peer" || PEER_BACKUP_OFFERED || current === "peer");
 const GB = 1024 ** 3;
 /** The webapp can't see the phone's free space: a sensible default reserve. */
 export const DEFAULT_WEB_RESERVE_GB = 16;
@@ -32,7 +39,7 @@ export const WEB_RESERVE_NOTE = "Keep this much free on that device for the back
 
 /** The draft store's values ("phone-only" | "peer" | "none") → the wire's. */
 export function policyFromDraft(v) {
-  if (v === "peer" || v === "none") return v;
+  if (v === "none" || (v === "peer" && PEER_BACKUP_OFFERED)) return v;
   return "phone";
 }
 

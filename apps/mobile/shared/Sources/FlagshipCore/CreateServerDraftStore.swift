@@ -1,4 +1,5 @@
 import Foundation
+import FlagshipAPI
 
 /// What the user picked on the create form before delivering an InstallBlob.
 /// Not part of the InstallBlob's signed bytes: the backup policy is signed
@@ -32,7 +33,10 @@ public struct CreateServerDraftStore {
     /// The owner's pick, or nil until they have made one (nothing is
     /// preselected, and creating a server stays off until they do).
     public func backupPolicy() -> BackupPolicy? {
+        // A saved "peer" pick is dropped while backups on other servers are off, so an old draft
+        // can't create a Peer server (the box refuses it too).
         defaults.string(forKey: Self.backupPolicyKey).flatMap(BackupPolicy.init(rawValue:))
+            .flatMap { $0 == .peer && !BackupFeatures.peerBackup ? nil : $0 }
     }
 
     public func setBackupPolicy(_ policy: BackupPolicy?) {

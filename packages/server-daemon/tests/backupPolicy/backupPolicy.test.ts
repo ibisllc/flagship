@@ -52,6 +52,26 @@ describe("backup policy store", () => {
     expect(again.current()).toEqual({ policy: "peer", phoneReserveBytes: 0, issuedAt: 2000 });
   });
 
+  it("refuses a new Peer policy on every path while peer backup is off, create time included", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "backup-policy-"));
+    const off = new BackupPolicyStore({ path: join(dir, "backup-policy.json"), serverDomain: SRV, authorize: (o, s) => verifyBackupPolicy(o, s, owner.publicKey), peerAllowed: () => false });
+    const peer = signed({ policy: "peer", phoneReserveBytes: 0 });
+    expect(await off.adoptFromPairingJson(JSON.stringify({ request: {}, signature: "", backupPolicy: peer }))).toBe(false);
+    expect(await off.adopt(peer.order, peer.signatureHex)).toMatch(/aren't available yet/);
+    expect(off.current().policy).toBe("unset");
+    // The other choices still work, and a server already on Peer may re-sign it.
+    const phone = signed({ issuedAt: 1500 });
+    expect(await off.adopt(phone.order, phone.signatureHex)).toBeNull();
+    const on = new BackupPolicyStore({ path: join(dir, "p2.json"), serverDomain: SRV, authorize: (o, s) => verifyBackupPolicy(o, s, owner.publicKey), peerAllowed: () => true });
+    expect(await on.adopt(peer.order, peer.signatureHex)).toBeNull();
+    let allowed = true;
+    const flip = new BackupPolicyStore({ path: join(dir, "p3.json"), serverDomain: SRV, authorize: (o, s) => verifyBackupPolicy(o, s, owner.publicKey), peerAllowed: () => allowed });
+    await flip.adopt(peer.order, peer.signatureHex);
+    allowed = false;
+    const again = signed({ policy: "peer", phoneReserveBytes: 0, issuedAt: 3000 });
+    expect(await flip.adopt(again.order, again.signatureHex)).toBeNull();
+  });
+
   it("refuses a policy signed by anyone else, for another server, or malformed", async () => {
     const s = store();
     const x = signed({}, stranger);

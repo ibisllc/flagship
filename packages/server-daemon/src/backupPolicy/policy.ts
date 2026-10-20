@@ -25,6 +25,8 @@ export interface BackupPolicyStoreOptions {
   serverDomain: string;
   /** Check the order's signature under this box's sensitive-order authority. */
   authorize: (o: BackupPolicyOrder, sig: Uint8Array) => boolean;
+  /** False while backups on other servers are switched off: a new Peer policy is refused on every path (create time included). */
+  peerAllowed?: () => boolean;
   log?: (m: string) => void;
 }
 
@@ -70,6 +72,9 @@ export class BackupPolicyStore {
     if (!order) return "that backup policy is malformed";
     if (order.serverDomain !== this.opts.serverDomain) return "that backup policy is for a different server";
     if (typeof signatureHex !== "string" || !this.verify(order, signatureHex)) return "only an admin device of this account can set the backup policy";
+    if (order.policy === "peer" && this.held?.order.policy !== "peer" && this.opts.peerAllowed && !this.opts.peerAllowed()) {
+      return "Backups on other servers aren't available yet. Choose another policy.";
+    }
     if (this.held && order.issuedAt <= this.held.order.issuedAt) {
       return order.issuedAt === this.held.order.issuedAt ? null : "a newer backup policy is already set on this server";
     }

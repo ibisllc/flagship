@@ -48,7 +48,10 @@ class CreateServerDraftStore(private val prefs: SharedPreferences) {
 
     /** The user's chosen backup policy; absent until they pick one (there is no default). */
     fun backupPolicy(): BackupPolicy? =
+        // A saved "peer" pick is dropped while backups on other servers are off, so an old draft
+        // can't create a Peer server (the box refuses it too).
         BackupPolicy.fromWire(prefs.getString(BACKUP_POLICY_KEY, null))
+            ?.takeUnless { it == BackupPolicy.PEER && !BackupFeatures.PEER_BACKUP }
 
     fun setBackupPolicy(policy: BackupPolicy) {
         prefs.edit().putString(BACKUP_POLICY_KEY, policy.wire).apply()

@@ -22,6 +22,7 @@ import {
   fetchPolicy,
   formatGb,
   peerLines,
+  policiesOffered,
   policyLine,
   setPolicy,
   usageFraction,
@@ -52,7 +53,7 @@ export function backupsSectionHtml(body) {
   const policies = ["phone", "peer", "none"]
     .map(
       (p) => `
-        <label class="boot-unlock-option">
+        <label class="boot-unlock-option${policiesOffered(null).includes(p) ? "" : " hidden"}" data-bk-policy-option="${p}">
           <input type="radio" name="bk-policy" value="${p}" />
           <span class="boot-unlock-title">${escapeHtml(POLICY_LABEL[p])}</span>
           <span class="boot-unlock-desc faint-sm">${escapeHtml(POLICY_TEXT[p])}</span>
@@ -258,6 +259,8 @@ export function wireBackupsSection(body, deps = {}) {
     const p = policyView?.policy?.policy;
     const want = p && p !== "unset" ? p : "phone";
     for (const el of document.querySelectorAll('input[name="bk-policy"]')) el.checked = el.value === want;
+    // Peer is offered only to a server that is already on it.
+    for (const opt of document.querySelectorAll("[data-bk-policy-option]")) opt.classList.toggle("hidden", !policiesOffered(p).includes(opt.dataset.bkPolicyOption));
     if (policyView?.policy?.phoneReserveBytes) $("bk-reserve-gb").value = String(Math.round(policyView.policy.phoneReserveBytes / GB));
     show($("bk-policy-error"), false);
     syncReserveRow();

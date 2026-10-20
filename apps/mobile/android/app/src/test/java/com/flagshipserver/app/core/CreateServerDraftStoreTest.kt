@@ -29,10 +29,18 @@ class CreateServerDraftStoreTest {
 
     @Test fun backupPolicyRoundTrips() {
         val store = freshStore()
-        store.setBackupPolicy(CreateServerDraftStore.BackupPolicy.PEER)
-        assertEquals(CreateServerDraftStore.BackupPolicy.PEER, store.backupPolicy())
+        store.setBackupPolicy(CreateServerDraftStore.BackupPolicy.PHONE_ONLY)
+        assertEquals(CreateServerDraftStore.BackupPolicy.PHONE_ONLY, store.backupPolicy())
         store.setBackupPolicy(CreateServerDraftStore.BackupPolicy.NONE)
         assertEquals(CreateServerDraftStore.BackupPolicy.NONE, store.backupPolicy())
+    }
+
+    /** Backups on other servers are off: an old draft that saved "peer" must not come back as a choice. */
+    @Test fun aSavedPeerDraftIsDropped() {
+        assertEquals(false, BackupFeatures.PEER_BACKUP)
+        val store = freshStore()
+        store.setBackupPolicy(CreateServerDraftStore.BackupPolicy.PEER)
+        assertEquals(null, store.backupPolicy())
     }
 
     @Test fun resetClearsThePick() {
