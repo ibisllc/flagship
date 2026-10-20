@@ -689,7 +689,10 @@ export class D1RoutingStorage implements RoutingStorage {
     if (existing && existing.rck_pubkey_hex !== rec.rckPubKeyHex) {
       return { ok: false as const, reason: "subdomain already controlled by a different RCK" };
     }
-    await this.db
+    // The check above and this write are two calls: a second registration of the same name with
+    // another RCK can land between them. The write itself therefore refuses to change the RCK of a
+    // name that exists (the WHERE), and no change at all means someone else holds the name.
+    const written = await this.db
       .prepare(
         `INSERT INTO routing (
           subdomain, username, rck_pubkey_hex,
@@ -698,7 +701,8 @@ export class D1RoutingStorage implements RoutingStorage {
         ON CONFLICT(subdomain) DO UPDATE SET
           username = excluded.username,
           rck_pubkey_hex = excluded.rck_pubkey_hex,
-          registered_at = excluded.registered_at`,
+          registered_at = excluded.registered_at
+        WHERE routing.rck_pubkey_hex = excluded.rck_pubkey_hex`,
       )
       .bind(
         rec.subdomain,
@@ -710,6 +714,9 @@ export class D1RoutingStorage implements RoutingStorage {
         rec.lastTargetNonce,
       )
       .run();
+    if (!(written.meta.changes && written.meta.changes > 0)) {
+      return { ok: false as const, reason: "subdomain already controlled by a different RCK" };
+    }
     return { ok: true as const };
   }
   async get(subdomain: string) {

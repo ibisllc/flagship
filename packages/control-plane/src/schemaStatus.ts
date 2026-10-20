@@ -75,6 +75,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0104",
   // The signatures a re-pair carried, kept so a box can verify the swap itself.
   "0105",
+  // The hub's list of hosts boxes' AI calls may leave through, and per-host totals.
+  "0106",
 ];
 
 export interface SchemaStatusDeps {

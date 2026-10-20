@@ -323,6 +323,15 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       data: { fileName: a.dataName, bytes: r.bytes, sha256: r.sha256, frameBytes: ARCHIVE_FRAME_BYTES },
     };
     const written = await writeBackupFile(a.backupPath, { archiveId: a.archiveId, key: a.key, slots: a.slots, body, nonce: randomBytes(12) });
+    // "Ready" and "saved" mean the file was read back and opened, not just written: the size and
+    // hash are the ones just made and every frame decrypts. It covers both the one-off backup
+    // (the file the owner downloads) and the saved and scheduled ones. A backup that fails this
+    // is not kept.
+    try {
+      await checkDataFile(a.dataPath, a.key, a.archiveId, { bytes: r.bytes, sha256: r.sha256 });
+    } catch (e) {
+      throw new Error(`the backup was written but did not pass its check, so it was not kept: ${(e as Error).message}`);
+    }
     return { ...r, backupBytes: written.bytes, bundleSha256: await bundleDigest(a.backupPath, written.bytes, a.dataPath) };
   }
 
@@ -371,7 +380,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           key.fill(0);
           note(
             "server.backup.created",
-            `Backup ready: ${r.apps.length} app${r.apps.length === 1 ? "" : "s"}.` +
+            `Backup ready and checked: ${r.apps.length} app${r.apps.length === 1 ? "" : "s"}.` +
               (r.left.length > 0 ? ` Left out: ${r.left.map((x) => x.name).join(", ")} (no source to rebuild from).` : ""),
             r.left.length === 0,
           );
@@ -857,12 +866,6 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       });
     })()
       .then(async (r) => {
-        // "Saved" means read back and opened, not just written.
-        try {
-          await checkDataFile(join(dir, SAVED_DATA_FILE), key, k.archiveId, { bytes: r.bytes, sha256: r.sha256 });
-        } catch (e) {
-          throw new Error(`the backup was written but did not pass its check, so it was not kept: ${(e as Error).message}`);
-        }
         const meta: SavedBackupMeta = {
           archiveId: k.archiveId,
           createdAt: startedAt,
