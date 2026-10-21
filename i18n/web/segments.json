@@ -1,0 +1,4165 @@
+{
+  "s63962a8090": {
+    "en": "Flagship: a personal cloud you actually own",
+    "kind": "text",
+    "ctx": "title",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s5b69e08cd4": {
+    "en": "Plug in at home, pair with your mobile device, build and share apps privately. TLS terminates on your hardware. Not even we can eavesdrop.",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s3462a9daf5": {
+    "en": "Flagship: a personal cloud you actually own",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s94b18c8831": {
+    "en": "Plug in at home, pair with your mobile device, build and share apps privately. Not even we can eavesdrop.",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s16062b5588": {
+    "en": "<1>Skip to content</1>",
+    "kind": "text",
+    "ctx": "body",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s2642c8cb87": {
+    "en": "Flagship home",
+    "kind": "attr",
+    "ctx": "a[aria-label]",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "open-source.html",
+      "adapters.html"
+    ]
+  },
+  "se164d2e5bf": {
+    "en": "Primary",
+    "kind": "attr",
+    "ctx": "nav[aria-label]",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "sd8e067f833": {
+    "en": "<1>How</1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s0d2f12aa02": {
+    "en": "<1>Trust</1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s19a72ce7ce": {
+    "en": "<1>FAQ</1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "index.html",
+      "help.html",
+      "open-source.html"
+    ]
+  },
+  "sb7eccb5b3d": {
+    "en": "<1>Security<2/></1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s285c2d9c1b": {
+    "en": "<1>Docs<2/></1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "se93cede7f7": {
+    "en": "Switch theme",
+    "kind": "attr",
+    "ctx": "button[aria-label]",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "s3980fa6732": {
+    "en": "Menu",
+    "kind": "attr",
+    "ctx": "button[aria-label]",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s96195c1a46": {
+    "en": "Mobile",
+    "kind": "attr",
+    "ctx": "nav[aria-label]",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s13acbefea1": {
+    "en": "<1>Live</1> <2>·</2> <3>v0.2 Beta</3> <4>·</4> <5>since 2026-05-05</5> <6>·</6> <7>1,489 tests, all green</7> <8>·</8> <9>Patent Pending</9>",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s6e89cd0496": {
+    "en": "<1/>Your stuff, on <2>your hardware</2>, with a real green padlock.",
+    "kind": "text",
+    "ctx": "h1",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sc16cc4a041": {
+    "en": "Plug a small box in at home. Pair it with the mobile app on your device. Build and share services privately at <1>yours.flagship.services</1>, with a certificate signed by a key only your hardware holds. Not even we can eavesdrop.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "yours.flagship.services"
+    ],
+    "pages": [
+      "index.html"
+    ]
+  },
+  "scb03957d28": {
+    "en": "<1> <2/> <3>iOS soon</3> </1> <4> <5/> <6>Android soon</6> </4> <7> <8>Use web app</8> </7>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "scac3ed322c": {
+    "en": "The iOS app is not ready yet",
+    "kind": "attr",
+    "ctx": "span[title]",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s3b30d62e24": {
+    "en": "The Android app is not ready yet",
+    "kind": "attr",
+    "ctx": "span[title]",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sb44cfe3eb1": {
+    "en": "Use the Flagship web app",
+    "kind": "attr",
+    "ctx": "a[aria-label]",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s1fb69e7dd2": {
+    "en": "Download Flagship Studio",
+    "kind": "attr",
+    "ctx": "div[aria-label]",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sbcf5e0ec0c": {
+    "en": "<1>macOS</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s02b85041f7": {
+    "en": "<1>Windows <2>Experimental</2></1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s412d2d882a": {
+    "en": "<1>How it works</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "se24f793bf9": {
+    "en": "Four steps. About ten minutes.",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sa98c06ba9c": {
+    "en": "You bring the hardware and a mobile device. Everything else compresses into a USB stick, a QR scan, and a quiet daemon.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s22f4f7a848": {
+    "en": "<1>01 · Pair</1>",
+    "kind": "text",
+    "ctx": "article",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s998666d65a": {
+    "en": "Mobile app is the keychain.",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s43361a412c": {
+    "en": "A key in the Secure Enclave (iOS) or the hardware-backed Keystore (Android) protects the only copy. Lose your device without cloud recovery and the data's gone, like a hardware wallet.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s8353e98357": {
+    "en": "<1>02 · Boot</1>",
+    "kind": "text",
+    "ctx": "article",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s3c1ca967c6": {
+    "en": "One USB, one reboot.",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "seaff254fe3": {
+    "en": "The builder writes your recipe to a stick. Disk encrypts on first boot; the mobile app signs the unlock. Subdomain comes up.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sad88ce1838": {
+    "en": "<1>03 · Build</1>",
+    "kind": "text",
+    "ctx": "article",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s91755f2f40": {
+    "en": "Vibe-code a service.",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s9c6c4044e6": {
+    "en": "Describe what you want. LLM emits manifest, Dockerfile, source; the daemon commits, builds, ships in two minutes.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "saca49fd781": {
+    "en": "<1>04 · Share</1>",
+    "kind": "text",
+    "ctx": "article",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sb9e546ea19": {
+    "en": "Hand a friend a link.",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s377e2e00d2": {
+    "en": "Every service lives at <1>app.you.flagship.services</1>. One tap to share, one tap to revoke.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "app.you.flagship.services"
+    ],
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s25fdc2454a": {
+    "en": "<1>Trust model</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s4120fd8958": {
+    "en": "We structurally cannot read your content.",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sad8f6be1a6": {
+    "en": "If we are compromised, what leaks is metadata (which servers exist and when they are online), never your files, messages or prompts. That isn't a promise, it's a property of the architecture.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s09bb2ad463": {
+    "en": "<1> <2>→</2> <3>Read the architecture</3> </1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s2a6ae3ff00": {
+    "en": "<1>flagshipserver.com</1> handles identity: a username and a sealed blob it can't read. <2>flagship.services</2> is a dumb pipe that routes raw TCP by SNI. TLS terminates on <3>your</3> hardware, with a Let's Encrypt certificate signed by a key only your daemon holds.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "flagshipserver.com",
+      "flagship.services"
+    ],
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s7549b442ab": {
+    "en": "Mobile devices initiate every consequential action. Servers never call out unsolicited. No shared database in a third party decides who can see what. Every authorization is enforced by the data's own server.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sa17b3400d9": {
+    "en": "The green padlock in your browser is real. It's signed by a key that lives on your hardware. Nobody else holds a copy.",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sea43ce41ef": {
+    "en": "Trust waterfall: mobile app → flagshipserver.com → flagship.services → your own server",
+    "kind": "attr",
+    "ctx": "aside[aria-label]",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s9436069fed": {
+    "en": "<1>Questions</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s9dc236459b": {
+    "en": "Honest questions, honest answers.",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sa692a5a771": {
+    "en": "The questions that actually matter before you give us your trust. No marketing-speak, no clichés.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s55e4f2ac0f": {
+    "en": "Why not just use iCloud, Google Drive, or Dropbox?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "se70badd926": {
+    "en": "Because they read your data. We don't, and structurally we can't: TLS terminates on your hardware. That's the whole product.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "se4e3c3c44c": {
+    "en": "What happens when I lose my mobile device?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s9179d1c89c": {
+    "en": "If you set up cloud recovery (a passkey wraps your master key, ciphertext lives on <1>.com</1>), your new device unwraps it. If you didn't, the data's gone, like a hardware wallet that lost its seed phrase.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      ".com"
+    ],
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s0502dadafd": {
+    "en": "Do I need to be a developer?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sb81419e122": {
+    "en": "No. The mobile app walks you through every step. Vibe-coding means typing what you want; the LLM writes it, the daemon ships it.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sf9f5a44ade": {
+    "en": "Can I run this on a Raspberry Pi?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sd673e903b8": {
+    "en": "Current image is x86_64. NUCs, mini-PCs, old laptops work. ARM64 is on the list; Pi support tracks the same image.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "scd681453ce": {
+    "en": "Is this open source?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s7bf9e61c67": {
+    "en": "Yes. BUSL-1.1, with automatic conversion to Apache 2.0 on May 3, 2030. Daemon, image-builder, mobile clients, webapp, protocol: all public.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sdbc9447fed": {
+    "en": "What if Flagship the company goes away?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s1a7198ac06": {
+    "en": "Your box keeps working. Your cert keeps renewing as long as Let's Encrypt is up. We can't lock you in because, structurally, we can't.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s218a7189a6": {
+    "en": "How does sharing work without a central account system?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sf5ca0ac126": {
+    "en": "Each pod issues signed invite tokens that are short-lived, revocable and scoped to one app. Authorization is enforced by the data's own server.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "se284ca5217": {
+    "en": "Take ten minutes.<1/>Get the rest of your data back.",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s56bf91cae1": {
+    "en": "A USB stick, an old PC, a mobile device, and a vibe. We've kept it in production six months. Your turn.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s340ac1f437": {
+    "en": "A personal cloud that respects you, your hardware, and your mobile device.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "sb893166c94": {
+    "en": "Product",
+    "kind": "text",
+    "ctx": "h4",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "s311aed55dd": {
+    "en": "<1>Webapp</1>",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "s55526cc13a": {
+    "en": "Trust",
+    "kind": "text",
+    "ctx": "h4",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "s0ea994bede": {
+    "en": "<1>Architecture</1>",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "sa3c3c380ee": {
+    "en": "<1>Disclosure</1>",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "s8104119722": {
+    "en": "<1>Report a vuln</1>",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "s5452a6ca48": {
+    "en": "<1>Abuse</1>",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "s26e5d747c2": {
+    "en": "<1>security.txt</1>",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "s4725b42d57": {
+    "en": "Open",
+    "kind": "text",
+    "ctx": "h4",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "s326d2af3a8": {
+    "en": "<1>Open source</1>",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "s2a8b102c74": {
+    "en": "<1>Repo adapters</1>",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "sc7470806c3": {
+    "en": "<1>Status</1>",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "s661cf4f411": {
+    "en": "<1>Docs</1>",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "s82cd1953ed": {
+    "en": "<1>Blog</1>",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "s52d369c9d8": {
+    "en": "<1>Help</1>",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "sfbb821f74f": {
+    "en": "<1>© 2026 Flagship · Patent Pending · BUSL-1.1 → Apache 2.0 on 2030-05-03</1> <2><3>Privacy</3> · <4>Terms</4> · <5>flagshipserver.com</5></2>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "sef298c20e8": {
+    "en": "FAQ · Flagship",
+    "kind": "text",
+    "ctx": "title",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s08c8d741a5": {
+    "en": "The questions people actually ask before they hand us their hardware and their phone. Honest answers, no marketing.",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sb8f2284180": {
+    "en": "<1>Home</1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "adapters.html",
+      "blog/index.html"
+    ]
+  },
+  "sd034a70edb": {
+    "en": "<1>Security</1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "faq.html",
+      "open-source.html",
+      "adapters.html"
+    ]
+  },
+  "se6e98cec67": {
+    "en": "Questions, in plain English.",
+    "kind": "text",
+    "ctx": "h1",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s966645cd97": {
+    "en": "The ones people actually ask before they hand us their hardware and their phone. If yours isn't here, mail <1>support@flagshipserver.com</1>.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s92054e9a8f": {
+    "en": "Sections",
+    "kind": "attr",
+    "ctx": "nav[aria-label]",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s04e3b46d7d": {
+    "en": "<1>Setup &amp; install</1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s4d712d799f": {
+    "en": "<1>Privacy &amp; security</1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sb251fd64bd": {
+    "en": "<1>Services</1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s33390601b0": {
+    "en": "<1>If Flagship goes away</1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s0b14c148fa": {
+    "en": "Setup and install",
+    "kind": "attr",
+    "ctx": "section[aria-label]",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sdf7fb03d36": {
+    "en": "Setup &amp; install",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s41f17e9264": {
+    "en": "Plug in any old PC. Boot from one USB stick. Pair with your phone. Most people are online in about ten minutes.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s5c3ca0ada0": {
+    "en": "What hardware do I actually need?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s4ff018fd28": {
+    "en": "Any x86_64 machine with at least 2 GB of RAM, 32 GB of disk, and a working ethernet port. An old laptop, a NUC, an Optiplex from 2014. All fine. (You can also host a server on a computer you already use, from Flagship Studio.) The builder handles the OS for you, so you don't need to know or care what it runs.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s9c429cdbec": {
+    "en": "How long does install take?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sded4956815": {
+    "en": "About ten minutes from inserting the USB stick to a real green padlock at <1>you.flagship.services</1>. Most of that is the kernel booting and Let's Encrypt issuing your cert. To make the stick, pair the app directly with <2>Flagship Studio</2>; your phone sends the signed recipe and Studio does the rest.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "you.flagship.services"
+    ],
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sb457301e0e": {
+    "en": "Will it wipe the disk?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s01212713eb": {
+    "en": "Yes. The installer formats the target disk, sets up LUKS full-disk encryption with a key only your phone can release, and lays down a hardened Linux base. Anything that was on the disk before is gone. The installer asks twice and shows you the device path; we try hard not to surprise anyone.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sd1a5b72785": {
+    "en": "Do I need a static IP or port forwarding at home?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sfbf5caea19": {
+    "en": "No. Your box opens an outbound WebSocket to <1>flagship.services</1>; that's the tunnel. No port-forwarding, no dynamic DNS, no router config. CGNAT is fine. The only requirement is that outbound TCP/443 works, which it does on every consumer ISP.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "flagship.services"
+    ],
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s888b3cc293": {
+    "en": "Can I install without a phone?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s50762b591d": {
+    "en": "Not really, but you have options. The phone <1>is</1> the trust root in the strong-security path; there's no email-and-password to fall back to. If you don't want to use a phone, the installable web app at <2>webapp.flagshipserver.com</2> works as a peer device (passphrase + WebAuthn instead of Secure Enclave). It's a weaker key-storage trade-off but it's an account you fully control.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s8962a9f162": {
+    "en": "How does Studio pairing work?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s3f2e86df4c": {
+    "en": "Open <1>Flagship Studio</1> on your computer. It shows a QR and a short code. In the mobile app, choose Add server → Pair with Studio, scan or enter the code, and compare the security code on both screens. Your phone signs the recipe and sends it directly to Studio; the pairing session is short-lived and single-use. The webapp offers a signed recipe download instead.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sa69e959d58": {
+    "en": "Can I run it on a Raspberry Pi?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s6a953087b5": {
+    "en": "Not yet. Today the builder targets x86_64 machines; we don't ship an ARM build of the base OS as a default. The daemon itself is plain TypeScript, so a Pi 4 with an SSD is technically capable; if you get there by hand, please tell us how it went.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s6114a6c420": {
+    "en": "Privacy and security",
+    "kind": "attr",
+    "ctx": "section[aria-label]",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sf2f9e1d058": {
+    "en": "Privacy &amp; security",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s47c8ac9f59": {
+    "en": "The structural answer to \"can you read my data?\" is no: the bytes never leave your box decrypted. Here's what that means in practice.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s381befd896": {
+    "en": "Can Flagship read my data?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s3ce81c8e1b": {
+    "en": "Not the content of your data: files, messages, app data and AI prompts never reach us in a readable form. TLS ends on your own box, against a Let's Encrypt certificate whose private key only your box holds, so <1>flagship.services</1> sees encrypted bytes go past on a TCP pipe. What we <2>can</2> see is metadata: that your account exists, which servers it has and when they are online, roughly how much traffic they carry, and the other items listed under \"What does Flagship the company actually store?\" below. Because we run the <3>flagship.services</3> DNS zone we could also obtain a certificate for a box's name; the apps pin your box's own signed certificate and would refuse it, and any such certificate would be visible in public Certificate Transparency logs, but a plain web browser would not notice. The full list of who sees what is in our <4>metadata page</4>.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "flagship.services",
+      "flagship.services"
+    ],
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s4ca7107941": {
+    "en": "What does Flagship the company actually store?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s1924809a87": {
+    "en": "Your username and your devices' public keys; each server's name, public keys, the address its heartbeat arrives from, last-seen times, health reports and the orders sent to it (updates, backup policy, moves); a sealed LUKS-unlock blob (encrypted to your phone); push-notification tokens; the audit events your devices post; and per-account counts of traffic and AI usage. We also keep one list of the outside AI hosts boxes have reached, with totals and no account or box. No file content, no prompts, no chats, no service traffic. The full inventory lives in <1>/privacy</1>.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sc03f046dac": {
+    "en": "What if my phone is compromised?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s270426a56c": {
+    "en": "Game over for that account, the same way it's game over for your bank app. The phone is the trust root; a compromised root can sign whatever it wants. That's why the keys are wrapped by a key held in the phone's secure hardware (the Secure Enclave on iPhone, the hardware-backed Keystore on Android), and sensitive actions such as approving a server's start or signing as an admin ask for your biometric. While the app is unlocked, some keys are held in the phone's memory, so a phone that is already hacked and unlocked is not protected. If you suspect a compromise, use any other paired device to revoke the phone's identity key.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s10d9dc75be": {
+    "en": "What encryption do you use?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s749eca938a": {
+    "en": "Standard primitives only: Ed25519 signatures, X25519 + AES-256-GCM for sealed blobs, HKDF-SHA-256 for key derivation, LUKS2/argon2id for the disk. Real Let's Encrypt certificates, requested by your box itself, for transport. If we ever invent our own crypto, please report it as a bug.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sc6e92b71e8": {
+    "en": "Is the source open?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s552fbf27d1": {
+    "en": "Yes. The protocol, daemon, image-builder, and clients are at <1>github.com/ibisllc/flagship</1> under BUSL-1.1, which converts to Apache 2.0 in 2030. Reproducible builds for the ISO are on the roadmap so you can verify the bytes match the source.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "saf59b9b7fb": {
+    "en": "Can a court compel you to hand over my data?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sf073a36aec": {
+    "en": "They can compel us to hand over what we have, and what we have is account and server metadata (see above), a sealed blob, and routing records. We can't decrypt your traffic because we don't terminate it. We can revoke the routing entry for your subdomain (which takes your services offline); that's a power we have and we'd resist abusing. We'll publish a transparency report annually once we have any requests to report.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s85cd5ab7ae": {
+    "en": "What do you log?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s760041ae8a": {
+    "en": "Cloudflare gets normal request logs (IP, path, status) for <1>flagshipserver.com</1> on a 30-day window; we don't extend them. Our relay on <2>flagship.services</2> writes no per-connection log: it keeps counters in memory (totals every 15 minutes) and shows an error line only when a box's connection is parked too long. Its hosting platform (Fly) may keep connection metadata under its own policy. Your daemon logs locally on your box and never ships those logs anywhere. We don't run analytics, ad pixels, or session-replay on the marketing site or the dashboard.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "flagshipserver.com",
+      "flagship.services"
+    ],
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sfcecd0fc91": {
+    "en": "Services",
+    "kind": "attr",
+    "ctx": "section[aria-label]",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s7a99dd0a63": {
+    "en": "Services",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s50f70c8f02": {
+    "en": "Services are containers running on your box, namespaced by user.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s206b62d7bc": {
+    "en": "What is \"vibe-coding\" a service?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "se463b7d8ab": {
+    "en": "You describe what you want in plain language (\"a tracker for which houseplants I've watered, push me when one's been thirsty 5+ days\"). An LLM writes the code. Your daemon builds it, picks the data-layer scopes (Postgres tables, object storage, push), and runs it at <1>plant-water.you.flagship.services</1>. About 90 seconds. You can edit the code if you feel like it.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "plant-water.you.flagship.services"
+    ],
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sef7edfcb25": {
+    "en": "Can I share a service with a friend?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s050a028549": {
+    "en": "Yes, two ways. Invite people to use one app with a link you create on your phone; each person joins with their own key and you set their rank. Or share the whole server with another account, to view it or to co-manage it (a co-manager can never destroy it). There is no central database: the lists live on your servers, and changes are signed by your admin device.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s9f6557f7bd": {
+    "en": "What stops a malicious service from stealing my data?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sa0c1e1859a": {
+    "en": "The data-layer is per-service and per-user-namespaced: each app gets its own Postgres database and its own files folder, runs in a sandbox (gVisor), and can reach the internet only at hosts you approve. A service for \"plant watering\" can't read your photos. Nothing stops a malicious service from being terrible inside its own scope, which is why you should think before installing one.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sc09b6aad48": {
+    "en": "Which AI providers can services use?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s09e0f849e7": {
+    "en": "Whichever you've configured: bring your own key for Anthropic, OpenAI, Google, OpenRouter or any OpenAI-compatible API. Keys live on your daemon, encrypted at rest. By default your box reaches the provider through our relay address, which carries the encrypted connection and sees the provider's hostname and the amount of data, not the prompts; you can turn that off per key. With no key, building an app uses Flagship Inference, our built-in AI: it passes requests to a third-party model provider without keeping them (see <1>/privacy</1>).",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s7c19e068aa": {
+    "en": "Can I uninstall a service cleanly?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sa75e47f852": {
+    "en": "Yes. Uninstall drops its container, its Postgres database, its files folder and its access list. You can keep a snapshot before uninstall if you want to come back to the data later.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s5fd034c234": {
+    "en": "If Flagship goes away",
+    "kind": "attr",
+    "ctx": "section[aria-label]",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sa61b1419f7": {
+    "en": "If Flagship goes away",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s49793f02fc": {
+    "en": "A fair question. The product is designed so this is survivable.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sfa2d6603c7": {
+    "en": "What happens to my server if you shut down?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sf40a7ccaf2": {
+    "en": "It keeps running, and so do your services, until its certificate runs out (certificates last about 90 days). Several things need us: routing through <1>flagship.services</1> (the tunnel hub is ours), renewing the certificate (our DNS zone is used for the challenge), setting up a new server, pairing a new device, account recovery and any routing change. The code is open, so someone could run their own copies, but we have not built a handover for that, and we don't promise one.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "flagship.services"
+    ],
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sfc4b4040e8": {
+    "en": "What about my data and identity?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s23bd910e28": {
+    "en": "The data is on your disk; it was never anywhere else. The identity is your phone's keypair; it doesn't depend on us being alive. The username at <1>flagshipserver.com</1> goes away if the company does, but the underlying public key is yours. Keep a backup of your account key and of your server (Back up now) so you can rebuild elsewhere.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "flagshipserver.com"
+    ],
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sda94031831": {
+    "en": "Will the source survive you?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sf3885f185e": {
+    "en": "Yes. BUSL-1.1 with a Change Date of 2030-05-03: even if the company evaporates tomorrow, the entire codebase becomes Apache 2.0 in 2030 by license, and the GitHub mirror stays up regardless.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s498918b177": {
+    "en": "<1>Open the help center</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s604191e884": {
+    "en": "Didn't find it?",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sf95f9e5911": {
+    "en": "Mail <1>support@flagshipserver.com</1>. A real person reads everything. For broken installs, try <2>/help</2> first; for security questions, <3>/security</3> goes deeper than this page does.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s89085bfc13": {
+    "en": "Help · Flagship",
+    "kind": "text",
+    "ctx": "title",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s4d3a8e16dc": {
+    "en": "You're stuck. Here's what to try first.",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "sa3f3aa2b21": {
+    "en": "You're stuck. Here's what to try first.",
+    "kind": "text",
+    "ctx": "h1",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s1c37022e79": {
+    "en": "Quick fixes for the four problems we see most often. If none of these unstick you, scroll to the bottom and email a real human.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "saebc3f74cb": {
+    "en": "Quick help",
+    "kind": "attr",
+    "ctx": "section[aria-label]",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s9e895fe532": {
+    "en": "<1>Quick start</1>",
+    "kind": "text",
+    "ctx": "article",
+    "pages": [
+      "help.html",
+      "docs/index.html"
+    ]
+  },
+  "sb4826d4e7b": {
+    "en": "I just want to start.",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s8371243592": {
+    "en": "Install the phone app from <1>/download</1> (or use the <2>web app</2>).",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s0cc5c8cb9b": {
+    "en": "On a computer, install <1>Flagship Studio</1>.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "se79a5297f5": {
+    "en": "Create a server in the app, pair with Studio's QR or short code, then use Studio to write the installer USB (8 GB+).",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s53d6d4748d": {
+    "en": "About ten minutes to a real green padlock at <1>you.flagship.services</1>.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "you.flagship.services"
+    ],
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s81036ddb39": {
+    "en": "<1>Stuck on install</1>",
+    "kind": "text",
+    "ctx": "article",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s33ba3db064": {
+    "en": "I'm stuck on the install screen.",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s2d277045ac": {
+    "en": "<1>\"No pairing code accepted\"</1>: reopen Studio to show a fresh QR and short code, then try again.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s1c796574b4": {
+    "en": "<1>\"No network\"</1>: the installer needs DHCP on a wired ethernet port. Wi-Fi is not supported during install. Plug a cable in.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s8d44db5c8b": {
+    "en": "<1>\"Disk too small\"</1>: minimum is 32 GB. The installer formats whichever disk you point it at; it does not dual-boot.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s891df71926": {
+    "en": "Still stuck? Capture the screen and email it.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s67ba454943": {
+    "en": "<1>Phone trouble</1>",
+    "kind": "text",
+    "ctx": "article",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s99be38ea8d": {
+    "en": "My phone died.",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s5be434e4b9": {
+    "en": "If you enabled iCloud Keychain or Google Block Store at setup, sign in on the new phone and your identity unwraps with biometrics.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s6f69b9ac84": {
+    "en": "If you didn't, your account is unrecoverable; that's by design (we have no backdoor) and we tried to be clear about it during setup.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s8c2c7994c4": {
+    "en": "The hardware itself is fine. Spinning up a new account against the same box is a clean reinstall.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s1b083f4d40": {
+    "en": "Full recovery flow: <1>/docs/recovery</1>.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s679391265d": {
+    "en": "<1>Service not loading</1>",
+    "kind": "text",
+    "ctx": "article",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "sf6d8715217": {
+    "en": "A service isn't loading.",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s21f61a2fb6": {
+    "en": "<1>Browser shows \"DNS error\"</1>: your subdomain is propagating. Wait 60 seconds; check <2>/status</2>.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s60be9aade8": {
+    "en": "<1>\"Cert invalid\" / no green padlock</1>: the daemon is renewing. Check the dashboard for \"Renewing\" pill; usually clears in 90 seconds.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s99bc649e8e": {
+    "en": "<1>\"403 not a member\"</1>: the service is identity-gated and your phone hasn't approved your device. Approve from the phone, refresh.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "sda5c18af9e": {
+    "en": "Logs live on your box at <1>journalctl -u flagshipd</1>.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "journalctl -u flagshipd"
+    ],
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s7c559da817": {
+    "en": "Common symptoms",
+    "kind": "attr",
+    "ctx": "section[aria-label]",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "sf2b04b0105": {
+    "en": "A bit more, by symptom.",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s9818befdd8": {
+    "en": "Three things that can knock a working install offline. Each one resolves on its own most of the time; if it doesn't, here's where to look.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s3e2ce059a1": {
+    "en": "My install is stuck at \"installed\"",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s73cf2551ba": {
+    "en": "The install finished and the box powered off so you could unplug the USB stick and power it back on, but after you do, it never comes up. This almost always means the box can't reach the network early in boot, so it can't fetch the key that unlocks its encrypted disk. It's the usual symptom on a <1>Wi-Fi-only</1> box (the disk-unlock step runs before Wi-Fi is available). Two fixes:",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "sc128328d7f": {
+    "en": "<1>Plug in an Ethernet cable.</1> A wired connection is up early enough for the box to fetch its unlock key and finish booting. This is the simplest fix and keeps your disk encrypted.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "sc74df2f119": {
+    "en": "<1>Or create a new server with disk encryption turned off.</1> In the app's \"Create a server\" screen (or the web app), uncheck <2>Encrypt disk</2>, then re-burn. A box with the disk unencrypted boots without needing the network to unlock, so it works on Wi-Fi-only setups. The trade-off: your data is no longer encrypted at rest, which is less safe if the box is stolen. Choose this only when a wired connection isn't an option.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "sc9d8ac1e80": {
+    "en": "The dashboard says \"Offline\"",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s21b5724dbf": {
+    "en": "The tunnel from your box to <1>flagship.services</1> is down. Check, in order:",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "flagship.services"
+    ],
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s10d14828e2": {
+    "en": "<1>Power and network</1>. Is the box on? Is the cable in? Can it reach the internet (<2>ping 1.1.1.1</2>)?",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "ping 1.1.1.1"
+    ],
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s827fa599d9": {
+    "en": "<1>Outbound 443 reachable</1>. Some restrictive networks block long-lived WebSockets. <2>curl https://flagship.services/api/health</2> from the box should return JSON.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "curl https://flagship.services/api/health"
+    ],
+    "pages": [
+      "help.html"
+    ]
+  },
+  "sf761e4b436": {
+    "en": "<1>Daemon health</1>. SSH in, run <2>systemctl status flagshipd</2>. Restart with <3>systemctl restart flagshipd</3>; recent logs in <4>journalctl -u flagshipd -n 200</4>.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "systemctl status flagshipd",
+      "systemctl restart flagshipd",
+      "journalctl -u flagshipd -n 200"
+    ],
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s1a8951df6c": {
+    "en": "\"Cert invalid\" in the browser",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s5e4b164d81": {
+    "en": "Your TLS cert lives on the daemon and renews automatically 30 days before expiry. If you're seeing a cert warning:",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s78c22cbbad": {
+    "en": "<1>Wait 90 seconds.</1> Renewals re-issue and reload silently. The dashboard shows a \"Renewing\" pill while it's happening.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s72c1f2829d": {
+    "en": "<1>Check the dashboard's cert section.</1> If it says \"Failed\", the underlying cause is in the daemon log. The most common reason: the box was offline during the renewal window. Triggering a manual renewal from the dashboard fixes it.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s09dbf55333": {
+    "en": "<1>Brand-new install with no cert at all</1>: the first issuance happens at boot and takes 30 to 60 seconds. Refresh.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s8bcfeb5e76": {
+    "en": "\"403 not a member\" or \"Service locked\"",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s2c87296550": {
+    "en": "Services default to identity-gated: only the owner and explicitly invited users can hit them. If you're the owner and seeing 403:",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "sbe6cd5aa65": {
+    "en": "Confirm you're signed in on this device. Open the dashboard at <1>https://you.flagship.services/.flagship/</1>; if it asks for pairing, pair.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "https://you.flagship.services/.flagship/"
+    ],
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s20b2afcaf7": {
+    "en": "If you're a guest someone shared the service with: ask them to re-issue the invite. Invite tokens expire after first use.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s0f718b64e3": {
+    "en": "If the service is supposed to be public, check its manifest's <1>access</1> field. Owner can change it from the dashboard.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "access"
+    ],
+    "pages": [
+      "help.html"
+    ]
+  },
+  "sdd9d88ff28": {
+    "en": "I want to talk to a human.",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s0679e24d14": {
+    "en": "A real person reads every email. Mail <1>support@flagshipserver.com</1> with what you tried, what you saw, and the dashboard URL or device path. Replies usually within a day, faster if you mention \"blocked\".",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s4c565e02fd": {
+    "en": "<1>Email support@flagshipserver.com</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s22df1d3ab1": {
+    "en": "<1>Check status</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s9d633cdf0a": {
+    "en": "<1>Read the full FAQ →</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "se2df663c00": {
+    "en": "<1>Live</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "sad69afa8ae": {
+    "en": "If <1>/status</1> shows green and you're still broken, that's almost always something local, and that's almost always something we can help with by email.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s8b8273130f": {
+    "en": "Security · Flagship",
+    "kind": "text",
+    "ctx": "title",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sd9886924eb": {
+    "en": "Flagship's security model, coordinated disclosure and bounty policy, and vulnerability report form.",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s046c2640c2": {
+    "en": "<1>Model</1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s6b95dcaace": {
+    "en": "<1>Report</1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s29ecfca8c0": {
+    "en": "Security",
+    "kind": "text",
+    "ctx": "h1",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sf9feed403b": {
+    "en": "Flagship is a personal-cloud product. Your phone is the trust root, you host your own data on hardware you own. We take that seriously.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s4a2fa9c902": {
+    "en": "Security model",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s03d4425a2f": {
+    "en": "Threat model in one paragraph",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s793882e078": {
+    "en": "Your phone holds your User Master Key (UMK), wrapped by a key in its secure hardware (Secure Enclave on iPhone, hardware-backed Keystore on Android); while the app is unlocked it is held in the phone's memory. It never leaves the phone unwrapped. Derived keys do specific jobs: <1>BAK</1> gates server boot, <2>IRK</2> signs account-level operations like image-rebuild and revocation, and <3>SWK</3> is provisioned to the server so backup runs autonomously without keeping your phone awake. Peer hosts who store your backup shards only ever see opaque ciphertext. The <4>flagshipserver.com</4> control plane is a delivery channel and matchmaker; it never sees secrets in the clear.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "flagshipserver.com"
+    ],
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s254faa5618": {
+    "en": "<1>Three device families.</1> The native iOS app and Android app use Secure Enclave / StrongBox: strong key storage. The installable webapp uses software-only IndexedDB-with-passphrase: weaker, suitable for testing or accessibility. We deliberately don't share keys between families: a webapp identity and an iOS identity are independent accounts, the way Apple Pay never crosses to Google Pay.",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s7289acbffd": {
+    "en": "What we promise",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sf2a6e53eb2": {
+    "en": "All security-critical code (key derivation, signing, encryption, daemon, boot path, mobile clients) is open source under Apache 2.0.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s798346340b": {
+    "en": "The boot image is built reproducibly: you can verify the bytes match the source.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s91d0513e04": {
+    "en": "Standard primitives only: <1>Ed25519</1>, <2>X25519</2>, <3>AES-256-GCM</3>, <4>HKDF-SHA-256</4>. No homemade crypto.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "Ed25519",
+      "X25519",
+      "AES-256-GCM",
+      "HKDF-SHA-256"
+    ],
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sa4b3981430": {
+    "en": "Server boot requires a phone-signed approval over the network. A stolen server cannot self-unlock.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sf3e26c491b": {
+    "en": "The auth domain (<1>flagshipserver.com</1>) is separate from the user-content domain (<2>*.flagship.services</2>) so user apps cannot reach session cookies via subdomain confusion.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "flagshipserver.com",
+      "*.flagship.services"
+    ],
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s0e35268f5a": {
+    "en": "flagshipserver.com is physically unable to read user-content TLS: bytes are routed by SNI and decrypted only on your own server.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s997a27acd4": {
+    "en": "<1>No KYC, ever.</1> We do not collect, store, or expose any real-world identity attribute about any user: no legal name, no email, no phone, no government ID. <2>Read the full policy →</2>",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s70dc6f0867": {
+    "en": "Source code",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s853b1e98b7": {
+    "en": "The protocol, daemon, image-builder, and mobile clients live at <1>github.com/ibisllc/flagship</1> (link will be live when the repo is published). Audit it, build it, run it.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s6b891dd327": {
+    "en": "Coordinated disclosure &amp; bounty",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sfd944ec22c": {
+    "en": "We pay for serious vulnerabilities in a defined scope and respond to reports under a published SLA. Coordinated disclosure is required: exploit details stay private until a fix ships.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s77ccc6a9a0": {
+    "en": "Scope",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sa8a5ba74e5": {
+    "en": "In scope",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s60406a567b": {
+    "en": "Out of scope",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sa27ba3ec99": {
+    "en": "<1>flagshipserver.com</1>: the Cloudflare Worker, all <2>/api/*</2> routes, the static site, and domain configuration / cookie scoping.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "flagshipserver.com",
+      "/api/*"
+    ],
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s89f95158f5": {
+    "en": "<1>webapp.flagshipserver.com</1>: the webapp PWA: WebAuthn / IRK signing / lease deposit / recovery upload paths.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "webapp.flagshipserver.com"
+    ],
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s1d6359e6f3": {
+    "en": "<1>remote.flagshipserver.com</1>: the browser-remote surface: the phone-approval ceremony and the keyless session it issues.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "remote.flagshipserver.com"
+    ],
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sa3dd9aa189": {
+    "en": "<1>*.flagship.services</1>: the SNI passthrough plane on Fly, the tunnel hub, and the tunnel transport from each Flagship server.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "*.flagship.services"
+    ],
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sd6f4b61c28": {
+    "en": "The Flagship daemon as shipped by Flagship Studio on the Debian-based boot image. Includes ACME, the local TLS server, the data layer (Postgres / Forgejo / Chromium under <1>/var/flagship/data/</1>, and each app's files volume).",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "/var/flagship/data/"
+    ],
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sffa777079b": {
+    "en": "The boot image and Flagship Studio, the image-builder.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "scc2208e9e6": {
+    "en": "The canonical-bytes layer in <1>@flagship/protocol</1>: sign/verify routines, key derivations, encryption.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "@flagship/protocol"
+    ],
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s53e831847c": {
+    "en": "The Flagship iOS and Android apps.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s374da2a0ec": {
+    "en": "Vulnerabilities in apps installed by individual users (those are the app author's responsibility; report to them directly).",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s9a9a66b41b": {
+    "en": "Self-hosted forks of Flagship (only the canonical builds are in scope).",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s4c6227a0d2": {
+    "en": "Issues in third-party dependencies, please report upstream and copy us.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s98ef40c66a": {
+    "en": "Issues requiring physical access to a user's already-unlocked phone or laptop.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sa52abbdfcd": {
+    "en": "Theoretical attacks against well-vetted primitives (Ed25519, X25519, AES-256-GCM, SHA-256, HKDF) without a working PoC.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s41949bf365": {
+    "en": "Rate-limiting, denial-of-service, or volumetric attacks against public endpoints. (We rely on Cloudflare's edge for these.)",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sc53eeae12b": {
+    "en": "Missing security headers on static pages where there's no XSS sink.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s3f66407798": {
+    "en": "Reports auto-generated by scanners with no manual analysis.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "se1c17ba8c5": {
+    "en": "Social engineering of staff or users.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s6864dfe49c": {
+    "en": "Response targets",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sc6b2ce2e27": {
+    "en": "Initial acknowledgement within <1>2 business days</1>.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sc7971729e7": {
+    "en": "Triage decision (in/out of scope, severity) within <1>7 days</1>.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s87a06d935a": {
+    "en": "Fix ship target by severity: critical within <1>7 days</1>; high within 30; medium within 90; low best-effort, usually rolled into the next release.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s0c9b8b1cc5": {
+    "en": "Public disclosure (reporter credit): coordinated with you, after the fix has shipped to all auto-update channels.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s1bd21e34f9": {
+    "en": "Bounty payouts",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s452cd01b43": {
+    "en": "<1>Status: pre-release, not yet fully funded.</1> Flagship has not launched commercially and the bounty programme is not funded yet, so <2>payouts are delayed until it is</2>. The bands below are what we expect to pay once funding is in place; they are not a current offer. Until then we triage, fix, and credit reports under this policy, and we record every qualifying report as an outstanding obligation to be assessed against these bands at commercial launch. We would rather tell you this before you spend your time than after.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sfe36cfe464": {
+    "en": "What that means in practice, until the programme is funded:",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s407b2109c3": {
+    "en": "<1>We still triage and fix on the published SLA.</1> Funding has no bearing on how fast a report gets dealt with. Every report listed in the hall of fame below was fixed and deployed within the SLA.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s313abb7688": {
+    "en": "<1>Every qualifying report is recorded as an outstanding obligation</1>, with the severity we assess it at, to be settled against the bands below at commercial launch.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "se5c16a1530": {
+    "en": "<1>We assess severity ourselves and will rate upwards.</1> If your own write-up is more conservative than the facts support, as the first report we received was, we record the higher severity, not the one you claimed.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sd8799fa954": {
+    "en": "<1>Credit is available immediately</1>, in whatever form you ask for, and is not contingent on anything. It is the one thing we can give you now, so we would rather give it properly.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s1620320bf0": {
+    "en": "<1>No embargo once the fix has shipped.</1> Write your findings up publicly whenever you like. Ask us first if you want a technical-accuracy review; we will not ask you to soften anything.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s0699483397": {
+    "en": "<1>If the delay causes you real hardship, tell us.</1> We would rather hear it than have you discover our funding position afterwards and feel misled.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sdcebd3e7f1": {
+    "en": "Severity",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sd52ed5e697": {
+    "en": "Examples",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s23be2c3ff4": {
+    "en": "Range (USD)",
+    "kind": "text",
+    "ctx": "th",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sf4f0b8fe64": {
+    "en": "Critical",
+    "kind": "text",
+    "ctx": "td",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sa05d2bd016": {
+    "en": "Account takeover without phone access; arbitrary unlock-key extraction; remote code execution on the daemon; canonical-bytes signature bypass.",
+    "kind": "text",
+    "ctx": "td",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sf03e311435": {
+    "en": "High",
+    "kind": "text",
+    "ctx": "td",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s90ee85dd34": {
+    "en": "Cross-user data exposure; bypass of paired-session auth; unauthenticated read of <1>auto_unlock_leases</1> or <2>webauthn_recovery_records</2> contents (cleartext).",
+    "kind": "text",
+    "ctx": "td",
+    "verbatim": [
+      "auto_unlock_leases",
+      "webauthn_recovery_records"
+    ],
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s4682023349": {
+    "en": "Medium",
+    "kind": "text",
+    "ctx": "td",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s365cdc1155": {
+    "en": "Stored or reflected XSS on <1>flagshipserver.com</1> or <2>webapp.flagshipserver.com</2>; CSRF on a state-changing endpoint not protected by signed canonical-bytes; significant trust-model violation that doesn't directly leak keys.",
+    "kind": "text",
+    "ctx": "td",
+    "verbatim": [
+      "flagshipserver.com",
+      "webapp.flagshipserver.com"
+    ],
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s5e25d0845a": {
+    "en": "Low",
+    "kind": "text",
+    "ctx": "td",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s22e86c10f4": {
+    "en": "Open redirect; subdomain takeover on a non-served subdomain; privacy leak (e.g. timing-side-channel revealing whether a username exists) without further impact.",
+    "kind": "text",
+    "ctx": "td",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s4b4230f70d": {
+    "en": "Final amount depends on impact, exploitability, the quality of the report, and whether you provided a working PoC. We reserve the right to award above the listed range for exceptional reports. Payouts are in USD via bank transfer or sent to a Bitcoin / Ethereum address you provide.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "se5d4747112": {
+    "en": "Safe harbor",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s23cc9e97a9": {
+    "en": "Good-faith research conducted under this policy will not be subject to legal action by Flagship. You may probe production endpoints provided you don't:",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sf70d5f609e": {
+    "en": "Access, modify, or delete other users' data beyond the minimum needed to demonstrate the issue. Use your own account.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sf95f64eb80": {
+    "en": "Use the issue to extract more than test-account data.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s9876e64009": {
+    "en": "Run automated scanners that generate sustained load.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "scf5d5d34dc": {
+    "en": "Publish details before the fix has shipped, or before our mutually agreed disclosure date (we aim for 90 days at most, negotiable for critical issues).",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s6113805e30": {
+    "en": "Hall of fame",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sefd58307d1": {
+    "en": "Researchers who reported a vulnerability to us, with the commits that closed it. Credited in whatever form each reporter asks for: name, handle, or anonymous, with a link if they want one. Listed without attribution until they have told us their preference; we never publish a name we have not been given.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s6600e49241": {
+    "en": "Report a vulnerability",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s74c47fae88": {
+    "en": "Use the form below (preferred: it asks for the right structured fields), or email <1>security@flagshipserver.com</1>. Encrypted reports are encouraged. Use our PGP key:",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s84f28e32dd": {
+    "en": "<1>Download the public key</1>, or let your mail client find it for <2>security@flagshipserver.com</2> (published via Web Key Directory).",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "security@flagshipserver.com"
+    ],
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s6f7ab5804a": {
+    "en": "Fingerprint: <1>D96D 675D B03E 3F3B BC88&nbsp; 7030 2308 936D 2154 96D0</1>",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "D96D 675D B03E 3F3B BC88 7030 2308 936D 2154 96D0"
+    ],
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s4544d04a82": {
+    "en": "Please include:",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s52aeedb192": {
+    "en": "A clear description of the issue.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sf5d5f5ebed": {
+    "en": "The exact endpoint / file / commit hash affected.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sd167944c84": {
+    "en": "A working PoC (script, curl invocation, or screenshots).",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s1a54995d5c": {
+    "en": "Your assessed impact and severity.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s58f871e779": {
+    "en": "Whether you'd like to be credited publicly (and under what name).",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s6f865282e2": {
+    "en": "<1>Your email <2>so we can reply (optional but recommended)</2></1> <3/> <4>Severity (your guess)</4>",
+    "kind": "text",
+    "ctx": "form",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s14d1d03c35": {
+    "en": "<1>Component</1>",
+    "kind": "text",
+    "ctx": "form",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "se1c78ccb72": {
+    "en": "<1>Summary <2>*</2></1> <3/> <4>Details, repro steps, impact <5>*</5></4>",
+    "kind": "text",
+    "ctx": "form",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s57cac2a23a": {
+    "en": "<1>Submit report</1>",
+    "kind": "text",
+    "ctx": "form",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sfc76fec397": {
+    "en": "you@example.com",
+    "kind": "attr",
+    "ctx": "input[placeholder]",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s48c634fb68": {
+    "en": "Critical: remote unauth, key compromise, data exfil",
+    "kind": "text",
+    "ctx": "option",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s968a748f3b": {
+    "en": "High: privilege escalation, account takeover",
+    "kind": "text",
+    "ctx": "option",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sa8eb8c19e1": {
+    "en": "Medium: info disclosure, partial bypass",
+    "kind": "text",
+    "ctx": "option",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s9998b57835": {
+    "en": "Low: minor, requires unusual conditions",
+    "kind": "text",
+    "ctx": "option",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s5c9496cd41": {
+    "en": "Protocol / crypto",
+    "kind": "text",
+    "ctx": "option",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sb04db7a8f9": {
+    "en": "Server daemon",
+    "kind": "text",
+    "ctx": "option",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s4d23d5dd17": {
+    "en": "Data layer (Postgres / files provisioning)",
+    "kind": "text",
+    "ctx": "option",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s632aa0fac1": {
+    "en": "Boot image / image-builder",
+    "kind": "text",
+    "ctx": "option",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sc2f07d347b": {
+    "en": "iOS app",
+    "kind": "text",
+    "ctx": "option",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s47a4e19c75": {
+    "en": "Android app",
+    "kind": "text",
+    "ctx": "option",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sfab367a8b3": {
+    "en": "Webapp",
+    "kind": "text",
+    "ctx": "option",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s6ec6bfb707": {
+    "en": "Deck (cast surface)",
+    "kind": "text",
+    "ctx": "option",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s077a42e4c9": {
+    "en": "Control plane (flagshipserver.com)",
+    "kind": "text",
+    "ctx": "option",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s242b8252df": {
+    "en": "Tunnel / public ingress",
+    "kind": "text",
+    "ctx": "option",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s1ae1290aa7": {
+    "en": "Other",
+    "kind": "text",
+    "ctx": "option",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s2ecf5e56e2": {
+    "en": "One-line description",
+    "kind": "attr",
+    "ctx": "input[placeholder]",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sfa29e26c6f": {
+    "en": "Docs · Flagship",
+    "kind": "text",
+    "ctx": "title",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sa3ed2e5f5a": {
+    "en": "Everything you need to set up Flagship, build apps on it, and recover when something goes sideways.",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sab8d77fa7b": {
+    "en": "Flagship — home",
+    "kind": "attr",
+    "ctx": "a[aria-label]",
+    "pages": [
+      "docs/index.html",
+      "blog/index.html"
+    ]
+  },
+  "s1d34362df3": {
+    "en": "Docs.",
+    "kind": "text",
+    "ctx": "h1",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sc9786c08cf": {
+    "en": "Concrete answers, no fluff. Pick a starting point.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s5dc07431a9": {
+    "en": "<1>Install</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sdd041c6e2d": {
+    "en": "<1>Assemble your server</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s1a60df0649": {
+    "en": "<1>Phone pairing</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s48a7e1670d": {
+    "en": "<1>Apps &amp; manifest</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s785da0b0e2": {
+    "en": "<1>URL multiplexing</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sdfb5cf702e": {
+    "en": "<1>Recovery</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s6a1585962c": {
+    "en": "<1>API reference</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sfa5eca78ce": {
+    "en": "<1>Walk through the full flow →</1>",
+    "kind": "text",
+    "ctx": "section",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s7b81e997fe": {
+    "en": "Quick start",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sa34f9c9c13": {
+    "en": "Three steps. About ten minutes.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s78acc73d60": {
+    "en": "<1>1.</1> Install the phone app. Pick a username. Approve biometrics. Your master key never leaves the phone.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s68234bbec4": {
+    "en": "<1>2.</1> Get <2>Flagship Studio</2> on your computer. In the phone app, choose Add server → Pair with Studio and scan the QR Studio shows. Studio receives the signed recipe and writes the boot USB for you. Plug in and boot — or order a pre-built box that's ready to go.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s3d7e9cf0c0": {
+    "en": "<1>3.</1> Vibe-code your first app from the phone. Done.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s255c6d3940": {
+    "en": "<1>Read the trust model →</1>",
+    "kind": "text",
+    "ctx": "section",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s8727bc5286": {
+    "en": "Architecture",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s72ae1fcd1b": {
+    "en": "Three planes. flagshipserver.com handles identity. flagship.services is a stateless pipe (SNI passthrough + tunnel hub). Your box terminates TLS itself with a real Let's Encrypt cert. We literally cannot read your data.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sb59a6619fd": {
+    "en": "The phone holds your keys. The .com Worker is the registrar; it never sees plaintext content. The .services Fly app is a dumb router that sees encrypted bytes only.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s9d514fbda1": {
+    "en": "How Flagship works",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sd726a76557": {
+    "en": "Five stages, start to finish. Your phone signs every step — we never see your content, even when you're registering for the first time.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s90e658c61c": {
+    "en": "<1>1 · Pair your phone.</1> You install the Flagship app. It generates a master key and wraps it with a key held in your phone's secure hardware (the Secure Enclave on iPhone, the hardware-backed Keystore on Android), unlocked with Face ID, Touch ID or your fingerprint. The master key never leaves the phone. From it we derive three more: one for identity (your username), one for backup-authorization (LUKS unlock), one for working keys (per-server secrets). You pick a username; the phone signs a registration request; <2>flagshipserver.com</2> records the username and the public half. No email, no password, no SMS.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "flagshipserver.com"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s4b9e427d97": {
+    "en": "<1>2 · Mint &amp; deliver a recipe.</1> Your phone pairs directly with <2>Flagship Studio</2> using the QR or short code Studio shows. After you confirm the matching security code, the phone mints and sends a small signed recipe naming your server and carrying a short, single-use expiry. Studio fetches the right base OS and writes the boot USB — you never pick or download an OS image yourself.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s3e7d605afd": {
+    "en": "<1>3 · Boot &amp; install.</1> The USB boots a hardened Linux base on your hardware. A first-boot script validates the recipe signature locally, then fetches the public installer from our GitHub repo at the exact pinned ref — a few hundred auditable lines of shell. It formats the disk with LUKS, generates a per-box identity, requests a real Let's Encrypt cert (DNS-01 wildcard), registers with <2>flagshipserver.com</2>, and boots into steady state. Your phone lights up: <3>\"Your Flagship is online.\"</3>",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "flagshipserver.com"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s3815323180": {
+    "en": "<1>4 · Every-boot unlock.</1> When the box reboots, the LUKS-encrypted root won't open. The boot stage polls <2>flagshipserver.com</2> for an unsealed unlock key. Your phone, woken by a push, asks for biometrics, decrypts the sealed blob locally, and deposits the unsealed key with a 10-minute TTL. The box consumes it; the row is deleted on read; the disk opens. A stolen box without your phone is a brick — even we can't help, because we never had the unsealed key.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "flagshipserver.com"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s498947451c": {
+    "en": "<1>5 · Live. Vibe-code. Share.</1> From the phone you describe a service in plain language. An LLM writes it (your own provider key, or Flagship Inference's free credits). The daemon builds the container, provisions a Postgres database and a files folder scoped to the service, deploys it, and registers a subdomain — live within a minute at <2>app.you.flagship.services</2>. Sharing is one tap: a signed invite or a username search. Services never see cookies; the daemon injects identity headers after a membership check.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "app.you.flagship.services"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s3ae6d776b0": {
+    "en": "<1>If you lose the phone.</1> Cloud recovery stores only an encrypted copy of your master key. On iOS, recovering it requires both your recovery passphrase and access to the iCloud Keychain holding your Flagship passkey; Flagship cannot read the key or reset your passphrase. Without cloud recovery, a single-device account must use the slower waiting-period claim process.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s43583bacb1": {
+    "en": "<1>Stuck on install? →</1>",
+    "kind": "text",
+    "ctx": "section",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sb4f9cc365c": {
+    "en": "Install &amp; first boot",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sa9acc1d69b": {
+    "en": "The installer is a public shell script in our open-source repo. It's pinned by hash inside the signed recipe. The installer formats the disk with LUKS, generates a server identity, requests a Let's Encrypt cert via DNS-01, and registers with .com.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sd02d86d61b": {
+    "en": "Every subsequent boot, the phone has to approve the LUKS unlock. A stolen box without your phone is a brick.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sf95bb2c916": {
+    "en": "<1>Stuck assembling? →</1>",
+    "kind": "text",
+    "ctx": "section",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s8c0c777ee8": {
+    "en": "Assemble your server",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sf6c63964dd": {
+    "en": "Flagship Studio turns a spare computer into your personal server. You give it two things — your certificate (the signed recipe) and a USB drive — and it fetches the right hardened Linux base for you and bakes your recipe in. Here's what each piece is and how it works.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "saf2a394505": {
+    "en": "A certificate",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s47c7bdb649": {
+    "en": "The certificate is a small JSON file your <1>phone</1> signs. It names the server you're creating and proves the request came from you — the phone is the only thing that can authorize a new Flagship server, and it never leaves your pocket.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s1c48353f0d": {
+    "en": "To get one, install <1>Flagship Studio</1> on your computer. Studio shows a QR and short code; scan or enter it from Add server in the phone app. After you confirm the matching security code, the app signs the server recipe and sends it directly to Studio. Webapp users can instead download the signed JSON recipe and open it in Studio.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s78c27675c3": {
+    "en": "<1>It's single-use and short-lived.</1> A certificate is good for a few hours and authorizes exactly one server, so a leftover file on disk can't be replayed. Generate a fresh one whenever you need it.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sc6668a4b17": {
+    "en": "<1>Get a certificate</1>",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sb688abbd4e": {
+    "en": "The base OS — handled for you",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s97cee8f5ff": {
+    "en": "<1>You don't need to download or pick an OS image.</1> The Builder fetches the right hardened Linux base automatically, verifies it, and bakes your recipe in. The pinned base is <2>Debian 13</2> — chosen because it boots on the widest range of machines.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "se5fe651511": {
+    "en": "The technical reference below is for people who want to know exactly what gets written, or who run the Builder in its advanced bring-your-own-image mode. Everyone else can skip it.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s7f52cf3ba2": {
+    "en": "Debian 13 (trixie) <1>amd64 · recommended</1>",
+    "kind": "text",
+    "ctx": "h4",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s57f4af19c1": {
+    "en": "The most compatible choice. Its installer can place the bootloader where even stubborn UEFI firmware will find it — so Debian installs and boots on machines where other installers give up. It's also a smaller download (a network installer), and boots on both BIOS and UEFI.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s124b378347": {
+    "en": "Download",
+    "kind": "text",
+    "ctx": "dt",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s4490eeba7e": {
+    "en": "<1>debian-13.6.0-amd64-netinst.iso</1>",
+    "kind": "text",
+    "ctx": "dd",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s1fd992e1fa": {
+    "en": "Size",
+    "kind": "text",
+    "ctx": "dt",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s3d5986a945": {
+    "en": "~750 MB",
+    "kind": "text",
+    "ctx": "dd",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sb2f674ca61": {
+    "en": "SHA-256",
+    "kind": "text",
+    "ctx": "dt",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s413750e99c": {
+    "en": "65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7",
+    "kind": "text",
+    "ctx": "dd",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s677a37fec9": {
+    "en": "<1>Why a pinned list?</1> The Builder verifies the image's SHA-256 against this list before it writes anything. A corrupted download, a tampered mirror, or an untested version is refused — you never have to check a checksum by hand. We add images here only after a real end-to-end install on real hardware.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sef4443cecf": {
+    "en": "A boot drive",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s405272917a": {
+    "en": "The USB drive is a one-time installer, not the server itself. It carries your certificate, turns a spare machine into your Flagship server, and then it's done — you can wipe and reuse it.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sb3f0ec95a5": {
+    "en": "Assemble the drive",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sb6197bac5e": {
+    "en": "Drop your certificate and a USB drive into the Builder and hit Assemble. It fetches the base OS for you and bakes your certificate <1>inside</1> the installer image, so the drive needs nothing from the network to know which server it's setting up.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sdb2baad0da": {
+    "en": "<1>The drive is erased</1> — everything on it is overwritten. Use a spare one.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sb0839f0f0f": {
+    "en": "Boot the target machine",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s915d01ce6e": {
+    "en": "Plug the drive into the computer you want to become your server and turn it on, choosing the USB drive as the boot device. The installer runs unattended — partitions the disk, installs the base system, sets up the Flagship daemon. No keyboard babysitting.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "se45e58fe66": {
+    "en": "Register, unattended",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "saab998605c": {
+    "en": "On first boot the new server generates its own identity, presents your signed certificate, and registers its subdomain. From this moment TLS terminates on your box — flagship.services becomes a dumb pipe that literally cannot read your content.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s6ad7d5b7e4": {
+    "en": "Reclaim the drive",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "se32ee110f9": {
+    "en": "Once the server is live, the boot drive has done its job. The certificate it carried is single-use and time-limited, so an old drive can't be replayed. Reformat the stick and use it for anything you like.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s8de00593a5": {
+    "en": "Phone pairing",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s3b1aed9ffd": {
+    "en": "To use the web console you scan a QR code from the phone. The phone shows a 32-byte session token, signs an <1>add-paired-session</1> order, and the daemon stores the token. The browser holds it as a cookie; every admin call carries it.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "add-paired-session"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s2709b265fd": {
+    "en": "Pairings are listed in <1>Settings → Paired devices</1>. Revoke any time.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sce033e73a2": {
+    "en": "Apps &amp; manifest",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s6f58864a3c": {
+    "en": "An app is a container your server builds from its source and a <1>flagship.app.json</1> manifest at the root of its repo. The manifest names the runtime the server builds it on, the data stores it needs (Postgres, a files folder), the internet hosts it may reach, and what anyone can open without signing in. The server injects identity headers, so apps never handle passwords.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "flagship.app.json"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sd1b4470cb3": {
+    "en": "You describe an app in a build chat (the AI writes the source and the manifest, never a Dockerfile) or import a git repo. Either way your server builds it, runs it in its own sandbox, and routes it.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sc4565293cb": {
+    "en": "Manifest reference",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s3b0da0a265": {
+    "en": "The fields, all checked when the app is installed:",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sb320add4a3": {
+    "en": "<1>schema_version</1>: always <2>1</2>. <3>name</3>: a DNS label (lowercase letters, digits and dashes). <4>version</4>: semver, like <5>1.2.0</5>. <6>description</6>: optional.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "schema_version",
+      "1",
+      "name",
+      "version",
+      "1.2.0",
+      "description"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s95ec5178f4": {
+    "en": "<1>runtime</1>: <2>base</2> is <3>node-24</3>, <4>python-3.13</4> or <5>static</5>, plus <6>port</6> (the app listens on <7>$PORT</7>), <8>start</8> (the start command as a list; <9>node-24</9> defaults to <10>npm start</10>) and <11>env</11>. Keys starting with <12>FLAGSHIP_</12> are the server's. An imported repo with its own Dockerfile names an <13>image</13> instead of a <14>base</14>.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "runtime",
+      "base",
+      "node-24",
+      "python-3.13",
+      "static",
+      "port",
+      "$PORT",
+      "start",
+      "node-24",
+      "npm start",
+      "env",
+      "FLAGSHIP_",
+      "image",
+      "base"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s2f8a054cc5": {
+    "en": "<1>data.stores</1>: <2>postgres: true</2> gives the app a Postgres 18 database (<3>FLAGSHIP_PG_URL</3>, with pgvector and the common extensions); <4>files: true</4> gives it a writable folder at <5>/data</5> (<6>FLAGSHIP_FILES_DIR</6>) that survives restarts and redeploys. There is no S3 and no Redis.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "data.stores",
+      "postgres: true",
+      "FLAGSHIP_PG_URL",
+      "files: true",
+      "/data",
+      "FLAGSHIP_FILES_DIR"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sc02a61f6c4": {
+    "en": "<1>network</1>: <2>subdomain</2>, served at <3>&lt;subdomain&gt;.&lt;server&gt;.&lt;you&gt;.flagship.services</3>, and <4>egress</4>, the hosts the app asks to reach, each with why. Nothing goes out until you approve it in the app's access list.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "network",
+      "subdomain",
+      "<subdomain>.<server>.<you>.flagship.services",
+      "egress"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s0c84f975cb": {
+    "en": "<1>access</1>: <2>enabled: true</2> (apps can't opt out of identity), <3>default_role</3>, optional <4>custom_roles</4>, <5>public_routes</5> (paths anyone can open when the app is members-only) and <6>queryable_by</6>.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "access",
+      "enabled: true",
+      "default_role",
+      "custom_roles",
+      "public_routes",
+      "queryable_by"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s461b197a6e": {
+    "en": "<1>migration.verification</1>: <2>standard</2> (biometric) or <3>elevated</3> (biometric and a second factor), for apps holding money, health or password data.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "migration.verification",
+      "standard",
+      "elevated"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s1935cc0eb2": {
+    "en": "Optional: <1>browser.domains</1>, the sites an app may drive in your server's own browser, approved at install.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "browser.domains"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s2be951575e": {
+    "en": "URL multiplexing",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sbca40a6a61": {
+    "en": "When you have one install of <1>game</1>, the URL <2>game.john.flagship.services</2> just works. When you have two installs of <3>game</3> on different boxes, that short URL is ambiguous and we serve a disambiguation page. The full long form (<4>game.home.john.flagship.services</4>) always works.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "game",
+      "game.john.flagship.services",
+      "game",
+      "game.home.john.flagship.services"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s07877d2711": {
+    "en": "You declare and release short-URL aliases from the phone. <1>Full design →</1>",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s4087f65e26": {
+    "en": "Recovery",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s141b6b7444": {
+    "en": "Your account key lives on your devices. There are three ways to get it onto a new one, and if you have none of them your data can't be recovered, like a hardware wallet. The apps say so while you set up.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s23b367e6fb": {
+    "en": "<1>Another of your devices.</1> On a device that's signed in, open Settings → Trusted devices → Add device. On the new one, choose Connect to an existing account and scan the code under Join with a pairing code, or paste its link (or Settings → Scan a pairing code when it's already signed in elsewhere). Both show the same code; when they match, the key moves over, end to end encrypted.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s085a394ec3": {
+    "en": "<1>A cloud backup.</1> If you turned on recovery, a passkey kept by iCloud Keychain or Google Password Manager unlocks a sealed copy of your key. On a new phone, sign in with your account name and confirm with Face ID or your fingerprint.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sf813d162b4": {
+    "en": "<1>Your account key file.</1> Settings → Back up account key saves a passphrase-protected <2>.flagshipkey</2> file. Open it on the new device with its passphrase.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      ".flagshipkey"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s4d42e538c7": {
+    "en": "Recovering without a working device is a takeover, and it waits so a thief can't rush it: 7 days on an account with one device, 24 hours on an account with several, which also needs your recovery authenticator code or a recovery code. Your other devices are told at once and can cancel it. Afterwards each server pairs with the new device.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sda6611dfbf": {
+    "en": "API reference",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s2016eaba56": {
+    "en": "What an app on your server can count on:",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s71581534ce": {
+    "en": "<1>Who is calling.</1> The server drops every <2>X-Flagship-*</2> header a client sends and sets its own: <3>X-Flagship-Visitor</3> is <4>member</4>, <5>api</5> or <6>anonymous</6>; for a member, <7>X-Flagship-User</7> is an id that is stable for this app only (the same person has unrelated ids in two apps) and <8>X-Flagship-Role</8> is their rank, <9>member</9>, <10>manager</10> or <11>master</11>. Anonymous visitors get no user or role.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "X-Flagship-*",
+      "X-Flagship-Visitor",
+      "member",
+      "api",
+      "anonymous",
+      "X-Flagship-User",
+      "X-Flagship-Role",
+      "member",
+      "manager",
+      "master"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sd3d8c5768a": {
+    "en": "<1>Sign-in.</1> Send people to <2>/__flagship/sign-in?next=/path</2> on the app's own host (and <3>/__flagship/sign-out</3>). They approve on their phone; the app never sees a password.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "/__flagship/sign-in?next=/path",
+      "/__flagship/sign-out"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s6afedd8c6b": {
+    "en": "<1>API keys.</1> Scripts and devices call the app with <2>Authorization: Bearer fsk_&lt;keyId&gt;_&lt;secret&gt;</2>, a key the owner creates on the app's page, read-only or read and write. The server checks it first and the app sees <3>X-Flagship-Visitor: api</3> and <4>X-Flagship-Api-Scope</4>.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "Authorization: Bearer fsk_<keyId>_<secret>",
+      "X-Flagship-Visitor: api",
+      "X-Flagship-Api-Scope"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s0b4a47c76c": {
+    "en": "<1>Live connections.</1> Responses stream, and WebSocket upgrades pass through.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sb7da225ed6": {
+    "en": "<1>Data.</1> <2>FLAGSHIP_PG_URL</2> for its Postgres database and <3>FLAGSHIP_FILES_DIR</3> for its files folder.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "FLAGSHIP_PG_URL",
+      "FLAGSHIP_FILES_DIR"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sf727df7ee4": {
+    "en": "Everything else, between your devices, your servers and flagshipserver.com, is signed orders rather than a public API. The specs are in the open source repo: <1>github.com/ibisllc/flagship</1>, starting with <2>docs/app-apis.md</2> and <3>docs/manifest.md</3>.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "docs/app-apis.md",
+      "docs/manifest.md"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sf22073d303": {
+    "en": "Open source · Flagship",
+    "kind": "text",
+    "ctx": "title",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "s1fb50e4865": {
+    "en": "Open source",
+    "kind": "text",
+    "ctx": "h1",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "sa2c266c838": {
+    "en": "Flagship is OSS. The platform's value belongs to the user, on hardware the user owns, under keys the user controls. The license guarantees that even if we vanished tomorrow, your install keeps running and anyone can fork the codebase to keep it alive.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "s5617796243": {
+    "en": "License",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "s84ba57466e": {
+    "en": "Flagship is licensed under the <1>Business Source License 1.1</1> (BUSL-1.1) with a <2>Change Date of 2030-05-03</2>. On that date the entire codebase auto-relicenses to <3>Apache 2.0</3>. Until then, you can:",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "s677aa849a5": {
+    "en": "Read every line of source: nothing is hidden.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "s4ea5058795": {
+    "en": "Run the entire stack on your own hardware, for your own use.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "sc57414c95b": {
+    "en": "Share modifications with friends running their own boxes.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "sf350ec4ab4": {
+    "en": "Fork the project to keep it alive if we go away.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "s043a4ec980": {
+    "en": "The license restricts only one thing: standing up a commercial, hosted Flagship-as-a-service competitor before the Change Date. That carve-out is what funds the work that would otherwise have to be VC-funded, and the carve-out evaporates in 2030.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "s62e043334a": {
+    "en": "Repository",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "sfa66ac1813": {
+    "en": "The canonical repo is <1>github.com/ibisllc/flagship</1>. It contains everything: the Cloudflare Worker that powers flagshipserver.com, the Fly app that powers flagship.services, the server daemon, the apkovl + ISO builders, the install scripts, and the iOS / Android scaffolds.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "sc3490798d0": {
+    "en": "How to contribute",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "s0e25398744": {
+    "en": "<1>Bug reports + small PRs:</1> open an issue or PR against the canonical repo. We respond on a weekly cadence; tests must pass.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "sb38784ea4d": {
+    "en": "<1>Security disclosures:</1> see <2>/security</2> and <3>/.well-known/security.txt</3>. Please report privately first.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "s68abb92d33": {
+    "en": "<1>Larger features:</1> open a discussion before writing code. The codebase has strong architectural invariants (TLS terminates on the user's box; flagship.services literally cannot read user content; every cross-pod message is canonical-bytes signed) and we'd rather align upfront than reject a 2-week PR.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "s59f753dfef": {
+    "en": "Governance",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "sf9aa0251f2": {
+    "en": "The Flagship project is currently maintained by Anthropic-funded contributors plus the open community. There is no formal foundation yet; we'll set one up before we hit 1.0 and start growing past early adopters. Until then, \"what gets merged\" is decided in public on the issue tracker. There are no closed-door technical decisions.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "s7b4f8e381e": {
+    "en": "Reproducible builds",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "sa19dd76d8e": {
+    "en": "The bootable ISO is reproducible: anyone can build it from the same source tag and verify the personalization trailer doesn't smuggle anything past the user's view. This is essential for the trust pitch: the install medium is too high-leverage to leave unverifiable.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "s8334bfb891": {
+    "en": "Why BUSL and not Apache from day one?",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "s1e01e9e300": {
+    "en": "We picked BUSL-1.1 with a 2030 Change Date for one specific reason: a hyperscaler running a hosted \"Flagship-but-it's-our-product\" service in year one would kill the project's ability to fund itself before we could ship the things that take time (mobile apps, peer backup, hardware partnership). The 2030 date is the gate; after that the entire codebase is Apache 2.0, with no hidden private modules. We are not pulling a SSPL-style bait-and-switch.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "s49d01ed8e0": {
+    "en": "Contributors",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "s8bcd624c7f": {
+    "en": "The full contributor list lives in <1>CONTRIBUTORS.md</1> at the canonical repo. Significant contributors get listed on the project's public site at the next release after their PR lands.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "CONTRIBUTORS.md"
+    ],
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "s823d26b55a": {
+    "en": "Last updated: 2026-05-09. License questions: <1>legal@flagshipserver.com</1>.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "open-source.html"
+    ]
+  },
+  "s06fd7e7ae0": {
+    "en": "What a repo adapter is, the public index Flagship servers share them through, and how a repo owner opts out.",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "sb08a901a7f": {
+    "en": "Repo adapters · Flagship",
+    "kind": "text",
+    "ctx": "title",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "saed7917772": {
+    "en": "<1>Terms</1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "s1578633fd0": {
+    "en": "Repo adapters",
+    "kind": "text",
+    "ctx": "h1",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "sd95a20a8ae": {
+    "en": "A repo adapter is the set of changes a Flagship server makes so an open-source app runs on Flagship: a <1>flagship.app.json</1> manifest, plus any small edits the app needs. The original repo is never changed.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "flagship.app.json"
+    ],
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "sfe98a0a5fb": {
+    "en": "Shared, and public",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "s471e294adb": {
+    "en": "When a Flagship server's AI adapts a public open-source repo, the server shares the adaptation by default, so the next person can install that repo without needing AI. The server's owner can switch sharing off on the import screen. We publish every adaptation at <1>github.com/ibisllc/flagship-adapters</1>, so anyone can see exactly what Flagship servers will apply, and every server gets the same files.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "s89a5469c1f": {
+    "en": "We never record who sent one. No account, server or address is attached.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "s53b27d6d55": {
+    "en": "We publish them in daily batches, dated to the day.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "s65f02d0f58": {
+    "en": "We only keep adaptations of public repos under an open-source license, and we check them first.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "sd5deeb784e": {
+    "en": "Each adaptation is under the license of the repo it adapts.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "se4b090bf05": {
+    "en": "When we refuse one for a reason it can fix, the server's own AI may fix it and send it again.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "sfbf6b69d4f": {
+    "en": "When an adaptation breaks",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "sf222e598ea": {
+    "en": "If an adaptation fails to build or start during an install, the server tells us which adaptation it was and whether it failed to build or to start. Nothing else is sent. A server's owner can also report a problem from the service page, with a short note. We keep notes privately, never publish them, use them only to review the adaptation, and delete them within 90 days, or 180 days after we retire the adaptation so we can learn what went wrong. Please don't put anything in a note that identifies you.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "sebfebaaafe": {
+    "en": "When 3 problems are reported for an adaptation, we retire it, and the next server's AI makes a new one.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "sb36c011bd3": {
+    "en": "The details are in our <1>privacy policy</1>.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "s361a593c60": {
+    "en": "Control how your repo runs on Flagship",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "s26d77f1e51": {
+    "en": "Commit a <1>flagship.app.json</1> at the root of your repo. Every Flagship server uses it instead of adapting the repo itself, and we never keep or share adaptations of a repo that has one, so committing one also takes your repo out of our index.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "flagship.app.json"
+    ],
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "sd9bd227f5f": {
+    "en": "To make one, write it by hand (see <1>Apps &amp; manifest</1>), or import your repo on your own Flagship server, check it runs, then use <2>Get flagship.app.json</2> on the import screen and commit the file it gives you.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "s8395b134c8": {
+    "en": "For repo owners",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "s080488df4d": {
+    "en": "If you don't want us to keep adaptations of your repo, email <1>legal@flagshipserver.com</1> from an address that shows you control the repo, or open an issue on it that we can verify. We'll add it to <2>do-not-adapt.txt</2> in the public index, which removes its adaptations at the next daily publish, and Flagship servers stop using them. Git history keeps earlier versions.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "do-not-adapt.txt"
+    ],
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "s6bb9b214c1": {
+    "en": "We can't stop someone running open-source code on their own server, so people can still adapt your repo there. We just won't keep or share it.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "scbef21db62": {
+    "en": "Flagship blog",
+    "kind": "attr",
+    "ctx": "link[title]",
+    "pages": [
+      "blog/index.html"
+    ]
+  },
+  "s1e60a4effc": {
+    "en": "Blog · Flagship",
+    "kind": "text",
+    "ctx": "title",
+    "pages": [
+      "blog/index.html"
+    ]
+  },
+  "sf6f05731ca": {
+    "en": "Field notes from a personal-cloud project that takes self-hosting seriously.",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "blog/index.html"
+    ]
+  },
+  "sa8e9fda511": {
+    "en": "<1>RSS</1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "blog/index.html"
+    ]
+  },
+  "s8fc4e92202": {
+    "en": "Blog",
+    "kind": "text",
+    "ctx": "h1",
+    "pages": [
+      "blog/index.html"
+    ]
+  },
+  "s4bc920353e": {
+    "en": "Field notes from building a personal-cloud product that takes self-hosting seriously. Subscribe via the RSS link above; we keep this page rate-limited (no surveillance pixels, no newsletter capture).",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "blog/index.html"
+    ]
+  },
+  "sefe57fd6f9": {
+    "en": "First posts coming alongside the 0.2 Beta launch. Until then, the source-of-truth on what we're building is the <1>docs</1>, the <2>security model</2>, and the <3>open-source</3> page.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "blog/index.html"
+    ]
+  },
+  "s8f7b9ab588": {
+    "en": "Drafts",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/index.html"
+    ]
+  },
+  "seb2f4750ac": {
+    "en": "We post when we have something concrete to say. Watch the RSS feed.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "blog/index.html"
+    ]
+  }
+}
