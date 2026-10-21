@@ -35,6 +35,7 @@
  * the phone can also confirm the change took effect.
  */
 
+import { languageFor, t, VARY_LANGUAGE } from "./i18n/index.js";
 import { createHash } from "node:crypto";
 import {
   ed,
@@ -156,14 +157,14 @@ export function denialResponse(decision: AccessGateDecision, headers: Record<str
   }
   return {
     status: 403,
-    headers: { "content-type": "text/html; charset=utf-8" },
-    body: DENIAL_HTML,
+    headers: { "content-type": "text/html; charset=utf-8", ...VARY_LANGUAGE },
+    body: denialHtml(languageFor(headers)),
   };
 }
 
-const DENIAL_HTML = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<title>Access restricted · Flagship</title>
+const denialHtml = (lang: string): string => `<!doctype html>
+<html lang="${lang}"><head><meta charset="utf-8">
+<title>${t(lang, "Access restricted · Flagship")}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <style>
@@ -172,13 +173,10 @@ const DENIAL_HTML = `<!doctype html>
   a { color: #7ad; }
 </style></head>
 <body>
-<h1>This app is private.</h1>
-<p>The owner has enabled "protect content" on this app. You need a valid
-invite link to enter.</p>
-<p>If you were expecting access, ask the owner to share an invite. They
-can do that from their phone or webapp — the link will end in
-<code>/invite#k=…</code>.</p>
-<p><a href="/invite">If you already have a link, open it here.</a></p>
+<h1>${t(lang, "This app is private.")}</h1>
+<p>${t(lang, "The owner has enabled \"protect content\" on this app. You need a valid invite link to enter.")}</p>
+<p>${t(lang, "If you were expecting access, ask the owner to share an invite. They can do that from their phone or webapp — the link will end in <code>/invite#k=…</code>.")}</p>
+<p><a href="/invite">${t(lang, "If you already have a link, open it here.")}</a></p>
 </body></html>`;
 
 function extractSessionToken(headers: Record<string, string>): string | null {
