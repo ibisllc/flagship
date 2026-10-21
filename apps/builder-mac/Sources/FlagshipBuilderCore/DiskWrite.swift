@@ -20,7 +20,7 @@ public enum DiskWriteError: LocalizedError {
         case .cannotOpen(let path, let why): return "Can't open \(path): \(why)"
         case .unmountFailed(let err): return "Couldn't unmount the disk: \(err)"
         case .writeFailed(let n, let reason):
-            return "Write failed \(n / (1024 * 1024)) MB in: \(reason)"
+            return String(localized: "Write failed \(n / (1024 * 1024)) MB in: \(reason)")
         }
     }
 }
@@ -109,7 +109,7 @@ public enum DiskWrite {
         case EINVAL:
             return "unaligned write (EINVAL) — the device may use a sector size this writer doesn't handle"
         default:
-            return "\(String(cString: strerror(code))) (errno \(code))"
+            return String(localized: "\(String(cString: strerror(code))) (errno \(code))")
         }
     }
 
@@ -122,7 +122,7 @@ public enum DiskWrite {
         case EROFS:
             return "the device is read-only — check for a write-protect switch"
         default:
-            return "\(String(cString: strerror(code))) (errno \(code))"
+            return String(localized: "\(String(cString: strerror(code))) (errno \(code))")
         }
     }
 

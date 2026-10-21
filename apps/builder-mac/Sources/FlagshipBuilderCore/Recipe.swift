@@ -67,9 +67,9 @@ public enum RecipeError: LocalizedError, Equatable {
         case .malformed(let why): return "Not a valid recipe: \(why)"
         case .wrongVersion(let v): return "Unsupported recipe version \(v) (expected 2)."
         case .expired(let when):
-            return "This recipe expired \(when.formatted(date: .abbreviated, time: .shortened))."
+            return String(localized: "This recipe expired \(when.formatted(date: .abbreviated, time: .shortened)).")
         case .badSignature:
-            return "The recipe's signature doesn't verify — it may be tampered or corrupt."
+            return String(localized: "The recipe's signature doesn't verify — it may be tampered or corrupt.")
         }
     }
 }

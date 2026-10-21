@@ -34,45 +34,5 @@
   "Approval failed.": {
     "en": "Approval failed.",
     "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:164"
-  },
-  "Flagship": {
-    "en": "Flagship",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchRootView.swift:49"
-  },
-  "Approve": {
-    "en": "Approve",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchRootView.swift:113"
-  },
-  "from %@": {
-    "en": "from %@",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchRootView.swift:87"
-  },
-  "Approved": {
-    "en": "Approved",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchRootView.swift:97"
-  },
-  "Security": {
-    "en": "Security",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchSecurityAlertsView.swift:62"
-  },
-  "Pending approvals": {
-    "en": "Pending approvals",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchSecurityAlertsView.swift:34"
-  },
-  "Servers": {
-    "en": "Servers",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchSecurityAlertsView.swift:43"
-  },
-  "Recent activity": {
-    "en": "Recent activity",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchSecurityAlertsView.swift:50"
-  },
-  "All quiet": {
-    "en": "All quiet",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchSecurityAlertsView.swift:77"
-  },
-  "Boot approvals and account changes show up here.": {
-    "en": "Boot approvals and account changes show up here.",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchSecurityAlertsView.swift:78"
   }
 }

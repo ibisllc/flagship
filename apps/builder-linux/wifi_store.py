@@ -8,6 +8,8 @@ and answering; otherwise into that same file, which only this user can read
 """
 from __future__ import annotations
 
+from i18n import tr
+
 import json
 import os
 from pathlib import Path
@@ -53,7 +55,7 @@ class LibsecretBackend:
             if password:
                 return bool(self._secret.password_store_sync(
                     self._schema, self._attrs, self._secret.COLLECTION_DEFAULT,
-                    "Flagship Studio Wi-Fi", password, None,
+                    tr("Flagship Studio Wi-Fi"), password, None,
                 ))
             self._secret.password_clear_sync(self._schema, self._attrs, None)
             return True

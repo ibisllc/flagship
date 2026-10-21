@@ -109,7 +109,7 @@ public final class BuilderPairingEngine {
                 return [.stage(.waitingForPhone)]
             }
         case "expired":
-            return end("This pairing session reached its time limit.")
+            return end(String(localized: "This pairing session reached its time limit."))
         case "error":
             let reason = (obj["reason"] as? String) ?? "relay error"
             return end(reason)
@@ -127,11 +127,11 @@ public final class BuilderPairingEngine {
         case "phone-hello":
             guard let phonePkB64 = frame["phonePk"] as? String,
                   let incomingPk = Base64URLBuilder.decode(phonePkB64) else {
-                return [.log("Ignoring malformed phone-hello.")]
+                return [.log(String(localized: "Ignoring malformed phone-hello."))]
             }
             if case .reconnecting = stage {
                 guard let previous = phonePk, previous == incomingPk else {
-                    return [.log("A different phone connected while waiting to reconnect — ignoring.")]
+                    return [.log(String(localized: "A different phone connected while waiting to reconnect — ignoring."))]
                 }
                 do {
                     let mat = try BuilderPairing.deriveMaterial(builderPrivateKey: privateKey,
@@ -141,7 +141,7 @@ public final class BuilderPairingEngine {
                     stage = .paired
                     return [.stage(.paired)]
                 } catch {
-                    return [.log("Couldn't resume the session: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")]
+                    return [.log(String(localized: "Couldn't resume the session: \((error as? LocalizedError)?.errorDescription ?? "\(error)")"))]
                 }
             }
             do {
@@ -153,22 +153,22 @@ public final class BuilderPairingEngine {
                 stage = .awaitingConfirm(matchCode: mat.matchCode)
                 return [.stage(stage)]
             } catch {
-                return [.log("Handshake failed: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")]
+                return [.log(String(localized: "Handshake failed: \((error as? LocalizedError)?.errorDescription ?? "\(error)")"))]
             }
         case "confirm-pairing":
             // The phone's user confirmed the SAS matched. Unlock.
             stage = .paired
             return [.stage(.paired)]
         case "deliver":
-            guard let key = aeadKey else { return [.log("Recipe arrived before pairing completed.")] }
+            guard let key = aeadKey else { return [.log(String(localized: "Recipe arrived before pairing completed."))] }
             guard let ct = frame["ciphertext"] as? String, let nonce = frame["nonce"] as? String else {
-                return [.log("Ignoring malformed recipe delivery.")]
+                return [.log(String(localized: "Ignoring malformed recipe delivery."))]
             }
             do {
                 let data = try BuilderPairing.open(ciphertextBase64Url: ct, nonceBase64Url: nonce, key: key)
                 return [.recipe(data)]
             } catch {
-                return [.log((error as? LocalizedError)?.errorDescription ?? "Couldn't read the recipe.")]
+                return [.log((error as? LocalizedError)?.errorDescription ?? String(localized: "Couldn't read the recipe."))]
             }
         default:
             return []

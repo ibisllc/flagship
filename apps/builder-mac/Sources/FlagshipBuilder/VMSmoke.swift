@@ -342,11 +342,11 @@ enum VMSmoke {
                 do {
                     try await h.start(config: config, layout: layout,
                                       attachInstallerISO: attachISO)
-                    VMSmoke.log("VZVirtualMachine.start OK · attachISO=\(attachISO) · state=\(vzStateName(h.machine?.state))")
+                    VMSmoke.log(String(localized: "VZVirtualMachine.start OK · attachISO=\(attachISO) · state=\(vzStateName(h.machine?.state))"))
                     self.attachConsole(h)
                     self.observeState(h)
                 } catch {
-                    VMSmoke.log("VZ start FAILED: \(error)")
+                    VMSmoke.log(String(localized: "VZ start FAILED: \(error)"))
                     self.exitCode = 3
                     switch self.lifecycle.state {
                     case .installing: self.drive(.installFailed("\(error)"))
@@ -389,7 +389,7 @@ enum VMSmoke {
         func observeState(_ h: VZHost) {
             guard let vm = h.machine else { return }
             stateObs = vm.observe(\.state, options: [.new]) { vm, _ in
-                Task { @MainActor in VMSmoke.log("VZ state → \(vzStateName(vm.state))") }
+                Task { @MainActor in VMSmoke.log(String(localized: "VZ state → \(vzStateName(vm.state))")) }
             }
         }
 

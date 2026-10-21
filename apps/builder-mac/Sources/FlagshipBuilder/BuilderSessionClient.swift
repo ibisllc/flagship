@@ -42,7 +42,7 @@ final class BuilderSessionClient: NSObject {
     func connect() {
         guard !closed else { return }
         guard let url = URL(string: "wss://\(host)/builder-pipe/\(engine.sessionId)?role=builder") else {
-            onStage?(.ended(reason: "Couldn't build the relay URL."))
+            onStage?(.ended(reason: String(localized: "Couldn't build the relay URL.")))
             return
         }
         let cfg = URLSessionConfiguration.default
@@ -61,7 +61,7 @@ final class BuilderSessionClient: NSObject {
             guard let self = self, !self.closed else { return }
             switch result {
             case .failure:
-                self.fail("Lost the connection to the relay.")
+                self.fail(String(localized: "Lost the connection to the relay."))
             case .success(let message):
                 let text: String?
                 switch message {
@@ -112,13 +112,13 @@ final class BuilderSessionClient: NSObject {
 
     func acknowledgeRecipe() {
         guard let task else {
-            fail("Couldn't return the recipe receipt to the phone.")
+            fail(String(localized: "Couldn't return the recipe receipt to the phone."))
             return
         }
         task.send(.string(BuilderPairingEngine.encode(.recipeAccepted))) { [weak self] error in
             guard let self else { return }
             if error != nil {
-                self.fail("Couldn't return the recipe receipt to the phone.")
+                self.fail(String(localized: "Couldn't return the recipe receipt to the phone."))
             } else {
                 // `send` completion means URLSession accepted the frame, not
                 // that the relay has forwarded it. Keep the socket alive until

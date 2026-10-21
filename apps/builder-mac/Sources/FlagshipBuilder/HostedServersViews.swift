@@ -39,7 +39,7 @@ struct HostedServersSidebar: View {
                     .padding(.horizontal, FB.Spacing.s2)
                 }
                 .confirmationDialog(
-                    confirmDeleteServer.map { "Delete \($0.record.config.serverDomain)?" } ?? "",
+                    confirmDeleteServer.map { String(localized: "Delete \($0.record.config.serverDomain)?") } ?? "",
                     isPresented: Binding(
                         get: { confirmDeleteServer != nil },
                         set: { if !$0 { confirmDeleteServer = nil } }),
@@ -198,7 +198,7 @@ struct HostedServersSidebar: View {
             Image(systemName: "bolt.horizontal.circle")
                 .foregroundStyle(FB.Colors.textMuted)
             Text(HostPower.hasInternalBattery
-                 ? "Keeping this Mac awake while servers run. Closing the lid still puts it to sleep and takes them offline, unless it's connected to a display."
+                 ? String(localized: "Keeping this Mac awake while servers run. Closing the lid still puts it to sleep and takes them offline, unless it's connected to a display.")
                  : "Keeping this Mac awake while servers run.")
                 .font(FB.Font.caption())
                 .foregroundStyle(FB.Colors.textMuted)
@@ -221,7 +221,7 @@ struct HostedServersSidebar: View {
         let runtime = elapsed(since: server.record.stateChangedAt ?? server.record.createdAt, now: now)
         guard let observation else { return "\(server.record.config.firstBootSummary) · \(runtime)" }
         if observation.isStale(at: now) {
-            return "No guest progress for \(observation.staleMinutes(at: now))m · \(observation.summary)"
+            return String(localized: "No guest progress for \(observation.staleMinutes(at: now))m · \(observation.summary)")
         }
         return "\(observation.summary) · \(runtime)"
     }
@@ -230,11 +230,11 @@ struct HostedServersSidebar: View {
         Grid(alignment: .leading, horizontalSpacing: FB.Spacing.s3,
              verticalSpacing: FB.Spacing.s1) {
             GridRow {
-                sidebarSpec("cpu", "\(config.cpuCount) vCPU")
-                sidebarSpec("memorychip", "\(config.memoryBytes / VMResourcePlan.gib) GiB RAM")
+                sidebarSpec("cpu", String(localized: "\(config.cpuCount) vCPU"))
+                sidebarSpec("memorychip", String(localized: "\(config.memoryBytes / VMResourcePlan.gib) GiB RAM"))
             }
             GridRow {
-                sidebarSpec("internaldrive", "\(config.mainDiskSizeBytes / VMResourcePlan.gib) GiB disk")
+                sidebarSpec("internaldrive", String(localized: "\(config.mainDiskSizeBytes / VMResourcePlan.gib) GiB disk"))
                 sidebarSpec(config.diskEncrypted ? "lock.fill" : "lock.open",
                             config.diskEncrypted ? "Encrypted" : "Unencrypted")
             }
@@ -419,7 +419,7 @@ struct VMDetailView: View {
                 let v = health.verdict(at: context.date)
                 StatusCard(icon: v.ok ? "heart.text.square" : "exclamationmark.triangle.fill",
                            tint: v.ok ? FB.Colors.success : FB.Colors.warning,
-                           title: v.ok ? "Health" : "Server health",
+                           title: v.ok ? "Health" : String(localized: "Server health"),
                            subtitle: v.lines.joined(separator: "\n"))
             }
         }
@@ -457,19 +457,19 @@ struct VMDetailView: View {
             let elapsed = max(0, Int(now.timeIntervalSince(start)) / 60)
             if let observation = vmManager.installObservation(named: server.id) {
                 if observation.isStale(at: now) {
-                    return "No new guest checkpoint for \(observation.staleMinutes(at: now)) minutes. Last reported: \(observation.summary). The VM may be stalled."
+                    return String(localized: "No new guest checkpoint for \(observation.staleMinutes(at: now)) minutes. Last reported: \(observation.summary). The VM may be stalled.")
                 }
-                return "\(observation.summary). Last guest checkpoint \(relativeAge(observation.updatedAt, now: now)); \(elapsed) minute\(elapsed == 1 ? "" : "s") total."
+                return String(localized: "\(observation.summary). Last guest checkpoint \(relativeAge(observation.updatedAt, now: now)); \(elapsed) minute\(elapsed == 1 ? "" : "s") total.")
             }
-            return "\(server.record.config.firstBootSummary); \(elapsed) minute\(elapsed == 1 ? "" : "s") so far. Progress appears here once the server checks in."
+            return String(localized: "\(server.record.config.firstBootSummary); \(elapsed) minute\(elapsed == 1 ? "" : "s") so far. Progress appears here once the server checks in.")
         case .running:
-            return "Serving at https://\(server.record.config.serverDomain)/"
+            return String(localized: "Serving at https://\(server.record.config.serverDomain)/")
         case .failed(let f):
             return f.reason
         case .installed, .stopped:
-            return "Start the server to bring it online."
+            return String(localized: "Start the server to bring it online.")
         case .created:
-            return "Preparing the installer…"
+            return String(localized: "Preparing the installer…")
         }
     }
 
@@ -487,16 +487,16 @@ struct VMDetailView: View {
                 .font(FB.Font.rowTitle())
                 .foregroundStyle(FB.Colors.ink)
             allocationRow("CPU", value: config.cpuCount, total: max(1, host.cpuCount),
-                          detail: "\(config.cpuCount) of \(host.cpuCount) cores")
+                          detail: String(localized: "\(config.cpuCount) of \(host.cpuCount) cores"))
             allocationRow("Memory",
                           value: Int(config.memoryBytes / VMResourcePlan.gib),
                           total: max(1, Int(host.memoryBytes / VMResourcePlan.gib)),
-                          detail: "\(config.memoryBytes / VMResourcePlan.gib) GiB reserved")
+                          detail: String(localized: "\(config.memoryBytes / VMResourcePlan.gib) GiB reserved"))
             Label("\(config.mainDiskSizeBytes / VMResourcePlan.gib) GiB sparse disk",
                   systemImage: "internaldrive")
                 .font(FB.Font.caption())
                 .foregroundStyle(FB.Colors.textMuted)
-            Label(config.diskEncrypted ? "LUKS encrypted" : "Unencrypted",
+            Label(config.diskEncrypted ? String(localized: "LUKS encrypted") : "Unencrypted",
                   systemImage: config.diskEncrypted ? "lock.fill" : "lock.open")
                 .font(FB.Font.caption())
                 .foregroundStyle(FB.Colors.textMuted)
@@ -528,18 +528,18 @@ struct VMDetailView: View {
             detailRow("State", server.record.stateLabel)
             detailRow("Created", server.record.createdAt.formatted(
                 date: .abbreviated, time: .shortened))
-            detailRow("Last state change", (server.record.stateChangedAt ?? server.record.createdAt)
+            detailRow(String(localized: "Last state change"), (server.record.stateChangedAt ?? server.record.createdAt)
                 .formatted(date: .abbreviated, time: .shortened))
-            detailRow("Last connected", server.record.lastConnectedAt?.formatted(
-                date: .abbreviated, time: .shortened) ?? "Not yet")
+            detailRow(String(localized: "Last connected"), server.record.lastConnectedAt?.formatted(
+                date: .abbreviated, time: .shortened) ?? String(localized: "Not yet"))
             if let observation = vmManager.installObservation(named: server.id) {
-                detailRow("Installer checkpoint", observation.summary)
-                detailRow("Checkpoint received", observation.updatedAt.formatted(
+                detailRow(String(localized: "Installer checkpoint"), observation.summary)
+                detailRow(String(localized: "Checkpoint received"), observation.updatedAt.formatted(
                     date: .omitted, time: .standard))
             }
-            detailRow("Network", "NAT + outbound tunnel")
+            detailRow("Network", String(localized: "NAT + outbound tunnel"))
             detailRow("Unlock", server.record.config.bootUnlockMode == "approve"
-                      ? "Phone approval" : "Automatic lease")
+                      ? String(localized: "Phone approval") : String(localized: "Automatic lease"))
         }
         .dashboardPanel()
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -549,7 +549,7 @@ struct VMDetailView: View {
         let seconds = max(0, Int(now.timeIntervalSince(date)))
         if seconds < 60 { return "less than a minute ago" }
         let minutes = seconds / 60
-        return "\(minutes) minute\(minutes == 1 ? "" : "s") ago"
+        return String(localized: "\(minutes) minute\(minutes == 1 ? "" : "s") ago")
     }
 
     private func detailRow(_ label: String, _ value: String) -> some View {
@@ -610,7 +610,7 @@ struct VMDetailView: View {
                 Button {
                     showConsole.toggle()
                 } label: {
-                    Label(showConsole ? "Hide serial console" : "Open serial console",
+                    Label(showConsole ? String(localized: "Hide serial console") : "Open serial console",
                           systemImage: "terminal.fill")
                         .font(FB.Font.caption())
                 }
@@ -739,7 +739,7 @@ extension VMConfig {
     /// What a server is doing before its first progress report reaches Studio.
     var firstBootSummary: String {
         effectiveProvisioningMode == .prebuiltAppliance
-            ? "Starting the server from the prebuilt image"
-            : "Booting the Debian installer"
+            ? String(localized: "Starting the server from the prebuilt image")
+            : String(localized: "Booting the Debian installer")
     }
 }

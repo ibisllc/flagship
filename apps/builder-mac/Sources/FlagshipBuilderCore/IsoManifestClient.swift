@@ -110,11 +110,11 @@ public enum IsoManifestError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .offline(let why):
-            return "Couldn't reach the base-image service — check your internet connection. (\(why))"
+            return String(localized: "Couldn't reach the base-image service — check your internet connection. (\(why))")
         case .httpStatus(let code):
-            return "The base-image service returned HTTP \(code)."
+            return String(localized: "The base-image service returned HTTP \(code).")
         case .decode(let why):
-            return "The base-image service sent a response we couldn't read. (\(why))"
+            return String(localized: "The base-image service sent a response we couldn't read. (\(why))")
         }
     }
 }

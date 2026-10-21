@@ -11,6 +11,8 @@ apps/builder-windows/src/VM/QemuFailure.cs; pinned by vm-core-vectors.json
 """
 from __future__ import annotations
 
+from i18n import tr
+
 import re
 from typing import Optional
 
@@ -27,7 +29,7 @@ _OUT_OF_MEMORY = (
 
 def not_enough_memory_message(need_bytes: int) -> str:
     gib = -(-need_bytes // GIB)
-    return f"Not enough free memory: this server needs {gib} GiB. Close other apps and try again."
+    return tr('Not enough free memory: this server needs {0} GiB. Close other apps and try again.').format(gib)
 
 
 def check_free_memory(need_bytes: int, available_bytes: Optional[int], headroom_bytes: int) -> Optional[str]:
@@ -57,8 +59,8 @@ def describe_exit(exit_code: int, stderr: str, memory_bytes: int) -> str:
         return not_enough_memory_message(memory_bytes)
     line = last_meaningful_line(stderr)
     if not line:
-        return f"QEMU stopped unexpectedly (exit {exit_code})."
-    return f"QEMU stopped (exit {exit_code}): {line}"
+        return tr('QEMU stopped unexpectedly (exit {0}).').format(exit_code)
+    return tr('QEMU stopped (exit {0}): {1}').format(exit_code, line)
 
 
 def available_memory_bytes() -> Optional[int]:

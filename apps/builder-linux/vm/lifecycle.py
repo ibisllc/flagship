@@ -19,6 +19,8 @@ pinned by apps/desktop-shared/golden/vm-core-vectors.json.
 """
 from __future__ import annotations
 
+from i18n import tr
+
 import enum
 import time
 from dataclasses import dataclass
@@ -86,17 +88,17 @@ class VMState:
         if self.kind == VMStateKind.CREATED:
             return "Created"
         if self.kind == VMStateKind.INSTALLING:
-            return "Installing…"
+            return tr("Installing…")
         if self.kind == VMStateKind.INSTALLED:
             return "Installed"
         if self.kind == VMStateKind.AWAITING_PHONE_UNLOCK:
-            return "Waiting for you to unlock"
+            return tr("Waiting for you to unlock")
         if self.kind == VMStateKind.RUNNING:
             return "Running"
         if self.kind == VMStateKind.STOPPED:
             return "Stopped"
         if self.kind == VMStateKind.FAILED:
-            return "Install failed" if (self.failure and self.failure.phase == VMFailurePhase.INSTALL) else "Stopped unexpectedly"
+            return tr("Install failed") if (self.failure and self.failure.phase == VMFailurePhase.INSTALL) else tr("Stopped unexpectedly")
         return "Unknown"
 
 
@@ -153,7 +155,7 @@ class VMEffect(enum.Enum):
 
 class VMLifecycleError(Exception):
     def __init__(self, from_state: VMState, on_event: VMEvent) -> None:
-        super().__init__(f"Invalid VM transition: {from_state.kind.value} on {on_event.kind.value}.")
+        super().__init__(tr('Invalid VM transition: {0} on {1}.').format(from_state.kind.value, on_event.kind.value))
         self.from_state = from_state
         self.on_event = on_event
 
@@ -175,9 +177,7 @@ def verdict_for_clean_install_stop(elapsed_seconds: float) -> VMEvent:
         return VMEvent.install_succeeded()
     secs = int(round(elapsed_seconds))
     return VMEvent.install_failed(
-        f"The installer stopped after only {secs}s — too fast to have completed. "
-        "The guest likely failed to boot the installer ISO. Retry the install; "
-        "if it persists, re-download the base image and remaster again."
+        tr('The installer stopped after only {0}s — too fast to have completed. The guest likely failed to boot the installer ISO. Retry the install; if it persists, re-download the base image and remaster again.').format(secs)
     )
 
 
@@ -188,8 +188,7 @@ def verdict_for_clean_provisioning_stop(elapsed_seconds: float, prebuilt: bool) 
         return VMEvent.install_succeeded()
     secs = int(round(elapsed_seconds))
     return VMEvent.install_failed(
-        f"The appliance stopped after only {secs}s — too fast to have specialized. "
-        "The image may be the wrong architecture or otherwise not bootable."
+        tr('The appliance stopped after only {0}s — too fast to have specialized. The image may be the wrong architecture or otherwise not bootable.').format(secs)
     )
 
 
@@ -227,7 +226,7 @@ class VMLifecycle:
         from this machine's own state timestamp. Only meaningful while
         installing."""
         if self.state.kind != VMStateKind.INSTALLING:
-            raise RuntimeError(f"Install verdict requested in state {self.state.kind.value}.")
+            raise RuntimeError(tr('Install verdict requested in state {0}.').format(self.state.kind.value))
         at = now if now is not None else self._clock()
         return verdict_for_clean_install_stop(at - self.state_changed_at)
 

@@ -13,16 +13,18 @@ entry.
 """
 from __future__ import annotations
 
+from i18n import tr
+
 import shutil
 import subprocess
 from dataclasses import dataclass
 from typing import Callable, List, Optional
 
 MISSING_MESSAGE = (
-    "No way to elevate the raw USB write: pkexec (PolicyKit) is not "
+    tr("No way to elevate the raw USB write: pkexec (PolicyKit) is not "
     "installed and passwordless sudo isn't available. Install pkexec "
     "(Debian/Ubuntu: sudo apt install pkexec; Fedora: sudo dnf install "
-    "polkit) and retry."
+    "polkit) and retry.")
 )
 
 

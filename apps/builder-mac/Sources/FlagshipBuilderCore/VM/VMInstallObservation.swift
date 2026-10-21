@@ -24,7 +24,7 @@ public struct VMInstallObservation: Sendable, Equatable {
         case "pairing": return "Pairing with your phone"
         case "live": return "Server is live"
         case "error": return "Installation reported an error"
-        default: return "Waiting for an installer checkpoint"
+        default: return String(localized: "Waiting for an installer checkpoint")
         }
     }
 

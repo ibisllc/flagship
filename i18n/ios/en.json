@@ -623,6 +623,18 @@
     "en": "That's everything.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift:432"
   },
+  "Approve your server's boot secret": {
+    "en": "Approve your server's boot secret",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/ActivityTab.swift:145"
+  },
+  "Unseal the disk key for %@": {
+    "en": "Unseal the disk key for %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/ActivityTab.swift:154"
+  },
+  "Authorize your server to serve": {
+    "en": "Authorize your server to serve",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/ActivityTab.swift:168"
+  },
   "Watching %@…": {
     "en": "Watching %@…",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/ActivityTab.swift:183"
@@ -943,6 +955,42 @@
     "en": "This pairing code expired. Start again to add a device.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AddDeviceViewModel.swift:297"
   },
+  "Only an admin device can remove an app.": {
+    "en": "Only an admin device can remove an app.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/AddServerGate.swift:62"
+  },
+  "Only an admin device can change where this app runs.": {
+    "en": "Only an admin device can change where this app runs.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/AddServerGate.swift:63"
+  },
+  "Only an admin device can change this app's internet access.": {
+    "en": "Only an admin device can change this app's internet access.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/AddServerGate.swift:64"
+  },
+  "Only an admin device can create or revoke API keys.": {
+    "en": "Only an admin device can create or revoke API keys.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/AddServerGate.swift:65"
+  },
+  "Only an admin device can change this app's data.": {
+    "en": "Only an admin device can change this app's data.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/AddServerGate.swift:66"
+  },
+  "Only an admin device can turn on quick approve from Apple Watch.": {
+    "en": "Only an admin device can turn on quick approve from Apple Watch.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/AddServerGate.swift:67"
+  },
+  "Only an admin device can delete this account.": {
+    "en": "Only an admin device can delete this account.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/AddServerGate.swift:68"
+  },
+  "Only an admin device can share this server.": {
+    "en": "Only an admin device can share this server.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/AddServerGate.swift:71"
+  },
+  "Only an admin device can change this server. This device can see it.": {
+    "en": "Only an admin device can change this server. This device can see it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/AddServerGate.swift:75"
+  },
   "Admin devices only": {
     "en": "Admin devices only",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/AddServerGate.swift:104"
@@ -1011,6 +1059,18 @@
     "en": "Change %@'s access list",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AppAccessAlertCenter.swift:259"
   },
+  "Allow": {
+    "en": "Allow",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppAccessScreens.swift:107"
+  },
+  "Deny": {
+    "en": "Deny",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppAccessScreens.swift:111"
+  },
+  "Ignore": {
+    "en": "Ignore",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppAccessScreens.swift:116"
+  },
   "Saved. The server now uses this list.": {
     "en": "Saved. The server now uses this list.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppAccessScreens.swift:203"
@@ -1019,9 +1079,13 @@
     "en": "Saving…",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppAccessScreens.swift:218"
   },
-  "Save": {
-    "en": "Save",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppAccessScreens.swift:218"
+  "Opening…": {
+    "en": "Opening…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppAccessScreens.swift:285"
+  },
+  "Not now": {
+    "en": "Not now",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppAccessScreens.swift:289"
   },
   "%@ · %@": {
     "en": "%@ · %@",
@@ -1031,6 +1095,14 @@
   "Only allow hosts you expect this app to need. Your answer goes into its access list.": {
     "en": "Only allow hosts you expect this app to need. Your answer goes into its access list.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppAccessScreens.swift:321"
+  },
+  "Allowing…": {
+    "en": "Allowing…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppAccessScreens.swift:329"
+  },
+  "Denying…": {
+    "en": "Denying…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppAccessScreens.swift:333"
   },
   "Internet access": {
     "en": "Internet access",
@@ -1164,9 +1236,13 @@
     "en": "Revoking…",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppApiKeysScreens.swift:89"
   },
-  "Revoke": {
-    "en": "Revoke",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppApiKeysScreens.swift:89"
+  "Copied": {
+    "en": "Copied",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppApiKeysScreens.swift:188"
+  },
+  "Copy": {
+    "en": "Copy",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppApiKeysScreens.swift:188"
   },
   "Send it with each request:": {
     "en": "Send it with each request:",
@@ -1184,9 +1260,9 @@
     "en": "Can only read: GET, HEAD and OPTIONS requests.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppApiKeysScreens.swift:152"
   },
-  "Can read and change anything the app allows.": {
-    "en": "Can read and change anything the app allows.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppApiKeysScreens.swift:153"
+  "Creating…": {
+    "en": "Creating…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppApiKeysScreens.swift:162"
   },
   "Api keys": {
     "en": "Api keys",
@@ -1291,6 +1367,26 @@
   "Give the key a name, so you know what uses it.": {
     "en": "Give the key a name, so you know what uses it.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AppApiKeysViewModel.swift:83"
+  },
+  "This server doesn't offer this app's database.": {
+    "en": "This server doesn't offer this app's database.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppDatabaseScreens.swift:112"
+  },
+  "Previous": {
+    "en": "Previous",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppDatabaseScreens.swift:272"
+  },
+  "Next": {
+    "en": "Next",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppDatabaseScreens.swift:276"
+  },
+  "Running…": {
+    "en": "Running…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppDatabaseScreens.swift:340"
+  },
+  "Confirming…": {
+    "en": "Confirming…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppDatabaseScreens.swift:373"
   },
   "Database": {
     "en": "Database",
@@ -1558,10 +1654,6 @@
     "en": "Can't remove it",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppPlacementViews.swift:212"
   },
-  "Can't remove the last copy": {
-    "en": "Can't remove the last copy",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppPlacementViews.swift:212"
-  },
   "Remove from %@": {
     "en": "Remove from %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppPlacementViews.swift:205"
@@ -1572,10 +1664,6 @@
   },
   "Runs on %@": {
     "en": "Runs on %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppPlacementViews.swift:236"
-  },
-  "Not on %@": {
-    "en": "Not on %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppPlacementViews.swift:236"
   },
   "Deploying": {
@@ -1786,10 +1874,6 @@
     "en": "Sign out of this device?",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/BiometricLockScreen.swift:95"
   },
-  "Sign out without recovery?": {
-    "en": "Sign out without recovery?",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/BiometricLockScreen.swift:95"
-  },
   "Flagship is locked": {
     "en": "Flagship is locked",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/BiometricLockScreen.swift:47"
@@ -1798,21 +1882,33 @@
     "en": "Unlock to continue.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/BiometricLockScreen.swift:50"
   },
+  "Authenticating…": {
+    "en": "Authenticating…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/BiometricLockScreen.swift:80"
+  },
+  "Unlock": {
+    "en": "Unlock",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/BiometricLockScreen.swift:80"
+  },
   "Sign out": {
     "en": "Sign out",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/BiometricLockScreen.swift:100"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/BiometricLockScreen.swift:83"
   },
-  "Sign out anyway": {
-    "en": "Sign out anyway",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/BiometricLockScreen.swift:100"
+  "Erases this device's account key and returns to the start.": {
+    "en": "Erases this device's account key and returns to the start.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/BiometricLockScreen.swift:85"
+  },
+  "Unlock Flagship": {
+    "en": "Unlock Flagship",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/BiometricLockScreen.swift:153"
   },
   "This erases this device's account key from the Keychain and returns you to the start. Sign back in with your recovery passkey to restore it — your account and servers stay put.": {
     "en": "This erases this device's account key from the Keychain and returns you to the start. Sign back in with your recovery passkey to restore it — your account and servers stay put.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/BiometricLockScreen.swift:114"
   },
-  "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good.": {
-    "en": "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/BiometricLockScreen.swift:115"
+  "No device screen lock is set up. Set one, disable the lock from Settings on another paired device, or sign out and start fresh.": {
+    "en": "No device screen lock is set up. Set one, disable the lock from Settings on another paired device, or sign out and start fresh.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/BiometricLockScreen.swift:144"
   },
   "Sign in to approve this server.": {
     "en": "Sign in to approve this server.",
@@ -1951,6 +2047,10 @@
     "en": "Delete this key?",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:126"
   },
+  "Add key": {
+    "en": "Add key",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:73"
+  },
   "Add an API key": {
     "en": "Add an API key",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:87"
@@ -1963,9 +2063,21 @@
     "en": "The keys are stored safely in your mobile app and your own servers.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:99"
   },
+  "Delete the AI key %@": {
+    "en": "Delete the AI key %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:140"
+  },
+  "The key wasn't deleted.": {
+    "en": "The key wasn't deleted.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:145"
+  },
   "%@ will be removed from this phone. Builds that are already running keep working.": {
     "en": "%@ will be removed from this phone. Builds that are already running keep working.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:133"
+  },
+  "Use this": {
+    "en": "Use this",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:168"
   },
   "Delete %@": {
     "en": "Delete %@",
@@ -1974,6 +2086,50 @@
   "Last used": {
     "en": "Last used",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:202"
+  },
+  "Send through the Flagship relay": {
+    "en": "Send through the Flagship relay",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:285"
+  },
+  "Better for your anonymity: the AI provider sees Flagship's address, not yours.": {
+    "en": "Better for your anonymity: the AI provider sees Flagship's address, not yours.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:286"
+  },
+  "Through the Flagship relay": {
+    "en": "Through the Flagship relay",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:287"
+  },
+  "Direct": {
+    "en": "Direct",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:288"
+  },
+  "Turn the relay off for this key": {
+    "en": "Turn the relay off for this key",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:289"
+  },
+  "The relay is off for this key. Try again.": {
+    "en": "The relay is off for this key. Try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:290"
+  },
+  "API key": {
+    "en": "API key",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:340"
+  },
+  "sk-…": {
+    "en": "sk-…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:341"
+  },
+  "Base URL (optional)": {
+    "en": "Base URL (optional)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:343"
+  },
+  "Label (optional)": {
+    "en": "Label (optional)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:345"
+  },
+  "e.g. Personal": {
+    "en": "e.g. Personal",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:346"
   },
   "Provider": {
     "en": "Provider",
@@ -1999,6 +2155,30 @@
     "en": "New build",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:83"
   },
+  "Start from scratch with AI": {
+    "en": "Start from scratch with AI",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:88"
+  },
+  "Describe it in plain English. The AI writes it and deploys it for you.": {
+    "en": "Describe it in plain English. The AI writes it and deploys it for you.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:89"
+  },
+  "Import from a Git repo": {
+    "en": "Import from a Git repo",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:96"
+  },
+  "Paste a repo URL. If it's Flagship-ready we install it as-is, otherwise the AI adapts it.": {
+    "en": "Paste a repo URL. If it's Flagship-ready we install it as-is, otherwise the AI adapts it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:97"
+  },
+  "Connect your IDE": {
+    "en": "Connect your IDE",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:104"
+  },
+  "Build from your own IDE (Claude Code, Cursor, VS Code or Cline) using your own AI. No model key ever touches the server.": {
+    "en": "Build from your own IDE (Claude Code, Cursor, VS Code or Cline) using your own AI. No model key ever touches the server.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:105"
+  },
   "Resume or view past builds": {
     "en": "Resume or view past builds",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:61"
@@ -2010,6 +2190,22 @@
   "Help": {
     "en": "Help",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:121"
+  },
+  "Builds still open on your server can be picked up where you left off: answer the AI, deploy, or retry a failed deploy. Older builds keep a timeline of what happened. A build stays open until your server restarts.": {
+    "en": "Builds still open on your server can be picked up where you left off: answer the AI, deploy, or retry a failed deploy. Older builds keep a timeline of what happened. A build stays open until your server restarts.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:136"
+  },
+  "Describe the app you want in plain English. An AI model writes the code on your server, asks you questions when it needs to, and you deploy it with one tap. You need a key from an AI provider (OpenAI, Anthropic, OpenRouter…); it is sent only to your server.": {
+    "en": "Describe the app you want in plain English. An AI model writes the code on your server, asks you questions when it needs to, and you deploy it with one tap. You need a key from an AI provider (OpenAI, Anthropic, OpenRouter…); it is sent only to your server.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:138"
+  },
+  "Paste the address of a code repository, for example on GitHub. If it is already set up for Flagship it installs as-is; otherwise the AI can adapt it for you.": {
+    "en": "Paste the address of a code repository, for example on GitHub. If it is already set up for Flagship it installs as-is; otherwise the AI can adapt it for you.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:140"
+  },
+  "For developers: work in your own IDE (Claude Code, Cursor, VS Code or Cline) with your own AI, connected to your server over MCP. No AI key is stored on the server.": {
+    "en": "For developers: work in your own IDE (Claude Code, Cursor, VS Code or Cline) with your own AI, connected to your server over MCP. No AI key is stored on the server.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:142"
   },
   "How building works": {
     "en": "How building works",
@@ -2026,6 +2222,22 @@
   "That name is taken": {
     "en": "That name is taken",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:324"
+  },
+  "Repository URL": {
+    "en": "Repository URL",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:263"
+  },
+  "Branch or tag (optional)": {
+    "en": "Branch or tag (optional)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:267"
+  },
+  "Name (optional)": {
+    "en": "Name (optional)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:273"
+  },
+  "From the repo's name": {
+    "en": "From the repo's name",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:274"
   },
   "https://": {
     "en": "https://",
@@ -2044,6 +2256,14 @@
     "en": "Available",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:355"
   },
+  "Cloning…": {
+    "en": "Cloning…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:386"
+  },
+  "Check repo": {
+    "en": "Check repo",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:386"
+  },
   "Open build sessions": {
     "en": "Open build sessions",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:328"
@@ -2052,9 +2272,45 @@
     "en": "Pick another name",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:329"
   },
+  "That can't be a web address.": {
+    "en": "That can't be a web address.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:348"
+  },
+  "This repo is not yet adapted for Flagship.": {
+    "en": "This repo is not yet adapted for Flagship.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:368"
+  },
+  "Use AI to adapt and deploy": {
+    "en": "Use AI to adapt and deploy",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:369"
+  },
+  "Run the AI again": {
+    "en": "Run the AI again",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:370"
+  },
+  "Deploy it": {
+    "en": "Deploy it",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:371"
+  },
+  "Anonymously share your adaptation": {
+    "en": "Anonymously share your adaptation",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:372"
+  },
+  "Others can then install this repo without AI. Nothing about you or your server is included.": {
+    "en": "Others can then install this repo without AI. Nothing about you or your server is included.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:373"
+  },
+  "Check again": {
+    "en": "Check again",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:374"
+  },
   "%@ — %lld file%@.": {
     "en": "%@ — %lld file%@.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:402"
+  },
+  "Install it": {
+    "en": "Install it",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:404"
   },
   "Flagship-ready": {
     "en": "Flagship-ready",
@@ -2072,6 +2328,14 @@
     "en": "Adapted",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:475"
   },
+  "Preparing…": {
+    "en": "Preparing…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:510"
+  },
+  "Get flagship.app.json": {
+    "en": "Get flagship.app.json",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:510"
+  },
   "Is this your repo? Commit this file at its root and every Flagship server will run it this way.": {
     "en": "Is this your repo? Commit this file at its root and every Flagship server will run it this way.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:514"
@@ -2088,10 +2352,6 @@
     "en": "Connect IDE",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:603"
   },
-  "Connect your IDE": {
-    "en": "Connect your IDE",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:573"
-  },
   "Your editor's agent builds against your server using your OWN AI subscription. No model key is stored on the server.": {
     "en": "Your editor's agent builds against your server using your OWN AI subscription. No model key is stored on the server.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:580"
@@ -2100,21 +2360,73 @@
     "en": "Your editor's agent changes %@ on your server, starting from its current code, using your own AI subscription. Deploying from the IDE replaces the running version; its address and data stay the same.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:576"
   },
+  "Create a connection": {
+    "en": "Create a connection",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:585"
+  },
   "Add this to your IDE's own settings, not a file in your project (the address names your server). The key works only for this build.": {
     "en": "Add this to your IDE's own settings, not a file in your project (the address names your server). The key works only for this build.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:611"
+  },
+  "Key": {
+    "en": "Key",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:619"
+  },
+  "Copy IDE config": {
+    "en": "Copy IDE config",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:637"
   },
   "Or run:": {
     "en": "Or run:",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:655"
   },
+  "Copy command": {
+    "en": "Copy command",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:665"
+  },
   "Your editor's agent writes files, validates, requests any secrets (value-free), and deploys. You can also deploy here once it's done:": {
     "en": "Your editor's agent writes files, validates, requests any secrets (value-free), and deploys. You can also deploy here once it's done:",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:681"
   },
+  "Deploying…": {
+    "en": "Deploying…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:685"
+  },
+  "Deploy now": {
+    "en": "Deploy now",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:685"
+  },
   "IDE": {
     "en": "IDE",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:624"
+  },
+  "URL copied": {
+    "en": "URL copied",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:617"
+  },
+  "Key copied": {
+    "en": "Key copied",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:620"
+  },
+  "Config copied": {
+    "en": "Config copied",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:638"
+  },
+  "Command copied": {
+    "en": "Command copied",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:666"
+  },
+  "Regenerating…": {
+    "en": "Regenerating…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:672"
+  },
+  "Regenerate key": {
+    "en": "Regenerate key",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:672"
+  },
+  "View journal": {
+    "en": "View journal",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:676"
   },
   "Your IDE asked for these secrets": {
     "en": "Your IDE asked for these secrets",
@@ -2123,6 +2435,18 @@
   "The editor and its AI never see the value — you set it here on your server. Open Configure environment on the service after it's deployed and enter each value there.": {
     "en": "The editor and its AI never see the value — you set it here on your server. Open Configure environment on the service after it's deployed and enter each value there.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:712"
+  },
+  "Refresh": {
+    "en": "Refresh",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:733"
+  },
+  "Set": {
+    "en": "Set",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:721"
+  },
+  "Needs you": {
+    "en": "Needs you",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:723"
   },
   "Build sessions": {
     "en": "Build sessions",
@@ -2136,17 +2460,13 @@
     "en": "Build timeline",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:802"
   },
-  "Past builds": {
-    "en": "Past builds",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:932"
-  },
   "Open on your servers": {
     "en": "Open on your servers",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:869"
   },
-  "Open on your server": {
-    "en": "Open on your server",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:869"
+  "Past builds": {
+    "en": "Past builds",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:932"
   },
   "All builds": {
     "en": "All builds",
@@ -2156,29 +2476,137 @@
     "en": "Discard build",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:821"
   },
+  "This stops the AI and deletes what it has written on your server.%@": {
+    "en": "This stops the AI and deletes what it has written on your server.%@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:850"
+  },
   "This deletes what was imported or written on your server. Its name, \"%@\", becomes free again.": {
     "en": "This deletes what was imported or written on your server. Its name, \"%@\", becomes free again.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:833"
+  },
+  "%@ · on %@": {
+    "en": "%@ · on %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:839"
+  },
+  "Couldn't reach %@, so its builds aren't listed.": {
+    "en": "Couldn't reach %@, so its builds aren't listed.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:844"
+  },
+  "Couldn't reach %@, so their builds aren't listed.": {
+    "en": "Couldn't reach %@, so their builds aren't listed.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:845"
+  },
+  "Started %@": {
+    "en": "Started %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:876"
   },
   "Discard…": {
     "en": "Discard…",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:886"
   },
+  "AI is working": {
+    "en": "AI is working",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:1018"
+  },
+  "Waiting for you": {
+    "en": "Waiting for you",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:1019"
+  },
+  "Ready to deploy": {
+    "en": "Ready to deploy",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:1020"
+  },
+  "Deployed": {
+    "en": "Deployed",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:1022"
+  },
+  "Cancelled": {
+    "en": "Cancelled",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:1023"
+  },
+  "Failed": {
+    "en": "Failed",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:1024"
+  },
+  "Resume": {
+    "en": "Resume",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:1033"
+  },
+  "Open": {
+    "en": "Open",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:1034"
+  },
   "No builds yet.": {
     "en": "No builds yet.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:937"
+  },
+  "Started %@ · %lld step%@": {
+    "en": "Started %@ · %lld step%@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:945"
+  },
+  "Deploy it again": {
+    "en": "Deploy it again",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:969"
+  },
+  "Run the AI again or deploy": {
+    "en": "Run the AI again or deploy",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:969"
   },
   "No steps recorded for this build.": {
     "en": "No steps recorded for this build.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:988"
   },
+  "Connecting": {
+    "en": "Connecting",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:44"
+  },
+  "Opening the secure channel to the builder…": {
+    "en": "Opening the secure channel to the builder…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:44"
+  },
+  "Sending": {
+    "en": "Sending",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:49"
+  },
+  "Minting your recipe and sending it to the builder…": {
+    "en": "Minting your recipe and sending it to the builder…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:49"
+  },
+  "Pair with the builder": {
+    "en": "Pair with the builder",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:87"
+  },
+  "On your computer, open the Flagship Studio — it shows a QR code and a short code. Point your camera at it.": {
+    "en": "On your computer, open the Flagship Studio — it shows a QR code and a short code. Point your camera at it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:87"
+  },
   "Enter the code instead": {
     "en": "Enter the code instead",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:99"
   },
+  "Enter the builder code": {
+    "en": "Enter the builder code",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:109"
+  },
+  "Type the short code shown under the QR on your computer (like ABCD-EFGH).": {
+    "en": "Type the short code shown under the QR on your computer (like ABCD-EFGH).",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:109"
+  },
+  "Connect": {
+    "en": "Connect",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:115"
+  },
   "Scan the QR instead": {
     "en": "Scan the QR instead",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:118"
+  },
+  "Builder code": {
+    "en": "Builder code",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:111"
+  },
+  "ABCD-EFGH": {
+    "en": "ABCD-EFGH",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:111"
   },
   "The Flagship Studio is a small desktop app that writes your server to a USB stick. On your computer, go to flagshipserver.com/studio, install it, and open it to see the code to scan here.": {
     "en": "The Flagship Studio is a small desktop app that writes your server to a USB stick. On your computer, go to flagshipserver.com/studio, install it, and open it to see the code to scan here.",
@@ -2187,6 +2615,30 @@
   "Don't have the builder?": {
     "en": "Don't have the builder?",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:128"
+  },
+  "Confirm the security code": {
+    "en": "Confirm the security code",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:142"
+  },
+  "Check that this matches the code on your computer. Only confirm if they're the same.": {
+    "en": "Check that this matches the code on your computer. Only confirm if they're the same.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:142"
+  },
+  "They match — pair & send": {
+    "en": "They match — pair & send",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:152"
+  },
+  "Sent — you can close this screen": {
+    "en": "Sent — you can close this screen",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:165"
+  },
+  "Your computer's builder has the recipe. Pick the USB drive and any Advanced options on the computer; nothing more is needed from your phone.": {
+    "en": "Your computer's builder has the recipe. Pick the USB drive and any Advanced options on the computer; nothing more is needed from your phone.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:165"
+  },
+  "Pairing failed": {
+    "en": "Pairing failed",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:179"
   },
   "The computer's builder app disconnected.": {
     "en": "The computer's builder app disconnected.",
@@ -2264,6 +2716,14 @@
     "en": "File",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatAttachments.swift:164"
   },
+  "Invite people": {
+    "en": "Invite people",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CoInviteSection.swift:137"
+  },
+  "Invite link": {
+    "en": "Invite link",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CoInviteSection.swift:189"
+  },
   "Remote": {
     "en": "Remote",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:39"
@@ -2275,6 +2735,10 @@
   "Disconnect %@?": {
     "en": "Disconnect %@?",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:67"
+  },
+  "Session %@": {
+    "en": "Session %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:275"
   },
   "Disconnect this browser?": {
     "en": "Disconnect this browser?",
@@ -2291,6 +2755,14 @@
   "Connect a browser": {
     "en": "Connect a browser",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:90"
+  },
+  "Scan the computer's code": {
+    "en": "Scan the computer's code",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:93"
+  },
+  "Use pasted link": {
+    "en": "Use pasted link",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:104"
   },
   "Or paste its link": {
     "en": "Or paste its link",
@@ -2320,6 +2792,18 @@
     "en": "It gets a keyless, read-only session for four hours. Protected actions still need this phone.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:182"
   },
+  "Approving…": {
+    "en": "Approving…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:185"
+  },
+  "Approve": {
+    "en": "Approve",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:185"
+  },
+  "Connected browsers": {
+    "en": "Connected browsers",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:200"
+  },
   "Couldn't load connected browsers": {
     "en": "Couldn't load connected browsers",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:209"
@@ -2336,9 +2820,9 @@
     "en": "last seen %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:248"
   },
-  "Scan the computer's code": {
-    "en": "Scan the computer's code",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:319"
+  "Revoke": {
+    "en": "Revoke",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:263"
   },
   "Paste link instead": {
     "en": "Paste link instead",
@@ -2380,13 +2864,41 @@
     "en": "Unsupported request kind — open your browser to handle",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:113"
   },
-  "Denying…": {
-    "en": "Denying…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:131"
+  "Release server name — from %@": {
+    "en": "Release server name — from %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:159"
   },
-  "Deny": {
-    "en": "Deny",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:131"
+  "Revoke server — from %@": {
+    "en": "Revoke server — from %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:160"
+  },
+  "Request from %@": {
+    "en": "Request from %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:161"
+  },
+  "%@ · reason: %@": {
+    "en": "%@ · reason: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:172"
+  },
+  "Hold to approve": {
+    "en": "Hold to approve",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:123"
+  },
+  "(missing serverDomain)": {
+    "en": "(missing serverDomain)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:168"
+  },
+  "(missing serverId)": {
+    "en": "(missing serverId)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:170"
+  },
+  "(missing reason)": {
+    "en": "(missing reason)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:171"
+  },
+  "Hold to confirm…": {
+    "en": "Hold to confirm…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:212"
   },
   "Approve release-server for %@": {
     "en": "Approve release-server for %@",
@@ -2416,9 +2928,17 @@
     "en": "Sign in with your account name",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ConnectAccountScreen.swift:76"
   },
+  "Account name": {
+    "en": "Account name",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ConnectAccountScreen.swift:81"
+  },
   "Signs in to the account with this name.": {
     "en": "Signs in to the account with this name.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ConnectAccountScreen.swift:111"
+  },
+  "The name you picked when you made the account.": {
+    "en": "The name you picked when you made the account.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ConnectAccountScreen.swift:251"
   },
   "Join with a pairing code": {
     "en": "Join with a pairing code",
@@ -2427,6 +2947,14 @@
   "On a device of that account, open Settings → Trusted devices → Add a device.": {
     "en": "On a device of that account, open Settings → Trusted devices → Add a device.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ConnectAccountScreen.swift:138"
+  },
+  "Code or link": {
+    "en": "Code or link",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ConnectAccountScreen.swift:157"
+  },
+  "Join": {
+    "en": "Join",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ConnectAccountScreen.swift:166"
   },
   "Opens the camera to scan the other device's code.": {
     "en": "Opens the camera to scan the other device's code.",
@@ -2439,6 +2967,10 @@
   "Scan a code": {
     "en": "Scan a code",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ConnectAccountScreen.swift:144"
+  },
+  "The demo server is online, but this device couldn't create a paired session. Try again.": {
+    "en": "The demo server is online, but this device couldn't create a paired session. Try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ConnectAccountScreen.swift:222"
   },
   "No Flagship account by that name": {
     "en": "No Flagship account by that name",
@@ -2468,9 +3000,69 @@
     "en": "Paste the pairing link, or scan the code.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ConnectInput.swift:20"
   },
+  "Opening the secure channel…": {
+    "en": "Opening the secure channel…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:75"
+  },
+  "Almost there": {
+    "en": "Almost there",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:80"
+  },
+  "Minting the install blob…": {
+    "en": "Minting the install blob…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:80"
+  },
+  "Delivering": {
+    "en": "Delivering",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:83"
+  },
+  "Pushing your boot recipe to the desktop…": {
+    "en": "Pushing your boot recipe to the desktop…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:83"
+  },
   "Pair with builder": {
     "en": "Pair with builder",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:116"
+  },
+  "Name your server": {
+    "en": "Name your server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:302"
+  },
+  "Boot unlock": {
+    "en": "Boot unlock",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:303"
+  },
+  "Backups": {
+    "en": "Backups",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:304"
+  },
+  "Pair with the builder app": {
+    "en": "Pair with the builder app",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:150"
+  },
+  "Scan the builder's QR (or type its code) and the recipe is sent over a secure live link. Easiest if the builder is open in front of you.": {
+    "en": "Scan the builder's QR (or type its code) and the recipe is sent over a secure live link. Easiest if the builder is open in front of you.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:151"
+  },
+  "Save / share recipe file": {
+    "en": "Save / share recipe file",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:160"
+  },
+  "Save the recipe as a file or send it (AirDrop, Messages, Mail). Whoever builds the server opens it in the builder. No secrets in the file.": {
+    "en": "Save the recipe as a file or send it (AirDrop, Messages, Mail). Whoever builds the server opens it in the builder. No secrets in the file.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:161"
+  },
+  "Copied!": {
+    "en": "Copied!",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:169"
+  },
+  "Copy recipe to clipboard": {
+    "en": "Copy recipe to clipboard",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:169"
+  },
+  "Copy the recipe text, then paste it into the builder's “I have a recipe” box.": {
+    "en": "Copy the recipe text, then paste it into the builder's “I have a recipe” box.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:170"
   },
   "Step %lld of %lld": {
     "en": "Step %lld of %lld",
@@ -2480,21 +3072,57 @@
     "en": "Flagship Studio is waiting. Set up your server and the recipe goes straight to it.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:256"
   },
+  "Server name": {
+    "en": "Server name",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:266"
+  },
+  "Short description (optional)": {
+    "en": "Short description (optional)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:277"
+  },
+  "Alice's private home server": {
+    "en": "Alice's private home server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:278"
+  },
+  "Up to ~40 characters.": {
+    "en": "Up to ~40 characters.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:279"
+  },
+  "Back": {
+    "en": "Back",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:330"
+  },
   "Recipe expires in": {
     "en": "Recipe expires in",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:346"
   },
-  "Boot unlock": {
-    "en": "Boot unlock",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:386"
+  "%lld min": {
+    "en": "%lld min",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:369"
+  },
+  "%lld hour%@": {
+    "en": "%lld hour%@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:372"
+  },
+  "Reboots on its own": {
+    "en": "Reboots on its own",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:391"
+  },
+  "Best for flaky power or connections. After you approve its first boot, the server self-unlocks on every reboot — no phone needed. Revocable any time.": {
+    "en": "Best for flaky power or connections. After you approve its first boot, the server self-unlocks on every reboot — no phone needed. Revocable any time.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:392"
+  },
+  "Authorize each boot": {
+    "en": "Authorize each boot",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:397"
+  },
+  "Most theft-resistant. The server asks your phone to unlock on every reboot. Best for critical servers on stable infrastructure.": {
+    "en": "Most theft-resistant. The server asks your phone to unlock on every reboot. Best for critical servers on stable infrastructure.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:398"
   },
   "Recommended. Your data disk is encrypted; the server unlocks it at boot.": {
     "en": "Recommended. Your data disk is encrypted; the server unlocks it at boot.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:452"
-  },
-  "Less safe — the disk is left unencrypted. Only for servers that can't keep network at boot (e.g. Wi-Fi-only), where the boot-time unlock can't run.": {
-    "en": "Less safe — the disk is left unencrypted. Only for servers that can't keep network at boot (e.g. Wi-Fi-only), where the boot-time unlock can't run.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:453"
   },
   "Encrypt disk": {
     "en": "Encrypt disk",
@@ -2528,13 +3156,69 @@
     "en": "Where should this server's backups go?",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:530"
   },
+  "Scan the QR": {
+    "en": "Scan the QR",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:547"
+  },
+  "Aim the viewfinder at a compatible Flagship pairing QR.": {
+    "en": "Aim the viewfinder at a compatible Flagship pairing QR.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:548"
+  },
   "Copy the QR link instead?": {
     "en": "Copy the QR link instead?",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:576"
   },
+  "Paste the QR link": {
+    "en": "Paste the QR link",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:594"
+  },
+  "Right-click (or long-press) the QR on flagshipserver.com, copy the link, and paste it here.": {
+    "en": "Right-click (or long-press) the QR on flagshipserver.com, copy the link, and paste it here.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:595"
+  },
+  "Submit": {
+    "en": "Submit",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:608"
+  },
+  "Back to viewfinder": {
+    "en": "Back to viewfinder",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:613"
+  },
+  "QR link": {
+    "en": "QR link",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:602"
+  },
+  "Confirm match code": {
+    "en": "Confirm match code",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:622"
+  },
+  "These six digits must match what the desktop shows. If they don't, someone is in the middle — cancel.": {
+    "en": "These six digits must match what the desktop shows. If they don't, someone is in the middle — cancel.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:623"
+  },
+  "Codes match — confirm": {
+    "en": "Codes match — confirm",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:636"
+  },
+  "Reading…": {
+    "en": "Reading…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:636"
+  },
   "Open the recipe in Flagship Studio, write the boot USB, and boot the target machine. The new server will phone home and finish setup automatically.": {
     "en": "Open the recipe in Flagship Studio, write the boot USB, and boot the target machine. The new server will phone home and finish setup automatically.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:652"
+  },
+  "Cancelling…": {
+    "en": "Cancelling…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:717"
+  },
+  "Cancel order": {
+    "en": "Cancel order",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:717"
+  },
+  "Serial": {
+    "en": "Serial",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:662"
   },
   "Delivered": {
     "en": "Delivered",
@@ -2600,6 +3284,10 @@
     "en": "Turn off debug access?",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DebugAccessCard.swift:61"
   },
+  "Debug access": {
+    "en": "Debug access",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DebugAccessCard.swift:46"
+  },
   "Turn off": {
     "en": "Turn off",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DebugAccessCard.swift:62"
@@ -2612,21 +3300,29 @@
     "en": "Key %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DebugAccessCard.swift:81"
   },
-  "Off. Turn it on to let one SSH key into this server as the debug user for a while.": {
-    "en": "Off. Turn it on to let one SSH key into this server as the debug user for a while.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DebugAccessCard.swift:92"
-  },
   "Turned on with this account's key.": {
     "en": "Turned on with this account's key.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DebugAccessCard.swift:88"
   },
-  "Turned on by an admin device.": {
-    "en": "Turned on by an admin device.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DebugAccessCard.swift:88"
+  "Off. Turn it on to let one SSH key into this server as the debug user for a while.": {
+    "en": "Off. Turn it on to let one SSH key into this server as the debug user for a while.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DebugAccessCard.swift:92"
+  },
+  "Renew": {
+    "en": "Renew",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DebugAccessCard.swift:108"
+  },
+  "Turn on": {
+    "en": "Turn on",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DebugAccessCard.swift:108"
   },
   "For": {
     "en": "For",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DebugAccessCard.swift:143"
+  },
+  "Signing…": {
+    "en": "Signing…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DebugAccessCard.swift:156"
   },
   "Anyone with this key can read everything on this server while it's on.": {
     "en": "Anyone with this key can read everything on this server while it's on.",
@@ -2808,6 +3504,10 @@
     "en": "Retry",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/FrontPageViews.swift:43"
   },
+  "Save": {
+    "en": "Save",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/FrontPageViews.swift:72"
+  },
   "Default Flagship page": {
     "en": "Default Flagship page",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/FrontPageViews.swift:57"
@@ -2856,10 +3556,6 @@
   "Continue anyway": {
     "en": "Continue anyway",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Components/GlobalTrustBar.swift:167"
-  },
-  "Not now": {
-    "en": "Not now",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Components/GlobalTrustBar.swift:179"
   },
   "Continue anyway?": {
     "en": "Continue anyway?",
@@ -3029,10 +3725,6 @@
     "en": "Send the backup",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:857"
   },
-  "Open": {
-    "en": "Open",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:863"
-  },
   "Cancel server": {
     "en": "Cancel server",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:874"
@@ -3048,10 +3740,6 @@
   "No recent activity.": {
     "en": "No recent activity.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:900"
-  },
-  "Deployed": {
-    "en": "Deployed",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:950"
   },
   "Removed": {
     "en": "Removed",
@@ -3073,13 +3761,37 @@
     "en": "Search servers",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:1223"
   },
+  "Server \"%@\" cancelled — the name is free again.": {
+    "en": "Server \"%@\" cancelled — the name is free again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/HomeTab.swift:813"
+  },
+  "Another device changed the order. Showing the latest one.": {
+    "en": "Another device changed the order. Showing the latest one.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/HomeTab.swift:481"
+  },
+  "Show your servers": {
+    "en": "Show your servers",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/HomeTab.swift:492"
+  },
+  "Couldn't load your servers. Pull down to try again.": {
+    "en": "Couldn't load your servers. Pull down to try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/HomeTab.swift:500"
+  },
+  "Please add your first server.": {
+    "en": "Please add your first server.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/HomeTab.swift:176"
+  },
+  "Refresh your servers' status": {
+    "en": "Refresh your servers' status",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/HomeTab.swift:191"
+  },
+  "Verify your servers": {
+    "en": "Verify your servers",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/HomeTab.swift:1092"
+  },
   "Paired devices": {
     "en": "Paired devices",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/HomeTab.swift:1186"
-  },
-  "Session %@": {
-    "en": "Session %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/HomeTab.swift:1210"
   },
   "token: %@…": {
     "en": "token: %@…",
@@ -3124,14 +3836,6 @@
   "You sent an invite to %@ and they accepted. Approving binds their access. (You won't see their username — only the label you gave them.)": {
     "en": "You sent an invite to %@ and they accepted. Approving binds their access. (You won't see their username — only the label you gave them.)",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/InviteAcceptScreen.swift:82"
-  },
-  "Approving…": {
-    "en": "Approving…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/InviteAcceptScreen.swift:85"
-  },
-  "Approve": {
-    "en": "Approve",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/InviteAcceptScreen.swift:85"
   },
   "They now have access to %@.": {
     "en": "They now have access to %@.",
@@ -3273,10 +3977,6 @@
     "en": "Couldn't join",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/JoinAccountScreen.swift:94"
   },
-  "Cancelled": {
-    "en": "Cancelled",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/JoinAccountScreen.swift:97"
-  },
   "We cancelled this for your security because a screenshot was taken. Scan the admin's code again to join.": {
     "en": "We cancelled this for your security because a screenshot was taken. Scan the admin's code again to join.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/JoinAccountScreen.swift:58"
@@ -3395,10 +4095,6 @@
   },
   "Fetching…": {
     "en": "Fetching…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/JournalViews.swift:36"
-  },
-  "View journal": {
-    "en": "View journal",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/JournalViews.swift:36"
   },
   "Unit": {
@@ -3745,10 +4441,6 @@
   "The old server is retired and wiped only after the new one has restored the data and taken over the name: from then on it can't unlock or connect, and it wipes itself as soon as it is reachable. If anything fails first, the old server keeps serving with all its data.": {
     "en": "The old server is retired and wiped only after the new one has restored the data and taken over the name: from then on it can't unlock or connect, and it wipes itself as soon as it is reachable. If anything fails first, the old server keeps serving with all its data.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/MigrateServerScreen.swift:100"
-  },
-  "Signing…": {
-    "en": "Signing…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/MigrateServerScreen.swift:107"
   },
   "Start migration": {
     "en": "Start migration",
@@ -4099,10 +4791,6 @@
     "en": "Advisory %@ · %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Notices/NoticeViews.swift:32"
   },
-  "Unlock Flagship": {
-    "en": "Unlock Flagship",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Notices/NoticeViews.swift:255"
-  },
   "This erases this device's account key and returns you to the start. Sign back in with your recovery passkey to restore it. Your account and servers stay put.": {
     "en": "This erases this device's account key and returns you to the start. Sign back in with your recovery passkey to restore it. Your account and servers stay put.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Notices/NoticeViews.swift:236"
@@ -4186,14 +4874,6 @@
   "Reliability score: %@ of 100": {
     "en": "Reliability score: %@ of 100",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PeerBackupScreen.swift:118"
-  },
-  "Cancelling…": {
-    "en": "Cancelling…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PendingServerScreen.swift:133"
-  },
-  "Cancel order": {
-    "en": "Cancel order",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PendingServerScreen.swift:133"
   },
   "The install hit a problem. You can cancel and try again.": {
     "en": "The install hit a problem. You can cancel and try again.",
@@ -4415,10 +5095,6 @@
   "No cloud backup on this account": {
     "en": "No cloud backup on this account",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RealAccountLoginScreen.swift:244"
-  },
-  "Back": {
-    "en": "Back",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RealAccountLoginScreen.swift:266"
   },
   "Welcome back": {
     "en": "Welcome back",
@@ -5001,10 +5677,6 @@
     "en": "Stop",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecuredSessionsScreen.swift:116"
   },
-  "Refresh": {
-    "en": "Refresh",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecuredSessionsScreen.swift:109"
-  },
   "Back up now (with a passcode)…": {
     "en": "Back up now (with a passcode)…",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift:15"
@@ -5068,10 +5740,6 @@
   "Suggested passcode": {
     "en": "Suggested passcode",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift:124"
-  },
-  "Copied": {
-    "en": "Copied",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift:130"
   },
   "Import a backup": {
     "en": "Import a backup",
@@ -5344,10 +6012,6 @@
   "Keep %lld GB on this phone": {
     "en": "Keep %lld GB on this phone",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:53"
-  },
-  "Backups": {
-    "en": "Backups",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift:113"
   },
   "Delete this backup from the server?": {
     "en": "Delete this backup from the server?",
@@ -5657,14 +6321,6 @@
     "en": "This server asks your phone for approval on every reboot — the most theft-resistant mode.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:602"
   },
-  "Reboots on its own": {
-    "en": "Reboots on its own",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:579"
-  },
-  "Authorize each boot": {
-    "en": "Authorize each boot",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:599"
-  },
   "Auto-unlock disabled. This server will ask your phone on its next reboot.": {
     "en": "Auto-unlock disabled. This server will ask your phone on its next reboot.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:632"
@@ -5797,10 +6453,6 @@
     "en": "This server is on the latest release.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1231"
   },
-  "Check again": {
-    "en": "Check again",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1233"
-  },
   "Or enter any release (full commit)": {
     "en": "Or enter any release (full commit)",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1267"
@@ -5860,10 +6512,6 @@
   "Reason": {
     "en": "Reason",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1490"
-  },
-  "Hold to confirm…": {
-    "en": "Hold to confirm…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:1554"
   },
   "Hold to revoke": {
     "en": "Hold to revoke",
@@ -6265,10 +6913,6 @@
     "en": "Everyone who joins through the link gets this rank.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:372"
   },
-  "Creating…": {
-    "en": "Creating…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:384"
-  },
   "Create invite link": {
     "en": "Create invite link",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:384"
@@ -6549,10 +7193,6 @@
   "It was set up from a shared adaptation of %@": {
     "en": "It was set up from a shared adaptation of %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceDetailScreen.swift:431"
-  },
-  "Allow": {
-    "en": "Allow",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceDetailScreen.swift:472"
   },
   "This app may reach:": {
     "en": "This app may reach:",
@@ -7316,6 +7956,22 @@
     "en": "Setup stopped",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SetupStoppedCard.swift:24"
   },
+  "Contact us": {
+    "en": "Contact us",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SetupStoppedCard.swift:46"
+  },
+  "This server didn't finish installing.": {
+    "en": "This server didn't finish installing.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SetupStoppedCard.swift:58"
+  },
+  "Cancel order and start again": {
+    "en": "Cancel order and start again",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SetupStoppedCard.swift:67"
+  },
+  "Riley": {
+    "en": "Riley",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:85"
+  },
   "Remove %@?": {
     "en": "Remove %@?",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:64"
@@ -7340,6 +7996,14 @@
     "en": "Last here %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:184"
   },
+  "Confirm with Face ID": {
+    "en": "Confirm with Face ID",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:207"
+  },
+  "Set up": {
+    "en": "Set up",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:261"
+  },
   "Send this link to %@": {
     "en": "Send this link to %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:407"
@@ -7356,6 +8020,38 @@
     "en": "Give another person access to %@. They use their own Flagship account; you can change or remove their access at any time.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:356"
   },
+  "Who is it for?": {
+    "en": "Who is it for?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:358"
+  },
+  "Only you and this server see this name.": {
+    "en": "Only you and this server see this name.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:359"
+  },
+  "Create link": {
+    "en": "Create link",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:397"
+  },
+  "What they can do": {
+    "en": "What they can do",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:362"
+  },
+  "Also let them": {
+    "en": "Also let them",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:387"
+  },
+  "Shared with me": {
+    "en": "Shared with me",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:456"
+  },
+  "Shared by %@": {
+    "en": "Shared by %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:464"
+  },
+  "Waiting for the owner": {
+    "en": "Waiting for the owner",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:467"
+  },
   "Shared server": {
     "en": "Shared server",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:511"
@@ -7368,6 +8064,10 @@
     "en": "Paste the link someone sent you, or scan the code on their phone.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:566"
   },
+  "That isn't a share link.": {
+    "en": "That isn't a share link.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:569"
+  },
   "Opening the link…": {
     "en": "Opening the link…",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:578"
@@ -7379,6 +8079,10 @@
   "%@ confirmed. %@ is now under Shared with me on Home.": {
     "en": "%@ confirmed. %@ is now under Shared with me on Home.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:589"
+  },
+  "Open %@": {
+    "en": "Open %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:591"
   },
   "%@ shared a server with you": {
     "en": "%@ shared a server with you",
@@ -7420,9 +8124,13 @@
     "en": "You lose access at once. The owner would have to share it with you again.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:711"
   },
-  "Shared by %@": {
-    "en": "Shared by %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:769"
+  "Leave this server": {
+    "en": "Leave this server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:755"
+  },
+  "Start-up": {
+    "en": "Start-up",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:778"
   },
   "%@ is starting. Unlock it?": {
     "en": "%@ is starting. Unlock it?",
@@ -7432,6 +8140,10 @@
     "en": "It's waiting for its disk key. Unlock it only if you expected it to restart.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:783"
   },
+  "Unlock with Face ID": {
+    "en": "Unlock with Face ID",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:785"
+  },
   "Running since %@": {
     "en": "Running since %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:807"
@@ -7439,6 +8151,14 @@
   "Certificate renews before %@": {
     "en": "Certificate renews before %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:809"
+  },
+  "Start-up notices": {
+    "en": "Start-up notices",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:854"
+  },
+  "What you can do": {
+    "en": "What you can do",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:909"
   },
   "The owner can change this or remove you at any time.": {
     "en": "The owner can change this or remove you at any time.",
@@ -7452,10 +8172,6 @@
     "en": "You can approve this server's start-ups. Keep this page open when it restarts.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:919"
   },
-  "Open %@": {
-    "en": "Open %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:975"
-  },
   "Couldn't load": {
     "en": "Couldn't load",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SharedHelpers.swift:46"
@@ -7468,6 +8184,14 @@
     "en": "Here's a free, random username. You can change it later.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SuggestUsernameScreen.swift:26"
   },
+  "Try again in %lld min": {
+    "en": "Try again in %lld min",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SuggestUsernameScreen.swift:72"
+  },
+  "Try again in %llds": {
+    "en": "Try again in %llds",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SuggestUsernameScreen.swift:73"
+  },
   "Couldn't get a handle. Try again.": {
     "en": "Couldn't get a handle. Try again.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/SuggestUsernameViewModel.swift:66"
@@ -7479,6 +8203,10 @@
   "Authorize %@ to join your cloud": {
     "en": "Authorize %@ to join your cloud",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/SwkDepositCoordinator.swift:170"
+  },
+  "Type to confirm": {
+    "en": "Type to confirm",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TieredConfirmationSheet.swift:43"
   },
   "Tap to dismiss": {
     "en": "Tap to dismiss",
@@ -7540,6 +8268,10 @@
     "en": "Type the server's address to confirm:",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TransferServerScreens.swift:76"
   },
+  "Transfer this server": {
+    "en": "Transfer this server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TransferServerScreens.swift:83"
+  },
   "Have the new owner scan this": {
     "en": "Have the new owner scan this",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TransferServerScreens.swift:93"
@@ -7548,9 +8280,17 @@
     "en": "On their phone: Add a server → Take over a transferred server. Keep this screen open until it completes — your phone hands off the disk key after they claim it.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TransferServerScreens.swift:95"
   },
+  "They claimed it — handing off the disk key…": {
+    "en": "They claimed it — handing off the disk key…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TransferServerScreens.swift:101"
+  },
   "Waiting for the new owner…": {
     "en": "Waiting for the new owner…",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TransferServerScreens.swift:103"
+  },
+  "Transfer complete. %@ now belongs to the new owner%@.": {
+    "en": "Transfer complete. %@ now belongs to the new owner%@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TransferServerScreens.swift:116"
   },
   "It's no longer in your fleet.": {
     "en": "It's no longer in your fleet.",
@@ -7559,6 +8299,14 @@
   "Take over a server": {
     "en": "Take over a server",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TransferServerScreens.swift:155"
+  },
+  "You now own %@. It will come online under your account shortly.": {
+    "en": "You now own %@. It will come online under your account shortly.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TransferServerScreens.swift:146"
+  },
+  "Scan again": {
+    "en": "Scan again",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TransferServerScreens.swift:149"
   },
   "Claiming the server…": {
     "en": "Claiming the server…",
@@ -7575,6 +8323,18 @@
   "Take over this server?": {
     "en": "Take over this server?",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TransferServerScreens.swift:187"
+  },
+  "You will become the owner of %@": {
+    "en": "You will become the owner of %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TransferServerScreens.swift:190"
+  },
+  "You'll own %@ and everything on it. The current owner loses control of it. This cannot be undone.": {
+    "en": "You'll own %@ and everything on it. The current owner loses control of it. This cannot be undone.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TransferServerScreens.swift:191"
+  },
+  "Take ownership": {
+    "en": "Take ownership",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/TransferServerScreens.swift:194"
   },
   "Continue with an unverified Flagship control server": {
     "en": "Continue with an unverified Flagship control server",
@@ -7652,13 +8412,29 @@
     "en": "Bring your own key",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeScreens.swift:40"
   },
+  "Set up a key": {
+    "en": "Set up a key",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeScreens.swift:45"
+  },
   "Anthropic, OpenAI, or Google. No daily limits. Your key, your bill, your choice of model.": {
     "en": "Anthropic, OpenAI, or Google. No daily limits. Your key, your bill, your choice of model.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeScreens.swift:42"
   },
+  "Invite only": {
+    "en": "Invite only",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeScreens.swift:65"
+  },
+  "Anyone with the link": {
+    "en": "Anyone with the link",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeScreens.swift:65"
+  },
   "New Service": {
     "en": "New Service",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeScreens.swift:205"
+  },
+  "Build it": {
+    "en": "Build it",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeScreens.swift:181"
   },
   "What should it do?": {
     "en": "What should it do?",
@@ -7667,6 +8443,50 @@
   "about 90 seconds": {
     "en": "about 90 seconds",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeScreens.swift:184"
+  },
+  "A build session already uses \"%@\". To use the name for a new build, open Build sessions and discard that one first.": {
+    "en": "A build session already uses \"%@\". To use the name for a new build, open Build sessions and discard that one first.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeScreens.swift:250"
+  },
+  "You already have a service called \"%@\". Pick another name.": {
+    "en": "You already have a service called \"%@\". Pick another name.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeScreens.swift:252"
+  },
+  "Habit tracker": {
+    "en": "Habit tracker",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeScreens.swift:240"
+  },
+  "A habit tracker: I tick off my daily habits and see my streaks for the last month.": {
+    "en": "A habit tracker: I tick off my daily habits and see my streaks for the last month.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeScreens.swift:240"
+  },
+  "Family wishlist": {
+    "en": "Family wishlist",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeScreens.swift:241"
+  },
+  "A family wishlist: everyone keeps a list, and the others can quietly mark what they'll buy.": {
+    "en": "A family wishlist: everyone keeps a list, and the others can quietly mark what they'll buy.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeScreens.swift:241"
+  },
+  "Recipe jar": {
+    "en": "Recipe jar",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeScreens.swift:242"
+  },
+  "A recipe jar: save recipes with a photo, ingredients and steps, and search them by ingredient.": {
+    "en": "A recipe jar: save recipes with a photo, ingredients and steps, and search them by ingredient.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeScreens.swift:242"
+  },
+  "Sleep journal": {
+    "en": "Sleep journal",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeScreens.swift:243"
+  },
+  "A sleep journal: log when I went to bed, when I woke up and how I slept, with a weekly chart.": {
+    "en": "A sleep journal: log when I went to bed, when I woke up and how I slept, with a weekly chart.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeScreens.swift:243"
+  },
+  "Pick another name.": {
+    "en": "Pick another name.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeScreens.swift:254"
   },
   "AI model": {
     "en": "AI model",
@@ -7687,6 +8507,10 @@
   "Jump to latest": {
     "en": "Jump to latest",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:160"
+  },
+  "Vibe code": {
+    "en": "Vibe code",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:218"
   },
   "Starting the session…": {
     "en": "Starting the session…",
@@ -7713,6 +8537,10 @@
     "en": "value",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:339"
   },
+  "Send value": {
+    "en": "Send value",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:347"
+  },
   "Sent once to your server": {
     "en": "Sent once to your server",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:356"
@@ -7721,9 +8549,17 @@
     "en": "Decline",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:352"
   },
+  "The app has no id yet. Wait for the AI to name it.": {
+    "en": "The app has no id yet. Wait for the AI to name it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:630"
+  },
   "This server couldn't make it invite only, so anyone with the link can open it. You can restrict it from the service's Access settings.": {
     "en": "This server couldn't make it invite only, so anyone with the link can open it. You can restrict it from the service's Access settings.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:370"
+  },
+  "%lld min, ": {
+    "en": "%lld min, ",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:380"
   },
   "%@ %@this can take a few minutes": {
     "en": "%@ %@this can take a few minutes",
@@ -7734,13 +8570,33 @@
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:389",
     "translatable": false
   },
+  "Deploy": {
+    "en": "Deploy",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:394"
+  },
+  "Try deploying again": {
+    "en": "Try deploying again",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:410"
+  },
+  "Session stopped.": {
+    "en": "Session stopped.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:401"
+  },
   "Building your app…": {
     "en": "Building your app…",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:419"
   },
-  "The AI is writing your app…": {
-    "en": "The AI is writing your app…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:419"
+  "Reply to the AI": {
+    "en": "Reply to the AI",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:744"
+  },
+  "Ask for a change…": {
+    "en": "Ask for a change…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:745"
+  },
+  "Tell the AI what to try next…": {
+    "en": "Tell the AI what to try next…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:746"
   },
   "Created git repo.": {
     "en": "Created git repo.",
@@ -7758,13 +8614,17 @@
     "en": "Stop allowing your Watch to approve boots",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/WatchDelegateViewModel.swift:181"
   },
-  "Unlock": {
-    "en": "Unlock",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/WatchWaitingPrompt.swift:30"
-  },
   "Let your Apple Watch approve": {
     "en": "Let your Apple Watch approve",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/WatchWaitingPrompt.swift:44"
+  },
+  "Create your account": {
+    "en": "Create your account",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/WelcomeScreen.swift:43"
+  },
+  "Sign in with your account name, or join with a pairing code.": {
+    "en": "Sign in with your account name, or join with a pairing code.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/WelcomeScreen.swift:47"
   },
   "Your stuff,\non your hardware.": {
     "en": "Your stuff,\non your hardware.",
@@ -7813,666 +8673,6 @@
   "Server committed but local install failed: %@. Open the app fresh to recover.": {
     "en": "Server committed but local install failed: %@. Open the app fresh to recover.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/WipeRestartViewModel.swift:215"
-  },
-  "Ignore": {
-    "en": "Ignore",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppAccessScreens.swift:116"
-  },
-  "Opening…": {
-    "en": "Opening…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppAccessScreens.swift:285"
-  },
-  "Allowing…": {
-    "en": "Allowing…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppAccessScreens.swift:329"
-  },
-  "Copy": {
-    "en": "Copy",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppApiKeysScreens.swift:188"
-  },
-  "This server doesn't offer this app's database.": {
-    "en": "This server doesn't offer this app's database.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppDatabaseScreens.swift:112"
-  },
-  "Previous": {
-    "en": "Previous",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppDatabaseScreens.swift:272"
-  },
-  "Next": {
-    "en": "Next",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppDatabaseScreens.swift:276"
-  },
-  "Running…": {
-    "en": "Running…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppDatabaseScreens.swift:340"
-  },
-  "Confirming…": {
-    "en": "Confirming…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AppDatabaseScreens.swift:373"
-  },
-  "Add key": {
-    "en": "Add key",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:73"
-  },
-  "Delete the AI key %@": {
-    "en": "Delete the AI key %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:140"
-  },
-  "The key wasn't deleted.": {
-    "en": "The key wasn't deleted.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:145"
-  },
-  "Use this": {
-    "en": "Use this",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:168"
-  },
-  "Send through the Flagship relay": {
-    "en": "Send through the Flagship relay",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:285"
-  },
-  "Better for your anonymity: the AI provider sees Flagship's address, not yours.": {
-    "en": "Better for your anonymity: the AI provider sees Flagship's address, not yours.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:286"
-  },
-  "Through the Flagship relay": {
-    "en": "Through the Flagship relay",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:287"
-  },
-  "Direct": {
-    "en": "Direct",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:288"
-  },
-  "Turn the relay off for this key": {
-    "en": "Turn the relay off for this key",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:289"
-  },
-  "The relay is off for this key. Try again.": {
-    "en": "The relay is off for this key. Try again.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:290"
-  },
-  "API key": {
-    "en": "API key",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:340"
-  },
-  "sk-…": {
-    "en": "sk-…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:341"
-  },
-  "Base URL (optional)": {
-    "en": "Base URL (optional)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:343"
-  },
-  "Label (optional)": {
-    "en": "Label (optional)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:345"
-  },
-  "e.g. Personal": {
-    "en": "e.g. Personal",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildKeyScreen.swift:346"
-  },
-  "Start from scratch with AI": {
-    "en": "Start from scratch with AI",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:88"
-  },
-  "Describe it in plain English. The AI writes it and deploys it for you.": {
-    "en": "Describe it in plain English. The AI writes it and deploys it for you.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:89"
-  },
-  "Import from a Git repo": {
-    "en": "Import from a Git repo",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:96"
-  },
-  "Paste a repo URL. If it's Flagship-ready we install it as-is, otherwise the AI adapts it.": {
-    "en": "Paste a repo URL. If it's Flagship-ready we install it as-is, otherwise the AI adapts it.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:97"
-  },
-  "Build from your own IDE (Claude Code, Cursor, VS Code or Cline) using your own AI. No model key ever touches the server.": {
-    "en": "Build from your own IDE (Claude Code, Cursor, VS Code or Cline) using your own AI. No model key ever touches the server.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:105"
-  },
-  "Builds still open on your server can be picked up where you left off: answer the AI, deploy, or retry a failed deploy. Older builds keep a timeline of what happened. A build stays open until your server restarts.": {
-    "en": "Builds still open on your server can be picked up where you left off: answer the AI, deploy, or retry a failed deploy. Older builds keep a timeline of what happened. A build stays open until your server restarts.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:136"
-  },
-  "Describe the app you want in plain English. An AI model writes the code on your server, asks you questions when it needs to, and you deploy it with one tap. You need a key from an AI provider (OpenAI, Anthropic, OpenRouter…); it is sent only to your server.": {
-    "en": "Describe the app you want in plain English. An AI model writes the code on your server, asks you questions when it needs to, and you deploy it with one tap. You need a key from an AI provider (OpenAI, Anthropic, OpenRouter…); it is sent only to your server.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:138"
-  },
-  "Paste the address of a code repository, for example on GitHub. If it is already set up for Flagship it installs as-is; otherwise the AI can adapt it for you.": {
-    "en": "Paste the address of a code repository, for example on GitHub. If it is already set up for Flagship it installs as-is; otherwise the AI can adapt it for you.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:140"
-  },
-  "For developers: work in your own IDE (Claude Code, Cursor, VS Code or Cline) with your own AI, connected to your server over MCP. No AI key is stored on the server.": {
-    "en": "For developers: work in your own IDE (Claude Code, Cursor, VS Code or Cline) with your own AI, connected to your server over MCP. No AI key is stored on the server.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:142"
-  },
-  "Repository URL": {
-    "en": "Repository URL",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:263"
-  },
-  "Branch or tag (optional)": {
-    "en": "Branch or tag (optional)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:267"
-  },
-  "Name (optional)": {
-    "en": "Name (optional)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:273"
-  },
-  "From the repo's name": {
-    "en": "From the repo's name",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:274"
-  },
-  "Cloning…": {
-    "en": "Cloning…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:386"
-  },
-  "Check repo": {
-    "en": "Check repo",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:386"
-  },
-  "That can't be a web address.": {
-    "en": "That can't be a web address.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:348"
-  },
-  "This repo is not yet adapted for Flagship.": {
-    "en": "This repo is not yet adapted for Flagship.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:368"
-  },
-  "Use AI to adapt and deploy": {
-    "en": "Use AI to adapt and deploy",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:369"
-  },
-  "Run the AI again": {
-    "en": "Run the AI again",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:370"
-  },
-  "Deploy it": {
-    "en": "Deploy it",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:371"
-  },
-  "Anonymously share your adaptation": {
-    "en": "Anonymously share your adaptation",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:372"
-  },
-  "Others can then install this repo without AI. Nothing about you or your server is included.": {
-    "en": "Others can then install this repo without AI. Nothing about you or your server is included.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:373"
-  },
-  "Install it": {
-    "en": "Install it",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:404"
-  },
-  "Preparing…": {
-    "en": "Preparing…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:510"
-  },
-  "Get flagship.app.json": {
-    "en": "Get flagship.app.json",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:510"
-  },
-  "Create a connection": {
-    "en": "Create a connection",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:585"
-  },
-  "Key": {
-    "en": "Key",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:619"
-  },
-  "Copy IDE config": {
-    "en": "Copy IDE config",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:637"
-  },
-  "Copy command": {
-    "en": "Copy command",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:665"
-  },
-  "Deploying…": {
-    "en": "Deploying…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:685"
-  },
-  "Deploy now": {
-    "en": "Deploy now",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:685"
-  },
-  "URL copied": {
-    "en": "URL copied",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:617"
-  },
-  "Key copied": {
-    "en": "Key copied",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:620"
-  },
-  "Config copied": {
-    "en": "Config copied",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:638"
-  },
-  "Command copied": {
-    "en": "Command copied",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:666"
-  },
-  "Regenerating…": {
-    "en": "Regenerating…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:672"
-  },
-  "Regenerate key": {
-    "en": "Regenerate key",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:672"
-  },
-  "Set": {
-    "en": "Set",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:721"
-  },
-  "Needs you": {
-    "en": "Needs you",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:723"
-  },
-  "This stops the AI and deletes what it has written on your server.%@": {
-    "en": "This stops the AI and deletes what it has written on your server.%@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:850"
-  },
-  "%@ · on %@": {
-    "en": "%@ · on %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:839"
-  },
-  "Couldn't reach %@, so its builds aren't listed.": {
-    "en": "Couldn't reach %@, so its builds aren't listed.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:844"
-  },
-  "Couldn't reach %@, so their builds aren't listed.": {
-    "en": "Couldn't reach %@, so their builds aren't listed.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:845"
-  },
-  "Started %@": {
-    "en": "Started %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:876"
-  },
-  "AI is working": {
-    "en": "AI is working",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:1018"
-  },
-  "Waiting for you": {
-    "en": "Waiting for you",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:1019"
-  },
-  "Ready to deploy": {
-    "en": "Ready to deploy",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:1020"
-  },
-  "Failed": {
-    "en": "Failed",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:1024"
-  },
-  "Resume": {
-    "en": "Resume",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:1033"
-  },
-  "Started %@ · %lld step%@": {
-    "en": "Started %@ · %lld step%@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:945"
-  },
-  "Deploy it again": {
-    "en": "Deploy it again",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:969"
-  },
-  "Run the AI again or deploy": {
-    "en": "Run the AI again or deploy",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:969"
-  },
-  "Connecting": {
-    "en": "Connecting",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:44"
-  },
-  "Opening the secure channel to the builder…": {
-    "en": "Opening the secure channel to the builder…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:44"
-  },
-  "Sending": {
-    "en": "Sending",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:49"
-  },
-  "Minting your recipe and sending it to the builder…": {
-    "en": "Minting your recipe and sending it to the builder…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:49"
-  },
-  "Pair with the builder": {
-    "en": "Pair with the builder",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:87"
-  },
-  "On your computer, open the Flagship Studio — it shows a QR code and a short code. Point your camera at it.": {
-    "en": "On your computer, open the Flagship Studio — it shows a QR code and a short code. Point your camera at it.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:87"
-  },
-  "Enter the builder code": {
-    "en": "Enter the builder code",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:109"
-  },
-  "Type the short code shown under the QR on your computer (like ABCD-EFGH).": {
-    "en": "Type the short code shown under the QR on your computer (like ABCD-EFGH).",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:109"
-  },
-  "Connect": {
-    "en": "Connect",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:115"
-  },
-  "Builder code": {
-    "en": "Builder code",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:111"
-  },
-  "ABCD-EFGH": {
-    "en": "ABCD-EFGH",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:111"
-  },
-  "Confirm the security code": {
-    "en": "Confirm the security code",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:142"
-  },
-  "Check that this matches the code on your computer. Only confirm if they're the same.": {
-    "en": "Check that this matches the code on your computer. Only confirm if they're the same.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:142"
-  },
-  "They match — pair & send": {
-    "en": "They match — pair & send",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:152"
-  },
-  "Sent — you can close this screen": {
-    "en": "Sent — you can close this screen",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:165"
-  },
-  "Your computer's builder has the recipe. Pick the USB drive and any Advanced options on the computer; nothing more is needed from your phone.": {
-    "en": "Your computer's builder has the recipe. Pick the USB drive and any Advanced options on the computer; nothing more is needed from your phone.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:165"
-  },
-  "Pairing failed": {
-    "en": "Pairing failed",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:179"
-  },
-  "Invite people": {
-    "en": "Invite people",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CoInviteSection.swift:137"
-  },
-  "Invite link": {
-    "en": "Invite link",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CoInviteSection.swift:189"
-  },
-  "Use pasted link": {
-    "en": "Use pasted link",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:104"
-  },
-  "Connected browsers": {
-    "en": "Connected browsers",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:200"
-  },
-  "Release server name — from %@": {
-    "en": "Release server name — from %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:159"
-  },
-  "Revoke server — from %@": {
-    "en": "Revoke server — from %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:160"
-  },
-  "Request from %@": {
-    "en": "Request from %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:161"
-  },
-  "%@ · reason: %@": {
-    "en": "%@ · reason: %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:172"
-  },
-  "Hold to approve": {
-    "en": "Hold to approve",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:123"
-  },
-  "(missing serverDomain)": {
-    "en": "(missing serverDomain)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:168"
-  },
-  "(missing serverId)": {
-    "en": "(missing serverId)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:170"
-  },
-  "(missing reason)": {
-    "en": "(missing reason)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionRequestsScreen.swift:171"
-  },
-  "Account name": {
-    "en": "Account name",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ConnectAccountScreen.swift:81"
-  },
-  "The name you picked when you made the account.": {
-    "en": "The name you picked when you made the account.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ConnectAccountScreen.swift:251"
-  },
-  "Code or link": {
-    "en": "Code or link",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ConnectAccountScreen.swift:157"
-  },
-  "Join": {
-    "en": "Join",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ConnectAccountScreen.swift:166"
-  },
-  "The demo server is online, but this device couldn't create a paired session. Try again.": {
-    "en": "The demo server is online, but this device couldn't create a paired session. Try again.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ConnectAccountScreen.swift:222"
-  },
-  "Opening the secure channel…": {
-    "en": "Opening the secure channel…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:75"
-  },
-  "Almost there": {
-    "en": "Almost there",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:80"
-  },
-  "Minting the install blob…": {
-    "en": "Minting the install blob…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:80"
-  },
-  "Delivering": {
-    "en": "Delivering",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:83"
-  },
-  "Pushing your boot recipe to the desktop…": {
-    "en": "Pushing your boot recipe to the desktop…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:83"
-  },
-  "Name your server": {
-    "en": "Name your server",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:302"
-  },
-  "Pair with the builder app": {
-    "en": "Pair with the builder app",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:150"
-  },
-  "Scan the builder's QR (or type its code) and the recipe is sent over a secure live link. Easiest if the builder is open in front of you.": {
-    "en": "Scan the builder's QR (or type its code) and the recipe is sent over a secure live link. Easiest if the builder is open in front of you.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:151"
-  },
-  "Save / share recipe file": {
-    "en": "Save / share recipe file",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:160"
-  },
-  "Save the recipe as a file or send it (AirDrop, Messages, Mail). Whoever builds the server opens it in the builder. No secrets in the file.": {
-    "en": "Save the recipe as a file or send it (AirDrop, Messages, Mail). Whoever builds the server opens it in the builder. No secrets in the file.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:161"
-  },
-  "Copied!": {
-    "en": "Copied!",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:169"
-  },
-  "Copy recipe to clipboard": {
-    "en": "Copy recipe to clipboard",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:169"
-  },
-  "Copy the recipe text, then paste it into the builder's “I have a recipe” box.": {
-    "en": "Copy the recipe text, then paste it into the builder's “I have a recipe” box.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:170"
-  },
-  "Server name": {
-    "en": "Server name",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:266"
-  },
-  "Short description (optional)": {
-    "en": "Short description (optional)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:277"
-  },
-  "Alice's private home server": {
-    "en": "Alice's private home server",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:278"
-  },
-  "Up to ~40 characters.": {
-    "en": "Up to ~40 characters.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:279"
-  },
-  "%lld min": {
-    "en": "%lld min",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:369"
-  },
-  "%lld hour%@": {
-    "en": "%lld hour%@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:372"
-  },
-  "Best for flaky power or connections. After you approve its first boot, the server self-unlocks on every reboot — no phone needed. Revocable any time.": {
-    "en": "Best for flaky power or connections. After you approve its first boot, the server self-unlocks on every reboot — no phone needed. Revocable any time.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:392"
-  },
-  "Most theft-resistant. The server asks your phone to unlock on every reboot. Best for critical servers on stable infrastructure.": {
-    "en": "Most theft-resistant. The server asks your phone to unlock on every reboot. Best for critical servers on stable infrastructure.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:398"
-  },
-  "Scan the QR": {
-    "en": "Scan the QR",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:547"
-  },
-  "Aim the viewfinder at a compatible Flagship pairing QR.": {
-    "en": "Aim the viewfinder at a compatible Flagship pairing QR.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:548"
-  },
-  "Paste the QR link": {
-    "en": "Paste the QR link",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:594"
-  },
-  "Right-click (or long-press) the QR on flagshipserver.com, copy the link, and paste it here.": {
-    "en": "Right-click (or long-press) the QR on flagshipserver.com, copy the link, and paste it here.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:595"
-  },
-  "Submit": {
-    "en": "Submit",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:608"
-  },
-  "Back to viewfinder": {
-    "en": "Back to viewfinder",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:613"
-  },
-  "QR link": {
-    "en": "QR link",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:602"
-  },
-  "Confirm match code": {
-    "en": "Confirm match code",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:622"
-  },
-  "These six digits must match what the desktop shows. If they don't, someone is in the middle — cancel.": {
-    "en": "These six digits must match what the desktop shows. If they don't, someone is in the middle — cancel.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:623"
-  },
-  "Codes match — confirm": {
-    "en": "Codes match — confirm",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:636"
-  },
-  "Reading…": {
-    "en": "Reading…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:636"
-  },
-  "Serial": {
-    "en": "Serial",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:662"
-  },
-  "Debug access": {
-    "en": "Debug access",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DebugAccessCard.swift:46"
-  },
-  "Renew": {
-    "en": "Renew",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DebugAccessCard.swift:108"
-  },
-  "Turn on": {
-    "en": "Turn on",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/DebugAccessCard.swift:108"
-  },
-  "Contact us": {
-    "en": "Contact us",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SetupStoppedCard.swift:46"
-  },
-  "This server didn't finish installing.": {
-    "en": "This server didn't finish installing.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SetupStoppedCard.swift:58"
-  },
-  "Cancel order and start again": {
-    "en": "Cancel order and start again",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SetupStoppedCard.swift:67"
-  },
-  "Riley": {
-    "en": "Riley",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:85"
-  },
-  "Confirm with Face ID": {
-    "en": "Confirm with Face ID",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:207"
-  },
-  "Set up": {
-    "en": "Set up",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:261"
-  },
-  "Who is it for?": {
-    "en": "Who is it for?",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:358"
-  },
-  "Only you and this server see this name.": {
-    "en": "Only you and this server see this name.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:359"
-  },
-  "Create link": {
-    "en": "Create link",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:397"
-  },
-  "What they can do": {
-    "en": "What they can do",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:362"
-  },
-  "Also let them": {
-    "en": "Also let them",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:387"
-  },
-  "Shared with me": {
-    "en": "Shared with me",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:456"
-  },
-  "Waiting for the owner": {
-    "en": "Waiting for the owner",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:467"
-  },
-  "That isn't a share link.": {
-    "en": "That isn't a share link.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:569"
-  },
-  "Leave this server": {
-    "en": "Leave this server",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:755"
-  },
-  "Start-up": {
-    "en": "Start-up",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:778"
-  },
-  "Unlock with Face ID": {
-    "en": "Unlock with Face ID",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:785"
-  },
-  "Start-up notices": {
-    "en": "Start-up notices",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:854"
-  },
-  "What you can do": {
-    "en": "What you can do",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:909"
   },
   "bad read-token URL": {
     "en": "bad read-token URL",
@@ -8558,32 +8758,32 @@
     "en": "%@ is full: new data is refused until you free space or raise the limit.",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppStorageModels.swift:118"
   },
-  "No health report for %lld min. The server itself may be off or frozen.": {
-    "en": "No health report for %lld min. The server itself may be off or frozen.",
+  "No health report for %@ min. The server itself may be off or frozen.": {
+    "en": "No health report for %@ min. The server itself may be off or frozen.",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/BoxHealth.swift:47"
   },
-  "Ran out of memory %lld× since it started (%lld MB free of %lld MB now).": {
-    "en": "Ran out of memory %lld× since it started (%lld MB free of %lld MB now).",
+  "Ran out of memory %@× since it started (%@ MB free of %@ MB now).": {
+    "en": "Ran out of memory %@× since it started (%@ MB free of %@ MB now).",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/BoxHealth.swift:51"
   },
-  "The server software isn't running (%@; restarted %lld×, last exit code %lld).": {
-    "en": "The server software isn't running (%@; restarted %lld×, last exit code %lld).",
+  "The server software isn't running (%@; restarted %@×, last exit code %@).": {
+    "en": "The server software isn't running (%@; restarted %@×, last exit code %@).",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/BoxHealth.swift:54"
   },
-  "The server software restarted %lld× since it started (last exit code %lld).": {
-    "en": "The server software restarted %lld× since it started (last exit code %lld).",
+  "The server software restarted %@× since it started (last exit code %@).": {
+    "en": "The server software restarted %@× since it started (last exit code %@).",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/BoxHealth.swift:56"
   },
   "Can't reach the Flagship relay.": {
     "en": "Can't reach the Flagship relay.",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/BoxHealth.swift:58"
   },
-  "Disk is %lld%% full.": {
-    "en": "Disk is %lld%% full.",
+  "Disk is %@%% full.": {
+    "en": "Disk is %@%% full.",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/BoxHealth.swift:59"
   },
-  "Healthy · %lld MB free of %lld MB · disk %lld%% · up %@": {
-    "en": "Healthy · %lld MB free of %lld MB · disk %lld%% · up %@",
+  "Healthy · %@ MB free of %@ MB · disk %@%% · up %@": {
+    "en": "Healthy · %@ MB free of %@ MB · disk %@%% · up %@",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/BoxHealth.swift:62"
   },
   "From Git": {
@@ -9412,10 +9612,6 @@
     "en": "This device isn't allowed to do that.",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/UserErrorText.swift:37"
   },
-  "(^HTTP\\s*\\d{3}|\\bexception\\b|nsurlerrordomain|nsposixerrordomain|kcferror|error domain=|\\buserinfo=|\\bcode=-?\\d+|\\bswift\\.|\\boptional\\(|\\bhandshake|\\berrno|\\beconn|\\bsocket\\b|unexpected end of stream|\\bEOF\\b|broken pipe|error code:? ?\\d+|^[\\[{<]|unexpected json|could not parse|stacktrace|\\bnil\\b|\\(null\\)|couldn.t be completed|\\bdecodingerror|\\bkeynotfound)": {
-    "en": "(^HTTP\\s*\\d{3}|\\bexception\\b|nsurlerrordomain|nsposixerrordomain|kcferror|error domain=|\\buserinfo=|\\bcode=-?\\d+|\\bswift\\.|\\boptional\\(|\\bhandshake|\\berrno|\\beconn|\\bsocket\\b|unexpected end of stream|\\bEOF\\b|broken pipe|error code:? ?\\d+|^[\\[{<]|unexpected json|could not parse|stacktrace|\\bnil\\b|\\(null\\)|couldn.t be completed|\\bdecodingerror|\\bkeynotfound)",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/UserErrorText.swift:42"
-  },
   "Remove this account from this device?": {
     "en": "Remove this account from this device?",
     "ctx": "apps/mobile/shared/Sources/FlagshipCore/AdminKeyWarning.swift:20"
@@ -9435,6 +9631,10 @@
   "Signing out removes this device's admin key. Save a backup of your account key first, or sign out anyway.": {
     "en": "Signing out removes this device's admin key. Save a backup of your account key first, or sign out anyway.",
     "ctx": "apps/mobile/shared/Sources/FlagshipCore/AdminKeyWarning.swift:28"
+  },
+  "Sign out anyway": {
+    "en": "Sign out anyway",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/AdminKeyWarning.swift:29"
   },
   "Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe.": {
     "en": "Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe.",
@@ -9991,22 +10191,6 @@
   "I'm requesting the Flagship account name \"%@\" on the basis": {
     "en": "I'm requesting the Flagship account name \"%@\" on the basis",
     "ctx": "apps/mobile/shared/Sources/FlagshipCore/TrademarkClaim.swift:25"
-  },
-  "Trademark holder / company: [your name or company]": {
-    "en": "Trademark holder / company: [your name or company]",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/TrademarkClaim.swift:28"
-  },
-  "Trademark registration number: [registration number]": {
-    "en": "Trademark registration number: [registration number]",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/TrademarkClaim.swift:29"
-  },
-  "Jurisdiction / registry: [e.g. USPTO, EUIPO]": {
-    "en": "Jurisdiction / registry: [e.g. USPTO, EUIPO]",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/TrademarkClaim.swift:30"
-  },
-  "Goods/services class(es): [class numbers]": {
-    "en": "Goods/services class(es): [class numbers]",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/TrademarkClaim.swift:31"
   },
   "Link or attachment to the registration: [URL or note that it's attached]": {
     "en": "Link or attachment to the registration: [URL or note that it's attached]",

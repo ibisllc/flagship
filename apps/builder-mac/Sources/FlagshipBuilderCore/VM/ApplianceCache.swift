@@ -62,20 +62,20 @@ public struct ApplianceCache: Sendable {
         public var errorDescription: String? {
             switch self {
             case .unavailable(let arch):
-                return "No prebuilt \(arch.rawValue) server image is published yet."
+                return String(localized: "No prebuilt \(arch.rawValue) server image is published yet.")
             case .refMismatch(let published, let recipe):
-                return "The prebuilt server image is for \(published), but this recipe installs \(recipe)."
+                return String(localized: "The prebuilt server image is for \(published), but this recipe installs \(recipe).")
             case .invalidManifest:
-                return "The prebuilt server image's manifest is malformed."
+                return String(localized: "The prebuilt server image's manifest is malformed.")
             case .offline(let why):
-                return "Couldn't download the prebuilt server image: \(why)"
+                return String(localized: "Couldn't download the prebuilt server image: \(why)")
             case .httpStatus(let code):
-                return "The server returned HTTP \(code) for the prebuilt server image."
+                return String(localized: "The server returned HTTP \(code) for the prebuilt server image.")
             case .checksumMismatch(let what):
-                return "The prebuilt server image failed its integrity check (\(what))."
+                return String(localized: "The prebuilt server image failed its integrity check (\(what)).")
             case .insufficientSpace(let needed, let free):
                 let gb = { (b: UInt64) in String(format: "%.1f GB", Double(b) / 1e9) }
-                return "Not enough free disk space for the server image: needs \(gb(needed)), \(gb(free)) free."
+                return String(localized: "Not enough free disk space for the server image: needs \(gb(needed)), \(gb(free)) free.")
             }
         }
 

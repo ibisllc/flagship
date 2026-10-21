@@ -19,13 +19,9 @@ enum HelperClient {
         var errorDescription: String? {
             switch self {
             case .needsApproval:
-                return "Approve “Flagship Studio” in System Settings → General → Login Items "
-                    + "(under “Allow in the Background”), then click Assemble again."
+                return String(localized: "Approve “Flagship Studio” in System Settings → General → Login Items (under “Allow in the Background”), then click Assemble again.")
             case .registrationFailed(let m):
-                return "Couldn't register the privileged helper: \(m)\n"
-                    + "The app must be signed with a Developer ID Application certificate and run "
-                    + "from /Applications (ad-hoc/Apple-Development signatures and swift-build "
-                    + "binaries are rejected by macOS)."
+                return String(localized: "Couldn't register the privileged helper: \(m)\nThe app must be signed with a Developer ID Application certificate and run from /Applications (ad-hoc/Apple-Development signatures and swift-build binaries are rejected by macOS).")
             }
         }
     }
