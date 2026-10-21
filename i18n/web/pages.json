@@ -1,0 +1,13 @@
+{
+  "_about": "The English pages that are localised. Everything else stays as it is: the legal pages (privacy, terms, abuse) are English-only on purpose - a machine translation of a legal text is worse than the original - and pages that are redirects, the Worker's own fallbacks, the live status board and the webapp are not marketing copy. Links from a localised page to an unlisted page go to the English one.",
+  "pages": [
+    { "src": "index.html" },
+    { "src": "faq.html" },
+    { "src": "help.html" },
+    { "src": "security.html" },
+    { "src": "docs/index.html" },
+    { "src": "open-source.html" },
+    { "src": "adapters.html" },
+    { "src": "blog/index.html" }
+  ]
+}
