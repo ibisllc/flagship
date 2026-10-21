@@ -7953,7 +7953,8 @@
   },
   "BUSL-1.1 → Apache 2.0 (2030)": {
     "en": "BUSL-1.1 → Apache 2.0 (2030)",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:880"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:880",
+    "translatable": false
   },
   "Patents": {
     "en": "Patents",
@@ -8005,7 +8006,8 @@
   },
   "Riley": {
     "en": "Riley",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:85"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift:85",
+    "translatable": false
   },
   "Remove %@?": {
     "en": "Remove %@?",
@@ -8533,7 +8535,8 @@
   },
   "… %lld earlier message%@ not shown": {
     "en": "… %lld earlier message%@ not shown",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:234"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:234",
+    "translatable": false
   },
   "Live at %@": {
     "en": "Live at %@",
@@ -8545,7 +8548,8 @@
   },
   "Vibe code": {
     "en": "Vibe code",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:218"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:218",
+    "translatable": false
   },
   "Starting the session…": {
     "en": "Starting the session…",
@@ -8711,7 +8715,8 @@
   },
   "bad read-token URL": {
     "en": "bad read-token URL",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/AccountReadToken.swift:55"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/AccountReadToken.swift:55",
+    "translatable": false
   },
   "Only an admin device of this account can add servers.": {
     "en": "Only an admin device of this account can add servers.",
@@ -8755,11 +8760,13 @@
   },
   "GPT-5.4 Mini": {
     "en": "GPT-5.4 Mini",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AiModelsModels.swift:177"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AiModelsModels.swift:177",
+    "translatable": false
   },
   "Qwen3 Coder": {
     "en": "Qwen3 Coder",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AiModelsModels.swift:179"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AiModelsModels.swift:179",
+    "translatable": false
   },
   "IP addresses can't be allowed or denied; use a host name": {
     "en": "IP addresses can't be allowed or denied; use a host name",
@@ -8835,31 +8842,38 @@
   },
   "Connection lost (%@ %lld): %@": {
     "en": "Connection lost (%@ %lld): %@",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/BuilderPairClient.swift:215"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/BuilderPairClient.swift:215",
+    "translatable": false
   },
   "no such demo user": {
     "en": "no such demo user",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DemoConnectClient.swift:159"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/DemoConnectClient.swift:159",
+    "translatable": false
   },
   "account bootstrap unavailable": {
     "en": "account bootstrap unavailable",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:320"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:320",
+    "translatable": false
   },
   "account directory unavailable": {
     "en": "account directory unavailable",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:327"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:327",
+    "translatable": false
   },
   "simulated failure": {
     "en": "simulated failure",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2365"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2365",
+    "translatable": false
   },
   "username taken": {
     "en": "username taken",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2378"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2378",
+    "translatable": false
   },
   "username unavailable": {
     "en": "username unavailable",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2392"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2392",
+    "translatable": false
   },
   "{\"error\":\"subdomain already controlled by a different RCK\"}": {
     "en": "{\"error\":\"subdomain already controlled by a different RCK\"}",
@@ -8868,87 +8882,108 @@
   },
   "this server was deleted, transferred or retired and can't be restored": {
     "en": "this server was deleted, transferred or retired and can't be restored",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2460"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2460",
+    "translatable": false
   },
   "test account": {
     "en": "test account",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2494"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2494",
+    "translatable": false
   },
   "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)": {
     "en": "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2510"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2510",
+    "translatable": false
   },
   "username \"%@\" is reserved": {
     "en": "username \"%@\" is reserved",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2518"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2518",
+    "translatable": false
   },
   "already claimed": {
     "en": "already claimed",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2526"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2526",
+    "translatable": false
   },
   "demo server is not ready": {
     "en": "demo server is not ready",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2597"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2597",
+    "translatable": false
   },
   "demo user not found": {
     "en": "demo user not found",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2594"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2594",
+    "translatable": false
   },
   "invalid paired-session token": {
     "en": "invalid paired-session token",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2591"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2591",
+    "translatable": false
   },
   "no envelope": {
     "en": "no envelope",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2644"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2644",
+    "translatable": false
   },
   "invalid fetch token": {
     "en": "invalid fetch token",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2662"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2662",
+    "translatable": false
   },
   "fetchToken must be hex": {
     "en": "fetchToken must be hex",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2658"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2658",
+    "translatable": false
   },
   "record predates passphrase gate": {
     "en": "record predates passphrase gate",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2654"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2654",
+    "translatable": false
   },
   "no recovery record": {
     "en": "no recovery record",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2650"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2650",
+    "translatable": false
   },
   "admit username / url mismatch": {
     "en": "admit username / url mismatch",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2785"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2785",
+    "translatable": false
   },
   "register username does not match admit": {
     "en": "register username does not match admit",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2788"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2788",
+    "translatable": false
   },
   "delegate already expired": {
     "en": "delegate already expired",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2812"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2812",
+    "translatable": false
   },
   "invalid scopes": {
     "en": "invalid scopes",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2809"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2809",
+    "translatable": false
   },
   "totpProof required for multi-device re-pair": {
     "en": "totpProof required for multi-device re-pair",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2977"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2977",
+    "translatable": false
   },
   "totpProof required for single-device recovery (a second factor is enrolled)": {
     "en": "totpProof required for single-device recovery (a second factor is enrolled)",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2983"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2983",
+    "translatable": false
   },
   "recoveryProof required: complete the cloud-recovery passphrase step, then retry": {
     "en": "recoveryProof required: complete the cloud-recovery passphrase step, then retry",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2989"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2989",
+    "translatable": false
   },
   "this account has no recovery credential enrolled; recovery is credential-only": {
     "en": "this account has no recovery credential enrolled; recovery is credential-only",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2994"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:2994",
+    "translatable": false
   },
   "{\"error\":\"stale\",\"currentEtag\":\"%@\"}": {
     "en": "{\"error\":\"stale\",\"currentEtag\":\"%@\"}",
@@ -8957,15 +8992,18 @@
   },
   "already pending": {
     "en": "already pending",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3001"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3001",
+    "translatable": false
   },
   "a RePairComplete envelope signed by the new IRK is required": {
     "en": "a RePairComplete envelope signed by the new IRK is required",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3022"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3022",
+    "translatable": false
   },
   "wipe-restart rate-limited": {
     "en": "wipe-restart rate-limited",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3077"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3077",
+    "translatable": false
   },
   "{\"currentEtag\":\"%@\"}": {
     "en": "{\"currentEtag\":\"%@\"}",
@@ -8974,27 +9012,33 @@
   },
   "concurrent rotation won": {
     "en": "concurrent rotation won",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3081"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3081",
+    "translatable": false
   },
   "label collision": {
     "en": "label collision",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3112"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3112",
+    "translatable": false
   },
   "bad signature": {
     "en": "bad signature",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3114"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3114",
+    "translatable": false
   },
   "not found": {
     "en": "not found",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3270"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3270",
+    "translatable": false
   },
   "invalid TOTP code": {
     "en": "invalid TOTP code",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3317"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3317",
+    "translatable": false
   },
   "no staged TOTP secret; call enroll-begin first": {
     "en": "no staged TOTP secret; call enroll-begin first",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3314"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3314",
+    "translatable": false
   },
   "{\"error\":\"Another device is still on this account. Remove it in Settings, Trusted devices, then delete the account.\",\"code\":\"other-devices-remain\",\"otherDevices\":%lld}": {
     "en": "{\"error\":\"Another device is still on this account. Remove it in Settings, Trusted devices, then delete the account.\",\"code\":\"other-devices-remain\",\"otherDevices\":%lld}",
@@ -9003,7 +9047,8 @@
   },
   "wrong passphrase": {
     "en": "wrong passphrase",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3690"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3690",
+    "translatable": false
   },
   "no cloud recovery for that username": {
     "en": "no cloud recovery for that username",
