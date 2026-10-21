@@ -1,60 +1,6 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "Home": {
-      "extractionState": "manual"
-    },
-    "New server": {
-      "extractionState": "manual"
-    },
-    "Provisioning": {
-      "extractionState": "manual"
-    },
-    "Account no longer listed": {
-      "extractionState": "manual"
-    },
-    "Keep on This iPhone": {
-      "extractionState": "manual"
-    },
-    "Erase Local Keys and Data": {
-      "extractionState": "manual"
-    },
-    "Flagship.com no longer lists this account. Nothing on this iPhone has been deleted. You can keep using the local account, or erase its local keys and data to start over.": {
-      "extractionState": "manual"
-    },
-    "Approve unlock": {
-      "extractionState": "manual"
-    },
-    "Open Flagship at the list of boxes waiting for you to release their disk key.": {
-      "extractionState": "manual"
-    },
-    "Show server": {
-      "extractionState": "manual"
-    },
-    "Open the detail page for a specific Flagship server.": {
-      "extractionState": "manual"
-    },
-    "Server": {
-      "extractionState": "manual"
-    },
-    "Flagship Server": {
-      "extractionState": "manual"
-    },
-    "Server status": {
-      "extractionState": "manual"
-    },
-    "Speak the current online/offline state of your Flagship servers.": {
-      "extractionState": "manual"
-    },
-    "You don't have any Flagship servers yet.": {
-      "extractionState": "manual"
-    },
-    "Approve your box's boot unlock": {
-      "extractionState": "manual"
-    },
-    "Unseal the disk key": {
-      "extractionState": "manual"
-    },
     "This device has no screen lock set up.": {
       "extractionState": "manual"
     },
@@ -427,6 +373,18 @@
     "Activity": {
       "extractionState": "manual"
     },
+    "%lld row rewritten": {
+      "extractionState": "manual"
+    },
+    "%lld rows rewritten": {
+      "extractionState": "manual"
+    },
+    "%lld app": {
+      "extractionState": "manual"
+    },
+    "%lld apps": {
+      "extractionState": "manual"
+    },
     "View report": {
       "extractionState": "manual"
     },
@@ -451,7 +409,13 @@
     "Unseal the disk key for %@": {
       "extractionState": "manual"
     },
+    "Unseal the disk key": {
+      "extractionState": "manual"
+    },
     "Authorize your server to serve": {
+      "extractionState": "manual"
+    },
+    "Provisioning": {
       "extractionState": "manual"
     },
     "Watching %@…": {
@@ -1684,6 +1648,12 @@
     "Check again": {
       "extractionState": "manual"
     },
+    "%@ — %lld file.": {
+      "extractionState": "manual"
+    },
+    "%@ — %lld files.": {
+      "extractionState": "manual"
+    },
     "Install it": {
       "extractionState": "manual"
     },
@@ -1693,7 +1663,13 @@
     "This can take several minutes. You can leave this screen; Build sessions shows how it went.": {
       "extractionState": "manual"
     },
-    "The AI rewrote this repo into a Flagship service%@.": {
+    "The AI rewrote this repo into a Flagship service.": {
+      "extractionState": "manual"
+    },
+    "The AI rewrote this repo into a Flagship service (%lld file).": {
+      "extractionState": "manual"
+    },
+    "The AI rewrote this repo into a Flagship service (%lld files).": {
       "extractionState": "manual"
     },
     "Adapted": {
@@ -1856,6 +1832,12 @@
       "extractionState": "manual"
     },
     "No builds yet.": {
+      "extractionState": "manual"
+    },
+    "Started %@ · %lld step": {
+      "extractionState": "manual"
+    },
+    "Started %@ · %lld steps": {
       "extractionState": "manual"
     },
     "Deploy it again": {
@@ -2042,6 +2024,9 @@
       "extractionState": "manual"
     },
     "Approve": {
+      "extractionState": "manual"
+    },
+    "Server": {
       "extractionState": "manual"
     },
     "Connected browsers": {
@@ -2267,6 +2252,12 @@
       "extractionState": "manual"
     },
     "%lld min": {
+      "extractionState": "manual"
+    },
+    "%lld hour": {
+      "extractionState": "manual"
+    },
+    "%lld hours": {
       "extractionState": "manual"
     },
     "Reboots on its own": {
@@ -2615,6 +2606,9 @@
       "extractionState": "manual"
     },
     "No servers yet": {
+      "extractionState": "manual"
+    },
+    "Home": {
       "extractionState": "manual"
     },
     "This device was removed from your account": {
@@ -3640,7 +3634,16 @@
     "Grace window — this takes effect at %@.": {
       "extractionState": "manual"
     },
+    "Membership rows re-anchored: %lld. Apps affected: %lld.": {
+      "extractionState": "manual"
+    },
     "Per-app results": {
+      "extractionState": "manual"
+    },
+    "%lld row re-anchored": {
+      "extractionState": "manual"
+    },
+    "%lld rows re-anchored": {
       "extractionState": "manual"
     },
     "Undo window": {
@@ -4369,6 +4372,12 @@
     "%@: waiting": {
       "extractionState": "manual"
     },
+    "Restored %lld app": {
+      "extractionState": "manual"
+    },
+    "Restored %lld apps": {
+      "extractionState": "manual"
+    },
     "Couldn't restore: %@: %@": {
       "extractionState": "manual"
     },
@@ -4522,6 +4531,12 @@
     "%lld of %lld pieces safe": {
       "extractionState": "manual"
     },
+    "Kept on %lld other server": {
+      "extractionState": "manual"
+    },
+    "Kept on %lld other servers": {
+      "extractionState": "manual"
+    },
     "Last placed %@": {
       "extractionState": "manual"
     },
@@ -4609,9 +4624,6 @@
     "Version": {
       "extractionState": "manual"
     },
-    "%lld hours": {
-      "extractionState": "manual"
-    },
     "%lld minutes": {
       "extractionState": "manual"
     },
@@ -4652,6 +4664,9 @@
       "extractionState": "manual"
     },
     "Authorize": {
+      "extractionState": "manual"
+    },
+    "Approve unlock": {
       "extractionState": "manual"
     },
     "Authorized — your server should come online shortly.": {
@@ -5231,6 +5246,12 @@
       "extractionState": "manual"
     },
     "Open browser viewer": {
+      "extractionState": "manual"
+    },
+    "%lld tab running server-side": {
+      "extractionState": "manual"
+    },
+    "%lld tabs running server-side": {
       "extractionState": "manual"
     },
     "Report a problem with this adaptation": {
@@ -6199,6 +6220,12 @@
     "session %@": {
       "extractionState": "manual"
     },
+    "… %lld earlier message not shown": {
+      "extractionState": "manual"
+    },
+    "… %lld earlier messages not shown": {
+      "extractionState": "manual"
+    },
     "Live at %@": {
       "extractionState": "manual"
     },
@@ -6508,7 +6535,19 @@
     "Not answering": {
       "extractionState": "manual"
     },
+    "%lld piece": {
+      "extractionState": "manual"
+    },
+    "%lld pieces": {
+      "extractionState": "manual"
+    },
     "The pieces of this backup are no longer kept.": {
+      "extractionState": "manual"
+    },
+    "Restore by %@ (%lld day left).": {
+      "extractionState": "manual"
+    },
+    "Restore by %@ (%lld days left).": {
       "extractionState": "manual"
     },
     "Proven so far: %@.": {
@@ -6520,10 +6559,25 @@
     "Backup of %@, saved %@ (%@).": {
       "extractionState": "manual"
     },
+    "Servers holding its pieces: %lld. Needed to bring it back: %lld.": {
+      "extractionState": "manual"
+    },
     "Too many tries. Try again later.": {
       "extractionState": "manual"
     },
     "Too many tries %@. Try again %@.": {
+      "extractionState": "manual"
+    },
+    "in about %lld minute": {
+      "extractionState": "manual"
+    },
+    "in about %lld minutes": {
+      "extractionState": "manual"
+    },
+    "in about %lld hour": {
+      "extractionState": "manual"
+    },
+    "in about %lld hours": {
       "extractionState": "manual"
     },
     "This device isn't connected to a server yet.": {
@@ -6644,6 +6698,15 @@
       "extractionState": "manual"
     },
     "Unlock first to save your key.": {
+      "extractionState": "manual"
+    },
+    "%lld minute ago": {
+      "extractionState": "manual"
+    },
+    "%lld hour ago": {
+      "extractionState": "manual"
+    },
+    "%lld day ago": {
       "extractionState": "manual"
     },
     "%lldm ago": {
