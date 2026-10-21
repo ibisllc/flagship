@@ -10303,5 +10303,40 @@
   "Server is live": {
     "en": "Server is live",
     "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchProvisionTimeline.swift:106"
+  },
+  "A server is waiting for your approval.": {
+    "en": "A server is waiting for your approval.",
+    "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
+    "manual": true
+  },
+  "A new server was added to your account.": {
+    "en": "A new server was added to your account.",
+    "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
+    "manual": true
+  },
+  "One of your servers needs your attention.": {
+    "en": "One of your servers needs your attention.",
+    "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
+    "manual": true
+  },
+  "One of your apps wants to reach the internet.": {
+    "en": "One of your apps wants to reach the internet.",
+    "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
+    "manual": true
+  },
+  "A device on your account invited someone to one of your apps.": {
+    "en": "A device on your account invited someone to one of your apps.",
+    "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
+    "manual": true
+  },
+  "Open Flagship to see what's new.": {
+    "en": "Open Flagship to see what's new.",
+    "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
+    "manual": true
+  },
+  "A server shared with you is asking you to unlock it.": {
+    "en": "A server shared with you is asking you to unlock it.",
+    "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
+    "manual": true
   }
 }
