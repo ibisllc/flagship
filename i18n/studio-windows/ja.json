@@ -53,7 +53,6 @@
   "notAValidRecipeMissingInvalid": "無効なレシピです：フィールド「{0}」がないか無効です。",
   "flashToUsb": "USB に書き込む",
   "assembleAndFlash": "組み立てて書き込む",
-  "beta": "ベータ",
   "openFlagshipStudio": "Flagship Studio を開く",
   "noServersHostedYet": "ホストしているサーバーはまだありません",
   "stopAllRunningServers": "実行中のサーバーをすべて停止",
