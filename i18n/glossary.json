@@ -3,7 +3,7 @@
   "keep": [
     "Flagship", "Flagship Studio", "Studio", "Flagship Inference", "Pro", "Let's Encrypt", "Cloudflare",
     "Face ID", "Touch ID", "iPhone", "iPad", "Apple Watch", "Android", "Wear OS",
-    "TLS", "DNS", "SSH", "VM", "PostgreSQL", "YubiKey", "WebAuthn", "iCloud", "Google Play", "App Store",
+    "TLS", "DNS", "SSH", "PostgreSQL", "YubiKey", "WebAuthn", "iCloud", "Google Play", "App Store",
     ".flagshipkey", "flagshipserver.com", "flagship.services"
   ],
   "terms": {
