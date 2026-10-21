@@ -62,7 +62,7 @@
     <string name="signing_out_removes_this_devices_admin">Signing out removes this device\'s admin key. Save a backup of your account key first, or sign out anyway.</string>
     <string name="signing_out_removes_this_devices_admin_2">Signing out removes this device\'s admin key. You backed up your account key, so keep that file and its passphrase safe.</string>
     <string name="sign_out_anyway">Sign out anyway</string>
-    <string name="private_key">PRIVATE KEY</string>
+    <string name="private_key" translatable="false">PRIVATE KEY</string>
     <string name="only_an_admin_device_of_this">Only an admin device of this account can add servers.</string>
     <string name="only_an_admin_device_of_this_2">Only an admin device of this account can add devices.</string>
     <string name="only_an_admin_device_can_remove">Only an admin device can remove an app.</string>
@@ -238,7 +238,7 @@
     <string name="the_other_device_isnt_connected_yet">The other device isn\'t connected yet — keep this screen open.</string>
     <string name="this_pairing_code_expired_generate_a">This pairing code expired. Generate a fresh one and try again.</string>
     <string name="the_other_device_didnt_open_a">The other device didn\'t open a return channel. Ask it to reopen the pairing link.</string>
-    <string name="text">%1$s %2$s %3$s%4$s</string>
+    <string name="text" translatable="false">%1$s %2$s %3$s%4$s</string>
     <string name="we_use_third_party_providers_and">We use third-party providers and anonymize your requests.</string>
     <string name="built_in_provider_it_cant_be">Built-in provider. It can\'t be removed.</string>
     <string name="checking">Checking…</string>
