@@ -30,6 +30,7 @@
  *    knows the recipient's IRK, the daemon enforces it on acceptance.
  */
 
+import { languageFor, t, tj, VARY_LANGUAGE } from "./i18n/index.js";
 import { createHash, randomBytes } from "node:crypto";
 import {
   ed,
@@ -250,7 +251,7 @@ export function buildInviteHandler(deps: InviteHandlerDeps) {
 
   return async function handle(req: HttpRequest): Promise<HttpResponse | null> {
     if (req.path === "/invite" && req.method === "GET") {
-      return invitePage();
+      return invitePage(languageFor(req.headers));
     }
     if (!req.path.startsWith("/.flagship/app/")) return null;
     // Strip a query string before path-segment matching; the preview
@@ -732,20 +733,20 @@ function verifyOver(canonical: Uint8Array, sig: Uint8Array, pub: Bytes): boolean
 // HTML page served at GET /invite (#80.2 + #83.3).
 // ──────────────────────────────────────────────────────────────────────
 
-export function invitePage(): HttpResponse {
+export function invitePage(lang = "en"): HttpResponse {
   return {
     status: 200,
-    headers: { "content-type": "text/html; charset=utf-8" },
-    body: INVITE_HTML,
+    headers: { "content-type": "text/html; charset=utf-8", ...VARY_LANGUAGE },
+    body: inviteHtml(lang),
   };
 }
 
-const INVITE_HTML = `<!doctype html>
-<html lang="en">
+const inviteHtml = (lang: string): string => `<!doctype html>
+<html lang="${lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>You've been invited · Flagship</title>
+<title>${t(lang, "You've been invited · Flagship")}</title>
 <meta name="robots" content="noindex">
 <style>
   :root { --bg:#0a0a0a; --fg:#eee; --muted:#888; --accent:#7ad; --warn:#fbcc4a; --danger:#f87171; }
@@ -764,36 +765,42 @@ const INVITE_HTML = `<!doctype html>
 </style>
 </head>
 <body>
-<h1>You've been invited.</h1>
-<p id="lede">Loading invite details…</p>
+<h1>${t(lang, "You've been invited.")}</h1>
+<p id="lede">${t(lang, "Loading invite details…")}</p>
 <div id="context" class="note" hidden>
-  <div>Issuer's note to you:</div>
+  <div>${t(lang, "Issuer's note to you:")}</div>
   <div id="context-note"></div>
 </div>
 <div class="caution">
-  <strong>Before you accept</strong>: only consume this invite if you got it
-  from the person you trust. Anyone holding this link can claim access — the
-  daemon enforces single-use, but bearer share-links are stronger than email
-  in one direction (no provider in the middle) and weaker in another (no
-  recovery if you accidentally consume the wrong one).
+  ${t(lang, "<strong>Before you accept</strong>: only consume this invite if you got it from the person you trust. Anyone holding this link can claim access — the daemon enforces single-use, but bearer share-links are stronger than email in one direction (no provider in the middle) and weaker in another (no recovery if you accidentally consume the wrong one).")}
 </div>
 <div class="row">
-  <button id="accept" disabled>Accept and continue</button>
-  <button id="cancel" style="background:#333;color:#eee">Cancel</button>
+  <button id="accept" disabled>${t(lang, "Accept and continue")}</button>
+  <button id="cancel" style="background:#333;color:#eee">${t(lang, "Cancel")}</button>
 </div>
 <div class="status" id="status"></div>
 <script>
 (function(){
+  const M = {
+    missing: ${tj(lang, "This invite link is missing required parameters.")},
+    cancelled: ${tj(lang, "Cancelled.")},
+    invitedTo: ${tj(lang, "You've been invited to {0} as {1}.")},
+    loadFailed: ${tj(lang, "Could not load invite: {0}")},
+    computing: ${tj(lang, "Computing acceptance…")},
+    openInApp: ${tj(lang, "Open this link in your Flagship app to accept.")},
+    accepted: ${tj(lang, "Accepted. You now have {0} access.")},
+  };
+  const fmt = (s, ...a) => s.replace(/\\{(\\d+)\\}/g, (m, i) => (a[i] !== undefined ? a[i] : m));
   const frag = new URLSearchParams(location.hash.slice(1));
   const secret = frag.get("k") || "";
   const serviceId = frag.get("a") || "";
   const status = document.getElementById("status");
   if (!secret || !serviceId) {
-    document.getElementById("lede").textContent = "This invite link is missing required parameters.";
+    document.getElementById("lede").textContent = M.missing;
     return;
   }
   document.getElementById("cancel").onclick = () => {
-    status.textContent = "Cancelled.";
+    status.textContent = M.cancelled;
   };
   async function sha256Hex(hex) {
     const bytes = new Uint8Array(hex.length / 2);
@@ -813,7 +820,7 @@ const INVITE_HTML = `<!doctype html>
         throw new Error(j.error || ("HTTP " + r.status));
       }
       const j = await r.json();
-      document.getElementById("lede").textContent = "You've been invited to " + j.serviceId + " as " + j.role + ".";
+      document.getElementById("lede").textContent = fmt(M.invitedTo, j.serviceId, j.role);
       if (j.contextNote) {
         document.getElementById("context-note").textContent = j.contextNote;
         document.getElementById("context").hidden = false;
@@ -821,17 +828,17 @@ const INVITE_HTML = `<!doctype html>
       document.getElementById("accept").disabled = false;
     } catch (e) {
       status.className = "status err";
-      status.textContent = "Could not load invite: " + (e && e.message || e);
+      status.textContent = fmt(M.loadFailed, e && e.message || e);
     }
   })();
   document.getElementById("accept").onclick = async () => {
     status.className = "status";
-    status.textContent = "Computing acceptance…";
+    status.textContent = M.computing;
     document.getElementById("accept").disabled = true;
     const handoff = (window).flagshipSignAcceptance;
     if (typeof handoff !== "function") {
       status.className = "status err";
-      status.textContent = "Open this link in your Flagship app to accept.";
+      status.textContent = M.openInApp;
       return;
     }
     try {
@@ -844,7 +851,7 @@ const INVITE_HTML = `<!doctype html>
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
       status.className = "status ok";
-      status.textContent = "Accepted. You now have " + j.role + " access.";
+      status.textContent = fmt(M.accepted, j.role);
       sessionStorage.setItem("flagship-session-" + serviceId, j.sessionToken);
     } catch (e) {
       status.className = "status err";
