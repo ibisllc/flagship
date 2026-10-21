@@ -72,8 +72,8 @@ export function metricRows(m) {
   const disk = fraction(m.diskUsedBytes, m.diskTotalBytes);
   return {
     cpu: { value: `${num(m.cpuPercent).toFixed(0)}%`, tone: "" },
-    memory: { value: `${formatBytes(m.memUsedBytes)} of ${formatBytes(m.memTotalBytes)}`, tone: "" },
-    disk: { value: `${pct(disk)} used`, tone: diskTone(disk) },
+    memory: { value: tr("{0} of {1}", formatBytes(m.memUsedBytes), formatBytes(m.memTotalBytes)), tone: "" },
+    disk: { value: tr("{0} used", pct(disk)), tone: diskTone(disk) },
     network: { value: `↓ ${formatRate(m.netRxBytesPerSec)}  ↑ ${formatRate(m.netTxBytesPerSec)}`, tone: "" },
   };
 }
@@ -130,11 +130,11 @@ export function metricsDetailHtml(m) {
       `<p class="note small">${tr("{0} in use", pct(mem))}</p>`,
     disk:
       `<div class="monitor-disk">${ring(disk)}${facts([
-        ["Used", formatBytes(m.diskUsedBytes)],
-        ["Free", formatBytes(Math.max(0, num(m.diskTotalBytes) - num(m.diskUsedBytes)))],
-        ["Total", formatBytes(m.diskTotalBytes)],
+        [tr("Used"), formatBytes(m.diskUsedBytes)],
+        [tr("Free"), formatBytes(Math.max(0, num(m.diskTotalBytes) - num(m.diskUsedBytes)))],
+        [tr("Total"), formatBytes(m.diskTotalBytes)],
       ])}</div>` +
-      rates([["Read", m.diskIOReadBytesPerSec, "accent"], ["Write", m.diskIOWriteBytesPerSec, "warn"]]),
+      rates([[tr("Read"), m.diskIOReadBytesPerSec, "accent"], [tr("Write"), m.diskIOWriteBytesPerSec, "warn"]]),
     network:
       rates([["In", m.netRxBytesPerSec, "ok"], ["Out", m.netTxBytesPerSec, "err"]]) +
       sparkline([
@@ -147,18 +147,18 @@ export function metricsDetailHtml(m) {
 /** Certificate row: collapsed value, tone and expanded detail. */
 export function certRow({ certNotAfter, certNotBefore, certIssuer, certSans } = {}, now = Date.now()) {
   if (typeof certNotAfter !== "number") {
-    return { value: "Provisioning", tone: "", detail: `<p class="note">${tr("No certificate yet. The server is getting one.")}</p>` };
+    return { value: tr("Provisioning"), tone: "", detail: `<p class="note">${tr("No certificate yet. The server is getting one.")}</p>` };
   }
   const expired = certNotAfter <= now;
-  const pairs = [["Renews", formatWhen(certNotAfter, now)]];
-  if (typeof certNotBefore === "number") pairs.push(["Issued", formatWhen(certNotBefore, now)]);
-  if (typeof certIssuer === "string" && certIssuer) pairs.push(["Issuer", certIssuer]);
+  const pairs = [[tr("Renews"), formatWhen(certNotAfter, now)]];
+  if (typeof certNotBefore === "number") pairs.push([tr("Issued"), formatWhen(certNotBefore, now)]);
+  if (typeof certIssuer === "string" && certIssuer) pairs.push([tr("Issuer"), certIssuer]);
   const sans = Array.isArray(certSans) ? certSans : [];
   const sanList = sans.length
     ? `<p class="note small mt-2">${tr("Names covered")}</p><ul class="monitor-sans">${sans.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ul>`
     : "";
   return {
-    value: expired ? "Expired" : tr("Valid until {0}", formatWhen(certNotAfter, now)),
+    value: expired ? tr("Expired") : tr("Valid until {0}", formatWhen(certNotAfter, now)),
     tone: expired ? "err" : "",
     detail: facts(pairs) + sanList,
   };
@@ -170,7 +170,7 @@ export function healthRow(h, now = Date.now()) {
   if (!verdict) return null;
   const stale = Math.floor((now - h.receivedAt) / 60000) >= HEALTH_STALE_AFTER_MIN;
   return {
-    value: verdict.ok ? "Healthy" : stale ? tr("No report") : tr("Needs attention"),
+    value: verdict.ok ? tr("Healthy") : stale ? tr("No report") : tr("Needs attention"),
     tone: verdict.ok ? "" : "warn",
     ok: verdict.ok,
     icon: verdict.ok ? heartPulseIcon : alertTriangleIcon,

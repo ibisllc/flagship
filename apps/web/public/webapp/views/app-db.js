@@ -74,7 +74,7 @@ export function renderDbTablesHtml(stores) {
             .map(
               (t) => `
             <button class="db-table-row secondary" data-db-store="${escapeHtml(s.store)}" data-db-table="${escapeHtml(t.name)}">
-              <span class="db-table-name mono">${escapeHtml(t.name)}${t.kind === "view" ? ' <span class="pill">view</span>' : ""}</span>
+              <span class="db-table-name mono">${escapeHtml(t.name)}${t.kind === "view" ? ` <span class="pill">${tr_("view")}</span>` : ""}</span>
               <span class="muted-sm">${escapeHtml(approxRowsText(t.rows))} · ${escapeHtml(formatBytes(t.bytes))}</span>
             </button>`,
             )
@@ -103,7 +103,7 @@ export function renderDbGridHtml(columns, rows) {
         `<tr>${columns
           .map((_, i) => {
             const t = cellText(r[i]);
-            return t === null ? '<td class="db-null">NULL</td>' : `<td>${escapeHtml(t)}</td>`;
+            return t === null ? `<td class="db-null">NULL</td>` : `<td>${escapeHtml(t)}</td>`;
           })
           .join("")}</tr>`,
     )

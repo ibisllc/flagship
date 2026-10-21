@@ -19,9 +19,9 @@ export const API_KEYS_NOTE =
   tr("Let scripts, devices and other servers call this app. Each key works until you revoke it.");
 export const API_KEYS_EMPTY = tr("No API keys yet.");
 export const API_KEYS_CREATE = tr("Create key");
-export const API_KEYS_REVOKE = "Revoke";
-export const API_KEYS_COPY = "Copy";
-export const API_KEYS_DONE = "Done";
+export const API_KEYS_REVOKE = tr("Revoke");
+export const API_KEYS_COPY = tr("Copy");
+export const API_KEYS_DONE = tr("Done");
 export const API_KEYS_COMPANION_NOTE = tr("Create and revoke keys from your owner app.");
 export const API_KEY_COPY_WARNING = tr("Copy it now. Flagship can't show it again.");
 export const API_KEY_LABEL_MAX = 64;
@@ -49,7 +49,7 @@ export function newApiKeyId(getRandomValues = (b) => crypto.getRandomValues(b)) 
 }
 
 export function scopeLabel(scope) {
-  return scope === "write" ? tr("Read & write") : "Read";
+  return scope === "write" ? tr("Read & write") : tr("Read");
 }
 
 /** The trimmed label, or an error to show next to the field. */

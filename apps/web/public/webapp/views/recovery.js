@@ -139,7 +139,7 @@ async function refreshCloudStatus() {
   if (!pill || !setupBtn || !removeBtn) return;
   const username = (await import("../lib/state.js")).getSession().username;
   if (!username) {
-    pill.textContent = "no username yet";
+    pill.textContent = tr("no username yet");
     setupBtn.textContent = tr("Set up cloud recovery");
     removeBtn.style.display = "none";
     return;
@@ -272,7 +272,7 @@ function openExportCeremony() {
       let reason = null;
       if (p1) {
         reason = passphraseStrengthError(p1);
-        if (!reason && p2 && p1 !== p2) reason = "Passphrases don't match.";
+        if (!reason && p2 && p1 !== p2) reason = tr("Passphrases don't match.");
       }
       if (reason) {
         errEl.textContent = reason;
