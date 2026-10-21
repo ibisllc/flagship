@@ -44,13 +44,13 @@ public static class DiskWrite
         long size;
         try { size = new FileInfo(imagePath).Length; }
         catch { size = 0; }
-        if (size < 1024) throw new DiskWriteException($"Image too small ({size} bytes); refusing to write.");
+        if (size < 1024) throw new DiskWriteException(Strings.F("imageTooSmallBytesRefusingTo", size));
         if (!LooksLikePhysicalDrive(devicePath))
             throw new DiskWriteException($"Refusing non-PhysicalDrive device: {devicePath}");
 
         int driveNumber = ParseDriveNumber(devicePath);
         if (driveNumber < 0)
-            throw new DiskWriteException($"Could not parse a drive number from {devicePath}.");
+            throw new DiskWriteException(Strings.F("couldNotParseADriveNumber", devicePath));
         if (driveNumber == 0)
             throw new DiskWriteException(@"Refusing \\.\PhysicalDrive0 (the Windows system disk).");
 
@@ -143,8 +143,8 @@ public static class DiskWrite
                     int err = Marshal.GetLastWin32Error();
                     vol.Dispose();
                     throw new DiskWriteException(
-                        $"Couldn't lock {letter}: — close any Explorer windows / programs using the drive and retry. " +
-                        $"(Win32 {err})");
+                        Strings.F("couldntLockCloseAnyExplorerWindows", letter) +
+                        Strings.F("win32", err));
                 }
                 TryFsctl(vol, FSCTL_DISMOUNT_VOLUME);
                 held.Add(vol);
@@ -249,7 +249,7 @@ public static class DiskWrite
                 throw new DiskWriteException("Write to device failed: " + new Win32Exception(err).Message);
             }
             if (wrote <= 0)
-                throw new DiskWriteException("Write to device returned 0 bytes (out of space or removed?).");
+                throw new DiskWriteException(Strings.T("writeToDeviceReturned0Bytes"));
             offset += wrote;
         }
     }
