@@ -32,6 +32,9 @@
     <Page Include="src\MainWindow.xaml" Generator="MSBuild:Compile" />
     <Compile Include="src\App.xaml.cs" />
     <Compile Include="src\MainWindow.xaml.cs" />
+    <!-- Translations: src\Strings.resx + src\Strings.<culture>.resx are embedded by the SDK's default globbing. -->
+    <Compile Include="src\Strings.cs" />
+    <Compile Include="src\StrExtension.cs" />
     <Compile Include="src\TrayIcon.cs" />
     <Compile Include="src\TaskbarProgress.cs" />
     <Compile Include="src\HostPower.cs" />

@@ -104,7 +104,7 @@ public sealed class VMProvisioningModeJsonConverter : JsonConverter<VMProvisioni
         {
             "installerISO" => VMProvisioningMode.InstallerISO,
             "prebuiltAppliance" => VMProvisioningMode.PrebuiltAppliance,
-            var s => throw new JsonException($"Unknown provisioning mode '{s}'."),
+            var s => throw new JsonException(Strings.F("unknownProvisioningMode", s)),
         };
 
     public override void Write(Utf8JsonWriter writer, VMProvisioningMode value, JsonSerializerOptions options)
@@ -119,7 +119,7 @@ public sealed class VMNetworkModeJsonConverter : JsonConverter<VMNetworkMode>
         => reader.GetString() switch
         {
             "nat" => VMNetworkMode.Nat,
-            var s => throw new JsonException($"Unknown network mode '{s}'."),
+            var s => throw new JsonException(Strings.F("unknownNetworkMode", s)),
         };
 
     public override void Write(Utf8JsonWriter writer, VMNetworkMode value, JsonSerializerOptions options)
