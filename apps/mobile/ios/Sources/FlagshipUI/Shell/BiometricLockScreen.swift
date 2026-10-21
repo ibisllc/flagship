@@ -152,16 +152,11 @@ struct BiometricLockScreen: View {
     /// deleted app leaves the account key in the Keychain, so without this
     /// anyone holding the phone could destroy it.
     private func authenticateForSignOut() async {
-        do {
-            try await BiometricGate().evaluate(reason: "Sign out of Flagship")
-        } catch {
-            // Nothing to ask with (no passcode set): the sign-out is the only way out.
-            guard BiometricGate.GateError.from(error) == .notAvailable else {
-                status = Self.message(for: error).map(Status.failed) ?? .idle
-                return
-            }
+        switch await DestructiveAuth.ask(reason: "Sign out of Flagship") {
+        case .allowed: showStartOver = true
+        case .declined: break
+        case let .failed(message): status = .failed(message)
         }
-        showStartOver = true
     }
 
     private func tryUnlock() async {

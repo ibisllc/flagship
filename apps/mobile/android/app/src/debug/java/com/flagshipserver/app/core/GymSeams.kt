@@ -31,6 +31,13 @@ object GymSeams {
     @Volatile
     var bypassBiometricGates: Boolean = false
 
+    /** End every biometric prompt as if the person dismissed it (twin of iOS
+     *  `GymSeams.refuseBiometricGates`), so the gym can prove the destructive
+     *  screens above the app lock change nothing without the owner. Wins over
+     *  the bypass. */
+    @Volatile
+    var refuseBiometricGates: Boolean = false
+
     /** Stand in a passkey app that saves passkeys but returns the PRF key
      *  only on an assertion (Samsung Pass's behaviour), for the cloud
      *  recovery set-up scenario. */
@@ -81,6 +88,7 @@ object GymSeams {
         forceAdminRoot = false
         deviceRank = null
         bypassBiometricGates = false
+        refuseBiometricGates = false
         fakePasskeysNoPrfOnCreate = false
         importBackupFile = null
         verifySignatures = false

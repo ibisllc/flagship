@@ -118,6 +118,7 @@ abstract class GymBase {
         apexHost: String? = null,
         fakePasskeys: Boolean = false,
         realBiometrics: Boolean = false,
+        refuseBiometrics: Boolean = false,
         persistSession: Boolean = false,
         /** An App Link to open at launch (e.g. a share link). */
         deepLink: String? = null,
@@ -146,6 +147,7 @@ abstract class GymBase {
             if (apexHost != null) putExtra("flagship.apexHost", apexHost)
             if (fakePasskeys) putExtra(SmokeModeConfig.EXTRA_SMOKE_FAKE_PASSKEYS, true)
             if (realBiometrics) putExtra(SmokeModeConfig.EXTRA_SMOKE_REAL_BIOMETRICS, true)
+            if (refuseBiometrics) putExtra(SmokeModeConfig.EXTRA_SMOKE_REFUSE_BIOMETRICS, true)
             if (persistSession) putExtra(SmokeModeConfig.EXTRA_SMOKE_PERSIST_SESSION, true)
             if (deepLink != null) data = android.net.Uri.parse(deepLink)
             if (backups != null) putExtra(SmokeModeConfig.EXTRA_SMOKE_BACKUPS, backups)
