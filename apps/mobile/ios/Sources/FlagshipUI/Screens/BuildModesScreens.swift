@@ -399,7 +399,7 @@ public struct BuildGitScreen: View {
                         Spacer(minLength: FS.space.s2)
                         checkAgainButton(c: c)
                     }
-                    Text("\(r.reason) — \(r.fileCount) file\(r.fileCount == 1 ? "" : "s").")
+                    Text(r.fileCount == 1 ? String(localized: "\(r.reason) — \(r.fileCount) file.") : String(localized: "\(r.reason) — \(r.fileCount) files."))
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                     FSPrimaryButton(String(localized: "Install it"), block: true) { Task { await vm.deploy() } }
                         .accessibilityIdentifier("build-git-deploy")
@@ -474,7 +474,7 @@ public struct BuildGitScreen: View {
                     Image(systemName: "checkmark.seal.fill").foregroundColor(c.success)
                     Text("Adapted").font(FS.font.h4()).foregroundColor(c.text)
                 }
-                Text("The AI rewrote this repo into a Flagship service\(n > 0 ? " (\(n) file\(n == 1 ? "" : "s"))" : "").")
+                Text(n == 0 ? String(localized: "The AI rewrote this repo into a Flagship service.") : n == 1 ? String(localized: "The AI rewrote this repo into a Flagship service (\(n) file).") : String(localized: "The AI rewrote this repo into a Flagship service (\(n) files)."))
                     .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 FSPrimaryButton(String(localized: "Install it"), block: true) { Task { await vm.deploy() } }
                     .accessibilityIdentifier("build-git-deploy")
@@ -942,7 +942,7 @@ public struct BuildJournalScreen: View {
                         FSListRow(
                             leading: .icon(modeIcon(b.mode), color: c.accent),
                             title: b.displayName,
-                            subtitle: Self.subtitle(String(localized: "Started \(Self.timeString(b.startedAt)) · \(b.entryCount) step\(b.entryCount == 1 ? "" : "s")"),
+                            subtitle: Self.subtitle((b.entryCount == 1 ? String(localized: "Started \(Self.timeString(b.startedAt)) · \(b.entryCount) step") : String(localized: "Started \(Self.timeString(b.startedAt)) · \(b.entryCount) steps")),
                                                     on: vm.serverName(forBuild: b.buildId)),
                             detail: nil,
                             below: { FSPill(b.methodLabel, kind: .idle) }

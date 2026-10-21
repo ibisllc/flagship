@@ -7605,6 +7605,27 @@
     },
     "Server is live": {
       "extractionState": "manual"
+    },
+    "A server is waiting for your approval.": {
+      "extractionState": "manual"
+    },
+    "A new server was added to your account.": {
+      "extractionState": "manual"
+    },
+    "One of your servers needs your attention.": {
+      "extractionState": "manual"
+    },
+    "One of your apps wants to reach the internet.": {
+      "extractionState": "manual"
+    },
+    "A device on your account invited someone to one of your apps.": {
+      "extractionState": "manual"
+    },
+    "Open Flagship to see what's new.": {
+      "extractionState": "manual"
+    },
+    "A server shared with you is asking you to unlock it.": {
+      "extractionState": "manual"
     }
   },
   "version": "1.0"
