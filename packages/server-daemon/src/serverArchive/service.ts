@@ -28,6 +28,7 @@
  * data file against the owner-signed restore order (size and SHA-256) before
  * the key opens it, then every frame as it unpacks.
  */
+import { languageFor, t } from "../i18n/index.js";
 import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
@@ -678,10 +679,11 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     const r = q.get("r") ?? "";
     const validR = /^[0-9a-f]{32}$/.test(r);
     await sweep();
+    const lang = languageFor(req.headers);
     const found = await byToken(token);
     if (!found) {
       return kind === ""
-        ? html(404, "<!doctype html><meta charset=utf-8><title>Link expired</title><p>This download link has expired or was replaced by a newer backup.</p>")
+        ? html(404, `<!doctype html><html lang="${lang}"><meta charset=utf-8><title>${t(lang, "Link expired")}</title><p>${t(lang, "This download link has expired or was replaced by a newer backup.")}</p>`)
         : err(404, "this download link has expired or was replaced by a newer backup");
     }
     const { d, link } = found;
@@ -700,8 +702,8 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           sizeText: gb(d.bundleBytes),
           statusUrl: `${base}/status?r=${r}`,
           fileUrl: `${base}/bundle?r=${r}`,
-          expiresText: d.expiresAt === null ? "the backup is removed from the server" : new Date(d.expiresAt).toUTCString(),
-        }),
+          expiresText: d.expiresAt === null ? t(lang, "the backup is removed from the server") : new Date(d.expiresAt).toUTCString(),
+        }, lang),
       );
     }
     if (!validR) return err(400, "r must be 16 bytes of lowercase hex");
