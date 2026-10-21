@@ -135,9 +135,9 @@ public enum HumanError {
              .networkConnectionLost,
              .dataNotAllowed,
              .internationalRoamingOff:
-            return (.offline, "You're offline. Check your connection and try again.")
+            return (.offline, String(localized: "You're offline. Check your connection and try again."))
         case .timedOut:
-            return (.offline, "The request timed out. Check your connection and try again.")
+            return (.offline, String(localized: "The request timed out. Check your connection and try again."))
         case .cannotFindHost, .dnsLookupFailed:
             // The connection is fine; the server's name just won't resolve yet.
             return (.offline, UserErrorText.nameLookup)
@@ -147,7 +147,7 @@ public enum HumanError {
         case .badServerResponse,
              .zeroByteResource,
              .cannotParseResponse:
-            return (.serverProblem, "The server had a temporary problem. Please try again in a moment.")
+            return (.serverProblem, String(localized: "The server had a temporary problem. Please try again in a moment."))
         case .cancelled:
             // Not a pin mismatch (that was consumed above) — a deliberate or
             // transport cancellation. Treat as a try-again offline-ish case.
@@ -160,15 +160,13 @@ public enum HumanError {
     // MARK: - Canonical copy (parity with Android + webapp)
 
     private static let certPinCopy =
-        "This server's security certificate doesn't match what we expected — "
-        + "someone may be intercepting the connection. Reinstall the server, or "
-        + "contact whoever runs it before continuing."
+        String(localized: "This server's security certificate doesn't match what we expected — someone may be intercepting the connection. Reinstall the server, or contact whoever runs it before continuing.")
     private static let offlineCopy =
-        "Couldn't reach the server. Check your connection and try again."
+        String(localized: "Couldn't reach the server. Check your connection and try again.")
     private static let decodingCopy =
-        "Something came back we couldn't read. Try again in a moment."
+        String(localized: "Something came back we couldn't read. Try again in a moment.")
     private static let genericCopy =
-        "Something went wrong. Please try again."
+        String(localized: "Something went wrong. Please try again.")
 }
 
 private extension URLError {

@@ -77,12 +77,12 @@ struct BiometricLockScreen: View {
                 // (instant re-pair, no rotation). Confirm copy adapts on
                 // cloud recovery.
                 FSActionFooter(
-                    primary: status == .authenticating ? "Authenticating…" : "Unlock",
+                    primary: status == .authenticating ? String(localized: "Authenticating…") : String(localized: "Unlock"),
                     primaryEnabled: status != .authenticating,
                     primaryId: "lock-unlock-btn",
-                    secondary: "Sign out",
+                    secondary: String(localized: "Sign out"),
                     secondaryId: "lock-sign-out-btn",
-                    secondaryHint: "Erases this device's account key and returns to the start.",
+                    secondaryHint: String(localized: "Erases this device's account key and returns to the start."),
                     onPrimary: { Task { await tryUnlock() } },
                     onSecondary: { showStartOver = true }
                 )
@@ -92,12 +92,12 @@ struct BiometricLockScreen: View {
         }
         .accessibilityAddTraits(.isModal)
         .confirmationDialog(
-            app.hasCloudRecovery ? "Sign out of this device?" : "Sign out without recovery?",
+            app.hasCloudRecovery ? String(localized: "Sign out of this device?") : "Sign out without recovery?",
             isPresented: $showStartOver,
             titleVisibility: .visible
         ) {
             Button(
-                app.hasCloudRecovery ? "Sign out" : "Sign out anyway",
+                app.hasCloudRecovery ? String(localized: "Sign out") : "Sign out anyway",
                 role: .destructive
             ) {
                 // Tier-2 sign out from the lock screen: erase ALL Keychain
@@ -111,7 +111,7 @@ struct BiometricLockScreen: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(app.hasCloudRecovery
-                ? "This erases this device's account key from the Keychain and returns you to the start. Sign back in with your recovery passkey to restore it — your account and servers stay put."
+                ? String(localized: "This erases this device's account key from the Keychain and returns you to the start. Sign back in with your recovery passkey to restore it — your account and servers stay put.")
                 : "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good.")
         }
         // Auto-prompt once the app is in front — pattern most password-manager
@@ -141,7 +141,7 @@ struct BiometricLockScreen: View {
         case .userCancelled, .interrupted:
             return nil
         case .notAvailable:
-            return "No device screen lock is set up. Set one, disable the lock from Settings on another paired device, or sign out and start fresh."
+            return String(localized: "No device screen lock is set up. Set one, disable the lock from Settings on another paired device, or sign out and start fresh.")
         default:
             return gate.errorDescription
         }
@@ -150,7 +150,7 @@ struct BiometricLockScreen: View {
     private func tryUnlock() async {
         status = .authenticating
         do {
-            let context = try await BiometricGate().evaluateReturningContext(reason: "Unlock Flagship")
+            let context = try await BiometricGate().evaluateReturningContext(reason: String(localized: "Unlock Flagship"))
             // The same unlock opens the account keys for this session, so a
             // status read token mints without a second prompt
             // (docs/account-read-token.md). Demo accounts hold no keys.

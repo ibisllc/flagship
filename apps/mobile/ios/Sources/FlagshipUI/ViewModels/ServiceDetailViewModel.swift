@@ -94,21 +94,21 @@ public final class ServiceDetailViewModel {
         return EgressCard(pending: pending, approved: egress.approved, canChange: canChange)
     }
 
-    public static let egressTitle = "This app wants to reach the internet"
-    public static let egressNote = "Until you allow them, the app can't reach any of these. Only allow hosts you expect this app to need."
+    public static let egressTitle = String(localized: "This app wants to reach the internet")
+    public static let egressNote = String(localized: "Until you allow them, the app can't reach any of these. Only allow hosts you expect this app to need.")
 
     /// Allow one declared host (older boxes without access lists): the
     /// grant is what's open now plus this host.
     @discardableResult
     public func allowEgress(host: String) async -> Bool {
         guard let egress else { return false }
-        return await sendEgress(hosts: egress.approved + [host], reason: "Allow \(displaySlug) to reach \(host)")
+        return await sendEgress(hosts: egress.approved + [host], reason: String(localized: "Allow \(displaySlug) to reach \(host)"))
     }
 
     /// Close the app's internet access (signs an empty host list).
     @discardableResult
     public func stopEgress() async -> Bool {
-        await sendEgress(hosts: [], reason: "Stop internet access for \(displaySlug)")
+        await sendEgress(hosts: [], reason: String(localized: "Stop internet access for \(displaySlug)"))
     }
 
     private var displaySlug: String { detail.value?.app.slug ?? serviceId }
@@ -117,7 +117,7 @@ public final class ServiceDetailViewModel {
         // The box the grant goes to must find its own name in it.
         let boxDomain = await client.boxDomain()
         guard let domain = boxDomain ?? egressServerDomain, !domain.isEmpty else {
-            egressPhase = .failed("No server to send this to.")
+            egressPhase = .failed(String(localized: "No server to send this to."))
             return false
         }
         egressPhase = .signing
@@ -125,7 +125,7 @@ public final class ServiceDetailViewModel {
         do {
             key = try await egressSigner(reason)
         } catch {
-            egressPhase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
+            egressPhase = .failed(String(localized: "Couldn't access your account key: \(UserErrorText.of(error))"))
             return false
         }
         let grant = AppEgressGrant(serverDomain: domain, serviceId: serviceId, hosts: hosts,
@@ -134,7 +134,7 @@ public final class ServiceDetailViewModel {
         do {
             signature = try key.signature(for: grant.canonicalBytes())
         } catch {
-            egressPhase = .failed("Couldn't sign the request: \(UserErrorText.of(error))")
+            egressPhase = .failed(String(localized: "Couldn't sign the request: \(UserErrorText.of(error))"))
             return false
         }
         egressPhase = .posting
@@ -160,17 +160,17 @@ public final class ServiceDetailViewModel {
         switch status {
         case 403:
             if reason == "grant is for a different server" {
-                return "This approval was for a different server. Open the app from the server it runs on and try again."
+                return String(localized: "This approval was for a different server. Open the app from the server it runs on and try again.")
             }
             if reason == "stale grant" {
-                return "Your phone's clock is too far off from the server's. Check the date and time, then try again."
+                return String(localized: "Your phone's clock is too far off from the server's. Check the date and time, then try again.")
             }
-            return "The server didn't accept your signature. Only the account owner's phone can allow this."
-        case 404: return "This app isn't installed on the server any more."
-        case 409: return "A newer change is already applied. Reload the page and try again."
-        case 422: return reason.map { "The app doesn't declare that host (\($0))." }
-            ?? "The app doesn't declare that host."
-        case 400: return reason.map { "The server refused the request: \($0)." }
+            return String(localized: "The server didn't accept your signature. Only the account owner's phone can allow this.")
+        case 404: return String(localized: "This app isn't installed on the server any more.")
+        case 409: return String(localized: "A newer change is already applied. Reload the page and try again.")
+        case 422: return reason.map { String(localized: "The app doesn't declare that host (\($0)).") }
+            ?? String(localized: "The app doesn't declare that host.")
+        case 400: return reason.map { String(localized: "The server refused the request: \($0).") }
             ?? ScreensClientError.plainLanguage(forStatus: status)
         default: return ScreensClientError.plainLanguage(forStatus: status)
         }
@@ -399,20 +399,20 @@ public final class ServiceDetailViewModel {
     /// needed.
     public func renameApp(to newLabel: String) async -> Bool {
         guard let server, let user = username(), !user.isEmpty else {
-            renamePhase = .failed("No active account on this device.")
+            renamePhase = .failed(String(localized: "No active account on this device."))
             return false
         }
         let trimmed = newLabel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !trimmed.isEmpty else {
-            renamePhase = .failed("Pick a non-empty label.")
+            renamePhase = .failed(String(localized: "Pick a non-empty label."))
             return false
         }
         renamePhase = .signing
         let irk: Curve25519.Signing.PrivateKey
         do {
-            irk = try await Keystore.deriveIRK(reason: "Rename service URL stem")
+            irk = try await Keystore.deriveIRK(reason: String(localized: "Rename service URL stem"))
         } catch {
-            renamePhase = .failed("Couldn't access your account keys: \(UserErrorText.of(error))")
+            renamePhase = .failed(String(localized: "Couldn't access your account keys: \(UserErrorText.of(error))"))
             return false
         }
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
@@ -426,7 +426,7 @@ public final class ServiceDetailViewModel {
         do {
             signature = try irk.signature(for: canonical)
         } catch {
-            renamePhase = .failed("Couldn't sign the rename: \(UserErrorText.of(error))")
+            renamePhase = .failed(String(localized: "Couldn't sign the rename: \(UserErrorText.of(error))"))
             return false
         }
         renamePhase = .posting
@@ -467,16 +467,16 @@ public final class ServiceDetailViewModel {
             await loadAppLinks()
             return true
         } catch ScreensClientError.http(let status, _) where status == 409 {
-            renamePhase = .failed("Another service already uses that name. Pick something else.")
+            renamePhase = .failed(String(localized: "Another service already uses that name. Pick something else."))
             return false
         } catch ScreensClientError.http(let status, _) where status == 400 {
-            renamePhase = .failed("That name isn't valid — use lowercase letters, digits, or hyphens (1–40 chars).")
+            renamePhase = .failed(String(localized: "That name isn't valid — use lowercase letters, digits, or hyphens (1–40 chars)."))
             return false
         } catch ScreensClientError.http(let status, _) where status == 403 {
-            renamePhase = .failed("Sign-in is needed. Re-open the app and try again.")
+            renamePhase = .failed(String(localized: "Sign-in is needed. Re-open the app and try again."))
             return false
         } catch {
-            renamePhase = .failed("Couldn't rename: \(UserErrorText.of(error))")
+            renamePhase = .failed(String(localized: "Couldn't rename: \(UserErrorText.of(error))"))
             return false
         }
     }
@@ -499,7 +499,7 @@ public final class ServiceDetailViewModel {
         // The owner IRK is pinned to a SPECIFIC box (`serverId`); without
         // knowing which box runs this service we can't sign a verifiable order.
         guard let domain = serverDomain, !domain.isEmpty else {
-            removePhase = .failed("No server to remove this from.")
+            removePhase = .failed(String(localized: "No server to remove this from."))
             return false
         }
         // Prefer the authoritative creator/slug from the loaded detail; fall
@@ -515,16 +515,16 @@ public final class ServiceDetailViewModel {
             creator = String(serviceId[..<delim.lowerBound])
             slug = String(serviceId[delim.upperBound...])
         } else {
-            removePhase = .failed("Couldn't identify the service to remove.")
+            removePhase = .failed(String(localized: "Couldn't identify the service to remove."))
             return false
         }
 
         removePhase = .signing
         let irk: Curve25519.Signing.PrivateKey
         do {
-            irk = try await irkSigner("Remove \(slug)")
+            irk = try await irkSigner(String(localized: "Remove \(slug)"))
         } catch {
-            removePhase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
+            removePhase = .failed(String(localized: "Couldn't access your account key: \(UserErrorText.of(error))"))
             return false
         }
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
@@ -535,7 +535,7 @@ public final class ServiceDetailViewModel {
         do {
             signature = try order.sign(with: irk)
         } catch {
-            removePhase = .failed("Couldn't sign the request: \(UserErrorText.of(error))")
+            removePhase = .failed(String(localized: "Couldn't sign the request: \(UserErrorText.of(error))"))
             return false
         }
 
@@ -551,10 +551,10 @@ public final class ServiceDetailViewModel {
             removePhase = .completed
             return true
         } catch let e as ScreensClientError {
-            removePhase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
+            removePhase = .failed(e.errorDescription ?? String(localized: "That didn't work. Try again in a moment."))
             return false
         } catch {
-            removePhase = .failed("Couldn't reach the server. Check your connection and try again.")
+            removePhase = .failed(String(localized: "Couldn't reach the server. Check your connection and try again."))
             return false
         }
     }

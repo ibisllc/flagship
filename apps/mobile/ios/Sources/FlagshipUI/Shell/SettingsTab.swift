@@ -108,7 +108,7 @@ public struct SettingsTab: View {
                         Task { @MainActor in
                             do {
                                 try await BiometricGate().evaluate(
-                                    reason: "Add one of your own phones or tablets")
+                                    reason: String(localized: "Add one of your own phones or tablets"))
                                 path.append(.addDevice)
                             } catch {
                                 // Cancelled or failed — stay put.
@@ -255,7 +255,7 @@ public struct SettingsTab: View {
                         await wipeVm?.run(currentEtag: vm.devicesEtag)
                         switch wipeVm?.phase {
                         case .completed:
-                            wipeToast = "Done. All other devices are now disconnected. Re-pair them on next open."
+                            wipeToast = String(localized: "Done. All other devices are now disconnected. Re-pair them on next open.")
                             // Drop to Welcome — the user just rotated
                             // identity; the in-memory session is stale.
                             await pushRegistrar?.revoke()
@@ -273,7 +273,7 @@ public struct SettingsTab: View {
                         isLastDevice: isLastDevice
                     ),
                     onRecoveryRequired: {
-                        toasts.warning("Set up account recovery to use this.")
+                        toasts.warning(String(localized: "Set up account recovery to use this."))
                     },
                     onDeleteAccount: {
                         if app.isDemoAccount {
@@ -386,7 +386,7 @@ public struct SettingsTab: View {
                 ),
                 username: app.currentUser ?? "",
                 onTransferGuidance: {
-                    toasts.info("To keep a server, open it from Home and choose Transfer to another account before you delete.", duration: 6)
+                    toasts.info(String(localized: "To keep a server, open it from Home and choose Transfer to another account before you delete."), duration: 6)
                 }
             )
         case .aiKeys:
@@ -731,7 +731,7 @@ struct PrivacyScreen: View {
             // the preference + sync to AppState.
             Task {
                 do {
-                    try await BiometricGate().evaluate(reason: "Enable app lock")
+                    try await BiometricGate().evaluate(reason: String(localized: "Enable app lock"))
                     privacy.requireBiometricAtLaunch = true
                     app.requireBiometricAtLaunch = true
                     // Already past auth → stay unlocked this session.
@@ -739,7 +739,7 @@ struct PrivacyScreen: View {
                 } catch {
                     let gate = BiometricGate.GateError.from(error)
                     if !gate.isSilent {
-                        pendingError = "Couldn't enable: \(UserErrorText.of(gate))"
+                        pendingError = String(localized: "Couldn't enable: \(UserErrorText.of(gate))")
                     }
                 }
             }
@@ -774,7 +774,7 @@ struct RecoveryContainer: View {
                         let seed = SymmetricKey(size: .bits256)
                         await vm.setup(umkSeed: seed, passphrase: passphrase)
                         if case .registered = vm.phase {
-                            toasts.success("Recovery is active.")
+                            toasts.success(String(localized: "Recovery is active."))
                         }
                     },
                     onRunRecover: { passphrase in
@@ -783,7 +783,7 @@ struct RecoveryContainer: View {
                             passphrase: passphrase
                         )
                         if recovered != nil {
-                            toasts.success("UMK recovered.")
+                            toasts.success(String(localized: "UMK recovered."))
                         }
                     },
                     showReattachProgress: showReattachProgress,
@@ -876,10 +876,10 @@ struct AboutStub: View {
                     .foregroundColor(c.textMuted)
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
-                        labeled("Version", appVersion, c: c)
-                        labeled("License", "BUSL-1.1 → Apache 2.0 (2030)", c: c)
-                        labeled("Patents", "Patent Pending", c: c)
-                        labeled("Source", "github.com/ibisllc/flagship", c: c, mono: true)
+                        labeled(String(localized: "Version"), appVersion, c: c)
+                        labeled(String(localized: "License"), String(localized: "BUSL-1.1 → Apache 2.0 (2030)"), c: c)
+                        labeled(String(localized: "Patents"), String(localized: "Patent Pending"), c: c)
+                        labeled(String(localized: "Source"), "github.com/ibisllc/flagship", c: c, mono: true)
                     }
                 }
             }

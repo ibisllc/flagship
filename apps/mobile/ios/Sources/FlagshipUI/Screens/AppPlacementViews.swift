@@ -209,7 +209,7 @@ struct RunsOnSection: View {
         } message: { row in
             Text(AppPlacementCopy.confirmRemoveMessage(row.name))
         }
-        .alert(refusal == AppPlacementCopy.adminOnlyRemove ? "Can't remove it" : "Can't remove the last copy", isPresented: Binding(get: { refusal != nil }, set: { if !$0 { refusal = nil } })) {
+        .alert(refusal == AppPlacementCopy.adminOnlyRemove ? String(localized: "Can't remove it") : "Can't remove the last copy", isPresented: Binding(get: { refusal != nil }, set: { if !$0 { refusal = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(refusal ?? "")
@@ -233,7 +233,7 @@ struct RunsOnSection: View {
             }
             .buttonStyle(.plain)
             .disabled(!enabled)
-            .accessibilityLabel(row.isTicked ? "Runs on \(row.name)" : "Not on \(row.name)")
+            .accessibilityLabel(row.isTicked ? String(localized: "Runs on \(row.name)") : "Not on \(row.name)")
             .accessibilityIdentifier("runs-on-\(row.fqdn)")
 
             VStack(alignment: .leading, spacing: 2) {

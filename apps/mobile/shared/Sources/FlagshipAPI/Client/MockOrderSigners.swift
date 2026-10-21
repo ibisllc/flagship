@@ -78,7 +78,7 @@ public final class MockOrderSigners: @unchecked Sendable {
     }
 
     /// The refusal the real endpoints send for a signature they don't accept.
-    public static let refusal = ScreensClientError.http(status: 403, message: #"{"error":"invalid signature"}"#)
+    public static let refusal = ScreensClientError.http(status: 403, message: String(localized: #"{"error":"invalid signature"}"#))
 
     /// Throws the endpoint's 403 unless `signatureHex` over `bytes` is by
     /// the key `authority` names. A no-op while nothing is pinned.

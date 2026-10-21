@@ -97,7 +97,7 @@ public final class WatchDelegateViewModel {
 
     public func enable() async {
         guard let user = username(), !user.isEmpty else {
-            phase = .failed("No active account on this device.")
+            phase = .failed(String(localized: "No active account on this device."))
             return
         }
         phase = .enabling
@@ -105,14 +105,14 @@ public final class WatchDelegateViewModel {
         do {
             delegateKey = try delegateKeyProvider()
         } catch {
-            phase = .failed("Couldn't create the Watch key. \(HumanError.humanize(error))")
+            phase = .failed(String(localized: "Couldn't create the Watch key. \(HumanError.humanize(error))"))
             return
         }
         let irk: Curve25519.Signing.PrivateKey
         do {
-            irk = try await signer("Allow your Watch to approve boots")
+            irk = try await signer(String(localized: "Allow your Watch to approve boots"))
         } catch {
-            phase = .failed("Couldn't access your account key. \(HumanError.humanize(error))")
+            phase = .failed(String(localized: "Couldn't access your account key. \(HumanError.humanize(error))"))
             return
         }
         let issuedAt = now()
@@ -131,7 +131,7 @@ public final class WatchDelegateViewModel {
         do {
             sig = try env.sign(with: irk)
         } catch {
-            phase = .failed("Couldn't sign. \(HumanError.humanize(error))")
+            phase = .failed(String(localized: "Couldn't sign. \(HumanError.humanize(error))"))
             return
         }
         do {
@@ -155,15 +155,15 @@ public final class WatchDelegateViewModel {
             phase = .idle
         } catch let error as ScreensClientError {
             // UX-B — plain language, no raw status code or server message.
-            phase = .failed(error.errorDescription ?? "That didn't work. Try again in a moment.")
+            phase = .failed(error.errorDescription ?? String(localized: "That didn't work. Try again in a moment."))
         } catch {
-            phase = .failed("Couldn't reach the server. Check your connection and try again.")
+            phase = .failed(String(localized: "Couldn't reach the server. Check your connection and try again."))
         }
     }
 
     public func disable() async {
         guard let user = username(), !user.isEmpty else {
-            phase = .failed("No active account on this device.")
+            phase = .failed(String(localized: "No active account on this device."))
             return
         }
         // Without a known grantId we can't sign a targeted revoke. Treat the
@@ -178,9 +178,9 @@ public final class WatchDelegateViewModel {
         phase = .disabling
         let irk: Curve25519.Signing.PrivateKey
         do {
-            irk = try await signer("Stop allowing your Watch to approve boots")
+            irk = try await signer(String(localized: "Stop allowing your Watch to approve boots"))
         } catch {
-            phase = .failed("Couldn't access your account key. \(HumanError.humanize(error))")
+            phase = .failed(String(localized: "Couldn't access your account key. \(HumanError.humanize(error))"))
             return
         }
         let issuedAt = now()
@@ -189,7 +189,7 @@ public final class WatchDelegateViewModel {
         do {
             sig = try env.sign(with: irk)
         } catch {
-            phase = .failed("Couldn't sign. \(HumanError.humanize(error))")
+            phase = .failed(String(localized: "Couldn't sign. \(HumanError.humanize(error))"))
             return
         }
         do {

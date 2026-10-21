@@ -54,7 +54,7 @@ public struct ServiceAccessScreen: View {
     enum Mode: String, CaseIterable, Identifiable {
         case open, membersOnly
         var id: String { rawValue }
-        var label: String { self == .open ? "Open to all" : "Members only" }
+        var label: String { self == .open ? String(localized: "Open to all") : String(localized: "Members only") }
     }
 
     enum AddKind { case person, group }
@@ -99,11 +99,11 @@ public struct ServiceAccessScreen: View {
             if !shown && !applyingMode { pendingMode = nil }
         }
         .confirmationDialog(
-            confirmRemove?.isGroup == true ? "Revoke \(confirmRemove?.name ?? "this group")?" : "Remove \(confirmRemove?.name ?? "this person")?",
+            confirmRemove?.isGroup == true ? String(localized: "Revoke \(confirmRemove?.name ?? "this group")?") : "Remove \(confirmRemove?.name ?? "this person")?",
             isPresented: Binding(get: { confirmRemove != nil }, set: { if !$0 { confirmRemove = nil } }),
             titleVisibility: .visible
         ) {
-            Button(confirmRemove?.isGroup == true ? "Revoke" : "Remove", role: .destructive) {
+            Button(confirmRemove?.isGroup == true ? String(localized: "Revoke") : "Remove", role: .destructive) {
                 if let p = confirmRemove { Task { await remove(p) } }
                 confirmRemove = nil
             }
@@ -118,19 +118,19 @@ public struct ServiceAccessScreen: View {
 
     private var membersOnlyMessage: String {
         let n = vm?.memberPeopleCount ?? 0
-        return n == 1 ? "Only this 1 person will be able to open it." : "Only these \(n) people will be able to open it."
+        return n == 1 ? String(localized: "Only this 1 person will be able to open it.") : String(localized: "Only these \(n) people will be able to open it.")
     }
 
     private func removeMessage(_ p: ServiceAccessViewModel.Person?) -> String {
         let membersOnly = mode == .membersOnly
         if p?.isGroup == true {
             return membersOnly
-                ? "Everyone who joined through this link loses access, unless they were also invited another way."
-                : "Everyone who joined through this link loses their rank and can still visit as anyone can."
+                ? String(localized: "Everyone who joined through this link loses access, unless they were also invited another way.")
+                : String(localized: "Everyone who joined through this link loses their rank and can still visit as anyone can.")
         }
         return membersOnly
-            ? "They're signed out and kept out. You can invite them again later."
-            : "They lose their rank and can still visit as anyone can. You can invite them again later."
+            ? String(localized: "They're signed out and kept out. You can invite them again later.")
+            : String(localized: "They lose their rank and can still visit as anyone can. You can invite them again later.")
     }
 
     // MARK: header
@@ -185,8 +185,8 @@ public struct ServiceAccessScreen: View {
                 Text(msg).font(FS.font.caption()).foregroundColor(c.danger)
                     .accessibilityIdentifier("service-access-mode-status")
             default:
-                Text(vm?.busyMode == true || applyingMode ? "Saving…"
-                     : mode == .membersOnly ? "Only members and you can open it. Anyone else is asked to sign in."
+                Text(vm?.busyMode == true || applyingMode ? String(localized: "Saving…")
+                     : mode == .membersOnly ? String(localized: "Only members and you can open it. Anyone else is asked to sign in.")
                      : "Anyone can open it. Members who sign in get their rank.")
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
@@ -202,7 +202,7 @@ public struct ServiceAccessScreen: View {
         let rows = vm?.members?.account ?? []
         if !rows.isEmpty {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                FSSectionLabel("Account members (\(rows.count))", id: "service-access-account-members-title")
+                FSSectionLabel(String(localized: "Account members (\(rows.count))"), id: "service-access-account-members-title")
                 ForEach(rows) { row in accountRow(row, c: c) }
             }
         }
@@ -278,7 +278,7 @@ public struct ServiceAccessScreen: View {
         }
         .disabled(busy)
         .accessibilityIdentifier("service-access-account-rank-\(a.id)")
-        .accessibilityLabel("Rank: \(current?.label ?? "Refused")")
+        .accessibilityLabel("Rank: \(current?.label ?? String(localized: "Refused"))")
     }
 
     private func refusedLabel(id: String, c: FSColors) -> some View {
@@ -302,7 +302,7 @@ public struct ServiceAccessScreen: View {
     private func membersSection(c: FSColors) -> some View {
         let people = vm?.people ?? []
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            FSSectionLabel("Members (\(people.count))", id: "service-access-members-title")
+            FSSectionLabel(String(localized: "Members (\(people.count))"), id: "service-access-members-title")
             if vm?.canInvite == true {
                 HStack(spacing: FS.space.s3) {
                     FSSecondaryButton("+ Add person", block: true) { openAdd(.person) }
@@ -319,7 +319,7 @@ public struct ServiceAccessScreen: View {
             if let adding, vm?.canInvite == true { addCard(adding, c: c) }
             if people.isEmpty {
                 FSCard {
-                    Text(vm?.canInvite == true ? "No members yet. Add a person or a group." : "No members yet.")
+                    Text(vm?.canInvite == true ? String(localized: "No members yet. Add a person or a group.") : "No members yet.")
                         .font(FS.font.body())
                         .foregroundColor(c.textMuted)
                 }
@@ -334,7 +334,7 @@ public struct ServiceAccessScreen: View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 HStack {
-                    Text(kind == .group ? "Add a group" : "Add a person")
+                    Text(kind == .group ? String(localized: "Add a group") : "Add a person")
                         .font(FS.font.scaled(16, weight: .semibold))
                         .foregroundColor(c.text)
                     Spacer()
@@ -348,8 +348,8 @@ public struct ServiceAccessScreen: View {
                     .foregroundColor(c.textMuted)
                 FSField(
                     value: $name,
-                    label: kind == .group ? "Group name (only you + your servers see it)" : "Name (only you + your servers see it)",
-                    placeholder: kind == .group ? "Chess club" : "Alex")
+                    label: kind == .group ? String(localized: "Group name (only you + your servers see it)") : String(localized: "Name (only you + your servers see it)"),
+                    placeholder: kind == .group ? String(localized: "Chess club") : String(localized: "Alex"))
                     .accessibilityIdentifier("service-access-name-field")
                 HStack {
                     Text("Rank").foregroundColor(c.text)
@@ -381,7 +381,7 @@ public struct ServiceAccessScreen: View {
                     .tint(c.accent)
                     .accessibilityIdentifier("service-access-approve-toggle")
                 }
-                FSPrimaryButton(vm?.busyAdd == true ? "Creating…" : "Create invite link", block: true, large: true) {
+                FSPrimaryButton(vm?.busyAdd == true ? String(localized: "Creating…") : String(localized: "Create invite link"), block: true, large: true) {
                     Task { await add(kind) }
                 }
                 .disabled(vm?.busyAdd == true || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -390,7 +390,7 @@ public struct ServiceAccessScreen: View {
                     Text(note).font(FS.font.caption()).foregroundColor(c.danger)
                 }
                 if let link = vm?.lastInviteLink {
-                    InviteShareCard(title: "Shareable link", subtitle: shareSubtitle, link: link, idPrefix: "service-access-share")
+                    InviteShareCard(title: String(localized: "Shareable link"), subtitle: shareSubtitle, link: link, idPrefix: "service-access-share")
                 }
             }
         }
@@ -453,7 +453,7 @@ public struct ServiceAccessScreen: View {
     @ViewBuilder
     private func groupFields(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            FSField(value: $groupMaxText, label: "How many people can use it? (0 = no limit)", placeholder: "10")
+            FSField(value: $groupMaxText, label: String(localized: "How many people can use it? (0 = no limit)"), placeholder: "10")
                 .keyboardType(.numberPad)
                 .accessibilityIdentifier("service-access-group-max")
             Toggle(isOn: $groupExpires) {
@@ -468,7 +468,7 @@ public struct ServiceAccessScreen: View {
     private func photoRow(c: FSColors) -> some View {
         HStack(spacing: FS.space.s3) {
             PhotosPicker(selection: $photoItem, matching: .images) {
-                Label(photoDataUri == nil ? "Add photo (optional)" : "Change photo", systemImage: "photo")
+                Label(photoDataUri == nil ? String(localized: "Add photo (optional)") : "Change photo", systemImage: "photo")
             }
             .buttonStyle(.bordered)
             .accessibilityIdentifier("service-access-photo-picker")
@@ -493,11 +493,11 @@ public struct ServiceAccessScreen: View {
     private var shareSubtitle: String {
         switch vm?.lastInviteTier {
         case .some(.personalManual):
-            return "They'll accept, then send a reply back to you — open it to approve them."
+            return String(localized: "They'll accept, then send a reply back to you — open it to approve them.")
         case .some(.group):
-            return "Anyone with this link (up to the limit) joins. Share it carefully."
+            return String(localized: "Anyone with this link (up to the limit) joins. Share it carefully.")
         default:
-            return "Send it over a private channel. It locks to the first account that opens it."
+            return String(localized: "Send it over a private channel. It locks to the first account that opens it.")
         }
     }
 
@@ -549,7 +549,7 @@ public struct ServiceAccessScreen: View {
                             .foregroundColor(c.danger)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(p.isGroup ? "Revoke \(p.name)" : "Remove \(p.name)")
+                    .accessibilityLabel(p.isGroup ? String(localized: "Revoke \(p.name)") : "Remove \(p.name)")
                     .accessibilityIdentifier("service-access-remove-\(p.inviteId)")
                 }
             }
@@ -568,7 +568,7 @@ public struct ServiceAccessScreen: View {
         if p.isGroup {
             let used = p.groupBoundAIDs.count
             let cap = p.groupMax ?? 0
-            return cap == 0 ? "\(used) joined" : "\(used) of \(cap) joined"
+            return cap == 0 ? String(localized: "\(used) joined") : String(localized: "\(used) of \(cap) joined")
         }
         if p.manual && !p.bound { return "you approve · not yet in" }
         return p.bound ? "active" : "invite sent — not opened yet"
@@ -654,7 +654,7 @@ public struct ServiceAccessScreen: View {
             if case .failed(let msg) = vm.phase {
                 toasts.error(msg)
             } else {
-                toasts.success(want == .membersOnly ? "Now members only." : "Now open to all.")
+                toasts.success(want == .membersOnly ? String(localized: "Now members only.") : String(localized: "Now open to all."))
             }
         }
     }
@@ -687,7 +687,7 @@ public struct ServiceAccessScreen: View {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let link = await vm.addPerson(name: trimmed, photo: kind == .group ? nil : photoDataUri, tier: tier, role: newRole)
         if link != nil {
-            toasts.success(kind == .group ? "Group invite created." : "Invite for \(trimmed) created.")
+            toasts.success(kind == .group ? String(localized: "Group invite created.") : String(localized: "Invite for \(trimmed) created."))
             name = ""
             photoDataUri = nil
             photoItem = nil
@@ -700,7 +700,7 @@ public struct ServiceAccessScreen: View {
     private func pickRole(_ role: AppMemberRole, for p: ServiceAccessViewModel.Person) async {
         guard let vm, role != vm.role(for: p) else { return }
         if await vm.setRole(role, for: p) {
-            toasts.success("\(p.name) is now \(role.label).")
+            toasts.success(String(localized: "\(p.name) is now \(role.label)."))
         } else if case .failed(let msg) = vm.phase {
             toasts.error(msg)
         }
@@ -714,8 +714,8 @@ public struct ServiceAccessScreen: View {
         let name = vm.accountName(a)
         if await vm.setAccountRank(rank, for: a) {
             toasts.success(rank == .refused
-                ? "\(name) is refused in this app."
-                : "\(name) is now \(AppMemberRole(rawValue: rank.rawValue)?.label ?? rank.rawValue).")
+                ? String(localized: "\(name) is refused in this app.")
+                : String(localized: "\(name) is now \(AppMemberRole(rawValue: rank.rawValue)?.label ?? rank.rawValue)."))
         } else if case .failed(let msg) = vm.phase {
             toasts.error(msg)
         }
@@ -725,7 +725,7 @@ public struct ServiceAccessScreen: View {
     private func remove(_ p: ServiceAccessViewModel.Person) async {
         guard let vm else { return }
         await vm.remove(inviteId: p.inviteId)
-        if case .failed(let msg) = vm.phase { toasts.error(msg) } else { toasts.success(p.isGroup ? "Group revoked." : "Removed.") }
+        if case .failed(let msg) = vm.phase { toasts.error(msg) } else { toasts.success(p.isGroup ? "Group revoked." : String(localized: "Removed.")) }
     }
 
     @MainActor
@@ -735,13 +735,13 @@ public struct ServiceAccessScreen: View {
             guard let data = try await item.loadTransferable(type: Data.self) else { return }
             // Cap at ~256 KB encoded so the sealed bundle stays small (.com stores it).
             if data.count > 256 * 1024 {
-                toasts.error("Photo is too large (max 256 KB). Pick a smaller image.")
+                toasts.error(String(localized: "Photo is too large (max 256 KB). Pick a smaller image."))
                 photoItem = nil
                 return
             }
             photoDataUri = "data:image/jpeg;base64,\(data.base64EncodedString())"
         } catch {
-            toasts.error("Couldn't read that image.")
+            toasts.error(String(localized: "Couldn't read that image."))
         }
     }
 

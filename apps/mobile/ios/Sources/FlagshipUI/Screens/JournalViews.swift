@@ -23,7 +23,7 @@ struct JournalCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            FSSectionLabel("Diagnostics")
+            FSSectionLabel(String(localized: "Diagnostics"))
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     if JournalUnits.all.count > 1 {
@@ -33,14 +33,14 @@ struct JournalCard: View {
                         .pickerStyle(.segmented)
                         .accessibilityIdentifier("sd-journal-unit")
                     }
-                    FSSecondaryButton(isLoading ? "Fetching…" : "View journal", block: true) {
+                    FSSecondaryButton(isLoading ? String(localized: "Fetching…") : String(localized: "View journal"), block: true) {
                         Task { await fetch() }
                     }
                     .disabled(isLoading)
                     .accessibilityIdentifier("sd-journal-fetch")
                     if case .loaded(let u, let lines) = vm?.phase {
                         ScrollView {
-                            Text(lines.isEmpty ? "(\(u): journal is empty)" : lines.joined(separator: "\n"))
+                            Text(lines.isEmpty ? String(localized: "(\(u): journal is empty)") : lines.joined(separator: "\n"))
                                 .font(FS.font.scaled(11, design: .monospaced))
                                 .foregroundColor(c.text)
                                 .frame(maxWidth: .infinity, alignment: .leading)

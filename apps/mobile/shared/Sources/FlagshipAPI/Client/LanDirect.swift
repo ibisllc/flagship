@@ -238,8 +238,8 @@ public final class LanDirectRegistry: @unchecked Sendable {
                 ok = await prober.probe(sniHost: box, address: e.address, port: e.port, certSha256: entry.certSha256)
                 let at = clock()
                 locked { probes[key] = (ok, at) }
-                log(ok ? "\(box) proved itself at \(e.address); using the local network"
-                       : "\(box) isn't at \(e.address) on this network; using the relay")
+                log(ok ? String(localized: "\(box) proved itself at \(e.address); using the local network")
+                       : String(localized: "\(box) isn't at \(e.address) on this network; using the relay"))
             }
             if ok { return e }
         }

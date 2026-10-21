@@ -48,9 +48,9 @@ public struct ReplaceDeviceFinalizeScreen: View {
                 case .completed:
                     completedCard(c: c)
                 case .completing:
-                    workingCard("Finishing the swap…", c: c)
+                    workingCard(String(localized: "Finishing the swap…"), c: c)
                 case .signing, .posting:
-                    workingCard("Re-confirming…", c: c)
+                    workingCard(String(localized: "Re-confirming…"), c: c)
                 default:
                     pendingBody(c: c)
                 }
@@ -112,7 +112,7 @@ public struct ReplaceDeviceFinalizeScreen: View {
                     .foregroundColor(c.textMuted)
 
                 FSPrimaryButton(
-                    "Complete replacement",
+                    String(localized: "Complete replacement"),
                     enabled: completeEnabled,
                     block: true,
                     large: true
@@ -138,10 +138,10 @@ public struct ReplaceDeviceFinalizeScreen: View {
     private func countdown(completesAt: Int64, c: FSColors) -> some View {
         let elapsed = graceElapsed(completesAt)
         return VStack(alignment: .leading, spacing: FS.space.s1) {
-            Text(elapsed ? "Grace window complete" : "Takes effect in")
+            Text(elapsed ? String(localized: "Grace window complete") : "Takes effect in")
                 .font(FS.font.caption())
                 .foregroundColor(c.textMuted)
-            Text(elapsed ? "Ready to complete" : remainingLabel(completesAt))
+            Text(elapsed ? String(localized: "Ready to complete") : remainingLabel(completesAt))
                 .font(FS.font.scaled(30, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundColor(elapsed ? c.success : c.text)
@@ -158,7 +158,7 @@ public struct ReplaceDeviceFinalizeScreen: View {
                 Text("Your identity key has rotated. Other devices on this account will be asked to re-pair the next time they open the app.")
                     .font(FS.font.bodySm())
                     .foregroundColor(c.textMuted)
-                FSPrimaryButton("Done", block: true, large: true) {
+                FSPrimaryButton(String(localized: "Done"), block: true, large: true) {
                     onCompleted()
                     dismiss()
                 }

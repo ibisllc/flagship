@@ -124,7 +124,7 @@ public final class AccountSecurityViewModel {
     /// renders as the QR + manual-key + "I've added it" step.
     public func beginEnrollment() async {
         guard let user = username(), !user.isEmpty else {
-            phase = .failed("No active account on this device.")
+            phase = .failed(String(localized: "No active account on this device."))
             return
         }
         phase = .beginning
@@ -132,11 +132,11 @@ public final class AccountSecurityViewModel {
         let irk: Curve25519.Signing.PrivateKey
         do {
             irk = try await Keystore.deriveIRK(
-                reason: "Turn on code protection",
+                reason: String(localized: "Turn on code protection"),
                 version: Keystore.currentIrkVersion()
             )
         } catch {
-            phase = .failed("Couldn't access your account keys: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't access your account keys: \(UserErrorText.of(error))"))
             return
         }
         let canonical = TotpEnrollBeginCanonical.bytes(username: user, issuedAt: issuedAt)
@@ -144,7 +144,7 @@ public final class AccountSecurityViewModel {
         do {
             signature = try irk.signature(for: canonical)
         } catch {
-            phase = .failed("Couldn't sign enroll-begin: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't sign enroll-begin: \(UserErrorText.of(error))"))
             return
         }
         do {
@@ -162,9 +162,9 @@ public final class AccountSecurityViewModel {
                 issuer: resp.issuer
             ))
         } catch ScreensClientError.http(let status, _) where status == 503 {
-            phase = .failed("Code protection isn't available on this server yet. Try again later.")
+            phase = .failed(String(localized: "Code protection isn't available on this server yet. Try again later."))
         } catch {
-            phase = .failed("Couldn't start enrollment: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't start enrollment: \(UserErrorText.of(error))"))
         }
     }
 
@@ -174,11 +174,11 @@ public final class AccountSecurityViewModel {
     public func confirmEnrollment(sampleCode: String) async {
         let trimmed = sampleCode.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else {
-            phase = .failed("Enter the 6-digit code from your authenticator app.")
+            phase = .failed(String(localized: "Enter the 6-digit code from your authenticator app."))
             return
         }
         guard let user = username(), !user.isEmpty else {
-            phase = .failed("No active account on this device.")
+            phase = .failed(String(localized: "No active account on this device."))
             return
         }
         // Keep the staged secret around so a sad-path retry can hop
@@ -193,11 +193,11 @@ public final class AccountSecurityViewModel {
         let irk: Curve25519.Signing.PrivateKey
         do {
             irk = try await Keystore.deriveIRK(
-                reason: "Confirm your code",
+                reason: String(localized: "Confirm your code"),
                 version: Keystore.currentIrkVersion()
             )
         } catch {
-            phase = .failed("Couldn't access your account keys: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't access your account keys: \(UserErrorText.of(error))"))
             return
         }
         let canonical = TotpEnrollConfirmCanonical.bytes(username: user, issuedAt: issuedAt)
@@ -205,7 +205,7 @@ public final class AccountSecurityViewModel {
         do {
             signature = try irk.signature(for: canonical)
         } catch {
-            phase = .failed("Couldn't sign enroll-confirm: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't sign enroll-confirm: \(UserErrorText.of(error))"))
             return
         }
         do {
@@ -232,9 +232,9 @@ public final class AccountSecurityViewModel {
             // Surface the mismatch as a secondary failed state — the
             // UI re-reads `phase` and shows an inline error beside
             // the input.
-            phase = .failed("That code didn't match. Try again with a fresh code from your authenticator.")
+            phase = .failed(String(localized: "That code didn't match. Try again with a fresh code from your authenticator."))
         } catch {
-            phase = .failed("Couldn't confirm: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't confirm: \(UserErrorText.of(error))"))
         }
     }
 
@@ -250,11 +250,11 @@ public final class AccountSecurityViewModel {
     public func disableEnrollment(code: String) async {
         let trimmed = code.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else {
-            phase = .failed("Enter your 6-digit code or a recovery code to confirm.")
+            phase = .failed(String(localized: "Enter your 6-digit code or a recovery code to confirm."))
             return
         }
         guard let user = username(), !user.isEmpty else {
-            phase = .failed("No active account on this device.")
+            phase = .failed(String(localized: "No active account on this device."))
             return
         }
         phase = .disabling
@@ -262,11 +262,11 @@ public final class AccountSecurityViewModel {
         let irk: Curve25519.Signing.PrivateKey
         do {
             irk = try await Keystore.deriveIRK(
-                reason: "Turn off code protection",
+                reason: String(localized: "Turn off code protection"),
                 version: Keystore.currentIrkVersion()
             )
         } catch {
-            phase = .failed("Couldn't access your account keys: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't access your account keys: \(UserErrorText.of(error))"))
             return
         }
         let canonical = TotpDisableCanonical.bytes(username: user, issuedAt: issuedAt)
@@ -274,7 +274,7 @@ public final class AccountSecurityViewModel {
         do {
             signature = try irk.signature(for: canonical)
         } catch {
-            phase = .failed("Couldn't sign disable: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't sign disable: \(UserErrorText.of(error))"))
             return
         }
         do {
@@ -290,11 +290,11 @@ public final class AccountSecurityViewModel {
             totpEnrolledAt = nil
             phase = .disabled
         } catch ScreensClientError.http(let status, _) where status == 401 {
-            phase = .failed("That code didn't match. Try a fresh code from your authenticator.")
+            phase = .failed(String(localized: "That code didn't match. Try a fresh code from your authenticator."))
         } catch ScreensClientError.http(let status, _) where status == 409 {
-            phase = .failed("Disable refused — other devices are still trusted on this account. Disconnect them first.")
+            phase = .failed(String(localized: "Disable refused — other devices are still trusted on this account. Disconnect them first."))
         } catch {
-            phase = .failed("Couldn't disable: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't disable: \(UserErrorText.of(error))"))
         }
     }
 }

@@ -104,16 +104,16 @@ struct InternetAccessSection: View {
                 .font(FS.font.caption()).foregroundColor(c.textMuted)
             if controller.canChange {
                 HStack(spacing: FS.space.s2) {
-                    FSPrimaryButton(busy ? "…" : "Allow", enabled: controller.busyHost == nil) {
+                    FSPrimaryButton(busy ? "…" : String(localized: "Allow"), enabled: controller.busyHost == nil) {
                         Task { await controller.answer(host: p.host, action: .allow) }
                     }
                     .accessibilityIdentifier("service-detail-access-allow")
-                    FSSecondaryButton("Deny") {
+                    FSSecondaryButton(String(localized: "Deny")) {
                         Task { await controller.answer(host: p.host, action: .deny) }
                     }
                     .disabled(controller.busyHost != nil)
                     .accessibilityIdentifier("service-detail-access-deny")
-                    FSGhostButton("Ignore") {
+                    FSGhostButton(String(localized: "Ignore")) {
                         Task { await controller.ignore(host: p.host) }
                     }
                     .disabled(controller.busyHost != nil)
@@ -211,11 +211,11 @@ struct AppAccessListEditorScreen: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(model.saved && !model.hasChanges ? "Done" : "Cancel", action: onClose)
+                    Button(model.saved && !model.hasChanges ? String(localized: "Done") : "Cancel", action: onClose)
                 }
                 if model.canSaveAtAll {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button(model.isSaving ? "Saving…" : "Save") {
+                        Button(model.isSaving ? String(localized: "Saving…") : "Save") {
                             Task { if await model.save() { onClose() } }
                         }
                         .disabled(!model.canSave)
@@ -279,14 +279,14 @@ public struct AppAccessAlertSheet: View {
             if case .failed(let msg) = center.stage {
                 Text(msg).font(FS.font.bodySm()).foregroundColor(c.danger)
                     .fixedSize(horizontal: false, vertical: true)
-                FSPrimaryButton("Close", block: true) { center.close() }
+                FSPrimaryButton(String(localized: "Close"), block: true) { center.close() }
             } else {
                 let opening = center.stage == .opening
-                FSPrimaryButton(opening ? "Opening…" : AppAccessCopy.review, enabled: !opening, block: true) {
+                FSPrimaryButton(opening ? String(localized: "Opening…") : AppAccessCopy.review, enabled: !opening, block: true) {
                     Task { await center.reviewDraft() }
                 }
                 .accessibilityIdentifier("access-alert-draft-review")
-                FSGhostButton("Not now", block: true) { center.notNow() }
+                FSGhostButton(String(localized: "Not now"), block: true) { center.notNow() }
                     .disabled(opening)
                     .accessibilityIdentifier("access-alert-not-now")
             }
@@ -306,7 +306,7 @@ public struct AppAccessAlertSheet: View {
                     .font(FS.font.h3()).foregroundColor(c.text)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("access-alert-done")
-                FSPrimaryButton("Close", block: true) { center.close() }
+                FSPrimaryButton(String(localized: "Close"), block: true) { center.close() }
                 FSSecondaryButton(AppAccessCopy.viewList, block: true) {
                     Task { await center.viewAccessList() }
                 }
@@ -326,16 +326,16 @@ public struct AppAccessAlertSheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 let working: Bool = { if case .working = center.stage { return true }; return false }()
-                FSPrimaryButton(center.stage == .working(.allow) ? "Allowing…" : "Allow", enabled: !working, block: true) {
+                FSPrimaryButton(center.stage == .working(.allow) ? String(localized: "Allowing…") : String(localized: "Allow"), enabled: !working, block: true) {
                     Task { await center.allow() }
                 }
                 .accessibilityIdentifier("access-alert-allow")
-                FSSecondaryButton(center.stage == .working(.deny) ? "Denying…" : "Deny", block: true) {
+                FSSecondaryButton(center.stage == .working(.deny) ? String(localized: "Denying…") : String(localized: "Deny"), block: true) {
                     Task { await center.deny() }
                 }
                 .disabled(working)
                 .accessibilityIdentifier("access-alert-deny")
-                FSGhostButton("Not now", block: true) { center.notNow() }
+                FSGhostButton(String(localized: "Not now"), block: true) { center.notNow() }
                     .disabled(working)
                     .accessibilityIdentifier("access-alert-not-now")
             }

@@ -42,7 +42,7 @@ public final class ShareCoInvitesMockBox: ServerShareTransport, @unchecked Senda
     /// (an admin made B a Member; one invite, "Jo", one person joined).
     public static func gym(creator: String = "bright-maple", bundleKey: Data?) -> ShareCoInvitesMockBox {
         let joId = String(repeating: "a7", count: 32)
-        let jo = bundleKey.flatMap { try? ServiceInvite.sealBundle(.init(name: "Jo"), householdKey: $0, inviteId: joId) } ?? "00"
+        let jo = bundleKey.flatMap { try? ServiceInvite.sealBundle(.init(name: String(localized: "Jo")), householdKey: $0, inviteId: joId) } ?? "00"
         return ShareCoInvitesMockBox(apps: [
             "\(creator)--plants": App(canInvite: true),
             "\(creator)--wiki": App(canInvite: false, why: "demoted", rank: "member", invites: [
@@ -68,14 +68,14 @@ public final class ShareCoInvitesMockBox: ServerShareTransport, @unchecked Senda
     private func handle(_ r: URLRequest) -> (Int, Any) {
         guard let url = r.url else { return refusal(400, "malformed", "bad request") }
         guard let token = r.value(forHTTPHeaderField: ServerShareClient.sessionHeader), !token.isEmpty else {
-            return refusal(401, "no-session", "Sign in again.")
+            return refusal(401, "no-session", String(localized: "Sign in again."))
         }
         sessionTokens.append(token)
         let body = r.httpBody.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any] ?? [:]
         switch (r.httpMethod ?? "GET", url.path) {
         case ("GET", "/api/shares/invites"):
             let ref = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "service" }?.value ?? ""
-            guard let app = apps[ref] else { return refusal(404, "no-such-app", "That app isn't on this server.") }
+            guard let app = apps[ref] else { return refusal(404, "no-such-app", String(localized: "That app isn't on this server.")) }
             return (200, [
                 "serviceRef": ref,
                 "canInvite": app.canInvite,
@@ -89,22 +89,22 @@ public final class ShareCoInvitesMockBox: ServerShareTransport, @unchecked Senda
             lastCreateBody = body
             guard let req = body["request"] as? [String: Any], let sig = body["signature"] as? String,
                   let ref = req["serviceRef"] as? String, let inviteId = req["inviteId"] as? String
-            else { return refusal(400, "malformed", "That request isn't complete.") }
-            if req["approvalMode"] != nil { return refusal(422, "manual-not-offered", "Co-managers can't make approve-first invites.") }
-            guard var app = apps[ref] else { return refusal(404, "no-such-app", "That app isn't on this server.") }
+            else { return refusal(400, "malformed", String(localized: "That request isn't complete.")) }
+            if req["approvalMode"] != nil { return refusal(422, "manual-not-offered", String(localized: "Co-managers can't make approve-first invites.")) }
+            guard var app = apps[ref] else { return refusal(404, "no-such-app", String(localized: "That app isn't on this server.")) }
             if !app.canInvite, let why = app.why { return refusal(403, why, Self.whyText[why] ?? why) }
             guard (req["authorAID"] as? String) == Self.ownerAid else {
-                return refusal(403, "wrong-author", "The invite must name the server's owner.")
+                return refusal(403, "wrong-author", String(localized: "The invite must name the server's owner."))
             }
             if let pub = memberPub, !verifyCreate(req, sig: sig, pub: pub) {
                 return refusal(403, "invalid-signature", "invalid-signature")
             }
             let issuedAt = (req["issuedAt"] as? NSNumber)?.int64Value ?? 0
             if abs(issuedAt - now()) > 5 * 60_000 {
-                return refusal(403, "stale", "Your device's clock looks off. Check it and try again.")
+                return refusal(403, "stale", String(localized: "Your device's clock looks off. Check it and try again."))
             }
             if app.invites.contains(where: { $0["inviteId"] as? String == inviteId }) {
-                return refusal(409, "exists", "That invite already exists.")
+                return refusal(409, "exists", String(localized: "That invite already exists."))
             }
             app.invites.append([
                 "inviteId": inviteId, "createdAt": issuedAt, "encryptedBundle": req["encryptedBundle"] ?? "",
@@ -116,10 +116,10 @@ public final class ShareCoInvitesMockBox: ServerShareTransport, @unchecked Senda
             lastWithdrawBody = body
             guard let revoke = body["revoke"] as? [String: Any], let inviteId = revoke["inviteId"] as? String,
                   let sig = body["signature"] as? String
-            else { return refusal(400, "malformed", "That request isn't complete.") }
+            else { return refusal(400, "malformed", String(localized: "That request isn't complete.")) }
             guard let ref = apps.first(where: { $0.value.invites.contains { $0["inviteId"] as? String == inviteId } })?.key,
                   var app = apps[ref]
-            else { return refusal(404, "not-yours", "That isn't one of your invites.") }
+            else { return refusal(404, "not-yours", String(localized: "That isn't one of your invites.")) }
             if !app.canInvite, let why = app.why { return refusal(403, why, Self.whyText[why] ?? why) }
             if let pub = memberPub {
                 let issuedAt = (revoke["issuedAt"] as? NSNumber)?.int64Value ?? 0
@@ -132,7 +132,7 @@ public final class ShareCoInvitesMockBox: ServerShareTransport, @unchecked Senda
             apps[ref] = app
             return (200, ["ok": true, "pruned": 0, "comNotified": true])
         default:
-            return refusal(404, "not-found", "Not found.")
+            return refusal(404, "not-found", String(localized: "Not found."))
         }
     }
 

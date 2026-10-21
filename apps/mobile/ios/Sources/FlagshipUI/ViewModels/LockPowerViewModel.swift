@@ -55,11 +55,11 @@ public final class LockPowerViewModel {
         let key: Curve25519.Signing.PrivateKey
         do {
             let reason = mode == .off
-                ? "Lock and turn off \(serverDomain)"
-                : "Lock and restart \(serverDomain)"
+                ? String(localized: "Lock and turn off \(serverDomain)")
+                : String(localized: "Lock and restart \(serverDomain)")
             key = try await signer(reason)
         } catch {
-            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't access your account key: \(UserErrorText.of(error))"))
             return
         }
 
@@ -68,7 +68,7 @@ public final class LockPowerViewModel {
         do {
             signature = try order.sign(with: key)
         } catch {
-            phase = .failed("Couldn't sign: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't sign: \(UserErrorText.of(error))"))
             return
         }
 
@@ -81,10 +81,10 @@ public final class LockPowerViewModel {
                 signatureHex: env["signature"] as! String
             )
         } catch let e as ScreensClientError {
-            phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
+            phase = .failed(e.errorDescription ?? String(localized: "That didn't work. Try again in a moment."))
             return
         } catch {
-            phase = .failed("Couldn't reach the server. Check your connection and try again.")
+            phase = .failed(String(localized: "Couldn't reach the server. Check your connection and try again."))
             return
         }
         phase = .sent(mode)

@@ -9,7 +9,7 @@ extension GymSweepSeams {
     /// `.com`'s rate-limit refusal, as the Worker sends it.
     public static let rateLimitedBody =
         #"{"error":"rate-limited","limit":"ip","retryAfterSec":720,"message":"Too many tries from your network. Try again in about 12 minutes."}"#
-    public static let rateLimitedSentence = "Too many tries from your network. Try again in about 12 minutes."
+    public static let rateLimitedSentence = String(localized: "Too many tries from your network. Try again in about 12 minutes.")
 
     /// The other device `-smoke-trusted-devices` lists beside this one.
     public static let otherDeviceId = String(repeating: "ab", count: 16)
@@ -79,7 +79,7 @@ extension GymSweepSeams {
         if args.contains("-smoke-companions") {
             mocks.screens.companionListFixture = CompanionListResponse(companions: [
                 CompanionSummary(tokenPrefix: companionPrefix, redeemedAt: now - 3_600_000, lastSeenMs: now - 60_000,
-                                 expiresAt: now + 3 * 3_600_000, userAgent: "Mozilla/5.0 (Macintosh)"),
+                                 expiresAt: now + 3 * 3_600_000, userAgent: String(localized: "Mozilla/5.0 (Macintosh)")),
             ])
             let music = app.pods.first(where: { $0.name == "Music" })?.fqdn ?? "music.\(user).flagship.services"
             let office = app.pods.first(where: { $0.name == "Office" })?.fqdn ?? "office.\(user).flagship.services"
@@ -101,7 +101,7 @@ extension GymSweepSeams {
         if args.contains("-smoke-secured-session") {
             let home = app.pods.first?.fqdn ?? "home.\(user).flagship.services"
             secured.put(SecuredSession(secretId: securedSessionId, serverId: home, serviceRef: "\(user)--plants",
-                                       serviceUrl: "https://plants.\(home)", browserAgent: "Mozilla/5.0 (Macintosh) Safari",
+                                       serviceUrl: "https://plants.\(home)", browserAgent: String(localized: "Mozilla/5.0 (Macintosh) Safari"),
                                        startedAt: now - 600_000))
         }
 

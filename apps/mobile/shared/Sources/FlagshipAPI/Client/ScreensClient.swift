@@ -319,24 +319,21 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case .notPaired:
-            return "This device isn't connected to a server yet."
+            return String(localized: "This device isn't connected to a server yet.")
         case .noSessionToken:
-            return "Your connection to this box expired. Reconnect and try again."
+            return String(localized: "Your connection to this box expired. Reconnect and try again.")
         case .http(let s, let body):
             if let r = RateLimitedRefusal.from(status: s, body: body) { return r.message }
             if AddServerRefusal.matches(status: s, body: body) { return AddServerRefusal.message }
             return UserErrorText.forStatus(s, body: body)
         case .decoding:
-            return "Something came back we couldn't read. Try again in a moment."
+            return String(localized: "Something came back we couldn't read. Try again in a moment.")
         case .notImplemented:
-            return "That isn't available yet."
+            return String(localized: "That isn't available yet.")
         case .certPinMismatch:
-            return "This box's security certificate doesn't match what we expected — "
-                + "someone may be intercepting the connection. Reinstall the box, or "
-                + "contact whoever runs it before continuing."
+            return String(localized: "This box's security certificate doesn't match what we expected — someone may be intercepting the connection. Reinstall the box, or contact whoever runs it before continuing.")
         case .controlServerUntrusted:
-            return "We can't currently verify the Flagship control server. Connecting "
-                + "is paused until it checks out — or you can choose to continue anyway."
+            return String(localized: "We can't currently verify the Flagship control server. Connecting is paused until it checks out — or you can choose to continue anyway.")
         }
     }
 
@@ -375,8 +372,7 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
     /// caller falls back to the normal plain-language mapping.
     public static func buildPlatformAbsent(_ error: Error) -> String? {
         if case let ScreensClientError.http(status, _) = error, status == 404 {
-            return "This server isn't set up to build services yet. "
-                + "Building services needs the services feature enabled on this box."
+            return String(localized: "This server isn't set up to build services yet. Building services needs the services feature enabled on this box.")
         }
         return nil
     }
@@ -387,19 +383,19 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
         switch status {
         case 0:
             // No HTTP response at all — transport-level failure.
-            return "Couldn't reach the server. Check your connection and try again."
+            return String(localized: "Couldn't reach the server. Check your connection and try again.")
         case 401, 403:
-            return "You're not signed in for that. Try signing in again."
+            return String(localized: "You're not signed in for that. Try signing in again.")
         case 404:
-            return "We couldn't find that. It may have moved or been removed."
+            return String(localized: "We couldn't find that. It may have moved or been removed.")
         case 408, 429:
-            return "The server is busy right now. Give it a moment and try again."
+            return String(localized: "The server is busy right now. Give it a moment and try again.")
         case 500...599:
-            return "Service temporarily unavailable. Try again in a few minutes."
+            return String(localized: "Service temporarily unavailable. Try again in a few minutes.")
         case 400...499:
             return UserErrorText.refused
         default:
-            return "Something went wrong. Try again in a moment."
+            return String(localized: "Something went wrong. Try again in a moment.")
         }
     }
 }

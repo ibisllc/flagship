@@ -39,7 +39,7 @@ public struct AuditLogScreen: View {
                         }
                         if vm.canLoadMore {
                             FSSecondaryButton(
-                                vm.loadingMore ? "Loading…" : "Load more",
+                                vm.loadingMore ? String(localized: "Loading…") : String(localized: "Load more"),
                                 block: true
                             ) {
                                 Task { await vm.loadMore() }

@@ -48,12 +48,12 @@ public final class WatchApprovalPrompt {
         inFront && appUnlocked && !hasSessionKey && current != nil
     }
 
-    public static let title = "Your Apple Watch is waiting"
-    public static let afterUnlock = "Unlocked. Tap Approve on your watch again."
-    public static let lockScreenNote = "Your Apple Watch is waiting to approve a server's start-up. Unlock, then tap Approve on the watch again."
+    public static let title = String(localized: "Your Apple Watch is waiting")
+    public static let afterUnlock = String(localized: "Unlocked. Tap Approve on your watch again.")
+    public static let lockScreenNote = String(localized: "Your Apple Watch is waiting to approve a server's start-up. Unlock, then tap Approve on the watch again.")
 
     public static func message(serverName: String?) -> String {
-        let what = serverName.map { "\($0)'s start-up" } ?? "a server's start-up"
-        return "Your watch asked to approve \(what). Unlock Flagship once so it can, then tap Approve on the watch again."
+        let what = serverName.map { String(localized: "\($0)'s start-up") } ?? "a server's start-up"
+        return String(localized: "Your watch asked to approve \(what). Unlock Flagship once so it can, then tap Approve on the watch again.")
     }
 }

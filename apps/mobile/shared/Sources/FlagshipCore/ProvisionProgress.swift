@@ -43,21 +43,21 @@ public enum ProvisionProgress {
     /// `installed` (action-needed: install finished, box powered off). The
     /// long form (spells out BOTH actions) — byte-identical across surfaces.
     public static let installedUnplugDetail =
-        "Install complete. If it ran from a USB stick, unplug it and power the server back on."
+        String(localized: "Install complete. If it ran from a USB stick, unplug it and power the server back on.")
 
     /// The canonical UI groups, in order (design §1.2 projection table).
     public static let stepGroups: [StepGroup] = [
-        StepGroup(key: .booting, label: "Booting",
+        StepGroup(key: .booting, label: String(localized: "Booting"),
                   phases: ["booting", "partitioning"]),
-        StepGroup(key: .installing, label: "Installing",
+        StepGroup(key: .installing, label: String(localized: "Installing"),
                   phases: ["installing", "downloading"]),
-        StepGroup(key: .registering, label: "Registering",
+        StepGroup(key: .registering, label: String(localized: "Registering"),
                   phases: ["registering", "pairing"]),
-        StepGroup(key: .securing, label: "Securing",
+        StepGroup(key: .securing, label: String(localized: "Securing"),
                   phases: ["sealing"]),
-        StepGroup(key: .installed, label: "Install complete",
+        StepGroup(key: .installed, label: String(localized: "Install complete"),
                   phases: ["installed"]),
-        StepGroup(key: .ready, label: "Ready", phases: ["live"]),
+        StepGroup(key: .ready, label: String(localized: "Ready"), phases: ["live"]),
     ]
 
     public enum StepState: String, Sendable, Equatable {

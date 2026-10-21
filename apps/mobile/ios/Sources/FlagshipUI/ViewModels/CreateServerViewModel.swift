@@ -112,7 +112,7 @@ public final class CreateServerViewModel {
     /// The SSH public key a debug-friendly server lets in (pasted).
     public var debugSshKey: String = ""
     public static let debugFriendlyWarning =
-        "Anyone with this key can read everything on this server while it's on. It turns off by itself 7 days from now."
+        String(localized: "Anyone with this key can read everything on this server while it's on. It turns off by itself 7 days from now.")
     /// The server's backup policy (docs/server-backup-and-clone.md, "Backup
     /// policy"): signed as `flagship/backup-policy/v1` with the sensitive-order
     /// key at mint time and carried beside the pairing order, so the box
@@ -141,7 +141,7 @@ public final class CreateServerViewModel {
         }
     }
     struct RestoreNeedsPairing: Error, LocalizedError {
-        var errorDescription: String? { "This server couldn't be prepared to receive the backup. Try again." }
+        var errorDescription: String? { String(localized: "This server couldn't be prepared to receive the backup. Try again.") }
     }
     /// Set after the .delivered transition. Container reads this so
     /// the new pending pod records the auth-code serial that Cancel-
@@ -427,7 +427,7 @@ public final class CreateServerViewModel {
         var debugKey: Curve25519.Signing.PrivateKey?
         if debugFriendly {
             debugGrant = try Self.debugGrant(serverDomain: serverDomain, rawKey: debugSshKey)
-            debugKey = try await debugGrantKey("Turn on debug access for \(name)")
+            debugKey = try await debugGrantKey(String(localized: "Turn on debug access for \(name)"))
         }
         // ONE biometric ceremony yields the IRK AND the new box's STK
         // pubkey. The STK pub is cached in the pin registry so later
@@ -442,7 +442,7 @@ public final class CreateServerViewModel {
         // NOT the app-backup `Keystore.deriveSWK` (slashes).
         let mint = try await Keystore.deriveIRKBoxStkAndSwk(
             serverId: serverDomain,
-            reason: "Mint installer for \(name)"
+            reason: String(localized: "Mint installer for \(name)")
         )
         let irk = mint.irk
         let boxSwkHex = mint.boxSwkHex
@@ -476,7 +476,7 @@ public final class CreateServerViewModel {
         // root and signs with the IRK alone.
         let adminKey: Curve25519.Signing.PrivateKey? = adminRootHex == nil
             ? nil
-            : try await adminRootSigner("Add \(name) to your account")
+            : try await adminRootSigner(String(localized: "Add \(name) to your account"))
         let acAdminSig = try adminKey.map { try $0.signature(for: authCode.adminCanonicalBytes()) }
         try await server.issueAuthCode(.init(
             code: .init(

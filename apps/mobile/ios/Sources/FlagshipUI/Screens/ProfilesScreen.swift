@@ -45,7 +45,7 @@ public struct ProfilesScreen: View {
                             Text("Set one up to bind this phone to a cloud.")
                                 .font(FS.font.body())
                                 .foregroundColor(c.textMuted)
-                            FSPrimaryButton("Set one up", action: onSetUpNew)
+                            FSPrimaryButton(String(localized: "Set one up"), action: onSetUpNew)
                         }
                     }
                 } else {

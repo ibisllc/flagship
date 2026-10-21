@@ -52,7 +52,7 @@ struct ReplaceServiceStemSheet: View {
                 .foregroundColor(c.textMuted)
 
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                FSSectionLabel("New stem")
+                FSSectionLabel(String(localized: "New stem"))
                 TextField("mynotes", text: $draft)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -103,7 +103,7 @@ struct ReplaceServiceStemSheet: View {
         switch phase {
         case .signing: return "Signing…"
         case .posting: return "Replacing…"
-        default: return "Replace"
+        default: return String(localized: "Replace")
         }
     }
 }

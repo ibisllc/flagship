@@ -87,7 +87,7 @@ public struct PendingServerScreen: View {
                 if let domain = timeline?.status?.serverDomain, !domain.isEmpty {
                     FSCard {
                         VStack(alignment: .leading, spacing: FS.space.s2) {
-                            FSSectionLabel("Address")
+                            FSSectionLabel(String(localized: "Address"))
                             Text(domain)
                                 .font(FS.font.mono())
                                 .foregroundColor(c.text)
@@ -130,7 +130,7 @@ public struct PendingServerScreen: View {
                             .accessibilityIdentifier("pending-cancel-error")
                     }
                     FSDangerButton(
-                        cancelling ? "Cancelling…" : (cancelError == nil ? "Cancel order" : CancelPendingOrder.retryLabel),
+                        cancelling ? String(localized: "Cancelling…") : (cancelError == nil ? String(localized: "Cancel order") : CancelPendingOrder.retryLabel),
                         block: true, large: true, action: onCancelOrder
                     )
                     .disabled(cancelling)
@@ -163,7 +163,7 @@ public struct PendingServerScreen: View {
         switch timeline?.status?.phase {
         case .error: return "Failed"
         case .live:  return "Live"
-        default:     return "Pending"
+        default:     return String(localized: "Pending")
         }
     }
 
@@ -178,13 +178,13 @@ public struct PendingServerScreen: View {
     private var headline: String {
         switch timeline?.status?.phase {
         case .error:
-            return "The install hit a problem. You can cancel and try again."
+            return String(localized: "The install hit a problem. You can cancel and try again.")
         case .live:
-            return "Your server finished provisioning and is coming online."
+            return String(localized: "Your server finished provisioning and is coming online.")
         case .none:
-            return "Your boot disk should have started downloading at flagshipserver.com. Flash it, boot any server, and progress will appear here as it phones home."
+            return String(localized: "Your boot disk should have started downloading at flagshipserver.com. Flash it, boot any server, and progress will appear here as it phones home.")
         default:
-            return "Your server is provisioning. This usually takes a few minutes."
+            return String(localized: "Your server is provisioning. This usually takes a few minutes.")
         }
     }
 

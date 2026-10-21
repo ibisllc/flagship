@@ -1,0 +1,15 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "NSCameraUsageDescription": {
+      "extractionState": "manual"
+    },
+    "NSFaceIDUsageDescription": {
+      "extractionState": "manual"
+    },
+    "NSLocalNetworkUsageDescription": {
+      "extractionState": "manual"
+    }
+  },
+  "version": "1.0"
+}

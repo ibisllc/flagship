@@ -56,7 +56,7 @@ public final class ServerBackupViewModel {
         self.serverFqdn = serverFqdn.lowercased()
         self.clients = clients
         self.accountKek = accountKek ?? { id in
-            try await Keystore.deriveServerArchiveKey(archiveId: id, reason: "Back up \(serverFqdn)")
+            try await Keystore.deriveServerArchiveKey(archiveId: id, reason: String(localized: "Back up \(serverFqdn)"))
         }
         self.passcodeSlot = passcodeSlot ?? { id, key, passcode in
             try await Task.detached(priority: .userInitiated) {
@@ -85,9 +85,9 @@ public final class ServerBackupViewModel {
     /// What's wrong with the user's own passcode, for the line under the fields.
     public var ownPasscodeHint: String? {
         guard useOwnPasscode else { return nil }
-        if ownPasscode.isEmpty { return "At least 12 characters with three kinds (lowercase, uppercase, digits, symbols), or 20 of anything." }
+        if ownPasscode.isEmpty { return String(localized: "At least 12 characters with three kinds (lowercase, uppercase, digits, symbols), or 20 of anything.") }
         if let p = ServerBackupFormat.passcodeProblem(ownPasscode) { return p }
-        if !ownPasscodeAgain.isEmpty && ownPasscodeAgain != ownPasscode { return "The two don't match." }
+        if !ownPasscodeAgain.isEmpty && ownPasscodeAgain != ownPasscode { return String(localized: "The two don't match.") }
         return nil
     }
 
@@ -109,7 +109,7 @@ public final class ServerBackupViewModel {
     /// Make the backup with the chosen passcode.
     public func start() async {
         guard canStart, let passcode = chosenPasscode else { return }
-        phase = .building(label: "Protecting the backup with its passcode…", fraction: 0)
+        phase = .building(label: String(localized: "Protecting the backup with its passcode…"), fraction: 0)
         let c = await clients.client(forFqdn: serverFqdn)
         do {
             let id = ServerArchive.newArchiveId()
@@ -143,7 +143,7 @@ public final class ServerBackupViewModel {
                 let p = s.progress
                 let total = max(p?.total ?? 0, 0)
                 phase = .building(
-                    label: total > 0 ? "Backing up \(p?.app ?? "apps") (\(min((p?.done ?? 0) + 1, total)) of \(total))…" : "Making the backup…",
+                    label: total > 0 ? String(localized: "Backing up \(p?.app ?? "apps") (\(min((p?.done ?? 0) + 1, total)) of \(total))…") : String(localized: "Making the backup…"),
                     fraction: total > 0 ? Double(p?.done ?? 0) / Double(total) : 0
                 )
                 try await Task.sleep(nanoseconds: pollNs)
@@ -164,7 +164,7 @@ public final class ServerBackupViewModel {
         let name = s.bundleFileName ?? "\(stem).\(ServerBackupBundle.fileExtension)"
         let total = s.bundleBytes ?? 0
         guard total > 0 else {
-            phase = .failed("This server's release can't hand out the backup as one file yet. Update the server and try again.")
+            phase = .failed(String(localized: "This server's release can't hand out the backup as one file yet. Update the server and try again."))
             return
         }
         phase = .downloading(fraction: 0)
@@ -206,8 +206,8 @@ public final class ServerBackupViewModel {
     }
 
     static func message(_ error: Error) -> String {
-        if let e = error as? BackupError { return e.errorDescription ?? "The backup failed." }
-        if let e = error as? ArchiveDownloader.DownloadError { return e.errorDescription ?? "The download didn't finish." }
+        if let e = error as? BackupError { return e.errorDescription ?? String(localized: "The backup failed.") }
+        if let e = error as? ArchiveDownloader.DownloadError { return e.errorDescription ?? String(localized: "The download didn't finish.") }
         return BoxSentence.of(error)
     }
 }
@@ -318,14 +318,14 @@ public final class ImportBackupViewModel {
             #if DEBUG
             if let seed = GymSeams.accountRootSeed { return seed }
             #endif
-            let umk = try await Keystore.currentUMK(reason: "Find the backup of your lost server")
+            let umk = try await Keystore.currentUMK(reason: String(localized: "Find the backup of your lost server"))
             return umk.withUnsafeBytes { Data($0) }
         }
         self.sealedRootFromCom = sealedRootFromCom ?? { id in try await PeerRootFromCom.fetch(serverId: id) }
         self.phase = fromPeers ? .peersPick : .pick
         self.clients = clients
         self.accountKek = accountKek ?? { id in
-            try await Keystore.deriveServerArchiveKey(archiveId: id, reason: "Open the backup")
+            try await Keystore.deriveServerArchiveKey(archiveId: id, reason: String(localized: "Open the backup"))
         }
         self.openWithPasscode = openWithPasscode ?? { file, passcode in
             try await ServerBackupPasscode.open(file, passcode: passcode)
@@ -354,7 +354,7 @@ public final class ImportBackupViewModel {
             fileSize = read.layout.dataOffset + read.layout.dataLength
         } catch {
             if ok { url.stopAccessingSecurityScopedResource() }
-            fileError = (error as? LocalizedError)?.errorDescription ?? "That file couldn't be read."
+            fileError = (error as? LocalizedError)?.errorDescription ?? String(localized: "That file couldn't be read.")
             return
         }
         await advance()
@@ -362,7 +362,7 @@ public final class ImportBackupViewModel {
 
     /// The line under the picker: the file picked, or that none is yet.
     public var filesSummary: String {
-        fileName.map { "\($0) (\(ServerArchive.formatBytes(fileSize ?? 0)))" } ?? "No backup file picked yet"
+        fileName.map { "\($0) (\(ServerArchive.formatBytes(fileSize ?? 0)))" } ?? String(localized: "No backup file picked yet")
     }
 
     /// One line on what the backup holds, once it is open.
@@ -371,7 +371,7 @@ public final class ImportBackupViewModel {
         let when = Date(timeIntervalSince1970: Double(body.createdAt) / 1000).formatted(date: .abbreviated, time: .shortened)
         let apps = body.apps.isEmpty ? "no apps" : body.apps.map(\.name).joined(separator: ", ")
         let left = body.left.isEmpty ? "" : " Not in this backup: \(body.left.map(\.name).joined(separator: ", "))."
-        return "From \(body.server.domain), saved \(when): \(apps).\(left)"
+        return String(localized: "From \(body.server.domain), saved \(when): \(apps).\(left)")
     }
 
     /// What the new server copies from the backup.
@@ -379,7 +379,7 @@ public final class ImportBackupViewModel {
         guard let s = opened?.body.server else { return nil }
         let unlock = s.bootUnlockMode == "approve" ? "asks your phone at every start" : "unlocks on its own after the first start"
         let disk = s.diskEncryption == "none" ? "disk not encrypted" : "disk encrypted"
-        return "Copied from the backup: \(unlock), \(disk)."
+        return String(localized: "Copied from the backup: \(unlock), \(disk).")
     }
 
     private func advance() async {
@@ -472,7 +472,7 @@ public final class ImportBackupViewModel {
             passcode = ""
             await checkData()
         } catch {
-            fileError = (error as? LocalizedError)?.errorDescription ?? "That passcode doesn't open this backup."
+            fileError = (error as? LocalizedError)?.errorDescription ?? String(localized: "That passcode doesn't open this backup.")
             phase = .passcode
         }
     }
@@ -495,7 +495,7 @@ public final class ImportBackupViewModel {
             self.file = nil
             self.opened = nil
             fileName = nil
-            fileError = (error as? LocalizedError)?.errorDescription ?? "The backup file couldn't be checked."
+            fileError = (error as? LocalizedError)?.errorDescription ?? String(localized: "The backup file couldn't be checked.")
             phase = .pick
             return
         }
@@ -519,12 +519,12 @@ public final class ImportBackupViewModel {
         let n = name.trimmingCharacters(in: .whitespaces).lowercased()
         if n.isEmpty {
             if let saved = opened?.body.server.name, takenNames.contains(saved.lowercased()) {
-                return "You already have a server called \"\(saved)\": pick another name."
+                return String(localized: "You already have a server called \"\(saved)\": pick another name.")
             }
             return nil
         }
         if let e = ServerLabel.errorMessage(n) { return e }
-        if takenNames.contains(n) { return "You already have a server called \"\(n)\"." }
+        if takenNames.contains(n) { return String(localized: "You already have a server called \"\(n)\".") }
         return nil
     }
 
@@ -698,23 +698,23 @@ public final class ImportBackupViewModel {
 
     public static func describe(_ a: ServerRestoreApp) -> String {
         switch a.state {
-        case "done": return "\(a.name): restored"
-        case "skipped": return "\(a.name): skipped (\(a.reason ?? "already here"))"
-        case "failed": return "\(a.name): couldn't be restored (\(a.reason ?? "unknown reason"))"
-        case "restoring": return "\(a.name): restoring…"
-        default: return "\(a.name): waiting"
+        case "done": return String(localized: "\(a.name): restored")
+        case "skipped": return String(localized: "\(a.name): skipped (\(a.reason ?? "already here"))")
+        case "failed": return String(localized: "\(a.name): couldn't be restored (\(a.reason ?? "unknown reason"))")
+        case "restoring": return String(localized: "\(a.name): restoring…")
+        default: return String(localized: "\(a.name): waiting")
         }
     }
 
     /// The result: "Restored N apps" (the restore tries every app, then ends).
     public static func restoredLine(_ apps: [ServerRestoreApp]) -> String {
         let n = apps.filter { $0.state == "done" }.count
-        return "Restored \(n) app\(n == 1 ? "" : "s")"
+        return String(localized: "Restored \(n) app\(n == 1 ? "" : "s")")
     }
 
     /// One line per app that couldn't be restored, with the server's reason.
     public static func failedLines(_ apps: [ServerRestoreApp]) -> [String] {
-        apps.filter { $0.state == "failed" }.map { "Couldn't restore: \($0.name): \(($0.reason ?? "unknown reason"))" }
+        apps.filter { $0.state == "failed" }.map { String(localized: "Couldn't restore: \($0.name): \(($0.reason ?? "unknown reason"))") }
     }
 
     private enum ImportError: Error, LocalizedError {
@@ -731,7 +731,7 @@ public final class ImportBackupViewModel {
     }
 
     static func message(_ error: Error) -> String {
-        if let e = error as? ImportError { return e.errorDescription ?? "The restore failed." }
+        if let e = error as? ImportError { return e.errorDescription ?? String(localized: "The restore failed.") }
         if error is PeerError || error is PeerBackupKeys.Failure || error is PeerRootFromCom.PeerComError,
            let d = (error as? LocalizedError)?.errorDescription { return d }
         if let e = error as? ServerBackupFormat.FormatError, let d = e.errorDescription { return d }
@@ -783,7 +783,7 @@ public final class BackupDownloadApprovalViewModel {
         guard phase != .working, phase != .approved else { return }
         phase = .working
         do {
-            let key = try await signer("Approve downloading the backup of \(serverFqdn)")
+            let key = try await signer(String(localized: "Approve downloading the backup of \(serverFqdn)"))
             let approval = ArchiveDownloadApproval(serverDomain: serverFqdn, archiveId: archiveId, requestId: requestId, issuedAt: now())
             let signature = try key.signature(for: approval.canonicalBytes())
             let c = await clients.client(forFqdn: serverFqdn)

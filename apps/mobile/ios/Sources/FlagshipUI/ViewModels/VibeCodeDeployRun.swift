@@ -19,10 +19,10 @@ enum VibeCodeDeployRun {
     /// The deploy line for a `deployPhase`; nil phase keeps today's text.
     static func phaseText(_ phase: String?) -> String {
         switch phase {
-        case "staging": return "Testing the app on a private copy…"
-        case "fixing": return "The AI is fixing a problem it found…"
-        case "going-live": return "Installing…"
-        default: return "Building and starting your app…"
+        case "staging": return String(localized: "Testing the app on a private copy…")
+        case "fixing": return String(localized: "The AI is fixing a problem it found…")
+        case "going-live": return String(localized: "Installing…")
+        default: return String(localized: "Building and starting your app…")
         }
     }
 
@@ -40,7 +40,7 @@ enum VibeCodeDeployRun {
             let r = try await client.vibeCodeDeployStart(sessionId: sessionId, credential: credential)
             if r.started != true {
                 if r.ok != false, let url = r.url { return .deployed(url: url, inviteOnly: r.inviteOnly) }
-                return .failed("Deploy was rejected by the server.")
+                return .failed(String(localized: "Deploy was rejected by the server."))
             }
         } catch let ScreensClientError.http(status, _) where status == 409 {
             // Already deploying (a second tap, or another device): follow it.
@@ -76,7 +76,7 @@ enum VibeCodeDeployRun {
             case "deployed":
                 return .deployed(url: s.deployedUrl ?? "", inviteOnly: nil)
             case "failed", "cancelled":
-                return .failed(s.errorReason ?? "The deploy didn't finish.")
+                return .failed(s.errorReason ?? String(localized: "The deploy didn't finish."))
             default:
                 // Not marked deploying yet (or a stale read): keep watching.
                 continue

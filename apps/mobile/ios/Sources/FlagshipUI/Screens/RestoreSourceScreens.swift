@@ -11,9 +11,9 @@ struct RestoreSourceScreen: View {
     let onPeers: () -> Void
     let onPhone: () -> Void
 
-    static let fileLine = "A .flagship backup file you saved or were sent."
-    static let peersLine = "Pieces other Flagship servers keep of a lost server's backup."
-    static let phoneLine = "The newest backups this phone keeps for your servers."
+    static let fileLine = String(localized: "A .flagship backup file you saved or were sent.")
+    static let peersLine = String(localized: "Pieces other Flagship servers keep of a lost server's backup.")
+    static let phoneLine = String(localized: "The newest backups this phone keeps for your servers.")
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -22,9 +22,9 @@ struct RestoreSourceScreen: View {
                 Text("Where is the backup?")
                     .font(FS.font.h3()).foregroundColor(c.text)
                     .accessibilityAddTraits(.isHeader)
-                source("From a file", Self.fileLine, "doc", id: "restore-source-file", action: onFile)
-                source("From other servers", Self.peersLine, "server.rack", id: "restore-source-peers", action: onPeers)
-                source("From this phone", Self.phoneLine, "iphone", id: "restore-source-phone", action: onPhone)
+                source(String(localized: "From a file"), Self.fileLine, "doc", id: "restore-source-file", action: onFile)
+                source(String(localized: "From other servers"), Self.peersLine, "server.rack", id: "restore-source-peers", action: onPeers)
+                source(String(localized: "From this phone"), Self.phoneLine, "iphone", id: "restore-source-phone", action: onPhone)
             }
             .padding(FS.space.s4)
             .fsReadingColumn()
@@ -73,7 +73,7 @@ struct PhoneBackupsScreen: View {
 
     static func serverName(_ fqdn: String) -> String { fqdn.split(separator: ".").first.map(String.init) ?? fqdn }
 
-    static let emptyLine = "This phone keeps no backups yet. When a server's backups go to \"On my phone\", its newest one is kept here."
+    static let emptyLine = String(localized: "This phone keeps no backups yet. When a server's backups go to \"On my phone\", its newest one is kept here.")
 
     var body: some View {
         let c = FSColors.scheme(scheme)

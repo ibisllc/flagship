@@ -151,22 +151,22 @@ public extension InferenceCatalogResponse {
     static let mock = InferenceCatalogResponse(
         models: [
             InferenceModel(id: "low", tier: "Low", model: "Qwen3.6-35B-A3B", multiplier: 1,
-                           label: "Low 1× (Qwen3.6-35B-A3B)",
-                           descriptor: "Quick and thrifty. Good for small apps and fixes.",
+                           label: String(localized: "Low 1× (Qwen3.6-35B-A3B)"),
+                           descriptor: String(localized: "Quick and thrifty. Good for small apps and fixes."),
                            contextTokens: 262_144, modalities: ["text", "image"], reasoning: true,
                            default: true),
             InferenceModel(id: "medium", tier: "Medium", model: "DeepSeek-V4-Flash", multiplier: 1,
-                           label: "Medium 1× (DeepSeek-V4-Flash)",
-                           descriptor: "Stronger code for bigger apps. Text only.",
+                           label: String(localized: "Medium 1× (DeepSeek-V4-Flash)"),
+                           descriptor: String(localized: "Stronger code for bigger apps. Text only."),
                            contextTokens: 1_000_000, modalities: ["text"], reasoning: true,
                            visionAlternative: "medium-vision"),
-            InferenceModel(id: "medium-vision", tier: "Medium multimodal", model: "GLM-5.3-Flash", multiplier: 2,
-                           label: "Medium multimodal 2× (GLM-5.3-Flash)",
-                           descriptor: "Reads screenshots and mockups.",
+            InferenceModel(id: "medium-vision", tier: String(localized: "Medium multimodal"), model: "GLM-5.3-Flash", multiplier: 2,
+                           label: String(localized: "Medium multimodal 2× (GLM-5.3-Flash)"),
+                           descriptor: String(localized: "Reads screenshots and mockups."),
                            contextTokens: 200_000, modalities: ["text", "image"], reasoning: true),
             InferenceModel(id: "high", tier: "High", model: "MiniMax-M3", multiplier: 3.5,
-                           label: "High 3.5× (MiniMax-M3)",
-                           descriptor: "The most capable. For hard builds.",
+                           label: String(localized: "High 3.5× (MiniMax-M3)"),
+                           descriptor: String(localized: "The most capable. For hard builds."),
                            contextTokens: 1_000_000, modalities: ["text"], reasoning: false),
         ],
         defaultModel: "low")
@@ -174,9 +174,9 @@ public extension InferenceCatalogResponse {
 
 public extension ModelOption {
     static let mockOwn: [ModelOption] = [
-        ModelOption(id: "gpt-5.4-mini", label: "GPT-5.4 Mini", contextTokens: 400_000, vision: true, tools: true,
+        ModelOption(id: "gpt-5.4-mini", label: String(localized: "GPT-5.4 Mini"), contextTokens: 400_000, vision: true, tools: true,
                     efforts: ["none", "low", "medium", "high", "xhigh"], defaultEffort: "medium", known: true),
-        ModelOption(id: "qwen3-coder", label: "Qwen3 Coder", contextTokens: 262_144, vision: false, tools: true,
+        ModelOption(id: "qwen3-coder", label: String(localized: "Qwen3 Coder"), contextTokens: 262_144, vision: false, tools: true,
                     known: true, visionAlternative: "gpt-5.4-mini"),
         ModelOption(id: "brand-new", label: "brand-new", vision: nil, tools: nil, known: false),
     ]

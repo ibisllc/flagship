@@ -42,13 +42,13 @@ public struct AdminRootReEscrow: Sendable {
         public var errorDescription: String? {
             switch self {
             case .wrongPassphrase:
-                return "That passphrase didn't match."
+                return String(localized: "That passphrase didn't match.")
             case .prfSaltMismatch:
-                return "Server returned a stale prfSaltHash — refusing to proceed."
+                return String(localized: "Server returned a stale prfSaltHash — refusing to proceed.")
             case .wrapKeySanityFailed:
-                return "Couldn't verify your recovery credential — your recovery backup was left unchanged."
+                return String(localized: "Couldn't verify your recovery credential — your recovery backup was left unchanged.")
             case .malformedEnvelope:
-                return "Your stored recovery backup looks corrupted — re-run recovery setup."
+                return String(localized: "Your stored recovery backup looks corrupted — re-run recovery setup.")
             }
         }
     }
@@ -113,7 +113,7 @@ public struct AdminRootReEscrow: Sendable {
         }
 
         // The CURRENT (post-rotation) admin root, re-wrapped for escrow.
-        let adminKey = try await loadAdminRoot("Update your recovery backup")
+        let adminKey = try await loadAdminRoot(String(localized: "Update your recovery backup"))
         let wrappedAdminRoot = try AdminRootEscrow.wrapForEscrow(
             seed: adminKey.rawRepresentation,
             prfSecret: prfSecret
@@ -124,7 +124,7 @@ public struct AdminRootReEscrow: Sendable {
         guard let wrappedUmkBytes = Data(base64Encoded: fetched.wrappedUmk) else {
             throw ReEscrowError.malformedEnvelope
         }
-        let irk = try await deriveIRK("Update your recovery backup")
+        let irk = try await deriveIRK(String(localized: "Update your recovery backup"))
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
         let signature = try RecoveryUpload.sign(
             username: username,

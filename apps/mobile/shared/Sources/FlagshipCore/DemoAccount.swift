@@ -16,7 +16,7 @@ public enum DemoAccount {
         return PodInfo(
             podId: "demo-server-\(username)",
             name: label.capitalized,
-            description: "Live demo server",
+            description: String(localized: "Live demo server"),
             fqdn: block.fqdn,
             status: mapStatus(block.lifecycle),
             demoServer: block

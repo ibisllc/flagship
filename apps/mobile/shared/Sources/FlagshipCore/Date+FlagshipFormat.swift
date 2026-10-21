@@ -23,8 +23,8 @@ public extension Date {
         let delta = now.timeIntervalSince(self)
         if delta >= 0 {
             if delta < 60 { return "just now" }
-            if delta < 3600 { return "\(Int(delta / 60))m ago" }
-            if delta < 86400 { return "\(Int(delta / 3600))h ago" }
+            if delta < 3600 { return String(localized: "\(Int(delta / 60))m ago") }
+            if delta < 86400 { return String(localized: "\(Int(delta / 3600))h ago") }
         }
 
         let fmt = DateFormatter()

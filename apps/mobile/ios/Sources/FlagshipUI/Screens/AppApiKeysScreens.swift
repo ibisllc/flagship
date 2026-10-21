@@ -86,7 +86,7 @@ struct ApiKeysSection: View {
                 Spacer(minLength: 0)
                 if controller.canChange {
                     let busy = controller.revokingKeyId == key.keyId
-                    Button(busy ? "Revoking…" : "Revoke") { confirmRevoke = key }
+                    Button(busy ? String(localized: "Revoking…") : "Revoke") { confirmRevoke = key }
                         .font(FS.font.bodySm().weight(.semibold))
                         .foregroundColor(c.danger)
                         .disabled(controller.revokingKeyId != nil)
@@ -127,7 +127,7 @@ struct ApiKeyCreateSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(controller.createdKey == nil ? "Cancel" : "Done", action: onClose)
+                    Button(controller.createdKey == nil ? String(localized: "Cancel") : "Done", action: onClose)
                         .disabled(controller.isCreating)
                         .accessibilityIdentifier("api-key-create-close")
                 }
@@ -149,7 +149,7 @@ struct ApiKeyCreateSheet: View {
         }
         .pickerStyle(.segmented)
         .accessibilityIdentifier("api-key-scope")
-        Text(scope == .read ? "Can only read: GET, HEAD and OPTIONS requests."
+        Text(scope == .read ? String(localized: "Can only read: GET, HEAD and OPTIONS requests.")
                             : "Can read and change anything the app allows.")
             .font(FS.font.caption()).foregroundColor(c.textMuted)
             .fixedSize(horizontal: false, vertical: true)
@@ -159,7 +159,7 @@ struct ApiKeyCreateSheet: View {
                 .accessibilityIdentifier("api-key-create-error")
         }
         let ready = !label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !controller.isCreating
-        FSPrimaryButton(controller.isCreating ? "Creating…" : AppApiKeysCopy.create, enabled: ready, block: true) {
+        FSPrimaryButton(controller.isCreating ? String(localized: "Creating…") : AppApiKeysCopy.create, enabled: ready, block: true) {
             Task { await controller.create(label: label, scope: scope) }
         }
         .accessibilityIdentifier("api-key-create-submit")
@@ -185,7 +185,7 @@ struct ApiKeyCreateSheet: View {
             .background(c.surface)
             .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(c.border, lineWidth: 1))
             .accessibilityIdentifier("api-key-secret")
-        FSPrimaryButton(copied ? "Copied" : "Copy", block: true) {
+        FSPrimaryButton(copied ? String(localized: "Copied") : String(localized: "Copy"), block: true) {
             // Local only, and gone from the clipboard after 10 minutes.
             UIPasteboard.general.setItems(
                 [[UTType.plainText.identifier: created.key]],

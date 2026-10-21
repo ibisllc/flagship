@@ -163,7 +163,7 @@ public struct ServicesTab: View {
                                 currentPodId: vm.serverFilter,
                                 leaderPodId: app.leaderPodId,
                                 onPick: { pod in vm.serverFilter = pod.podId },
-                                allLabel: "All servers",
+                                allLabel: String(localized: "All servers"),
                                 onPickAll: { vm.serverFilter = nil }
                             )
                         }
@@ -289,7 +289,7 @@ public struct ServicesTab: View {
 
     private func headerSubtitle(vm: ServicesListViewModel) -> String {
         guard let apps = vm.state.value else { return " " }
-        return apps.isEmpty ? "Nothing installed yet." : "\(apps.count) installed"
+        return apps.isEmpty ? String(localized: "Nothing installed yet.") : String(localized: "\(apps.count) installed")
     }
 
     /// vm.filteredApps already applies the server-filter + search; the owner
@@ -339,7 +339,7 @@ public struct ServicesTab: View {
                         Text("Build your first service").font(FS.font.h3()).foregroundColor(c.text)
                         Text("Describe it in plain English. The AI writes it, your server runs it.")
                             .font(FS.font.body()).foregroundColor(c.textMuted)
-                        FSPrimaryButton("Build a service", block: true) {
+                        FSPrimaryButton(String(localized: "Build a service"), block: true) {
                             startCreation(pinnedFqdn: nil)
                         }
                     }
@@ -590,7 +590,7 @@ struct ServiceDetailContainer: View {
         .onChange(of: vm?.runsOn?.removedFromPage ?? false) { _, removed in
             // Unticked the server this page talks to: the app is gone here.
             guard removed, let vm else { return }
-            toasts.success("Removed \(vm.detail.value?.app.slug.capitalized ?? vm.serviceId) from \(serverDomain).")
+            toasts.success(String(localized: "Removed \(vm.detail.value?.app.slug.capitalized ?? vm.serviceId) from \(serverDomain)."))
             path.removeAll()
         }
     }
@@ -602,13 +602,13 @@ struct ServiceDetailContainer: View {
         let slug = vm.detail.value?.app.slug ?? vm.serviceId
         let ok = await vm.uninstall()
         if ok {
-            toasts.success("Removed \(slug).")
+            toasts.success(String(localized: "Removed \(slug)."))
             // Pop straight back to the list root; ServicesTab reloads it.
             path.removeAll()
         } else if case .failed(let msg) = vm.removePhase {
             toasts.error(msg)
         } else {
-            toasts.error("Couldn't remove the app. Try again in a moment.")
+            toasts.error(String(localized: "Couldn't remove the app. Try again in a moment."))
         }
     }
 }
@@ -781,10 +781,10 @@ struct VibeCodeDescribeContainer: View {
                 if let taken = VibeCodeNameCheck.conflict(in: error) { return taken }
                 switch await repairMissingServicePlatform(for: error) {
                 case .accepted:
-                    toasts.warning("This server was missing its app key. We sent it again; the server will restart within a few minutes. Then retry the build.")
+                    toasts.warning(String(localized: "This server was missing its app key. We sent it again; the server will restart within a few minutes. Then retry the build."))
                     return nil
                 case .deferred:
-                    toasts.warning("This server still needs its app key. Return Home, unlock the app if asked, and pull down to refresh before retrying.")
+                    toasts.warning(String(localized: "This server still needs its app key. Return Home, unlock the app if asked, and pull down to refresh before retrying."))
                     return nil
                 case .notApplicable:
                     break
@@ -792,7 +792,7 @@ struct VibeCodeDescribeContainer: View {
                 // Don't swallow — a tap that does nothing with no feedback
                 // is a dead control. Surface the failure so the owner knows
                 // the build didn't start (and a test can see why).
-                toasts.error("Couldn't start the build: \(HumanError.humanize(error))")
+                toasts.error(String(localized: "Couldn't start the build: \(HumanError.humanize(error))"))
             }
             return nil
         }, onOpenSessions: { path.openBuildSessions() }, menu: menu, stager: stager)

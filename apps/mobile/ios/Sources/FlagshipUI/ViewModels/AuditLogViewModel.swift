@@ -113,49 +113,49 @@ public final class AuditLogViewModel {
     /// docs/revocation-ui.md. Unknown kinds are humanized rather than shown raw.
     public static func label(for kind: String) -> String {
         switch kind {
-        case "device-disconnected": return "Disconnected device"
-        case "device-replaced":     return "Replaced device"
-        case "device-added":        return "Added device"
-        case "wipe-restart":        return "Wiped & restarted account"
-        case "recovery-set-up":     return "Set up recovery"
-        case "recovery-rotated":    return "Rotated recovery passkey"
-        case "recovery-code-consumed": return "Used a recovery code"
-        case "app-renamed":         return "Renamed app URL"
-        case "invite-created":      return "Someone was invited to an app"
-        case "server-created":      return "Created server"
-        case "server-online":       return "Server came online"
-        case "server-migration-started":     return "Started moving a server"
-        case "server-migration-taken-over":  return "Moved a server to a new server"
-        case "server-migration-aborted":     return "Cancelled a server move"
-        case "server-revoked":      return "Revoked server"
-        case "server-unrevoked":    return "Restored server"
-        case "server-transfer-offered": return "Offered a server transfer"
-        case "server-transfer-claimed": return "Server transfer claimed"
-        case "servers-self-delete-issued": return "Requested server deletion"
-        case "demo-vps-provisioned": return "Demo server provisioned"
-        case "demo-vps-destroyed":  return "Demo server removed"
-        case "demo-vps-idle-reaped": return "Demo server stopped after inactivity"
-        case "demo-vps-stuck":      return "Demo server failed to start"
-        case "demo-user-created":   return "Demo account created"
-        case "demo-user-deleted":   return "Demo account deleted"
-        case "demo-user-cancelled": return "Demo setup cancelled"
-        case "demo-connect-attempt-rate-limited": return "Demo connection rate-limited"
-        case "totp-enrolled":       return "Turned on authenticator codes"
-        case "totp-disabled":       return "Turned off authenticator codes"
-        case "totp-failed-rate":    return "Repeated authenticator code failures"
-        case "re-pair-initiated":   return "Started device replacement"
-        case "re-pair-expired":     return "Device replacement expired"
-        case "re-pair-refused-no-credential": return "Refused a device replacement"
-        case "re-pair-initiated-no-credential": return "Started device replacement without a credential"
-        case "quarantine-blocked-revoke": return "Blocked a quarantined device's action"
-        case "account-deleted":     return "Deleted account"
-        case "username-reclaimed":  return "Username reclaimed"
-        case "account-type-changed-single-to-multi": return "Switched to multi-device"
-        case "account-type-changed-multi-to-single": return "Switched to single-device"
-        case "ct-unexpected-cert":  return "Unexpected certificate observed"
+        case "device-disconnected": return String(localized: "Disconnected device")
+        case "device-replaced":     return String(localized: "Replaced device")
+        case "device-added":        return String(localized: "Added device")
+        case "wipe-restart":        return String(localized: "Wiped & restarted account")
+        case "recovery-set-up":     return String(localized: "Set up recovery")
+        case "recovery-rotated":    return String(localized: "Rotated recovery passkey")
+        case "recovery-code-consumed": return String(localized: "Used a recovery code")
+        case "app-renamed":         return String(localized: "Renamed app URL")
+        case "invite-created":      return String(localized: "Someone was invited to an app")
+        case "server-created":      return String(localized: "Created server")
+        case "server-online":       return String(localized: "Server came online")
+        case "server-migration-started":     return String(localized: "Started moving a server")
+        case "server-migration-taken-over":  return String(localized: "Moved a server to a new server")
+        case "server-migration-aborted":     return String(localized: "Cancelled a server move")
+        case "server-revoked":      return String(localized: "Revoked server")
+        case "server-unrevoked":    return String(localized: "Restored server")
+        case "server-transfer-offered": return String(localized: "Offered a server transfer")
+        case "server-transfer-claimed": return String(localized: "Server transfer claimed")
+        case "servers-self-delete-issued": return String(localized: "Requested server deletion")
+        case "demo-vps-provisioned": return String(localized: "Demo server provisioned")
+        case "demo-vps-destroyed":  return String(localized: "Demo server removed")
+        case "demo-vps-idle-reaped": return String(localized: "Demo server stopped after inactivity")
+        case "demo-vps-stuck":      return String(localized: "Demo server failed to start")
+        case "demo-user-created":   return String(localized: "Demo account created")
+        case "demo-user-deleted":   return String(localized: "Demo account deleted")
+        case "demo-user-cancelled": return String(localized: "Demo setup cancelled")
+        case "demo-connect-attempt-rate-limited": return String(localized: "Demo connection rate-limited")
+        case "totp-enrolled":       return String(localized: "Turned on authenticator codes")
+        case "totp-disabled":       return String(localized: "Turned off authenticator codes")
+        case "totp-failed-rate":    return String(localized: "Repeated authenticator code failures")
+        case "re-pair-initiated":   return String(localized: "Started device replacement")
+        case "re-pair-expired":     return String(localized: "Device replacement expired")
+        case "re-pair-refused-no-credential": return String(localized: "Refused a device replacement")
+        case "re-pair-initiated-no-credential": return String(localized: "Started device replacement without a credential")
+        case "quarantine-blocked-revoke": return String(localized: "Blocked a quarantined device's action")
+        case "account-deleted":     return String(localized: "Deleted account")
+        case "username-reclaimed":  return String(localized: "Username reclaimed")
+        case "account-type-changed-single-to-multi": return String(localized: "Switched to multi-device")
+        case "account-type-changed-multi-to-single": return String(localized: "Switched to single-device")
+        case "ct-unexpected-cert":  return String(localized: "Unexpected certificate observed")
         default:
             let words = kind.replacingOccurrences(of: "[._-]+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
-            if words.isEmpty { return "Account event" }
+            if words.isEmpty { return String(localized: "Account event") }
             return words.prefix(1).uppercased() + words.dropFirst()
         }
     }

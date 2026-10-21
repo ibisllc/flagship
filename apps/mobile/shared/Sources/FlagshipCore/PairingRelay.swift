@@ -115,9 +115,9 @@ public enum PairingRelayError: Error, LocalizedError, Sendable {
     /// Said when this phone has no live pairing transport (every release
     /// build): the web app has the real pairing, so that is where to go.
     public static let addDeviceUnavailable =
-        "Adding a device from this phone isn't available yet. Use the web app."
+        String(localized: "Adding a device from this phone isn't available yet. Use the web app.")
     public static let joinAccountUnavailable =
-        "Joining an account from this phone isn't available yet. Use the web app."
+        String(localized: "Joining an account from this phone isn't available yet. Use the web app.")
 }
 
 /// Refuses with a sentence instead of waiting on a peer that can never

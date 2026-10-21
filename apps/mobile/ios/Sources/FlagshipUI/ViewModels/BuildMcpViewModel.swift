@@ -52,7 +52,7 @@ public final class BuildMcpViewModel {
     public var ideChoices: [McpIdeConfig] {
         guard let conn = connection else { return [] }
         if let list = conn.ideConfigs, !list.isEmpty { return list }
-        return [McpIdeConfig(id: "generic", name: "IDE", where: "Your IDE's MCP settings", config: conn.ideConfig)]
+        return [McpIdeConfig(id: "generic", name: "IDE", where: String(localized: "Your IDE's MCP settings"), config: conn.ideConfig)]
     }
 
     public var currentIde: McpIdeConfig? {

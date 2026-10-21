@@ -291,21 +291,21 @@ public enum FreeAiEntryState: Equatable, Sendable {
 /// The words, shared with the webapp and Android. Nothing here is sold, so
 /// none of it says buy, upgrade or purchase.
 public enum FreeAiCopy {
-    public static let title = "Flagship Inference"
+    public static let title = String(localized: "Flagship Inference")
     /// The built-in provider entry, first in every key list.
-    public static let providerTitle = "Flagship Inference"
-    public static let providerSubtitle = "We use third-party providers and anonymize your requests."
-    public static let builtInAccessibility = "Built-in provider. It can't be removed."
-    public static let useButton = "Use Flagship Inference →"
-    public static let tooLong = "This build is too big for Flagship Inference. Try a smaller change, or use your own AI key."
-    public static let note = "Used automatically when you build with AI and haven't added your own key."
-    public static let usedUp = "You've used this week's Flagship Inference credits. More arrive on Monday, or add your own AI key to keep building."
-    public static let busyToday = "Flagship Inference is busy today. Try again tomorrow, or use your own AI key."
-    public static let noServer = "Flagship Inference starts once one of your servers is running."
-    public static let ended = "The free building period has ended — use your own AI key."
-    public static let unavailable = "Flagship Inference isn't available right now. You can add your own AI key."
-    public static let couldNotMint = "Couldn't reach Flagship Inference. Try again, or add your own AI key."
-    public static let addOwnKey = "Add your own key"
+    public static let providerTitle = String(localized: "Flagship Inference")
+    public static let providerSubtitle = String(localized: "We use third-party providers and anonymize your requests.")
+    public static let builtInAccessibility = String(localized: "Built-in provider. It can't be removed.")
+    public static let useButton = String(localized: "Use Flagship Inference →")
+    public static let tooLong = String(localized: "This build is too big for Flagship Inference. Try a smaller change, or use your own AI key.")
+    public static let note = String(localized: "Used automatically when you build with AI and haven't added your own key.")
+    public static let usedUp = String(localized: "You've used this week's Flagship Inference credits. More arrive on Monday, or add your own AI key to keep building.")
+    public static let busyToday = String(localized: "Flagship Inference is busy today. Try again tomorrow, or use your own AI key.")
+    public static let noServer = String(localized: "Flagship Inference starts once one of your servers is running.")
+    public static let ended = String(localized: "The free building period has ended — use your own AI key.")
+    public static let unavailable = String(localized: "Flagship Inference isn't available right now. You can add your own AI key.")
+    public static let couldNotMint = String(localized: "Couldn't reach Flagship Inference. Try again, or add your own AI key.")
+    public static let addOwnKey = String(localized: "Add your own key")
 
     /// A whole number with the locale's thousands separators: 1840 → "1,840".
     public static func credits(_ n: Int64, locale: Locale = .current) -> String {
@@ -321,8 +321,8 @@ public enum FreeAiCopy {
     /// that says "free", so it can go when the promotion ends. Settings and
     /// the key step show the same line.
     public static func balance(_ c: FreeAiCredits, locale: Locale = .current) -> String {
-        let left = "\(credits(c.creditsLeft, locale: locale)) free credits left"
+        let left = String(localized: "\(credits(c.creditsLeft, locale: locale)) free credits left")
         guard let weekly = c.creditsPerWeek else { return left }
-        return "\(left) · \(credits(weekly, locale: locale)) added each week"
+        return String(localized: "\(left) · \(credits(weekly, locale: locale)) added each week")
     }
 }

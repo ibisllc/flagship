@@ -36,7 +36,7 @@ public struct AddDeviceScreen: View {
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Add a device")
         .navigationBarTitleDisplayMode(.inline)
-        .captureProtected { vm.invalidate(reason: "We hid this code because a screenshot was taken. Start again to add a device.") }
+        .captureProtected { vm.invalidate(reason: String(localized: "We hid this code because a screenshot was taken. Start again to add a device.")) }
         .task { await vm.start() }
         .onDisappear { Task { await vm.cancel() } }
     }
@@ -71,16 +71,16 @@ public struct AddDeviceScreen: View {
             promoteCard(c)
             confirmCard(c, matchCode: matchCode, gateExpired: gateExpired)
         case .admitting:
-            statusCard(c, system: "lock.shield", title: "Sharing your account key…", detail: "Hold on — sending the keys securely to the new device.")
+            statusCard(c, system: "lock.shield", title: String(localized: "Sharing your account key…"), detail: String(localized: "Hold on — sending the keys securely to the new device."))
         case .admitted:
-            statusCard(c, system: "checkmark.seal.fill", title: "Device added", detail: "The new device joined as a peer and is under a 14-day review window. You'll be reminded to check your trusted devices.")
-            FSPrimaryButton("Done", block: true) { dismiss() }
+            statusCard(c, system: "checkmark.seal.fill", title: String(localized: "Device added"), detail: String(localized: "The new device joined as a peer and is under a 14-day review window. You'll be reminded to check your trusted devices."))
+            FSPrimaryButton(String(localized: "Done"), block: true) { dismiss() }
         case .failed(let msg):
-            statusCard(c, system: "xmark.octagon", title: "Couldn't add the device", detail: msg)
-            FSSecondaryButton("Try again", block: true) { Task { await vm.start() } }
+            statusCard(c, system: "xmark.octagon", title: String(localized: "Couldn't add the device"), detail: msg)
+            FSSecondaryButton(String(localized: "Try again"), block: true) { Task { await vm.start() } }
         case .invalidated(let msg):
-            statusCard(c, system: "eye.slash", title: "Pairing cancelled", detail: msg)
-            FSSecondaryButton("Start again", block: true) { Task { await vm.start() } }
+            statusCard(c, system: "eye.slash", title: String(localized: "Pairing cancelled"), detail: msg)
+            FSSecondaryButton(String(localized: "Start again"), block: true) { Task { await vm.start() } }
         }
     }
 
@@ -146,7 +146,7 @@ public struct AddDeviceScreen: View {
                     .tracking(6)
                     .foregroundColor(c.text)
                     .frame(maxWidth: .infinity)
-                FSPrimaryButton("Confirm codes match", enabled: gateExpired, block: true) {
+                FSPrimaryButton(String(localized: "Confirm codes match"), enabled: gateExpired, block: true) {
                     Task { await vm.confirmMatch() }
                 }
             }

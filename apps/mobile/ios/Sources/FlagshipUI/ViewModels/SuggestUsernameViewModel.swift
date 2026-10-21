@@ -63,7 +63,7 @@ public final class SuggestUsernameViewModel {
                 armCooldown(ms: (r.retryAfterSec ?? 60) * 1000)
                 return
             }
-            errorText = "Couldn't get a handle. Try again."
+            errorText = String(localized: "Couldn't get a handle. Try again.")
             armCooldown(ms: 2000)
         }
     }

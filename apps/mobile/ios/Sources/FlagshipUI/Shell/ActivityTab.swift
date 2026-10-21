@@ -142,7 +142,7 @@ extension ActivityTab {
             mailbox: mailbox,
             username: username,
             irkProvider: {
-                try await Keystore.deriveIRK(reason: "Approve your server's boot secret")
+                try await Keystore.deriveIRK(reason: String(localized: "Approve your server's boot secret"))
             },
             unsealSeedProvider: { serverDomain in
                 // The installer seals the LUKS key against one of the phone's
@@ -151,11 +151,11 @@ extension ActivityTab {
                 var seeds: [Data] = []
                 if let bak = try? await Keystore.deriveBAK(
                     serverId: serverDomain,
-                    reason: "Unseal the disk key for \(serverDomain)"
+                    reason: String(localized: "Unseal the disk key for \(serverDomain)")
                 ) {
                     seeds.append(bak.rawRepresentation)
                 }
-                if let irk = try? await Keystore.deriveIRK(reason: "Unseal the disk key") {
+                if let irk = try? await Keystore.deriveIRK(reason: String(localized: "Unseal the disk key")) {
                     seeds.append(irk.rawRepresentation)
                 }
                 return seeds
@@ -165,7 +165,7 @@ extension ActivityTab {
             // an IRK-signed one), else the owner IRK.
             orderKeyProvider: {
                 Keystore.hasAdminRoot
-                    ? try await Keystore.adminRootKey(reason: "Authorize your server to serve")
+                    ? try await Keystore.adminRootKey(reason: String(localized: "Authorize your server to serve"))
                     : nil
             },
             // "Quick approve from Apple Watch": a plain unlock approval signs the

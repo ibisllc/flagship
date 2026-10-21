@@ -117,12 +117,12 @@ public struct KnockAuthorizeScreen: View {
                 Text("This signs the browser at \(siteLabel) in as you. Only do this for a browser you opened yourself.")
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
-                FSPrimaryButton(isAuthorizing ? "Signing in…" : "Open", block: true, large: true) {
+                FSPrimaryButton(isAuthorizing ? String(localized: "Signing in…") : String(localized: "Open"), block: true, large: true) {
                     Task { await authorize() }
                 }
                 .disabled(isAuthorizing)
                 .accessibilityIdentifier("knock-authorize-btn")
-                FSSecondaryButton("Cancel", block: true) { onDone() }
+                FSSecondaryButton(String(localized: "Cancel"), block: true) { onDone() }
                     .disabled(isAuthorizing)
                     .accessibilityIdentifier("knock-authorize-cancel")
                 if case .some(.failed(let msg)) = vm?.phase {
@@ -145,7 +145,7 @@ public struct KnockAuthorizeScreen: View {
                 Text("Go back to the browser: it opens \(svc.isEmpty ? "the app" : svc) on its own. You can refresh or stop this session anytime from Settings → Open secured sessions.")
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
-                FSPrimaryButton("Done", block: true, large: true) { onDone() }
+                FSPrimaryButton(String(localized: "Done"), block: true, large: true) { onDone() }
                     .accessibilityIdentifier("knock-authorize-done")
             }
         }

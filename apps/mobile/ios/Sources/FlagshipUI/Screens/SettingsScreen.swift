@@ -296,8 +296,8 @@ public struct SettingsScreen: View {
             if showPromo {
                 FSAnnouncementCard(
                     icon: "sparkles",
-                    title: "Welcome to Flagship",
-                    message: "Your stuff, on your hardware, with a real green padlock.",
+                    title: String(localized: "Welcome to Flagship"),
+                    message: String(localized: "Your stuff, on your hardware, with a real green padlock."),
                     onDismiss: { showPromo = false }
                 )
                 .fsPlainListRow()
@@ -329,7 +329,7 @@ public struct SettingsScreen: View {
         .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
         .refreshable { await onRefresh() }
         .confirmationDialog(
-            disconnectTarget.map { "Revoke \($0.displayName)?" } ?? "Revoke device?",
+            disconnectTarget.map { String(localized: "Revoke \($0.displayName)?") } ?? String(localized: "Revoke device?"),
             isPresented: Binding(
                 get: { disconnectTarget != nil },
                 set: { if !$0 { disconnectTarget = nil } }
@@ -371,7 +371,7 @@ public struct SettingsScreen: View {
                 case .managed(let deviceId):
                     success = await onSetManagedDeviceName(deviceId, name, locked)
                 }
-                if !success { nameEditMessage = "Couldn't save the encrypted name. Check the name and try again." }
+                if !success { nameEditMessage = String(localized: "Couldn't save the encrypted name. Check the name and try again.") }
                 return success
             }
         }
@@ -383,7 +383,7 @@ public struct SettingsScreen: View {
             )
         ) { Button("OK") { nameEditMessage = nil } } message: { Text(nameEditMessage ?? "") }
         .confirmationDialog(
-            revokeSessionTarget.map { "Revoke session \($0.tokenPrefix)?" } ?? "Revoke this session?",
+            revokeSessionTarget.map { String(localized: "Revoke session \($0.tokenPrefix)?") } ?? String(localized: "Revoke this session?"),
             isPresented: Binding(
                 get: { revokeSessionTarget != nil },
                 set: { if !$0 { revokeSessionTarget = nil } }
@@ -469,7 +469,7 @@ public struct SettingsScreen: View {
         Task {
             let success = await onDisconnectTrustedDevice(target)
             if !success {
-                disconnectMessage = "Couldn't disconnect — check your connection and try again."
+                disconnectMessage = String(localized: "Couldn't disconnect — check your connection and try again.")
             }
             disconnectTarget = nil
         }
@@ -480,38 +480,38 @@ public struct SettingsScreen: View {
     /// account-type state (single-device vs multi-device + 2FA) in its
     /// subtitle and drills into AccountSecurityScreen.
     private func accountGroup(c: FSColors) -> some View {
-        FSSettingsListSection("Account", rows: [
+        FSSettingsListSection(String(localized: "Account"), rows: [
             FSSettingsRow(
                 icon: "person.text.rectangle",
-                title: "Display name",
-                subtitle: accountDisplayName ?? "Encrypted account presentation name",
+                title: String(localized: "Display name"),
+                subtitle: accountDisplayName ?? String(localized: "Encrypted account presentation name"),
                 accessibilityId: "settings-edit-account-name",
                 action: {
                     guard canManageNames else { return }
-                    nameEditor = NameEditor(kind: .account, title: "Edit account name", initialName: accountDisplayName ?? "")
+                    nameEditor = NameEditor(kind: .account, title: String(localized: "Edit account name"), initialName: accountDisplayName ?? "")
                 }
             ),
             FSSettingsRow(
                 icon: accountType == "multi" ? "checkmark.shield.fill" : "shield.lefthalf.filled",
                 iconTint: accountType == "multi" ? c.success : c.accent,
-                title: "Account security",
+                title: String(localized: "Account security"),
                 subtitle: accountType == "multi"
-                    ? "Code protection on — recovery needs a code."
-                    : "Single-device — recovery is a 3-day wait.",
+                    ? String(localized: "Code protection on — recovery needs a code.")
+                    : String(localized: "Single-device — recovery is a 3-day wait."),
                 accessibilityId: "settings-open-account-security",
                 action: onOpenAccountSecurity
             ),
-            FSSettingsRow(icon: "sparkles", title: "AI keys", subtitle: "Bring-your-own keys for building apps", action: onOpenAiKeys),
+            FSSettingsRow(icon: "sparkles", title: String(localized: "AI keys"), subtitle: String(localized: "Bring-your-own keys for building apps"), action: onOpenAiKeys),
         ] + (isDemoAccount ? [] : [
-            FSSettingsRow(icon: "key.horizontal.fill", title: "Cloud recovery", subtitle: "Recover on a new device", action: onOpenRecovery),
-            FSSettingsRow(icon: "doc.badge.arrow.up.fill", title: "Back up account key", subtitle: "Save an encrypted key file", action: onOpenKeyfileBackup),
+            FSSettingsRow(icon: "key.horizontal.fill", title: String(localized: "Cloud recovery"), subtitle: String(localized: "Recover on a new device"), action: onOpenRecovery),
+            FSSettingsRow(icon: "doc.badge.arrow.up.fill", title: String(localized: "Back up account key"), subtitle: String(localized: "Save an encrypted key file"), action: onOpenKeyfileBackup),
         ]) + [
-            FSSettingsRow(icon: "person.2.circle.fill", title: "Profiles", subtitle: "Switch between your clouds", action: onOpenProfiles),
+            FSSettingsRow(icon: "person.2.circle.fill", title: String(localized: "Profiles"), subtitle: String(localized: "Switch between your clouds"), action: onOpenProfiles),
         ])
     }
 
     private func trustedDevicesSection(c: FSColors) -> some View {
-        section("Trusted devices", c: c) {
+        section(String(localized: "Trusted devices"), c: c) {
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 // M4 — pending re-pair banner. A replace started on THIS or
                 // ANY other device surfaces here with a grace countdown and
@@ -563,7 +563,7 @@ public struct SettingsScreen: View {
                     .opacity(canAddDevice ? 1 : 0.5)
                     .accessibilityIdentifier("settings-add-device")
                     Text(canAddDevice
-                         ? "For your own phones and tablets. To give another person access, use Share this server on the server's page."
+                         ? String(localized: "For your own phones and tablets. To give another person access, use Share this server on the server's page.")
                          : AddDeviceGate.adminOnlyLine)
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
@@ -612,12 +612,12 @@ public struct SettingsScreen: View {
                             Spacer()
                         }
                         Text(elapsed
-                            ? "The grace window has elapsed — finalize the device replacement now."
+                            ? String(localized: "The grace window has elapsed — finalize the device replacement now.")
                             : "Replace pending — finalize when the 3-day grace elapses (\(absolute(ms: pending.completesAt))).")
                             .font(FS.font.caption()).foregroundColor(c.textMuted)
                             .accessibilityIdentifier("pending-re-pair-banner-body")
                         FSPrimaryButton(
-                            "Finalize now",
+                            String(localized: "Finalize now"),
                             enabled: elapsed,
                             block: true
                         ) {
@@ -664,7 +664,7 @@ public struct SettingsScreen: View {
                     }
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
                     if d.isManaged {
-                        Text(d.isLocked ? "Administrator-managed · locked" : "Administrator-managed")
+                        Text(d.isLocked ? String(localized: "Administrator-managed · locked") : "Administrator-managed")
                             .font(FS.font.caption()).foregroundColor(c.textMuted)
                     } else if d.lastSeenAt > d.createdAt {
                         Text("last seen \(relative(ms: d.lastSeenAt))")
@@ -675,7 +675,7 @@ public struct SettingsScreen: View {
                 Menu {
                     if d.isCurrent {
                         Button {
-                            nameEditor = NameEditor(kind: .selfDevice, title: "Rename this device", initialName: d.displayName)
+                            nameEditor = NameEditor(kind: .selfDevice, title: String(localized: "Rename this device"), initialName: d.displayName)
                         } label: {
                             Label("Rename this device", systemImage: "pencil")
                         }
@@ -684,19 +684,19 @@ public struct SettingsScreen: View {
                         Button {
                             nameEditor = NameEditor(
                                 kind: .managed(d.deviceId),
-                                title: d.isManaged ? "Edit managed name" : "Set managed name",
+                                title: d.isManaged ? String(localized: "Edit managed name") : String(localized: "Set managed name"),
                                 initialName: d.displayName,
                                 supportsLock: true,
                                 initiallyLocked: d.isLocked
                             )
                         } label: {
-                            Label(d.isManaged ? "Edit managed name" : "Set managed name", systemImage: "lock.shield")
+                            Label(d.isManaged ? String(localized: "Edit managed name") : "Set managed name", systemImage: "lock.shield")
                         }
                         if d.isManaged {
                             Button(role: .destructive) {
                                 Task {
                                     if !(await onRemoveManagedDeviceName(d.deviceId)) {
-                                        nameEditMessage = "Couldn't remove the managed name."
+                                        nameEditMessage = String(localized: "Couldn't remove the managed name.")
                                     }
                                 }
                             } label: {
@@ -757,9 +757,9 @@ public struct SettingsScreen: View {
         switch raw {
         case "ios": return "iPhone / iPad"
         case "android": return "Android"
-        case "web": return "Web"
-        case "macos": return "Mac"
-        default: return "Device"
+        case "web": return String(localized: "Web")
+        case "macos": return String(localized: "Mac")
+        default: return String(localized: "Device")
         }
     }
 
@@ -773,7 +773,7 @@ public struct SettingsScreen: View {
     @ViewBuilder
     private func browserSessionsSection(c: FSColors) -> some View {
         if case .loaded(let sessions) = controlDevices, !sessions.isEmpty {
-            section("Browser sessions", c: c) {
+            section(String(localized: "Browser sessions"), c: c) {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     Text("Computers you've docked a browser from. They can manage this account for a few hours, then expire.")
                         .font(FS.font.caption()).foregroundColor(c.textMuted)
@@ -799,9 +799,9 @@ public struct SettingsScreen: View {
                 }
                 Spacer()
                 if s.current {
-                    FSPill("This device", kind: .online)
+                    FSPill(String(localized: "This device"), kind: .online)
                 } else {
-                    FSDangerButton("Revoke") { revokeSessionTarget = s }
+                    FSDangerButton(String(localized: "Revoke")) { revokeSessionTarget = s }
                         .accessibilityIdentifier("settings-revoke-browser-\(s.tokenPrefix)")
                 }
             }
@@ -813,11 +813,11 @@ public struct SettingsScreen: View {
     /// right after those two sections so all device management reads as one
     /// area.
     private func deviceExtrasGroup(c: FSColors) -> some View {
-        FSSettingsListSection("Companions", rows: [
-            FSSettingsRow(icon: "laptopcomputer", title: "Remote", subtitle: "Read-only browser session (4h)", action: onOpenCompanionDock),
+        FSSettingsListSection(String(localized: "Companions"), rows: [
+            FSSettingsRow(icon: "laptopcomputer", title: String(localized: "Remote"), subtitle: String(localized: "Read-only browser session (4h)"), action: onOpenCompanionDock),
             FSSettingsRow(
                 icon: "tray.full",
-                title: "Companion requests",
+                title: String(localized: "Companion requests"),
                 subtitle: companionRequestsSubtitle,
                 badge: pendingCompanionWritesCount > 0 ? pendingCompanionWritesCount : nil,
                 action: onOpenCompanionRequests
@@ -827,16 +827,16 @@ public struct SettingsScreen: View {
 
     /// Web-access group (spec S1 group 3).
     private func webAccessGroup(c: FSColors) -> some View {
-        FSSettingsListSection("Web access", rows: [
-            FSSettingsRow(icon: "lock.open.laptopcomputer", title: "Open secured sessions", subtitle: "Sites you've signed a browser into", accessibilityId: "settings-open-secured-sessions", action: onOpenSecuredSessions),
-            FSSettingsRow(icon: "link", title: "Process URL", subtitle: "Open a sign-in link you copied", action: onOpenProcessUrl),
+        FSSettingsListSection(String(localized: "Web access"), rows: [
+            FSSettingsRow(icon: "lock.open.laptopcomputer", title: String(localized: "Open secured sessions"), subtitle: String(localized: "Sites you've signed a browser into"), accessibilityId: "settings-open-secured-sessions", action: onOpenSecuredSessions),
+            FSSettingsRow(icon: "link", title: String(localized: "Process URL"), subtitle: String(localized: "Open a sign-in link you copied"), action: onOpenProcessUrl),
         ])
     }
 
     /// Backup-&-peers group (spec S1 group 4).
     private func backupPeersGroup(c: FSColors) -> some View {
-        FSSettingsListSection("Backup & peers", rows: [
-            FSSettingsRow(icon: "externaldrive.connected.to.line.below.fill", title: "Peer backup", subtitle: "Where the pieces of your backup are kept", action: onOpenPeerBackup),
+        FSSettingsListSection(String(localized: "Backup & peers"), rows: [
+            FSSettingsRow(icon: "externaldrive.connected.to.line.below.fill", title: String(localized: "Peer backup"), subtitle: String(localized: "Where the pieces of your backup are kept"), action: onOpenPeerBackup),
         ])
     }
 
@@ -863,9 +863,9 @@ public struct SettingsScreen: View {
         let gated = signOutPolicy == .blockedNoRecovery
         return FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                FSDangerButton("Lock the app", block: true, large: true, action: onLock)
+                FSDangerButton(String(localized: "Lock the app"), block: true, large: true, action: onLock)
                     .accessibilityIdentifier("settings-lock-btn")
-                FSDangerButton("Sign out", muted: gated, block: true, large: true) {
+                FSDangerButton(String(localized: "Sign out"), muted: gated, block: true, large: true) {
                     if gated { onRecoveryRequired() }
                     else if signOutPolicy == .deletionCeremony { onDeleteAccount() }
                     else if holdsAdminKey { signOutWarning = true }
@@ -887,24 +887,24 @@ public struct SettingsScreen: View {
         // enrolled, tap-while-greyed surfaces a toast. Boxed like a server
         // page's Danger zone; the confirmations carry the warnings.
         let gated = signOutPolicy == .blockedNoRecovery
-        return section("Danger zone", c: c) {
+        return section(String(localized: "Danger zone"), c: c) {
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
-                    FSDangerButton("Remove this device from account", muted: gated, block: true) {
+                    FSDangerButton(String(localized: "Remove this device from account"), muted: gated, block: true) {
                         if gated { onRecoveryRequired() }
                         else if signOutPolicy == .deletionCeremony { onDeleteAccount() }
                         else if holdsRescueKey { removeWarning = true }
                         else { showRemoveConfirm = true }
                     }
                     .accessibilityIdentifier("remove-from-account-btn")
-                    FSDangerButton("Delete account", block: true, action: onDeleteAccount)
+                    FSDangerButton(String(localized: "Delete account"), block: true, action: onDeleteAccount)
                         .accessibilityIdentifier("settings-delete-account-btn")
                 }
             }
         }
         .confirmationDialog(
             hasCloudRecovery
-                ? "Remove this device from your account?"
+                ? String(localized: "Remove this device from your account?")
                 : "Permanently remove this device?",
             isPresented: $showRemoveConfirm,
             titleVisibility: .visible
@@ -915,7 +915,7 @@ public struct SettingsScreen: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(hasCloudRecovery
-                ? "We'll revoke this device's notification access and erase its local keys. Use your recovery passkey to sign in again later."
+                ? String(localized: "We'll revoke this device's notification access and erase its local keys. Use your recovery passkey to sign in again later.")
                 : "You have no cloud recovery on this account. After removal, no other device can take over — your account is gone for good. Set up recovery first if you might want to come back.")
         }
     }
@@ -924,25 +924,25 @@ public struct SettingsScreen: View {
     /// control), Privacy, and About under one header. Appearance writes
     /// straight to PrivacySettings; RootShell applies it app-wide.
     private func appSection(c: FSColors) -> some View {
-        section("App", c: c) {
+        section(String(localized: "App"), c: c) {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 FSSegmentedControl(
                     segments: [
-                        .init(value: PrivacySettings.ThemeMode.light, title: "Light", systemImage: "sun.max.fill",
-                              identifier: "appearance-light", accessibilityLabel: "Light appearance"),
-                        .init(value: .dark, title: "Dark", systemImage: "moon.fill",
-                              identifier: "appearance-dark", accessibilityLabel: "Dark appearance"),
-                        .init(value: .auto, title: "Auto", identifier: "appearance-auto",
-                              accessibilityLabel: "Automatic appearance"),
+                        .init(value: PrivacySettings.ThemeMode.light, title: String(localized: "Light"), systemImage: "sun.max.fill",
+                              identifier: "appearance-light", accessibilityLabel: String(localized: "Light appearance")),
+                        .init(value: .dark, title: String(localized: "Dark"), systemImage: "moon.fill",
+                              identifier: "appearance-dark", accessibilityLabel: String(localized: "Dark appearance")),
+                        .init(value: .auto, title: String(localized: "Auto"), identifier: "appearance-auto",
+                              accessibilityLabel: String(localized: "Automatic appearance")),
                     ],
                     selection: privacy.themeMode,
                     onSelect: { privacy.themeMode = $0 }
                 )
-                FSSectionLabel("App icon")
+                FSSectionLabel(String(localized: "App icon"))
                 FSSegmentedControl(
                     segments: [
-                        .init(value: String?.none, title: "Classic", identifier: "appicon-classic"),
-                        .init(value: "AppIcon-Legacy", title: "Legacy", identifier: "appicon-legacy"),
+                        .init(value: String?.none, title: String(localized: "Classic"), identifier: "appicon-classic"),
+                        .init(value: String(localized: "AppIcon-Legacy"), title: String(localized: "Legacy"), identifier: "appicon-legacy"),
                     ],
                     selection: alternateIconName,
                     onSelect: { setAppIcon($0) }
@@ -954,8 +954,8 @@ public struct SettingsScreen: View {
 
     private var appRows: some View {
         FSSettingsListSection(rows: [
-            FSSettingsRow(icon: "lock.shield.fill", title: "Privacy", subtitle: "App lock, push notifications", action: onOpenPrivacy),
-            FSSettingsRow(icon: "info.circle.fill", title: "About Flagship", subtitle: "Version, license, source", action: onOpenAbout),
+            FSSettingsRow(icon: "lock.shield.fill", title: String(localized: "Privacy"), subtitle: String(localized: "App lock, push notifications"), action: onOpenPrivacy),
+            FSSettingsRow(icon: "info.circle.fill", title: String(localized: "About Flagship"), subtitle: String(localized: "Version, license, source"), action: onOpenAbout),
         ])
     }
 
@@ -977,9 +977,9 @@ public struct SettingsScreen: View {
     }
 
     private var companionRequestsSubtitle: String {
-        if pendingCompanionWritesCount == 0 { return "Approve writes from docked browsers" }
+        if pendingCompanionWritesCount == 0 { return String(localized: "Approve writes from docked browsers") }
         if pendingCompanionWritesCount == 1 { return "1 pending write from a docked browser" }
-        return "\(pendingCompanionWritesCount) pending writes from docked browsers"
+        return String(localized: "\(pendingCompanionWritesCount) pending writes from docked browsers")
     }
 
     @ViewBuilder
@@ -1062,7 +1062,7 @@ private struct DeviceNameEditor: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(saving ? "Saving…" : "Save") {
+                    Button(saving ? String(localized: "Saving…") : "Save") {
                         saving = true
                         Task {
                             if await onSave(name, locked) { dismiss() }

@@ -24,7 +24,7 @@ public struct ServerOrderSaver {
     /// one, else the account IRK. Gets at most one prompt.
     public typealias Signer = @MainActor (_ reason: String) async throws -> Curve25519.Signing.PrivateKey
 
-    public static let reason = "Confirm the new server order"
+    public static let reason = String(localized: "Confirm the new server order")
 
     private let app: AppState
     private let mailbox: any SecretMailboxClient
@@ -49,7 +49,7 @@ public struct ServerOrderSaver {
 
     /// Show `podIds` (first = leader) as the order, then sign and post it.
     public func save(podIds: [String]) async -> Outcome {
-        guard let user = app.currentUser, !user.isEmpty else { return .failed("Sign in first.") }
+        guard let user = app.currentUser, !user.isEmpty else { return .failed(String(localized: "Sign in first.")) }
         let issuedAt = now()
         let snapshot = app.beginServerOrderChange(podIds: podIds, issuedAt: issuedAt)
         if app.isDemoAccount {
@@ -110,12 +110,12 @@ public struct ServerOrderSaver {
     static func message(for error: Error) -> String {
         if error is AdminOrderRefused { return AdminOrderGate.server }
         if BiometricGate.GateError.from(error) == .userCancelled {
-            return "The server order wasn't changed."
+            return String(localized: "The server order wasn't changed.")
         }
         if case ScreensClientError.http(status: 403, message: _) = error {
-            return "Your account didn't accept the new order. Try again."
+            return String(localized: "Your account didn't accept the new order. Try again.")
         }
-        return "Couldn't save the server order. Check your connection and try again."
+        return String(localized: "Couldn't save the server order. Check your connection and try again.")
     }
 
     /// Silent when the session already holds the IRK and this device has no

@@ -20,7 +20,7 @@ public final class UnrevokeServerViewModel {
         case failed(String)
     }
 
-    public static let completedMessage = "Server restored. If it unlocks on its own, approve its unlock once from your phone."
+    public static let completedMessage = String(localized: "Server restored. If it unlocks on its own, approve its unlock once from your phone.")
 
     public private(set) var phase: Phase = .idle
 
@@ -49,15 +49,15 @@ public final class UnrevokeServerViewModel {
     public func run() async {
         if case .working = phase { return }
         guard let user = username(), !user.isEmpty else {
-            phase = .failed("No active account on this device.")
+            phase = .failed(String(localized: "No active account on this device."))
             return
         }
         phase = .working
         let key: Curve25519.Signing.PrivateKey
         do {
-            key = try await signer("Un-revoke server \(serverDomain)")
+            key = try await signer(String(localized: "Un-revoke server \(serverDomain)"))
         } catch {
-            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't access your account key: \(UserErrorText.of(error))"))
             return
         }
         let issuedAt = now()
@@ -70,19 +70,19 @@ public final class UnrevokeServerViewModel {
                 signature: HexUtil.encode(sig)
             ))
         } catch ScreensClientError.http(let status, _) where status == 403 {
-            phase = .failed("The server rejected the request. Sign in again and retry.")
+            phase = .failed(String(localized: "The server rejected the request. Sign in again and retry."))
             return
         } catch ScreensClientError.http(let status, _) where status == 404 {
-            phase = .failed("That server no longer exists.")
+            phase = .failed(String(localized: "That server no longer exists."))
             return
         } catch ScreensClientError.http(let status, _) where status == 409 {
-            phase = .failed("This server was deleted, transferred or retired and can't be restored.")
+            phase = .failed(String(localized: "This server was deleted, transferred or retired and can't be restored."))
             return
         } catch let error as ScreensClientError {
-            phase = .failed(error.errorDescription ?? "That didn't work. Try again in a moment.")
+            phase = .failed(error.errorDescription ?? String(localized: "That didn't work. Try again in a moment."))
             return
         } catch {
-            phase = .failed("Couldn't reach the server. Check your connection and try again.")
+            phase = .failed(String(localized: "Couldn't reach the server. Check your connection and try again."))
             return
         }
         phase = .completed

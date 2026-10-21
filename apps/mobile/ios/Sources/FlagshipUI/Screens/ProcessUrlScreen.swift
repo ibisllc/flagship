@@ -48,7 +48,7 @@ public struct ProcessUrlScreen: View {
                         }
                     }
                 }
-                FSPrimaryButton("Open link", block: true, large: true) { process() }
+                FSPrimaryButton(String(localized: "Open link"), block: true, large: true) { process() }
                     .disabled(pasted.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .accessibilityIdentifier("process-url-open")
                 Spacer().frame(height: FS.space.s12)
@@ -64,7 +64,7 @@ public struct ProcessUrlScreen: View {
     private func process() {
         error = nil
         guard let link = DeepLink.parsePastedString(pasted) else {
-            error = "We couldn't read that link. Copy the full link from the sign-in page and try again."
+            error = String(localized: "We couldn't read that link. Copy the full link from the sign-in page and try again.")
             return
         }
         // Hand off to the shared router (RootShell presents the authorize cover).

@@ -120,7 +120,7 @@ public final class CompanionRequestsViewModel {
             case "revoke-server":
                 try await dispatchRevokeServer(intent: request.intent)
             default:
-                rowError[request.requestId] = "Unsupported request kind — open your browser to handle"
+                rowError[request.requestId] = String(localized: "Unsupported request kind — open your browser to handle")
                 return
             }
         } catch {
@@ -160,7 +160,7 @@ public final class CompanionRequestsViewModel {
         }
         let intentUsername = string(from: intent["username"]) ?? user
         let issuedAt = self.now()
-        let irk = try await sensitiveSigner("Approve release-server for \(serverDomain)")
+        let irk = try await sensitiveSigner(String(localized: "Approve release-server for \(serverDomain)"))
         let canonical = ReleaseServerName.canonicalBytes(
             username: intentUsername,
             serverDomain: serverDomain,
@@ -193,7 +193,7 @@ public final class CompanionRequestsViewModel {
         }
         let userId = string(from: intent["userId"]) ?? user
         let issuedAt = self.now()
-        let irk = try await signer("Approve revoke-server for \(serverId)")
+        let irk = try await signer(String(localized: "Approve revoke-server for \(serverId)"))
         let canonical = ServerRevocationClaim.canonicalBytes(
             userId: userId,
             revokedServerId: serverId,

@@ -6,10 +6,10 @@ import Foundation
 public enum SupportContact {
     public static let email = "support@flagshipserver.com"
 
-    public static func subject() -> String { "Server setup stopped" }
+    public static func subject() -> String { String(localized: "Server setup stopped") }
 
     public static func body(serial: String, step: String?) -> String {
-        "My server's setup stopped.\nOrder: \(serial)\nStep: \(step ?? "")\n"
+        String(localized: "My server's setup stopped.\nOrder: \(serial)\nStep: \(step ?? "")\n")
     }
 
     public static func setupStoppedURL(serial: String, step: String?) -> URL? {

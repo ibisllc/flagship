@@ -82,7 +82,7 @@ public struct SecuredSessionsScreen: View {
                             .font(FS.font.scaled(15, weight: .semibold))
                             .foregroundColor(c.text)
                             .lineLimit(1).truncationMode(.middle)
-                        Text(session.browserAgent.isEmpty ? "Unknown browser" : session.browserAgent)
+                        Text(session.browserAgent.isEmpty ? String(localized: "Unknown browser") : session.browserAgent)
                             .font(FS.font.caption()).foregroundColor(c.textMuted)
                             .lineLimit(1).truncationMode(.tail)
                         Text("started \(relative(ms: session.startedAt))")
@@ -129,11 +129,11 @@ public struct SecuredSessionsScreen: View {
     private func statusPill(_ session: SecuredSession) -> some View {
         switch vm.statuses[session.secretId] {
         case .some(.online):
-            FSPill("Online", kind: .online)
+            FSPill(String(localized: "Online"), kind: .online)
         case .some(.offline):
-            FSPill("Offline", kind: .offline)
+            FSPill(String(localized: "Offline"), kind: .offline)
         case .none:
-            FSPill("Tap refresh", kind: .idle)
+            FSPill(String(localized: "Tap refresh"), kind: .idle)
         }
     }
 

@@ -85,17 +85,17 @@ public struct KeyfileImportSheet: View {
                         .foregroundColor(pickedFileText == nil ? c.primary : c.success)
                         .imageScale(.large)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(pickedFileText == nil ? "Choose your backup file" : "Backup file selected")
+                        Text(pickedFileText == nil ? String(localized: "Choose your backup file") : "Backup file selected")
                             .font(FS.font.bodySm()).foregroundColor(c.text)
                         Text(pickedFileText == nil
-                             ? "Pick the .flagshipkey file you saved earlier."
+                             ? String(localized: "Pick the .flagshipkey file you saved earlier.")
                              : "Now enter the passphrase you set when you created it.")
                             .font(FS.font.caption()).foregroundColor(c.textMuted)
                     }
                 }
             }
 
-            FSGhostButton(pickedFileText == nil ? "Choose file" : "Choose a different file", block: true) {
+            FSGhostButton(pickedFileText == nil ? String(localized: "Choose file") : String(localized: "Choose a different file"), block: true) {
                 pickError = nil
                 showPicker = true
             }
@@ -104,8 +104,8 @@ public struct KeyfileImportSheet: View {
             if pickedFileText != nil {
                 FSField(
                     value: $vm.passphrase,
-                    label: "Passphrase",
-                    placeholder: "The passphrase for this file",
+                    label: String(localized: "Passphrase"),
+                    placeholder: String(localized: "The passphrase for this file"),
                     secure: true
                 )
                 .accessibilityIdentifier("keyfile-import-passphrase")
@@ -125,7 +125,7 @@ public struct KeyfileImportSheet: View {
             }
 
             FSPrimaryButton(
-                "Import",
+                String(localized: "Import"),
                 enabled: pickedFileText != nil && vm.canImport,
                 block: true,
                 large: true
@@ -150,12 +150,12 @@ public struct KeyfileImportSheet: View {
                         Image(systemName: "clock.badge.exclamationmark")
                             .foregroundColor(c.accent)
                         Text(elapsed
-                             ? "The grace period has elapsed — you can finish now."
+                             ? String(localized: "The grace period has elapsed — you can finish now.")
                              : "This device takes over in \(RealAccountLoginScreen.formatRemaining(remaining)). Your other devices are being alerted.")
                             .font(FS.font.bodySm()).foregroundColor(c.text)
                     }
                 }
-                FSPrimaryButton("Finish now", enabled: elapsed, block: true, large: true) {
+                FSPrimaryButton(String(localized: "Finish now"), enabled: elapsed, block: true, large: true) {
                     Task { await vm.completeTakeover() }
                 }
                 .accessibilityIdentifier("keyfile-import-finish")
@@ -193,17 +193,17 @@ public struct KeyfileImportSheet: View {
             do {
                 let data = try Data(contentsOf: url)
                 guard let text = String(data: data, encoding: .utf8) else {
-                    pickError = "This isn't a Flagship key file."
+                    pickError = String(localized: "This isn't a Flagship key file.")
                     return
                 }
                 pickedFileText = text
                 pickError = nil
                 vm.reset()
             } catch {
-                pickError = "Couldn't read that file. Try choosing it again."
+                pickError = String(localized: "Couldn't read that file. Try choosing it again.")
             }
         case .failure:
-            pickError = "Couldn't open the file picker. Try again."
+            pickError = String(localized: "Couldn't open the file picker. Try again.")
         }
     }
 

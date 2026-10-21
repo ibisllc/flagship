@@ -108,7 +108,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         guard let base = await store.podBaseUrl else { throw ScreensClientError.notPaired }
         guard let token = await store.sessionToken else { throw ScreensClientError.noSessionToken }
         guard let url = URL(string: base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/screens/lan-hint") else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
         var req = URLRequest(url: url)
         req.setValue(token, forHTTPHeaderField: "x-flagship-session")
@@ -133,7 +133,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         guard let base = await store.podBaseUrl else { throw ScreensClientError.notPaired }
         guard let token = await store.sessionToken else { throw ScreensClientError.noSessionToken }
         guard let url = URL(string: base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + path) else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
 
         var req = URLRequest(url: url)
@@ -161,7 +161,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
             throw error
         }
         guard let http = resp as? HTTPURLResponse else {
-            throw ScreensClientError.http(status: 0, message: "no response")
+            throw ScreensClientError.http(status: 0, message: String(localized: "no response"))
         }
         if !(200..<300).contains(http.statusCode) {
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -218,7 +218,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     }
     public func appBackupFetch(fetchPath: String) async throws -> Data {
         guard fetchPath.hasPrefix("/api/backups/") else {
-            throw ScreensClientError.http(status: 0, message: "unexpected backup path")
+            throw ScreensClientError.http(status: 0, message: String(localized: "unexpected backup path"))
         }
         return try await requestData(fetchPath, timeout: 300)
     }
@@ -542,12 +542,12 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
                       let token = await store.sessionToken,
                       var comps = URLComponents(string: base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/screens/vibe-code/\(sessionId)/stream")
                 else {
-                    finish(incomplete: "Couldn't reach the server to load this build.")
+                    finish(incomplete: String(localized: "Couldn't reach the server to load this build."))
                     return
                 }
                 comps.scheme = comps.scheme?.hasSuffix("s") == true ? "wss" : "ws"
                 guard let url = comps.url else {
-                    finish(incomplete: "Couldn't reach the server to load this build.")
+                    finish(incomplete: String(localized: "Couldn't reach the server to load this build."))
                     return
                 }
                 var req = URLRequest(url: url)
@@ -582,7 +582,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
                 ws.cancel(with: .normalClosure, reason: nil)
                 // A user-initiated cancel (screen popped) is not an error; a
                 // drop before any terminal frame is.
-                finish(incomplete: Task.isCancelled ? nil : "Lost connection to the server before the build finished.")
+                finish(incomplete: Task.isCancelled ? nil : String(localized: "Lost connection to the server before the build finished."))
             }
             continuation.onTermination = { _ in task.cancel() }
         }
