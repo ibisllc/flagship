@@ -8,12 +8,13 @@
 
 import { ScreensError } from "./api.js";
 
-export const DEPLOY_STAGING = "Testing the app on a private copy…";
-export const DEPLOY_FIXING = "The AI is fixing a problem it found…";
-export const DEPLOY_GOING_LIVE = "Installing…";
-export const DEPLOYING = "Deploying…";
-export const DEPLOY_FAILED = "The app couldn't be deployed.";
-export const DEPLOY_TOO_LONG = "Deploying is taking unusually long. Check Build sessions later to see how it went.";
+import { tr } from "./i18n.js";
+export const DEPLOY_STAGING = tr("Testing the app on a private copy…");
+export const DEPLOY_FIXING = tr("The AI is fixing a problem it found…");
+export const DEPLOY_GOING_LIVE = tr("Installing…");
+export const DEPLOYING = tr("Deploying…");
+export const DEPLOY_FAILED = tr("The app couldn't be deployed.");
+export const DEPLOY_TOO_LONG = tr("Deploying is taking unusually long. Check Build sessions later to see how it went.");
 
 const POLL_INTERVAL_MS = 1500;
 const POLL_LIMIT_MS = 30 * 60 * 1000;

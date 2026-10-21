@@ -32,16 +32,17 @@ import {
 import { runRotateAdminRoot } from "../lib/adminRootRotation.js";
 import { setupCloudRecovery, hasCloudRecovery } from "../lib/recovery.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-account-security");
 
 // Slice D (§5) — the type-to-confirm phrase for the destructive "Rotate admin
 // key" action, and the revoke-semantic warning shown on the sheet.
 const ROTATE_CONFIRM_PHRASE = "ROTATE";
 export const ROTATE_ADMIN_WARNING =
-  "Rotating mints a brand-new admin key and REVOKES admin from every OTHER admin device — they keep access as members but can no longer wipe, transfer, or decommission your cloud. Do this if an admin device was lost or you want to cut off the others. Your boxes adopt the change on their next check-in.";
+  tr("Rotating mints a brand-new admin key and REVOKES admin from every OTHER admin device — they keep access as members but can no longer wipe, transfer, or decommission your cloud. Do this if an admin device was lost or you want to cut off the others. Your boxes adopt the change on their next check-in.");
 
 export const ROTATE_REESCROW_FAILED_MESSAGE =
-  "Admin key rotated, but your recovery backup wasn't updated — it still holds your OLD admin key. Run recovery setup again from Settings to fix this.";
+  tr("Admin key rotated, but your recovery backup wasn't updated — it still holds your OLD admin key. Run recovery setup again from Settings to fix this.");
 
 /**
  * The post-rotation re-escrow the rotation lib runs. Not-enrolled resolves
@@ -92,10 +93,10 @@ function fmtDate(ms) {
 /** Renders the badge + explainer at the top of the screen. */
 function renderBadge() {
   const isMulti = state.accountType === "multi";
-  const titleText = isMulti ? "Multi-device + 2FA" : "Single-device account";
+  const titleText = isMulti ? tr("Multi-device + 2FA") : tr("Single-device account");
   const explainer = isMulti
-    ? "Recovery requires a 6-digit TOTP code (or a recovery code) plus a 24-hour grace window."
-    : "Recovery needs a recovery credential and then waits 3 days. Your other devices are alerted during the wait, but can't cancel it.";
+    ? tr("Recovery requires a 6-digit TOTP code (or a recovery code) plus a 24-hour grace window.")
+    : tr("Recovery needs a recovery credential and then waits 3 days. Your other devices are alerted during the wait, but can't cancel it.");
   return `
     <div class="card" data-account-security-badge="${escapeHtml(state.accountType ?? "unknown")}">
       <div class="row">
@@ -112,21 +113,16 @@ function renderBadge() {
 function renderExplainer() {
   if (state.accountType === "multi") {
     return `
-      <h3 class="mt-3">Currently enabled</h3>
+      <h3 class="mt-3">${tr("Currently enabled")}</h3>
       <p>
-        Your TOTP secret was generated on ${escapeHtml(fmtDate(state.totpEnrolledAt))}.
-        Store your recovery codes somewhere safe — they're the only
-        way back in if your authenticator app is lost.
+        ${tr("Your TOTP secret was generated on {0}. Store your recovery codes somewhere safe — they're the only way back in if your authenticator app is lost.", escapeHtml(fmtDate(state.totpEnrolledAt)))}
       </p>
     `;
   }
   return `
-    <h3 class="mt-3">Why enable this?</h3>
+    <h3 class="mt-3">${tr("Why enable this?")}</h3>
     <p>
-      A second factor outside your browser's password manager. If
-      that store is ever compromised, the attacker still needs a live
-      6-digit code from your authenticator app to take over your
-      account.
+      ${tr("A second factor outside your browser's password manager. If that store is ever compromised, the attacker still needs a live 6-digit code from your authenticator app to take over your account.")}
     </p>
   `;
 }
@@ -136,27 +132,26 @@ function renderStagedSecret() {
   const dataUrl = `data:image/png;base64,${state.staged.qrPngBase64}`;
   return `
     <div class="card mt-3" data-account-security-staged>
-      <h3>Step 2 of 4 — scan or paste</h3>
+      <h3>${tr("Step 2 of 4 — scan or paste")}</h3>
       <p class="note small">
-        Scan with an authenticator app (1Password, Google Authenticator,
-        Authy …). Or paste the manual key below.
+        ${tr("Scan with an authenticator app (1Password, Google Authenticator, Authy …). Or paste the manual key below.")}
       </p>
       ${state.staged.qrPngBase64
-        ? `<img alt="TOTP QR code" data-account-security-qr src="${escapeHtml(dataUrl)}"
+        ? `<img alt="${tr("TOTP QR code")}" data-account-security-qr src="${escapeHtml(dataUrl)}"
                 style="image-rendering: pixelated; width: 200px; height: 200px;" />`
         : ""}
-      <p class="weight-600 mt-2">Manual key</p>
+      <p class="weight-600 mt-2">${tr("Manual key")}</p>
       <code data-account-security-manual-secret>${escapeHtml(state.staged.secret)}</code>
-      <p class="weight-600 mt-3">Step 3 — enter the 6-digit code</p>
+      <p class="weight-600 mt-3">${tr("Step 3 — enter the 6-digit code")}</p>
       <input type="text" inputmode="numeric" maxlength="6"
              id="account-security-sample-code"
              data-account-security-sample-code
              placeholder="123456" autocomplete="one-time-code" />
       <div class="row-2 mt-2">
         <button id="account-security-verify" data-account-security-verify-btn>
-          Verify code
+          ${tr("Verify code")}
         </button>
-        <button class="secondary" id="account-security-cancel-enroll">Cancel</button>
+        <button class="secondary" id="account-security-cancel-enroll">${tr("Cancel")}</button>
       </div>
     </div>
   `;
@@ -169,11 +164,9 @@ function renderRecoveryCodes() {
     .join("");
   return `
     <div class="card mt-3" data-account-security-codes>
-      <h3>Step 4 of 4 — save your recovery codes</h3>
+      <h3>${tr("Step 4 of 4 — save your recovery codes")}</h3>
       <p>
-        Print these or store them in a password manager. Each code
-        works once if you lose your authenticator. They're the ONLY
-        way back in.
+        ${tr("Print these or store them in a password manager. Each code works once if you lose your authenticator. They're the ONLY way back in.")}
       </p>
       <ol class="recovery-codes" data-account-security-recovery-codes>
         ${items}
@@ -182,14 +175,14 @@ function renderRecoveryCodes() {
         <input type="checkbox" id="account-security-saved"
                data-account-security-saved-toggle
                ${state.savedRecoveryCodes ? "checked" : ""} />
-        I've saved these somewhere safe
+        ${tr("I've saved these somewhere safe")}
       </label>
       <button id="account-security-done" class="mt-2"
               data-account-security-done-btn
               ${state.savedRecoveryCodes ? "" : "disabled"}>
-        Done
+        ${tr("Done")}
       </button>
-      <button class="secondary mt-2" id="account-security-print">Print</button>
+      <button class="secondary mt-2" id="account-security-print">${tr("Print")}</button>
     </div>
   `;
 }
@@ -201,7 +194,7 @@ function renderActions() {
         <button class="danger" id="account-security-disable"
                 data-account-security-disable-btn
                 ${state.busy ? "disabled" : ""}>
-          ${state.busy ? "Working…" : "Disable multi-device + 2FA"}
+          ${state.busy ? tr("Working…") : tr("Disable multi-device + 2FA")}
         </button>
       </div>
     `;
@@ -211,11 +204,10 @@ function renderActions() {
       <button id="account-security-enable"
               data-account-security-enable-btn
               ${state.busy ? "disabled" : ""}>
-        ${state.busy ? "Working…" : "Enable multi-device + 2FA"}
+        ${state.busy ? tr("Working…") : tr("Enable multi-device + 2FA")}
       </button>
       <p class="faint-sm mt-2">
-        This browser signs the enrollment with your account key — no
-        phone required.
+        ${tr("This browser signs the enrollment with your account key — no phone required.")}
       </p>
     </div>
   `;
@@ -230,22 +222,21 @@ function renderRotateAdminRoot() {
   if (!isAdmin) {
     return `
       <div class="card mt-3" data-account-security-rotate="unavailable">
-        <h3>Admin key</h3>
+        <h3>${tr("Admin key")}</h3>
         <p class="note small">
-          This device isn't an admin device, so it can't rotate the admin key.
-          Rotate from a device that holds admin authority.
+          ${tr("This device isn't an admin device, so it can't rotate the admin key. Rotate from a device that holds admin authority.")}
         </p>
       </div>
     `;
   }
   return `
     <div class="card mt-3" data-account-security-rotate="available">
-      <h3>Admin key</h3>
+      <h3>${tr("Admin key")}</h3>
       <p class="note small">${escapeHtml(ROTATE_ADMIN_WARNING)}</p>
       <button class="danger" id="account-security-rotate-admin"
               data-account-security-rotate-btn
               ${state.busy ? "disabled" : ""}>
-        ${state.busy ? "Working…" : "Rotate admin key"}
+        ${state.busy ? tr("Working…") : tr("Rotate admin key")}
       </button>
     </div>
   `;
@@ -263,7 +254,7 @@ function renderFailure() {
 async function renderAccountSecurity() {
   const root = $("account-security-content");
   if (!root) return;
-  root.innerHTML = `<div class="card placeholder">Loading…</div>`;
+  root.innerHTML = `<div class="card placeholder">${tr("Loading…")}</div>`;
   try {
     await fetchAccountType();
     root.innerHTML = [
@@ -285,7 +276,7 @@ function bindHandlers() {
   document.getElementById("account-security-enable")?.addEventListener("click", async () => {
     const session = getSession();
     if (!session.umk) {
-      state.failureMessage = "Unlock the webapp first.";
+      state.failureMessage = tr("Unlock the webapp first.");
       await renderAccountSecurity();
       return;
     }
@@ -301,7 +292,7 @@ function bindHandlers() {
     } catch (e) {
       console.error("totp enroll-begin failed", e);
       state.failureMessage = e?.status === 503
-        ? "Two-factor isn't enabled on this server yet. Try again later."
+        ? tr("Two-factor isn't enabled on this server yet. Try again later.")
         : humanError(e);
     } finally {
       state.busy = false;
@@ -311,22 +302,22 @@ function bindHandlers() {
   document.getElementById("account-security-disable")?.addEventListener("click", async () => {
     const { inlineConfirm } = await import("../lib/modal.js");
     const ok = await inlineConfirm({
-      title: "Disable multi-device + 2FA?",
-      message: "Drops your TOTP secret + recovery codes. The account goes back to single-device + 3-day recovery grace. Refused while other trusted devices exist.",
-      okLabel: "Disable",
+      title: tr("Disable multi-device + 2FA?"),
+      message: tr("Drops your TOTP secret + recovery codes. The account goes back to single-device + 3-day recovery grace. Refused while other trusted devices exist."),
+      okLabel: tr("Disable"),
       danger: true,
     });
     if (!ok) return;
     const { inlinePrompt } = await import("../lib/modal.js");
     const code = await inlinePrompt({
-      title: "Confirm with your 2FA code",
-      message: "Enter a live 6-digit code from your authenticator (or a recovery code) to disable.",
+      title: tr("Confirm with your 2FA code"),
+      message: tr("Enter a live 6-digit code from your authenticator (or a recovery code) to disable."),
       placeholder: "123456",
     });
     if (!code) return;
     const session = getSession();
     if (!session.umk) {
-      state.failureMessage = "Unlock the webapp first.";
+      state.failureMessage = tr("Unlock the webapp first.");
       await renderAccountSecurity();
       return;
     }
@@ -341,13 +332,13 @@ function bindHandlers() {
       });
       state.accountType = accountType;
       state.totpEnrolledAt = null;
-      toast("Two-factor disabled.");
+      toast(tr("Two-factor disabled."));
     } catch (e) {
       console.error("totp disable failed", e);
       state.failureMessage = e?.status === 401
-        ? "That code didn't match. Try a fresh code from your authenticator."
+        ? tr("That code didn't match. Try a fresh code from your authenticator.")
         : e?.status === 409
-          ? "Disable refused — other devices are still trusted on this account. Disconnect them first."
+          ? tr("Disable refused — other devices are still trusted on this account. Disconnect them first.")
           : humanError(e);
     } finally {
       state.busy = false;
@@ -358,13 +349,13 @@ function bindHandlers() {
     const codeInput = document.getElementById("account-security-sample-code");
     const code = (codeInput?.value ?? "").trim();
     if (!code) {
-      state.failureMessage = "Enter the 6-digit code from your authenticator app.";
+      state.failureMessage = tr("Enter the 6-digit code from your authenticator app.");
       await renderAccountSecurity();
       return;
     }
     const session = getSession();
     if (!session.umk) {
-      state.failureMessage = "Unlock the webapp first.";
+      state.failureMessage = tr("Unlock the webapp first.");
       await renderAccountSecurity();
       return;
     }
@@ -384,7 +375,7 @@ function bindHandlers() {
     } catch (e) {
       console.error("totp enroll-confirm failed", e);
       state.failureMessage = e?.status === 401
-        ? "That code didn't match. Try again with a fresh code from your authenticator."
+        ? tr("That code didn't match. Try again with a fresh code from your authenticator.")
         : humanError(e);
     } finally {
       state.busy = false;
@@ -402,7 +393,7 @@ function bindHandlers() {
   });
   document.getElementById("account-security-done")?.addEventListener("click", async () => {
     if (!state.savedRecoveryCodes) {
-      toast("Tick the checkbox first.", "err");
+      toast(tr("Tick the checkbox first."), "err");
       return;
     }
     // Scrub plaintexts from memory once the user has confirmed.
@@ -419,26 +410,26 @@ function bindHandlers() {
     const session = getSession();
     if (!session.umk || !session.adminRootSeed) {
       state.failureMessage = session.umk
-        ? "This device isn't an admin device."
-        : "Unlock the webapp first.";
+        ? tr("This device isn't an admin device.")
+        : tr("Unlock the webapp first.");
       await renderAccountSecurity();
       return;
     }
     const { inlineConfirm, inlinePrompt } = await import("../lib/modal.js");
     const ok = await inlineConfirm({
-      title: "Rotate admin key?",
+      title: tr("Rotate admin key?"),
       message: ROTATE_ADMIN_WARNING,
-      okLabel: "Continue",
+      okLabel: tr("Continue"),
       danger: true,
     });
     if (!ok) return;
     const typed = await inlinePrompt({
-      title: "Type ROTATE to confirm",
-      message: `This revokes admin from your other admin devices and cannot be undone. Type ${ROTATE_CONFIRM_PHRASE} to continue.`,
+      title: tr("Type ROTATE to confirm"),
+      message: tr("This revokes admin from your other admin devices and cannot be undone. Type {0} to continue.", ROTATE_CONFIRM_PHRASE),
       placeholder: ROTATE_CONFIRM_PHRASE,
     });
     if (!typed || typed.trim().toUpperCase() !== ROTATE_CONFIRM_PHRASE) {
-      if (typed != null) toast("Rotation cancelled — phrase didn't match.", "err");
+      if (typed != null) toast(tr("Rotation cancelled — phrase didn't match."), "err");
       return;
     }
     state.busy = true;
@@ -459,7 +450,7 @@ function bindHandlers() {
         // the dead root, so the warning must persist past a toast's lifetime.
         state.failureMessage = ROTATE_REESCROW_FAILED_MESSAGE;
       } else {
-        toast("Admin key rotated — your other admin devices are no longer admins.", "ok");
+        toast(tr("Admin key rotated — your other admin devices are no longer admins."), "ok");
       }
     } catch (e) {
       console.error("admin-root rotation failed", e);

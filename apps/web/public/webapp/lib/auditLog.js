@@ -19,6 +19,7 @@
 import { controlApex } from "./apex.js";
 import { accountReadFetch } from "./accountRead.js";
 
+import { tr } from "./i18n.js";
 /** Server-side per-request cap — mirror of MAX_LIMIT in
  *  packages/control-plane/src/auditEvents.ts. */
 export const AUDIT_MAX_LIMIT = 50;
@@ -39,51 +40,51 @@ export function auditKindLabel(kind) {
   const label = AUDIT_KIND_LABELS[kind];
   if (label) return label;
   const words = String(kind ?? "").replace(/[._-]+/g, " ").trim();
-  return words ? words.charAt(0).toUpperCase() + words.slice(1) : "Account event";
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : tr("Account event");
 }
 
 export const AUDIT_KIND_LABELS = Object.freeze({
-  "device-disconnected": "Disconnected device",
-  "device-replaced": "Replaced device",
-  "device-added": "Added device",
-  "wipe-restart": "Wiped & restarted account",
-  "recovery-set-up": "Set up recovery",
-  "recovery-rotated": "Rotated recovery passkey",
-  "recovery-code-consumed": "Used a recovery code",
-  "app-renamed": "Renamed app URL",
-  "server-created": "Created server",
-  "server-online": "Server came online",
-  "server-migration-started": "Started moving a server",
-  "server-migration-taken-over": "Moved a server to a new machine / VM",
-  "server-migration-aborted": "Cancelled a server move",
-  "server-revoked": "Revoked server",
-  "server-unrevoked": "Restored server",
-  "server-transfer-offered": "Offered a server transfer",
-  "server-transfer-claimed": "Server transfer claimed",
-  "servers-self-delete-issued": "Requested server deletion",
-  "demo-vps-provisioned": "Demo server provisioned",
-  "demo-vps-destroyed": "Demo server removed",
-  "demo-vps-idle-reaped": "Demo server stopped after inactivity",
-  "demo-vps-stuck": "Demo server failed to start",
-  "demo-user-created": "Demo account created",
-  "demo-user-deleted": "Demo account deleted",
-  "demo-user-cancelled": "Demo setup cancelled",
-  "demo-connect-attempt-rate-limited": "Demo connection rate-limited",
-  "totp-enrolled": "Turned on authenticator codes",
-  "totp-disabled": "Turned off authenticator codes",
-  "totp-failed-rate": "Repeated authenticator code failures",
-  "re-pair": "Re-paired a device",
-  "re-pair-initiated": "Started device replacement",
-  "re-pair-expired": "Device replacement expired",
-  "re-pair-refused-no-credential": "Refused a device replacement",
-  "re-pair-initiated-no-credential": "Started device replacement without a credential",
-  "quarantine-blocked-revoke": "Blocked a quarantined device's action",
-  "account-type-changed-single-to-multi": "Switched to multi-device",
-  "account-type-changed-multi-to-single": "Switched to single-device",
-  "account-deleted": "Deleted account",
-  "username-reclaimed": "Username reclaimed",
-  "ct-unexpected-cert": "Unexpected certificate observed",
-  "invite-created": "Someone was invited to an app",
+  "device-disconnected": tr("Disconnected device"),
+  "device-replaced": tr("Replaced device"),
+  "device-added": tr("Added device"),
+  "wipe-restart": tr("Wiped & restarted account"),
+  "recovery-set-up": tr("Set up recovery"),
+  "recovery-rotated": tr("Rotated recovery passkey"),
+  "recovery-code-consumed": tr("Used a recovery code"),
+  "app-renamed": tr("Renamed app URL"),
+  "server-created": tr("Created server"),
+  "server-online": tr("Server came online"),
+  "server-migration-started": tr("Started moving a server"),
+  "server-migration-taken-over": tr("Moved a server to a new machine / VM"),
+  "server-migration-aborted": tr("Cancelled a server move"),
+  "server-revoked": tr("Revoked server"),
+  "server-unrevoked": tr("Restored server"),
+  "server-transfer-offered": tr("Offered a server transfer"),
+  "server-transfer-claimed": tr("Server transfer claimed"),
+  "servers-self-delete-issued": tr("Requested server deletion"),
+  "demo-vps-provisioned": tr("Demo server provisioned"),
+  "demo-vps-destroyed": tr("Demo server removed"),
+  "demo-vps-idle-reaped": tr("Demo server stopped after inactivity"),
+  "demo-vps-stuck": tr("Demo server failed to start"),
+  "demo-user-created": tr("Demo account created"),
+  "demo-user-deleted": tr("Demo account deleted"),
+  "demo-user-cancelled": tr("Demo setup cancelled"),
+  "demo-connect-attempt-rate-limited": tr("Demo connection rate-limited"),
+  "totp-enrolled": tr("Turned on authenticator codes"),
+  "totp-disabled": tr("Turned off authenticator codes"),
+  "totp-failed-rate": tr("Repeated authenticator code failures"),
+  "re-pair": tr("Re-paired a device"),
+  "re-pair-initiated": tr("Started device replacement"),
+  "re-pair-expired": tr("Device replacement expired"),
+  "re-pair-refused-no-credential": tr("Refused a device replacement"),
+  "re-pair-initiated-no-credential": tr("Started device replacement without a credential"),
+  "quarantine-blocked-revoke": tr("Blocked a quarantined device's action"),
+  "account-type-changed-single-to-multi": tr("Switched to multi-device"),
+  "account-type-changed-multi-to-single": tr("Switched to single-device"),
+  "account-deleted": tr("Deleted account"),
+  "username-reclaimed": tr("Username reclaimed"),
+  "ct-unexpected-cert": tr("Unexpected certificate observed"),
+  "invite-created": tr("Someone was invited to an app"),
 });
 
 /**

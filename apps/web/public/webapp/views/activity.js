@@ -25,6 +25,7 @@ import { formatDateTime } from "../lib/dateFormat.js";
 import { accountReadFetch } from "../lib/accountRead.js";
 import { getSession } from "../lib/state.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-activity", { tab: "activity" });
 
 // The user's online pods (statusByDomain map values), fetched alongside the
@@ -42,7 +43,7 @@ function activityPodSwitcherHtml() {
   const buttons = model.options
     .map((o) => {
       const flag = o.isLeader
-        ? `<span class="icon pod-switcher-leader" aria-label="Main server" title="Main server">${flagIcon}</span>`
+        ? `<span class="icon pod-switcher-leader" aria-label="${tr("Main server")}" title="${tr("Main server")}">${flagIcon}</span>`
         : "";
       return (
         `<button type="button" class="fs-chip pod-switcher-chip${o.selected ? " is-selected" : ""}" ` +
@@ -53,7 +54,7 @@ function activityPodSwitcherHtml() {
     })
     .join("");
   return `
-    <div class="fs-chip-row pod-switcher mt-1" role="group" aria-label="Switch server">
+    <div class="fs-chip-row pod-switcher mt-1" role="group" aria-label="${tr("Switch server")}">
       ${buttons}
     </div>
   `;
@@ -68,7 +69,7 @@ function wireActivityPodSwitcher(root) {
       const next = btn.getAttribute("data-pod-switch") ?? "";
       if (next === getPodBaseUrl()) return;
       setPodBaseUrl(next);
-      renderActivity().catch(() => { toast("Couldn't switch server.", "err"); });
+      renderActivity().catch(() => { toast(tr("Couldn't switch server."), "err"); });
     });
   });
 }
@@ -178,13 +179,13 @@ export async function renderActivity() {
       : `
         <div class="card">
           <div class="row">
-            <span class="value">Post-recovery report</span>
+            <span class="value">${tr("Post-recovery report")}</span>
             <span class="pill">${escapeHtml(recovery.status ?? "snapshot")}</span>
           </div>
           <p class="note small">
-            ${recovery.totalRewritten ?? 0} rewrites · ${recovery.reattachedCount ?? 0} apps reattached
+            ${tr("{0} rewrites · {1} apps reattached", recovery.totalRewritten ?? 0, recovery.reattachedCount ?? 0)}
           </p>
-          <button class="secondary full-width mt-2" id="activity-feed-open-recovery">View report</button>
+          <button class="secondary full-width mt-2" id="activity-feed-open-recovery">${tr("View report")}</button>
         </div>`;
 
     const rows = mergeFeed({
@@ -210,7 +211,7 @@ export async function renderActivity() {
       ${activityPodSwitcherHtml()}
       ${recoveryCard}
       ${feed}
-      <button class="secondary full-width mt-2" id="activity-see-all-audit">See all account history</button>
+      <button class="secondary full-width mt-2" id="activity-see-all-audit">${tr("See all account history")}</button>
     `;
     wireActivityPodSwitcher(root);
     $("activity-feed-open-recovery")?.addEventListener("click", async () => {

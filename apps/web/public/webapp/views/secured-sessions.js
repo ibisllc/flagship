@@ -23,6 +23,7 @@ import {
 } from "../lib/securedSessions.js";
 import { sessionStatus, closeSession } from "../lib/serviceInvite.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-secured-sessions");
 
 // secretId → { status: "online"|"offline"|"unknown", lastCheckedAt:number }
@@ -50,11 +51,11 @@ export function renderSecuredSessions() {
           <div>
             <div class="weight-600">${escapeHtml(s.serviceUrl || s.serverId)} ${statusPill(s.secretId)}</div>
             ${s.browserAgent ? `<div class="value text-xs mt-1">${escapeHtml(s.browserAgent)}</div>` : ""}
-            ${started ? `<div class="faint-sm">started ${escapeHtml(started)}</div>` : ""}
+            ${started ? `<div class="faint-sm">${tr("started {0}", escapeHtml(started))}</div>` : ""}
           </div>
           <div class="btn-row-sm">
-            <button class="secondary" data-action="refresh" data-secret="${escapeHtml(s.secretId)}">Refresh</button>
-            <button class="secondary" data-action="stop" data-secret="${escapeHtml(s.secretId)}">Stop</button>
+            <button class="secondary" data-action="refresh" data-secret="${escapeHtml(s.secretId)}">${tr("Refresh")}</button>
+            <button class="secondary" data-action="stop" data-secret="${escapeHtml(s.secretId)}">${tr("Stop")}</button>
           </div>
         </div>
       </div>`;
@@ -74,12 +75,12 @@ async function refreshOne(secretId, btn) {
   if (!s) return;
   const prev = liveness.get(secretId);
   if (!canCheckStatus(prev?.lastCheckedAt)) {
-    toast("Checked too recently — try again in a moment.", "warn");
+    toast(tr("Checked too recently — try again in a moment."), "warn");
     return;
   }
   if (btn) {
     btn.disabled = true;
-    btn.textContent = "Checking…";
+    btn.textContent = tr("Checking…");
   }
   try {
     const status = await sessionStatus({ serverId: s.serverId, secretId });
@@ -90,7 +91,7 @@ async function refreshOne(secretId, btn) {
     // mark the check time so we back off. Other errors surface a toast.
     if (e?.code === "429") {
       liveness.set(secretId, { status: prev?.status ?? "unknown", lastCheckedAt: Date.now() });
-      toast("Checked too recently — try again in a moment.", "warn");
+      toast(tr("Checked too recently — try again in a moment."), "warn");
       renderSecuredSessions();
     } else {
       toast(humanError(e), "err");
@@ -98,7 +99,7 @@ async function refreshOne(secretId, btn) {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = "Refresh";
+      btn.textContent = tr("Refresh");
     }
   }
 }
@@ -109,9 +110,9 @@ async function stopOne(secretId) {
   if (!s) return;
   const { inlineConfirm } = await import("../lib/modal.js");
   const ok = await inlineConfirm({
-    title: "Stop this session?",
-    message: `The browser at ${s.serviceUrl || s.serverId} will be signed out of the site immediately.`,
-    okLabel: "Stop",
+    title: tr("Stop this session?"),
+    message: tr("The browser at {0} will be signed out of the site immediately.", s.serviceUrl || s.serverId),
+    okLabel: tr("Stop"),
     danger: true,
   });
   if (!ok) return;
@@ -125,7 +126,7 @@ async function stopOne(secretId) {
   }
   removeSecuredSession(secretId);
   liveness.delete(secretId);
-  toast("Stopped");
+  toast(tr("Stopped"));
   renderSecuredSessions();
 }
 

@@ -139,6 +139,7 @@ import { SERVER_ADMIN_ONLY, canSignAdminOrders } from "../lib/addServerGate.js";
 import { isAdminDevice } from "../lib/memberRoles.js";
 import { debugAccessBannerHtml, debugAccessCardHtml, wireDebugAccess } from "./debug-access.js";
 
+import { tr, trn } from "../lib/i18n.js";
 registerView("view-server-detail");
 
 function fmtUptime(ms) {
@@ -215,17 +216,17 @@ export function isRestorableRevokedPod(pod) {
  */
 export function renderDangerZoneCard({ serverFqdn, username, revoked, canTransfer = false }) {
   const transferButton = canTransfer
-    ? `<button id="transfer-start-btn" class="danger full-width">Transfer to another account</button>`
+    ? `<button id="transfer-start-btn" class="danger full-width">${tr("Transfer to another account")}</button>`
     : "";
   const revokeButton = revoked
-    ? `<button id="unrevoke-server-btn" class="full-width">Un-revoke server</button>`
-    : `<button id="revoke-server-btn" class="danger full-width">Revoke server (reversible)</button>`;
+    ? `<button id="unrevoke-server-btn" class="full-width">${tr("Un-revoke server")}</button>`
+    : `<button id="revoke-server-btn" class="danger full-width">${tr("Revoke server (reversible)")}</button>`;
   return `
-      <h2 class="mt-4">Danger zone</h2>
+      <h2 class="mt-4">${tr("Danger zone")}</h2>
       <div class="card" id="danger-zone-card" data-server-fqdn="${escapeHtml(serverFqdn)}" data-username="${escapeHtml(username)}">
         ${transferButton}
         ${revokeButton.replace('full-width"', canTransfer ? 'full-width mt-2"' : 'full-width"')}
-        <button id="delete-server-btn" class="danger full-width mt-2">Delete and wipe this server</button>
+        <button id="delete-server-btn" class="danger full-width mt-2">${tr("Delete and wipe this server")}</button>
       </div>`;
 }
 
@@ -273,44 +274,44 @@ export function unreachableCopy(kind, { message = "", lastSeen = "" } = {}) {
     case "revoked":
       return {
         id: "server-detail-revoked",
-        title: "This server is revoked",
-        status: "This server is revoked. It can't connect or unlock until you un-revoke it.",
-        note: "Its name stays reserved. Un-revoke it below if you got the box back, or delete it to free the name.",
+        title: tr("This server is revoked"),
+        status: tr("This server is revoked. It can't connect or unlock until you un-revoke it."),
+        note: tr("Its name stays reserved. Un-revoke it below if you got the box back, or delete it to free the name."),
       };
     case "offline":
       return {
         id: "server-detail-offline",
-        title: "This server has gone offline.",
+        title: tr("This server has gone offline."),
         status: "",
         note: "",
       };
     case "coming-up":
       return {
         id: "server-detail-coming-up",
-        title: "Still coming up…",
-        status: "This server is registered and powering on, but hasn't checked in for the first time yet. This can take a few minutes after a fresh install.",
-        note: "Refresh to re-check.",
+        title: tr("Still coming up…"),
+        status: tr("This server is registered and powering on, but hasn't checked in for the first time yet. This can take a few minutes after a fresh install."),
+        note: tr("Refresh to re-check."),
       };
     case "never-online":
       return {
         id: "server-detail-never-online",
-        title: "This server never came online",
-        status: "The install reserved this name and registered the box, but its software never checked in.",
-        note: "If the install failed, you can delete it below: that frees the name so you can try again.",
+        title: tr("This server never came online"),
+        status: tr("The install reserved this name and registered the box, but its software never checked in."),
+        note: tr("If the install failed, you can delete it below: that frees the name so you can try again."),
       };
     case "not-paired":
       return {
         id: "server-detail-not-paired",
-        title: "This server isn't paired with this browser yet",
-        status: "Pair it to manage this server here.",
+        title: tr("This server isn't paired with this browser yet"),
+        status: tr("Pair it to manage this server here."),
         note: "",
       };
     default:
       return {
         id: "server-detail-connecting",
-        title: "Connecting to your server…",
-        status: `Your server is online, but it didn't answer just now${message ? ` (${message})` : ""}. This can take a moment right after it comes up.`,
-        note: "Refresh to try again. You can still revoke or delete it below.",
+        title: tr("Connecting to your server…"),
+        status: tr("Your server is online, but it didn't answer just now{0}. This can take a moment right after it comes up.", message ? ` (${message})` : ""),
+        note: tr("Refresh to try again. You can still revoke or delete it below."),
       };
   }
 }
@@ -333,7 +334,7 @@ export function renderUnreachableDetail({ serverFqdn, username, revoked, message
   return `
       <div class="card" id="${copy.id}" data-unreachable-kind="${escapeHtml(k)}">
         <div class="card-title">${escapeHtml(copy.title)}</div>
-        <div class="row mt-2"><span class="label">FQDN</span><span class="value">${escapeHtml(serverFqdn)}</span></div>
+        <div class="row mt-2"><span class="label">${tr("FQDN")}</span><span class="value">${escapeHtml(serverFqdn)}</span></div>
         ${copy.status ? `<p class="note mt-2" data-detail-unreachable>${escapeHtml(copy.status)}</p>` : ""}
         ${copy.note ? `<p class="faint-sm mt-1">${escapeHtml(copy.note)}</p>` : ""}
         ${pairButton}
@@ -349,11 +350,11 @@ function wireCheckAgain() {
   if (!btn) return;
   btn.addEventListener("click", () => {
     btn.disabled = true;
-    btn.textContent = "Checking…";
+    btn.textContent = tr("Checking…");
     renderServerDetail().catch((e) => {
       console.error(e);
       btn.disabled = false;
-      btn.textContent = "Check again";
+      btn.textContent = tr("Check again");
       toast(humanError(e), "err");
     });
   });
@@ -366,19 +367,19 @@ function wirePairServer(fqdn, pod) {
   if (!btn) return;
   btn.addEventListener("click", async () => {
     btn.disabled = true;
-    btn.textContent = "Pairing…";
+    btn.textContent = tr("Pairing…");
     try {
       const { autoPairPods } = await import("../lib/autoPair.js");
       const out = await autoPairPods([{ ...(pod ?? {}), serverDomain: fqdn, liveness: "live" }]);
       if (!out.paired.includes(fqdn)) {
-        const msg = "The server didn't accept the pairing. Try again in a moment.";
+        const msg = tr("The server didn't accept the pairing. Try again in a moment.");
         throw Object.assign(new Error(msg), { userMessage: msg });
       }
-      toast("Paired", "ok");
+      toast(tr("Paired"), "ok");
       await renderServerDetail();
     } catch (e) {
       btn.disabled = false;
-      btn.textContent = "Pair this server";
+      btn.textContent = tr("Pair this server");
       toast(humanError(e), "err");
     }
   });
@@ -435,7 +436,7 @@ export async function renderServerDetail() {
   const session = getSession();
   const knownFqdn = detailFqdn || activePodFqdn();
   const titleEl = $("server-detail-title");
-  if (titleEl) titleEl.textContent = (knownFqdn || "").split(".")[0] || "Server";
+  if (titleEl) titleEl.textContent = (knownFqdn || "").split(".")[0] || tr("Server");
   const podPromise = lookupPod(session?.username, knownFqdn);
   let body;
   try {
@@ -475,16 +476,16 @@ export async function renderServerDetail() {
     root.innerHTML = `
       ${body.debugAccess ? debugAccessBannerHtml(body.debugAccess) : ""}
       <div class="card">
-        <div class="row"><span class="label">FQDN</span><span class="value">${escapeHtml(body.serverFqdn)}</span></div>
-        <div class="row"><span class="label">Username</span><span class="value">${escapeHtml(body.username)}</span></div>
-        <div class="row"><span class="label">Daemon</span><span class="value">${escapeHtml(body.daemonVersion)}</span></div>
-        <div class="row"><span class="label">Version</span><span class="value">${escapeHtml(shortCommit(body.currentCommit))}</span></div>
-        <div class="row"><span class="label">Uptime</span><span class="value">${escapeHtml(fmtUptime(body.uptimeMs))}</span></div>
+        <div class="row"><span class="label">${tr("FQDN")}</span><span class="value">${escapeHtml(body.serverFqdn)}</span></div>
+        <div class="row"><span class="label">${tr("Username")}</span><span class="value">${escapeHtml(body.username)}</span></div>
+        <div class="row"><span class="label">${tr("Daemon")}</span><span class="value">${escapeHtml(body.daemonVersion)}</span></div>
+        <div class="row"><span class="label">${tr("Version")}</span><span class="value">${escapeHtml(shortCommit(body.currentCommit))}</span></div>
+        <div class="row"><span class="label">${tr("Uptime")}</span><span class="value">${escapeHtml(fmtUptime(body.uptimeMs))}</span></div>
       </div>
-      <h2 class="mt-4">Counters</h2>
+      <h2 class="mt-4">${tr("Counters")}</h2>
       <div class="card">
-        <div class="row"><span class="label">Apps installed</span><span class="value">${body.serviceCount}</span></div>
-        <div class="row"><span class="label">Paired sessions</span><span class="value">${body.pairedSessionCount}</span></div>
+        <div class="row"><span class="label">${tr("Apps installed")}</span><span class="value">${body.serviceCount}</span></div>
+        <div class="row"><span class="label">${tr("Paired sessions")}</span><span class="value">${body.pairedSessionCount}</span></div>
       </div>
       ${(() => {
         const n = appSandboxNotice(body.appSandbox);
@@ -495,32 +496,27 @@ export async function renderServerDetail() {
       })()}
       <div id="server-apps">${serverAppsHtml([], { loading: true, canCreate: !isCompanionProfile() })}</div>
       ${renderMonitoringSection({ detail: body })}
-      <h2 class="mt-4">Auto-unlock</h2>
+      <h2 class="mt-4">${tr("Auto-unlock")}</h2>
       <div class="card" id="auto-unlock-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
         <p class="note">
-          Off by default — every reboot waits for you. Turn on a long-lived
-          lease to let this server reboot freely (power blips, kernel
-          updates) for up to a week. If you go offline longer than the
-          lease, the next reboot waits for you again.
+          ${tr("Off by default — every reboot waits for you. Turn on a long-lived lease to let this server reboot freely (power blips, kernel updates) for up to a week. If you go offline longer than the lease, the next reboot waits for you again.")}
         </p>
         <div id="auto-unlock-status" class="row">
-          <span class="label">Status</span>
-          <span class="pill" id="auto-unlock-pill">checking…</span>
+          <span class="label">${tr("Status")}</span>
+          <span class="pill" id="auto-unlock-pill">${tr("checking…")}</span>
         </div>
         <div id="auto-unlock-leases-list" class="mt-1"></div>
-        <button id="auto-unlock-enable" class="full-width mt-2">Enable for 7 days</button>
+        <button id="auto-unlock-enable" class="full-width mt-2">${tr("Enable for 7 days")}</button>
       </div>
-      <h2 class="mt-4">Front page</h2>
+      <h2 class="mt-4">${tr("Front page")}</h2>
       <div class="card" id="front-page-card">
         <p class="note">
-          What visitors see at <code>${escapeHtml(body.serverFqdn)}</code>.
-          Point it at one of your apps (the browser is redirected to the
-          app's own address) or keep the default Flagship page.
+          ${tr("What visitors see at <code>{0}</code>. Point it at one of your apps (the browser is redirected to the app's own address) or keep the default Flagship page.", escapeHtml(body.serverFqdn))}
         </p>
         <select id="front-page-select" class="full-width" disabled>
-          <option value="">Default Flagship page</option>
+          <option value="">${tr("Default Flagship page")}</option>
         </select>
-        <button id="front-page-save" class="full-width mt-2" disabled>Save</button>
+        <button id="front-page-save" class="full-width mt-2" disabled>${tr("Save")}</button>
         <p class="note small hidden" id="front-page-status"></p>
       </div>
       <h2 class="mt-4">${escapeHtml(isLuksBox(body) ? "Lock & power" : "Power")}</h2>
@@ -536,94 +532,88 @@ export async function renderServerDetail() {
         </div>
         <p class="note small hidden" id="power-status"></p>
       </div>
-      <h2 class="mt-4">Dead-man heartbeat-lock</h2>
+      <h2 class="mt-4">${tr("Dead-man heartbeat-lock")}</h2>
       <div class="card" id="deadman-card">
         <p class="note">
-          Off by default. When on, you must periodically affirm — an explicit
-          tap that signs "keep this server unlocked?". If the window lapses with
-          no affirmation, the box locks itself (${escapeHtml(isLuksBox(body) ? "turns off / restarts and waits for your approval to unlock" : "powers off / restarts")}).
-          The phone apps own the real background reminders — this webapp can only
-          show the countdown while it's open.
+          ${tr("Off by default. When on, you must periodically affirm — an explicit tap that signs \"keep this server unlocked?\". If the window lapses with no affirmation, the box locks itself ({0}). The phone apps own the real background reminders — this webapp can only show the countdown while it's open.", escapeHtml(isLuksBox(body) ? "turns off / restarts and waits for your approval to unlock" : "powers off / restarts"))}
         </p>
         <div class="row mt-2">
-          <span class="label">Status</span>
-          <span class="pill" id="deadman-pill">off</span>
+          <span class="label">${tr("Status")}</span>
+          <span class="pill" id="deadman-pill">${tr("off")}</span>
         </div>
-        <label class="caption mt-2">Window</label>
+        <label class="caption mt-2">${tr("Window")}</label>
         <select id="deadman-window" class="full-width">
           ${DEADMAN_WINDOW_PRESETS.map(
             (p) => `<option value="${escapeHtml(p.id)}"${p.id === DEADMAN_DEFAULT_PRESET.id ? " selected" : ""}>${escapeHtml(p.label)}</option>`,
           ).join("")}
         </select>
-        <label class="caption mt-2">Lockout action</label>
+        <label class="caption mt-2">${tr("Lockout action")}</label>
         <select id="deadman-lockout" class="full-width">
-          <option value="off" selected>Turn off (default)</option>
-          <option value="restart">Restart</option>
+          <option value="off" selected>${tr("Turn off (default)")}</option>
+          <option value="restart">${tr("Restart")}</option>
         </select>
         <div class="row-2 mt-2">
-          <button id="deadman-enable-btn" class="full-width">Enable</button>
-          <button id="deadman-disable-btn" class="secondary full-width hidden">Disable</button>
+          <button id="deadman-enable-btn" class="full-width">${tr("Enable")}</button>
+          <button id="deadman-disable-btn" class="secondary full-width hidden">${tr("Disable")}</button>
         </div>
-        <button id="deadman-tighten-btn" class="secondary full-width mt-2">Tighten now (${escapeHtml(DEADMAN_TIGHTEN_PRESET.label.replace(/\s*\(.*\)/, ""))})</button>
+        <button id="deadman-tighten-btn" class="secondary full-width mt-2">${tr("Tighten now ({0})", escapeHtml(DEADMAN_TIGHTEN_PRESET.label.replace(/\s*\(.*\)/, "")))}</button>
         <div id="deadman-affirm-block" class="mt-3 hidden">
           <div class="row">
-            <span class="label">Time remaining</span>
+            <span class="label">${tr("Time remaining")}</span>
             <span class="value" id="deadman-remaining">—</span>
           </div>
-          <button id="deadman-affirm-btn" class="full-width mt-2">Keep ${escapeHtml(body.serverFqdn.split(".")[0] || "server")} unlocked</button>
+          <button id="deadman-affirm-btn" class="full-width mt-2">${tr("Keep {0} unlocked", escapeHtml(body.serverFqdn.split(".")[0] || "server"))}</button>
           <p class="note small mt-1">
-            Reminders fire on the phone apps, not here — keep an eye on the
-            countdown above while this tab is open.
+            ${tr("Reminders fire on the phone apps, not here — keep an eye on the countdown above while this tab is open.")}
           </p>
         </div>
       </div>
       ${debugAccessCardHtml(body.debugAccess, { isAdmin: isAdminDevice(session), fqdn: body.serverFqdn })}
-      <h2 class="mt-4">Diagnostics</h2>
+      <h2 class="mt-4">${tr("Diagnostics")}</h2>
       <div class="card" id="journal-card">
-        <label class="caption">Unit</label>
+        <label class="caption">${tr("Unit")}</label>
         <select id="journal-unit" class="full-width">
           ${JOURNAL_UNITS.map(
             (u) => `<option value="${escapeHtml(u)}"${u === JOURNAL_DEFAULT_UNIT ? " selected" : ""}>${escapeHtml(u)}</option>`,
           ).join("")}
         </select>
-        <label class="caption mt-2">Lines</label>
+        <label class="caption mt-2">${tr("Lines")}</label>
         <input id="journal-lines" class="full-width" type="number" min="1" max="500" value="${JOURNAL_DEFAULT_LINES}" />
-        <button id="journal-fetch-btn" class="full-width mt-2">View journal</button>
+        <button id="journal-fetch-btn" class="full-width mt-2">${tr("View journal")}</button>
         <p class="note small hidden" id="journal-status"></p>
         <pre id="journal-output" class="journal-output hidden" aria-label="journal output"></pre>
       </div>
-      <h2 class="mt-4">Leader</h2>
+      <h2 class="mt-4">${tr("Leader")}</h2>
       <div class="card" id="leader-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
         <div class="row" id="leader-status">
-          <span class="label">Status</span>
+          <span class="label">${tr("Status")}</span>
           <span class="pill" id="leader-pill">…</span>
         </div>
         <p class="note small hidden" id="leader-confirm-note">${escapeHtml(LEADER_WAITING_NOTE)}</p>
-        <button id="make-leader-btn" class="full-width mt-2">Make leader</button>
+        <button id="make-leader-btn" class="full-width mt-2">${tr("Make leader")}</button>
         ${canSignAdminOrders() ? "" : `<p class="note small mt-1" data-leader-admin-only>${escapeHtml(SERVER_ORDER_ADMIN_ONLY)}</p>`}
       </div>
       ${serverSharingHtml(body)}
 
       ${backupsSectionHtml(body)}
-      <h2 class="mt-4">Backup / Migrate</h2>
+      <h2 class="mt-4">${tr("Backup / Migrate")}</h2>
       <div class="card" id="backup-migrate-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
-        <button id="backup-start-btn" class="full-width">Back up with a passcode…</button>
+        <button id="backup-start-btn" class="full-width">${tr("Back up with a passcode…")}</button>
         <button id="migrate-start-btn" class="full-width mt-2">${escapeHtml(MIGRATE_LABEL)}</button>
       </div>
 
-      <h2 class="mt-4">Software update</h2>
+      <h2 class="mt-4">${tr("Software update")}</h2>
       <div class="card" id="update-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
         <div class="row mt-2">
-          <span class="label">Running</span>
+          <span class="label">${tr("Running")}</span>
           <span class="value" id="update-current-commit">${escapeHtml(shortCommit(body.currentCommit))}</span>
         </div>
         <p class="note small mt-2 hidden" id="update-available"></p>
         <p class="note small mt-2${describeLastUpdate(body.lastUpdate) ? "" : " hidden"}" id="update-last-outcome">${escapeHtml(describeLastUpdate(body.lastUpdate) || "")}</p>
         <div class="mt-2 hidden" id="update-pending"></div>
-        <button id="update-server-btn" class="danger full-width mt-2"${body.currentCommit ? "" : " disabled"}>Update this server</button>
+        <button id="update-server-btn" class="danger full-width mt-2"${body.currentCommit ? "" : " disabled"}>${tr("Update this server")}</button>
         <p class="note small${body.currentCommit ? " hidden" : ""}" id="update-hint">
-          Waiting for this server to report its current version — it can't be
-          updated in place until it does.
+          ${tr("Waiting for this server to report its current version — it can't be updated in place until it does.")}
         </p>
       </div>
 
@@ -739,15 +729,15 @@ function wireServerApps(serverFqdn) {
     .catch((e) => paint([], { error: humanError(e) }));
 }
 
-export const LEADER_WAITING_NOTE = "Waiting for it to confirm the new order.";
+export const LEADER_WAITING_NOTE = tr("Waiting for it to confirm the new order.");
 
 /** Where a non-leading server stands, by who it takes over from (no numbers):
  *  `above` are the servers ranked over it. */
 export function successionLine(above) {
   const names = (above ?? []).map((n) => podShortName(n));
-  if (!names.length) return "First in line to lead";
-  if (names.length === 1) return `Takes over while ${names[0]} is down`;
-  return `Takes over while ${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} are down`;
+  if (!names.length) return tr("First in line to lead");
+  if (names.length === 1) return tr("Takes over while {0} is down", names[0]);
+  return tr("Takes over while {0} and {1} are down", names.slice(0, -1).join(", "), names[names.length - 1]);
 }
 
 /** This server's place in the owner's order, from the account's `/pods`:
@@ -790,7 +780,7 @@ export async function leaderStatus(fqdn, deps = {}) {
   const m = await leaderModel(fqdn, deps).catch(() => null);
   if (!m || m.position < 1) return { text: "not ranked yet", pill: "pill", waiting: false, canLead: false, model: m };
   if (m.isLeader) {
-    return { text: "Leader", pill: m.confirmed ? "pill ok" : "pill", waiting: !m.confirmed, canLead: m.position !== 1, model: m };
+    return { text: tr("Leader"), pill: m.confirmed ? "pill ok" : "pill", waiting: !m.confirmed, canLead: m.position !== 1, model: m };
   }
   return { text: successionLine(m.above), pill: "", waiting: false, canLead: !!m.stk && m.position !== 1, model: m };
 }
@@ -805,7 +795,7 @@ function wireMakeLeader(body) {
     if (!pill) return;
     pill.className = st.pill;
     pill.textContent = st.text;
-    if (st.waiting) pill.setAttribute("title", "Leader, waiting for the server to confirm");
+    if (st.waiting) pill.setAttribute("title", tr("Leader, waiting for the server to confirm"));
     else pill.removeAttribute("title");
     note?.classList.toggle("hidden", !st.waiting);
     btn.disabled = !st.canLead || !canSignAdminOrders();
@@ -818,15 +808,15 @@ function wireMakeLeader(body) {
   });
   btn.addEventListener("click", async () => {
     btn.disabled = true;
-    btn.textContent = "Signing…";
+    btn.textContent = tr("Signing…");
     try {
       await makeServerLeader(body.serverFqdn);
       preferLeaderAsCurrent(await loadAccountPods(getSession().username));
-      toast(`${body.serverFqdn} is first in your server order`, "ok");
+      toast(tr("{0} is first in your server order", body.serverFqdn), "ok");
     } catch (e) {
       toast(serverOrderFailureText(e, humanError), "err");
     } finally {
-      btn.textContent = "Make leader";
+      btn.textContent = tr("Make leader");
       void paint();
     }
   });
@@ -837,19 +827,19 @@ function wireAutoUnlock(serverFqdn) {
     const btn = $("auto-unlock-enable");
     if (btn) {
       btn.disabled = true;
-      btn.textContent = "Signing…";
+      btn.textContent = tr("Signing…");
     }
     try {
       const r = await enableLongLived(serverFqdn);
-      toast(`Auto-unlock on; lease expires ${formatWhen(r.expiresAt)}`, "ok");
+      toast(tr("Auto-unlock on; lease expires {0}", formatWhen(r.expiresAt)), "ok");
       await refreshLeases(serverFqdn);
     } catch (e) {
-      toast(`Enable failed: ${e.message ?? e}`, "err");
+      toast(tr("Enable failed: {0}", e.message ?? e), "err");
     } finally {
       const b = $("auto-unlock-enable");
       if (b) {
         b.disabled = false;
-        b.textContent = "Renew for 7 more days";
+        b.textContent = tr("Renew for 7 more days");
       }
     }
   });
@@ -878,10 +868,9 @@ async function refreshLeases(serverFqdn) {
   list.innerHTML = longLived.map((l) => `
     <div class="row mt-1">
       <span class="value text-xs">
-        ${escapeHtml(l.leaseId.slice(0, 12))}…
-        · until ${escapeHtml(fmtDate(l.expiresAt))}
+        ${tr("{0}… · until {1}", escapeHtml(l.leaseId.slice(0, 12)), escapeHtml(fmtDate(l.expiresAt)))}
       </span>
-      <button class="danger btn-xs" data-action="revoke-lease" data-lease-id="${escapeHtml(l.leaseId)}">Revoke</button>
+      <button class="danger btn-xs" data-action="revoke-lease" data-lease-id="${escapeHtml(l.leaseId)}">${tr("Revoke")}</button>
     </div>
   `).join("");
   list.querySelectorAll('[data-action="revoke-lease"]').forEach((btn) => {
@@ -889,16 +878,16 @@ async function refreshLeases(serverFqdn) {
       const id = btn.getAttribute("data-lease-id");
       if (!id) return;
       const ok = await inlineConfirm({
-        title: "Revoke auto-unlock lease?",
-        message: "This server will need phone approval to unlock on its next boot. This can't be undone.",
-        okLabel: "Revoke",
+        title: tr("Revoke auto-unlock lease?"),
+        message: tr("This server will need phone approval to unlock on its next boot. This can't be undone."),
+        okLabel: tr("Revoke"),
         danger: true,
       });
       if (!ok) return;
       btn.disabled = true;
       try {
         await revokeLease(serverFqdn, id);
-        toast(`Revoked lease ${id.slice(0, 8)}…`, "ok");
+        toast(tr("Revoked lease {0}…", id.slice(0, 8)), "ok");
         await refreshLeases(serverFqdn);
       } catch (e) {
         console.error("lease revoke failed", e);
@@ -982,7 +971,7 @@ function wireFrontPage(body) {
     } catch {
       if (status) {
         status.classList.remove("hidden");
-        status.textContent = "Couldn't reach the server to load front-page settings.";
+        status.textContent = tr("Couldn't reach the server to load front-page settings.");
       }
     }
   })();
@@ -990,13 +979,13 @@ function wireFrontPage(body) {
   save.addEventListener("click", async () => {
     const session = getSession();
     if (!session.umk) {
-      toast("Unlock the webapp first", "err");
+      toast(tr("Unlock the webapp first"), "err");
       return;
     }
     const label = select.value;
     save.disabled = true;
     const orig = save.textContent;
-    save.textContent = "Saving…";
+    save.textContent = tr("Saving…");
     try {
       await sendSetFrontPage({
         baseUrl,
@@ -1006,12 +995,12 @@ function wireFrontPage(body) {
         signWithIrk: sensitiveSigner(),
       });
       current = label;
-      toast(label ? `Front page set to ${label}` : "Front page reset to default", "ok");
+      toast(label ? tr("Front page set to {0}", label) : tr("Front page reset to default"), "ok");
       if (status) {
         status.classList.remove("hidden");
         status.textContent = label
-          ? `Visitors to ${body.serverFqdn} now land on ${label}.${body.serverFqdn}.`
-          : `Visitors to ${body.serverFqdn} now see the default Flagship page.`;
+          ? tr("Visitors to {0} now land on {1}.{2}.", body.serverFqdn, label, body.serverFqdn)
+          : tr("Visitors to {0} now see the default Flagship page.", body.serverFqdn);
       }
     } catch (e) {
       toast(humanError(e), "err");
@@ -1038,22 +1027,22 @@ async function runJournalFetch(body, btn) {
   const out = $("journal-output");
   const session = getSession();
   if (!session.umk) {
-    toast("Unlock the webapp first", "err");
+    toast(tr("Unlock the webapp first"), "err");
     return;
   }
   const baseUrl = baseOf(body);
   if (!baseUrl) {
-    toast("Not paired with this server", "err");
+    toast(tr("Not paired with this server"), "err");
     return;
   }
   const unit = $("journal-unit")?.value || JOURNAL_DEFAULT_UNIT;
   const lines = Number($("journal-lines")?.value) || JOURNAL_DEFAULT_LINES;
   const orig = btn.textContent;
   btn.disabled = true;
-  btn.textContent = "Fetching…";
+  btn.textContent = tr("Fetching…");
   if (status) {
     status.classList.remove("hidden");
-    status.textContent = "Asking the server…";
+    status.textContent = tr("Asking the server…");
   }
   try {
     const res = await fetchJournal({
@@ -1067,7 +1056,7 @@ async function runJournalFetch(body, btn) {
       out.classList.remove("hidden");
       out.textContent = res.lines.length ? res.lines.join("\n") : "(journal is empty)";
     }
-    if (status) status.textContent = `${res.lines.length} line${res.lines.length === 1 ? "" : "s"} from ${res.unit}.`;
+    if (status) status.textContent = trn(res.lines.length, "{0} line from {1}.", "{0} lines from {1}.", res.unit);
   } finally {
     btn.disabled = false;
     btn.textContent = orig;
@@ -1089,7 +1078,7 @@ function isLuksBox(body) {
 function powerLabel(mode, body) {
   const verb = mode === "restart" ? "restart" : "turn off";
   const cap = verb.charAt(0).toUpperCase() + verb.slice(1);
-  return isLuksBox(body) ? `Lock and ${verb}` : cap;
+  return isLuksBox(body) ? tr("Lock and {0}", verb) : cap;
 }
 
 function wireLockPower(body) {
@@ -1111,12 +1100,12 @@ function wireLockPower(body) {
 async function runPowerAction(body, mode, btn, allButtons, status) {
   const session = getSession();
   if (!session.umk) {
-    toast("Unlock the webapp first", "err");
+    toast(tr("Unlock the webapp first"), "err");
     return;
   }
   const baseUrl = baseOf(body);
   if (!baseUrl) {
-    toast("Not paired with this server", "err");
+    toast(tr("Not paired with this server"), "err");
     return;
   }
   const actionLabel = powerLabel(mode, body);
@@ -1129,7 +1118,7 @@ async function runPowerAction(body, mode, btn, allButtons, status) {
       await countdownConfirm({
         signal,
         onTick: (s) => {
-          btn.textContent = s > 0 ? `${actionLabel} in ${s}…` : `${actionLabel}…`;
+          btn.textContent = s > 0 ? tr("{0} in {1}…", actionLabel, s) : `${actionLabel}…`;
         },
       });
       await sendPowerOff({
@@ -1142,7 +1131,7 @@ async function runPowerAction(body, mode, btn, allButtons, status) {
       if (status) {
         status.classList.remove("hidden");
         status.textContent =
-          mode === "restart" ? "Restarting — the server will go offline briefly." : "Powering off — the server is going offline.";
+          mode === "restart" ? tr("Restarting — the server will go offline briefly.") : tr("Powering off — the server is going offline.");
       }
       toast(`${actionLabel} sent`, "ok");
     } finally {
@@ -1162,9 +1151,9 @@ function openPowerConfirmDialog(body, mode, actionLabel, onConfirm) {
   dlg.setAttribute("aria-label", actionLabel);
   dlg.innerHTML = `
     <h3 class="modal-title">${escapeHtml(actionLabel)}?</h3>
-    <p class="modal-message">${escapeHtml(body.serverFqdn)} will go offline.</p>
+    <p class="modal-message">${tr("{0} will go offline.", escapeHtml(body.serverFqdn))}</p>
     <div class="row-2 mt-3">
-      <button class="secondary" data-power-cancel>Cancel</button>
+      <button class="secondary" data-power-cancel>${tr("Cancel")}</button>
       <button class="danger" data-power-go>${escapeHtml(actionLabel)}</button>
     </div>
   `;
@@ -1230,7 +1219,7 @@ function setDeadManEnabledUi(enabled, leaseExpiry) {
   const enableBtn = $("deadman-enable-btn");
   const affirmBlock = $("deadman-affirm-block");
   if (pill) pill.textContent = enabled ? "on" : "off";
-  if (enableBtn) enableBtn.textContent = enabled ? "Update window" : "Enable";
+  if (enableBtn) enableBtn.textContent = enabled ? tr("Update window") : tr("Enable");
   disableBtn?.classList.toggle("hidden", !enabled);
   affirmBlock?.classList.toggle("hidden", !enabled);
   if (enabled) startDeadManCountdown(leaseExpiry);
@@ -1249,7 +1238,7 @@ function startDeadManCountdown(leaseExpiry) {
     el.textContent =
       typeof leaseExpiry === "number"
         ? fmtRemaining(leaseExpiry, Date.now())
-        : "affirm to start the lease";
+        : tr("affirm to start the lease");
   };
   render();
   if (typeof leaseExpiry === "number") {
@@ -1266,9 +1255,9 @@ function stopDeadManCountdown() {
 
 async function applyDeadManPolicy(body, { enabled, preset, lockoutMode }) {
   const session = getSession();
-  if (!session.umk) throw Object.assign(new Error("Unlock the webapp first"), { code: "400" });
+  if (!session.umk) throw Object.assign(new Error(tr("Unlock the webapp first")), { code: "400" });
   const baseUrl = baseOf(body);
-  if (!baseUrl) throw Object.assign(new Error("Not paired with this server"), { code: "400" });
+  if (!baseUrl) throw Object.assign(new Error(tr("Not paired with this server")), { code: "400" });
   return setDeadManPolicy({
     baseUrl,
     enabled,
@@ -1290,16 +1279,16 @@ function wireDeadMan(body) {
   enableBtn?.addEventListener("click", async () => {
     const lockoutMode = $("deadman-lockout")?.value === "restart" ? "restart" : "off";
     enableBtn.disabled = true;
-    enableBtn.textContent = "Signing…";
+    enableBtn.textContent = tr("Signing…");
     try {
       await applyDeadManPolicy(body, { enabled: true, preset: selectedWindowPreset(), lockoutMode });
       setDeadManEnabledUi(true, null);
-      toast("Dead-man lock enabled — affirm to start the lease", "ok");
+      toast(tr("Dead-man lock enabled — affirm to start the lease"), "ok");
     } catch (e) {
       toast(humanError(e), "err");
     } finally {
       enableBtn.disabled = false;
-      if ($("deadman-pill")?.textContent !== "on") enableBtn.textContent = "Enable";
+      if ($("deadman-pill")?.textContent !== "on") enableBtn.textContent = tr("Enable");
     }
   });
 
@@ -1312,7 +1301,7 @@ function wireDeadMan(body) {
         lockoutMode: $("deadman-lockout")?.value === "restart" ? "restart" : "off",
       });
       setDeadManEnabledUi(false, null);
-      toast("Dead-man lock disabled", "ok");
+      toast(tr("Dead-man lock disabled"), "ok");
     } catch (e) {
       toast(humanError(e), "err");
     } finally {
@@ -1328,7 +1317,7 @@ function wireDeadMan(body) {
       const sel = $("deadman-window");
       if (sel) sel.value = DEADMAN_TIGHTEN_PRESET.id;
       setDeadManEnabledUi(true, null);
-      toast(`Tightened to ${DEADMAN_TIGHTEN_PRESET.label}`, "ok");
+      toast(tr("Tightened to {0}", DEADMAN_TIGHTEN_PRESET.label), "ok");
     } catch (e) {
       toast(humanError(e), "err");
     } finally {
@@ -1338,11 +1327,11 @@ function wireDeadMan(body) {
 
   affirmBtn?.addEventListener("click", async () => {
     const session = getSession();
-    if (!session.umk) return toast("Unlock the webapp first", "err");
+    if (!session.umk) return toast(tr("Unlock the webapp first"), "err");
     const baseUrl = baseOf(body);
-    if (!baseUrl) return toast("Not paired with this server", "err");
+    if (!baseUrl) return toast(tr("Not paired with this server"), "err");
     affirmBtn.disabled = true;
-    affirmBtn.textContent = "Affirming…";
+    affirmBtn.textContent = tr("Affirming…");
     try {
       const r = await affirmDeadMan({
         baseUrl,
@@ -1351,12 +1340,12 @@ function wireDeadMan(body) {
         signWithIrk: sensitiveSigner(),
       });
       setDeadManEnabledUi(true, r.leaseExpiry);
-      toast("Affirmed — lease renewed", "ok");
+      toast(tr("Affirmed — lease renewed"), "ok");
     } catch (e) {
       toast(humanError(e), "err");
     } finally {
       affirmBtn.disabled = false;
-      affirmBtn.textContent = `Keep ${body.serverFqdn.split(".")[0] || "server"} unlocked`;
+      affirmBtn.textContent = tr("Keep {0} unlocked", body.serverFqdn.split(".")[0] || "server");
     }
   });
 }
@@ -1375,9 +1364,7 @@ function wireTransfer(body) {
 // Slice D §9.8 — a failed admin-root hand-off deposit is RETRYABLE, never a
 // transfer failure: ownership already moved when the claim landed.
 export const TRANSFER_ADMIN_HANDOFF_WARNING =
-  "Claimed — but the admin-key hand-off didn't go through yet. Retrying while " +
-  "this dialog is open; a box with a pinned admin key will wait for this " +
-  "hand-off before re-homing.";
+  tr("Claimed — but the admin-key hand-off didn't go through yet. Retrying while this dialog is open; a box with a pinned admin key will wait for this hand-off before re-homing.");
 
 /** The transfer link as a QR the new owner's phone camera opens (the same
  *  link iOS and Android show). The link text stays below it for pasting. */
@@ -1398,31 +1385,26 @@ export async function renderTransferQr(slot, link, load = () => import("/qrEncod
 async function openTransferDialog(body) {
   const session = getSession();
   if (!session.umk || !session.irk) {
-    toast("Unlock the webapp first", "err");
+    toast(tr("Unlock the webapp first"), "err");
     return;
   }
   const serverFqdn = body.serverFqdn;
   const dlg = document.createElement("dialog");
   dlg.className = "modal-card";
-  dlg.setAttribute("aria-label", "Transfer this server");
+  dlg.setAttribute("aria-label", tr("Transfer this server"));
   dlg.innerHTML = `
-    <h3 class="modal-title">Transfer ${escapeHtml(serverFqdn)}?</h3>
+    <h3 class="modal-title">${tr("Transfer {0}?", escapeHtml(serverFqdn))}</h3>
     <p class="modal-message">
-      This hands the box <strong>and all its contents</strong> to another
-      account. <strong>You will lose control of it</strong> — this cannot be
-      undone. Type the server's full name to confirm.
+      ${tr("This hands the box <strong>and all its contents</strong> to another account. <strong>You will lose control of it</strong> — this cannot be undone. Type the server's full name to confirm.")}
     </p>
     <input class="full-width mt-2" data-transfer-confirm placeholder="${escapeHtml(serverFqdn)}" autocomplete="off" />
     <p class="modal-error err-text hidden" data-transfer-error></p>
     <div class="row-2 mt-3">
-      <button class="secondary" data-transfer-cancel>Cancel</button>
-      <button class="danger" data-transfer-go disabled>Create transfer code</button>
+      <button class="secondary" data-transfer-cancel>${tr("Cancel")}</button>
+      <button class="danger" data-transfer-go disabled>${tr("Create transfer code")}</button>
     </div>
     <div class="mt-3 hidden" data-transfer-result>
-      <p class="note">Have the new owner scan this with their phone's camera,
-      or share the link below for them to paste into <em>Take over a box</em>.
-      It expires soon. Keep this open: after they claim it, this browser hands
-      over the disk key.</p>
+      <p class="note">${tr("Have the new owner scan this with their phone's camera, or share the link below for them to paste into <em>Take over a box</em>. It expires soon. Keep this open: after they claim it, this browser hands over the disk key.")}</p>
       <div class="share-qr" id="transfer-qr" data-transfer-qr-svg></div>
       <textarea class="full-width mt-2" rows="3" readonly data-transfer-qr></textarea>
       <p class="note small hidden" data-transfer-handoff></p>
@@ -1452,7 +1434,7 @@ async function openTransferDialog(body) {
     goBtn.addEventListener("click", async () => {
       errEl.classList.add("hidden");
       goBtn.disabled = true;
-      goBtn.textContent = "Signing…";
+      goBtn.textContent = tr("Signing…");
       try {
         const out = await createTransferOffer({
           serverDomain: serverFqdn,
@@ -1472,8 +1454,8 @@ async function openTransferDialog(body) {
         resultEl.classList.remove("hidden");
         goBtn.classList.add("hidden");
         confirmEl.disabled = true;
-        cancelBtn.textContent = "Done";
-        toast("Transfer code created", "ok");
+        cancelBtn.textContent = tr("Done");
+        toast(tr("Transfer code created"), "ok");
         // Hand the box's AUTHORITY anchor to the acquirer at claim-received:
         // poll for the claim while this dialog stays open, then deposit the
         // giver-signed proof the box verifies against what IT already pins.
@@ -1522,8 +1504,8 @@ async function openTransferDialog(body) {
               handoffEl.classList.remove("hidden");
             } else if (res.status === "deposited") {
               handoffEl.textContent = session.adminRootSeed
-                ? `Claimed by ${claim.acquirerUsername} — admin key handed off.`
-                : `Claimed by ${claim.acquirerUsername} — re-home authorized.`;
+                ? tr("Claimed by {0} — admin key handed off.", claim.acquirerUsername)
+                : tr("Claimed by {0} — re-home authorized.", claim.acquirerUsername);
               handoffEl.classList.remove("err-text");
               handoffEl.classList.remove("hidden");
             }
@@ -1534,7 +1516,7 @@ async function openTransferDialog(body) {
         errEl.textContent = humanError(e);
         errEl.classList.remove("hidden");
         goBtn.disabled = false;
-        goBtn.textContent = "Create transfer code";
+        goBtn.textContent = tr("Create transfer code");
       }
     });
   });
@@ -1559,7 +1541,7 @@ function wireBackup(body) {
 async function openBackupDialog(body) {
   const session = getSession();
   if (!session.umk) {
-    toast("Unlock the webapp first", "err");
+    toast(tr("Unlock the webapp first"), "err");
     return;
   }
   const serverFqdn = body.serverFqdn;
@@ -1571,40 +1553,40 @@ async function openBackupDialog(body) {
   dlg.innerHTML = `
     <h3 class="modal-title">${escapeHtml(BACKUP_TITLE)}</h3>
     <div data-bk-pass class="hidden">
-      <p class="note">Set the backup's passcode. ${escapeHtml(PASSCODE_NOTE)}</p>
+      <p class="note">${tr("Set the backup's passcode. {0}", escapeHtml(PASSCODE_NOTE))}</p>
       <div data-bk-suggested>
-        <label class="caption" for="bk-suggested">Suggested passcode</label>
+        <label class="caption" for="bk-suggested">${tr("Suggested passcode")}</label>
         <div class="row-2">
           <input id="bk-suggested" class="mono" readonly value="${escapeHtml(suggested)}" />
-          <button class="secondary" data-bk-copy-pass>Copy</button>
+          <button class="secondary" data-bk-copy-pass>${tr("Copy")}</button>
         </div>
-        <button class="linklike mt-2" data-bk-own>Use my own passcode instead</button>
+        <button class="linklike mt-2" data-bk-own>${tr("Use my own passcode instead")}</button>
       </div>
       <div data-bk-own-fields class="hidden">
-        <label class="caption" for="bk-pass1">Your passcode</label>
+        <label class="caption" for="bk-pass1">${tr("Your passcode")}</label>
         <input id="bk-pass1" type="password" class="full-width" autocomplete="new-password" data-bk-pass1 />
-        <label class="caption mt-2" for="bk-pass2">Type it again</label>
+        <label class="caption mt-2" for="bk-pass2">${tr("Type it again")}</label>
         <input id="bk-pass2" type="password" class="full-width" autocomplete="new-password" data-bk-pass2 />
         <p class="note small" data-bk-pass-rule></p>
-        <button class="linklike mt-2" data-bk-use-suggested>Use the suggested passcode</button>
+        <button class="linklike mt-2" data-bk-use-suggested>${tr("Use the suggested passcode")}</button>
       </div>
-      <label class="row mt-2"><input type="checkbox" data-bk-written /> <span>I've saved the passcode somewhere safe</span></label>
-      <button class="full-width mt-2" data-bk-go disabled>Make the backup</button>
+      <label class="row mt-2"><input type="checkbox" data-bk-written /> <span>${tr("I've saved the passcode somewhere safe")}</span></label>
+      <button class="full-width mt-2" data-bk-go disabled>${tr("Make the backup")}</button>
     </div>
     <div data-bk-progress class="hidden">
-      <p class="modal-message" data-bk-status>Making the backup…</p>
+      <p class="modal-message" data-bk-status>${tr("Making the backup…")}</p>
       <progress class="full-width" data-bk-bar max="100" value="0"></progress>
       <p class="note small">${escapeHtml(BACKUP_EXCLUDES_NOTE)}</p>
       <p class="note small hidden" data-bk-hint></p>
     </div>
     <p class="modal-error err-text hidden" data-bk-error></p>
     <div class="row-2 mt-3">
-      <button class="secondary" data-bk-close>Close</button>
-      <button class="hidden" data-bk-save>Download the backup</button>
+      <button class="secondary" data-bk-close>${tr("Close")}</button>
+      <button class="hidden" data-bk-save>${tr("Download the backup")}</button>
     </div>
     <div class="row-2 mt-2">
-      <button class="secondary hidden" data-bk-copy>Copy download link</button>
-      <button class="secondary hidden" data-bk-remove>Delete from server</button>
+      <button class="secondary hidden" data-bk-copy>${tr("Copy download link")}</button>
+      <button class="secondary hidden" data-bk-remove>${tr("Delete from server")}</button>
     </div>
   `;
   document.body.appendChild(dlg);
@@ -1647,8 +1629,8 @@ async function openBackupDialog(body) {
     if (own) {
       const p1 = q("[data-bk-pass1]").value;
       const p2 = q("[data-bk-pass2]").value;
-      rule.textContent = !p1 ? "At least 12 characters with three kinds (lower, upper, digits, symbols), or 20 of anything."
-        : passcodeProblem(p1) ?? (p2 && p1 !== p2 ? "The two don't match." : "Good.");
+      rule.textContent = !p1 ? tr("At least 12 characters with three kinds (lower, upper, digits, symbols), or 20 of anything.")
+        : passcodeProblem(p1) ?? (p2 && p1 !== p2 ? tr("The two don't match.") : tr("Good."));
     }
     q("[data-bk-go]").disabled = !(chosenPasscode() && q("[data-bk-written]").checked);
   };
@@ -1671,9 +1653,9 @@ async function openBackupDialog(body) {
   q("[data-bk-copy-pass]").addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(suggested);
-      toast("Passcode copied", "ok");
+      toast(tr("Passcode copied"), "ok");
     } catch {
-      toast("Couldn't copy the passcode", "err");
+      toast(tr("Couldn't copy the passcode"), "err");
     }
   });
 
@@ -1681,21 +1663,21 @@ async function openBackupDialog(body) {
     passEl.classList.add("hidden");
     progressEl.classList.remove("hidden");
     try {
-      statusEl.textContent = passcode ? "Protecting the backup with its passcode…" : "Making the backup…";
+      statusEl.textContent = passcode ? tr("Protecting the backup with its passcode…") : tr("Making the backup…");
       await startServerBackup({ client, umk: session.umk, passcode });
       const archive = await waitForBackup({
         client,
         onProgress: (a) => {
           if (closed) throw Object.assign(new Error("closed"), { code: "cancelled" });
           const { done, total, app } = a.progress || {};
-          statusEl.textContent = total ? `Backing up ${app || "apps"} (${Math.min(done + 1, total)} of ${total})…` : "Making the backup…";
+          statusEl.textContent = total ? tr("Backing up {0} ({1} of {2})…", app || "apps", Math.min(done + 1, total), total) : tr("Making the backup…");
           barEl.value = total ? Math.round((done / total) * 100) : 0;
         },
       });
       barEl.value = 100;
-      statusEl.textContent = `Backup ready: ${archive.bundleFileName} (${formatBytes(archive.bundleBytes)}). Your browser saves it straight to disk.`;
+      statusEl.textContent = tr("Backup ready: {0} ({1}). Your browser saves it straight to disk.", archive.bundleFileName, formatBytes(archive.bundleBytes));
       if (Array.isArray(archive.left) && archive.left.length > 0) {
-        errEl.textContent = `Left out (no source to rebuild them from): ${archive.left.map((a) => a.name).join(", ")}.`;
+        errEl.textContent = tr("Left out (no source to rebuild them from): {0}.", archive.left.map((a) => a.name).join(", "));
         errEl.classList.remove("hidden");
       }
       const link = await backupDownloadLink({ client });
@@ -1703,8 +1685,7 @@ async function openBackupDialog(body) {
       copyBtn.classList.remove("hidden");
       removeBtn.classList.remove("hidden");
       hintEl.textContent =
-        `Download here, or copy the link to open it on another computer: that page asks the Flagship app on your phone to approve. ` +
-        `The link works until ${new Date(link.expiresAt).toLocaleString()}; a download that stops picks up where it left off.`;
+        tr("Download here, or copy the link to open it on another computer: that page asks the Flagship app on your phone to approve. {0}", tr("The link works until {0}; a download that stops picks up where it left off.", new Date(link.expiresAt).toLocaleString()));
       hintEl.classList.remove("hidden");
       saveBtn.addEventListener("click", async () => {
         saveBtn.disabled = true;
@@ -1716,7 +1697,7 @@ async function openBackupDialog(body) {
             umk: session.umk,
             signWithIrk: sensitiveSigner(),
           });
-          toast("Download started", "ok");
+          toast(tr("Download started"), "ok");
         } catch (e) {
           showError(e);
         } finally {
@@ -1726,16 +1707,16 @@ async function openBackupDialog(body) {
       copyBtn.addEventListener("click", async () => {
         try {
           await navigator.clipboard.writeText(link.url);
-          toast("Download link copied", "ok");
+          toast(tr("Download link copied"), "ok");
         } catch {
-          toast("Couldn't copy the link", "err");
+          toast(tr("Couldn't copy the link"), "err");
         }
       });
       removeBtn.addEventListener("click", async () => {
         removeBtn.disabled = true;
         try {
           await forgetBackup({ client });
-          statusEl.textContent = "The server's copy is removed; the link no longer works.";
+          statusEl.textContent = tr("The server's copy is removed; the link no longer works.");
           saveBtn.classList.add("hidden");
           copyBtn.classList.add("hidden");
           removeBtn.classList.add("hidden");
@@ -1748,7 +1729,7 @@ async function openBackupDialog(body) {
     } catch (e) {
       if (closed || e?.code === "cancelled") return;
       showError(e);
-      statusEl.textContent = "The backup didn't finish.";
+      statusEl.textContent = tr("The backup didn't finish.");
       barEl.classList.add("hidden");
     }
   };
@@ -1843,11 +1824,11 @@ function paintUpdateCard(card) {
 function paintReleaseNote(card, pending) {
   const note = $("update-available");
   if (note) {
-    note.textContent = card.latest ? `New release available: ${card.latest.tag}` : "";
+    note.textContent = card.latest ? tr("New release available: {0}", card.latest.tag) : "";
     note.classList.toggle("hidden", pending || !card.latest);
   }
   const btn = $("update-server-btn");
-  if (btn) btn.textContent = card.latest ? "Update to latest" : "Update this server";
+  if (btn) btn.textContent = card.latest ? tr("Update to latest") : tr("Update this server");
 }
 
 function refreshReleaseNote(card) {
@@ -1899,45 +1880,45 @@ function ensurePendingUpdatePoll(card) {
 export async function openUpdateDialog(body, { sendAgain = false } = {}) {
   const session = getSession();
   if (!session.umk || !session.irk) {
-    toast("Unlock the webapp first", "err");
+    toast(tr("Unlock the webapp first"), "err");
     return;
   }
   const serverFqdn = body.serverFqdn;
   const currentCommit = body.currentCommit;
   if (!COMMIT_SHA_RE.test(String(currentCommit))) {
-    toast("This server hasn't reported its current version yet", "err");
+    toast(tr("This server hasn't reported its current version yet"), "err");
     return;
   }
 
   const dlg = document.createElement("dialog");
   dlg.className = "modal-card";
-  dlg.setAttribute("aria-label", "Update this server");
+  dlg.setAttribute("aria-label", tr("Update this server"));
   dlg.innerHTML = `
-    <h3 class="modal-title">Update ${escapeHtml(serverFqdn)}</h3>
+    <h3 class="modal-title">${tr("Update {0}", escapeHtml(serverFqdn))}</h3>
     <div class="row mt-2">
-      <span class="label">Running</span>
+      <span class="label">${tr("Running")}</span>
       <span class="value" data-update-running>${escapeHtml(shortCommit(currentCommit))}</span>
     </div>
     <div class="hidden" data-update-choose>
       <div class="mt-3" data-update-latest>
-        <p class="note small">Checking for new releases…</p>
+        <p class="note small">${tr("Checking for new releases…")}</p>
       </div>
-      <p class="note small hidden" data-update-stale>The server couldn't reach GitHub, so this list may be out of date.</p>
+      <p class="note small hidden" data-update-stale>${tr("The server couldn't reach GitHub, so this list may be out of date.")}</p>
       <div class="mt-3 hidden" data-update-others></div>
       <details class="advanced-disclosure mt-3" data-update-advanced>
-        <summary>Advanced</summary>
+        <summary>${tr("Advanced")}</summary>
         <p class="note small mt-2" data-update-warning>${escapeHtml(DOWNGRADE_WARNING)}</p>
         <div data-update-older></div>
-        <label class="caption mt-2">Or enter any release (full commit)</label>
+        <label class="caption mt-2">${tr("Or enter any release (full commit)")}</label>
         <input class="full-width" data-update-target placeholder="40-character commit hash" autocomplete="off" spellcheck="false" />
         <p class="note small hidden" data-update-target-hint></p>
-        <button class="danger full-width mt-2" data-update-go disabled>Order update</button>
+        <button class="danger full-width mt-2" data-update-go disabled>${tr("Order update")}</button>
       </details>
     </div>
     <p class="modal-error err-text hidden" data-update-error></p>
     <div class="mt-3 hidden" data-update-result></div>
     <div class="row-2 mt-3">
-      <button class="secondary" data-update-cancel>Cancel</button>
+      <button class="secondary" data-update-cancel>${tr("Cancel")}</button>
     </div>
   `;
   document.body.appendChild(dlg);
@@ -1990,27 +1971,27 @@ export async function openUpdateDialog(body, { sendAgain = false } = {}) {
     if (g.latest) {
       latestEl.innerHTML = `
         <div class="card">
-          <p class="caption">Latest release</p>
+          <p class="caption">${tr("Latest release")}</p>
           <p class="mono">${escapeHtml(g.latest.tag)}</p>
-          <button class="full-width mt-2" id="update-latest-btn" data-update-commit="${escapeHtml(g.latest.commit)}" data-update-action="update">Update to latest</button>
-          <p class="note small mt-2">The server rolls back by itself if the new version doesn't start.</p>
+          <button class="full-width mt-2" id="update-latest-btn" data-update-commit="${escapeHtml(g.latest.commit)}" data-update-action="update">${tr("Update to latest")}</button>
+          <p class="note small mt-2">${tr("The server rolls back by itself if the new version doesn't start.")}</p>
         </div>
       `;
     } else {
       latestEl.innerHTML = `
         <div class="row">
-          <span class="value">This server is on the latest release.</span>
-          <button class="secondary btn-xs" data-update-recheck>Check again</button>
+          <span class="value">${tr("This server is on the latest release.")}</span>
+          <button class="secondary btn-xs" data-update-recheck>${tr("Check again")}</button>
         </div>
       `;
       q("[data-update-recheck]")?.addEventListener("click", () => loadCatalog(true));
     }
     staleEl.classList.toggle("hidden", !g.stale);
     othersEl.innerHTML = g.otherNewer.length
-      ? `<p class="caption">Other new releases</p>${releaseRows(g.otherNewer, "Update", "update")}`
+      ? `<p class="caption">${tr("Other new releases")}</p>${releaseRows(g.otherNewer, "Update", "update")}`
       : "";
     othersEl.classList.toggle("hidden", g.otherNewer.length === 0);
-    olderEl.innerHTML = releaseRows(g.older, "Go back", "downgrade");
+    olderEl.innerHTML = releaseRows(g.older, tr("Go back"), "downgrade");
     orderButtons().forEach((b) => {
       b.disabled = working;
       b.addEventListener("click", () => order(b.getAttribute("data-update-commit")));
@@ -2025,7 +2006,7 @@ export async function openUpdateDialog(body, { sendAgain = false } = {}) {
       renderCatalog();
     } catch (e) {
       if (!catalog) {
-        latestEl.innerHTML = `<p class="note small">Couldn't check for releases: ${escapeHtml(humanError(e))} You can still enter a release under Advanced.</p>`;
+        latestEl.innerHTML = `<p class="note small">${tr("Couldn't check for releases: {0} You can still enter a release under Advanced.", escapeHtml(humanError(e)))}</p>`;
       } else if (recheck) {
         recheck.disabled = false;
       }
@@ -2036,7 +2017,7 @@ export async function openUpdateDialog(body, { sendAgain = false } = {}) {
     resultEl.classList.add("hidden");
     resultEl.innerHTML = "";
     chooseEl.classList.remove("hidden");
-    cancelBtn.textContent = "Cancel";
+    cancelBtn.textContent = tr("Cancel");
     if (!catalogRequested) {
       catalogRequested = true;
       loadCatalog(false);
@@ -2048,7 +2029,7 @@ export async function openUpdateDialog(body, { sendAgain = false } = {}) {
     chooseEl.classList.add("hidden");
     resultEl.innerHTML = renderPendingUpdate(pending, { formatWhen, escapeHtml });
     resultEl.classList.remove("hidden");
-    cancelBtn.textContent = "Done";
+    cancelBtn.textContent = tr("Done");
     resultEl.querySelector("[data-update-send-again]")?.addEventListener("click", showChooser);
     resultEl.querySelector("[data-update-forget]")?.addEventListener("click", () => {
       clearPendingUpdate(serverFqdn);
@@ -2096,7 +2077,7 @@ export async function openUpdateDialog(body, { sendAgain = false } = {}) {
     }
     done = true;
     showSent(sent.pending);
-    toast("Update ordered", "ok");
+    toast(tr("Update ordered"), "ok");
   }
 
   return new Promise((resolve, reject) => {
@@ -2139,7 +2120,7 @@ function wireMigrate(body) {
 async function openMigrateDialog(body) {
   const session = getSession();
   if (!session.umk || !session.irk) {
-    toast("Unlock the webapp first", "err");
+    toast(tr("Unlock the webapp first"), "err");
     return;
   }
   const serverFqdn = body.serverFqdn;
@@ -2158,35 +2139,31 @@ async function openMigrateDialog(body) {
   dlg.className = "modal-card";
   dlg.setAttribute("aria-label", MIGRATE_LABEL);
   dlg.innerHTML = `
-    <h3 class="modal-title">Migrate ${escapeHtml(serverFqdn)}</h3>
-    <p class="modal-message" data-mig-loading>Checking for a migration in progress…</p>
+    <h3 class="modal-title">${tr("Migrate {0}", escapeHtml(serverFqdn))}</h3>
+    <p class="modal-message" data-mig-loading>${tr("Checking for a migration in progress…")}</p>
     <div class="hidden" data-mig-init>
       <p class="note" data-mig-backup></p>
       <p class="note small err-text hidden" data-mig-gate></p>
-      <p class="note small mt-2">The old server is retired and wiped only
-      <em>after</em> the new one has restored the data and taken over the name:
-      from then on it can't unlock or connect, and it wipes itself as soon as it
-      is reachable. If anything fails first, the old server keeps serving with
-      all its data.</p>
+      <p class="note small mt-2">${tr("The old server is retired and wiped only <em>after</em> the new one has restored the data and taken over the name: from then on it can't unlock or connect, and it wipes itself as soon as it is reachable. If anything fails first, the old server keeps serving with all its data.")}</p>
     </div>
     <div class="hidden" data-mig-progress>
       <ul class="mt-2" data-mig-steps style="list-style:none;padding-left:0"></ul>
       <p class="note" data-mig-wait></p>
       <div class="hidden mt-2" data-mig-move>
-        <p class="note" data-mig-estimate>Measuring the link between the two servers…</p>
+        <p class="note" data-mig-estimate>${tr("Measuring the link between the two servers…")}</p>
         <p class="note small hidden" data-mig-move-step></p>
         <progress class="full-width hidden" data-mig-move-bar max="100" value="0"></progress>
         <ul class="note small hidden" data-mig-move-apps></ul>
-        <button class="full-width mt-2" data-mig-move-btn disabled>Move the data now</button>
+        <button class="full-width mt-2" data-mig-move-btn disabled>${tr("Move the data now")}</button>
       </div>
     </div>
     <p class="modal-error err-text hidden" data-mig-error></p>
     <div class="row-2 mt-3">
-      <button class="secondary" data-mig-cancel>Close</button>
+      <button class="secondary" data-mig-cancel>${tr("Close")}</button>
       <button class="danger hidden" data-mig-action></button>
     </div>
     <div class="mt-2 hidden" data-mig-abort-row>
-      <button class="secondary full-width" data-mig-abort>Abort migration — old server stays active with all data</button>
+      <button class="secondary full-width" data-mig-abort>${tr("Abort migration — old server stays active with all data")}</button>
     </div>
   `;
   document.body.appendChild(dlg);
@@ -2246,19 +2223,19 @@ async function openMigrateDialog(body) {
     }
     renderMove(s);
     if (s.phase === "pre-seeded") {
-      actionBtn.textContent = "Hand off to the new box now";
+      actionBtn.textContent = tr("Hand off to the new box now");
       actionBtn.disabled = false;
       actionBtn.classList.remove("hidden");
       actionBtn.onclick = () => runHandOff(s, /*confirmFirst*/ true);
     } else if (s.phase === "ready") {
-      actionBtn.textContent = "Freeze old server and hand off";
+      actionBtn.textContent = tr("Freeze old server and hand off");
       actionBtn.disabled = false;
       actionBtn.classList.remove("hidden");
       actionBtn.onclick = () => runHandOff(s, /*confirmFirst*/ false);
     }
     if (s.done || s.abortedAt != null) {
       clearMigrationHold(serverFqdn);
-      cancelBtn.textContent = "Done";
+      cancelBtn.textContent = tr("Done");
     }
   };
 
@@ -2281,13 +2258,13 @@ async function openMigrateDialog(body) {
       .then((e) => {
         estimated = e;
         estimateEl.textContent =
-          `About ${formatBytes(e.archiveBytes || 0)} to move at ${formatBytes(e.bytesPerSecond)}/s between the servers. ` +
-          `Your apps pause for ${downtimeText(e.downtimeSec)}: they show "moving to a new server" until the new one takes over.`;
+          tr("About {0} to move at {1}/s between the servers. ", formatBytes(e.archiveBytes || 0), formatBytes(e.bytesPerSecond)) +
+          tr("Your apps pause for {0}: they show \"moving to a new server\" until the new one takes over.", downtimeText(e.downtimeSec));
         moveBtn.disabled = !canSignAdminOrders();
       })
       .catch((e) => {
         estimated = null;
-        estimateEl.textContent = `Couldn't measure the move: ${archiveErrorText(e)}`;
+        estimateEl.textContent = tr("Couldn't measure the move: {0}", archiveErrorText(e));
       });
     moveBtn.onclick = async () => {
       errEl.classList.add("hidden");
@@ -2339,14 +2316,14 @@ async function openMigrateDialog(body) {
     errEl.classList.add("hidden");
     actionBtn.disabled = true;
     const orig = actionBtn.textContent;
-    actionBtn.textContent = "Signing…";
+    actionBtn.textContent = tr("Signing…");
     try {
       if (confirmFirst) await confirmMigrationReady(signerArgs());
       // Freeze = the graceful-decommission deposit, session-validated. If this
       // half fails after confirm-ready landed, the next poll renders the
       // `ready` phase and the button retries the freeze alone.
       await freezeMigration({ ...signerArgs(), session: s });
-      toast("Handing off — the old server is freezing", "ok");
+      toast(tr("Handing off — the old server is freezing"), "ok");
       await poll();
     } catch (e) {
       showError(e);
@@ -2360,13 +2337,13 @@ async function openMigrateDialog(body) {
     errEl.classList.add("hidden");
     abortBtn.disabled = true;
     const orig = abortBtn.textContent;
-    abortBtn.textContent = "Aborting…";
+    abortBtn.textContent = tr("Aborting…");
     try {
       await abortMigration(signerArgs());
       // The old server's apps run again (they were paused for the move).
       await resumeOld({ oldClient: boxClient(serverFqdn) }).catch(() => {});
       clearMigrationHold(serverFqdn);
-      toast("Migration aborted — your old server stays active", "ok");
+      toast(tr("Migration aborted — your old server stays active"), "ok");
       await poll();
     } catch (e) {
       showError(e);
@@ -2381,7 +2358,7 @@ async function openMigrateDialog(body) {
     loadingEl.classList.add("hidden");
     initEl.classList.remove("hidden");
     backupEl.textContent = MIGRATE_DATA_NOTE;
-    actionBtn.textContent = "Start migration";
+    actionBtn.textContent = tr("Start migration");
     actionBtn.classList.remove("hidden");
 
     const blocked = !canSignAdminOrders();
@@ -2397,7 +2374,7 @@ async function openMigrateDialog(body) {
       errEl.classList.add("hidden");
       actionBtn.disabled = true;
       const orig = actionBtn.textContent;
-      actionBtn.textContent = "Signing…";
+      actionBtn.textContent = tr("Signing…");
       try {
         await startMigration({
           ...signerArgs(),
@@ -2407,11 +2384,9 @@ async function openMigrateDialog(body) {
         // The SWK hold makes the NEXT added pod's SWK deposit migration-aware
         // (lib/serverMigration.js migrationSwkServerId).
         setMigrationHold(serverFqdn);
-        toast("Migration started — now add the new box", "ok");
+        toast(tr("Migration started — now add the new box"), "ok");
         waitEl.textContent =
-          "Next: burn/apply a recipe for the NEW box via Add a server (any name — it becomes " +
-          serverFqdn +
-          " at take-over). It attaches here automatically once online.";
+          tr("Next: burn/apply a recipe for the NEW box via Add a server (any name — it becomes {0} at take-over). It attaches here automatically once online.", serverFqdn);
         await poll();
       } catch (e) {
         showError(e);
@@ -2442,7 +2417,7 @@ async function openMigrateDialog(body) {
         loadingEl.classList.add("hidden");
         showError(
           new Error(
-            "Couldn't read this box's current key from the directory — is it online? It must be reachable to migrate.",
+            tr("Couldn't read this box's current key from the directory — is it online? It must be reachable to migrate."),
           ),
         );
         return;
@@ -2473,7 +2448,7 @@ function wireDangerZone(serverFqdn, username, { pod = null } = {}) {
   $("delete-server-btn")?.addEventListener("click", () => {
     const session = getSession();
     if (!session.umk) {
-      toast("Unlock the webapp first", "err");
+      toast(tr("Unlock the webapp first"), "err");
       return;
     }
     void openDeleteServerDialog(
@@ -2511,11 +2486,11 @@ async function refreshAfterRevocationChange() {
 async function runUnrevoke(serverFqdn, username) {
   const session = getSession();
   if (!session.umk) {
-    toast("Unlock the webapp first", "err");
+    toast(tr("Unlock the webapp first"), "err");
     return;
   }
   const btn = $("unrevoke-server-btn");
-  if (btn) { btn.disabled = true; btn.textContent = "Restoring…"; }
+  if (btn) { btn.disabled = true; btn.textContent = tr("Restoring…"); }
   try {
     const out = await unrevokeServer({
       username: session.username || username,
@@ -2525,37 +2500,35 @@ async function runUnrevoke(serverFqdn, username) {
     });
     toast(
       out.body?.alreadyActive
-        ? "This server isn't revoked."
-        : "Server restored. If it unlocks on its own, approve its unlock once from your phone.",
+        ? tr("This server isn't revoked.")
+        : tr("Server restored. If it unlocks on its own, approve its unlock once from your phone."),
       "ok",
     );
     await refreshAfterRevocationChange();
   } catch (e) {
     console.error("server un-revoke failed", e);
     toast(humanError(e), "err");
-    if (btn) { btn.disabled = false; btn.textContent = "Un-revoke server"; }
+    if (btn) { btn.disabled = false; btn.textContent = tr("Un-revoke server"); }
   }
 }
 
 async function openRevokeDialog(serverFqdn, username) {
   const session = getSession();
   if (!session.umk) {
-    toast("Unlock the webapp first", "err");
+    toast(tr("Unlock the webapp first"), "err");
     return;
   }
 
   const dlg = document.createElement("dialog");
   dlg.className = "modal-card";
-  dlg.setAttribute("aria-label", "Revoke server");
+  dlg.setAttribute("aria-label", tr("Revoke server"));
   dlg.innerHTML = `
-    <h3 class="modal-title">Revoke ${escapeHtml(serverFqdn)}?</h3>
+    <h3 class="modal-title">${tr("Revoke {0}?", escapeHtml(serverFqdn))}</h3>
     <p class="modal-message">
-      Locks this server out right away: it can't connect or unlock until you
-      un-revoke it. Its name stays reserved. Use this if the box is lost or
-      stolen. Other servers on your account stay running.
+      ${tr("Locks this server out right away: it can't connect or unlock until you un-revoke it. Its name stays reserved. Use this if the box is lost or stolen. Other servers on your account stay running.")}
     </p>
     <fieldset class="mt-3">
-      <legend class="caption">Reason</legend>
+      <legend class="caption">${tr("Reason")}</legend>
       ${REVOCATION_REASONS.map((r, i) => `
         <label class="row">
           <input type="radio" name="revoke-reason" value="${escapeHtml(r)}" ${i === 0 ? "checked" : ""} />
@@ -2565,8 +2538,8 @@ async function openRevokeDialog(serverFqdn, username) {
     </fieldset>
     <p class="modal-error err-text hidden" data-revoke-error></p>
     <div class="row-2 mt-3">
-      <button class="secondary" data-revoke-cancel>Cancel</button>
-      <button class="danger" data-revoke-go>Revoke</button>
+      <button class="secondary" data-revoke-cancel>${tr("Cancel")}</button>
+      <button class="danger" data-revoke-go>${tr("Revoke")}</button>
     </div>
   `;
   document.body.appendChild(dlg);
@@ -2597,7 +2570,7 @@ async function openRevokeDialog(serverFqdn, username) {
     goBtn.addEventListener("click", async () => {
       const reason = dlg.querySelector('input[name="revoke-reason"]:checked')?.value;
       if (!REVOCATION_REASONS.includes(reason)) {
-        errEl.textContent = "Pick a reason.";
+        errEl.textContent = tr("Pick a reason.");
         errEl.classList.remove("hidden");
         return;
       }
@@ -2609,7 +2582,7 @@ async function openRevokeDialog(serverFqdn, username) {
         await countdownConfirm({
           signal: abort.signal,
           onTick: (s) => {
-            goBtn.textContent = s > 0 ? `Revoking in ${s}…` : "Revoking…";
+            goBtn.textContent = s > 0 ? tr("Revoking in {0}…", s) : tr("Revoking…");
           },
         });
         const revokeOut = await revokeServer({
@@ -2629,7 +2602,7 @@ async function openRevokeDialog(serverFqdn, username) {
           );
           const result = await showCompanionPendingSheet(revokeOut);
           if (result.outcome === "approved") {
-            toast("Server revoked. It can't connect or unlock until you un-revoke it.", "ok");
+            toast(tr("Server revoked. It can't connect or unlock until you un-revoke it."), "ok");
             resolve();
           } else {
             const { text, kind } = outcomeToastCopy(result.outcome);
@@ -2638,7 +2611,7 @@ async function openRevokeDialog(serverFqdn, username) {
           }
           return;
         }
-        toast("Server revoked. It can't connect or unlock until you un-revoke it.", "ok");
+        toast(tr("Server revoked. It can't connect or unlock until you un-revoke it."), "ok");
         document.removeEventListener("keydown", onEscape);
         dlg.removeEventListener("close", onCancel);
         cleanup();
@@ -2647,7 +2620,7 @@ async function openRevokeDialog(serverFqdn, username) {
         if (e?.code === "cancelled") {
           // Returned to the picker so the user can re-confirm.
           goBtn.disabled = false;
-          goBtn.textContent = "Revoke";
+          goBtn.textContent = tr("Revoke");
           return;
         }
         document.removeEventListener("keydown", onEscape);

@@ -64,6 +64,7 @@ import {
   setSessionTokenForPod,
 } from "./api.js";
 
+import { tr } from "./i18n.js";
 /** Canonical scope list — mirror of `DEVICE_SCOPES` in
  *  `packages/protocol/src/auth.ts`. Order MUST match the canonical
  *  sort order so a future audit-trail render stays stable.
@@ -117,7 +118,7 @@ export function deviceCapabilityChipText(block) {
   const summary = (set.size === 1 && set.has("browse"))
     ? "browse-only"
     : `${block.scopes.length} scopes`;
-  return `Restricted device · ${summary}`;
+  return tr("Restricted device · {0}", summary);
 }
 
 /** Per-action capability gate. Returns true when the action is

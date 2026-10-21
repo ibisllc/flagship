@@ -2,6 +2,7 @@ import { $, registerView, setSubtitle, show } from "../lib/router.js";
 import { toast } from "../lib/toast.js";
 import { openRemoteRequest, redeemRemoteTicket } from "../lib/companionDockStart.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-dock-start");
 
 let activeRequest = null;
@@ -34,7 +35,7 @@ async function startRequest() {
     await renderQr(request.approvalUrl);
     const ticket = await request.delivered;
     if (myRun !== runNumber) return;
-    setMessage("Approved. Connecting to your server…");
+    setMessage(tr("Approved. Connecting to your server…"));
     const persisted = await redeemRemoteTicket(ticket);
     if (myRun !== runNumber) return;
     history.replaceState({}, "", "/");
@@ -50,7 +51,7 @@ async function startRequest() {
 function showCode(code) {
   $("dock-code").textContent = `${code.slice(0, 3)} ${code.slice(3)}`;
   $("dock-code-step")?.classList.remove("hidden");
-  setMessage("Waiting for approval on your phone…");
+  setMessage(tr("Waiting for approval on your phone…"));
 }
 
 async function renderQr(url) {
@@ -64,9 +65,9 @@ async function copyApprovalLink() {
   if (!activeRequest?.approvalUrl) return;
   try {
     await navigator.clipboard.writeText(activeRequest.approvalUrl);
-    toast("Link copied");
+    toast(tr("Link copied"));
   } catch {
-    toast("Copy isn't available in this browser", "err");
+    toast(tr("Copy isn't available in this browser"), "err");
   }
 }
 

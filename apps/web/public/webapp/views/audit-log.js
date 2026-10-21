@@ -32,6 +32,7 @@ import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import { formatDateTime } from "../lib/dateFormat.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-audit-log");
 registerView("view-audit-entry");
 
@@ -46,38 +47,38 @@ let activeCursor = null;
  * log reads consistently no matter which subsystem authored the event.
  */
 const KIND_LABELS = {
-  "app-grant.issue": "App-grant issued",
-  "app-grant.renew": "App-grant renewed",
-  "app-grant.revoke": "App-grant revoked",
-  "pod.register": "Server registered",
-  "pod.revoke": "Server revoked",
-  "url.claim": "URL claimed",
-  "url.drop": "URL dropped",
-  "lease.grant": "Auto-unlock lease granted",
-  "lease.consume": "Auto-unlock lease consumed",
-  "lease.revoke": "Auto-unlock lease revoked",
-  "recovery.setup": "Cloud recovery set up",
-  "recovery.use": "Cloud recovery used",
-  "username.rename": "Username renamed",
-  "app.install": "Service installed",
-  "app.uninstall": "Service uninstalled",
-  "app.update": "Service updated",
-  "invite.issue": "Invite issued",
-  "invite.consume": "Invite consumed",
-  "invite.revoke": "Invite revoked",
-  "recovery.j3": "Recovery J.3 (re-pair envelope)",
-  "recovery.merge-back": "Recovery merge-back",
+  "app-grant.issue": tr("App-grant issued"),
+  "app-grant.renew": tr("App-grant renewed"),
+  "app-grant.revoke": tr("App-grant revoked"),
+  "pod.register": tr("Server registered"),
+  "pod.revoke": tr("Server revoked"),
+  "url.claim": tr("URL claimed"),
+  "url.drop": tr("URL dropped"),
+  "lease.grant": tr("Auto-unlock lease granted"),
+  "lease.consume": tr("Auto-unlock lease consumed"),
+  "lease.revoke": tr("Auto-unlock lease revoked"),
+  "recovery.setup": tr("Cloud recovery set up"),
+  "recovery.use": tr("Cloud recovery used"),
+  "username.rename": tr("Username renamed"),
+  "app.install": tr("Service installed"),
+  "app.uninstall": tr("Service uninstalled"),
+  "app.update": tr("Service updated"),
+  "invite.issue": tr("Invite issued"),
+  "invite.consume": tr("Invite consumed"),
+  "invite.revoke": tr("Invite revoked"),
+  "recovery.j3": tr("Recovery J.3 (re-pair envelope)"),
+  "recovery.merge-back": tr("Recovery merge-back"),
 };
 
 const KIND_FILTERS = [
-  { value: "", label: "All" },
-  { value: "lease", label: "Leases" },
-  { value: "app-grant", label: "App grants" },
-  { value: "url", label: "URLs" },
-  { value: "app", label: "Services" },
-  { value: "pod", label: "Pods" },
-  { value: "invite", label: "Invites" },
-  { value: "recovery", label: "Recovery" },
+  { value: "", label: tr("All") },
+  { value: "lease", label: tr("Leases") },
+  { value: "app-grant", label: tr("App grants") },
+  { value: "url", label: tr("URLs") },
+  { value: "app", label: tr("Services") },
+  { value: "pod", label: tr("Pods") },
+  { value: "invite", label: tr("Invites") },
+  { value: "recovery", label: tr("Recovery") },
 ];
 
 /**
@@ -113,8 +114,8 @@ function actorLabel(entry) {
   const a = entry.actor;
   if (!a) return "—";
   if (a.kind === "self") return "you (this device)";
-  if (a.kind === "sibling") return `Sibling server ${escapeHtml(a.podId ?? "?")}`;
-  if (a.kind === "irk") return `Account key ${escapeHtml((a.pubkeyHex ?? "").slice(0, 12))}…`;
+  if (a.kind === "sibling") return tr("Sibling server {0}", escapeHtml(a.podId ?? "?"));
+  if (a.kind === "irk") return tr("Account key {0}…", escapeHtml((a.pubkeyHex ?? "").slice(0, 12)));
   return escapeHtml(String(a.kind));
 }
 
@@ -125,14 +126,12 @@ function entryRow(entry) {
         <div>
           <div class="weight-600">${escapeHtml(kindLabel(entry.kind))}</div>
           <div class="faint-sm">
-            ${escapeHtml(fmtDate(entry.at))}
-            · actor: ${actorLabel(entry)}
-            ${entry.resource ? `· ${escapeHtml(entry.resource)}` : ""}
+            ${tr("{0} · actor: {1} {2}", escapeHtml(fmtDate(entry.at)), actorLabel(entry), entry.resource ? `· ${escapeHtml(entry.resource)}` : "")}
           </div>
           ${entry.summary ? `<div class="muted-sm mt-1">${escapeHtml(entry.summary)}</div>` : ""}
         </div>
         <button class="secondary" data-action="audit-entry" data-event-id="${escapeHtml(entry.eventId)}">
-          inspect
+          ${tr("inspect")}
         </button>
       </div>
     </div>
@@ -154,9 +153,7 @@ export async function renderInlineActivityAuditLog() {
     if (e instanceof ScreensError && (e.status === 404 || e.status === 503)) {
       root.innerHTML = `
         <div class="card placeholder">
-          audit log not yet available — the daemon's
-          <code>/api/screens/audit-log</code> surface is on the
-          v1-launch checklist (task #34, BFF side pending).
+          ${tr("audit log not yet available — the daemon's <code>/api/screens/audit-log</code> surface is on the v1-launch checklist (task #34, BFF side pending).")}
         </div>
       `;
       return;
@@ -168,15 +165,13 @@ export async function renderInlineActivityAuditLog() {
   if (!entries.length) {
     root.innerHTML = `
       <div class="card placeholder">
-        no signed events yet — actions you take (claiming a URL,
-        granting an app, issuing an invite) will land here with the
-        underlying envelope you can verify yourself.
+        ${tr("no signed events yet — actions you take (claiming a URL, granting an app, issuing an invite) will land here with the underlying envelope you can verify yourself.")}
       </div>
     `;
     return;
   }
   root.innerHTML = entries.map(entryRow).join("") + `
-    <button class="secondary full-width mt-2" id="activity-audit-log-see-all">see all activity</button>
+    <button class="secondary full-width mt-2" id="activity-audit-log-see-all">${tr("see all activity")}</button>
   `;
   $("activity-audit-log-see-all")?.addEventListener("click", () => {
     enterAuditLog().catch((e) => { console.error(e); toast(humanError(e), "err"); });
@@ -220,11 +215,7 @@ export async function renderAuditLog() {
       if (e.status === 404 || e.status === 503) {
         root.innerHTML = `
           <div class="card placeholder">
-            audit log not yet available — the daemon's
-            <code>/api/screens/audit-log</code> surface is on the
-            v1-launch checklist (task #34, BFF side pending). Once
-            the daemon exposes the endpoint, every signed event the
-            user has authored will land here.
+            ${tr("audit log not yet available — the daemon's <code>/api/screens/audit-log</code> surface is on the v1-launch checklist (task #34, BFF side pending). Once the daemon exposes the endpoint, every signed event the user has authored will land here.")}
           </div>
         `;
         return;
@@ -239,17 +230,14 @@ export async function renderAuditLog() {
   if (!entries.length) {
     root.innerHTML = `
       <div class="card placeholder">
-        no events yet${activeKindFilter ? ` for filter "${escapeHtml(activeKindFilter)}"` : ""} —
-        signed actions you take (claiming a URL, granting an app,
-        issuing an invite) will land here with the underlying
-        envelope you can verify yourself.
+        ${tr("no events yet{0} — signed actions you take (claiming a URL, granting an app, issuing an invite) will land here with the underlying envelope you can verify yourself.", activeKindFilter ? ` for filter "${escapeHtml(activeKindFilter)}"` : "")}
       </div>
     `;
     return;
   }
 
   const more = body.nextCursor
-    ? `<button class="secondary full-width mt-2" id="audit-log-load-more">load more</button>`
+    ? `<button class="secondary full-width mt-2" id="audit-log-load-more">${tr("load more")}</button>`
     : "";
   root.innerHTML = entries.map(entryRow).join("") + more;
   $("audit-log-load-more")?.addEventListener("click", () => {
@@ -287,31 +275,29 @@ export async function enterAuditEntry(eventId) {
     const canonicalBytes = entry.canonicalBytesHex ?? entry.canonicalBytes ?? "";
     root.innerHTML = `
       <div class="card">
-        <div class="row"><span class="label">event id</span><span class="value text-xs">${escapeHtml(entry.eventId ?? eventId)}</span></div>
-        <div class="row"><span class="label">kind</span><span class="value">${escapeHtml(kindLabel(entry.kind))}</span></div>
-        <div class="row"><span class="label">at</span><span class="value">${escapeHtml(fmtDate(entry.at))}</span></div>
-        <div class="row"><span class="label">actor</span><span class="value">${actorLabel(entry)}</span></div>
-        ${entry.resource ? `<div class="row"><span class="label">resource</span><span class="value text-xs">${escapeHtml(entry.resource)}</span></div>` : ""}
-        ${entry.signatureHex ? `<div class="row"><span class="label">signature</span><span class="value text-xs">${escapeHtml(entry.signatureHex)}</span></div>` : ""}
-        ${entry.signerPubkeyHex ? `<div class="row"><span class="label">signer pubkey</span><span class="value text-xs">${escapeHtml(entry.signerPubkeyHex)}</span></div>` : ""}
-        ${entry.canonicalBytesTag ? `<div class="row"><span class="label">tag</span><span class="value text-xs">${escapeHtml(entry.canonicalBytesTag)}</span></div>` : ""}
+        <div class="row"><span class="label">${tr("event id")}</span><span class="value text-xs">${escapeHtml(entry.eventId ?? eventId)}</span></div>
+        <div class="row"><span class="label">${tr("kind")}</span><span class="value">${escapeHtml(kindLabel(entry.kind))}</span></div>
+        <div class="row"><span class="label">${tr("at")}</span><span class="value">${escapeHtml(fmtDate(entry.at))}</span></div>
+        <div class="row"><span class="label">${tr("actor")}</span><span class="value">${actorLabel(entry)}</span></div>
+        ${entry.resource ? `<div class="row"><span class="label">${tr("resource")}</span><span class="value text-xs">${escapeHtml(entry.resource)}</span></div>` : ""}
+        ${entry.signatureHex ? `<div class="row"><span class="label">${tr("signature")}</span><span class="value text-xs">${escapeHtml(entry.signatureHex)}</span></div>` : ""}
+        ${entry.signerPubkeyHex ? `<div class="row"><span class="label">${tr("signer pubkey")}</span><span class="value text-xs">${escapeHtml(entry.signerPubkeyHex)}</span></div>` : ""}
+        ${entry.canonicalBytesTag ? `<div class="row"><span class="label">${tr("tag")}</span><span class="value text-xs">${escapeHtml(entry.canonicalBytesTag)}</span></div>` : ""}
       </div>
       ${canonicalBytes ? `
-        <h3 class="mt-4">Canonical bytes (pre-image)</h3>
+        <h3 class="mt-4">${tr("Canonical bytes (pre-image)")}</h3>
         <div class="card">
           <pre class="audit-envelope-pre">${escapeHtml(canonicalBytes)}</pre>
         </div>
       ` : ""}
       ${envelope ? `
-        <h3 class="mt-4">Signed request</h3>
+        <h3 class="mt-4">${tr("Signed request")}</h3>
         <div class="card">
           <pre class="audit-envelope-pre">${escapeHtml(JSON.stringify(envelope, null, 2))}</pre>
         </div>
       ` : ""}
       <div class="card placeholder mt-2">
-        Verify this signature yourself: feed the canonical-bytes pre-image
-        through Ed25519.verify with the signer's pubkey. The webapp
-        never makes you trust its rendering — these bytes are the truth.
+        ${tr("Verify this signature yourself: feed the canonical-bytes pre-image through Ed25519.verify with the signer's pubkey. The webapp never makes you trust its rendering — these bytes are the truth.")}
       </div>
     `;
   } catch (e) {

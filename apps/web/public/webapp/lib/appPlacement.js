@@ -27,24 +27,25 @@ import { escapeHtml } from "./util.js";
 import { accountReadFetch } from "./accountRead.js";
 import { serverIcon } from "./icons.js";
 
+import { tr } from "./i18n.js";
 export const TAG_APP_COPY = "flagship/app-copy/v1";
 export const TAG_UNINSTALL_SERVICE = "flagship/uninstall-service/v1";
 
-export const RUNS_ON_TITLE = "Runs on";
-export const RUNS_ON_NOTE = "Tick a server to copy this app there as it is now. Untick one to remove the app from it.";
-export const RUNS_ON_UNKNOWN = "Can't reach this server, so it isn't known whether the app is there.";
-export const RUNS_ON_LAST_COPY = "This is the app's only copy, so it can't be unticked.";
-export const RUNS_ON_COMPANION = "Only the owner's devices can change where this app runs.";
-export const RUNS_ON_ADMIN_ONLY = "Only an admin device can change where this app runs.";
-export const COPYING = "Copying…";
-export const COPY_NEEDS_UPDATE = "This server needs an update to receive copies.";
-export const COPY_ALREADY = "This server already has this app, or is copying it now.";
-export const COPY_REFUSED = "This server refused the copy.";
-export const COPY_STARTED = "Copying the app. It appears on that server when it's ready.";
-export const REMOVE_CONFIRM_TITLE = "Remove from this server?";
-export const CREATE_APP_HERE = "Create app here";
+export const RUNS_ON_TITLE = tr("Runs on");
+export const RUNS_ON_NOTE = tr("Tick a server to copy this app there as it is now. Untick one to remove the app from it.");
+export const RUNS_ON_UNKNOWN = tr("Can't reach this server, so it isn't known whether the app is there.");
+export const RUNS_ON_LAST_COPY = tr("This is the app's only copy, so it can't be unticked.");
+export const RUNS_ON_COMPANION = tr("Only the owner's devices can change where this app runs.");
+export const RUNS_ON_ADMIN_ONLY = tr("Only an admin device can change where this app runs.");
+export const COPYING = tr("Copying…");
+export const COPY_NEEDS_UPDATE = tr("This server needs an update to receive copies.");
+export const COPY_ALREADY = tr("This server already has this app, or is copying it now.");
+export const COPY_REFUSED = tr("This server refused the copy.");
+export const COPY_STARTED = tr("Copying the app. It appears on that server when it's ready.");
+export const REMOVE_CONFIRM_TITLE = tr("Remove from this server?");
+export const CREATE_APP_HERE = tr("Create app here");
 export const SERVER_APPS_TITLE = "Apps";
-export const SERVER_NO_APPS = "No apps on this server yet.";
+export const SERVER_NO_APPS = tr("No apps on this server yet.");
 
 const RECENT_REPORT_MS = 15 * 60_000;
 const COPY_UNDERWAY = new Set(["copying", "installing"]);
@@ -205,7 +206,7 @@ export function creationPickerModel(servers, target = creationTarget()) {
       name: s.name,
       selected: s.fqdn === selected,
       disabled: !s.selectable && s.fqdn !== selected,
-      note: !s.online ? "offline" : !s.hasSession ? "not paired with this device" : s.isLeader ? "leader" : "",
+      note: !s.online ? "offline" : !s.hasSession ? tr("not paired with this device") : s.isLeader ? "leader" : "",
     }));
   return {
     pinned: target.pinned,
@@ -218,7 +219,7 @@ export function creationPickerModel(servers, target = creationTarget()) {
 
 export function creationPickerHtml(model) {
   if (!model.selected) {
-    return `<p class="note runs-on-line" data-runs-on>${escapeHtml(RUNS_ON_TITLE)}: no server you can build on is online.</p>`;
+    return `<p class="note runs-on-line" data-runs-on>${tr("{0}: no server you can build on is online.", escapeHtml(RUNS_ON_TITLE))}</p>`;
   }
   if (!model.choosable) {
     return `<p class="note runs-on-line" data-runs-on>${escapeHtml(RUNS_ON_TITLE)}: <strong>${escapeHtml(model.selectedName)}</strong></p>`;
@@ -308,10 +309,10 @@ export function copyErrorMessage(e) {
   if (e?.status === 409) return COPY_ALREADY;
   if (e?.status === 403) {
     const why = boxSays(e);
-    return why ? `${COPY_REFUSED} ${why}` : `${COPY_REFUSED} Check this device's clock and try again.`;
+    return why ? `${COPY_REFUSED} ${why}` : tr("{0} Check this device's clock and try again.", COPY_REFUSED);
   }
-  if (e?.status === 400) return boxSays(e) ?? "This server couldn't read the copy request.";
-  if (e?.status === 0) return "This device isn't paired with that server.";
+  if (e?.status === 400) return boxSays(e) ?? tr("This server couldn't read the copy request.");
+  if (e?.status === 0) return tr("This device isn't paired with that server.");
   return boxSays(e) ?? (e instanceof Error ? e.message : String(e));
 }
 
@@ -342,24 +343,24 @@ export function canonicalUninstallServiceBytes({ serverId, creator, slug, issued
   return new TextEncoder().encode([TAG_UNINSTALL_SERVICE, serverId, creator, slug, String(issuedAt)].join("|"));
 }
 
-export const REMOVE_APP_LABEL = "Remove app";
-export const REMOVE_APP_BUSY = "Removing…";
-export const REMOVE_APP_TITLE = "Remove this app?";
+export const REMOVE_APP_LABEL = tr("Remove app");
+export const REMOVE_APP_BUSY = tr("Removing…");
+export const REMOVE_APP_TITLE = tr("Remove this app?");
 
 /** The confirmation's words: what goes, where, and what stays. */
 export function removeAppMessage({ slug, server, otherCopies = 0 }) {
   const where = server ? ` from ${server}` : "";
   const rest = otherCopies > 0
-    ? ` Your ${otherCopies === 1 ? "other server keeps its copy" : `other ${otherCopies} servers keep their copies`}.`
+    ? tr(" Your {0}.", otherCopies === 1 ? "other server keeps its copy" : `other ${otherCopies} servers keep their copies`)
     : "";
-  return `This uninstalls ${slug}${where} and deletes its data there. This can't be undone.${rest}`;
+  return tr("This uninstalls {0}{1} and deletes its data there. This can't be undone.{2}", slug, where, rest);
 }
 
 /** The owner-facing words for a refused uninstall. */
 export function removeAppErrorMessage(e) {
-  if (e?.status === 0) return "This device isn't paired with that server.";
-  if (e?.status === 403) return boxSays(e) ?? "The server refused the request. Check this device's clock and try again.";
-  return boxSays(e) ?? (e instanceof Error && e.message ? e.message : "Couldn't remove the app. Try again in a moment.");
+  if (e?.status === 0) return tr("This device isn't paired with that server.");
+  if (e?.status === 403) return boxSays(e) ?? tr("The server refused the request. Check this device's clock and try again.");
+  return boxSays(e) ?? (e instanceof Error && e.message ? e.message : tr("Couldn't remove the app. Try again in a moment."));
 }
 
 /** Sign the uninstall for `serverFqdn` and DELETE it there. */
@@ -452,7 +453,7 @@ export function runsOnHtml(model, { companion = false, adminOnly = false, error 
       </div>`;
 }
 
-export const NO_COPY_SOURCE = "None of the servers with this app can be reached to copy it from.";
+export const NO_COPY_SOURCE = tr("None of the servers with this app can be reached to copy it from.");
 
 /**
  * The owner ticked or unticked `fqdn` on the app page. Ticking signs a copy
@@ -483,7 +484,7 @@ export async function changeRunsOn({ rows, fqdn, checked, app, current = current
   } catch (e) {
     return { rows, error: boxSays(e) ?? (e instanceof Error ? e.message : String(e)) };
   }
-  return { rows: set("missing"), message: `Removed from ${row.name}.` };
+  return { rows: set("missing"), message: tr("Removed from {0}.", row.name) };
 }
 
 // ---------------------------------------------------------------------------
@@ -631,7 +632,7 @@ export const APP_STATE_LABELS = {
 export const PILL_DEPLOYING = "Deploying";
 export const PILL_EDITING = "Editing";
 export const PILL_STOPPED = "Stopped";
-export const PILL_UNREACHABLE = "Can't reach";
+export const PILL_UNREACHABLE = tr("Can't reach");
 export const UNREACHABLE = "unreachable";
 
 const ACTIVITY_KINDS = new Set(["deploying", "copying", "editing"]);
@@ -682,7 +683,7 @@ export function combineAppStatus(states) {
   const running = list.filter((s) => s === "running" || s === "starting").length;
   const unknown = list.filter((s) => !RUN_STATES.has(s)).length;
   const count = running || unknown;
-  if (count) return { kind: "on", label: count === 1 ? "On 1 server" : `On ${count} servers`, count };
+  if (count) return { kind: "on", label: count === 1 ? tr("On 1 server") : tr("On {0} servers", count), count };
   if (list.length) return { kind: "stopped", label: PILL_STOPPED, count: 0 };
   return { kind: "unreachable", label: PILL_UNREACHABLE, count: 0 };
 }
@@ -747,16 +748,16 @@ export function appSandboxNotice(sandbox) {
     if (reason.startsWith(EGRESS_FENCE_REASON)) {
       return {
         tone: "danger",
-        text: `Apps can't start on this server: ${reason}. The server tries again every 30 seconds and starts them once it runs.`,
+        text: tr("Apps can't start on this server: {0}. The server tries again every 30 seconds and starts them once it runs.", reason),
       };
     }
     return {
       tone: "danger",
-      text: `Apps can't start on this server: the sandbox they run in isn't working (${reason}). The server tries again every 10 minutes.`,
+      text: tr("Apps can't start on this server: the sandbox they run in isn't working ({0}). The server tries again every 10 minutes.", reason),
     };
   }
   if (sandbox?.state === "starting") {
-    return { tone: "muted", text: "Setting up the sandbox apps run in. They start once it's ready." };
+    return { tone: "muted", text: tr("Setting up the sandbox apps run in. They start once it's ready.") };
   }
   return null;
 }

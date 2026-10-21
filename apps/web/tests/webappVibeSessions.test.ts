@@ -177,7 +177,7 @@ describe("build chooser and build sessions screens", () => {
     expect(js).toContain("Past builds");
     expect(js).toContain("openVibeCodeSession");
     expect(js).toContain("Discard…");
-    expect(js).toContain('okLabel: "Discard build"');
+    expect(js).toContain('okLabel: tr("Discard build")');
     expect(js).toContain("buildDisplayName(b)");
     expect(js).not.toContain("last: ");
   });
@@ -260,8 +260,8 @@ describe("unique build names on the describe form", () => {
     expect(section).toMatch(/<textarea id="vc-prompt"[^>]*><\/textarea>/);
     const js = await asset("/webapp/views/vibe-code.js");
     expect(js).toContain("CONFLICT_TITLE");
-    expect(js).toContain('okLabel: "Open build sessions"');
-    expect(js).toContain('cancelLabel: "Pick another name"');
+    expect(js).toContain('okLabel: tr("Open build sessions")');
+    expect(js).toContain('cancelLabel: tr("Pick another name")');
     expect(js).toContain("enterBuildJournal()");
     expect(js).toContain("conflictFromError(e)");
     expect(js).toContain("inviteOnly === false");

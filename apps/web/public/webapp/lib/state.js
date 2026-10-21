@@ -14,6 +14,7 @@ import {
 } from "./profilesStore.js";
 import { controlApex } from "./apex.js";
 
+import { tr } from "./i18n.js";
 const _session = {
   umk: null,
   irk: null,
@@ -80,13 +81,13 @@ export async function ensureUsername() {
   if (_session.username) return _session.username;
   const { inlinePrompt } = await import("./modal.js");
   const handle = await inlinePrompt({
-    title: "Pick a username",
+    title: tr("Pick a username"),
     message: "DNS-safe label — will appear at <name>.flagship.services.",
     placeholder: "alice",
     validate: (v) => {
       if (!v) return "username required";
       if (!USERNAME_RE.test(v) || v.includes("--")) {
-        return "3–30 lowercase letters/digits with interior single dashes";
+        return tr("3–30 lowercase letters/digits with interior single dashes");
       }
       return null;
     },

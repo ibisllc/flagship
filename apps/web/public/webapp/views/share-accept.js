@@ -21,6 +21,7 @@ import {
   signInToShare,
 } from "../lib/serverShares.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-share-accept", { tab: "home" });
 
 export const SHARE_POLL_MS = 4000;
@@ -40,7 +41,7 @@ function errorCard(message) {
   return `
       <div class="card">
         <p class="err-text">${escapeHtml(message)}</p>
-        <button class="secondary full-width mt-2" data-share-home>Back to servers</button>
+        <button class="secondary full-width mt-2" data-share-home>${tr("Back to servers")}</button>
       </div>`;
 }
 
@@ -52,15 +53,15 @@ export function offerCardHtml(offer) {
   return `
       <div class="card share-offer">
         <span class="fs-listrow-icon fs-listrow-icon--teal icon share-offer-icon" aria-hidden="true">${serverIcon}</span>
-        <h3 class="share-offer-name">${escapeHtml(offer.serverName || offer.serverDomain)} is shared with you</h3>
+        <h3 class="share-offer-name">${tr("{0} is shared with you", escapeHtml(offer.serverName || offer.serverDomain))}</h3>
         <p class="mono faint-sm">${escapeHtml(offer.serverDomain)}</p>
         <p class="mt-2"><span class="pill ok">${escapeHtml(LEVEL_TEXT[offer.level])}</span></p>
         <p class="note mt-2">${escapeHtml(LEVEL_LINE[offer.level])}</p>
         ${extras.map((x) => `<p class="note">${escapeHtml(x)}</p>`).join("")}
-        <p class="faint-sm mt-2">You use your own account. The owner sees only the name they gave you.</p>
+        <p class="faint-sm mt-2">${tr("You use your own account. The owner sees only the name they gave you.")}</p>
         <div class="row-2 mt-3">
-          <button class="secondary" data-share-decline>Not now</button>
-          <button data-share-accept>Accept</button>
+          <button class="secondary" data-share-decline>${tr("Not now")}</button>
+          <button data-share-accept>${tr("Accept")}</button>
         </div>
       </div>`;
 }
@@ -69,12 +70,12 @@ export function offerCardHtml(offer) {
 export function codeCardHtml(sas, serverName) {
   return `
       <div class="card share-code">
-        <p class="note">Read this code to the owner:</p>
+        <p class="note">${tr("Read this code to the owner:")}</p>
         <p class="share-sas mono" data-share-sas>${escapeHtml(sas)}</p>
-        <p class="note">They check it matches on their side before you can use ${escapeHtml(serverName)}.</p>
+        <p class="note">${tr("They check it matches on their side before you can use {0}.", escapeHtml(serverName))}</p>
         <div class="update-pending mt-2" data-share-waiting>
           <span class="update-pending-spinner" aria-hidden="true"></span>
-          <p class="text-sm">Waiting for the owner to confirm…</p>
+          <p class="text-sm">${tr("Waiting for the owner to confirm…")}</p>
         </div>
       </div>`;
 }
@@ -95,9 +96,9 @@ export async function enterShareAccept(link) {
   const el = root();
   if (!el) return;
   const title = $("share-accept-title");
-  if (title) title.textContent = "Shared server";
+  if (title) title.textContent = tr("Shared server");
   if (!getSession()?.umk) {
-    el.innerHTML = errorCard("Unlock Flagship first, then open the link again.");
+    el.innerHTML = errorCard(tr("Unlock Flagship first, then open the link again."));
     wireHome();
     return;
   }
@@ -128,10 +129,10 @@ export async function enterShareAccept(link) {
   const btn = el.querySelector("[data-share-accept]");
   btn?.addEventListener("click", () => {
     btn.disabled = true;
-    btn.textContent = "Accepting…";
+    btn.textContent = tr("Accepting…");
     void accept(opened, my).catch(() => {
       btn.disabled = false;
-      btn.textContent = "Accept";
+      btn.textContent = tr("Accept");
     });
   });
 }
@@ -154,7 +155,7 @@ async function accept(opened, my) {
   if (my !== seq) return;
   const name = opened.offer.serverName || opened.offer.serverDomain;
   el.innerHTML = codeCardHtml(r.sas, name);
-  if (!r.savedToInbox) toast("Accepted, but it isn't saved to your list yet. Keep this page open until the owner confirms.", "err");
+  if (!r.savedToInbox) toast(tr("Accepted, but it isn't saved to your list yet. Keep this page open until the owner confirms."), "err");
   waitForOwner(r.entry, name, my);
 }
 
@@ -167,7 +168,7 @@ function waitForOwner(entry, name, my) {
     } catch (e) {
       if (my !== seq) return;
       if (e?.code === "share-ended") {
-        root().innerHTML = errorCard("The owner cancelled this share.");
+        root().innerHTML = errorCard(tr("The owner cancelled this share."));
         wireHome();
         return;
       }
@@ -177,9 +178,9 @@ function waitForOwner(entry, name, my) {
     if (my !== seq) return;
     root().innerHTML = `
       <div class="card share-code">
-        <p class="share-offer-name">You can now use ${escapeHtml(name)}</p>
-        <p class="note">It's under <strong>Shared with me</strong> on your servers list.</p>
-        <button class="full-width mt-2" data-share-open>Open ${escapeHtml(name)}</button>
+        <p class="share-offer-name">${tr("You can now use {0}", escapeHtml(name))}</p>
+        <p class="note">${tr("It's under <strong>Shared with me</strong> on your servers list.")}</p>
+        <button class="full-width mt-2" data-share-open>${tr("Open {0}", escapeHtml(name))}</button>
       </div>`;
     root().querySelector("[data-share-open]")?.addEventListener("click", async () => {
       const { enterSharedServer } = await import("./shared-server.js");
@@ -194,11 +195,11 @@ function waitForOwner(entry, name, my) {
 export async function promptShareLink() {
   if (!canAddServers()) return refuseAddServer();
   const text = await inlinePrompt({
-    title: "Open a share link",
-    message: "Paste the link the owner sent you.",
+    title: tr("Open a share link"),
+    message: tr("Paste the link the owner sent you."),
     placeholder: "https://flagshipserver.com/share#s=…",
-    okLabel: "Open",
-    validate: (v) => (parseShareLink(v) ? null : "That isn't a share link."),
+    okLabel: tr("Open"),
+    validate: (v) => (parseShareLink(v) ? null : tr("That isn't a share link.")),
   });
   if (!text) return;
   const link = parseShareLink(text);

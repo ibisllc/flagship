@@ -24,20 +24,21 @@ import { currentViewId } from "./router.js";
 import { getSession } from "./state.js";
 import { toast } from "./toast.js";
 
+import { tr } from "./i18n.js";
 export const NOTICE_COPY = Object.freeze({
   bannerDismiss: "Dismiss",
-  updateButton: "Reload to update",
+  updateButton: tr("Reload to update"),
   updating: "Updating",
-  updateFailed: "Couldn't update yet. Check your connection and try again.",
-  lockKicker: "Security update",
-  lockTitle: "Update required",
+  updateFailed: tr("Couldn't update yet. Check your connection and try again."),
+  lockKicker: tr("Security update"),
+  lockTitle: tr("Update required"),
   lockReassure:
-    "Your accounts and servers are unchanged and nothing has been deleted. Flagship is paused on this device until you update.",
+    tr("Your accounts and servers are unchanged and nothing has been deleted. Flagship is paused on this device until you update."),
   whyLabel: "Why",
-  backup: "Back up my account key",
-  unlockFirst: "Unlock to back up my account key",
-  signOut: "Sign out",
-  signedBy: "Signed by the Flagship maintainers",
+  backup: tr("Back up my account key"),
+  unlockFirst: tr("Unlock to back up my account key"),
+  signOut: tr("Sign out"),
+  signedBy: tr("Signed by the Flagship maintainers"),
   advisory: (id) => `Advisory ${id}`,
 });
 
@@ -220,7 +221,7 @@ async function backupAccountKey() {
     await runKeyfileExportCeremony();
   } catch (e) {
     console.error("key backup failed", e);
-    toast("Couldn't start the backup. Try again.", "err");
+    toast(tr("Couldn't start the backup. Try again."), "err");
   }
 }
 

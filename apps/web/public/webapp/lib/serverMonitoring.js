@@ -17,13 +17,14 @@ import {
   memoryStickIcon,
 } from "./icons.js";
 
+import { tr } from "./i18n.js";
 export const MONITOR_ROWS = [
-  { key: "health", label: "Health", icon: heartPulseIcon },
+  { key: "health", label: tr("Health"), icon: heartPulseIcon },
   { key: "cpu", label: "CPU", icon: cpuIcon },
-  { key: "memory", label: "Memory", icon: memoryStickIcon },
-  { key: "disk", label: "Disk", icon: hardDriveIcon },
-  { key: "network", label: "Network", icon: arrowUpDownIcon },
-  { key: "certificate", label: "Certificate", icon: lockIcon },
+  { key: "memory", label: tr("Memory"), icon: memoryStickIcon },
+  { key: "disk", label: tr("Disk"), icon: hardDriveIcon },
+  { key: "network", label: tr("Network"), icon: arrowUpDownIcon },
+  { key: "certificate", label: tr("Certificate"), icon: lockIcon },
 ];
 
 export const METRIC_KEYS = ["cpu", "memory", "disk", "network"];
@@ -122,11 +123,11 @@ export function metricsDetailHtml(m) {
   const memTotal = num(m.memTotalBytes);
   return {
     cpu:
-      sparkline([{ values: (m.cpuHistory ?? []).map((s) => s.value), tone: "accent" }], { max: 100, label: "CPU over the last hour" }) +
-      `<p class="note small">Load ${num(m.loadAvg1).toFixed(2)} · ${num(m.loadAvg5).toFixed(2)} · ${num(m.loadAvg15).toFixed(2)}</p>`,
+      sparkline([{ values: (m.cpuHistory ?? []).map((s) => s.value), tone: "accent" }], { max: 100, label: tr("CPU over the last hour") }) +
+      `<p class="note small">${tr("Load {0} · {1} · {2}", num(m.loadAvg1).toFixed(2), num(m.loadAvg5).toFixed(2), num(m.loadAvg15).toFixed(2))}</p>`,
     memory:
-      sparkline([{ values: (m.memHistory ?? []).map((s) => s.value), tone: "ok" }], { max: memTotal || undefined, label: "Memory over the last hour" }) +
-      `<p class="note small">${pct(mem)} in use</p>`,
+      sparkline([{ values: (m.memHistory ?? []).map((s) => s.value), tone: "ok" }], { max: memTotal || undefined, label: tr("Memory over the last hour") }) +
+      `<p class="note small">${tr("{0} in use", pct(mem))}</p>`,
     disk:
       `<div class="monitor-disk">${ring(disk)}${facts([
         ["Used", formatBytes(m.diskUsedBytes)],
@@ -139,14 +140,14 @@ export function metricsDetailHtml(m) {
       sparkline([
         { values: (m.netHistory ?? []).map((s) => s.read), tone: "ok" },
         { values: (m.netHistory ?? []).map((s) => s.write), tone: "err" },
-      ], { label: "Network traffic over the last hour" }),
+      ], { label: tr("Network traffic over the last hour") }),
   };
 }
 
 /** Certificate row: collapsed value, tone and expanded detail. */
 export function certRow({ certNotAfter, certNotBefore, certIssuer, certSans } = {}, now = Date.now()) {
   if (typeof certNotAfter !== "number") {
-    return { value: "Provisioning", tone: "", detail: `<p class="note">No certificate yet. The server is getting one.</p>` };
+    return { value: "Provisioning", tone: "", detail: `<p class="note">${tr("No certificate yet. The server is getting one.")}</p>` };
   }
   const expired = certNotAfter <= now;
   const pairs = [["Renews", formatWhen(certNotAfter, now)]];
@@ -154,10 +155,10 @@ export function certRow({ certNotAfter, certNotBefore, certIssuer, certSans } = 
   if (typeof certIssuer === "string" && certIssuer) pairs.push(["Issuer", certIssuer]);
   const sans = Array.isArray(certSans) ? certSans : [];
   const sanList = sans.length
-    ? `<p class="note small mt-2">Names covered</p><ul class="monitor-sans">${sans.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ul>`
+    ? `<p class="note small mt-2">${tr("Names covered")}</p><ul class="monitor-sans">${sans.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ul>`
     : "";
   return {
-    value: expired ? "Expired" : `Valid until ${formatWhen(certNotAfter, now)}`,
+    value: expired ? "Expired" : tr("Valid until {0}", formatWhen(certNotAfter, now)),
     tone: expired ? "err" : "",
     detail: facts(pairs) + sanList,
   };
@@ -169,7 +170,7 @@ export function healthRow(h, now = Date.now()) {
   if (!verdict) return null;
   const stale = Math.floor((now - h.receivedAt) / 60000) >= HEALTH_STALE_AFTER_MIN;
   return {
-    value: verdict.ok ? "Healthy" : stale ? "No report" : "Needs attention",
+    value: verdict.ok ? "Healthy" : stale ? tr("No report") : tr("Needs attention"),
     tone: verdict.ok ? "" : "warn",
     ok: verdict.ok,
     icon: verdict.ok ? heartPulseIcon : alertTriangleIcon,
@@ -198,11 +199,11 @@ export function renderMonitoringSection({ detail = null, now = Date.now() } = {}
   const rows = MONITOR_ROWS.filter((r) => detail || r.key === "health").map((r) => {
     if (r.key === "certificate") return rowHtml(r, certRow(detail, now));
     if (r.key === "health") return rowHtml(r, { value: "", hidden: true });
-    return rowHtml(r, { detail: `<p class="note">Loading…</p>` });
+    return rowHtml(r, { detail: `<p class="note">${tr("Loading…")}</p>` });
   });
   return `
       <section class="monitor-section${detail ? "" : " hidden"}" id="monitor-section" aria-labelledby="monitor-heading">
-        <h2 class="mt-4" id="monitor-heading">Monitoring</h2>
+        <h2 class="mt-4" id="monitor-heading">${tr("Monitoring")}</h2>
         <div class="card monitor-pane" id="monitor-pane">${rows.join("")}</div>
       </section>`;
 }

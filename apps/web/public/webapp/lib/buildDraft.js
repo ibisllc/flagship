@@ -26,6 +26,7 @@
 // This module does NOT touch the actual phone-app code; only the webapp
 // peer's draft composer is in scope. iOS/Android composers will mirror
 // the same canonical-bytes shape natively (Swift + Kotlin).
+import { tr } from "./i18n.js";
 
 const DB_NAME = "flagship-webapp";
 const DRAFT_STORE = "buildDrafts";
@@ -227,14 +228,14 @@ export async function sealForBrowserKey(plaintext, browserPkHex) {
   const aesKey = await crypto.subtle.importKey(
     "raw",
     new Uint8Array(symBits),
-    { name: "AES-GCM" },
+    { name: tr("AES-GCM") },
     false,
     ["encrypt"],
   );
   const nonce = new Uint8Array(12);
   crypto.getRandomValues(nonce);
   const ct = new Uint8Array(
-    await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, aesKey, plaintext),
+    await crypto.subtle.encrypt({ name: tr("AES-GCM"), iv: nonce }, aesKey, plaintext),
   );
   const out = new Uint8Array(32 + 12 + ct.length);
   out.set(ephPubBytes, 0);

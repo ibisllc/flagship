@@ -92,9 +92,9 @@ describe("edit-service screens", () => {
 
   it("the chooser and the describe step carry the iOS copy", async () => {
     const lib = await asset("/webapp/lib/editService.js");
-    expect(lib).toContain('title: "Describe the change"');
+    expect(lib).toContain('title: tr("Describe the change")');
     expect(lib).toContain('"Tell the AI what to change. It starts from the current code."');
-    expect(lib).toContain('title: "Use your IDE"');
+    expect(lib).toContain('title: tr("Use your IDE")');
     expect(lib).toContain('"Connect Cursor, Cline or another editor and change it with your own AI."');
     expect(lib).toContain(
       '"The new version replaces the one running now. Its address, data and the people who can open it stay the same."',
@@ -118,9 +118,9 @@ describe("edit-service screens", () => {
     expect(js).toContain("openVibeCodeSession(r.sessionId, { credential, back: () => openService(id) })");
     expect(js).toContain('"Starting…"');
     // The refusal pop-ups and where their buttons go.
-    expect(js).toContain('okLabel: "Open build sessions", cancelLabel: "OK"');
+    expect(js).toContain('okLabel: tr("Open build sessions"), cancelLabel: tr("OK")');
     expect(js).toContain("enterBuildJournal()");
-    expect(js).toContain('okLabel: "Use your IDE", cancelLabel: "OK"');
+    expect(js).toContain('okLabel: tr("Use your IDE"), cancelLabel: tr("OK")');
     expect(js).toContain("inlineAlert");
 
     const vibe = await asset("/webapp/views/vibe-code.js");
@@ -145,6 +145,6 @@ describe("edit-service screens", () => {
     const sw = await asset("/webapp/service-worker.js");
     expect(sw).toContain('"/views/edit-service.js"');
     expect(sw).toContain('"/lib/editService.js"');
-    expect(sw).toContain('SHELL_VERSION = "v156"');
+    expect(sw).toContain('SHELL_VERSION = "v157"');
   });
 });

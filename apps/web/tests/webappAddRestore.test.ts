@@ -16,8 +16,8 @@ describe("the Add/Restore server menu", () => {
   it("is titled Add/Restore server and offers exactly three choices in order", () => {
     expect(IMPORT_SRC).toContain('export const ADD_IMPORT_LABEL = "+ Add/Restore server";');
     expect(menu).toContain('"Add or restore a server"');
-    expect(menu).toContain('<h3 class="modal-title">Add/Restore server</h3>');
-    const labels = [...menu.matchAll(/data-choice-(add|co-manage|restore)>([^<]+)</g)].map((m) => [m[1], m[2]]);
+    expect(menu).toContain('<h3 class="modal-title">${tr("Add/Restore server")}</h3>');
+    const labels = [...menu.matchAll(/data-choice-(add|co-manage|restore)>([^<]+)</g)].map((m) => [m[1], m[2].replace(/^\$\{tr\("|"\)\}$/g, "")]);
     expect(labels).toEqual([
       ["add", "Create a server"],
       ["co-manage", "Co-manage a running server"],
@@ -28,10 +28,10 @@ describe("the Add/Restore server menu", () => {
   });
 
   it("the restore chooser has the file and other-servers sources, one line each, and no device copy in a browser", () => {
-    expect(IMPORT_SRC).toContain('file: { title: "From a file", description: "Pick a .flagship backup file." }');
-    expect(IMPORT_SRC).toContain('peers: { title: "From other servers", description: "Rebuild a lost server from pieces other servers keep." }');
+    expect(IMPORT_SRC).toContain('file: { title: tr("From a file"), description: tr("Pick a .flagship backup file.") }');
+    expect(IMPORT_SRC).toContain('peers: { title: tr("From other servers"), description: tr("Rebuild a lost server from pieces other servers keep.") }');
     expect(IMPORT_SRC).toContain('"Restore from backup"');
-    expect(IMPORT_SRC).not.toContain(`title: "From this device"`);
+    expect(IMPORT_SRC).not.toContain(`title: tr("From this device")`);
     expect(IMPORT_SRC).toMatch(/data-restore-file[\s\S]*openImportBackup\(\)/);
     expect(IMPORT_SRC).toMatch(/data-restore-peers[\s\S]*openRestoreFromPeers\(\)/);
   });

@@ -5,10 +5,11 @@
 // anyway. Each finished file becomes one "wrote" line, a file still being
 // written shows only its last few lines, and only the newest messages stay
 // on screen.
+import { tr, trn } from "./i18n.js";
 
 export const MAX_MESSAGES = 40;
 export const LIVE_TAIL_LINES = 6;
-export const JUMP_TO_LATEST = "Jump to latest";
+export const JUMP_TO_LATEST = tr("Jump to latest");
 /** How close to the bottom (px) still counts as following the newest message. */
 export const FOLLOW_SLACK_PX = 48;
 
@@ -67,7 +68,7 @@ export function transcriptWindow(messages, max = MAX_MESSAGES) {
 /** "… 3 earlier messages not shown", or "" when nothing is left out. */
 export function hiddenMessagesText(hidden) {
   if (!(hidden > 0)) return "";
-  return `… ${hidden} earlier message${hidden === 1 ? "" : "s"} not shown`;
+  return trn(hidden, "… {0} earlier message not shown", "… {0} earlier messages not shown");
 }
 
 /** Whether a scroll box is at (or within the slack of) its bottom. */

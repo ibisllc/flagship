@@ -18,6 +18,7 @@ import {
   signWithAdminRoot,
 } from "../keystore.js";
 
+import { tr } from "./i18n.js";
 export async function signedDirectoryFetch(path, init = {}, deps = {}) {
   const session = deps.session ?? getSession();
   const profile = deps.profile ?? getActiveProfile();
@@ -42,7 +43,7 @@ export async function signedDirectoryFetch(path, init = {}, deps = {}) {
   const signature = deps.signDevice
     ? await deps.signDevice(key, canonicalDirectoryRequest(request))
     : new Uint8Array(await crypto.subtle.sign(
-        { name: "Ed25519" },
+        { name: tr("Ed25519") },
         key.privateKey,
         canonicalDirectoryRequest(request),
       ));
@@ -69,7 +70,7 @@ export async function fetchDecryptedDirectory(deps = {}) {
   if (!(session?.umk instanceof Uint8Array) || !profile?.accountId) throw new Error("unlock this account first");
   const path = `/api/accounts/${encodeURIComponent(profile.accountId)}/directory`;
   const response = await signedDirectoryFetch(path, { method: "GET" }, { ...deps, session, profile });
-  if (!response.ok) throw new Error(`Couldn't fetch trusted devices (${response.status})`);
+  if (!response.ok) throw new Error(tr("Couldn't fetch trusted devices ({0})", response.status));
   const body = await response.json();
   const accountKey = await deriveAccountProfileKey(session.umk);
   const directoryKey = await deriveDeviceDirectoryKey(session.umk);
@@ -158,7 +159,7 @@ export async function updateSelfDisplayName(displayName, current, deps = {}) {
   };
   const signature = deps.signDevice
     ? await deps.signDevice(key, canonicalDeviceSelfProfile(unsigned))
-    : new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, key.privateKey, canonicalDeviceSelfProfile(unsigned)));
+    : new Uint8Array(await crypto.subtle.sign({ name: tr("Ed25519") }, key.privateKey, canonicalDeviceSelfProfile(unsigned)));
   return putProfile(`/api/accounts/${encodeURIComponent(profile.accountId)}/devices/${profile.deviceId}/profile`, {
     profile: { ...unsigned, signatureHex: bytesToHex(signature) },
     expectedRevision: current?.revision ?? 0,
@@ -209,7 +210,7 @@ async function directoryError(response) {
   } catch {
     /* not JSON */
   }
-  const e = new Error(reason ?? `Profile update failed (${response.status})`);
+  const e = new Error(reason ?? tr("Profile update failed ({0})", response.status));
   e.status = response.status;
   e.body = reason ? { error: reason } : null;
   return e;

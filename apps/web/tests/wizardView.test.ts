@@ -131,7 +131,7 @@ describe('"Secure your account" backup nudge step', () => {
   });
 
   it("uses the approved verbatim title + body copy", () => {
-    expect(VIEW_JS).toContain('label: "Secure your account"');
+    expect(VIEW_JS).toContain('label: tr("Secure your account")');
     expect(VIEW_JS).toMatch(
       /Back up your account now so you can get back in if you lose this\s+device\. No one — not even us — can recover it for you\./,
     );
@@ -160,8 +160,8 @@ describe('"Secure your account" backup nudge step', () => {
     expect(VIEW_JS).toContain(
       "Without a backup, losing this device means losing your account for good. You can set this up anytime in Settings.",
     );
-    expect(VIEW_JS).toContain('okLabel: "Skip anyway"');
-    expect(VIEW_JS).toContain('cancelLabel: "Back"');
+    expect(VIEW_JS).toContain('okLabel: tr("Skip anyway")');
+    expect(VIEW_JS).toContain('cancelLabel: tr("Back")');
     // Skipping pins the persistent home-screen recovery warning. Post P12
     // hard cut-over the write goes through the per-profile profilesStore;
     // the home-screen banner reads from the same slot.

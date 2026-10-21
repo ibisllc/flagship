@@ -34,6 +34,7 @@ import {
 } from "../lib/crossDevicePairing.js";
 import { makeAdminRelay } from "../lib/pairingRelay.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-add-device");
 
 // L10 — anti-double-tap gate (ms) for the "codes match" confirm. Mirrors the
@@ -45,7 +46,7 @@ export const SAS_CONFIRM_GATE_MS = 600;
 // Slice D (D-4) — the hard warning shown beside the (default-OFF) "make this
 // device an admin" toggle. Byte-stable so iOS/Android can mirror the copy.
 export const PROMOTE_ADMIN_WARNING =
-  "This device will be able to wipe, transfer, or decommission your cloud — full admin authority, not just access. Leave this off unless you truly intend to hand over that control.";
+  tr("This device will be able to wipe, transfer, or decommission your cloud — full admin authority, not just access. Leave this off unless you truly intend to hand over that control.");
 
 let activePairing = null; // { abort: () => void }
 
@@ -85,7 +86,7 @@ async function renderQr(link) {
 async function startPairing() {
   const session = getSession();
   if (!session.umk || !session.username) {
-    return toast("Unlock the webapp first", "err");
+    return toast(tr("Unlock the webapp first"), "err");
   }
   if (!isAdminDevice(session)) {
     setStatus("error", ADD_DEVICE_ADMIN_ONLY);
@@ -97,7 +98,7 @@ async function startPairing() {
   }
 
   showSas(null);
-  setStatus("active", "generating pairing code…");
+  setStatus("active", tr("generating pairing code…"));
 
   // The relay transport: admin is the SENDER. SAS is surfaced via the
   // onSas callback; the Confirm gate is the admin's "codes match" tap,
@@ -106,7 +107,7 @@ async function startPairing() {
     ttlMs: PAIRING_TTL_MS,
     onSas: (sas) => {
       showSas(sas);
-      setStatus("active", "compare the code on both screens, then confirm");
+      setStatus("active", tr("compare the code on both screens, then confirm"));
       const btn = $("add-device-confirm");
       if (btn) {
         // L10 anti-double-tap gate (parity with iOS AddDeviceViewModel's 600ms
@@ -123,7 +124,7 @@ async function startPairing() {
         }, SAS_CONFIRM_GATE_MS);
       }
     },
-    onPeerWaiting: () => setStatus("active", "waiting for the other device to connect…"),
+    onPeerWaiting: () => setStatus("active", tr("waiting for the other device to connect…")),
   });
   activePairing = { abort: () => { relay._confirm(false); relay.close?.(); } };
 
@@ -148,15 +149,15 @@ async function startPairing() {
       onJoinLink: (link) => { void renderQr(link); },
     });
     if (result.outcome === "cancelled") {
-      setStatus("idle", "cancelled.");
+      setStatus("idle", tr("cancelled."));
       return;
     }
     if (result.promotedAdmin) {
-      setStatus("done", "admin device added — it joins under a 14-day review window.");
-      toast("Admin device added (quarantined for review)", "ok");
+      setStatus("done", tr("admin device added — it joins under a 14-day review window."));
+      toast(tr("Admin device added (quarantined for review)"), "ok");
     } else {
-      setStatus("done", "device added — it joins under a 14-day review window.");
-      toast("Device added (quarantined for review)", "ok");
+      setStatus("done", tr("device added — it joins under a 14-day review window."));
+      toast(tr("Device added (quarantined for review)"), "ok");
     }
   } catch (e) {
     setStatus("error", String(e?.message || e));
@@ -179,7 +180,7 @@ export function renderAddDevice() {
       <label class="inline-check">
         <input type="checkbox" id="add-device-promote-admin"
                data-add-device-promote-admin />
-        Also make this device an admin
+        ${tr("Also make this device an admin")}
       </label>
       <p class="note small err-text" data-section="promote-admin-warning">
         ⚠️ ${escapeHtml(PROMOTE_ADMIN_WARNING)}
@@ -188,25 +189,25 @@ export function renderAddDevice() {
     : "";
   root.innerHTML = `
     <div class="card warning" data-section="risk">
-      <p class="note"><strong>Heads up.</strong> ${escapeHtml(ADMIN_RISK_WARNING)}</p>
+      <p class="note">${tr("<strong>Heads up.</strong> {0}", escapeHtml(ADMIN_RISK_WARNING))}</p>
     </div>
     ${promoteSection}
     <div class="card" data-section="qr">
-      <div id="add-device-qr" class="qr-box" aria-label="Pairing QR"></div>
+      <div id="add-device-qr" class="qr-box" aria-label="${tr("Pairing QR")}"></div>
       <p class="note small err-text" data-section="no-screenshot">⚠️ ${escapeHtml(NO_SCREENSHOT_WARNING)}</p>
-      <label class="mt-2 small">Or share this link</label>
+      <label class="mt-2 small">${tr("Or share this link")}</label>
       <input id="add-device-link" class="modal-input" readonly value="" />
     </div>
     <div class="card mt-2" data-section="sas">
-      <div class="row"><span class="label">Match code</span>
+      <div class="row"><span class="label">${tr("Match code")}</span>
         <span class="value mono" id="add-device-sas">— — —</span></div>
-      <p class="note small">When the other device connects, compare this 6-digit code on both screens. They must match before you confirm.</p>
-      <button id="add-device-confirm" class="full-width mt-2" disabled>Codes match — confirm &amp; add</button>
+      <p class="note small">${tr("When the other device connects, compare this 6-digit code on both screens. They must match before you confirm.")}</p>
+      <button id="add-device-confirm" class="full-width mt-2" disabled>${tr("Codes match — confirm &amp; add")}</button>
     </div>
-    <p class="note" id="add-device-status">idle</p>
+    <p class="note" id="add-device-status">${tr("idle")}</p>
     <div class="row-2 mt-2">
-      <button class="secondary" id="add-device-restart">New code</button>
-      <button class="secondary" id="add-device-back">← Back</button>
+      <button class="secondary" id="add-device-restart">${tr("New code")}</button>
+      <button class="secondary" id="add-device-back">${tr("← Back")}</button>
     </div>
   `;
   $("add-device-restart")?.addEventListener("click", () => startPairing().catch((e) => { console.error(e); toast(humanError(e), "err"); }));

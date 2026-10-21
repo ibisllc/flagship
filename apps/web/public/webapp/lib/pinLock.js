@@ -34,6 +34,7 @@ import {
   hexToBytes,
 } from "../keystore.js";
 
+import { tr } from "./i18n.js";
 export const MIN_PIN_LEN = 4;
 export const MAX_PIN_LEN = 6;
 export const MAX_ATTEMPTS = 5;
@@ -117,14 +118,14 @@ async function wrapSeed(pin, seed, pepper) {
   const salt = randomBytes(PIN_SALT_BYTES);
   const nonce = randomBytes(AES_NONCE_BYTES);
   const key = await pinWrapKey(pin, salt, pepper);
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, key, seed));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: tr("AES-GCM"), iv: nonce }, key, seed));
   return { v: 1, salt: bytesToHex(salt), nonce: bytesToHex(nonce), ct: bytesToHex(ct) };
 }
 
 async function unwrapSeed(pin, blob, pepper) {
   const key = await pinWrapKey(pin, hexToBytes(blob.salt), pepper);
   const pt = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: hexToBytes(blob.nonce) },
+    { name: tr("AES-GCM"), iv: hexToBytes(blob.nonce) },
     key,
     hexToBytes(blob.ct),
   );
@@ -156,7 +157,7 @@ export async function hasPin(deps) {
 /** Wrap `seed` (the 32-byte UMK) under `pin` + device pepper and persist
  *  it. Resets the attempt counter. Caller must already be unlocked. */
 export async function setPin(pin, seed, deps) {
-  if (!isValidPin(pin)) throw new Error(`PIN must be ${MIN_PIN_LEN}–${MAX_PIN_LEN} digits`);
+  if (!isValidPin(pin)) throw new Error(tr("PIN must be {0}–{1} digits", MIN_PIN_LEN, MAX_PIN_LEN));
   if (!(seed instanceof Uint8Array) || seed.length !== 32) {
     throw new Error("seed must be a 32-byte Uint8Array");
   }

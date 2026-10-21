@@ -42,6 +42,7 @@ import {
 } from "./loginTakeover.js";
 import { generateDeviceId } from "./accountMetadata.js";
 
+import { tr } from "./i18n.js";
 /** Canonical-bytes tag for the re-pair initiate envelope. MUST match
  *  packages/protocol/src/recovery.ts TAG_RE_PAIR_INITIATE + loginTakeover.js. */
 export const TAG_RE_PAIR_INITIATE = "flagship/re-pair-initiate/v1";
@@ -60,7 +61,7 @@ function defaultBytesToHex(b) {
  *  three surfaces tell the user the same thing. The import sheet can't collect
  *  the factor, so it points at the sign-in flow which can. */
 export const SECOND_FACTOR_GUIDANCE =
-  'This account has a second factor enrolled. Choose "Connect to an existing account" and sign in with your account name — it will ask for your authenticator or recovery code.';
+  tr("This account has a second factor enrolled. Choose \"Connect to an existing account\" and sign in with your account name — it will ask for your authenticator or recovery code.");
 
 /** A tagged sentinel error so the caller can render the second-factor
  *  guidance instead of a raw failure. */

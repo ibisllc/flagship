@@ -32,6 +32,7 @@ import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { escapeHtml } from "../lib/util.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-invite-redeem");
 
 // The secret the friend is redeeming, held across an unlock detour.
@@ -72,7 +73,7 @@ export async function enterInviteRedeem(secretHex, boxBaseUrl, ctx = {}) {
 async function renderInviteRedeem() {
   const root = $("invite-redeem-content");
   if (!pendingSecretHex) {
-    root.innerHTML = `<div class="card"><p class="err-text">This invite link is missing its code.</p></div>`;
+    root.innerHTML = `<div class="card"><p class="err-text">${tr("This invite link is missing its code.")}</p></div>`;
     return;
   }
   // The friend needs their own account (UMK) to prove control of their AID.
@@ -88,12 +89,11 @@ async function renderInviteRedeem() {
   if (!hasIdentity) {
     root.innerHTML = `
       <div class="card">
-        <div class="card-title">You've been invited</div>
+        <div class="card-title">${tr("You've been invited")}</div>
         <p class="note mt-2">
-          To accept, you need a Flagship account on this device. Set one up,
-          then reopen this invite link.
+          ${tr("To accept, you need a Flagship account on this device. Set one up, then reopen this invite link.")}
         </p>
-        <button id="ir-setup" class="full-width mt-2">Set up an account</button>
+        <button id="ir-setup" class="full-width mt-2">${tr("Set up an account")}</button>
       </div>`;
     $("ir-setup")?.addEventListener("click", () => {
       // Send them through the normal first-run; they reopen the link after.
@@ -105,9 +105,9 @@ async function renderInviteRedeem() {
   if (!unlocked) {
     root.innerHTML = `
       <div class="card">
-        <div class="card-title">You've been invited</div>
-        <p class="note mt-2">Unlock this device to accept the invite.</p>
-        <button id="ir-unlock" class="full-width mt-2">Unlock</button>
+        <div class="card-title">${tr("You've been invited")}</div>
+        <p class="note mt-2">${tr("Unlock this device to accept the invite.")}</p>
+        <button id="ir-unlock" class="full-width mt-2">${tr("Unlock")}</button>
       </div>`;
     $("ir-unlock")?.addEventListener("click", () => {
       // Route to the unlock view; app.js re-dispatches to the pending redeem
@@ -120,21 +120,18 @@ async function renderInviteRedeem() {
   // Unlocked + has identity — show the accept CTA.
   root.innerHTML = `
     <div class="card">
-      <div class="card-title">Accept this invite</div>
+      <div class="card-title">${tr("Accept this invite")}</div>
       <p class="note mt-2">
-        This grants your account access to a restricted service. A private
-        per-owner identity is recorded so the owner can manage access; your
-        Flagship username is never shared, and the owner can't link you across
-        their different services.
+        ${tr("This grants your account access to a restricted service. A private per-owner identity is recorded so the owner can manage access; your Flagship username is never shared, and the owner can't link you across their different services.")}
       </p>
-      <button id="ir-accept" class="full-width mt-2">Accept &amp; get access</button>
+      <button id="ir-accept" class="full-width mt-2">${tr("Accept &amp; get access")}</button>
       <div id="ir-status" class="mt-2 text-sm"></div>
     </div>`;
   $("ir-accept")?.addEventListener("click", () => onAccept().catch((e) => { console.error(e); toast(humanError(e), "err"); }));
 }
 
 /** Shown for a link made before per-app ids (no `s=`). */
-export const OLD_INVITE_LINK = "This invite link is from an older version of Flagship. Ask the owner for a new link.";
+export const OLD_INVITE_LINK = tr("This invite link is from an older version of Flagship. Ask the owner for a new link.");
 
 /**
  * The identity the friend redeems with: their id for the invite's app.
@@ -162,11 +159,11 @@ async function onAccept() {
   }
   if (status) {
     status.className = "mt-2 text-sm";
-    status.textContent = "accepting…";
+    status.textContent = tr("accepting…");
   }
   if (btn) {
     btn.disabled = true;
-    btn.textContent = "Accepting…";
+    btn.textContent = tr("Accepting…");
   }
   try {
     const ident = await redemptionIdentity(session.umk);
@@ -195,7 +192,7 @@ async function onAccept() {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = "Accept & get access";
+      btn.textContent = tr("Accept & get access");
     }
   }
 }
@@ -214,13 +211,12 @@ function renderGranted(r) {
   const root = $("invite-redeem-content");
   root.innerHTML = `
     <div class="card">
-      <div class="card-title">You're in</div>
+      <div class="card-title">${tr("You're in")}</div>
       <p class="note mt-2">
-        Your account now has access to <strong>${serviceRef}</strong>.
-        ${r.firstBind === false ? "(You already had access — this link is linked to your account.)" : ""}
+        ${tr("Your account now has access to <strong>{0}</strong>. {1}", serviceRef, r.firstBind === false ? tr("(You already had access — this link is linked to your account.)") : "")}
       </p>
-      <button id="ir-open" class="full-width mt-2">Open it</button>
-      <button id="ir-home" class="secondary full-width mt-2">Go to Flagship</button>
+      <button id="ir-open" class="full-width mt-2">${tr("Open it")}</button>
+      <button id="ir-home" class="secondary full-width mt-2">${tr("Go to Flagship")}</button>
     </div>`;
   wireDoneButtons();
   finishRedeem();
@@ -237,12 +233,11 @@ async function renderPendingAcceptance(serviceRef, contactAID, umk) {
     // A manual invite MUST be a v2 link (it carries the inviteId + author AID).
     root.innerHTML = `
       <div class="card">
-        <div class="card-title">Almost there</div>
+        <div class="card-title">${tr("Almost there")}</div>
         <p class="note mt-2">
-          This invite needs the owner to approve you, but the link is missing the
-          details to do that. Ask the owner to resend the invite link.
+          ${tr("This invite needs the owner to approve you, but the link is missing the details to do that. Ask the owner to resend the invite link.")}
         </p>
-        <button id="ir-home" class="secondary full-width mt-2">Go to Flagship</button>
+        <button id="ir-home" class="secondary full-width mt-2">${tr("Go to Flagship")}</button>
       </div>`;
     wireDoneButtons();
     finishRedeem();
@@ -262,20 +257,18 @@ async function renderPendingAcceptance(serviceRef, contactAID, umk) {
   const svc = serviceRef ? escapeHtml(serviceRef) : "this service";
   root.innerHTML = `
     <div class="card">
-      <div class="card-title">Send this back to the owner</div>
+      <div class="card-title">${tr("Send this back to the owner")}</div>
       <p class="note mt-2">
-        The owner approves each person for <strong>${svc}</strong>. Send them this
-        acceptance code over the same channel they sent you the invite — once they
-        finalize it, you're in. It doesn't reveal who you are.
+        ${tr("The owner approves each person for <strong>{0}</strong>. Send them this acceptance code over the same channel they sent you the invite — once they finalize it, you're in. It doesn't reveal who you are.", svc)}
       </p>
-      <label>Acceptance code</label>
+      <label>${tr("Acceptance code")}</label>
       <input id="ir-accept-reply" type="text" readonly class="mt-1" />
       <div id="ir-accept-qr" class="mt-2" style="text-align:center;"></div>
       <div class="row-2 mt-2">
-        <button id="ir-accept-share" class="secondary">Share…</button>
-        <button id="ir-accept-copy" class="secondary">Copy code</button>
+        <button id="ir-accept-share" class="secondary">${tr("Share…")}</button>
+        <button id="ir-accept-copy" class="secondary">${tr("Copy code")}</button>
       </div>
-      <button id="ir-home" class="full-width mt-3">Done</button>
+      <button id="ir-home" class="full-width mt-3">${tr("Done")}</button>
     </div>`;
   const input = $("ir-accept-reply");
   if (input) input.value = reply;
@@ -328,7 +321,7 @@ function finishRedeem() {
 async function shareText(text) {
   if (typeof navigator.share === "function") {
     try {
-      await navigator.share({ title: "Flagship acceptance", text });
+      await navigator.share({ title: tr("Flagship acceptance"), text });
       return;
     } catch {
       /* user cancelled — fall through to copy */
@@ -340,9 +333,9 @@ async function shareText(text) {
 async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
-    toast("Copied — send it to the owner.");
+    toast(tr("Copied — send it to the owner."));
   } catch {
-    toast("Couldn't copy — long-press the field to copy.", "err");
+    toast(tr("Couldn't copy — long-press the field to copy."), "err");
   }
 }
 

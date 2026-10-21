@@ -11,23 +11,24 @@
 
 import { requireOwnerProfile } from "./companionGuard.js";
 
+import { tr } from "./i18n.js";
 export const TAG_APP_API_KEY = "flagship/app-api-key/v1";
 
-export const API_KEYS_TITLE = "API keys";
+export const API_KEYS_TITLE = tr("API keys");
 export const API_KEYS_NOTE =
-  "Let scripts, devices and other servers call this app. Each key works until you revoke it.";
-export const API_KEYS_EMPTY = "No API keys yet.";
-export const API_KEYS_CREATE = "Create key";
+  tr("Let scripts, devices and other servers call this app. Each key works until you revoke it.");
+export const API_KEYS_EMPTY = tr("No API keys yet.");
+export const API_KEYS_CREATE = tr("Create key");
 export const API_KEYS_REVOKE = "Revoke";
 export const API_KEYS_COPY = "Copy";
 export const API_KEYS_DONE = "Done";
-export const API_KEYS_COMPANION_NOTE = "Create and revoke keys from your owner app.";
-export const API_KEY_COPY_WARNING = "Copy it now. Flagship can't show it again.";
+export const API_KEYS_COMPANION_NOTE = tr("Create and revoke keys from your owner app.");
+export const API_KEY_COPY_WARNING = tr("Copy it now. Flagship can't show it again.");
 export const API_KEY_LABEL_MAX = 64;
 
 export const API_KEY_SCOPES = [
-  { value: "read", label: "Read" },
-  { value: "write", label: "Read & write" },
+  { value: "read", label: tr("Read") },
+  { value: "write", label: tr("Read & write") },
 ];
 
 export const DEFAULT_API_KEY_SCOPE = "read";
@@ -48,14 +49,14 @@ export function newApiKeyId(getRandomValues = (b) => crypto.getRandomValues(b)) 
 }
 
 export function scopeLabel(scope) {
-  return scope === "write" ? "Read & write" : "Read";
+  return scope === "write" ? tr("Read & write") : "Read";
 }
 
 /** The trimmed label, or an error to show next to the field. */
 export function checkApiKeyLabel(label) {
   const v = String(label ?? "").trim();
-  if (!v) return { error: "Give the key a name, so you know what uses it." };
-  if (v.length > API_KEY_LABEL_MAX) return { error: `Keep the name under ${API_KEY_LABEL_MAX + 1} characters.` };
+  if (!v) return { error: tr("Give the key a name, so you know what uses it.") };
+  if (v.length > API_KEY_LABEL_MAX) return { error: tr("Keep the name under {0} characters.", API_KEY_LABEL_MAX + 1) };
   return { label: v };
 }
 
@@ -102,24 +103,24 @@ export function isApiKeyExpired(key, now = Date.now()) {
 
 /** `Authorization: Bearer <key>`, the line a caller sends. */
 export function apiKeyUsageLine(key) {
-  return `Authorization: Bearer ${key}`;
+  return tr("Authorization: Bearer {0}", key);
 }
 
 /** The box's refusal, said plainly. */
 export function apiKeyErrorMessage(e) {
   const status = e?.status;
   const raw = typeof e?.body?.error === "string" && e.body.error ? e.body.error : String(e?.message ?? "");
-  if (status === 400) return raw ? `Your server didn't accept this key: ${raw}` : "Your server didn't accept this key.";
-  if (status === 404) return "This app isn't installed on this server anymore.";
-  if (status === 409) return "A key with that id already exists. Try again.";
+  if (status === 400) return raw ? tr("Your server didn't accept this key: {0}", raw) : tr("Your server didn't accept this key.");
+  if (status === 404) return tr("This app isn't installed on this server anymore.");
+  if (status === 409) return tr("A key with that id already exists. Try again.");
   if (status === 403) {
     if (/companion|read-only/i.test(raw)) return API_KEYS_COMPANION_NOTE;
-    if (/stale|clock|issuedAt/i.test(raw)) return "This device's clock is more than 10 minutes off. Fix the clock and try again.";
-    if (/different server|serverDomain/i.test(raw)) return "This key was signed for a different server.";
-    if (/signature/i.test(raw)) return "Your server didn't accept this key's signature.";
-    return raw || "Your server refused this key.";
+    if (/stale|clock|issuedAt/i.test(raw)) return tr("This device's clock is more than 10 minutes off. Fix the clock and try again.");
+    if (/different server|serverDomain/i.test(raw)) return tr("This key was signed for a different server.");
+    if (/signature/i.test(raw)) return tr("Your server didn't accept this key's signature.");
+    return raw || tr("Your server refused this key.");
   }
-  return raw || "Couldn't update this app's API keys.";
+  return raw || tr("Couldn't update this app's API keys.");
 }
 
 const keysPath = (serviceId) => `/api/screens/services/${encodeURIComponent(serviceId)}/api-keys`;
@@ -153,7 +154,7 @@ export async function fetchApiKeys(serviceId, fetchJson) {
 export async function createApiKey(args, deps = {}) {
   const { serverDomain, serviceId, scope, umk, signWithIrk, fetchJson, bytesToHex } = args;
   (deps.requireOwnerProfile ?? requireOwnerProfile)();
-  if (!umk || typeof signWithIrk !== "function") throw new Error("Unlock the webapp first");
+  if (!umk || typeof signWithIrk !== "function") throw new Error(tr("Unlock the webapp first"));
   const checked = checkApiKeyLabel(args.label);
   if (checked.error) throw new Error(checked.error);
   for (let attempt = 0; ; attempt++) {
@@ -180,7 +181,7 @@ export async function createApiKey(args, deps = {}) {
       if (attempt === 0 && e?.status === 409) continue;
       throw e;
     }
-    if (typeof r?.key !== "string" || !r.key) throw new Error("Your server didn't return the new key.");
+    if (typeof r?.key !== "string" || !r.key) throw new Error(tr("Your server didn't return the new key."));
     return { key: r.key, keyId: grant.keyId, scope, issuedAt, label: checked.label };
   }
 }

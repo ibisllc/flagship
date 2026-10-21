@@ -127,7 +127,7 @@ describe("create-server view — words for a browser", () => {
     expect(titles).not.toContain("On other servers");
     expect(section).toContain("Nothing is copied. You can turn backups on later.");
     expect(section).toContain("You can change it any time in the server's Backups section.");
-    expect(VIEW_SRC).toContain('"phone-only": "On my devices"');
+    expect(VIEW_SRC).toContain('"phone-only": tr("On my devices")');
   });
 
   it("keeps Create off until a backup choice is made and refuses without one", () => {

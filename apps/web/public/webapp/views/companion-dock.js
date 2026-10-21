@@ -24,6 +24,7 @@ import {
 } from "../lib/companionClient.js";
 import { remoteOrigin } from "../lib/apex.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-companion-dock");
 
 function fmtDate(unixMs) {
@@ -53,9 +54,7 @@ export async function renderCompanionDock() {
       if (e.status === 503) {
         root.innerHTML = `
           <div class="card placeholder">
-            Remote isn't available on this server yet — the daemon is
-            running an older build (pre-P14). Update the daemon to let a
-            browser drive this server.
+            ${tr("Remote isn't available on this server yet — the daemon is running an older build (pre-P14). Update the daemon to let a browser drive this server.")}
           </div>
         `;
         return;
@@ -69,35 +68,33 @@ export async function renderCompanionDock() {
   const companions = body.companions ?? [];
   const startCard = `
     <div class="card">
-      <div class="weight-600">Use a browser as a remote</div>
+      <div class="weight-600">${tr("Use a browser as a remote")}</div>
       <p class="note">
-        On the computer you want to use, open <code>${escapeHtml(new URL(remoteOrigin()).host)}</code>.
-        It will show a one-time QR for your phone to scan and approve.
+        ${tr("On the computer you want to use, open <code>{0}</code>. It will show a one-time QR for your phone to scan and approve.", escapeHtml(new URL(remoteOrigin()).host))}
       </p>
-      <a class="btn full-width mt-2" href="${escapeHtml(remoteOrigin())}/" target="_blank" rel="noopener">Open the remote page</a>
+      <a class="btn full-width mt-2" href="${escapeHtml(remoteOrigin())}/" target="_blank" rel="noopener">${tr("Open the remote page")}</a>
     </div>
   `;
 
   const listCard = companions.length === 0
     ? `
-      <h3 class="mt-4">Connected browsers</h3>
-      <div class="card placeholder">no browsers connected</div>
+      <h3 class="mt-4">${tr("Connected browsers")}</h3>
+      <div class="card placeholder">${tr("no browsers connected")}</div>
     `
     : `
-      <h3 class="mt-4">Connected browsers</h3>
+      <h3 class="mt-4">${tr("Connected browsers")}</h3>
       ${companions.map((c) => `
         <div class="card">
           <div class="row row-top">
             <div>
-              <div class="weight-600">Session ${escapeHtml(c.tokenPrefix)}</div>
+              <div class="weight-600">${tr("Session {0}", escapeHtml(c.tokenPrefix))}</div>
               <div class="value text-xs">${escapeHtml(c.tokenPrefix)}…</div>
               <div class="faint-sm">
-                connected ${escapeHtml(fmtDate(c.redeemedAt))}
-                · ${escapeHtml(timeLeft(c.expiresAt))}
+                ${tr("connected {0} · {1}", escapeHtml(fmtDate(c.redeemedAt)), escapeHtml(timeLeft(c.expiresAt)))}
               </div>
               ${c.userAgent ? `<div class="faint-sm">${escapeHtml(c.userAgent)}</div>` : ""}
             </div>
-            <button class="secondary" data-action="revoke" data-prefix="${escapeHtml(c.tokenPrefix)}">revoke</button>
+            <button class="secondary" data-action="revoke" data-prefix="${escapeHtml(c.tokenPrefix)}">${tr("revoke")}</button>
           </div>
         </div>
       `).join("")}
@@ -113,15 +110,15 @@ async function runRevoke(prefix) {
   if (!prefix) return;
   const { inlineConfirm } = await import("../lib/modal.js");
   const ok = await inlineConfirm({
-    title: `Disconnect remote ${prefix}…?`,
-    message: "The browser using this session will be signed out immediately.",
-    okLabel: "Disconnect",
+    title: tr("Disconnect remote {0}…?", prefix),
+    message: tr("The browser using this session will be signed out immediately."),
+    okLabel: tr("Disconnect"),
     danger: true,
   });
   if (!ok) return;
   try {
     await companionRevoke(prefix);
-    toast("Disconnected");
+    toast(tr("Disconnected"));
     await renderCompanionDock();
   } catch (e) {
     toast(e.message ?? String(e), "err");

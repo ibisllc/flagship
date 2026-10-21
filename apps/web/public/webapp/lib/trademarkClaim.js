@@ -8,13 +8,14 @@
 //
 // Single source of truth for the to/subject/body so the iOS + Android
 // "name taken" states can mirror the exact same message.
+import { tr } from "./i18n.js";
 
 /** Where trademark claims go. */
 export const TRADEMARK_CLAIM_EMAIL = "trademarks@flagshipserver.com";
 
 /** Subject line for a trademark claim on `username`. */
 export function trademarkClaimSubject(username) {
-  return `Trademark claim for the name "${username}"`;
+  return tr("Trademark claim for the name \"{0}\"", username);
 }
 
 /** Plain-text body template. Leaves bracketed placeholders for the user
@@ -23,18 +24,18 @@ export function trademarkClaimBody(username) {
   return [
     `Hello,`,
     ``,
-    `I'm requesting the Flagship account name "${username}" on the basis`,
+    tr("I'm requesting the Flagship account name \"{0}\" on the basis", username),
     `that I hold a registered trademark covering it.`,
     ``,
-    `Trademark holder / company: [your name or company]`,
-    `Trademark registration number: [registration number]`,
-    `Jurisdiction / registry: [e.g. USPTO, EUIPO]`,
-    `Goods/services class(es): [class numbers]`,
-    `Link or attachment to the registration: [URL or note that it's attached]`,
+    tr("Trademark holder / company: [your name or company]"),
+    tr("Trademark registration number: [registration number]"),
+    tr("Jurisdiction / registry: [e.g. USPTO, EUIPO]"),
+    tr("Goods/services class(es): [class numbers]"),
+    tr("Link or attachment to the registration: [URL or note that it's attached]"),
     ``,
-    `Requested name: ${username}`,
+    tr("Requested name: {0}", username),
     ``,
-    `Thank you.`,
+    tr("Thank you."),
   ].join("\n");
 }
 

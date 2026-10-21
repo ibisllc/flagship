@@ -10,6 +10,7 @@ import { approveArchiveDownload, commitRestore, newArchiveId, waitForRestore } f
 import { openWithAccountKey, parseBackupFile, serverRestoreCanonicalBytes } from "./serverBackupFormat.js";
 import { SAVED_PATH, depositKeys, savedView } from "./savedBackups.js";
 
+import { tr } from "./i18n.js";
 const RESTORE_PATH = "/api/screens/server-restore";
 const toHex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -48,11 +49,11 @@ export async function estimateMove({ oldClient, newClient, oldFqdn }) {
  * `onProgress({ step: "backup"|"transfer"|"restore", pct, text })`.
  */
 export async function moveData({ oldClient, newClient, oldFqdn, newFqdn, umk, sign, canSignAdmin, onProgress = () => {}, pollMs = 2000, rng }) {
-  if (!umk) throw userError("Unlock the webapp first.");
+  if (!umk) throw userError(tr("Unlock the webapp first."));
   // 1. The old server needs a key for the move's backup (one approval for a batch).
   let view = await savedView({ client: oldClient });
   if (Number(view.keysLeft) === 0) {
-    if (!canSignAdmin) throw userError("Only an admin device of this account can move a server.");
+    if (!canSignAdmin) throw userError(tr("Only an admin device of this account can move a server."));
     view = await depositKeys({ client: oldClient, serverDomain: oldFqdn, umk, count: view.keysWanted || 400, sign });
   }
   // 2. Pause the apps and make the backup.
@@ -64,18 +65,18 @@ export async function moveData({ oldClient, newClient, oldFqdn, newFqdn, umk, si
     entry = (view.backups ?? []).find((b) => b.archiveId === archiveId) ?? null;
     if (entry) break;
     if (!view.running && view.lastRun && view.lastRun.ok === false) {
-      throw userError(`The backup for the move failed: ${String(view.lastRun.reason ?? "").replace(/[.\s]+$/, "")}. The old server's apps are running again.`);
+      throw userError(tr("The backup for the move failed: {0}. The old server's apps are running again.", String(view.lastRun.reason ?? "").replace(/[.\s]+$/, "")));
     }
     const p = view.running?.progress;
-    onProgress({ step: "backup", pct: p?.total ? Math.round((p.done / p.total) * 100) : 0, text: "Backing up the old server…" });
+    onProgress({ step: "backup", pct: p?.total ? Math.round((p.done / p.total) * 100) : 0, text: tr("Backing up the old server…") });
     await sleep(pollMs);
   }
-  onProgress({ step: "backup", pct: 100, text: "Backed up." });
+  onProgress({ step: "backup", pct: 100, text: tr("Backed up.") });
   // 3. Open the backup file with this account's key.
   const text = await oldClient.fetch(`${SAVED_PATH}/${archiveId}/backup-file`).then((r) => (typeof r === "string" ? r : JSON.stringify(r)));
   const file = parseBackupFile(text);
   const opened = await openWithAccountKey(file, await deriveServerArchiveKeyFromSeed(umk, archiveId));
-  if (!opened) throw userError("This device couldn't open the move's backup.");
+  if (!opened) throw userError(tr("This device couldn't open the move's backup."));
   const data = opened.body.data;
   // 4. The new server waits for exactly that backup.
   const order = { serverDomain: newFqdn.toLowerCase(), archiveId, bytes: data.bytes, sha256: data.sha256, issuedAt: Date.now() };
@@ -93,13 +94,13 @@ export async function moveData({ oldClient, newClient, oldFqdn, newFqdn, umk, si
     const r = st.restore;
     if (r?.state === "ready") break;
     if (r && !r.pulling && r.reason) {
-      if (++retries > 5) throw userError(`The new server couldn't fetch the backup: ${String(r.reason).replace(/[.\s]+$/, "")}.`);
+      if (++retries > 5) throw userError(tr("The new server couldn't fetch the backup: {0}.", String(r.reason).replace(/[.\s]+$/, "")));
       await newClient.fetch(`${RESTORE_PATH}/pull`, { method: "POST", body: pullBody });
     }
-    onProgress({ step: "transfer", pct: r?.bytes ? Math.round((r.received / r.bytes) * 100) : 0, text: "Sending the backup to the new server…" });
+    onProgress({ step: "transfer", pct: r?.bytes ? Math.round((r.received / r.bytes) * 100) : 0, text: tr("Sending the backup to the new server…") });
     await sleep(pollMs);
   }
-  onProgress({ step: "transfer", pct: 100, text: "Sent." });
+  onProgress({ step: "transfer", pct: 100, text: tr("Sent.") });
   // 6. The key; every app is tried, then it ends.
   await commitRestore({ client: newClient, contentKey: opened.contentKey });
   const done = await waitForRestore({
@@ -108,10 +109,10 @@ export async function moveData({ oldClient, newClient, oldFqdn, newFqdn, umk, si
     onProgress: (st) => {
       const apps = st.restore?.apps ?? [];
       const n = apps.filter((a) => a.state === "done" || a.state === "failed" || a.state === "skipped").length;
-      onProgress({ step: "restore", pct: apps.length ? Math.round((n / apps.length) * 100) : 0, text: "Restoring the apps on the new server…" });
+      onProgress({ step: "restore", pct: apps.length ? Math.round((n / apps.length) * 100) : 0, text: tr("Restoring the apps on the new server…") });
     },
   });
-  onProgress({ step: "restore", pct: 100, text: "Restored." });
+  onProgress({ step: "restore", pct: 100, text: tr("Restored.") });
   return { archiveId, apps: done.apps ?? [] };
 }
 

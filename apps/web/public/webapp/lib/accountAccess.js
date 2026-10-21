@@ -7,6 +7,7 @@
 // is discoverable. This module is the PURE core: given an AccountResolution it
 // returns the option list; the view renders it and routes the pick to the
 // existing per-pathway flow. No DOM, no network — unit-testable in isolation.
+import { tr } from "./i18n.js";
 
 /** @typedef {import("./accountResolve.js").AccountResolution} AccountResolution */
 
@@ -41,22 +42,22 @@ export function accessOptions(resolution) {
   return [
     {
       id: "recover",
-      label: "Recover with your passkey",
-      sublabel: "Unlock with the recovery passkey + passphrase you set up.",
+      label: tr("Recover with your passkey"),
+      sublabel: tr("Unlock with the recovery passkey + passphrase you set up."),
       enabled: recoveryEnrolled,
-      disabledReason: recoveryEnrolled ? null : "No cloud recovery is set up on this account.",
+      disabledReason: recoveryEnrolled ? null : tr("No cloud recovery is set up on this account."),
     },
     {
       id: "scan",
-      label: "Scan a pairing code",
-      sublabel: "From a device that's already signed in — its Settings → Add device.",
+      label: tr("Scan a pairing code"),
+      sublabel: tr("From a device that's already signed in — its Settings → Add device."),
       enabled: true,
       disabledReason: null,
     },
     {
       id: "keyfile",
-      label: "Import a key file",
-      sublabel: "Restore from a key file you exported and saved.",
+      label: tr("Import a key file"),
+      sublabel: tr("Restore from a key file you exported and saved."),
       enabled: true,
       disabledReason: null,
     },

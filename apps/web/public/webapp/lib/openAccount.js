@@ -40,6 +40,7 @@ import {
   signWithAdminRoot,
 } from "../keystore.js";
 
+import { tr } from "./i18n.js";
 /** Login/identity handle is a bare label: 3–30 lowercase letters/digits,
  *  3–30, interior single dashes OK (no leading/trailing), no `--` (the
  *  slug↔creator delimiter). Mirror of control-plane labels.ts
@@ -231,7 +232,7 @@ export async function openAccount(username, deps) {
     signatureHex: toHex(await (deps.signWithDevice
       ? deps.signWithDevice(deviceKey, canonicalDeviceSelfProfile(deviceUnsigned))
       : new Uint8Array(await crypto.subtle.sign(
-          { name: "Ed25519" },
+          { name: tr("Ed25519") },
           deviceKey.privateKey,
           canonicalDeviceSelfProfile(deviceUnsigned),
         )))),

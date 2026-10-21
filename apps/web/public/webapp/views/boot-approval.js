@@ -23,6 +23,7 @@ import {
 } from "../lib/bootApproval.js";
 import { fetchFirstBootMap } from "../lib/boxInbox.js";
 
+import { tr } from "../lib/i18n.js";
 let inFlightId = null;
 let pollTimer = null;
 const POLL_MS = 5000;
@@ -30,7 +31,7 @@ const POLL_MS = 5000;
 function typeTitle(purpose, ctx) {
   const spec = BOX_REQUEST_TYPES[purpose];
   if (spec) return spec.title(ctx);
-  return "Approval request";
+  return tr("Approval request");
 }
 
 function infoRow(label, value) {
@@ -54,25 +55,23 @@ function requestCard(req, firstBootMap = {}) {
   const busy = inFlightId === req.id;
   const action = actionable
     ? `<button class="primary full-width mt-2" data-approve-id="${escapeHtml(req.id)}" ${busy ? "disabled" : ""}>
-         ${busy ? "Working…" : "Yes, this is my box"}
+         ${busy ? tr("Working…") : tr("Yes, this is my box")}
        </button>`
-    : `<p class="faint-sm mt-2">Approve this request from your phone.</p>`;
+    : `<p class="faint-sm mt-2">${tr("Approve this request from your phone.")}</p>`;
   return `
     <div class="card" data-boot-request-id="${escapeHtml(req.id)}">
       <div class="value server-fqdn">${escapeHtml(req.serverDomain)}</div>
       <p class="note small">${escapeHtml(typeTitle(req.purpose, { firstBoot }))}</p>
-      ${
-        req.deviceInfo
+      ${req.deviceInfo
           ? `<div class="mt-1">
                ${infoRow("IP", info.ip)}
                ${infoRow("Region", info.region)}
                ${infoRow("OS", info.os)}
                ${infoRow("Host", info.hostname)}
              </div>`
-          : ""
-      }
+          : ""}
       <p class="faint-sm mt-1">
-        Is this the machine in front of you? Only approve if you recognise it.
+        ${tr("Is this the machine in front of you? Only approve if you recognise it.")}
       </p>
       ${action}
     </div>
@@ -98,7 +97,7 @@ function paintList(root, verified, firstBootMap) {
   setCount(verified.length);
   root.dataset.painted = "1";
   if (!verified.length) {
-    root.innerHTML = `<div class="card placeholder">Nothing waiting for you</div>`;
+    root.innerHTML = `<div class="card placeholder">${tr("Nothing waiting for you")}</div>`;
     return;
   }
   root.innerHTML = verified.map((req) => requestCard(req, firstBootMap)).join("");
@@ -113,12 +112,12 @@ export async function renderBootApproval() {
   const session = getSession();
   if (!session.username) {
     setCount(0);
-    root.innerHTML = `<div class="card placeholder">Sign in to approve a box.</div>`;
+    root.innerHTML = `<div class="card placeholder">${tr("Sign in to approve a box.")}</div>`;
     return;
   }
   if (!session.umk) {
     setCount(0);
-    root.innerHTML = `<div class="card placeholder">Unlock the webapp first.</div>`;
+    root.innerHTML = `<div class="card placeholder">${tr("Unlock the webapp first.")}</div>`;
     return;
   }
   // Don't blow away the list (and any in-flight button) under the poll — only
@@ -135,7 +134,7 @@ export async function renderBootApproval() {
       root.innerHTML = `
         <div class="card">
           <p class="err-text">${escapeHtml(boxErrorText(e))}</p>
-          <button class="secondary full-width mt-2" id="boot-approval-retry">Try again</button>
+          <button class="secondary full-width mt-2" id="boot-approval-retry">${tr("Try again")}</button>
         </div>`;
       $("boot-approval-retry")?.addEventListener("click", () => {
         delete root.dataset.painted;
@@ -166,18 +165,18 @@ function bindCards(root, verified, firstBootMap) {
       if (!req || inFlightId) return;
       inFlightId = id;
       btn.disabled = true;
-      btn.textContent = "Working…";
+      btn.textContent = tr("Working…");
       let answered = false;
       try {
         await satisfy(req);
         answered = true;
-        toast(`Approved ${req.serverDomain}. Your box will pick it up.`);
+        toast(tr("Approved {0}. Your box will pick it up.", req.serverDomain));
       } catch (e) {
         if (isAlreadyAnswered(e)) {
           answered = true; // someone answered it already: done, no error
         } else {
           console.error("approval failed", e);
-          toast(`Couldn't approve ${req.serverDomain}. ${boxErrorText(e)}`, "err");
+          toast(tr("Couldn't approve {0}. {1}", req.serverDomain, boxErrorText(e)), "err");
         }
       } finally {
         inFlightId = null;

@@ -22,6 +22,7 @@
 
 import { controlApex } from "./apex.js";
 
+import { tr } from "./i18n.js";
 // ---- Canonical-bytes tag — MUST match @flagship/protocol ----
 export const TAG_SERVER_UPDATE = "flagship/server-update/v1";
 
@@ -198,7 +199,7 @@ export async function depositUpdateOrder(args, deps = {}) {
 }
 
 const REFUSAL_COPY = {
-  unendorsed: "Flagship's maintainers haven't endorsed that release.",
+  unendorsed: tr("Flagship's maintainers haven't endorsed that release."),
   "from-commit-mismatch":
     "the server was no longer on the version the update was made for. Send it again.",
   "apply-failed": "it couldn't download or build the new version. Nothing changed.",
@@ -217,22 +218,22 @@ export function describeLastUpdate(lastUpdate) {
   const target = short(lastUpdate.targetCommit);
   const previous = short(lastUpdate.previousCommit);
   if (lastUpdate.outcome === "applied") {
-    return target ? `Last update: ${target} installed and running.` : "Last update installed and running.";
+    return target ? tr("Last update: {0} installed and running.", target) : tr("Last update installed and running.");
   }
   if (lastUpdate.outcome === "rolled-back") {
     const to = target ? ` to ${target}` : "";
     const back = previous ? ` to ${previous}` : "";
-    return `The last update${to} didn't start cleanly, so the server went back${back} on its own.`;
+    return tr("The last update{0} didn't start cleanly, so the server went back{1} on its own.", to, back);
   }
   if (lastUpdate.outcome === "refused") {
     const why = REFUSAL_COPY[lastUpdate.reason];
-    return why ? `The server refused the last update: ${why}` : "The server refused the last update.";
+    return why ? tr("The server refused the last update: {0}", why) : tr("The server refused the last update.");
   }
   return null;
 }
 
 export const DOWNGRADE_WARNING =
-  "Older releases don't have the fixes made since, and may not understand changes made to this server after them, such as a rotated admin key. In the worst case the server stops accepting updates and has to be reinstalled. Only go back if a newer release broke something.";
+  tr("Older releases don't have the fixes made since, and may not understand changes made to this server after them, such as a rotated admin key. In the worst case the server stops accepting updates and has to be reinstalled. Only go back if a newer release broke something.");
 
 /** GET /api/screens/updates path (the box's own verified release list). */
 export function releaseCatalogPath(refresh = false) {
@@ -402,20 +403,20 @@ export function isPendingUpdateStale(pending, now = Date.now()) {
  */
 export function renderPendingUpdate(pending, { now = Date.now(), formatWhen, escapeHtml }) {
   const name = pending.targetTag || String(pending.targetCommit).slice(0, 8);
-  const sent = `Update to ${name} sent ${formatWhen(pending.orderedAt, now)}.`;
+  const sent = tr("Update to {0} sent {1}.", name, formatWhen(pending.orderedAt, now));
   if (isPendingUpdateStale(pending, now)) {
     return `
       <div data-update-pending="stale">
-        <p class="note">${escapeHtml(sent)} The server hasn't applied this update yet. It may be offline.</p>
+        <p class="note">${tr("{0} The server hasn't applied this update yet. It may be offline.", escapeHtml(sent))}</p>
         <div class="row-2 mt-2">
-          <button class="secondary" data-update-send-again>Send again</button>
-          <button class="secondary" data-update-forget>Forget it</button>
+          <button class="secondary" data-update-send-again>${tr("Send again")}</button>
+          <button class="secondary" data-update-forget>${tr("Forget it")}</button>
         </div>
       </div>`;
   }
   return `
       <div class="update-pending" data-update-pending="sent" role="status">
         <span class="update-pending-spinner" aria-hidden="true"></span>
-        <p class="note">${escapeHtml(sent)} The server picks it up within about five minutes, restarts, and goes back on its own if the new version doesn't start.</p>
+        <p class="note">${tr("{0} The server picks it up within about five minutes, restarts, and goes back on its own if the new version doesn't start.", escapeHtml(sent))}</p>
       </div>`;
 }

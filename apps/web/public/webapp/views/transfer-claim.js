@@ -34,6 +34,7 @@ import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { escapeHtml } from "../lib/util.js";
 
+import { tr } from "../lib/i18n.js";
 /** Parse either the universal-link form (`/transfer?o=…`, `flagship://…`) or
  *  a raw JSON transfer code. Returns the parsed offer or throws. */
 export function parseAnyTransferInput(text) {
@@ -53,7 +54,7 @@ export function parseAnyTransferInput(text) {
 export async function enterTransferClaim(prefillOffer) {
   const session = getSession();
   if (!session?.umk || !session?.irk) {
-    toast("Unlock the webapp first", "err");
+    toast(tr("Unlock the webapp first"), "err");
     return;
   }
   // Taking over a box adds it to the account: admin devices only.
@@ -61,43 +62,35 @@ export async function enterTransferClaim(prefillOffer) {
 
   const dlg = document.createElement("dialog");
   dlg.className = "modal-card";
-  dlg.setAttribute("aria-label", "Take over a box");
+  dlg.setAttribute("aria-label", tr("Take over a box"));
   dlg.innerHTML = `
-    <h3 class="modal-title">Take over a box</h3>
+    <h3 class="modal-title">${tr("Take over a box")}</h3>
 
     <div data-stage="input">
       <p class="modal-message">
-        Someone is handing you their box. Paste the transfer link they created
-        (Server → Transfer to another account)${
-          hasBarcodeDetector() ? ", or scan their QR code" : ""
-        }. You'll become the new owner of the box and all its contents.
+        ${tr("Someone is handing you their box. Paste the transfer link they created (Server → Transfer to another account){0}. You'll become the new owner of the box and all its contents.", hasBarcodeDetector() ? ", or scan their QR code" : "")}
       </p>
-      <textarea class="full-width mt-2" rows="4" data-claim-input placeholder="Paste the transfer link or code…"></textarea>
-      ${
-        hasBarcodeDetector()
-          ? `<button class="secondary full-width mt-2" data-claim-scan>Scan QR with camera</button>
+      <textarea class="full-width mt-2" rows="4" data-claim-input placeholder="${tr("Paste the transfer link or code…")}"></textarea>
+      ${hasBarcodeDetector()
+          ? `<button class="secondary full-width mt-2" data-claim-scan>${tr("Scan QR with camera")}</button>
              <video class="full-width mt-2 hidden" data-claim-video playsinline muted style="border-radius:8px;max-height:320px;background:#000"></video>`
-          : ""
-      }
+          : ""}
       <p class="modal-error err-text hidden" data-claim-error></p>
       <div class="row-2 mt-3">
-        <button class="secondary" data-claim-cancel>Cancel</button>
-        <button class="primary" data-claim-continue>Continue</button>
+        <button class="secondary" data-claim-cancel>${tr("Cancel")}</button>
+        <button class="primary" data-claim-continue>${tr("Continue")}</button>
       </div>
     </div>
 
     <div data-stage="confirm" class="hidden">
       <p class="modal-message">
-        This takes over <strong data-confirm-domain></strong> and
-        <strong>all its contents</strong>. You'll become the new owner and the
-        current owner will lose control — this cannot be undone. Type the
-        server's full name to confirm.
+        ${tr("This takes over <strong data-confirm-domain></strong> and <strong>all its contents</strong>. You'll become the new owner and the current owner will lose control — this cannot be undone. Type the server's full name to confirm.")}
       </p>
       <input class="full-width mt-2" data-confirm-input placeholder="" autocomplete="off" />
       <p class="modal-error err-text hidden" data-confirm-error></p>
       <div class="row-2 mt-3">
-        <button class="secondary" data-confirm-cancel>Cancel</button>
-        <button class="danger" data-confirm-go disabled>Take over</button>
+        <button class="secondary" data-confirm-cancel>${tr("Cancel")}</button>
+        <button class="danger" data-confirm-go disabled>${tr("Take over")}</button>
       </div>
     </div>
   `;
@@ -162,7 +155,7 @@ export async function enterTransferClaim(prefillOffer) {
       confirmGo.addEventListener("click", async () => {
         confirmErr.classList.add("hidden");
         confirmGo.disabled = true;
-        confirmGo.textContent = "Taking over…";
+        confirmGo.textContent = tr("Taking over…");
         try {
           const out = await submitTransferClaim({
             offer,
@@ -181,7 +174,7 @@ export async function enterTransferClaim(prefillOffer) {
             // IRK (tag-routed). Legacy accounts sign with the IRK.
             signWithIrk: sensitiveSigner(),
           });
-          toast(`Took over ${escapeHtml(out.body.newServerDomain || domain)}`, "ok");
+          toast(tr("Took over {0}", escapeHtml(out.body.newServerDomain || domain)), "ok");
           cleanup();
           show("view-home");
           resolve(out);
@@ -189,7 +182,7 @@ export async function enterTransferClaim(prefillOffer) {
           confirmErr.textContent = humanError(e);
           confirmErr.classList.remove("hidden");
           confirmGo.disabled = false;
-          confirmGo.textContent = "Take over";
+          confirmGo.textContent = tr("Take over");
         }
       });
     }
@@ -201,7 +194,7 @@ export async function enterTransferClaim(prefillOffer) {
       try {
         offer = parseAnyTransferInput(inputEl.value.trim());
       } catch {
-        inputErr.textContent = "That doesn't look like a transfer link or code.";
+        inputErr.textContent = tr("That doesn't look like a transfer link or code.");
         inputErr.classList.remove("hidden");
         return;
       }
@@ -212,7 +205,7 @@ export async function enterTransferClaim(prefillOffer) {
     scanBtn?.addEventListener("click", async () => {
       inputErr.classList.add("hidden");
       scanBtn.disabled = true;
-      scanBtn.textContent = "Scanning…";
+      scanBtn.textContent = tr("Scanning…");
       videoEl?.classList.remove("hidden");
       try {
         const raw = await scanWithCamera(videoEl, { timeoutMs: 30_000 });
@@ -221,7 +214,7 @@ export async function enterTransferClaim(prefillOffer) {
         try {
           offer = parseAnyTransferInput(String(raw).trim());
         } catch {
-          inputErr.textContent = "That QR isn't a Flagship transfer code.";
+          inputErr.textContent = tr("That QR isn't a Flagship transfer code.");
           inputErr.classList.remove("hidden");
           return;
         }
@@ -229,14 +222,14 @@ export async function enterTransferClaim(prefillOffer) {
       } catch (e) {
         // No camera / permission denied / not HTTPS / timeout → keep paste.
         inputErr.textContent =
-          "Couldn't scan — paste the transfer link or code instead.";
+          tr("Couldn't scan — paste the transfer link or code instead.");
         inputErr.classList.remove("hidden");
         void e;
       } finally {
         stopScan();
         videoEl?.classList.add("hidden");
         scanBtn.disabled = false;
-        scanBtn.textContent = "Scan QR with camera";
+        scanBtn.textContent = tr("Scan QR with camera");
       }
     });
 

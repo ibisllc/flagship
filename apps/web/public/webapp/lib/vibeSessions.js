@@ -5,6 +5,7 @@
 //
 // MIRRORS: iOS VibeCodeSessionMeta + BuildJournalViewModel, Android
 // VibeCodeSessions.kt.
+import { tr, trn } from "./i18n.js";
 
 const ACTIVE = new Set(["streaming", "awaiting-tool-response", "ready-to-deploy", "deploying"]);
 
@@ -18,9 +19,9 @@ export function countActiveSessions(sessions) {
 
 export function sessionStatusLabel(status) {
   switch (status) {
-    case "streaming": return "AI is working";
-    case "awaiting-tool-response": return "Waiting for you";
-    case "ready-to-deploy": return "Ready to deploy";
+    case "streaming": return tr("AI is working");
+    case "awaiting-tool-response": return tr("Waiting for you");
+    case "ready-to-deploy": return tr("Ready to deploy");
     case "deploying": return "Deploying";
     case "deployed": return "Deployed";
     case "failed": return "Failed";
@@ -71,21 +72,21 @@ function serviceSlug(serviceId) {
 /** A past build's title: its name, else its service's slug. */
 export function buildDisplayName(build) {
   if (build?.name) return build.name;
-  return serviceSlug(build?.serviceId) || "Unnamed build";
+  return serviceSlug(build?.serviceId) || tr("Unnamed build");
 }
 
 /** How a build was made, for the pill beside its name. */
 export function buildMethodLabel(mode) {
   switch (mode) {
-    case "git": return "From Git";
-    case "mcp": return "From your IDE";
-    default: return "AI chat";
+    case "git": return tr("From Git");
+    case "mcp": return tr("From your IDE");
+    default: return tr("AI chat");
   }
 }
 
 export function pastBuildSubtitle(build, started) {
   const n = build?.entryCount ?? 0;
-  return `Started ${started} · ${n} step${n === 1 ? "" : "s"}`;
+  return trn(n, "Started {1} · {0} step", "Started {1} · {0} steps", started);
 }
 
 // Session and build ids are per box; a row tagged with the server that listed
@@ -98,7 +99,7 @@ export function sessionTitle(session, builds) {
   if (session.name) return session.name;
   const build = (builds || []).find((b) => b.buildId === session.sessionId && (b.server ?? "") === (session.server ?? ""));
   if (build) return buildDisplayName(build);
-  return serviceSlug(session.serviceId) || "Unnamed build";
+  return serviceSlug(session.serviceId) || tr("Unnamed build");
 }
 
 /** Discarding frees the name; a deployed session's name is its app's. */
@@ -106,11 +107,11 @@ export function canDiscard(session) {
   return session?.status !== "deployed";
 }
 
-export const DISCARD_TITLE = "Discard this build?";
+export const DISCARD_TITLE = tr("Discard this build?");
 
 export function discardMessage(session) {
-  const freed = session?.name ? ` Its name, "${session.name}", becomes free again.` : "";
-  return `This stops the AI and deletes what it has written on your server.${freed}`;
+  const freed = session?.name ? tr(" Its name, \"{0}\", becomes free again.", session.name) : "";
+  return tr("This stops the AI and deletes what it has written on your server.{0}", freed);
 }
 
 /** Past builds the box no longer holds a session for. */
@@ -126,13 +127,13 @@ export function openBuilds(builds, sessions) {
 }
 
 export function discardBuildMessage(build) {
-  return `This deletes what was imported or written on your server. Its name, "${buildDisplayName(build)}", becomes free again.`;
+  return tr("This deletes what was imported or written on your server. Its name, \"{0}\", becomes free again.", buildDisplayName(build));
 }
 
 /** Forget an open git or IDE build on the box, which frees its name. Throws
  *  the box's reason on failure. */
 export async function discardBuild({ baseUrl, token, buildId, fetchImpl = globalThis.fetch } = {}) {
-  if (!baseUrl || !token) throw new Error("Not paired to a server yet.");
+  if (!baseUrl || !token) throw new Error(tr("Not paired to a server yet."));
   const r = await fetchImpl(
     `${String(baseUrl).replace(/\/+$/, "")}/api/build/sessions/${encodeURIComponent(buildId)}/discard`,
     {
@@ -142,7 +143,7 @@ export async function discardBuild({ baseUrl, token, buildId, fetchImpl = global
     },
   );
   if (!r.ok) {
-    let msg = `The build wasn't discarded (HTTP ${r.status}).`;
+    let msg = tr("The build wasn't discarded (HTTP {0}).", r.status);
     try {
       const body = await r.json();
       if (body?.error) msg = body.error;
@@ -190,7 +191,7 @@ export async function fetchVibeSessions({ baseUrl, token, fetchImpl = globalThis
 /** Stop a session and delete it on the box, which frees its name. Throws on
  *  failure so the list can say why. */
 export async function discardSession({ baseUrl, token, sessionId, fetchImpl = globalThis.fetch } = {}) {
-  if (!baseUrl || !token) throw new Error("Not paired to a server yet.");
+  if (!baseUrl || !token) throw new Error(tr("Not paired to a server yet."));
   const r = await fetchImpl(
     `${String(baseUrl).replace(/\/+$/, "")}/api/llm/sessions/${encodeURIComponent(sessionId)}/discard`,
     {
@@ -200,7 +201,7 @@ export async function discardSession({ baseUrl, token, sessionId, fetchImpl = gl
     },
   );
   if (!r.ok) {
-    let msg = `The build wasn't discarded (HTTP ${r.status}).`;
+    let msg = tr("The build wasn't discarded (HTTP {0}).", r.status);
     try {
       const body = await r.json();
       if (body?.error) msg = body.error;

@@ -31,6 +31,7 @@
 
 import { setActiveKeystoreProfile } from "../keystore.js";
 
+import { tr } from "./i18n.js";
 /** @typedef {Object} Profile
  *  @property {string} cloudName
  *  @property {string} [cloudRootPubHex]
@@ -190,7 +191,7 @@ export function renderProfilesDropdown(container, opts = {}) {
     const label = (root.ownerDocument ?? document).createElement("button");
     label.type = "button";
     label.className = "flagship-profiles-trigger";
-    label.textContent = active ? active.cloudName : "No profile";
+    label.textContent = active ? active.cloudName : tr("No profile");
     label.setAttribute("aria-haspopup", "listbox");
     root.appendChild(label);
 

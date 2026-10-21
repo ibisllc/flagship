@@ -27,7 +27,7 @@ describe("service-access admin view", () => {
     expect(r.body).toContain('registerView("view-service-access")');
     // The two-way Open to all | Members only toggle is the access-mode control.
     expect(r.body).toContain('id="sa-mode" role="radiogroup"');
-    expect(r.body).toContain('const MODE_LABEL = { open: "Open to all", restricted: "Members only" }');
+    expect(r.body).toContain('const MODE_LABEL = { open: tr("Open to all"), restricted: tr("Members only") }');
     expect(r.body).toContain("setServiceAccessMode");
     // Going members-only confirms how many people that leaves; a failure rolls the toggle back.
     expect(r.body).toContain("will be able to open it.");

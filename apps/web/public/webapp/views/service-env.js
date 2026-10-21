@@ -19,6 +19,7 @@ import { envNameError, signedEnvChangeBody } from "../lib/serviceEnvChange.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-service-env");
 
 let currentAppId = null;
@@ -73,7 +74,7 @@ function renderList(names) {
       <div class="card service-env-row" data-name="${escapeHtml(n)}">
         <div class="row">
           <span class="value mono">${escapeHtml(n)}</span>
-          <button class="secondary danger service-env-remove" data-name="${escapeHtml(n)}">Remove</button>
+          <button class="secondary danger service-env-remove" data-name="${escapeHtml(n)}">${tr("Remove")}</button>
         </div>
       </div>
     `,
@@ -98,17 +99,17 @@ async function submit() {
   const valueEl = $("service-env-value");
   const name = nameEl.value.trim();
   const value = valueEl.value;
-  if (!name) return toast("Name required", "err");
+  if (!name) return toast(tr("Name required"), "err");
   const bad = envNameError(name);
   if (bad) return toast(bad, "err");
-  if (!value) return toast("Value required", "err");
-  if (!getSession()?.umk) return toast("Sign in first.", "err");
+  if (!value) return toast(tr("Value required"), "err");
+  if (!getSession()?.umk) return toast(tr("Sign in first."), "err");
 
   let body;
   try {
     body = await signedBody("set", name, value);
   } catch (e) {
-    return toast(`Sign failed: ${e.message ?? e}`, "err");
+    return toast(tr("Sign failed: {0}", e.message ?? e), "err");
   }
   try {
     await screensFetch(
@@ -125,20 +126,20 @@ async function submit() {
   // / dev-tools inspection of the form post-submit shouldn't leak it.
   nameEl.value = "";
   valueEl.value = "";
-  toast("Saved");
+  toast(tr("Saved"));
   await reload();
 }
 
 async function unset(name) {
   if (!name) return;
-  if (!confirm(`Remove "${name}"?`)) return;
-  if (!getSession()?.umk) return toast("Sign in first.", "err");
+  if (!confirm(tr("Remove \"{0}\"?", name))) return;
+  if (!getSession()?.umk) return toast(tr("Sign in first."), "err");
   // The signed change names this one variable; the others stay.
   let body;
   try {
     body = await signedBody("unset", name);
   } catch (e) {
-    return toast(`Sign failed: ${e.message ?? e}`, "err");
+    return toast(tr("Sign failed: {0}", e.message ?? e), "err");
   }
   try {
     await screensFetch(
@@ -151,6 +152,6 @@ async function unset(name) {
       "err",
     );
   }
-  toast(`Removed ${name}`);
+  toast(tr("Removed {0}", name));
   await reload();
 }

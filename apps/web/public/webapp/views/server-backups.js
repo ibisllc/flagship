@@ -45,6 +45,7 @@ import {
   utcToLocal,
 } from "../lib/savedBackups.js";
 
+import { tr } from "../lib/i18n.js";
 const GB = 1024 ** 3;
 const fmtTime = (t) => new Date(t).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
@@ -61,11 +62,11 @@ export function backupsSectionHtml(body) {
     )
     .join("");
   return `
-      <h2 class="mt-4">Backups</h2>
+      <h2 class="mt-4">${tr("Backups")}</h2>
       <div class="card" id="backups-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
         <p class="note small hidden" id="bk-unavailable"></p>
         <div class="row">
-          <span class="label">Backup policy</span>
+          <span class="label">${tr("Backup policy")}</span>
           <span class="value" id="bk-policy-value">…</span>
         </div>
         <progress id="bk-usage-bar" class="full-width hidden" max="1" value="0"></progress>
@@ -73,18 +74,18 @@ export function backupsSectionHtml(body) {
         <p class="note small err hidden" id="bk-over" role="alert"></p>
         ${serverStorageNotes(body.storage).map((t) => `<p class="note small err" data-bk-storage>${escapeHtml(t)}</p>`).join("")}
         <div class="note small hidden" id="bk-peer"></div>
-        <button id="bk-policy-change" class="secondary full-width mt-2"${admin ? "" : " disabled"}>Change backup policy</button>
+        <button id="bk-policy-change" class="secondary full-width mt-2"${admin ? "" : " disabled"}>${tr("Change backup policy")}</button>
         <div id="bk-policy-editor" class="hidden mt-2">
           <div class="boot-unlock-options">${policies}</div>
           <div id="bk-reserve-row" class="mt-2">
-            <label class="caption" for="bk-reserve-gb">Space kept on that device (GB)</label>
+            <label class="caption" for="bk-reserve-gb">${tr("Space kept on that device (GB)")}</label>
             <input id="bk-reserve-gb" type="number" min="1" max="4096" step="1" value="${DEFAULT_WEB_RESERVE_GB}" class="full-width" />
             <p class="faint-sm">${escapeHtml(WEB_RESERVE_NOTE)}</p>
           </div>
           <p class="note small err hidden" id="bk-policy-error" role="alert"></p>
           <div class="row-2 mt-2">
-            <button class="secondary" id="bk-policy-cancel">Cancel</button>
-            <button id="bk-policy-save">Save</button>
+            <button class="secondary" id="bk-policy-cancel">${tr("Cancel")}</button>
+            <button id="bk-policy-save">${tr("Save")}</button>
           </div>
         </div>
 
@@ -94,34 +95,34 @@ export function backupsSectionHtml(body) {
         <div class="row" id="bk-schedule-row">
           <span class="value" id="bk-schedule-line"></span>
         </div>
-        <button id="bk-schedule-change" class="secondary full-width mt-2"${admin ? "" : " disabled"}>Change schedule</button>
+        <button id="bk-schedule-change" class="secondary full-width mt-2"${admin ? "" : " disabled"}>${tr("Change schedule")}</button>
         <div id="bk-schedule-editor" class="hidden mt-2">
-          <label class="caption" for="bk-frequency">How often</label>
+          <label class="caption" for="bk-frequency">${tr("How often")}</label>
           <select id="bk-frequency" class="full-width">
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="off">Off</option>
+            <option value="daily">${tr("Daily")}</option>
+            <option value="weekly">${tr("Weekly")}</option>
+            <option value="off">${tr("Off")}</option>
           </select>
           <div id="bk-weekday-row" class="hidden">
-            <label class="caption" for="bk-weekday">Day</label>
+            <label class="caption" for="bk-weekday">${tr("Day")}</label>
             <select id="bk-weekday" class="full-width">
               ${["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d, i) => `<option value="${i}">${d}</option>`).join("")}
             </select>
           </div>
-          <label class="caption" for="bk-time">Time</label>
+          <label class="caption" for="bk-time">${tr("Time")}</label>
           <input id="bk-time" type="time" class="full-width" value="03:00" />
-          <label class="caption" for="bk-keep-daily">Keep daily backups</label>
+          <label class="caption" for="bk-keep-daily">${tr("Keep daily backups")}</label>
           <input id="bk-keep-daily" type="number" min="0" max="60" step="1" value="7" class="full-width" />
-          <label class="caption" for="bk-keep-weekly">Keep weekly backups</label>
+          <label class="caption" for="bk-keep-weekly">${tr("Keep weekly backups")}</label>
           <input id="bk-keep-weekly" type="number" min="0" max="52" step="1" value="4" class="full-width" />
           <p class="note small err hidden" id="bk-schedule-error" role="alert"></p>
           <div class="row-2 mt-2">
-            <button class="secondary" id="bk-schedule-cancel">Cancel</button>
-            <button id="bk-schedule-save">Save</button>
+            <button class="secondary" id="bk-schedule-cancel">${tr("Cancel")}</button>
+            <button id="bk-schedule-save">${tr("Save")}</button>
           </div>
         </div>
-        <button id="bk-approve-keys" class="full-width mt-2 hidden">Approve backups for this server</button>
-        <button id="bk-run-now" class="full-width mt-2"${admin ? "" : " disabled"}>Back up now</button>
+        <button id="bk-approve-keys" class="full-width mt-2 hidden">${tr("Approve backups for this server")}</button>
+        <button id="bk-run-now" class="full-width mt-2"${admin ? "" : " disabled"}>${tr("Back up now")}</button>
         <ul class="list mt-2" id="bk-list"></ul>
         <p class="faint-sm mt-2">${escapeHtml(SAVED_FILES_NOTE)}</p>
         ${admin ? "" : `<p class="note small mt-1" data-backups-admin-only>${escapeHtml(SERVER_ADMIN_ONLY)}</p>`}
@@ -159,7 +160,7 @@ export function wireBackupsSection(body, deps = {}) {
     const lines = peerLines(v?.peer, { formatTime: fmtTime });
     peer.innerHTML = lines.map((l) => `<div>${escapeHtml(l)}</div>`).join("");
     show(peer, lines.length > 0);
-    $("bk-policy-change").textContent = v?.policy?.policy === "unset" ? "Choose a backup policy" : "Change backup policy";
+    $("bk-policy-change").textContent = v?.policy?.policy === "unset" ? tr("Choose a backup policy") : tr("Change backup policy");
   };
 
   const renderSaved = () => {
@@ -184,8 +185,8 @@ export function wireBackupsSection(body, deps = {}) {
           <div>${escapeHtml(t.main)}</div>
           ${t.left ? `<div class="faint-sm">${escapeHtml(t.left)}</div>` : ""}
           <div class="row-2 mt-1">
-            <button class="secondary" data-bk-download="${escapeHtml(b.archiveId)}">Download</button>
-            <button class="danger" data-bk-delete="${escapeHtml(b.archiveId)}"${admin ? "" : " disabled"}>Delete</button>
+            <button class="secondary" data-bk-download="${escapeHtml(b.archiveId)}">${tr("Download")}</button>
+            <button class="danger" data-bk-delete="${escapeHtml(b.archiveId)}"${admin ? "" : " disabled"}>${tr("Delete")}</button>
           </div>
         </li>`;
       })
@@ -223,7 +224,7 @@ export function wireBackupsSection(body, deps = {}) {
       [policyView, saved] = await Promise.all([fetchPolicy({ client }), savedView({ client })]);
     } catch (e) {
       const u = $("bk-unavailable");
-      u.textContent = e?.status === 404 ? "This server needs an update to show its backups." : boxErrorText(e);
+      u.textContent = e?.status === 404 ? tr("This server needs an update to show its backups.") : boxErrorText(e);
       show(u, true);
       return;
     }
@@ -286,7 +287,7 @@ export function wireBackupsSection(body, deps = {}) {
       show($("bk-policy-editor"), false);
       saved = await savedView({ client }).catch(() => saved);
       renderSaved();
-      toast(`Backup policy: ${POLICY_LABEL[policy]}`, "ok");
+      toast(tr("Backup policy: {0}", POLICY_LABEL[policy]), "ok");
     } catch (e) {
       fail(e, $("bk-policy-error"));
     } finally {
@@ -356,14 +357,14 @@ export function wireBackupsSection(body, deps = {}) {
     const del = target?.closest("[data-bk-delete]");
     const session = getSession();
     if (dl) {
-      if (!session?.umk) return toast("Unlock the webapp first", "err");
+      if (!session?.umk) return toast(tr("Unlock the webapp first"), "err");
       try {
         await downloadSaved({ client, serverDomain: fqdn, archiveId: dl.getAttribute("data-bk-download"), umk: session.umk, signWithIrk: sensitiveSigner() });
       } catch (e) {
         fail(e);
       }
     } else if (del && admin) {
-      const ok = await inlineConfirm({ title: "Delete backup", message: DELETE_CONFIRM, okLabel: "Delete", danger: true });
+      const ok = await inlineConfirm({ title: tr("Delete backup"), message: DELETE_CONFIRM, okLabel: tr("Delete"), danger: true });
       if (!ok) return;
       try {
         saved = await deleteSaved({ client, archiveId: del.getAttribute("data-bk-delete") });

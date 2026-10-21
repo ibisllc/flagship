@@ -25,6 +25,7 @@ import {
 import { deriveShareMemberKey, signWithShareMemberKey } from "./serverShare.js";
 import { authorizeKnock } from "./serviceInvite.js";
 
+import { tr } from "./i18n.js";
 const STORE_KEY = "flagship.inviteOwners.v1";
 const HEX64 = /^[0-9a-f]{64}$/;
 
@@ -89,11 +90,11 @@ function bytesToHex(b) {
 /** Shown (and nothing is signed or sent) for a box that is neither ours nor
  *  one we redeemed an invite for on this device. */
 export const NOT_YOUR_SERVER =
-  "This isn't one of your servers. Open its invite link on this device first, then try again.";
+  tr("This isn't one of your servers. Open its invite link on this device first, then try again.");
 
 /** Shown when one of our own servers asks and this device has no account device id. */
 export const NO_DEVICE_KEY =
-  "This device isn't set up on your account yet. Sign in to your account on it again, then try again.";
+  tr("This device isn't set up on your account yet. Sign in to your account on it again, then try again.");
 
 const DEVICE_ID_RE = /^[0-9a-f]{32}$/;
 const SHARE_ID_RE = /^[0-9a-f]{32}$/;

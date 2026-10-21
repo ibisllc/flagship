@@ -59,6 +59,7 @@ export { deriveAppAccountIdFromSeed as deriveAppAccountId } from "../keystore.js
 
 import { appLinkFragmentUrl, appLinkParams, dataApex, isAppLink } from "./apex.js";
 
+import { tr } from "./i18n.js";
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
@@ -186,7 +187,7 @@ async function importGcmKey(householdKey) {
   if (!(householdKey instanceof Uint8Array) || householdKey.length !== 32) {
     throw err("household key must be 32 bytes", "400");
   }
-  return crypto.subtle.importKey("raw", householdKey, { name: "AES-GCM" }, false, [
+  return crypto.subtle.importKey("raw", householdKey, { name: tr("AES-GCM") }, false, [
     "encrypt",
     "decrypt",
   ]);
@@ -206,7 +207,7 @@ export async function sealInviteBundle(bundle, householdKey, inviteId, fixedNonc
   const nonce = fixedNonce ?? randomBytes(12);
   const ct = new Uint8Array(
     await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: nonce, additionalData: bundleAad(inviteId) },
+      { name: tr("AES-GCM"), iv: nonce, additionalData: bundleAad(inviteId) },
       key,
       bundlePlaintext(bundle),
     ),
@@ -231,7 +232,7 @@ export async function openInviteBundle(sealedHex, householdKey, inviteId) {
   try {
     plain = new Uint8Array(
       await crypto.subtle.decrypt(
-        { name: "AES-GCM", iv: nonce, additionalData: bundleAad(inviteId) },
+        { name: tr("AES-GCM"), iv: nonce, additionalData: bundleAad(inviteId) },
         key,
         ct,
       ),
@@ -931,10 +932,10 @@ export async function redeemInvite(args, deps = {}) {
   } catch {
     throw err("could not reach the server", "network");
   }
-  if (resp.status === 404) throw err("This invite link is unknown or was withdrawn.", "404");
-  if (resp.status === 409) throw err("This invite is already linked to another account.", "409");
-  if (resp.status === 403) throw err("This invite has been revoked.", "403");
-  if (resp.status === 410) throw err("This invite has expired or reached its limit.", "410");
+  if (resp.status === 404) throw err(tr("This invite link is unknown or was withdrawn."), "404");
+  if (resp.status === 409) throw err(tr("This invite is already linked to another account."), "409");
+  if (resp.status === 403) throw err(tr("This invite has been revoked."), "403");
+  if (resp.status === 410) throw err(tr("This invite has expired or reached its limit."), "410");
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
     throw err(`redeem failed (${resp.status}): ${text}`.trim(), String(resp.status));
@@ -1133,14 +1134,14 @@ export async function submitAccept(args, deps = {}) {
   } catch {
     throw err("could not reach the server", "network");
   }
-  if (resp.status === 403) throw err("That acceptance didn't verify. Ask them to send a fresh one.", "403");
-  if (resp.status === 409) throw err("That invite isn't for a service on this server.", "409");
+  if (resp.status === 403) throw err(tr("That acceptance didn't verify. Ask them to send a fresh one."), "403");
+  if (resp.status === 409) throw err(tr("That invite isn't for a service on this server."), "409");
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
     throw err(`accept failed (${resp.status}): ${text}`.trim(), String(resp.status));
   }
   const body = await resp.json().catch(() => ({}));
-  if (body.bound !== true) throw err("Couldn't finalize that acceptance.", "500");
+  if (body.bound !== true) throw err(tr("Couldn't finalize that acceptance."), "500");
   return { bound: true, serviceRef: body.serviceRef, boundAID: body.boundAID };
 }
 
@@ -1299,17 +1300,17 @@ export async function authorizeKnock(args, deps = {}) {
   } catch {
     throw err("could not reach the server", "network");
   }
-  if (resp.status === 401) throw err("You don't have access to this service.", "401");
-  if (resp.status === 403) throw err("Couldn't authorize — try refreshing the page.", "403");
-  if (resp.status === 404) throw err("The page expired — refresh it and try again.", "404");
-  if (resp.status === 409) throw err("That page was already authorized.", "409");
+  if (resp.status === 401) throw err(tr("You don't have access to this service."), "401");
+  if (resp.status === 403) throw err(tr("Couldn't authorize — try refreshing the page."), "403");
+  if (resp.status === 404) throw err(tr("The page expired — refresh it and try again."), "404");
+  if (resp.status === 409) throw err(tr("That page was already authorized."), "409");
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
     throw err(`authorize failed (${resp.status}): ${text}`.trim(), String(resp.status));
   }
   const body = await resp.json().catch(() => ({}));
   if (!body || body.authorized !== true || typeof body.secretId !== "string") {
-    throw err("Couldn't authorize — try refreshing the page.", "403");
+    throw err(tr("Couldn't authorize — try refreshing the page."), "403");
   }
   return {
     secretId: body.secretId,
@@ -1345,7 +1346,7 @@ export async function sessionStatus(args, deps = {}) {
   } catch {
     throw err("could not reach the server", "network");
   }
-  if (resp.status === 429) throw err("Checked too recently — try again in a moment.", "429");
+  if (resp.status === 429) throw err(tr("Checked too recently — try again in a moment."), "429");
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
     throw err(`status failed (${resp.status}): ${text}`.trim(), String(resp.status));

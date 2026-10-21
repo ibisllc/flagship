@@ -22,9 +22,10 @@ import {
 } from "./modelMenu.js";
 import { escapeHtml } from "./util.js";
 
+import { tr } from "./i18n.js";
 export const FLAGSHIP_GROUP = "flagship";
-export const CONTEXT_NOTICE = "Older messages will be summarised to fit this model.";
-export const CHOOSE_MODEL = "Choose a model";
+export const CONTEXT_NOTICE = tr("Older messages will be summarised to fit this model.");
+export const CHOOSE_MODEL = tr("Choose a model");
 
 /** How a saved key is named in the menu. */
 export function keyTitle(entry) {
@@ -55,7 +56,7 @@ export function buildGroups({ entries = [], flagshipUsable = false, flagshipMenu
 }
 
 export const UNSAVED_GROUP = "unsaved";
-export const UNSAVED_LABEL = "Unsaved key";
+export const UNSAVED_LABEL = tr("Unsaved key");
 
 export function groupById(groups, id) {
   return (groups || []).find((g) => g.id === id) ?? null;
@@ -142,15 +143,15 @@ function groupRowsHtml(group, choice) {
   const attrs = ` data-mm-group="${escapeHtml(group.id)}"`;
   const mine = choice?.group === group.id ? choice : null;
   const menu = group.menu;
-  if (!menu) return `<div class="mm-loading note">Loading models…</div>`;
+  if (!menu) return `<div class="mm-loading note">${tr("Loading models…")}</div>`;
   if (menu.kind === "flagship") {
-    if (!menu.catalog) return `<p class="note mm-muted mm-note">The models couldn't be listed right now.</p>`;
+    if (!menu.catalog) return `<p class="note mm-muted mm-note">${tr("The models couldn't be listed right now.")}</p>`;
     return menu.catalog.models.map((m) => rowHtml(menu, m, mine, attrs)).join("");
   }
   if (!menu.listed) {
     return `
       <label class="mm-free">
-        <span class="field-label">Model</span>
+        <span class="field-label">${tr("Model")}</span>
         <input type="text" data-mm-free${attrs} autocapitalize="none" autocorrect="off" spellcheck="false"
                value="${escapeHtml(mine?.model || menu.defaultModel || "")}" placeholder="model id">
       </label>
@@ -161,7 +162,7 @@ function groupRowsHtml(group, choice) {
 
 /** The open panel: each group's title, then its models. Exported for tests. */
 export function groupedPanelHtml(groups, choice) {
-  if (!groups || groups.length === 0) return `<p class="note mm-muted mm-note">Add an AI key in Settings to pick a model.</p>`;
+  if (!groups || groups.length === 0) return `<p class="note mm-muted mm-note">${tr("Add an AI key in Settings to pick a model.")}</p>`;
   return groups
     .map((g) => `<div class="mm-group" role="group" aria-label="${escapeHtml(g.title)}"><div class="mm-head">${escapeHtml(g.title)}</div>${groupRowsHtml(g, choice)}</div>`)
     .join("");
@@ -171,7 +172,7 @@ export function groupedPanelHtml(groups, choice) {
 export function groupedEffortHtml(group, choice) {
   const efforts = effortOptions(group?.menu, choice?.model);
   if (efforts.length === 0) return "";
-  return `<select class="mm-effort" data-mm-effort aria-label="Effort">${efforts
+  return `<select class="mm-effort" data-mm-effort aria-label="${tr("Effort")}">${efforts
     .map((e) => `<option value="${escapeHtml(e)}"${e === choice?.effort ? " selected" : ""}>${escapeHtml(effortLabel(e))}</option>`)
     .join("")}</select>`;
 }

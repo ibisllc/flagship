@@ -45,6 +45,7 @@ import {
   canonicalDecommissionBytes,
 } from "./serverReplacement.js";
 
+import { tr } from "./i18n.js";
 // ---- Canonical-bytes tags — MUST match @flagship/protocol ----
 export const TAG_SERVER_MIGRATION = "flagship/server-migration/v1";
 export const TAG_SERVER_MIGRATION_CONTROL = "flagship/server-migration-control/v1";
@@ -54,9 +55,9 @@ export const TAG_SERVER_MIGRATION_CONTROL = "flagship/server-migration-control/v
  *  match @flagship/protocol MigrationDisposition. */
 export const MIGRATION_DISPOSITIONS = ["keep", "wipe-after-handoff"];
 export const DEFAULT_MIGRATION_DISPOSITION = "wipe-after-handoff";
-export const MIGRATE_LABEL = "Migrate to a new server";
+export const MIGRATE_LABEL = tr("Migrate to a new server");
 export const MIGRATE_DATA_NOTE =
-  "The move pauses this server's apps, backs it up and sends the backup straight to the new server, which restores it and then takes over the name. Until then your apps say they are moving.";
+  tr("The move pauses this server's apps, backs it up and sends the backup straight to the new server, which restores it and then takes over the name. Until then your apps say they are moving.");
 
 function defaultBytesToHex(b) {
   let s = "";
@@ -393,14 +394,14 @@ export const PRESEED_STUCK_MS = 10 * 60_000;
 export function migrationSteps(s, nowMs) {
   const aborted = s.abortedAt != null;
   const rows = [
-    ["initiate", "Migration authorized", s.initiatedAt],
-    ["provision", "New box online + attached", s.attachedAt],
-    ["pre-seed", "Data moved to the new box", s.preSeededAt],
-    ["ready", "Confirmed ready to take over", s.readyAt],
-    ["freeze", "Old server frozen", s.freezeAt],
-    ["final-delta", "Old server handed off", s.finalDeltaAt],
-    ["take-over", "New box took over the name", s.takenOverAt],
-    ["close-out", "Old box closed out", s.oldClosedOutAt],
+    ["initiate", tr("Migration authorized"), s.initiatedAt],
+    ["provision", tr("New box online + attached"), s.attachedAt],
+    ["pre-seed", tr("Data moved to the new box"), s.preSeededAt],
+    ["ready", tr("Confirmed ready to take over"), s.readyAt],
+    ["freeze", tr("Old server frozen"), s.freezeAt],
+    ["final-delta", tr("Old server handed off"), s.finalDeltaAt],
+    ["take-over", tr("New box took over the name"), s.takenOverAt],
+    ["close-out", tr("Old box closed out"), s.oldClosedOutAt],
   ];
   let activeSeen = false;
   return rows.map(([key, label, at]) => {
@@ -421,24 +422,24 @@ export function migrationSteps(s, nowMs) {
 export function migrationWaitCopy(s, nowMs) {
   const now = nowMs ?? Date.now();
   if (s.abortedAt != null) {
-    return "Migration aborted — your old server stays active with all its data.";
+    return tr("Migration aborted — your old server stays active with all its data.");
   }
-  if (s.done) return "Migration complete — the server now runs on the new box.";
+  if (s.done) return tr("Migration complete — the server now runs on the new box.");
   switch (s.phase) {
     case "initiated":
-      return "Waiting for the new box to come online. Apply the recipe on the new machine / VM; it will attach itself here.";
+      return tr("Waiting for the new box to come online. Apply the recipe on the new machine / VM; it will attach itself here.");
     case "provisioned":
-      return "New box attached. Move the data when you're ready: this server's apps pause until the new one takes over.";
+      return tr("New box attached. Move the data when you're ready: this server's apps pause until the new one takes over.");
     case "pre-seeded":
-      return "Data restored. Confirm the hand-off when you're ready — the old server will briefly freeze writes while the name moves.";
+      return tr("Data restored. Confirm the hand-off when you're ready — the old server will briefly freeze writes while the name moves.");
     case "ready":
-      return "Ready — freeze the old server to flush the final backup and hand the name over.";
+      return tr("Ready — freeze the old server to flush the final backup and hand the name over.");
     case "freezing":
       return s.finalDeltaAt == null
-        ? "The old server is handing off…"
-        : "Handed off — the new box is claiming the name…";
+        ? tr("The old server is handing off…")
+        : tr("Handed off — the new box is claiming the name…");
     case "taken-over":
-      return "The new box is serving the name. Waiting for the old box to close out.";
+      return tr("The new box is serving the name. Waiting for the old box to close out.");
     default:
       return "";
   }

@@ -41,6 +41,7 @@ import { controlApex, bootOrigin } from "./apex.js";
 import { importX25519Private } from "./x25519.js";
 import { accountReadFetch } from "./accountRead.js";
 
+import { tr } from "./i18n.js";
 const COM_BASE = controlApex();
 const BOOT_BASE = bootOrigin();
 
@@ -127,8 +128,8 @@ async function openSealedWithEd25519Seed(blob, edSeed) {
   const ephKey = await crypto.subtle.importKey("raw", ephPub, "X25519", false, []);
   const shared = await crypto.subtle.deriveBits({ name: "X25519", public: ephKey }, myKey, 256);
   const sym = await hkdfSeal(shared, ephPub);
-  const aesKey = await crypto.subtle.importKey("raw", sym, { name: "AES-GCM" }, false, ["decrypt"]);
-  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, aesKey, ct);
+  const aesKey = await crypto.subtle.importKey("raw", sym, { name: tr("AES-GCM") }, false, ["decrypt"]);
+  const pt = await crypto.subtle.decrypt({ name: tr("AES-GCM"), iv: nonce }, aesKey, ct);
   return new Uint8Array(pt);
 }
 
@@ -146,9 +147,9 @@ async function sealForBoxStk(plaintext, stkEdPub) {
   const ephPub = new Uint8Array(await crypto.subtle.exportKey("raw", eph.publicKey));
   const shared = await crypto.subtle.deriveBits({ name: "X25519", public: recipKey }, eph.privateKey, 256);
   const sym = await hkdfSeal(shared, ephPub);
-  const aesKey = await crypto.subtle.importKey("raw", sym, { name: "AES-GCM" }, false, ["encrypt"]);
+  const aesKey = await crypto.subtle.importKey("raw", sym, { name: tr("AES-GCM") }, false, ["encrypt"]);
   const nonce = randomBytes(12);
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, aesKey, plaintext));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: tr("AES-GCM"), iv: nonce }, aesKey, plaintext));
   return concat(ephPub, nonce, ct);
 }
 
@@ -299,8 +300,8 @@ export async function fetchVerifiedRequests(deps = {}) {
     });
     let verified = false;
     try {
-      const key = await crypto.subtle.importKey("raw", stkPub, { name: "Ed25519" }, false, ["verify"]);
-      verified = await crypto.subtle.verify({ name: "Ed25519" }, key, sig, canonical);
+      const key = await crypto.subtle.importKey("raw", stkPub, { name: tr("Ed25519") }, false, ["verify"]);
+      verified = await crypto.subtle.verify({ name: tr("Ed25519") }, key, sig, canonical);
     } catch {
       verified = false;
     }
@@ -481,17 +482,17 @@ export const BOX_REQUEST_TYPES = {
   "unlock-key": {
     title: (ctx = {}) =>
       (ctx.firstBoot ?? true)
-        ? "Unlock device and authorize it to join your cloud"
-        : "Unlock device",
+        ? tr("Unlock device and authorize it to join your cloud")
+        : tr("Unlock device"),
     detail: (ctx = {}) =>
       (ctx.firstBoot ?? true)
-        ? "Unlocks the encrypted disk and authorizes this box to serve your account."
-        : "Unlocks the encrypted disk so this box comes back online.",
+        ? tr("Unlocks the encrypted disk and authorizes this box to serve your account.")
+        : tr("Unlocks the encrypted disk so this box comes back online."),
     respond: respondUnlock,
   },
   entitlement: {
-    title: () => "Authorize this box to serve your account",
-    detail: () => "Lets this box come online and serve your services.",
+    title: () => tr("Authorize this box to serve your account"),
+    detail: () => tr("Lets this box come online and serve your services."),
     respond: respondEntitlement,
   },
 };
@@ -604,7 +605,7 @@ export async function depositEntitlement(args, deps = {}) {
  *   issuedAt: number, signWithIrk: Function, umk: Uint8Array }} args
  */
 export async function buildSwkDeliveryCarrier({ serverDomain, swk, boxIdentityPub, issuedAt, signWithIrk, umk }) {
-  if (swk.length !== 32) throw new Error("SWK must be 32 bytes");
+  if (swk.length !== 32) throw new Error(tr("SWK must be 32 bytes"));
   if (boxIdentityPub.length !== 32) throw new Error("box identity pubkey must be 32 bytes");
   const sealed = await sealForBoxStk(swk, boxIdentityPub);
   // Field guard: serverDomain must never contain '|' or control chars (mirrors
@@ -708,7 +709,7 @@ export async function depositSwk(args, deps = {}) {
  *   issuedAt: number, signWithIrk: Function, umk: Uint8Array }} args
  */
 export async function buildCgkDeliveryCarrier({ serverDomain, cgk, boxIdentityPub, issuedAt, signWithIrk, umk }) {
-  if (cgk.length !== 32) throw new Error("CGK must be 32 bytes");
+  if (cgk.length !== 32) throw new Error(tr("CGK must be 32 bytes"));
   if (boxIdentityPub.length !== 32) throw new Error("box identity pubkey must be 32 bytes");
   const sealed = await sealForBoxStk(cgk, boxIdentityPub);
   // Field guard: serverDomain must never contain '|' or control chars (mirrors

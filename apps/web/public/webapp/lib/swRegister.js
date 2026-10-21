@@ -6,6 +6,7 @@
 // shows a non-modal "Update available — tap to refresh" toast.
 // The user can defer indefinitely; nothing breaks if they
 // ignore it (the old SW keeps serving them just fine).
+import { tr } from "./i18n.js";
 if ("serviceWorker" in navigator) {
   (async () => {
     const reg = await navigator.serviceWorker.register("/service-worker.js", { scope: "/" });
@@ -13,7 +14,7 @@ if ("serviceWorker" in navigator) {
       if (!worker) return;
       const toastEl = document.getElementById("toast");
       if (!toastEl) return;
-      toastEl.textContent = "Update available — tap to refresh";
+      toastEl.textContent = tr("Update available — tap to refresh");
       toastEl.classList.remove("hidden", "err");
       const accept = () => {
         toastEl.removeEventListener("click", accept);

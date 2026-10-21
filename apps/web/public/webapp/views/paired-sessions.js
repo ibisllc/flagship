@@ -7,6 +7,7 @@ import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { formatWhen } from "../lib/dateFormat.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-paired-sessions");
 
 /**
@@ -36,13 +37,13 @@ export async function renderPairedSessions() {
       <div class="card">
         <div class="row row-top">
           <div>
-            <div class="weight-600">Session ${escapeHtml(s.tokenPrefix)} ${s.current ? '<span class="pill ok">this device</span>' : ""}</div>
+            <div class="weight-600">${tr("Session {0} {1}", escapeHtml(s.tokenPrefix), s.current ? '<span class="pill ok">this device</span>' : "")}</div>
             <div class="value text-xs">${escapeHtml(s.tokenPrefix)}…</div>
-            <div class="faint-sm">added ${escapeHtml(formatWhen(s.addedAt))}</div>
+            <div class="faint-sm">${tr("added {0}", escapeHtml(formatWhen(s.addedAt)))}</div>
           </div>
           ${s.current
             ? '<button class="secondary" disabled>can\'t revoke self</button>'
-            : `<button class="secondary" data-action="revoke" data-prefix="${escapeHtml(s.tokenPrefix)}">revoke</button>`}
+            : `<button class="secondary" data-action="revoke" data-prefix="${escapeHtml(s.tokenPrefix)}">${tr("revoke")}</button>`}
         </div>
       </div>
     `).join("");
@@ -61,9 +62,9 @@ export async function renderPairedSessions() {
 async function revoke(prefix) {
   const { inlineConfirm } = await import("../lib/modal.js");
   const ok = await inlineConfirm({
-    title: `Revoke session ${prefix}…?`,
-    message: "The device using this session token will be signed out immediately.",
-    okLabel: "Revoke",
+    title: tr("Revoke session {0}…?", prefix),
+    message: tr("The device using this session token will be signed out immediately."),
+    okLabel: tr("Revoke"),
     danger: true,
   });
   if (!ok) return;
@@ -72,7 +73,7 @@ async function revoke(prefix) {
       `/api/screens/paired-sessions/${encodeURIComponent(prefix)}`,
       { method: "DELETE" },
     );
-    toast("Revoked");
+    toast(tr("Revoked"));
     await renderPairedSessions();
   } catch (e) {
     toast(e.message, "err");

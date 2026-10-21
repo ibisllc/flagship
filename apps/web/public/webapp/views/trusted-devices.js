@@ -32,6 +32,7 @@ import {
   updateSelfDisplayName,
 } from "../lib/accountDirectory.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-trusted-devices");
 
 /** Cached state: last-fetched devices + ETag for the If-Match flow.
@@ -64,9 +65,9 @@ function platformDisplay(p) {
     android: "Android",
     web: "Web",
     macos: "Mac",
-    windows: "Windows PC",
-    linux: "Linux PC",
-  })[p] ?? (p || "Unknown platform");
+    windows: tr("Windows PC"),
+    linux: tr("Linux PC"),
+  })[p] ?? (p || tr("Unknown platform"));
 }
 
 /** The name shown for a device row. Never renders the literal string
@@ -131,8 +132,8 @@ function isQuarantined(device) {
  *  Android helpers so the message is byte-stable across surfaces. */
 function quarantineMessage(device) {
   const until = device.quarantineUntil;
-  if (!until) return "This device is in quarantine. Use another device.";
-  return `Quarantined until ${formatWhen(until)}. Use another device.`;
+  if (!until) return tr("This device is in quarantine. Use another device.");
+  return tr("Quarantined until {0}. Use another device.", formatWhen(until));
 }
 
 function renderDeviceCard(device) {
@@ -145,25 +146,20 @@ function renderDeviceCard(device) {
         <div class="weight-600">
           <span aria-hidden="true">${platformIcon(device.platformClass)}</span>
           ${escapeHtml(deviceName(device))}
-          ${device.isCurrent ? `<span class="pill">This device</span>` : ""}
-          ${device.grant?.signerRoot === "admin-root" ? `<span class="pill">Administrator</span>` : ""}
-          ${device.managed ? `<span class="pill">${device.locked ? "Managed · locked" : "Managed"}</span>` : ""}
+          ${device.isCurrent ? `<span class="pill">${tr("This device")}</span>` : ""}
+          ${device.grant?.signerRoot === "admin-root" ? `<span class="pill">${tr("Administrator")}</span>` : ""}
+          ${device.managed ? `<span class="pill">${device.locked ? tr("Managed · locked") : "Managed"}</span>` : ""}
         </div>
       </div>
       <div class="note small">
-        ${escapeHtml(platformDisplay(device.platformClass))}
-        · Device ${escapeHtml(device.supportCode ?? device.deviceId.slice(0, 8))}
-        · added ${escapeHtml(relative(device.createdAt))}
-        ${
-          device.lastSeenAt > device.createdAt
+        ${tr("{0} · Device {1} · added {2} {3}", escapeHtml(platformDisplay(device.platformClass)), escapeHtml(device.supportCode ?? device.deviceId.slice(0, 8)), escapeHtml(relative(device.createdAt)), device.lastSeenAt > device.createdAt
             ? `· last seen ${escapeHtml(relative(device.lastSeenAt))}`
-            : ""
-        }
+            : "")}
       </div>
       <div class="row mt-2">
-        ${device.isCurrent ? `<button class="secondary" data-self-rename="${escapeHtml(device.deviceId)}">Rename this device</button>` : ""}
-        ${getSession().adminRootSeed ? `<button class="secondary" data-managed-name="${escapeHtml(device.deviceId)}">${device.managed ? "Edit managed name" : "Set managed name"}</button>` : ""}
-        ${device.managed && getSession().adminRootSeed ? `<button class="secondary" data-managed-remove="${escapeHtml(device.deviceId)}">Remove managed name</button>` : ""}
+        ${device.isCurrent ? `<button class="secondary" data-self-rename="${escapeHtml(device.deviceId)}">${tr("Rename this device")}</button>` : ""}
+        ${getSession().adminRootSeed ? `<button class="secondary" data-managed-name="${escapeHtml(device.deviceId)}">${device.managed ? tr("Edit managed name") : tr("Set managed name")}</button>` : ""}
+        ${device.managed && getSession().adminRootSeed ? `<button class="secondary" data-managed-remove="${escapeHtml(device.deviceId)}">${tr("Remove managed name")}</button>` : ""}
       </div>
       ${quarantined
         ? `<div class="note small err-text">${escapeHtml(quarantineMsg)}</div>`
@@ -180,39 +176,32 @@ function renderDeviceCard(device) {
 function renderDangerZone() {
   return `
     <hr class="mt-4" />
-    <h3 class="mt-2">Danger zone</h3>
+    <h3 class="mt-2">${tr("Danger zone")}</h3>
     <p class="note small">
-      Lost a device or worried about a stolen one? These actions rotate
-      your account's identity keys, disconnecting every device on this
-      account in one shot.
+      ${tr("Lost a device or worried about a stolen one? These actions rotate your account's identity keys, disconnecting every device on this account in one shot.")}
     </p>
     <div class="card" data-section="replace-device">
       <div class="row">
         <div class="weight-600">
           <span aria-hidden="true">🔄</span>
-          Replace device
+          ${tr("Replace device")}
         </div>
-        <button class="secondary danger" id="replace-device-btn">Replace device</button>
+        <button class="secondary danger" id="replace-device-btn">${tr("Replace device")}</button>
       </div>
       <p class="note small">
-        Rotates your account's identity key. Every other device on this
-        account will need to confirm a new pairing the next time it opens.
-        Pods stay running; apps stay installed.
+        ${tr("Rotates your account's identity key. Every other device on this account will need to confirm a new pairing the next time it opens. Pods stay running; apps stay installed.")}
       </p>
     </div>
     <div class="card" data-section="wipe-restart">
       <div class="row">
         <div class="weight-600">
           <span aria-hidden="true">🗑️</span>
-          Wipe &amp; restart
+          ${tr("Wipe &amp; restart")}
         </div>
-        <button class="secondary danger" id="wipe-restart-btn">Wipe &amp; restart</button>
+        <button class="secondary danger" id="wipe-restart-btn">${tr("Wipe &amp; restart")}</button>
       </div>
       <p class="note small">
-        Rotates your account identity + recovery passkey in one ceremony.
-        Every device currently on this account — including this browser —
-        gets disconnected and re-pairs fresh. Pods keep running; apps stay
-        installed.
+        ${tr("Rotates your account identity + recovery passkey in one ceremony. Every device currently on this account — including this browser — gets disconnected and re-pairs fresh. Pods keep running; apps stay installed.")}
       </p>
     </div>
   `;
@@ -237,7 +226,7 @@ async function renderTrustedDevices() {
   const root = $("trusted-devices-list");
   if (!root) return;
   renderAddDeviceGate();
-  root.innerHTML = `<div class="card placeholder">Loading devices…</div>`;
+  root.innerHTML = `<div class="card placeholder">${tr("Loading devices…")}</div>`;
   try {
     await fetchDevices();
     await fetchPendingRePairSnapshot();
@@ -246,9 +235,9 @@ async function renderTrustedDevices() {
       root.innerHTML = `
         ${bannerHtml}
         <div class="card">
-          <div class="weight-600">Just this device</div>
+          <div class="weight-600">${tr("Just this device")}</div>
           <p class="note small">
-            Sign in on a phone or tablet to add a trusted device.
+            ${tr("Sign in on a phone or tablet to add a trusted device.")}
           </p>
         </div>
         ${renderDangerZone()}`;
@@ -259,8 +248,8 @@ async function renderTrustedDevices() {
     const accountHeader = `
       <div class="card">
         <div class="weight-600">${escapeHtml(state.accountDisplayName ?? `@${state.username}`)}</div>
-        <div class="note small">@${escapeHtml(state.username)} · public routing address</div>
-        ${getSession().adminRootSeed ? `<button class="secondary mt-2" id="edit-account-display-name">Edit account name</button>` : ""}
+        <div class="note small">${tr("@{0} · public routing address", escapeHtml(state.username))}</div>
+        ${getSession().adminRootSeed ? `<button class="secondary mt-2" id="edit-account-display-name">${tr("Edit account name")}</button>` : ""}
       </div>`;
     root.innerHTML = bannerHtml + accountHeader + state.devices.map(renderDeviceCard).join("") + renderDangerZone();
     bindPrivateNameActions(root);
@@ -275,18 +264,18 @@ function bindPrivateNameActions(root) {
   document.getElementById("edit-account-display-name")?.addEventListener("click", async () => {
     const { inlinePrompt } = await import("../lib/modal.js");
     const name = await inlinePrompt({
-      title: "Edit account name",
-      message: "Encrypted presentation only. Your public routing username does not change.",
+      title: tr("Edit account name"),
+      message: tr("Encrypted presentation only. Your public routing username does not change."),
       initial: state.accountDisplayName ?? "",
-      validate: (value) => value?.trim() ? null : "Enter an account name",
+      validate: (value) => value?.trim() ? null : tr("Enter an account name"),
     });
     if (!name) return;
     try {
       await updateAccountDisplayName(name, state.accountProfile);
-      toast("Account name updated");
+      toast(tr("Account name updated"));
       await renderTrustedDevices();
     } catch (error) {
-      toast(error?.message ?? "Couldn't update account name", "err");
+      toast(error?.message ?? tr("Couldn't update account name"), "err");
     }
   });
   root.querySelectorAll("[data-self-rename]").forEach((button) => button.addEventListener("click", async () => {
@@ -295,18 +284,18 @@ function bindPrivateNameActions(root) {
     const current = state.selfProfiles.find((item) => item.deviceId === deviceId) ?? null;
     const { inlinePrompt } = await import("../lib/modal.js");
     const name = await inlinePrompt({
-      title: "Rename this device",
-      message: "This name applies only inside this Flagship account.",
+      title: tr("Rename this device"),
+      message: tr("This name applies only inside this Flagship account."),
       initial: device?.selfDisplayName ?? "",
-      validate: (value) => value?.trim() ? null : "Enter a device name",
+      validate: (value) => value?.trim() ? null : tr("Enter a device name"),
     });
     if (!name) return;
     try {
       await updateSelfDisplayName(name, current);
-      toast(device?.managed ? "Suggestion saved; the managed name remains visible" : "Device renamed");
+      toast(device?.managed ? tr("Suggestion saved; the managed name remains visible") : tr("Device renamed"));
       await renderTrustedDevices();
     } catch (error) {
-      toast(error?.message ?? "Couldn't rename device", "err");
+      toast(error?.message ?? tr("Couldn't rename device"), "err");
     }
   }));
   root.querySelectorAll("[data-managed-name]").forEach((button) => button.addEventListener("click", async () => {
@@ -314,34 +303,34 @@ function bindPrivateNameActions(root) {
     const device = state.devices.find((item) => item.deviceId === deviceId);
     const current = state.managedProfiles.find((item) => item.deviceId === deviceId) ?? null;
     const { inlineConfirm, inlinePrompt } = await import("../lib/modal.js");
-    if (!await inlineConfirm({ title: "Administrator change", message: "Use your unlocked administrator authority to manage this device name.", okLabel: "Continue" })) return;
+    if (!await inlineConfirm({ title: tr("Administrator change"), message: tr("Use your unlocked administrator authority to manage this device name."), okLabel: tr("Continue") })) return;
     const name = await inlinePrompt({
-      title: "Managed device name",
-      message: "This encrypted name overrides the device's own suggestion.",
+      title: tr("Managed device name"),
+      message: tr("This encrypted name overrides the device's own suggestion."),
       initial: device?.managedDisplayName ?? device?.selfDisplayName ?? "",
-      validate: (value) => value?.trim() ? null : "Enter a device name",
+      validate: (value) => value?.trim() ? null : tr("Enter a device name"),
     });
     if (!name) return;
-    const locked = await inlineConfirm({ title: "Lock this name?", message: "A locked managed name stays effective until an administrator removes or unlocks it.", okLabel: "Lock name", cancelLabel: "Leave unlocked" });
+    const locked = await inlineConfirm({ title: tr("Lock this name?"), message: tr("A locked managed name stays effective until an administrator removes or unlocks it."), okLabel: tr("Lock name"), cancelLabel: tr("Leave unlocked") });
     try {
       await setManagedDeviceDisplayName(deviceId, name, locked, current);
-      toast("Managed name updated");
+      toast(tr("Managed name updated"));
       await renderTrustedDevices();
     } catch (error) {
-      toast(error?.message ?? "Couldn't manage device name", "err");
+      toast(error?.message ?? tr("Couldn't manage device name"), "err");
     }
   }));
   root.querySelectorAll("[data-managed-remove]").forEach((button) => button.addEventListener("click", async () => {
     const deviceId = button.getAttribute("data-managed-remove");
     const current = state.managedProfiles.find((item) => item.deviceId === deviceId) ?? null;
     const { inlineConfirm } = await import("../lib/modal.js");
-    if (!await inlineConfirm({ title: "Remove managed name?", message: "The device's own encrypted suggestion becomes visible.", okLabel: "Remove", danger: true })) return;
+    if (!await inlineConfirm({ title: tr("Remove managed name?"), message: tr("The device's own encrypted suggestion becomes visible."), okLabel: tr("Remove"), danger: true })) return;
     try {
       await removeManagedDeviceDisplayName(deviceId, current);
-      toast("Managed name removed");
+      toast(tr("Managed name removed"));
       await renderTrustedDevices();
     } catch (error) {
-      toast(error?.message ?? "Couldn't remove managed name", "err");
+      toast(error?.message ?? tr("Couldn't remove managed name"), "err");
     }
   }));
 }
@@ -349,19 +338,19 @@ function bindPrivateNameActions(root) {
 function bindPendingBanner() {
   if (!shouldRenderBanner(state.pendingRePair)) return;
   document.getElementById("finalize-replace-btn")?.addEventListener("click", () => {
-    finalizePendingReplace().catch((e) => toast(e?.message ?? "Finalize failed", "err"));
+    finalizePendingReplace().catch((e) => toast(e?.message ?? tr("Finalize failed"), "err"));
   });
 }
 
 async function finalizePendingReplace() {
   const session = getSession();
   if (!session.umk || !session.username) {
-    toast("Unlock the webapp first", "err");
+    toast(tr("Unlock the webapp first"), "err");
     return;
   }
-  const phase = openPhaseToast("Finalize replace");
+  const phase = openPhaseToast(tr("Finalize replace"));
   try {
-    phase.update("installing", "Installing new identity…");
+    phase.update("installing", tr("Installing new identity…"));
     const out = await completeReplaceDeviceCeremony({
       username: session.username,
       // The finalization is signed by the key being installed — the
@@ -372,13 +361,13 @@ async function finalizePendingReplace() {
     // Bump the local IRK slot so subsequent signs use the rotated key.
     setCurrentIrkVersion(currentIrkVersion() + 1);
     await unlockSession(session.umk, session.username);
-    phase.update("done", "Replace complete.");
-    toast("Replace complete.");
+    phase.update("done", tr("Replace complete."));
+    toast(tr("Replace complete."));
     state.pendingRePair = null;
     await renderTrustedDevices();
   } catch (e) {
-    phase.update("error", e?.message ?? "Couldn't finalize");
-    toast(e?.message ?? "Finalize failed", "err");
+    phase.update("error", e?.message ?? tr("Couldn't finalize"));
+    toast(e?.message ?? tr("Finalize failed"), "err");
   } finally {
     phase.dismissAfter(3500);
   }
@@ -386,10 +375,10 @@ async function finalizePendingReplace() {
 
 function bindDangerZone() {
   document.getElementById("replace-device-btn")?.addEventListener("click", () => {
-    runReplaceDeviceSheet().catch((e) => toast(e?.message ?? "Replace failed", "err"));
+    runReplaceDeviceSheet().catch((e) => toast(e?.message ?? tr("Replace failed"), "err"));
   });
   document.getElementById("wipe-restart-btn")?.addEventListener("click", () => {
-    runWipeRestartSheet().catch((e) => toast(e?.message ?? "Wipe failed", "err"));
+    runWipeRestartSheet().catch((e) => toast(e?.message ?? tr("Wipe failed"), "err"));
   });
 }
 
@@ -408,7 +397,7 @@ function openCountdownSheet({ titleHtml, bodyHtml, primaryLabel, primaryClass })
         <div class="modal-message">${bodyHtml}</div>
         <p class="modal-message" data-countdown-line aria-live="polite"></p>
         <div class="row-2 mt-3">
-          <button type="button" class="secondary" data-cancel>Cancel</button>
+          <button type="button" class="secondary" data-cancel>${tr("Cancel")}</button>
           <button type="button" class="${primaryClass || "danger"}" data-primary>${primaryLabel}</button>
         </div>
       </form>
@@ -442,10 +431,10 @@ function openCountdownSheet({ titleHtml, bodyHtml, primaryLabel, primaryClass })
       countdown = startCountdown({
         onTick: (remaining) => {
           if (remaining > 0) {
-            line.textContent = `Replacing in ${remaining}…`;
+            line.textContent = tr("Replacing in {0}…", remaining);
             primary.textContent = `${remaining}…`;
           } else {
-            line.textContent = "Working…";
+            line.textContent = tr("Working…");
           }
         },
       });
@@ -459,28 +448,25 @@ function openCountdownSheet({ titleHtml, bodyHtml, primaryLabel, primaryClass })
 async function runReplaceDeviceSheet() {
   const session = getSession();
   if (!session.umk || !session.username) {
-    toast("Unlock the webapp first", "err");
+    toast(tr("Unlock the webapp first"), "err");
     return;
   }
   // Sheet copy — VERBATIM from docs/revocation-ui.md § "Replace device
   // sheet copy". DO NOT REPHRASE.
   const confirmed = await openCountdownSheet({
-    titleHtml: "Replace this device?",
+    titleHtml: tr("Replace this device?"),
     bodyHtml: `
-      <p>Rotates your account's identity key. Every other device on this
-      account — including this phone — will need to confirm a new pairing
-      the next time it opens the app. You won't be locked out, but you'll
-      see a one-time biometric prompt on each device.</p>
-      <p>Servers stay running. Apps stay installed.</p>
+      <p>${tr("Rotates your account's identity key. Every other device on this account — including this phone — will need to confirm a new pairing the next time it opens the app. You won't be locked out, but you'll see a one-time biometric prompt on each device.")}</p>
+      <p>${tr("Servers stay running. Apps stay installed.")}</p>
     `,
     primaryLabel: "Replace",
     primaryClass: "danger",
   });
   if (!confirmed) return;
 
-  const phase = openPhaseToast("Replace device");
+  const phase = openPhaseToast(tr("Replace device"));
   try {
-    phase.update("signing", "Signing rotation request…");
+    phase.update("signing", tr("Signing rotation request…"));
     const oldVersion = currentIrkVersion();
     const result = await runReplaceDeviceCeremony(
       {
@@ -491,7 +477,7 @@ async function runReplaceDeviceSheet() {
       },
       { requestTotpProof: promptForTotpProof },
     );
-    phase.update("posting", `Pending — completes ${formatCompletesAt(result.completesAt)}`);
+    phase.update("posting", tr("Pending — completes {0}", formatCompletesAt(result.completesAt)));
     // Some accounts/policy paths complete immediately; the spec
     // optionally calls /complete now. Worker returns 425 if too early,
     // so we tolerate the early-call failure silently — UI surfaces the
@@ -504,32 +490,32 @@ async function runReplaceDeviceSheet() {
         umk: session.umk,
         newVersion: result.newVersion,
       });
-      phase.update("installing", "Installing new identity…");
+      phase.update("installing", tr("Installing new identity…"));
       setCurrentIrkVersion(result.newVersion);
       await unlockSession(session.umk, session.username);
-      phase.update("done", "Replace complete.");
+      phase.update("done", tr("Replace complete."));
     } catch (e) {
       if (e?.code === "425") {
         // Grace not elapsed — keep the rotation pending; the user can
         // come back to this view later and we'll detect a still-pending
         // row via /api/users/:u/re-pair (GET). For now we surface the
         // pending state and don't bump local IRK version yet.
-        phase.update("done", "Pending — finish later from this screen.");
+        phase.update("done", tr("Pending — finish later from this screen."));
       } else if (e?.code === "404") {
         // No pending row server-side (already completed) — treat as
         // success and bump local version so subsequent signs match.
         setCurrentIrkVersion(result.newVersion);
         await unlockSession(session.umk, session.username);
-        phase.update("done", "Replace complete.");
+        phase.update("done", tr("Replace complete."));
       } else {
         throw e;
       }
     }
-    toast("Replace device — request accepted.");
+    toast(tr("Replace device — request accepted."));
     await renderTrustedDevices();
   } catch (e) {
-    phase.update("error", e?.message ?? "Couldn't replace");
-    toast(e?.message ?? "Replace failed", "err");
+    phase.update("error", e?.message ?? tr("Couldn't replace"));
+    toast(e?.message ?? tr("Replace failed"), "err");
   } finally {
     phase.dismissAfter(3500);
   }
@@ -538,22 +524,19 @@ async function runReplaceDeviceSheet() {
 async function runWipeRestartSheet() {
   const session = getSession();
   if (!session.umk || !session.username) {
-    toast("Unlock the webapp first", "err");
+    toast(tr("Unlock the webapp first"), "err");
     return;
   }
   // Sheet copy — VERBATIM from docs/revocation-ui.md § "Wipe & restart
   // sheet copy". The user-facing `<u>` interpolation is the username
   // exactly as registered.
   const confirmed = await openCountdownSheet({
-    titleHtml: "Wipe and start over?",
+    titleHtml: tr("Wipe and start over?"),
     bodyHtml: `
-      <p>Your account keeps the username <strong>@${escapeHtml(session.username)}</strong>
-      and your pods keep their data. Every device currently on this account
-      will be disconnected. You'll re-pair each one fresh — including this
-      phone, which becomes the new root of trust.</p>
-      <p><strong>This can't be undone from another device.</strong></p>
+      <p>${tr("Your account keeps the username <strong>@{0}</strong> and your pods keep their data. Every device currently on this account will be disconnected. You'll re-pair each one fresh — including this phone, which becomes the new root of trust.", escapeHtml(session.username))}</p>
+      <p><strong>${tr("This can't be undone from another device.")}</strong></p>
     `,
-    primaryLabel: "Wipe and start over",
+    primaryLabel: tr("Wipe and start over"),
     primaryClass: "danger",
   });
   if (!confirmed) return;
@@ -561,25 +544,25 @@ async function runWipeRestartSheet() {
   // We need a fresh local passphrase for the re-bound UMK.
   const { inlinePrompt } = await import("../lib/modal.js");
   const newLocalPass = await inlinePrompt({
-    title: "Set a new browser passphrase",
-    message: "After the wipe, this browser will unlock with a new passphrase. Use 8+ characters.",
-    placeholder: "New browser passphrase",
+    title: tr("Set a new browser passphrase"),
+    message: tr("After the wipe, this browser will unlock with a new passphrase. Use 8+ characters."),
+    placeholder: tr("New browser passphrase"),
     type: "password",
-    okLabel: "Continue",
-    validate: (v) => (v && v.length >= 8 ? null : "Use at least 8 characters"),
+    okLabel: tr("Continue"),
+    validate: (v) => (v && v.length >= 8 ? null : tr("Use at least 8 characters")),
   });
   if (!newLocalPass) return;
 
-  const phase = openPhaseToast("Wipe & restart");
+  const phase = openPhaseToast(tr("Wipe & restart"));
   try {
-    phase.update("registering", "Registering new passkey…");
-    phase.update("signing", "Signing wipe request…");
+    phase.update("registering", tr("Registering new passkey…"));
+    phase.update("signing", tr("Signing wipe request…"));
     const result = await runWipeRestartCeremony({
       username: session.username,
       umk: session.umk,
       ifMatch: state.etag,
     });
-    phase.update("posting", "Server accepted; installing locally…");
+    phase.update("posting", tr("Server accepted; installing locally…"));
     // Local install: drop the OLD wrapped UMK and re-bootstrap with
     // the NEW UMK under the user's new browser passphrase. Failure
     // here AFTER server-success matches the iOS "worst case" branch —
@@ -595,17 +578,17 @@ async function runWipeRestartSheet() {
     } catch (e) {
       phase.update(
         "error",
-        `Server committed but local install failed: ${e?.message ?? e}. Re-open the app to recover.`,
+        tr("Server committed but local install failed: {0}. Re-open the app to recover.", e?.message ?? e),
       );
-      toast("Server wiped — re-open the app to finish on this browser.", "err");
+      toast(tr("Server wiped — re-open the app to finish on this browser."), "err");
       return;
     }
-    phase.update("done", "Wipe complete. New account key installed.");
-    toast("Wipe & restart complete.");
+    phase.update("done", tr("Wipe complete. New account key installed."));
+    toast(tr("Wipe & restart complete."));
     await renderTrustedDevices();
   } catch (e) {
-    phase.update("error", e?.message ?? "Couldn't wipe");
-    toast(e?.message ?? "Wipe failed", "err");
+    phase.update("error", e?.message ?? tr("Couldn't wipe"));
+    toast(e?.message ?? tr("Wipe failed"), "err");
   } finally {
     phase.dismissAfter(4000);
   }
@@ -631,7 +614,7 @@ function openPhaseToast(action) {
     bar.innerHTML = `<div class="weight-600">${escapeHtml(action)}</div>
       <p class="note small" data-phase="${escapeHtml(phase)}">${escapeHtml(message)}</p>`;
   };
-  setText("idle", "Starting…");
+  setText("idle", tr("Starting…"));
   return {
     update: setText,
     dismissAfter(ms) {
@@ -649,14 +632,13 @@ function openPhaseToast(action) {
 async function promptForTotpProof() {
   const { inlinePrompt } = await import("../lib/modal.js");
   const code = await inlinePrompt({
-    title: "Enter your TOTP code",
+    title: tr("Enter your TOTP code"),
     message:
-      "This account requires a 6-digit code from your authenticator app, " +
-      "or a recovery code if you've lost the device with the authenticator.",
+      tr("This account requires a 6-digit code from your authenticator app, or a recovery code if you've lost the device with the authenticator."),
     placeholder: "123456",
     type: "text",
-    okLabel: "Continue",
-    validate: (v) => (v && v.length >= 6 ? null : "Enter the 6-digit code or a recovery code"),
+    okLabel: tr("Continue"),
+    validate: (v) => (v && v.length >= 6 ? null : tr("Enter the 6-digit code or a recovery code")),
   });
   if (!code) return null;
   // Heuristic: pure-numeric 6-8 digits → TOTP; anything else → recovery.

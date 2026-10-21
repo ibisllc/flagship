@@ -13,19 +13,20 @@
 
 import { requireOwnerProfile } from "./companionGuard.js";
 
+import { tr, trn } from "./i18n.js";
 export const TAG_APP_DB_WRITE = "flagship/app-db-write/v1";
 export const DB_PAGE_SIZE = 100;
 
 export const DB_TITLE = "Database";
-export const DB_OPEN = "Open database";
-export const DB_RUN_SQL = "Run SQL";
+export const DB_OPEN = tr("Open database");
+export const DB_RUN_SQL = tr("Run SQL");
 export const DB_RUN = "Run";
-export const DB_EXPORT_CSV = "Export CSV";
-export const DB_CONFIRM_WRITE = "This changes data. Confirm to run it.";
-export const DB_CONFIRM_RUN = "Confirm and run";
+export const DB_EXPORT_CSV = tr("Export CSV");
+export const DB_CONFIRM_WRITE = tr("This changes data. Confirm to run it.");
+export const DB_CONFIRM_RUN = tr("Confirm and run");
 export const DB_NOTE =
-  "Your app's live data. Browsing and queries only read; a statement that changes data asks you to confirm it first.";
-export const DB_TRUNCATED_NOTE = "Showing the first rows only: the result was cut off.";
+  tr("Your app's live data. Browsing and queries only read; a statement that changes data asks you to confirm it first.");
+export const DB_TRUNCATED_NOTE = tr("Showing the first rows only: the result was cut off.");
 
 const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
 
@@ -176,8 +177,8 @@ export function nextIssuedAt(now = Date.now) {
 export async function runSignedQuery(args, deps = {}) {
   const { serverDomain, serviceId, store, sql, umk, signWithIrk, fetchJson, bytesToHex } = args;
   (deps.requireOwnerProfile ?? requireOwnerProfile)();
-  if (!umk || typeof signWithIrk !== "function") throw new Error("Unlock the webapp first");
-  if (!serverDomain) throw new Error("Pair with this server first");
+  if (!umk || typeof signWithIrk !== "function") throw new Error(tr("Unlock the webapp first"));
+  if (!serverDomain) throw new Error(tr("Pair with this server first"));
   const body = await signAppDbWrite({
     serverDomain,
     serviceId,
@@ -278,16 +279,16 @@ export function formatBytes(n) {
 export function approxRowsText(rows) {
   if (rows === null || rows === undefined) return "rows unknown";
   const n = Math.max(0, Math.round(rows));
-  return `~${n.toLocaleString("en-US")} ${n === 1 ? "row" : "rows"}`;
+  return trn(n, "~{1} row", "~{1} rows", n.toLocaleString("en-US"));
 }
 
 /** "Rows 101–200 of 1,234" (or "No rows"). */
 export function pageRangeText({ offset, rows, total }) {
-  if (rows === 0 && offset === 0) return "No rows";
+  if (rows === 0 && offset === 0) return tr("No rows");
   const from = offset + 1;
   const to = offset + rows;
   const of = total === null || total === undefined ? "" : ` of ${total.toLocaleString("en-US")}`;
-  return `Rows ${from.toLocaleString("en-US")}–${to.toLocaleString("en-US")}${of}`;
+  return tr("Rows {0}–{1}{2}", from.toLocaleString("en-US"), to.toLocaleString("en-US"), of);
 }
 
 /** Whether there's a next page after this one. */
@@ -300,7 +301,7 @@ export function hasNextPage({ offset, rows, limit, total }) {
 export function queryResultSummary(r) {
   const cmd = r.command || "Done";
   if (r.rowCount === null || r.rowCount === undefined) return cmd;
-  return `${cmd} · ${r.rowCount.toLocaleString("en-US")} ${r.rowCount === 1 ? "row" : "rows"}`;
+  return trn(r.rowCount, "{1} · {2} row", "{1} · {2} rows", cmd, r.rowCount.toLocaleString("en-US"));
 }
 
 /** A cell as text, or null for SQL NULL. */
@@ -316,22 +317,22 @@ export function dbErrorMessage(e) {
   const raw = typeof e?.body?.error === "string" && e.body.error ? e.body.error : String(e?.message ?? "");
   if (status === 400) {
     const pos = Number.isFinite(e?.body?.position) ? ` (at character ${e.body.position})` : "";
-    return `${raw || "Your server refused this statement"}${pos}`;
+    return `${raw || tr("Your server refused this statement")}${pos}`;
   }
-  if (status === 404) return "This app, store or table isn't on this server anymore.";
-  if (status === 409) return "That confirmation was already used. Confirm again to run it.";
+  if (status === 404) return tr("This app, store or table isn't on this server anymore.");
+  if (status === 409) return tr("That confirmation was already used. Confirm again to run it.");
   if (status === 413) {
-    if (/too long/i.test(raw)) return "This statement is too long to run.";
-    return "This table is too big to export at once (over 64 MB). Export it in parts with a query.";
+    if (/too long/i.test(raw)) return tr("This statement is too long to run.");
+    return tr("This table is too big to export at once (over 64 MB). Export it in parts with a query.");
   }
-  if (status === 503) return "Your server couldn't reach this app's database. Try again in a moment.";
+  if (status === 503) return tr("Your server couldn't reach this app's database. Try again in a moment.");
   if (status === 403) {
-    if (/companion|read-only|owner/i.test(raw)) return "Open the database from your owner app.";
-    if (/stale|clock|issuedAt/i.test(raw)) return "This device's clock is more than 10 minutes off. Fix the clock and try again.";
-    if (/different server|serverDomain/i.test(raw)) return "This confirmation was signed for a different server.";
-    if (/not the one that was signed/i.test(raw)) return "The statement changed after you confirmed it. Run it again.";
-    if (/signature/i.test(raw)) return "Your server didn't accept this confirmation's signature.";
-    return raw || "Your server refused this statement.";
+    if (/companion|read-only|owner/i.test(raw)) return tr("Open the database from your owner app.");
+    if (/stale|clock|issuedAt/i.test(raw)) return tr("This device's clock is more than 10 minutes off. Fix the clock and try again.");
+    if (/different server|serverDomain/i.test(raw)) return tr("This confirmation was signed for a different server.");
+    if (/not the one that was signed/i.test(raw)) return tr("The statement changed after you confirmed it. Run it again.");
+    if (/signature/i.test(raw)) return tr("Your server didn't accept this confirmation's signature.");
+    return raw || tr("Your server refused this statement.");
   }
-  return raw || "Couldn't reach this app's database.";
+  return raw || tr("Couldn't reach this app's database.");
 }

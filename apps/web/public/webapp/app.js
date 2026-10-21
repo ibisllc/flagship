@@ -143,6 +143,7 @@ import {
   redeemCompanionAndPersist,
 } from "./lib/companionReceiver.js";
 
+import { tr } from "./lib/i18n.js";
 // Register the tab-bar landing sections (#23). They have no per-view
 // module — the tab bar simply toggles them.
 registerView("view-settings-tab", { tab: "settings" });
@@ -437,13 +438,13 @@ async function runTrustOverride(certHash) {
   let session;
   try { session = getSession(); } catch { session = null; }
   if (!session?.umk) {
-    toast("Unlock first to accept a certificate.", "err");
+    toast(tr("Unlock first to accept a certificate."), "err");
     return;
   }
   const cert = serverTrust.failingCerts().find((c) => c.certHash === certHash);
   if (!cert) return;
   if (cert.overridden) {
-    toast("You already accepted this certificate on this device.");
+    toast(tr("You already accepted this certificate on this device."));
     return;
   }
   // Gate: require the PIN when one is set; otherwise a deliberate typed
@@ -452,21 +453,21 @@ async function runTrustOverride(certHash) {
   const pinSet = await hasPin().catch(() => false);
   if (pinSet) {
     const pin = await inlinePrompt({
-      title: "Accept this certificate?",
+      title: tr("Accept this certificate?"),
       message:
-        "Someone may be intercepting your connection. Only accept if you understand the risk. Enter your PIN to confirm.",
+        tr("Someone may be intercepting your connection. Only accept if you understand the risk. Enter your PIN to confirm."),
       type: "password",
-      okLabel: "Accept",
-      validate: async (v) => ((await verifyPin(v)) ? "" : "Incorrect PIN"),
+      okLabel: tr("Accept"),
+      validate: async (v) => ((await verifyPin(v)) ? "" : tr("Incorrect PIN")),
     });
     if (pin === null) return; // cancelled
   } else {
     const ok = await inlinePrompt({
-      title: "Accept this certificate?",
+      title: tr("Accept this certificate?"),
       message:
-        "Someone may be intercepting your connection. Only accept if you understand the risk. Type ACCEPT to confirm.",
-      okLabel: "Accept",
-      validate: (v) => (v.trim().toUpperCase() === "ACCEPT" ? "" : 'Type "ACCEPT" to confirm'),
+        tr("Someone may be intercepting your connection. Only accept if you understand the risk. Type ACCEPT to confirm."),
+      okLabel: tr("Accept"),
+      validate: (v) => (v.trim().toUpperCase() === "ACCEPT" ? "" : tr("Type \"ACCEPT\" to confirm")),
     });
     if (ok === null) return;
   }
@@ -477,7 +478,7 @@ async function runTrustOverride(certHash) {
       { umk: session.umk, certClass: cert.certClass, certHash: cert.certHash, username },
       {},
     );
-    toast("Certificate accepted on this device.");
+    toast(tr("Certificate accepted on this device."));
   } catch (e) {
     console.error(e);
     toast(humanError(e), "err");
@@ -787,7 +788,7 @@ async function boot() {
       // (we only strip on success), but the user can still navigate
       // around the existing webapp if they had a prior profile.
     } else {
-      toast(`connected as a remote (${result.label ?? "no label"})`);
+      toast(tr("connected as a remote ({0})", result.label ?? "no label"));
       // Remote sessions skip the unlock view entirely — there's no UMK
       // to unwrap. Render the home tab so they land somewhere
       // meaningful.
@@ -817,12 +818,12 @@ async function boot() {
         setUsername: (username) => profileSet("username", username),
       });
       if (resumed.resumed) {
-        if (resumed.repaired) toast("Demo session refreshed", "ok");
+        if (resumed.repaired) toast(tr("Demo session refreshed"), "ok");
         return;
       }
     } catch (e) {
       console.error("demo resume failed", e);
-      toast("Couldn't reopen the demo session. Check your connection and reload.", "err");
+      toast(tr("Couldn't reopen the demo session. Check your connection and reload."), "err");
     }
   }
 

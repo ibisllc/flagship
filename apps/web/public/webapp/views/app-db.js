@@ -36,6 +36,7 @@ import {
   queryResultSummary,
 } from "../lib/appDb.js";
 
+import { tr as tr_ } from "../lib/i18n.js";
 registerView("view-app-db");
 
 /** @type {{serviceId: string, appName: string, stores: any[], screen: string, store: string, table: string, offset: number, sql: string, src: DbSource} | null} */
@@ -68,7 +69,7 @@ export function renderDbTablesHtml(stores) {
   const body = stores
     .map((s) => {
       const rows = s.tables.length === 0
-        ? `<p class="muted-sm mt-1">No tables yet.</p>`
+        ? `<p class="muted-sm mt-1">${tr_("No tables yet.")}</p>`
         : s.tables
             .map(
               (t) => `
@@ -121,15 +122,15 @@ export function renderDbTablePageHtml(page) {
           <button id="app-db-export" class="secondary db-inline-btn">${escapeHtml(DB_EXPORT_CSV)}</button></div>
         ${renderDbGridHtml(page.columns, page.rows)}
         <div class="row-2 mt-2">
-          <button id="app-db-prev" class="secondary"${prev ? "" : " disabled"}>Previous</button>
-          <button id="app-db-next" class="secondary"${next ? "" : " disabled"}>Next</button>
+          <button id="app-db-prev" class="secondary"${prev ? "" : " disabled"}>${tr_("Previous")}</button>
+          <button id="app-db-next" class="secondary"${next ? "" : " disabled"}>${tr_("Next")}</button>
         </div>
       </div>`;
 }
 
 export function renderDbSqlHtml({ stores, store, sql }) {
   const select = stores.length > 1
-    ? `<label for="app-db-store">Store</label>
+    ? `<label for="app-db-store">${tr_("Store")}</label>
        <select id="app-db-store">${stores
          .map((s) => `<option value="${escapeHtml(s.store)}"${s.store === store ? " selected" : ""}>${escapeHtml(s.store)}</option>`)
          .join("")}</select>`
@@ -138,7 +139,7 @@ export function renderDbSqlHtml({ stores, store, sql }) {
       <div class="card">
         ${select}
         <textarea id="app-db-sql-text" class="db-sql-editor mt-2" rows="6" spellcheck="false" autocapitalize="off"
-          autocomplete="off" aria-label="SQL" placeholder="SELECT * FROM items LIMIT 10">${escapeHtml(sql)}</textarea>
+          autocomplete="off" aria-label="${tr_("SQL")}" placeholder="${tr_("SELECT * FROM items LIMIT 10")}">${escapeHtml(sql)}</textarea>
         <button id="app-db-run" class="full-width mt-2">${escapeHtml(DB_RUN)}</button>
       </div>
       <div id="app-db-result" aria-live="polite"></div>`;
@@ -157,7 +158,7 @@ export function renderQueryErrorHtml(text, { sqlState } = {}) {
   return `
       <div class="card" data-db-error>
         <p class="err-text">${escapeHtml(text)}</p>
-        ${sqlState ? `<p class="faint-sm mono">SQLSTATE ${escapeHtml(sqlState)}</p>` : ""}
+        ${sqlState ? `<p class="faint-sm mono">${tr_("SQLSTATE {0}", escapeHtml(sqlState))}</p>` : ""}
       </div>`;
 }
 
@@ -201,7 +202,7 @@ async function renderTables() {
   }
   if (current !== ctx) return;
   if (stores === null) {
-    root.innerHTML = renderQueryErrorHtml("This server can't show app data yet. Update it first.");
+    root.innerHTML = renderQueryErrorHtml(tr_("This server can't show app data yet. Update it first."));
     return;
   }
   ctx.stores = stores;
@@ -325,7 +326,7 @@ function askConfirm(note) {
     $("app-db-confirm")?.addEventListener("click", (ev) => {
       const b = ev.currentTarget;
       b.disabled = true;
-      b.textContent = "Running…";
+      b.textContent = tr_("Running…");
       pendingConfirm = null;
       resolve(true);
     });
@@ -349,7 +350,7 @@ async function run(btn) {
     });
     if (current !== ctx || ctx.screen !== "sql" || out.cancelled) return;
     showResult(renderQueryResultHtml(out.result));
-    if (out.signed) toast("Statement ran", "ok");
+    if (out.signed) toast(tr_("Statement ran"), "ok");
   } catch (e) {
     if (current === ctx && ctx.screen === "sql") showResult(renderQueryErrorHtml(message(e), { sqlState: e?.body?.sqlState }));
   } finally {

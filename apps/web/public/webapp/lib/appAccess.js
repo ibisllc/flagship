@@ -10,33 +10,33 @@
 
 import { requireOwnerProfile } from "./companionGuard.js";
 
+import { tr } from "./i18n.js";
 export const TAG_APP_ACCESS = "flagship/app-access/v1";
 export const MAX_ACCESS_RULES = 200;
 /** A new app's list: denies everything and shows how to open it up. The box
  *  returns it for an app it holds no signed list for. */
 export const DEFAULT_ACCESS_LIST = "# Uncomment the following line to allow all hosts\n#allow all\n";
 
-export const ACCESS_TITLE = "Internet access";
-export const ACCESS_VIEW_LIST = "View access list";
+export const ACCESS_TITLE = tr("Internet access");
+export const ACCESS_VIEW_LIST = tr("View access list");
 export const ACCESS_ALLOW = "Allow";
 export const ACCESS_DENY = "Deny";
 export const ACCESS_IGNORE = "Ignore";
-export const ACCESS_NOT_NOW = "Not now";
+export const ACCESS_NOT_NOW = tr("Not now");
 export const ACCESS_CLOSE = "Close";
 export const ACCESS_SAVE = "Save";
-export const ACCESS_PENDING_BADGE = "Wants internet";
-export const ACCESS_COMPANION_NOTE = "Change this from your owner app.";
+export const ACCESS_PENDING_BADGE = tr("Wants internet");
+export const ACCESS_COMPANION_NOTE = tr("Change this from your owner app.");
 export const ACCESS_LIST_HELP =
-  "One rule per line: allow or deny, then a host, *.example.com for its subdomains, or all. " +
-  "The first rule that matches decides; a host no rule matches is blocked. # starts a comment.";
-export const ACCESS_PUSH_TEXT = "One of your apps wants to reach the internet";
-export const ACCESS_DRAFT_TITLE = "This app suggests letting it reach these hosts";
+  tr("One rule per line: allow or deny, then a host, *.example.com for its subdomains, or all. The first rule that matches decides; a host no rule matches is blocked. # starts a comment.");
+export const ACCESS_PUSH_TEXT = tr("One of your apps wants to reach the internet");
+export const ACCESS_DRAFT_TITLE = tr("This app suggests letting it reach these hosts");
 export const ACCESS_DRAFT_REVIEW = "Review";
 export const ACCESS_DRAFT_DISMISS = "Dismiss";
-export const ACCESS_DRAFT_BADGE = "Access suggested";
-export const ACCESS_DRAFT_WAITING = "A suggested access list is waiting…";
+export const ACCESS_DRAFT_BADGE = tr("Access suggested");
+export const ACCESS_DRAFT_WAITING = tr("A suggested access list is waiting…");
 export const ACCESS_DRAFT_EDITOR_NOTE =
-  "This is the list the app suggests. Nothing changes until you save it; edit it first if you like.";
+  tr("This is the list the app suggests. Nothing changes until you save it; edit it first if you like.");
 
 const MSG = {
   verb: 'start the line with "allow" or "deny"',
@@ -45,7 +45,7 @@ const MSG = {
   scheme: "write the host only, without http:// or https://",
   path: "write the host only, without a path",
   port: "write the host only, without a port",
-  ip: "IP addresses can't be allowed or denied; use a host name",
+  ip: tr("IP addresses can't be allowed or denied; use a host name"),
   star: 'write "all" instead of "*"',
   starPlace: "a * may only start a host, as in *.example.com",
   tooMany: `an access list can have at most ${MAX_ACCESS_RULES} rules`,
@@ -82,9 +82,9 @@ function checkTarget(raw) {
   if (host.includes("*")) return { error: MSG.starPlace };
   if (host.endsWith(".")) host = host.slice(0, -1);
   if (IPV4_RE.test(host)) return { error: MSG.ip };
-  if (host === "localhost" || host.endsWith(".localhost")) return { error: `"localhost" is not a public host name` };
+  if (host === "localhost" || host.endsWith(".localhost")) return { error: tr("\"localhost\" is not a public host name") };
   if (host.length === 0 || host.length > 253 || !host.split(".").every((l) => LABEL_RE.test(l))) {
-    return { error: `"${v}" is not a valid host name` };
+    return { error: tr("\"{0}\" is not a valid host name", v) };
   }
   return { target: wildcard ? `*.${host}` : host };
 }
@@ -206,7 +206,7 @@ export function canonicalAppAccessBytes({ serverDomain, serviceId, listSha256, i
 /** Thrown before signing when the list doesn't parse; carries the errors. */
 export class AccessListError extends Error {
   constructor(errors) {
-    super(errors.map((e) => `Line ${e.line}: ${e.message}`).join("\n"));
+    super(errors.map((e) => tr("Line {0}: {1}", e.line, e.message)).join("\n"));
     this.name = "AccessListError";
     this.errors = errors;
   }
@@ -316,28 +316,28 @@ export function hasPendingInternetRequest(app, hasPendingEgress = () => false) {
 }
 
 export function ruleCountText(n) {
-  if (!n) return "No rules: this app can't reach the internet.";
+  if (!n) return tr("No rules: this app can't reach the internet.");
   return n === 1 ? "1 rule" : `${n} rules`;
 }
 
 export function accessRequestTitle(appName, host) {
-  return `${appName || "An app"} wants to reach ${host}`;
+  return `${appName || tr("An app")} wants to reach ${host}`;
 }
 
 /** Whether it tried to connect or asked at install. */
 export function accessRequestNote(req) {
-  if (req?.source === "app") return "It asked for this when it was installed.";
+  if (req?.source === "app") return tr("It asked for this when it was installed.");
   const n = req?.attempts ?? 0;
-  if (n > 1) return `It tried to connect ${n} times.`;
-  return "It tried to connect.";
+  if (n > 1) return tr("It tried to connect {0} times.", n);
+  return tr("It tried to connect.");
 }
 
 export function accessDraftAlertTitle(appName) {
-  return `${appName || "An app"} suggests an access list`;
+  return `${appName || tr("An app")} suggests an access list`;
 }
 
 export function accessAnsweredText(appName, host, action) {
-  const name = appName || "This app";
+  const name = appName || tr("This app");
   return action === "allow" ? `${name} can now reach ${host}` : `${name} won't reach ${host}`;
 }
 
@@ -347,18 +347,18 @@ export function accessErrorMessage(e) {
   const status = e?.status;
   const raw = typeof e?.body?.error === "string" && e.body.error ? e.body.error : String(e?.message ?? "");
   if (status === 400 && Array.isArray(e?.body?.errors) && e.body.errors.length > 0) {
-    return e.body.errors.map((x) => `Line ${x.line}: ${x.message}`).join("\n");
+    return e.body.errors.map((x) => tr("Line {0}: {1}", x.line, x.message)).join("\n");
   }
-  if (status === 404) return "This app isn't installed on this server anymore.";
-  if (status === 409) return "The access list changed on your server. Refresh and try again.";
+  if (status === 404) return tr("This app isn't installed on this server anymore.");
+  if (status === 409) return tr("The access list changed on your server. Refresh and try again.");
   if (status === 403) {
-    if (/stale|clock|issuedAt/i.test(raw)) return "This device's clock is more than 10 minutes off. Fix the clock and try again.";
-    if (/different server|serverDomain/i.test(raw)) return "This list was signed for a different server.";
-    if (/signature/i.test(raw)) return "Your server didn't accept this list's signature.";
+    if (/stale|clock|issuedAt/i.test(raw)) return tr("This device's clock is more than 10 minutes off. Fix the clock and try again.");
+    if (/different server|serverDomain/i.test(raw)) return tr("This list was signed for a different server.");
+    if (/signature/i.test(raw)) return tr("Your server didn't accept this list's signature.");
     if (/companion|read-only/i.test(raw)) return ACCESS_COMPANION_NOTE;
-    return raw || "Your server refused this access list.";
+    return raw || tr("Your server refused this access list.");
   }
-  return raw || "Couldn't update this app's internet access.";
+  return raw || tr("Couldn't update this app's internet access.");
 }
 
 const accessPath = (serviceId) => `/api/screens/services/${encodeURIComponent(serviceId)}/access`;
@@ -400,7 +400,7 @@ export async function dismissAccessDraft({ serviceId, fetchJson }, deps = {}) {
 export async function sendAccessList(args, deps = {}) {
   const { serverDomain, serviceId, list, umk, signWithIrk, fetchJson, bytesToHex } = args;
   (deps.requireOwnerProfile ?? requireOwnerProfile)();
-  if (!umk || typeof signWithIrk !== "function") throw new Error("Unlock the webapp first");
+  if (!umk || typeof signWithIrk !== "function") throw new Error(tr("Unlock the webapp first"));
   const body = await signAccessList({
     serverDomain,
     serviceId,

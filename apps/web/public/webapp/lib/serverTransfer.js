@@ -27,6 +27,7 @@ import { sealForBrowserKey } from "./buildDraft.js";
 import { openSealedWithIrk } from "./leases.js";
 import { verifyWithEd25519Pub, hexToBytes as keystoreHexToBytes } from "../keystore.js";
 
+import { tr } from "./i18n.js";
 // ---- Canonical-bytes tags — MUST match @flagship/protocol ----
 export const TAG_SERVER_TRANSFER_OFFER = "flagship/server-transfer-offer/v1";
 export const TAG_SERVER_TRANSFER_CLAIM = "flagship/server-transfer-claim/v2";
@@ -409,7 +410,7 @@ export function transferLinkFromLocation(loc) {
  */
 export async function verifyTransferOffer(offer, deps = {}) {
   if (!offer || typeof offer !== "object") {
-    return { ok: false, reason: "That doesn't look like a transfer code." };
+    return { ok: false, reason: tr("That doesn't look like a transfer code.") };
   }
   const { serverDomain, transferNonce, giverIrkPub, issuedAt, expiresAt, offerSignature } = offer;
   if (
@@ -418,14 +419,14 @@ export async function verifyTransferOffer(offer, deps = {}) {
     typeof giverIrkPub !== "string" ||
     typeof offerSignature !== "string"
   ) {
-    return { ok: false, reason: "This transfer code is missing required fields." };
+    return { ok: false, reason: tr("This transfer code is missing required fields.") };
   }
   if (!/^[0-9a-f]{64}$/i.test(giverIrkPub)) {
-    return { ok: false, reason: "This transfer code has a malformed owner key." };
+    return { ok: false, reason: tr("This transfer code has a malformed owner key.") };
   }
   const now = (deps.now || Date.now)();
   if (typeof expiresAt === "number" && expiresAt <= now) {
-    return { ok: false, reason: "This transfer code has expired. Ask the current owner for a new one." };
+    return { ok: false, reason: tr("This transfer code has expired. Ask the current owner for a new one.") };
   }
   const hexToBytes = deps.hexToBytes || keystoreHexToBytes;
   const verify = deps.verify || verifyWithEd25519Pub;
@@ -440,7 +441,7 @@ export async function verifyTransferOffer(offer, deps = {}) {
     ok = false;
   }
   if (!ok) {
-    return { ok: false, reason: "This transfer code's signature didn't verify — it may be corrupted or tampered with." };
+    return { ok: false, reason: tr("This transfer code's signature didn't verify — it may be corrupted or tampered with.") };
   }
   return { ok: true };
 }

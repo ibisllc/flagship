@@ -8,16 +8,17 @@ import { getPodBaseUrl, getSessionToken, setPodBaseUrl, setSessionToken } from "
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-pod-pair");
 
 async function handlePair() {
   const baseUrl = $("pod-pair-base").value.trim();
-  if (!baseUrl) return toast("Server URL required", "err");
+  if (!baseUrl) return toast(tr("Server URL required"), "err");
   const btn = $("pod-pair-go");
   btn.disabled = true;
   try {
     await pairWithPod({ baseUrl });
-    toast("Paired with server");
+    toast(tr("Paired with server"));
     await enterPodPair(); // re-render the status card
   } catch (e) {
     toast(e.message, "err");
@@ -29,15 +30,15 @@ async function handlePair() {
 async function handleUnpair() {
   const { inlineConfirm } = await import("../lib/modal.js");
   const ok = await inlineConfirm({
-    title: "Forget this server?",
-    message: "Removes the paired-session token from this device. You can re-pair anytime.",
-    okLabel: "Forget",
+    title: tr("Forget this server?"),
+    message: tr("Removes the paired-session token from this device. You can re-pair anytime."),
+    okLabel: tr("Forget"),
     danger: true,
   });
   if (!ok) return;
   setPodBaseUrl("");
   setSessionToken("");
-  toast("Unpaired");
+  toast(tr("Unpaired"));
   enterPodPair();
 }
 
@@ -55,8 +56,8 @@ export async function enterPodPair() {
   if (baseUrl && tok) {
     status.innerHTML = `
       <div class="row">
-        <span class="value">Paired to <strong>${escapeHtml(baseUrl)}</strong></span>
-        <button class="secondary" id="pod-pair-unpair">Unpair</button>
+        <span class="value">${tr("Paired to <strong>{0}</strong>", escapeHtml(baseUrl))}</span>
+        <button class="secondary" id="pod-pair-unpair">${tr("Unpair")}</button>
       </div>
     `;
     $("pod-pair-unpair")?.addEventListener("click", () => handleUnpair());

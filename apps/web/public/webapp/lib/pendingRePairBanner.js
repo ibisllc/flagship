@@ -7,6 +7,7 @@
 import { escapeHtml } from "./util.js";
 import { formatWhen } from "./dateFormat.js";
 
+import { tr } from "./i18n.js";
 /** Format a completesAt millis epoch per the shared S2 rules; "soon" if
  *  the value is missing / non-numeric. */
 export function formatCompletesAt(ms, nowMs = Date.now()) {
@@ -34,19 +35,19 @@ export function renderPendingBanner(snapshot, nowMs = Date.now()) {
   const elapsed = typeof p.completesAt === "number" && p.completesAt <= nowMs;
   const when = formatCompletesAt(p.completesAt, nowMs);
   const body = elapsed
-    ? `The grace window has elapsed — finalize the device replacement now.`
-    : `Replace pending — finalize when the 3-day grace elapses (${escapeHtml(when)}).`;
+    ? tr("The grace window has elapsed — finalize the device replacement now.")
+    : tr("Replace pending — finalize when the 3-day grace elapses ({0}).", escapeHtml(when));
   return `
     <div class="card" data-pending-re-pair role="status" aria-live="polite">
       <div class="row">
         <div class="weight-600">
           <span aria-hidden="true">⏳</span>
-          Replace pending
+          ${tr("Replace pending")}
         </div>
         <button class="${elapsed ? "" : "secondary"}"
                 id="finalize-replace-btn"
                 ${elapsed ? "" : "disabled"}>
-          Finalize now
+          ${tr("Finalize now")}
         </button>
       </div>
       <p class="note small">${body}</p>

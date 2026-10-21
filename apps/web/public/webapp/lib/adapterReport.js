@@ -10,17 +10,18 @@ import { ScreensError, boxReason } from "./api.js";
 import { escapeHtml } from "./util.js";
 import { alertCircleIcon } from "./icons.js";
 
+import { tr } from "./i18n.js";
 export const MAX_LENGTH = 2000;
-export const ROW_TITLE = "Report a problem with this adaptation";
-export const TITLE = "Report a problem";
-export const PROMPT = "What goes wrong? It helps fix the shared adaptation for everyone.";
+export const ROW_TITLE = tr("Report a problem with this adaptation");
+export const TITLE = tr("Report a problem");
+export const PROMPT = tr("What goes wrong? It helps fix the shared adaptation for everyone.");
 export const WARNING =
-  "Please don't include anything that identifies you, your server or your data: no names, addresses, emails or passwords.";
-export const SENT = "Sent. Thank you.";
-export const SENT_NEXT = "To fix it on your server now, use Edit this service to change it with AI.";
+  tr("Please don't include anything that identifies you, your server or your data: no names, addresses, emails or passwords.");
+export const SENT = tr("Sent. Thank you.");
+export const SENT_NEXT = tr("To fix it on your server now, use Edit this service to change it with AI.");
 
 export function rowCaption(repo) {
-  return `It was set up from a shared adaptation of ${repo}`;
+  return tr("It was set up from a shared adaptation of {0}", repo);
 }
 
 export function counterText(detail) {
@@ -82,14 +83,14 @@ export function openAdapterReport({ serviceId, fetchJson, doc = globalThis.docum
           <p class="note" data-report-count>${escapeHtml(counterText(""))}</p>
           <p class="modal-error err-text hidden" data-report-error></p>
           <div class="row-2 mt-3">
-            <button class="secondary" data-report-cancel>Cancel</button>
-            <button id="adapter-report-send" data-report-send disabled>Send report</button>
+            <button class="secondary" data-report-cancel>${tr("Cancel")}</button>
+            <button id="adapter-report-send" data-report-send disabled>${tr("Send report")}</button>
           </div>
         </div>
         <div data-report-sent class="hidden">
           <p class="modal-message"><strong>${escapeHtml(SENT)}</strong></p>
           <p class="note">${escapeHtml(SENT_NEXT)}</p>
-          <div class="row-2 mt-3"><button data-report-done>Done</button></div>
+          <div class="row-2 mt-3"><button data-report-done>${tr("Done")}</button></div>
         </div>
       </div>`;
     host.appendChild(overlay);
@@ -106,7 +107,7 @@ export function openAdapterReport({ serviceId, fetchJson, doc = globalThis.docum
       count.textContent = counterText(text.value);
       count.classList.toggle("err-text", text.value.length > MAX_LENGTH);
       send.disabled = !canSend(text.value, sending);
-      send.textContent = sending ? "Sending…" : "Send report";
+      send.textContent = sending ? tr("Sending…") : tr("Send report");
     };
     const close = () => {
       if (sending) return;

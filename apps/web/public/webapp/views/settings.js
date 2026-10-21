@@ -52,6 +52,7 @@ import { isDemoProfile } from "../lib/demoAccount.js";
 import { get as profileGet } from "../lib/profilesStore.js";
 import { holdsAdminKey, removeWarning, saveKeyFirst, signOutWarning } from "../lib/adminKeyWarning.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-settings");
 
 function maskKey(k) {
@@ -132,7 +133,7 @@ export async function renderProviders() {
         </div>
         <div class="btn-row-sm">
           <button class="${isActive ? "" : "secondary"}" data-action="set-active" data-id="${escapeHtml(e.id)}">${isActive ? "active" : "use"}</button>
-          <button class="secondary" data-action="remove" data-id="${escapeHtml(e.id)}">remove</button>
+          <button class="secondary" data-action="remove" data-id="${escapeHtml(e.id)}">${tr("remove")}</button>
         </div>
       </div>
     `;
@@ -146,7 +147,7 @@ export async function renderProviders() {
         await setActive(getSession().umk, b.getAttribute("data-id"));
         await renderProviders();
         await renderActiveProviderChip();
-        toast("Active provider updated");
+        toast(tr("Active provider updated"));
       } catch (e) {
         toast(e.message, "err");
       }
@@ -166,9 +167,9 @@ export async function renderProviders() {
     b.addEventListener("click", async () => {
       const { inlineConfirm } = await import("../lib/modal.js");
       const ok = await inlineConfirm({
-        title: "Remove this provider?",
-        message: "The API key for this provider will be deleted from this device.",
-        okLabel: "Remove",
+        title: tr("Remove this provider?"),
+        message: tr("The API key for this provider will be deleted from this device."),
+        okLabel: tr("Remove"),
         danger: true,
       });
       if (!ok) return;
@@ -183,7 +184,7 @@ export async function renderProviders() {
   });
 }
 
-export const DEFAULT_MODEL_LABEL = "Default model";
+export const DEFAULT_MODEL_LABEL = tr("Default model");
 
 /** Where a provider's default-model menu goes. Exported for tests. */
 export function defaultModelSlot(attrs) {
@@ -192,7 +193,7 @@ export function defaultModelSlot(attrs) {
 
 const saveDefault = (id) => async (choice) => {
   const session = getSession();
-  if (!session.umk) return toast("Unlock first", "err");
+  if (!session.umk) return toast(tr("Unlock first"), "err");
   try {
     await setDefaultModel(session.umk, id, { model: choice.model, effort: choice.effort });
   } catch (e) {
@@ -238,17 +239,15 @@ export function freeAiCardHtml(status, { isActive = false } = {}) {
   return `
     <div class="row row-top" role="group" aria-label="${escapeHtml(BUILT_IN_LABEL)}">
       <div>
-        <div class="weight-600">${escapeHtml(PROVIDER_TITLE)} <span class="pill">built-in</span></div>
+        <div class="weight-600">${escapeHtml(PROVIDER_TITLE)} <span class="pill">${tr("built-in")}</span></div>
         <div class="faint-sm mt-1">${escapeHtml(PROVIDER_SUBTITLE)}</div>
         <div class="note mt-1${view.usable ? "" : " warn"}" id="free-ai-line">${escapeHtml(view.text)}</div>
         ${view.usable && isActive ? `<div class="faint-sm mt-1">${escapeHtml(CARD_NOTE)}</div>` : ""}
         ${view.usable ? defaultModelSlot('id="free-ai-default-model"') : ""}
       </div>
-      ${
-        view.usable
-          ? `<div class="btn-row-sm"><button class="${isActive ? "" : "secondary"}" id="free-ai-use" aria-label="Use ${escapeHtml(PROVIDER_TITLE)}">${isActive ? "active" : "use"}</button></div>`
-          : ""
-      }
+      ${view.usable
+          ? `<div class="btn-row-sm"><button class="${isActive ? "" : "secondary"}" id="free-ai-use" aria-label="${tr("Use {0}", escapeHtml(PROVIDER_TITLE))}">${isActive ? "active" : "use"}</button></div>`
+          : ""}
     </div>
     ${!view.usable && view.offerOwnKey ? '<button id="free-ai-add-key" class="full-width mt-2">Add your own key</button>' : ""}
   `;
@@ -271,7 +270,7 @@ async function renderFreeAiCard(isActive, savedDefault) {
       await setActive(getSession().umk, PROMO_ID);
       await renderProviders();
       await renderActiveProviderChip();
-      toast("Active provider updated");
+      toast(tr("Active provider updated"));
     } catch (e) {
       toast(e.message, "err");
     }
@@ -284,15 +283,15 @@ async function handleAddProvider() {
 
 async function handleSaveProvider() {
   const session = getSession();
-  if (!session.umk) return toast("Unlock first", "err");
+  if (!session.umk) return toast(tr("Unlock first"), "err");
   const provider = $("np-provider").value;
   const label = $("np-label").value.trim();
   const apiKey = $("np-key").value;
   const baseUrl = $("np-base").value.trim();
   const defaultModel = $("np-model").value.trim();
   const relay = $("np-relay") ? $("np-relay").checked : true;
-  if (!label) return toast("Label required", "err");
-  if (!apiKey) return toast("Api key required", "err");
+  if (!label) return toast(tr("Label required"), "err");
+  if (!apiKey) return toast(tr("Api key required"), "err");
   try {
     await addProvider(session.umk, {
       provider,
@@ -312,7 +311,7 @@ async function handleSaveProvider() {
   if ($("np-relay")) $("np-relay").checked = true;
   $("add-provider-form").classList.add("hidden");
   await renderProviders();
-  toast("Provider saved");
+  toast(tr("Provider saved"));
 }
 
 async function refreshPushStatus() {
@@ -358,14 +357,14 @@ async function runPushSwitch() {
     if (r.pushError) {
       toast(
         enabled
-          ? `Your servers will send alerts again, but this browser couldn't turn on notifications: ${r.pushError.message ?? r.pushError}`
-          : `This browser couldn't drop its notifications: ${r.pushError.message ?? r.pushError}`,
+          ? tr("Your servers will send alerts again, but this browser couldn't turn on notifications: {0}", r.pushError.message ?? r.pushError)
+          : tr("This browser couldn't drop its notifications: {0}", r.pushError.message ?? r.pushError),
         "err",
       );
     } else if (r.failed.length > 0) {
-      toast(`Saved. ${r.failed.length} server(s) couldn't be reached and will be updated next time.`, "ok");
+      toast(tr("Saved. {0} server(s) couldn't be reached and will be updated next time.", r.failed.length), "ok");
     } else {
-      toast(enabled ? "Push notifications on" : "Push notifications off", "ok");
+      toast(enabled ? tr("Push notifications on") : tr("Push notifications off"), "ok");
     }
   } catch (e) {
     toast(humanError(e), "err");
@@ -379,18 +378,18 @@ async function runEnablePush() {
   const btn = $("push-enable");
   if (btn) {
     btn.disabled = true;
-    btn.textContent = "Requesting…";
+    btn.textContent = tr("Requesting…");
   }
   try {
     await ensureUsername();
     await subscribeToWebPush();
-    toast("Notifications enabled", "ok");
+    toast(tr("Notifications enabled"), "ok");
   } catch (e) {
-    toast(`Enable failed: ${e.message ?? e}`, "err");
+    toast(tr("Enable failed: {0}", e.message ?? e), "err");
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = "Allow browser notifications";
+      btn.textContent = tr("Allow browser notifications");
     }
     void refreshPushStatus();
   }
@@ -472,7 +471,7 @@ async function handleSignOut() {
     setSubtitle,
   });
   if (res?.blocked) return;
-  toast("Signed out");
+  toast(tr("Signed out"));
 }
 
 /** A recovery-gated session button (Tier-2 sign-out / Tier-3 remove) was
@@ -504,7 +503,7 @@ async function handleNoRecoveryGatedTap() {
   }
   // "normal" (another device exists) or "exempt" (demo) — the destructive
   // wipe still needs recovery to be safe here, so keep the guidance nudge.
-  toast("Set up account recovery to use this.", "warn");
+  toast(tr("Set up account recovery to use this."), "warn");
 }
 
 export function initSettingsView() {

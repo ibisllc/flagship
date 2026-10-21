@@ -25,6 +25,7 @@
 import { argon2id } from "../vendor/noble-hashes/argon2.js";
 import { bytesToHex, hexToBytes } from "../keystore.js";
 
+import { tr } from "./i18n.js";
 export const KEYFILE_MAGIC = "flagship-key";
 export const KEYFILE_VERSION = 1;
 
@@ -72,14 +73,14 @@ function deriveKey(passphrase, salt, p) {
 async function aesGcmEncrypt(keyBytes, nonce, aad, plaintext) {
   const key = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["encrypt"]);
   return new Uint8Array(
-    await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, additionalData: aad }, key, plaintext),
+    await crypto.subtle.encrypt({ name: tr("AES-GCM"), iv: nonce, additionalData: aad }, key, plaintext),
   );
 }
 
 async function aesGcmDecrypt(keyBytes, nonce, aad, ciphertext) {
   const key = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["decrypt"]);
   return new Uint8Array(
-    await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce, additionalData: aad }, key, ciphertext),
+    await crypto.subtle.decrypt({ name: tr("AES-GCM"), iv: nonce, additionalData: aad }, key, ciphertext),
   );
 }
 
@@ -100,7 +101,7 @@ function randomBytes(n) {
  */
 export async function wrapUmkToKeyfile(seed, passphrase, meta, argonParams = KEYFILE_ARGON_PARAMS) {
   if (!(seed instanceof Uint8Array) || seed.length !== 32) {
-    throw new KeyfileError("UMK seed must be 32 bytes", "malformed");
+    throw new KeyfileError(tr("UMK seed must be 32 bytes"), "malformed");
   }
   if (typeof passphrase !== "string" || passphrase.length < KEYFILE_MIN_PASSPHRASE) {
     throw new KeyfileError(`passphrase too short (min ${KEYFILE_MIN_PASSPHRASE})`, "malformed");

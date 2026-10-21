@@ -28,6 +28,7 @@ import { parseCompanionPayload } from "./companionClient.js";
 import { setPodBaseUrl, setSessionToken } from "./api.js";
 import { humanError } from "./humanError.js";
 
+import { tr } from "./i18n.js";
 /** Where to find the dock payload on the current document. Test seam. */
 export function companionPayloadFromLocation(loc = globalThis.location) {
   if (!loc || typeof loc.search !== "string") return null;
@@ -57,10 +58,10 @@ export function persistCompanionSession({
   username,
 }) {
   if (typeof companionSessionToken !== "string" || typeof expiresAt !== "number") {
-    return { error: "missing companionSessionToken/expiresAt in response" };
+    return { error: tr("missing companionSessionToken/expiresAt in response") };
   }
   if (typeof podBaseUrl !== "string" || !podBaseUrl || typeof username !== "string" || !username) {
-    return { error: "missing companion server or username" };
+    return { error: tr("missing companion server or username") };
   }
   const tokenPrefix = companionSessionToken.slice(0, 12);
   const cloudName = companionCloudName(podBaseUrl, tokenPrefix);

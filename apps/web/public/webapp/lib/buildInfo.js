@@ -6,9 +6,10 @@
 // "v156" is 156); a test fails when they drift, so bump both together.
 // PROTOCOL_LEVEL mirrors CLIENT_PROTOCOL_LEVEL in packages/protocol: raise it
 // only when a breaking change to a signed message or wire contract ships.
+import { tr } from "./i18n.js";
 
 export const PLATFORM = "web";
-export const WEB_BUILD = 156;
+export const WEB_BUILD = 157;
 export const PROTOCOL_LEVEL = 1;
 
 // The one product version every Flagship surface shows (release/version.json;
@@ -18,7 +19,7 @@ export const PRODUCT_VERSION = "0.2";
 export const PRODUCT_LABEL = "Beta";
 
 export function aboutVersionLine() {
-  return `Flagship ${PRODUCT_VERSION} ${PRODUCT_LABEL} (web build ${WEB_BUILD})`;
+  return tr("Flagship {0} {1} (web build {2})", PRODUCT_VERSION, PRODUCT_LABEL, WEB_BUILD);
 }
 
 export function clientIdentity() {

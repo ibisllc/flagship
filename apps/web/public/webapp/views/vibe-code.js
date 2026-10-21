@@ -91,13 +91,14 @@ import {
   mountGroupedModelMenu,
 } from "../lib/modelGroups.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-vibe-code");
 
 const POLL_INTERVAL_MS = 800;
 const TERMINAL_STATUSES = new Set(["deployed", "failed", "cancelled"]);
 
-export const SUMMARISED_NOTE = "Earlier conversation summarised";
-const FIRST_TURN_PLACEHOLDER = "A simple habit tracker — checkboxes per day, last 30 days visible.";
+export const SUMMARISED_NOTE = tr("Earlier conversation summarised");
+const FIRST_TURN_PLACEHOLDER = tr("A simple habit tracker — checkboxes per day, last 30 days visible.");
 
 let activeSessionId = null;
 let pollTimer = null;
@@ -294,7 +295,7 @@ function renderChips() {
         <span class="vc-chip" data-idx="${i}">
           ${thumb}
           <span class="vc-chip-name">${label}</span>
-          <button class="vc-chip-x" data-idx="${i}" aria-label="Remove ${label}">×</button>
+          <button class="vc-chip-x" data-idx="${i}" aria-label="${tr("Remove {0}", label)}">×</button>
         </span>`;
     })
     .join("");
@@ -311,11 +312,11 @@ function renderChips() {
  * deploy or failed takes a new message (`canContinue`).
  */
 export function composerMode(state) {
-  if (state?.pendingRequest?.kind === "talkToUser") return { enabled: true, placeholder: "Reply to the AI…" };
+  if (state?.pendingRequest?.kind === "talkToUser") return { enabled: true, placeholder: tr("Reply to the AI…") };
   if (state?.canContinue === true) {
     return {
       enabled: true,
-      placeholder: state.status === "failed" ? "Tell the AI what to try next…" : "Ask for a change…",
+      placeholder: state.status === "failed" ? tr("Tell the AI what to try next…") : tr("Ask for a change…"),
     };
   }
   return { enabled: false, placeholder: "" };
@@ -342,19 +343,19 @@ async function send() {
   const promptEl = $("vc-prompt");
   const text = promptEl.value.trim();
   if (!activeSessionId) return startBuild(text);
-  if (!text && staged.length === 0) return toast("Type a message first.", "err");
+  if (!text && staged.length === 0) return toast(tr("Type a message first."), "err");
   if (!composerMode(lastState).enabled) {
-    toast("Wait for the AI to finish this turn.", "info");
+    toast(tr("Wait for the AI to finish this turn."), "info");
     return;
   }
   const attachments = staged.slice();
   if (!(await checkVision(attachments))) return;
   const sendBtn = $("vc-send");
   sendBtn.disabled = true;
-  sendBtn.textContent = "Sending…";
+  sendBtn.textContent = tr("Sending…");
   try {
     if (pendingEnvVar) {
-      toast(`Answer the request for ${pendingEnvVar} above first.`, "info");
+      toast(tr("Answer the request for {0} above first.", pendingEnvVar), "info");
       return;
     }
     // An answer to the AI's question, or a new message on a chat that is
@@ -385,7 +386,7 @@ async function send() {
     toast(errorText(e), "err");
   } finally {
     sendBtn.disabled = false;
-    sendBtn.textContent = "Send";
+    sendBtn.textContent = tr("Send");
   }
 }
 
@@ -408,7 +409,7 @@ function clearComposer() {
 
 /** No key can drive this chat: add or pick one, then send again. */
 function askForKey() {
-  toast("Add an AI key to carry on.", "warn");
+  toast(tr("Add an AI key to carry on."), "warn");
   enterBuildKey({
     back: "view-vibe-code",
     serverFqdn: client().fqdn,
@@ -538,10 +539,10 @@ async function checkVision(attachments) {
   const check = visionCheck(currentMenu(), modelChoice, attachments);
   if (check.kind === "ok") return true;
   if (check.kind === "blocked") {
-    await inlineAlert({ message: check.message, okLabel: "OK" });
+    await inlineAlert({ message: check.message, okLabel: tr("OK") });
     return false;
   }
-  const ok = await inlineConfirm({ message: check.message, okLabel: "Switch", cancelLabel: "Cancel" });
+  const ok = await inlineConfirm({ message: check.message, okLabel: tr("Switch"), cancelLabel: tr("Cancel") });
   if (!ok) return false;
   modelChoice = { group: modelChoice.group, ...withModel(currentMenu(), modelChoice, check.to) };
   choiceTouched = true;
@@ -567,7 +568,7 @@ function renderNameStatus() {
   const slug = currentSlug();
   const addr = $("vc-name-address");
   if (addr) {
-    addr.innerHTML = `https://<strong class="vc-address-name">${escapeHtml(slug || "<name>")}</strong>.${escapeHtml(serverFqdn())}`;
+    addr.innerHTML = `${tr("https://<strong class=\"vc-address-name\">{0}</strong>.{1}", escapeHtml(slug || "<name>"), escapeHtml(serverFqdn()))}`;
   }
   const status = $("vc-name-status");
   if (status) {
@@ -579,7 +580,7 @@ function renderNameStatus() {
       status.classList.add("is-taken");
       status.classList.remove("hidden");
     } else if (check?.ok && check.name) {
-      status.textContent = "✓ Available";
+      status.textContent = tr("✓ Available");
       status.classList.add("is-free");
       status.classList.remove("hidden");
     } else {
@@ -594,7 +595,7 @@ function updateBuildButton() {
   if (activeSessionId) return;
   const btn = $("vc-send");
   if (!btn) return;
-  btn.textContent = starting ? "Starting…" : "Build it";
+  btn.textContent = starting ? tr("Starting…") : tr("Build it");
   btn.disabled = !canBuild({
     slug: currentSlug(),
     prompt: $("vc-prompt")?.value,
@@ -626,13 +627,13 @@ export async function showConflict(check, name) {
     const open = await inlineConfirm({
       title: CONFLICT_TITLE,
       message: conflictMessage(check, name),
-      okLabel: "Open build sessions",
-      cancelLabel: "Pick another name",
+      okLabel: tr("Open build sessions"),
+      cancelLabel: tr("Pick another name"),
     });
     // The list's Back returns to the chooser, not this half-filled form.
     if (open) void enterBuildJournal();
   } else {
-    await inlineAlert({ title: CONFLICT_TITLE, message: conflictMessage(check, name), okLabel: "Pick another name" });
+    await inlineAlert({ title: CONFLICT_TITLE, message: conflictMessage(check, name), okLabel: tr("Pick another name") });
   }
 }
 
@@ -709,11 +710,11 @@ async function startBuild(text) {
     if (r.needsCredential) {
       // No model can drive this yet — gently route into the AI-key step.
       // Don't surface a sliver op for a build that hasn't actually started.
-      toast("Add an AI key to start.", "warn");
+      toast(tr("Add an AI key to start."), "warn");
       promptEl.value = text; // keep what they typed
       promptEl.disabled = false;
       enterBuildKey({
-        contextLabel: "Start from scratch with AI",
+        contextLabel: tr("Start from scratch with AI"),
         back: "view-vibe-code",
         serverFqdn: client().fqdn,
         onChosen: (credential) => {
@@ -754,7 +755,7 @@ async function startBuild(text) {
     starting = false;
     const sendBtn = $("vc-send");
     if (activeSessionId) {
-      sendBtn.textContent = "Send";
+      sendBtn.textContent = tr("Send");
     } else {
       updateBuildButton();
     }
@@ -804,16 +805,16 @@ async function poll() {
 }
 
 export const LEFT_OPEN_WARNING =
-  "This server couldn't make it invite only, so anyone with the link can open it. You can restrict it from the service's Access settings.";
+  tr("This server couldn't make it invite only, so anyone with the link can open it. You can restrict it from the service's Access settings.");
 
 export function statusLabel(status, deployPhase) {
   switch (status) {
-    case "streaming": return "Writing…";
-    case "awaiting-tool-response": return "The AI has a question";
-    case "ready-to-deploy": return "Ready to deploy";
+    case "streaming": return tr("Writing…");
+    case "awaiting-tool-response": return tr("The AI has a question");
+    case "ready-to-deploy": return tr("Ready to deploy");
     case "deploying": return deployPhaseText(deployPhase);
     case "deployed": return "Deployed";
-    case "failed": return "Something went wrong";
+    case "failed": return tr("Something went wrong");
     case "cancelled": return "Cancelled";
     default: return status || "idle";
   }
@@ -903,7 +904,7 @@ function render(state) {
         (p) => `
       <div class="card card-compact">
         <details>
-          <summary class="file-summary">${escapeHtml(p)} <span class="file-summary-meta">(${files[p].length} chars)</span></summary>
+          <summary class="file-summary">${escapeHtml(p)} <span class="file-summary-meta">${tr("({0} chars)", files[p].length)}</span></summary>
           <pre class="file-body">${escapeHtml(files[p])}</pre>
         </details>
       </div>`,
@@ -961,15 +962,15 @@ export function envVarRequestMarkup(pending) {
   const p = pending.payload;
   return `
       <div class="card vc-envvar" id="vc-envvar">
-        <div class="weight-600">The app needs <code>${escapeHtml(p.name)}</code></div>
+        <div class="weight-600">${tr("The app needs <code>{0}</code>", escapeHtml(p.name))}</div>
         ${p.description ? `<p class="value text-sm mt-1">${escapeHtml(p.description)}</p>` : ""}
-        ${p.why ? `<p class="note">Why: ${escapeHtml(p.why)}</p>` : ""}
-        ${p.example ? `<p class="note">Example: <code>${escapeHtml(p.example)}</code></p>` : ""}
-        <input id="vc-envvar-value" type="password" placeholder="Paste the value" aria-label="Value for ${escapeHtml(p.name)}"
+        ${p.why ? `<p class="note">${tr("Why: {0}", escapeHtml(p.why))}</p>` : ""}
+        ${p.example ? `<p class="note">${tr("Example: <code>{0}</code>", escapeHtml(p.example))}</p>` : ""}
+        <input id="vc-envvar-value" type="password" placeholder="${tr("Paste the value")}" aria-label="${tr("Value for {0}", escapeHtml(p.name))}"
                autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-        <p class="note mt-1">Sent once to your server. Not saved in this browser.</p>
-        <button id="vc-envvar-send" class="full-width mt-2">Send value</button>
-        <button id="vc-envvar-decline" class="secondary full-width mt-2">Decline</button>
+        <p class="note mt-1">${tr("Sent once to your server. Not saved in this browser.")}</p>
+        <button id="vc-envvar-send" class="full-width mt-2">${tr("Send value")}</button>
+        <button id="vc-envvar-decline" class="secondary full-width mt-2">${tr("Decline")}</button>
       </div>`;
 }
 
@@ -977,7 +978,7 @@ export function envVarRequestMarkup(pending) {
 export function deployedMarkup(url, open) {
   return `
       <div class="card">
-        <div class="weight-600">Deployed ✓</div>
+        <div class="weight-600">${tr("Deployed ✓")}</div>
         <div class="value text-sm mt-1">
           <a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a>
         </div>
@@ -992,13 +993,13 @@ async function sendEnvVar() {
   const el = $("vc-envvar-value");
   const value = el?.value ?? "";
   if (!name || !activeSessionId) return;
-  if (!value) return toast("Paste a value first.", "err");
+  if (!value) return toast(tr("Paste a value first."), "err");
   const appId = pendingAppId ?? "";
   // appId = "<creator>--<slug>": neither half may contain "--".
   const parts = appId.split("--");
-  if (parts.length !== 2 || !parts[0] || !parts[1]) return toast("This build has no app to set it on yet.", "err");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return toast(tr("This build has no app to set it on yet."), "err");
   const session = getSession();
-  if (!session?.umk) return toast("Unlock first", "err");
+  if (!session?.umk) return toast(tr("Unlock first"), "err");
   const btn = $("vc-envvar-send");
   if (btn) btn.disabled = true;
   try {
@@ -1039,7 +1040,7 @@ async function answerEnvVar(status) {
     });
     if (credential) boxGroupId = modelChoice.group;
     pendingEnvVar = null;
-    toast(status === "set" ? "Sent" : "Declined", "ok");
+    toast(status === "set" ? tr("Sent") : tr("Declined"), "ok");
     schedulePoll();
     await poll();
   } catch (e) {
@@ -1050,10 +1051,10 @@ async function answerEnvVar(status) {
 // Turn the relay off for this build's key after the box couldn't reach it.
 async function relayOff() {
   const session = getSession();
-  if (!session.umk) return toast("Unlock first", "err");
+  if (!session.umk) return toast(tr("Unlock first"), "err");
   try {
     if (!(await turnRelayOffForCredential(session.umk, buildCredential))) {
-      return toast("That key isn't saved on this device.", "err");
+      return toast(tr("That key isn't saved on this device."), "err");
     }
   } catch (e) {
     return toast(e instanceof Error ? e.message : String(e), "err");
@@ -1095,10 +1096,10 @@ async function postDeploy(sessionId) {
 async function triggerDeploy() {
   if (!activeSessionId) return;
   const id = activeSessionId;
-  if (!client().baseUrl || !client().token()) return toast("Not paired", "err");
+  if (!client().baseUrl || !client().token()) return toast(tr("Not paired"), "err");
   const btn = $("vc-deploy-go");
   btn.disabled = true;
-  btn.textContent = "deploying…";
+  btn.textContent = tr("deploying…");
   schedulePoll();
   try {
     const out = await startAndFollowChatDeploy({
@@ -1112,7 +1113,7 @@ async function triggerDeploy() {
     if (out.ok) {
       deployedUrl = out.url;
       leftOpen = out.inviteOnly === false;
-      toast("Deployed");
+      toast(tr("Deployed"));
     } else {
       toast(out.reason, "err");
     }
@@ -1121,7 +1122,7 @@ async function triggerDeploy() {
   } catch (e) {
     toast(e.message, "err");
     btn.disabled = false;
-    btn.textContent = "Deploy";
+    btn.textContent = tr("Deploy");
   }
 }
 
@@ -1186,7 +1187,7 @@ function reset() {
   const deployBtn = $("vc-deploy-go");
   if (deployBtn) {
     deployBtn.disabled = false;
-    deployBtn.textContent = "Deploy";
+    deployBtn.textContent = tr("Deploy");
   }
 }
 
@@ -1236,7 +1237,7 @@ export async function enterVibeCode(opts = {}) {
   });
   // With none paired, nudge the user to add one rather than opening a dead form.
   if (!fqdn) {
-    toast("Please add your first server.", "err");
+    toast(tr("Please add your first server."), "err");
     show("view-home");
     return;
   }
@@ -1294,11 +1295,11 @@ export async function openVibeCodeSession(sessionId, { back = null, credential =
   else void refreshModelMenu();
   setFirstTurnVisible(false);
   const sendBtn = $("vc-send");
-  if (sendBtn) sendBtn.textContent = "Send";
+  if (sendBtn) sendBtn.textContent = tr("Send");
   await poll().catch(() => {});
 }
 
-export const SESSION_NOT_FOUND = "That build isn't open on any of your servers any more.";
+export const SESSION_NOT_FOUND = tr("That build isn't open on any of your servers any more.");
 
 /**
  * Open a session named only by its id (an AI-needs-you notification, the

@@ -3,6 +3,7 @@
 //
 // Browsers with BarcodeDetector: Chrome (mobile + desktop), Edge, Opera.
 // Safari + Firefox: the user pastes the QR payload as text.
+import { tr } from "./lib/i18n.js";
 
 export function hasBarcodeDetector() {
   return typeof globalThis.BarcodeDetector !== "undefined";
@@ -14,7 +15,7 @@ export function hasBarcodeDetector() {
  */
 export async function scanWithCamera(videoEl, opts = {}) {
   if (!hasBarcodeDetector()) {
-    throw new Error("BarcodeDetector not available in this browser");
+    throw new Error(tr("BarcodeDetector not available in this browser"));
   }
   const detector = new globalThis.BarcodeDetector({ formats: ["qr_code"] });
   const stream = await navigator.mediaDevices.getUserMedia({
@@ -44,7 +45,7 @@ export async function scanWithCamera(videoEl, opts = {}) {
       }
       await new Promise((r) => setTimeout(r, 100));
     }
-    throw new Error("QR scan timed out");
+    throw new Error(tr("QR scan timed out"));
   } finally {
     stop();
   }

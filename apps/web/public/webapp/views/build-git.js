@@ -46,6 +46,7 @@ import { getSession } from "../lib/state.js";
 import { turnRelayOffForCredential } from "../providers.js";
 import { RELAY_TURNED_OFF, TURN_RELAY_OFF, isRelayFailure } from "../lib/aiRelay.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-build-git");
 
 let buildId = null;
@@ -161,7 +162,7 @@ export async function resumeBuildGit({ buildId: id, server = "", state, fileCoun
     </div>`;
   $("build-git-adapt")?.addEventListener("click", () =>
     enterBuildKey({
-      contextLabel: "Building with AI",
+      contextLabel: tr("Building with AI"),
       back: "view-build-git",
       onChosen: (credential) => {
         adaptCredential = credential;
@@ -205,7 +206,7 @@ function renderNameStatus() {
   const slug = currentSlug();
   const addr = $("build-git-address");
   if (addr) {
-    addr.innerHTML = `https://<strong class="vc-address-name">${escapeHtml(addressLabel(slug, assignedName))}</strong>.${escapeHtml(serverFqdn())}`;
+    addr.innerHTML = `${tr("https://<strong class=\"vc-address-name\">{0}</strong>.{1}", escapeHtml(addressLabel(slug, assignedName)), escapeHtml(serverFqdn()))}`;
   }
   const status = $("build-git-name-status");
   if (status) {
@@ -216,7 +217,7 @@ function renderNameStatus() {
       status.textContent = `⚠ ${warning}`;
       status.classList.add("is-taken");
     } else if (check?.ok && check.name) {
-      status.textContent = "✓ Available";
+      status.textContent = tr("✓ Available");
       status.classList.add("is-free");
     } else if (!slug) {
       status.textContent = blankNameHint($("build-git-ref")?.value);
@@ -232,7 +233,7 @@ function renderNameStatus() {
 function updateCheckButton() {
   const btn = $("build-git-check");
   if (!btn) return;
-  btn.textContent = checking ? "cloning…" : "Check repo";
+  btn.textContent = checking ? tr("cloning…") : tr("Check repo");
   btn.disabled = checking || currentCheck()?.ok === false;
   btn.classList.toggle("hidden", verdictShown);
 }
@@ -260,7 +261,7 @@ async function checkRepo() {
     ref: $("build-git-ref").value,
     name: $("build-git-name").value,
   });
-  if (!body.gitUrl) return toast("Paste a repo URL first", "err");
+  if (!body.gitUrl) return toast(tr("Paste a repo URL first"), "err");
   buildId = null;
   lastVerdict = null;
   assignedName = null;
@@ -295,7 +296,7 @@ async function checkRepo() {
 }
 
 function journalLink() {
-  return `<p class="note mt-2"><a id="build-git-journal" href="#">View build journal →</a></p>`;
+  return `<p class="note mt-2"><a id="build-git-journal" href="#">${tr("View build journal →")}</a></p>`;
 }
 
 function wireJournalLink() {
@@ -315,8 +316,8 @@ function renderVerdict(r, error = null) {
   if (r.fit) {
     box.innerHTML = `
       <div class="card">
-        <div class="build-git-verdict-head"><p><strong>Flagship-ready ✓</strong></p>${checkAgainButton()}</div>
-        <p class="note">${escapeHtml(r.reason)} — ${r.fileCount} file(s).</p>
+        <div class="build-git-verdict-head"><p><strong>${tr("Flagship-ready ✓")}</strong></p>${checkAgainButton()}</div>
+        <p class="note">${tr("{0} — {1} file(s).", escapeHtml(r.reason), r.fileCount)}</p>
         <button id="build-git-deploy" class="full-width mt-2">${escapeHtml(DEPLOY_BUTTON)}</button>
         ${journalLink()}
       </div>`;
@@ -351,7 +352,7 @@ function renderVerdict(r, error = null) {
     // then run the adapt with that in-memory credential.
     $("build-git-adapt")?.addEventListener("click", () =>
       enterBuildKey({
-        contextLabel: "Building with AI",
+        contextLabel: tr("Building with AI"),
         back: "view-build-git",
         onChosen: (credential) => {
           adaptCredential = credential;
@@ -373,9 +374,9 @@ function leaveVerdict() {
 // Turn the relay off for the key this adapt used, then offer the adapt again.
 async function relayOff(verdict, error) {
   const session = getSession();
-  if (!session.umk) return toast("Unlock first", "err");
+  if (!session.umk) return toast(tr("Unlock first"), "err");
   try {
-    if (!(await turnRelayOffForCredential(session.umk, adaptCredential))) return toast("That key isn't saved on this device.", "err");
+    if (!(await turnRelayOffForCredential(session.umk, adaptCredential))) return toast(tr("That key isn't saved on this device."), "err");
   } catch (e) {
     return toast(e instanceof Error ? e.message : String(e), "err");
   }
@@ -398,8 +399,8 @@ function renderAdapted(fileCount) {
   leaveVerdict();
   $("build-git-verdict").innerHTML = `
     <div class="card">
-      <p><strong>Adapted ✓</strong></p>
-      <p class="note">The AI rewrote this repo into a Flagship app (${fileCount} file(s)).</p>
+      <p><strong>${tr("Adapted ✓")}</strong></p>
+      <p class="note">${tr("The AI rewrote this repo into a Flagship app ({0} file(s)).", fileCount)}</p>
       <button id="build-git-deploy" class="full-width mt-2">${escapeHtml(DEPLOY_BUTTON)}</button>
       ${adapterExport()}
       ${journalLink()}
@@ -413,7 +414,7 @@ function renderInstalled(url) {
   leaveVerdict();
   $("build-git-verdict").innerHTML = `
     <div class="card">
-      <p><strong>Installed ✓</strong></p>
+      <p><strong>${tr("Installed ✓")}</strong></p>
       <p class="note"><a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a></p>
       ${adapterExport()}
     </div>`;
@@ -471,10 +472,10 @@ function failAdapt(message, { sealed = false } = {}) {
 function showAdaptOutcome(outcome) {
   if (outcome.phase === "installed") {
     renderInstalled(outcome.url);
-    toast("Deployed", "ok");
+    toast(tr("Deployed"), "ok");
   } else if (outcome.phase === "adapted") {
     renderAdapted(outcome.fileCount);
-    toast("Adapted — review and install", "ok");
+    toast(tr("Adapted — review and install"), "ok");
   } else if (outcome.phase === "not-live") {
     closed = true;
     renderNotLive(outcome.reason);
@@ -484,7 +485,7 @@ function showAdaptOutcome(outcome) {
 }
 
 /** What a reopened Flagship-ready build says (the box's verdict isn't kept). */
-const RESUMED_FIT = "Ready to install";
+const RESUMED_FIT = tr("Ready to install");
 
 // Follow an adapt the box is already running (a build reopened from Build
 // sessions) to its end.
@@ -547,7 +548,7 @@ async function adapt() {
   } catch (e) {
     if (buildId !== id) return;
     if (e instanceof ScreensError && e.status === 503) {
-      toast("AI adapt isn't available on this server yet — starting from scratch instead", "warn");
+      toast(tr("AI adapt isn't available on this server yet — starting from scratch instead"), "warn");
       // Mirror iOS (ServicesTab `onFallBackToScratch`) + Android
       // (BuildGitScreen `nav.navigate("vibe/key")`): a from-scratch build still
       // drives the box's model, so route through the AI-key step FIRST — then
@@ -555,7 +556,7 @@ async function adapt() {
       // enterVibeCode() let the chat self-correct via `needsCredential`, costing
       // an extra round-trip + a worse first impression.)
       enterBuildKey({
-        contextLabel: "Start from scratch with AI",
+        contextLabel: tr("Start from scratch with AI"),
         back: "view-build-git",
         onChosen: (credential) => enterVibeCode({ credential }),
       });
@@ -569,11 +570,11 @@ async function deploy() {
   if (!buildId) return;
   const btn = $("build-git-deploy");
   btn.disabled = true;
-  btn.textContent = "installing…";
+  btn.textContent = tr("installing…");
   try {
     const r = await boxFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/deploy`, { method: "POST" });
     renderInstalled(r.url);
-    toast("Deployed", "ok");
+    toast(tr("Deployed"), "ok");
   } catch (e) {
     const failure = deployFailure(e);
     if (failure.needsAdapt) {

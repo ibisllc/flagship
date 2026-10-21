@@ -4,9 +4,10 @@
 
 import { formatGb } from "./backupPolicy.js";
 
-export const FULL_SENTENCE = "Full: new data is refused until you free space or raise the limit.";
-export const STOPPED_SENTENCE = "Its database is closed until it is under its limit again.";
-export const STORAGE_FULL_ALERT = "An app on this server is full";
+import { tr } from "./i18n.js";
+export const FULL_SENTENCE = tr("Full: new data is refused until you free space or raise the limit.");
+export const STOPPED_SENTENCE = tr("Its database is closed until it is under its limit again.");
+export const STORAGE_FULL_ALERT = tr("An app on this server is full");
 
 function size(n) {
   if (!Number.isFinite(n)) return "";

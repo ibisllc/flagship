@@ -43,6 +43,7 @@ import {
   isAccessDraft,
 } from "./appAccess.js";
 
+import { tr } from "./i18n.js";
 /** The screens socket the box sends `access-request` events on. */
 export const ACCESS_EVENTS_PATH = "/api/screens/events";
 export const ACCESS_EVENT = "access-request";
@@ -319,7 +320,7 @@ export function showAccessRequestSheet(req) {
   const overlay = openSheet(`
     <h3 class="modal-title" data-access-sheet>${escapeHtml(accessRequestTitle(req.appName, req.host))}</h3>
     <p class="modal-message">${escapeHtml(accessRequestNote(req))}</p>
-    <p class="note">Only allow hosts you expect this app to need. You can change this later in its access list.</p>
+    <p class="note">${tr("Only allow hosts you expect this app to need. You can change this later in its access list.")}</p>
     <div class="row-2 mt-3">
       <button class="secondary" data-choice="deny">${escapeHtml(ACCESS_DENY)}</button>
       <button data-choice="allow">${escapeHtml(ACCESS_ALLOW)}</button>
@@ -346,7 +347,7 @@ export function showAccessDraftSheet(draft) {
   const overlay = openSheet(`
     <h3 class="modal-title" data-access-draft-sheet>${escapeHtml(accessDraftAlertTitle(draft.appName))}</h3>
     ${draftHostsHtml(draft.hosts ?? [])}
-    <p class="note">Nothing changes until you review the list and save it.</p>
+    <p class="note">${tr("Nothing changes until you review the list and save it.")}</p>
     <div class="row-2 mt-3">
       <button class="secondary" data-choice="later">${escapeHtml(ACCESS_NOT_NOW)}</button>
       <button data-choice="review">${escapeHtml(ACCESS_DRAFT_REVIEW)}</button>
@@ -371,7 +372,7 @@ export function showAccessAnsweredSheet(text) {
  *  server it came from. */
 export async function answerWithSession(req, action) {
   const session = getSession();
-  if (!session?.umk) throw new Error("Unlock the webapp first");
+  if (!session?.umk) throw new Error(tr("Unlock the webapp first"));
   const client = boxClient(req.serverDomain || "");
   return answerAccessRequest({
     serverDomain: client.fqdn || podServerDomain(),

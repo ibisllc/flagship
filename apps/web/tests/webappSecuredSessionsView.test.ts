@@ -33,7 +33,7 @@ describe("web-experience gating — Process-URL authorize view", () => {
     expect(r.body).toContain("saveSecuredSession");
     // The "Process URL" affordance + confirm copy.
     expect(r.body).toContain("Process URL");
-    expect(r.body).toContain("Open ${app} on ${server}?");
+    expect(r.body).toContain('tr("Open {0} on {1}?", app, server)');
     expect(r.body).not.toMatch(/restricted site/i);
   });
 

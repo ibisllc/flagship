@@ -23,6 +23,7 @@ import { getSession, onSessionLock } from "./state.js";
 import { answerIfAccountGone, noteAccountGoneResponse } from "./accountGone.js";
 import { bytesToHex, deriveAccountDeviceKeyFromSeed, deriveIrkFromSeed, signWithIrk } from "../keystore.js";
 
+import { tr } from "./i18n.js";
 export const ACCOUNT_READ_TOKEN_LABEL = "account-read-token";
 const TAG_DEVICE_ENDPOINT_CLAIM = "flagship/device-endpoint-claim/v1";
 /** Re-mint a token this long before `.com` would stop accepting it. */
@@ -77,7 +78,7 @@ export async function accountReadFetch(url, init = {}, deps = {}) {
   const f = deps.fetch ?? globalThis.fetch;
   const profile = (deps.getProfile ?? getActiveProfile)();
   if ((deps.isCompanion ?? isCompanionProfile)()) {
-    return new Response(JSON.stringify({ error: "a remote browser doesn't read the account's servers" }), {
+    return new Response(JSON.stringify({ error: tr("a remote browser doesn't read the account's servers") }), {
       status: 403,
       headers: { "content-type": "application/json" },
     });
@@ -196,7 +197,7 @@ export async function deviceRequestHeaders({ umk, accountId, deviceId, path }, d
     issuedAt: (deps.now ?? Date.now)(),
   };
   const signature = new Uint8Array(await crypto.subtle.sign(
-    { name: "Ed25519" },
+    { name: tr("Ed25519") },
     key.privateKey,
     canonicalDirectoryRequest(request),
   ));

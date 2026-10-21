@@ -13,6 +13,7 @@ import { enterAccountDelete, removeDemoFromBrowser } from "./account-delete.js";
 import { getActiveProfile } from "../lib/profiles.js";
 import { isDemoProfile } from "../lib/demoAccount.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-unlock");
 
 async function handleUnlock() {
@@ -29,9 +30,9 @@ async function handleUnlock() {
       /* best-effort — never block an otherwise-good unlock */
     }
     await dispatchInitialView();
-    toast("Unlocked");
+    toast(tr("Unlocked"));
   } catch {
-    toast("Wrong passphrase", "err");
+    toast(tr("Wrong passphrase"), "err");
   }
 }
 
@@ -73,9 +74,9 @@ export async function handleReset() {
   }
   const { inlineConfirm } = await import("../lib/modal.js");
   const ok = await inlineConfirm({
-    title: "Reset this device?",
-    message: "Removes this device's local key. You'll need your cloud recovery passkey or your account key backup file to come back. Continue?",
-    okLabel: "Reset",
+    title: tr("Reset this device?"),
+    message: tr("Removes this device's local key. You'll need your cloud recovery passkey or your account key backup file to come back. Continue?"),
+    okLabel: tr("Reset"),
     danger: true,
   });
   if (!ok) return;

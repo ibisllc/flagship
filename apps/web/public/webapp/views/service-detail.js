@@ -99,6 +99,7 @@ import { getActiveProfile } from "../lib/profiles.js";
 import { isDeviceFullyScoped } from "../lib/usersCheck.js";
 import { accountReadFetch } from "../lib/accountRead.js";
 
+import { tr } from "../lib/i18n.js";
 const COM_BASE = controlApex();
 
 /** V3 — cached service-links per serviceId for the current render. */
@@ -186,12 +187,10 @@ export async function renderServiceDetail(serviceId) {
     root.innerHTML = `
       <div class="card">
         <div class="card-title">${escapeHtml(s.slug)}${appStatePillHtml(appServerState(s))}</div>
-        <div class="muted-sm text-xs mt-1">${
-          s.version ? `ver: ${escapeHtml(s.version)}&nbsp;&nbsp;·&nbsp;&nbsp;` : ""
-        }id: ${escapeHtml(s.serviceId)}</div>
+        <div class="muted-sm text-xs mt-1">${tr("{0}id: {1}", s.version ? `ver: ${escapeHtml(s.version)}&nbsp;&nbsp;·&nbsp;&nbsp;` : "", escapeHtml(s.serviceId))}</div>
         <div class="muted-sm mt-2 truncate">${escapeHtml(s.summary || "")}</div>
         <div class="row mt-2">
-          <span class="label">creator</span><span class="value">${escapeHtml(s.creator)}</span>
+          <span class="label">${tr("creator")}</span><span class="value">${escapeHtml(s.creator)}</span>
         </div>
       </div>
       <div id="sd-runs-on">${runsOnHtml([], { companion: isCompanionProfile(), adminOnly: !canSignAdminOrders() })}</div>
@@ -202,46 +201,41 @@ export async function renderServiceDetail(serviceId) {
       <div id="sd-database"></div>
 
       ${renderWebDomainsSection(s, currentServiceLinks)}
-      <h2 class="mt-4">App config</h2>
+      <h2 class="mt-4">${tr("App config")}</h2>
       <div class="card">
         <pre class="json-block">${escapeHtml(JSON.stringify(body.manifest, null, 2))}</pre>
       </div>
-      <h2 class="mt-4">Data layer</h2>
+      <h2 class="mt-4">${tr("Data layer")}</h2>
       ${(body.dataLayerInstances ?? []).length === 0
         ? '<div class="card placeholder">no stores</div>'
-        : (body.dataLayerInstances ?? []).map(renderStoreRow).join("")
-      }
+        : (body.dataLayerInstances ?? []).map(renderStoreRow).join("")}
       ${renderAppStorage(body.storage)}
       ${hasBrowserBundle(body) ? `
-        <h2 class="mt-4">Browser bundle</h2>
+        <h2 class="mt-4">${tr("Browser bundle")}</h2>
         <div class="card">
           <p class="note">
-            This service ships a Chromium tab the daemon runs on your pod. Open
-            the viewer to drive a sign-in or paste-a-cookie flow against it
-            from your webapp — frames stream over the paired-session WS.
+            ${tr("This service ships a Chromium tab the daemon runs on your pod. Open the viewer to drive a sign-in or paste-a-cookie flow against it from your webapp — frames stream over the paired-session WS.")}
           </p>
-          <button id="sd-open-browser" class="full-width">Open browser viewer</button>
+          <button id="sd-open-browser" class="full-width">${tr("Open browser viewer")}</button>
         </div>
       ` : ""}
-      <h2 class="mt-4">Access control</h2>
+      <h2 class="mt-4">${tr("Access control")}</h2>
       <button class="card full-width edit-row" id="sd-access" type="button">
         <span class="edit-row-icon" aria-hidden="true">${usersIcon}</span>
         <span class="edit-row-body">
-          <strong>Access control</strong>
-          <span class="note">Open to all or members only, and each member's rank</span>
+          <strong>${tr("Access control")}</strong>
+          <span class="note">${tr("Open to all or members only, and each member's rank")}</span>
         </span>
       </button>
       ${renderRecentLogs(body.recentLogs)}
-      <h2 class="mt-4">Backup</h2>
+      <h2 class="mt-4">${tr("Backup")}</h2>
       ${renderBackupCard(body.lastBackup)}
-      <h2 class="mt-4">Environment variables</h2>
+      <h2 class="mt-4">${tr("Environment variables")}</h2>
       <div class="card">
         <p class="note">
-          Per-app key/value pairs (e.g. <code>OPENAI_API_KEY</code>) the app
-          reads at runtime. Names appear in the editor; values stay sealed
-          on your pod.
+          ${tr("Per-app key/value pairs (e.g. <code>OPENAI_API_KEY</code>) the app reads at runtime. Names appear in the editor; values stay sealed on your pod.")}
         </p>
-        <button id="sd-configure-env" class="full-width mt-2">Configure environment</button>
+        <button id="sd-configure-env" class="full-width mt-2">${tr("Configure environment")}</button>
       </div>
       ${renderRemoveAppControl()}
     `;
@@ -365,7 +359,7 @@ export function renderAccessSection(app, { summary = readAccessSummary(app), sta
     pendingHtml = state.pending
       .map((r) => `
         <div class="sd-access-req mt-2" data-access-host="${escapeHtml(r.host)}">
-          <div class="weight-600">Wants to reach <span class="mono">${escapeHtml(r.host)}</span></div>
+          <div class="weight-600">${tr("Wants to reach")} <span class="mono">${escapeHtml(r.host)}</span></div>
           <div class="muted-sm">${escapeHtml(accessRequestNote(r))}</div>
           ${locked
             ? ""
@@ -380,12 +374,12 @@ export function renderAccessSection(app, { summary = readAccessSummary(app), sta
       pendingHtml += `<p class="faint-sm mt-2" data-access-locked>${escapeHtml(locked)}</p>`;
     }
   } else if (summary?.pending > 0) {
-    pendingHtml = `<p class="muted-sm mt-2">${summary.pending === 1 ? "1 request" : `${summary.pending} requests`} waiting…</p>`;
+    pendingHtml = `<p class="muted-sm mt-2">${tr("{0} waiting…", summary.pending === 1 ? "1 request" : `${summary.pending} requests`)}</p>`;
   }
   return `
       <h2 class="mt-4">${escapeHtml(ACCESS_TITLE)}</h2>
       <div class="card sd-access">
-        <div class="row"><span class="label">Access list</span><span class="value" id="sd-access-count">${escapeHtml(ruleCountText(rules))}</span></div>
+        <div class="row"><span class="label">${tr("Access list")}</span><span class="value" id="sd-access-count">${escapeHtml(ruleCountText(rules))}</span></div>
         <div id="sd-access-draft">${draftHtml}</div>
         <div id="sd-access-pending">${pendingHtml}</div>
         <button id="sd-access-view" class="secondary full-width mt-2">${escapeHtml(ACCESS_VIEW_LIST)}</button>
@@ -443,7 +437,7 @@ async function answerFromPage(app, state, btn) {
   const act = btn.getAttribute("data-access-act");
   const host = btn.getAttribute("data-host");
   const session = getSession();
-  if (act !== "ignore" && !session.umk) return toast("Unlock the webapp first", "err");
+  if (act !== "ignore" && !session.umk) return toast(tr("Unlock the webapp first"), "err");
   const row = btn.closest(".sd-access-req");
   row?.querySelectorAll("button").forEach((b) => { b.disabled = true; });
   const fetchJson = (path, init) => screensFetch(path, init);
@@ -512,10 +506,10 @@ function serverDomainOfPod() {
 function bindEgressHandlers(app) {
   const send = async (hosts, btn) => {
     const session = getSession();
-    if (!session.umk) return toast("Unlock the webapp first", "err");
+    if (!session.umk) return toast(tr("Unlock the webapp first"), "err");
     const label = btn.textContent;
     btn.disabled = true;
-    btn.textContent = hosts.length > 0 ? "Allowing…" : "Stopping…";
+    btn.textContent = hosts.length > 0 ? tr("Allowing…") : tr("Stopping…");
     try {
       const egress = await sendEgressGrant({
         serverDomain: serverDomainOfPod(),
@@ -530,7 +524,7 @@ function bindEgressHandlers(app) {
       const slot = $("sd-egress");
       if (slot) slot.innerHTML = renderEgressSection(app);
       bindEgressHandlers(app);
-      toast(hosts.length > 0 ? "Internet access allowed" : "Internet access stopped", "ok");
+      toast(hosts.length > 0 ? tr("Internet access allowed") : tr("Internet access stopped"), "ok");
     } catch (e) {
       toast(e instanceof ScreensError ? egressErrorMessage(e) : humanError(e), "err");
       btn.disabled = false;
@@ -609,10 +603,8 @@ function apiKeyRow(k, { companion, adminOnly = false, now }) {
             <span class="weight-600 sd-api-key-label">${escapeHtml(k.label || k.keyId)}</span>
             <span class="pill${k.scope === "write" ? " warn" : ""}">${escapeHtml(scopeLabel(k.scope))}</span>
           </div>
-          <div class="muted-sm">Created ${escapeHtml(formatWhen(k.createdAt, now))} · ${
-            k.lastUsedAt ? `Last used ${escapeHtml(formatWhen(k.lastUsedAt, now))}` : "Never used"
-          }</div>
-          ${expired ? `<div class="muted-sm err-text">Expired ${escapeHtml(formatWhen(k.expiresAt, now))}</div>` : ""}
+          <div class="muted-sm">${tr("Created {0} · {1}", escapeHtml(formatWhen(k.createdAt, now)), k.lastUsedAt ? tr("Last used {0}", escapeHtml(formatWhen(k.lastUsedAt, now))) : tr("Never used"))}</div>
+          ${expired ? `<div class="muted-sm err-text">${tr("Expired {0}", escapeHtml(formatWhen(k.expiresAt, now)))}</div>` : ""}
           ${companion || adminOnly
             ? ""
             : `<button class="secondary sd-api-key-revoke mt-1" data-api-key-revoke="${escapeHtml(k.keyId)}">${escapeHtml(API_KEYS_REVOKE)}</button>`}
@@ -624,13 +616,13 @@ function apiKeyForm() {
     list.map((o) => `<option value="${o.value}"${o.value === selected ? " selected" : ""}>${escapeHtml(o.label)}</option>`).join("");
   return `
         <div class="sd-api-key-form mt-2">
-          <label for="sd-api-key-label">Name</label>
-          <input id="sd-api-key-label" type="text" placeholder="Kitchen display" autocomplete="off" maxlength="${API_KEY_LABEL_MAX}" />
-          <label for="sd-api-key-scope">Access</label>
+          <label for="sd-api-key-label">${tr("Name")}</label>
+          <input id="sd-api-key-label" type="text" placeholder="${tr("Kitchen display")}" autocomplete="off" maxlength="${API_KEY_LABEL_MAX}" />
+          <label for="sd-api-key-scope">${tr("Access")}</label>
           <select id="sd-api-key-scope">${options(API_KEY_SCOPES, DEFAULT_API_KEY_SCOPE)}</select>
           <p class="err-text text-sm hidden" id="sd-api-key-error"></p>
           <div class="row-2 mt-2">
-            <button class="secondary" id="sd-api-key-cancel">Cancel</button>
+            <button class="secondary" id="sd-api-key-cancel">${tr("Cancel")}</button>
             <button id="sd-api-key-go">${escapeHtml(API_KEYS_CREATE)}</button>
           </div>
         </div>`;
@@ -642,7 +634,7 @@ function apiKeyReveal(revealed) {
           <div class="weight-600">${escapeHtml(revealed.label)}</div>
           <pre class="json-block mono sd-api-key-secret" id="sd-api-key-secret">${escapeHtml(revealed.key)}</pre>
           <p class="note err-text">${escapeHtml(API_KEY_COPY_WARNING)}</p>
-          <p class="muted-sm">Send it with each request:</p>
+          <p class="muted-sm">${tr("Send it with each request:")}</p>
           <pre class="json-block mono sd-api-key-usage">${escapeHtml(apiKeyUsageLine("<key>"))}</pre>
           <div class="row-2 mt-2">
             <button id="sd-api-key-copy">${escapeHtml(API_KEYS_COPY)}</button>
@@ -714,9 +706,9 @@ function paintApiKeysSection() {
   $("sd-api-key-copy")?.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(st.revealed.key);
-      toast("Copied.");
+      toast(tr("Copied."));
     } catch {
-      toast("Couldn't copy — select the key and copy it by hand.", "err");
+      toast(tr("Couldn't copy — select the key and copy it by hand."), "err");
     }
   });
   $("sd-api-key-done")?.addEventListener("click", () => set({ revealed: null }));
@@ -737,10 +729,10 @@ async function createFromPage(btn) {
   const checked = checkApiKeyLabel(label);
   if (checked.error) return showError(checked.error);
   const session = getSession();
-  if (!session.umk) return showError("Unlock the webapp first");
+  if (!session.umk) return showError(tr("Unlock the webapp first"));
   const scope = $("sd-api-key-scope")?.value ?? DEFAULT_API_KEY_SCOPE;
   btn.disabled = true;
-  btn.textContent = "Creating…";
+  btn.textContent = tr("Creating…");
   const fetchJson = (path, init) => screensFetch(path, init);
   try {
     const made = await createApiKey({
@@ -774,8 +766,8 @@ async function revokeFromPage(btn) {
   const key = st.keys.find((k) => k.keyId === keyId);
   const { inlineConfirm } = await import("../lib/modal.js");
   const ok = await inlineConfirm({
-    title: `Revoke "${key?.label || keyId}"?`,
-    message: "Anything using this key stops working right away. This can't be undone.",
+    title: tr("Revoke \"{0}\"?", key?.label || keyId),
+    message: tr("Anything using this key stops working right away. This can't be undone."),
     okLabel: API_KEYS_REVOKE,
     danger: true,
   });
@@ -786,7 +778,7 @@ async function revokeFromPage(btn) {
     if (currentServiceId !== st.app.serviceId) return;
     apiKeysState = { ...apiKeysState, keys: apiKeysState.keys.filter((k) => k.keyId !== keyId), error: "" };
     paintApiKeysSection();
-    toast("Key revoked", "ok");
+    toast(tr("Key revoked"), "ok");
   } catch (e) {
     btn.disabled = false;
     toast(e instanceof ScreensError ? apiKeyErrorMessage(e) : humanError(e), "err");
@@ -800,7 +792,7 @@ export function renderRecentLogs(lines) {
   const list = (Array.isArray(lines) ? lines : []).filter((l) => typeof l === "string");
   if (list.length === 0) return "";
   return `
-      <h2 class="mt-4">Recent logs</h2>
+      <h2 class="mt-4">${tr("Recent logs")}</h2>
       <div class="card" id="sd-recent-logs">
         <pre class="json-block mono">${list.map((l) => escapeHtml(l)).join("\n")}</pre>
       </div>`;
@@ -819,25 +811,25 @@ function renderEditRow() {
 }
 
 export const BACKUP_CARD_NOTE =
-  "The app's code, and its data if you include it. It comes straight from your server to this device.";
+  tr("The app's code, and its data if you include it. It comes straight from your server to this device.");
 export const BACKUP_GONE =
-  "The server no longer has that backup. Back up again.";
+  tr("The server no longer has that backup. Back up again.");
 
 export function renderBackupCard(lastBackup) {
   const last =
     lastBackup && Number.isFinite(lastBackup.bytes)
-      ? `<p class="note">Last backup: ${escapeHtml(formatBackupSize(lastBackup.bytes))} · ${escapeHtml(formatWhen(lastBackup.createdAt))}</p>`
+      ? `<p class="note">${tr("Last backup: {0} · {1}", escapeHtml(formatBackupSize(lastBackup.bytes)), escapeHtml(formatWhen(lastBackup.createdAt)))}</p>`
       : "";
   return `
       <div class="card" id="sd-backup">
         ${last}
         <p class="note">${escapeHtml(BACKUP_CARD_NOTE)}</p>
         <label class="inline-check">
-          <input type="checkbox" id="sd-include-data" /> Include the app's data
+          <input type="checkbox" id="sd-include-data" /> ${tr("Include the app's data")}
         </label>
-        <input type="password" id="sd-password" placeholder="Password to encrypt it (optional)" autocomplete="new-password" class="mt-2" />
+        <input type="password" id="sd-password" placeholder="${tr("Password to encrypt it (optional)")}" autocomplete="new-password" class="mt-2" />
         <div id="sd-backup-status" class="mt-2 text-sm" aria-live="polite"></div>
-        <button id="sd-backup-go" class="secondary full-width mt-2">Back up now</button>
+        <button id="sd-backup-go" class="secondary full-width mt-2">${tr("Back up now")}</button>
       </div>`;
 }
 
@@ -870,21 +862,21 @@ async function triggerBackup(serviceId) {
       serviceId,
       includeUserData: dataEl.checked,
       password: passwordEl.value,
-      onPhase: (p) => { go.textContent = p === "creating" ? "Packing…" : "Downloading…"; },
+      onPhase: (p) => { go.textContent = p === "creating" ? tr("Packing…") : tr("Downloading…"); },
     });
     if (currentServiceId !== serviceId || !status.isConnected) return;
     passwordEl.value = "";
     backupUrl = URL.createObjectURL(r.blob);
     status.innerHTML = `
-      <p class="ok-text" data-backup-ready>Ready: ${escapeHtml(formatBackupSize(r.bytes))}${r.encrypted ? ", encrypted" : ""}</p>
-      <a class="btn full-width mt-2" id="sd-backup-save" href="${escapeHtml(backupUrl)}" download="${escapeHtml(r.fileName)}">Save backup</a>`;
+      <p class="ok-text" data-backup-ready>${tr("Ready: {0}{1}", escapeHtml(formatBackupSize(r.bytes)), r.encrypted ? ", encrypted" : "")}</p>
+      <a class="btn full-width mt-2" id="sd-backup-save" href="${escapeHtml(backupUrl)}" download="${escapeHtml(r.fileName)}">${tr("Save backup")}</a>`;
   } catch (e) {
     console.error("app backup failed", e);
     const gone = e instanceof ScreensError && e.status === 404;
     status.innerHTML = `<p class="err-text" data-backup-error>${escapeHtml(gone ? BACKUP_GONE : humanError(e))}</p>`;
   } finally {
     busy(false);
-    go.textContent = "Back up now";
+    go.textContent = tr("Back up now");
   }
 }
 
@@ -940,7 +932,7 @@ async function toggleRunsOn(state, fqdn, checked) {
   if (state.busy) return;
   const session = getSession();
   if (!session?.umk) {
-    state.error = "Unlock the webapp first.";
+    state.error = tr("Unlock the webapp first.");
     return paintRunsOn(state);
   }
   const { app } = state;
@@ -958,8 +950,8 @@ async function toggleRunsOn(state, fqdn, checked) {
     confirmRemove: (row) =>
       inlineConfirm({
         title: REMOVE_CONFIRM_TITLE,
-        message: `${app.slug} and its data on ${row.name} are deleted. Your other servers keep their copies.`,
-        okLabel: "Remove",
+        message: tr("{0} and its data on {1} are deleted. Your other servers keep their copies.", app.slug, row.name),
+        okLabel: tr("Remove"),
         danger: true,
       }),
   });
@@ -988,7 +980,7 @@ async function toggleRunsOn(state, fqdn, checked) {
 async function removeAppHere(app, btn) {
   const session = getSession();
   if (!session?.umk) {
-    toast("Unlock the webapp first.", "err");
+    toast(tr("Unlock the webapp first."), "err");
     return;
   }
   const fqdn = currentPodFqdn();
@@ -1019,7 +1011,7 @@ async function removeAppHere(app, btn) {
     return;
   }
   runsOn?.stop?.();
-  toast(`Removed ${app.slug}.`, "ok");
+  toast(tr("Removed {0}.", app.slug), "ok");
   if (backToServer) {
     const { enterServerDetail } = await import("./server-detail.js");
     await enterServerDetail(backToServer);
@@ -1100,11 +1092,11 @@ function renderWebDomainsSection(service, links) {
           <a class="weight-600 mono" href="${escapeHtml(shortUrl)}" target="_blank" rel="noopener">
             ${displayUrl(shortUrl)}
           </a>
-          <button class="ghost" data-copy="${escapeHtml(shortUrl)}" aria-label="Copy short link">📋</button>
+          <button class="ghost" data-copy="${escapeHtml(shortUrl)}" aria-label="${tr("Copy short link")}">📋</button>
         </div>`
     : `
         <div class="row" data-section="short">
-          <span class="muted-sm">No short link yet. Tap Replace to mint one.</span>
+          <span class="muted-sm">${tr("No short link yet. Tap Replace to mint one.")}</span>
         </div>`;
 
   const canonicalRow = `
@@ -1112,12 +1104,12 @@ function renderWebDomainsSection(service, links) {
       <a class="mono" href="${escapeHtml(canonical)}" target="_blank" rel="noopener">
         ${displayUrl(canonical)}
       </a>
-      <button class="ghost" data-copy="${escapeHtml(canonical)}" aria-label="Copy canonical">📋</button>
+      <button class="ghost" data-copy="${escapeHtml(canonical)}" aria-label="${tr("Copy canonical")}">📋</button>
     </div>`;
 
   const instancesBlock = instances.length === 0 ? "" : `
     <div class="mt-3">
-      <div class="label-tiny">INDIVIDUAL INSTANCES</div>
+      <div class="label-tiny">${tr("INDIVIDUAL INSTANCES")}</div>
       ${instances.map((i) => `
         <div class="row muted-sm mono" data-section="instance">
           ${displayUrl(i.url)}
@@ -1127,16 +1119,16 @@ function renderWebDomainsSection(service, links) {
 
   return `
     <div class="row mt-4" style="align-items:baseline;">
-      <h2 style="margin:0;">Web domains</h2>
-      <button class="danger small" id="sd-replace-stem">Replace</button>
+      <h2 style="margin:0;">${tr("Web domains")}</h2>
+      <button class="danger small" id="sd-replace-stem">${tr("Replace")}</button>
     </div>
     <div class="card">
-      <div class="label-tiny">SHORT REDIRECT</div>
-      <div class="muted-sm text-xs">Convenient to share — redirects to your box. Stays the same until you rename the service.</div>
+      <div class="label-tiny">${tr("SHORT REDIRECT")}</div>
+      <div class="muted-sm text-xs">${tr("Convenient to share — redirects to your box. Stays the same until you rename the service.")}</div>
       ${shortRow}
       <div class="mt-3">
-        <div class="label-tiny">CANONICAL (SHARED BY ALL INSTANCES)</div>
-        <div class="muted-sm text-xs">Permanent, verifiable address — share this when the exact name matters.</div>
+        <div class="label-tiny">${tr("CANONICAL (SHARED BY ALL INSTANCES)")}</div>
+        <div class="muted-sm text-xs">${tr("Permanent, verifiable address — share this when the exact name matters.")}</div>
         ${canonicalRow}
       </div>
       ${instancesBlock}
@@ -1151,9 +1143,9 @@ function bindWebDomainsHandlers(service) {
       const url = ev.currentTarget.getAttribute("data-copy");
       try {
         await navigator.clipboard.writeText(url);
-        toast("Copied.");
+        toast(tr("Copied."));
       } catch (e) {
-        toast("Couldn't copy — long-press to copy manually.", "err");
+        toast(tr("Couldn't copy — long-press to copy manually."), "err");
       }
     });
   });
@@ -1166,11 +1158,7 @@ async function openReplaceModal(service) {
   const { inlineConfirm } = await import("../lib/modal.js");
   const currentLabel = currentServiceLinks?.displayLabel ?? service.urlLabel ?? "";
   const draft = window.prompt(
-    "Replace access URLs.\n\n" +
-      `This will update all the links to this service, replacing "${currentLabel}" ` +
-      "with a new stem. All existing links break immediately, including the short " +
-      "link. If you have attached external domains, those stay unaffected.\n\n" +
-      "New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):",
+    tr("Replace access URLs. {0}with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):", tr("This will update all the links to this service, replacing \"{0}\" ", currentLabel)),
     currentLabel,
   );
   if (draft === null) return; // cancelled
@@ -1178,17 +1166,15 @@ async function openReplaceModal(service) {
   if (trimmed === "" || trimmed === currentLabel) return;
   // Mirrors the Worker's DNS_LABEL_RE in serviceRename.ts.
   if (!/^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/.test(trimmed)) {
-    toast("Stem must be a DNS label: lowercase, [a-z0-9-], 1–40 chars, no leading/trailing hyphen.", "err");
+    toast(tr("Stem must be a DNS label: lowercase, [a-z0-9-], 1–40 chars, no leading/trailing hyphen."), "err");
     return;
   }
   // Final scare confirm before we fire the destructive op.
   const ok = await inlineConfirm({
-    title: `Replace stem with '${trimmed}'?`,
+    title: tr("Replace stem with '{0}'?", trimmed),
     message:
-      "Every link to this service changes immediately, including the short link. " +
-      "Attached external domains are unaffected. Other devices see the new URL " +
-      "on next refresh.",
-    okLabel: "Replace",
+      tr("Every link to this service changes immediately, including the short link. Attached external domains are unaffected. Other devices see the new URL on next refresh."),
+    okLabel: tr("Replace"),
     danger: true,
   });
   if (!ok) return;
@@ -1200,17 +1186,17 @@ async function openReplaceModal(service) {
 async function runRename(service, newLabel) {
   const session = getSession();
   if (!session.username || !session.umk) {
-    toast("Sign in first.", "err");
+    toast(tr("Sign in first."), "err");
     return;
   }
-  toast("Renaming…");
+  toast(tr("Renaming…"));
   const issuedAt = Date.now();
   const canonical = canonicalServiceRename(session.username, service.serviceId, newLabel, issuedAt);
   let sig;
   try {
     sig = await signWithIrk(session.umk, canonical);
   } catch (e) {
-    toast(`Couldn't sign: ${e.message ?? e}`, "err");
+    toast(tr("Couldn't sign: {0}", e.message ?? e), "err");
     return;
   }
   try {
@@ -1234,9 +1220,9 @@ async function runRename(service, newLabel) {
       const text = await r.text();
       console.error("service rename failed", r.status, text);
       if (r.status === 409) {
-        toast("Another service already uses that name.", "err");
+        toast(tr("Another service already uses that name."), "err");
       } else if (r.status === 400) {
-        toast("That name isn't valid (lowercase letters, digits, hyphens; 1–40 chars).", "err");
+        toast(tr("That name isn't valid (lowercase letters, digits, hyphens; 1–40 chars)."), "err");
       } else {
         toast(humanError(r.status), "err");
       }
@@ -1250,13 +1236,13 @@ async function runRename(service, newLabel) {
       instances: currentServiceLinks?.instances ?? [],
       shortUrl: body.shortUrl,
     };
-    toast(`Renamed to ${body.displayLabel}. New short link minted.`);
+    toast(tr("Renamed to {0}. New short link minted.", body.displayLabel));
     // Re-render the section in place.
     if (currentServiceId === service.serviceId) {
       await renderServiceDetail(service.serviceId);
     }
   } catch (e) {
-    toast(`Couldn't rename: ${e.message ?? e}`, "err");
+    toast(tr("Couldn't rename: {0}", e.message ?? e), "err");
   }
 }
 

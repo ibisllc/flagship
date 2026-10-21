@@ -19,20 +19,21 @@ import {
   setActiveCloudName,
 } from "./profilesStore.js";
 
+import { tr } from "./i18n.js";
 /** Approved verbatim copy — keep in sync with the iOS strings. */
 export const KEYFILE_COPY = {
-  exportTitle: "Back up your account key",
+  exportTitle: tr("Back up your account key"),
   intro: "",
   danger:
-    "Anyone with both this file and its passphrase can take over your account and lock you out.",
+    tr("Anyone with both this file and its passphrase can take over your account and lock you out."),
   passphrase: "12 characters minimum",
   acks: [
-    "I understand anyone with this file and passphrase controls my entire account.",
+    tr("I understand anyone with this file and passphrase controls my entire account."),
   ],
-  createButton: "Create backup file",
-  afterSave: "Backup saved. Keep it somewhere safe and offline.",
-  importBadPassphrase: "That passphrase didn't open the file.",
-  importBadFile: "This isn't a Flagship key file.",
+  createButton: tr("Create backup file"),
+  afterSave: tr("Backup saved. Keep it somewhere safe and offline."),
+  importBadPassphrase: tr("That passphrase didn't open the file."),
+  importBadFile: tr("This isn't a Flagship key file."),
 };
 
 /**
@@ -46,7 +47,7 @@ export const KEYFILE_COPY = {
  */
 export function passphraseStrengthError(pass) {
   if (typeof pass !== "string" || pass.length < 12) {
-    return "Use at least 12 characters.";
+    return tr("Use at least 12 characters.");
   }
   let classes = 0;
   if (/[a-z]/.test(pass)) classes++;
@@ -54,7 +55,7 @@ export function passphraseStrengthError(pass) {
   if (/[0-9]/.test(pass)) classes++;
   if (/[^a-zA-Z0-9]/.test(pass)) classes++;
   if (classes < 3) {
-    return "Mix upper- and lower-case letters, numbers, and symbols.";
+    return tr("Mix upper- and lower-case letters, numbers, and symbols.");
   }
   return null;
 }
@@ -167,5 +168,5 @@ export function importErrorMessage(err) {
     if (err.code === "bad-passphrase") return KEYFILE_COPY.importBadPassphrase;
     return KEYFILE_COPY.importBadFile; // malformed / version
   }
-  return err?.message ? String(err.message) : "Import failed.";
+  return err?.message ? String(err.message) : tr("Import failed.");
 }

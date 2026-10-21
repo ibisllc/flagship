@@ -18,6 +18,7 @@ import {
 } from "../lib/provisionProgress.js";
 import { controlApex } from "../lib/apex.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-install-progress");
 
 const POLL_INTERVAL_MS = 2_000;
@@ -71,10 +72,10 @@ function renderEscape(reason) {
   root.innerHTML = `
     <div class="card">
       <p class="err-text">${escapeText(reason)}</p>
-      <p class="note mt-2">Your box may still be installing — this only means we couldn't read its status just now. It keeps going on its own, and you'll see it on Home when it comes online.</p>
+      <p class="note mt-2">${tr("Your box may still be installing — this only means we couldn't read its status just now. It keeps going on its own, and you'll see it on Home when it comes online.")}</p>
       <div class="row-2 mt-3">
-        <button id="ip-escape-retry" class="secondary">Try again</button>
-        <button id="ip-escape-home" class="secondary">Go to Home</button>
+        <button id="ip-escape-retry" class="secondary">${tr("Try again")}</button>
+        <button id="ip-escape-home" class="secondary">${tr("Go to Home")}</button>
       </div>
     </div>`;
   $("ip-escape-retry")?.addEventListener("click", () => {
@@ -138,7 +139,7 @@ async function poll() {
 
 function start() {
   const serial = $("ip-serial").value.trim();
-  if (!serial) return toast("Enter the serial first", "err");
+  if (!serial) return toast(tr("Enter the serial first"), "err");
   clearPoll();
   activeSerial = serial;
   latest = null;

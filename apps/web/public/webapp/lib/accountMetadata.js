@@ -1,3 +1,4 @@
+import { tr } from "./i18n.js";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
@@ -40,7 +41,7 @@ export async function deviceSupportCode(accountId, deviceId, devicePublicKey) {
 }
 
 async function deriveMetadataKey(umk, info) {
-  if (!(umk instanceof Uint8Array) || umk.length !== 32) throw new Error("UMK must be 32 bytes");
+  if (!(umk instanceof Uint8Array) || umk.length !== 32) throw new Error(tr("UMK must be 32 bytes"));
   const source = await crypto.subtle.importKey("raw", umk, "HKDF", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits({
     name: "HKDF",
@@ -74,7 +75,7 @@ export async function encryptProfile(displayName, keyBytes, fields) {
   const key = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["encrypt"]);
   const plaintext = encoder.encode(`{"version":1,"displayName":${JSON.stringify(name)}}`);
   const ciphertext = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: nonce, additionalData: profileAad(fields), tagLength: 128 },
+    { name: tr("AES-GCM"), iv: nonce, additionalData: profileAad(fields), tagLength: 128 },
     key,
     plaintext,
   );
@@ -86,7 +87,7 @@ export async function decryptProfile(envelope, keyBytes) {
   const key = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["decrypt"]);
   const plaintext = await crypto.subtle.decrypt(
     {
-      name: "AES-GCM",
+      name: tr("AES-GCM"),
       iv: fromHex(envelope.nonceHex),
       additionalData: profileAad(envelope),
       tagLength: 128,

@@ -350,8 +350,8 @@ describe("Studio platforms that have not passed a hardware run say so", () => {
   });
   it("the Windows and Linux window titles carry the label", () => {
     const root = join(__dirname, "../../");
-    expect(readFileSync(join(root, "builder-windows/src/MainWindow.xaml"), "utf8")).toContain('Title="Flagship Studio (Experimental)"');
-    expect(readFileSync(join(root, "builder-linux/wizard.py"), "utf8")).toContain('window.set_title("Flagship Studio (Experimental)")');
+    expect(readFileSync(join(root, "builder-windows/src/MainWindow.xaml"), "utf8")).toContain('Title="{local:Str flagshipStudioExperimental}"');
+    expect(readFileSync(join(root, "builder-linux/wizard.py"), "utf8")).toContain('window.set_title(tr("Flagship Studio (Experimental)"))');
   });
 });
 

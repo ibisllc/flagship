@@ -12,6 +12,7 @@ import { escapeHtml } from "../lib/util.js";
 import { ideEditIntro, serviceSlug } from "../lib/editService.js";
 import { enterBuildJournal } from "./build-journal.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-build-mcp");
 
 let buildId = null;
@@ -69,7 +70,7 @@ export function enterBuildMcp({ editServiceId: editId = null, back = "view-build
 async function createConnection() {
   const btn = $("build-mcp-create");
   btn.disabled = true;
-  btn.textContent = "creating…";
+  btn.textContent = tr("creating…");
   try {
     const body = { label: "webapp" };
     if (editServiceId) body.editServiceId = editServiceId;
@@ -86,7 +87,7 @@ async function createConnection() {
     toast(boxSays ?? buildEntryError(e), "err");
   } finally {
     btn.disabled = false;
-    btn.textContent = "Create a connection";
+    btn.textContent = tr("Create a connection");
   }
 }
 
@@ -95,7 +96,7 @@ async function createConnection() {
 function ideChoices(conn) {
   const list = Array.isArray(conn.ideConfigs) ? conn.ideConfigs.filter((c) => c && c.config) : [];
   if (list.length > 0) return list;
-  return [{ id: "generic", name: "IDE", where: "Your IDE's MCP settings", config: conn.ideConfig }];
+  return [{ id: "generic", name: "IDE", where: tr("Your IDE's MCP settings"), config: conn.ideConfig }];
 }
 
 let ideChoice = "claude-code";
@@ -112,25 +113,25 @@ function renderConnection(conn) {
         .join("")}</div>`
     : "";
   const command = current.command
-    ? `<p class="note mt-2">Or run:</p><pre class="vc-transcript" id="mcp-command">${escapeHtml(current.command)}</pre>
-       <button class="secondary full-width" id="mcp-copy-cmd">Copy command</button>`
+    ? `<p class="note mt-2">${tr("Or run:")}</p><pre class="vc-transcript" id="mcp-command">${escapeHtml(current.command)}</pre>
+       <button class="secondary full-width" id="mcp-copy-cmd">${tr("Copy command")}</button>`
     : "";
   box.innerHTML = `
     <div class="card">
-      <p class="note">Add this to your IDE's own settings, not a file in your project (the address names your server). The key works only for this build.</p>
-      <div class="row mt-2"><span class="label">URL</span><span class="value mono" id="mcp-url">${escapeHtml(conn.url)}</span></div>
-      <div class="row"><span class="label">Key</span><span class="value mono" id="mcp-key">${escapeHtml(conn.key)}</span></div>
+      <p class="note">${tr("Add this to your IDE's own settings, not a file in your project (the address names your server). The key works only for this build.")}</p>
+      <div class="row mt-2"><span class="label">${tr("URL")}</span><span class="value mono" id="mcp-url">${escapeHtml(conn.url)}</span></div>
+      <div class="row"><span class="label">${tr("Key")}</span><span class="value mono" id="mcp-key">${escapeHtml(conn.key)}</span></div>
       ${tabs}
       <p class="note mt-2" id="mcp-ide-where">${escapeHtml(current.where ?? "")}</p>
-      <button id="mcp-copy-cfg" class="full-width mt-2">Copy IDE config</button>
+      <button id="mcp-copy-cfg" class="full-width mt-2">${tr("Copy IDE config")}</button>
       <pre class="vc-transcript mt-2" id="mcp-ide-config">${escapeHtml(cfg)}</pre>
       ${command}
       <div class="row-2 mt-2">
-        <button class="secondary" id="mcp-rotate">Regenerate key</button>
-        <button class="secondary" id="mcp-journal">View journal</button>
+        <button class="secondary" id="mcp-rotate">${tr("Regenerate key")}</button>
+        <button class="secondary" id="mcp-journal">${tr("View journal")}</button>
       </div>
-      <p class="note mt-2">Your editor's agent writes files, validates, requests any secrets (value-free), and deploys. You can also deploy here once it's done:</p>
-      <button id="mcp-deploy" class="full-width mt-2">Deploy now</button>
+      <p class="note mt-2">${tr("Your editor's agent writes files, validates, requests any secrets (value-free), and deploys. You can also deploy here once it's done:")}</p>
+      <button id="mcp-deploy" class="full-width mt-2">${tr("Deploy now")}</button>
       <div id="mcp-env-requests"></div>
     </div>`;
   $("mcp-copy-cfg").addEventListener("click", () => copy(cfg, "config copied"));
@@ -177,10 +178,10 @@ async function refreshEnvRequests() {
     .join("");
   box.innerHTML = `
     <div class="card mt-2">
-      <p class="label">Your IDE asked for these secrets</p>
-      <p class="note">The editor and its AI never see the value — you set it here on your box. Open <strong>Configure environment</strong> on the service after it's deployed and enter each value there; it never travels through your IDE.</p>
+      <p class="label">${tr("Your IDE asked for these secrets")}</p>
+      <p class="note">${tr("The editor and its AI never see the value — you set it here on your box. Open <strong>Configure environment</strong> on the service after it's deployed and enter each value there; it never travels through your IDE.")}</p>
       ${rows}
-      <button id="mcp-env-refresh" class="secondary full-width mt-2">Refresh</button>
+      <button id="mcp-env-refresh" class="secondary full-width mt-2">${tr("Refresh")}</button>
     </div>`;
   $("mcp-env-refresh").addEventListener("click", refreshEnvRequests);
 }
@@ -190,7 +191,7 @@ async function rotate() {
   try {
     const conn = await boxFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/mcp/rotate`, { method: "POST", body: JSON.stringify({ label: "webapp" }) });
     renderConnection(conn);
-    toast("Key regenerated — update your IDE", "ok");
+    toast(tr("Key regenerated — update your IDE"), "ok");
   } catch (e) {
     toast(e instanceof ScreensError ? e.message : String(e), "err");
   }
@@ -200,15 +201,15 @@ async function deploy() {
   if (!buildId) return;
   const btn = $("mcp-deploy");
   btn.disabled = true;
-  btn.textContent = "deploying…";
+  btn.textContent = tr("deploying…");
   try {
     const r = await boxFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/deploy`, { method: "POST" });
-    toast(`Deployed → ${r.url}`, "ok");
+    toast(tr("Deployed → {0}", r.url), "ok");
   } catch (e) {
     toast(e instanceof ScreensError ? e.message : String(e), "err");
   } finally {
     btn.disabled = false;
-    btn.textContent = "Deploy now";
+    btn.textContent = tr("Deploy now");
   }
 }
 
@@ -217,6 +218,6 @@ function copy(text, msg) {
     navigator.clipboard.writeText(text);
     toast(msg, "ok");
   } catch {
-    toast("Copy failed — select manually", "err");
+    toast(tr("Copy failed — select manually"), "err");
   }
 }

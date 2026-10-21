@@ -35,6 +35,7 @@ import {
 } from "./profilesStore.js";
 import { accountReadFetch } from "./accountRead.js";
 
+import { tr } from "./i18n.js";
 // ---- Canonical-bytes tags — MUST match @flagship/protocol ----
 export const TAG_SERVER_DECOMMISSION = "flagship/server-decommission/v1";
 export const TAG_DEVICE_ENDPOINT_CLAIM = "flagship/device-endpoint-claim/v1";
@@ -227,7 +228,7 @@ export function preflightGate({ disposition, backupEnrolled }) {
     return {
       blocked: true,
       reason:
-        "This server has no backup — replacing it will lose its data. Set up backup first, or choose 'wipe-now' only if you accept data loss.",
+        tr("This server has no backup — replacing it will lose its data. Set up backup first, or choose 'wipe-now' only if you accept data loss."),
     };
   }
   return { blocked: false };

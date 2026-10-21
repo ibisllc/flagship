@@ -34,6 +34,7 @@ import { freshCredential } from "../lib/freeAi.js";
 import { getSession } from "../lib/state.js";
 import { defaultModelFor, loadProviders } from "../providers.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-edit-service");
 registerView("view-edit-describe");
 
@@ -62,7 +63,7 @@ async function openService(id) {
 function chooseAI() {
   const id = serviceId;
   enterBuildKey({
-    contextLabel: "Changing a service with AI",
+    contextLabel: tr("Changing a service with AI"),
     back: "view-edit-service",
     onChosen: (cred) => enterEditDescribe(id, cred),
   });
@@ -75,7 +76,7 @@ function useIDE(back) {
 function updateStartButton() {
   const btn = $("edit-describe-start");
   if (!btn) return;
-  btn.textContent = starting ? "Starting…" : "Start";
+  btn.textContent = starting ? tr("Starting…") : tr("Start");
   btn.disabled = !canStart($("edit-describe-prompt")?.value, starting);
 }
 
@@ -83,13 +84,13 @@ async function showRefusal(r, name) {
   const title = refusalTitle(r);
   const message = refusalMessage(r, name);
   if (r.kind === "session") {
-    const open = await inlineConfirm({ title, message, okLabel: "Open build sessions", cancelLabel: "OK" });
+    const open = await inlineConfirm({ title, message, okLabel: tr("Open build sessions"), cancelLabel: tr("OK") });
     if (open) void enterBuildJournal();
   } else if (r.kind === "tooBig") {
-    const ide = await inlineConfirm({ title, message, okLabel: "Use your IDE", cancelLabel: "OK" });
+    const ide = await inlineConfirm({ title, message, okLabel: tr("Use your IDE"), cancelLabel: tr("OK") });
     if (ide) useIDE("view-edit-describe");
   } else {
-    await inlineAlert({ title, message, okLabel: "OK" });
+    await inlineAlert({ title, message, okLabel: tr("OK") });
   }
 }
 
@@ -134,7 +135,7 @@ async function start() {
     }
     if (r.needsCredential) {
       enterBuildKey({
-        contextLabel: "Changing a service with AI",
+        contextLabel: tr("Changing a service with AI"),
         back: "view-edit-describe",
         onChosen: (cred) => enterEditDescribe(id, cred),
       });

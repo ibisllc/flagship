@@ -39,6 +39,7 @@ import { throwIfRateLimited } from "../lib/rateLimited.js";
 import { confirmFreshUnlock } from "../lib/freshUnlock.js";
 import { enterPendingServer, rememberPendingOrder } from "./pending-server.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-create-server");
 
 // Server (pod) names are a standard RFC-1123 DNS label — lowercase
@@ -71,9 +72,9 @@ const TAG_RCK_REGISTER = "flagship/rck-register/v1";
 
 // The browser's words for each backup policy (the wire values stay).
 const BACKUP_POLICY_LABELS = Object.freeze({
-  "phone-only": "On my devices",
-  none: "No backup",
-  peer: "On other servers",
+  "phone-only": tr("On my devices"),
+  none: tr("No backup"),
+  peer: tr("On other servers"),
 });
 
 let activeDraftId = null;
@@ -88,7 +89,7 @@ function genSerial() {
 }
 
 async function genEd25519() {
-  const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+  const kp = await crypto.subtle.generateKey({ name: tr("Ed25519") }, true, ["sign", "verify"]);
   const pub = new Uint8Array(await crypto.subtle.exportKey("raw", kp.publicKey));
   return { keypair: kp, publicKey: pub };
 }
@@ -112,7 +113,7 @@ function renderDraftList(drafts) {
     // cancelServer().
     const delivered = d.status === "delivered";
     const cancelBtn = delivered
-      ? `<button class="secondary danger" data-action="cancel-server" data-id="${escapeHtml(d.id)}">Cancel server (free the name)</button>`
+      ? `<button class="secondary danger" data-action="cancel-server" data-id="${escapeHtml(d.id)}">${tr("Cancel server (free the name)")}</button>`
       : "";
     return `
     <div class="card">
@@ -121,16 +122,16 @@ function renderDraftList(drafts) {
         <span class="pill ${delivered ? "ok" : ""}">${escapeHtml(d.status)}</span>
       </div>
       <div class="row">
-        <span class="label">backup</span>
+        <span class="label">${tr("backup")}</span>
         <span class="value">${escapeHtml(BACKUP_POLICY_LABELS[d.backupPolicy] ?? d.backupPolicy ?? "not chosen yet")}</span>
       </div>
       <div class="row">
-        <span class="label">updated</span>
+        <span class="label">${tr("updated")}</span>
         <span class="value">${escapeHtml(formatWhen(d.updatedAt))}</span>
       </div>
       <div class="row-2 mt-2">
-        <button class="secondary" data-action="resume" data-id="${escapeHtml(d.id)}">Resume</button>
-        <button class="secondary" data-action="delete" data-id="${escapeHtml(d.id)}">Delete</button>
+        <button class="secondary" data-action="resume" data-id="${escapeHtml(d.id)}">${tr("Resume")}</button>
+        <button class="secondary" data-action="delete" data-id="${escapeHtml(d.id)}">${tr("Delete")}</button>
       </div>
       ${cancelBtn ? `<div class="mt-2">${cancelBtn}</div>` : ""}
     </div>
@@ -147,8 +148,8 @@ function renderDraftList(drafts) {
         (async () => {
           const { inlineConfirm } = await import("../lib/modal.js");
           const ok = await inlineConfirm({
-            title: "Delete this draft?",
-            okLabel: "Delete",
+            title: tr("Delete this draft?"),
+            okLabel: tr("Delete"),
             danger: true,
           });
           if (!ok) return;
@@ -173,7 +174,7 @@ function renderDraftList(drafts) {
  */
 async function cancelServer(id) {
   const d = await getDraft(id);
-  if (!d) return toast("Draft not found", "err");
+  if (!d) return toast(tr("Draft not found"), "err");
   const session = getSession();
   // P14 Phase 2 — companion profiles route the cancel through the
   // owner; they don't need an unlocked session to QUEUE the request.
@@ -182,19 +183,19 @@ async function cancelServer(id) {
   const { isCompanionProfile } = await import("../lib/companionGuard.js");
   const asCompanion = isCompanionProfile();
   if (!asCompanion && (!session.umk || !session.irk)) {
-    return toast("Unlock the webapp first", "err");
+    return toast(tr("Unlock the webapp first"), "err");
   }
   const username = session.username
     || (await ensureUsername().catch(() => null));
-  if (!username) return toast("No account on this device", "err");
+  if (!username) return toast(tr("No account on this device"), "err");
 
   const { inlineConfirm } = await import("../lib/modal.js");
   const confirmed = await inlineConfirm({
-    title: `Cancel server "${d.serverName}"?`,
+    title: tr("Cancel server \"{0}\"?", d.serverName),
     message: asCompanion
-      ? "Companion sessions can't sign on their own — this will queue the request for the account owner to approve from their owner app."
-      : "Frees the name so you can use it again. Any pending install recipe is voided; a box that boots later is rejected. If this server is already running, it will be released — do this only if you mean to give the name up.",
-    okLabel: asCompanion ? "Forward to owner" : "Cancel server",
+      ? tr("Companion sessions can't sign on their own — this will queue the request for the account owner to approve from their owner app.")
+      : tr("Frees the name so you can use it again. Any pending install recipe is voided; a box that boots later is rejected. If this server is already running, it will be released — do this only if you mean to give the name up."),
+    okLabel: asCompanion ? tr("Forward to owner") : tr("Cancel server"),
     danger: true,
   });
   if (!confirmed) return;
@@ -215,7 +216,7 @@ async function cancelServer(id) {
         if (d.code) await revokeAuthCodeBestEffort(d.code, username).catch(() => {});
         await deleteDraft(id);
         clearPendingRck(serverDomain);
-        toast(`Server "${d.serverName}" cancelled — the name is free again`, "ok");
+        toast(tr("Server \"{0}\" cancelled — the name is free again", d.serverName), "ok");
         await refreshDrafts();
         return;
       }
@@ -231,12 +232,12 @@ async function cancelServer(id) {
     }
     await deleteDraft(id);
     clearPendingRck(serverDomain);
-    toast(`Server "${d.serverName}" cancelled — the name is free again`, "ok");
+    toast(tr("Server \"{0}\" cancelled — the name is free again", d.serverName), "ok");
     await refreshDrafts();
   } catch (e) {
     // The name stays reserved and the draft stays, so the button still retries.
     console.error("cancel server failed", e);
-    toast(`Couldn't cancel — the name is still reserved. ${boxErrorText(e)}`, "err");
+    toast(tr("Couldn't cancel — the name is still reserved. {0}", boxErrorText(e)), "err");
   }
 }
 
@@ -278,13 +279,13 @@ async function refreshDrafts() {
 
 async function resumeDraft(id) {
   const d = await getDraft(id);
-  if (!d) return toast("Draft not found", "err");
+  if (!d) return toast(tr("Draft not found"), "err");
   activeDraftId = id;
   $("cs-server-name").value = d.serverName || "";
   setBackupPolicyChoice(d.backupPolicy);
   if (d.reserveGb) $("cs-reserve-gb").value = String(d.reserveGb);
   restoreDiskEncryption(d.diskEncryption);
-  toast(`Resumed ${d.serverName}`);
+  toast(tr("Resumed {0}", d.serverName));
 }
 
 function readInputs({ draft = false } = {}) {
@@ -296,7 +297,7 @@ function readInputs({ draft = false } = {}) {
     throw new Error(`server name "${serverName}" is reserved`);
   }
   const backupPolicy = readBackupPolicyChoice();
-  if (!backupPolicy && !draft) throw new Error("Choose where this server's backups go.");
+  if (!backupPolicy && !draft) throw new Error(tr("Choose where this server's backups go."));
   const reserveGb = readReserveGb();
   // Recipe TTL in millis. Picker UI emits hours via #cs-ttl-hours;
   // absent input = default 6 hours.
@@ -330,9 +331,9 @@ function readInputs({ draft = false } = {}) {
 // the sentence to show when it's missing or isn't one. Exported for the test.
 export function readDebugSshKey() {
   const raw = String($("cs-debug-ssh-key")?.value ?? "").trim();
-  if (!raw) throw new Error("Debug access needs an SSH public key.");
+  if (!raw) throw new Error(tr("Debug access needs an SSH public key."));
   const key = normalizeSshPublicKey(raw);
-  if (!key) throw new Error("That isn't an SSH public key this server can use.");
+  if (!key) throw new Error(tr("That isn't an SSH public key this server can use."));
   return key;
 }
 
@@ -498,7 +499,7 @@ async function handleSaveDraft() {
       status: "draft",
     });
     activeDraftId = saved.id;
-    toast("Draft saved");
+    toast(tr("Draft saved"));
     await refreshDrafts();
   } catch (e) {
     console.error(e);
@@ -509,7 +510,7 @@ async function handleSaveDraft() {
 async function handleRecipeDownload() {
   const session = getSession();
   if (!session.umk || !session.irk) {
-    return toast("Unlock the webapp first", "err");
+    return toast(tr("Unlock the webapp first"), "err");
   }
   let inputs;
   try { inputs = readInputs(); }
@@ -517,9 +518,9 @@ async function handleRecipeDownload() {
   // A debug grant takes one fresh unlock, like the server page's Turn on.
   if (inputs.debugFriendly) {
     const unlocked = await confirmFreshUnlock({
-      title: "Make a debug-friendly server?",
-      message: "Anyone with this key can read everything on this server while it's on. It turns off by itself 7 days from now.",
-      okLabel: "Create recipe",
+      title: tr("Make a debug-friendly server?"),
+      message: tr("Anyone with this key can read everything on this server while it's on. It turns off by itself 7 days from now."),
+      okLabel: tr("Create recipe"),
     });
     if (!unlocked.ok) return unlocked.cancelled ? undefined : toast(unlocked.error, "err");
   }
@@ -537,9 +538,9 @@ async function handleRecipeDownload() {
   creating = true;
   if (btn) {
     btn.disabled = true;
-    btn.textContent = "Creating recipe…";
+    btn.textContent = tr("Creating recipe…");
   }
-  setStatus("active", "creating signed recipe…");
+  setStatus("active", tr("creating signed recipe…"));
   let blobBundle;
   try {
     blobBundle = await mintInstallBlobBundle(session, username, inputs, { skipClaim: alreadyOpened });
@@ -548,7 +549,7 @@ async function handleRecipeDownload() {
     creating = false;
     if (btn) {
       btn.disabled = false;
-      btn.textContent = "Create and download recipe";
+      btn.textContent = tr("Create and download recipe");
     }
     return;
   }
@@ -564,7 +565,7 @@ async function handleRecipeDownload() {
     });
     activeDraftId = saved.id;
     await refreshDrafts();
-    setStatus("done", "Recipe downloaded — open it in Flagship Studio.");
+    setStatus("done", tr("Recipe downloaded — open it in Flagship Studio."));
     followSetupOf({ serial: blobBundle.blob.authCode.serial, fqdn: blobBundle.blob.serverDomain, name: inputs.serverName });
   } catch (e) {
     setStatus("error", String(e.message || e));
@@ -572,7 +573,7 @@ async function handleRecipeDownload() {
     creating = false;
     if (btn) {
       btn.disabled = false;
-      btn.textContent = "Create and download recipe";
+      btn.textContent = tr("Create and download recipe");
     }
   }
 }
@@ -748,7 +749,7 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
   });
   if (!rckResp.ok) {
     await throwIfAddServerRefused(rckResp);
-    throw new Error(`RCK register failed (${rckResp.status})`);
+    throw new Error(tr("RCK register failed ({0})", rckResp.status));
   }
 
   // v2: blob.issuedAt + blob.expiresAt dropped. The authCode's own
@@ -893,8 +894,8 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
  */
 export async function createServerForRestore({ serverName, bootUnlockMode, diskEncryption, restore }) {
   const session = getSession();
-  if (!session.umk || !session.irk) throw new Error("Unlock the webapp first");
-  if (!isValidServerName(serverName)) throw new Error("That name can't be used for a server.");
+  if (!session.umk || !session.irk) throw new Error(tr("Unlock the webapp first"));
+  if (!isValidServerName(serverName)) throw new Error(tr("That name can't be used for a server."));
   const username = await ensureUsername();
   const inputs = {
     serverName,

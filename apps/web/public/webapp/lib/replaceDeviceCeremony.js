@@ -43,6 +43,7 @@ import { requireOwnerProfile } from "./companionGuard.js";
 import { controlApex } from "./apex.js";
 import { throwIfRateLimited } from "./rateLimited.js";
 
+import { tr } from "./i18n.js";
 /** Canonical-bytes tag — MUST match @flagship/protocol TAG_RE_PAIR_INITIATE. */
 export const TAG_RE_PAIR_INITIATE = "flagship/re-pair-initiate/v1";
 /** MUST match packages/protocol/src/recovery.ts TAG_RE_PAIR_COMPLETE. */
@@ -121,7 +122,7 @@ export async function runReplaceDeviceCeremony(args, deps = {}) {
     issuedAt,
   });
   const sigBytes = new Uint8Array(
-    await crypto.subtle.sign({ name: "Ed25519" }, newIrk.privateKey, canonical),
+    await crypto.subtle.sign({ name: tr("Ed25519") }, newIrk.privateKey, canonical),
   );
   // …and with the OLD (currently registered) IRK over the SAME bytes.
   // That second signature is the credential `.com` requires: the first
@@ -129,7 +130,7 @@ export async function runReplaceDeviceCeremony(args, deps = {}) {
   // is public, so neither proves we own the account. This device holds
   // the session UMK, so it can prove it outright.
   const oldSigBytes = new Uint8Array(
-    await crypto.subtle.sign({ name: "Ed25519" }, oldIrk.privateKey, canonical),
+    await crypto.subtle.sign({ name: tr("Ed25519") }, oldIrk.privateKey, canonical),
   );
 
   // 3 — POST initiate.
@@ -174,17 +175,17 @@ export async function runReplaceDeviceCeremony(args, deps = {}) {
     if (needsTotp && typeof deps.requestTotpProof === "function") {
       const proof = await deps.requestTotpProof();
       if (!proof || typeof proof.code !== "string" || proof.code.length === 0) {
-        throw makeError("Recovery cancelled — TOTP code is required.", "cancelled");
+        throw makeError(tr("Recovery cancelled — TOTP code is required."), "cancelled");
       }
       const method = proof.method === "recovery" ? "recovery" : "totp";
       resp = await post({ ...baseBody, totpProof: { code: proof.code, method } });
       if (resp.status === 401) {
         const text2 = await resp.text().catch(() => "");
-        throw makeError(`TOTP code rejected: ${text2 || "invalid code"}`, "401");
+        throw makeError(tr("TOTP code rejected: {0}", text2 || "invalid code"), "401");
       }
     } else {
       throw makeError(
-        "This account requires a TOTP code to recover. Open the app on a trusted device.",
+        tr("This account requires a TOTP code to recover. Open the app on a trusted device."),
         "401",
       );
     }
@@ -210,21 +211,21 @@ export async function runReplaceDeviceCeremony(args, deps = {}) {
     let parsed;
     try { parsed = JSON.parse(text); } catch { parsed = null; }
     throw makeError(
-      "Your device list changed in the background. Refresh and try again.",
+      tr("Your device list changed in the background. Refresh and try again."),
       "412",
       { currentEtag: parsed?.currentEtag ?? null },
     );
   }
   if (resp.status === 409) {
-    throw makeError("A device replacement is already pending on this account.", "409");
+    throw makeError(tr("A device replacement is already pending on this account."), "409");
   }
   if (resp.status === 403) {
-    throw makeError("The server rejected the request — refresh and try again.", "403");
+    throw makeError(tr("The server rejected the request — refresh and try again."), "403");
   }
   if (resp.status === 400) {
-    throw makeError(`Bad request: ${text || resp.status}`, "400");
+    throw makeError(tr("Bad request: {0}", text || resp.status), "400");
   }
-  throw makeError(`Server error (${resp.status}): ${text}`, "5xx");
+  throw makeError(tr("Server error ({0}): {1}", resp.status, text), "5xx");
 }
 
 /**
@@ -262,7 +263,7 @@ export async function completeReplaceDeviceCeremony(args, deps = {}) {
   const newIrkPubHex = bytesToHex(newIrk.publicKey);
   const completeSig = new Uint8Array(
     await crypto.subtle.sign(
-      { name: "Ed25519" },
+      { name: tr("Ed25519") },
       newIrk.privateKey,
       new TextEncoder().encode(
         [TAG_RE_PAIR_COMPLETE, username, newIrkPubHex, issuedAt].join("|"),
@@ -291,21 +292,21 @@ export async function completeReplaceDeviceCeremony(args, deps = {}) {
   }
   const text = await resp.text().catch(() => "");
   if (resp.status === 425) {
-    throw makeError("The 24-hour grace hasn't ended yet. Try again later.", "425");
+    throw makeError(tr("The 24-hour grace hasn't ended yet. Try again later."), "425");
   }
   if (resp.status === 409) {
-    throw makeError("This replacement was cancelled, or the account key has already changed. Local state stays unchanged.", "409");
+    throw makeError(tr("This replacement was cancelled, or the account key has already changed. Local state stays unchanged."), "409");
   }
   if (resp.status === 404) {
-    throw makeError("No pending rotation found on the server.", "404");
+    throw makeError(tr("No pending rotation found on the server."), "404");
   }
   if (resp.status === 410) {
     // #52 — the completion window (7d past the grace deadline) elapsed
     // and the server swept the stale row. Unlike 404 this is a dead
     // recovery, not an already-done one — start a new ceremony.
-    throw makeError("This rotation expired before it was completed. Start again.", "410");
+    throw makeError(tr("This rotation expired before it was completed. Start again."), "410");
   }
-  throw makeError(`Server error (${resp.status}): ${text}`, "5xx");
+  throw makeError(tr("Server error ({0}): {1}", resp.status, text), "5xx");
 }
 
 /**
@@ -376,7 +377,7 @@ export async function fetchPendingRePair(args, deps = {}) {
   }
   if (resp.status !== 200) {
     const text = await resp.text().catch(() => "");
-    throw makeError(`Server error (${resp.status}): ${text}`, "5xx");
+    throw makeError(tr("Server error ({0}): {1}", resp.status, text), "5xx");
   }
   const body = await resp.json().catch(() => ({}));
   return { pending: body.pending ?? null };

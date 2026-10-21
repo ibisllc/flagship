@@ -19,6 +19,7 @@ import { CompanionWriteError, requireOwnerProfile } from "./companionGuard.js";
 import { submitWriteRequest } from "./companionWriteRelay.js";
 import { controlApex } from "./apex.js";
 
+import { tr } from "./i18n.js";
 /** Canonical-bytes tag — MUST match @flagship/protocol TAG_REVOKE. */
 export const TAG_REVOKE = "flagship/revoke/v1";
 
@@ -188,7 +189,7 @@ export async function unrevokeServer(args, deps = {}) {
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({}));
     const msg = resp.status === 409
-      ? "This server was deleted or handed over and can't be restored."
+      ? tr("This server was deleted or handed over and can't be restored.")
       : (body && body.error) || `un-revoke failed (${resp.status})`;
     throw makeError(msg, String(resp.status));
   }

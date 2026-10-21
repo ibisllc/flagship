@@ -14,6 +14,7 @@
 
 import { get as profileGet } from "./profilesStore.js";
 
+import { tr } from "./i18n.js";
 export const COMPANION_WRITE_ERROR_CODE = "companion-write-not-allowed";
 
 export class CompanionWriteError extends Error {
@@ -91,7 +92,7 @@ export function applyCompanionUiRestrictions(doc = globalThis.document) {
     if (active) {
       el.setAttribute("data-companion-unavailable", "true");
       el.setAttribute("aria-disabled", "true");
-      el.setAttribute("title", "Unavailable in a keyless remote session");
+      el.setAttribute("title", tr("Unavailable in a keyless remote session"));
       if ("disabled" in el) el.disabled = true;
     } else if (el.getAttribute("data-companion-unavailable") === "true") {
       el.removeAttribute("data-companion-unavailable");

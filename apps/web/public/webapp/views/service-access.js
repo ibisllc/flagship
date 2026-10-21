@@ -84,6 +84,7 @@ import { humanError } from "../lib/humanError.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { formatWhen } from "../lib/dateFormat.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-service-access");
 
 let currentService = null;
@@ -136,7 +137,7 @@ async function thisDevicePub() {
 async function signWithThisDevice(umk, bytes) {
   const accountId = getActiveProfile()?.accountId;
   const deviceId = thisDeviceId();
-  if (!accountId || !deviceId) throw new Error("This device isn't set up on your account yet. Sign in to your account on it again.");
+  if (!accountId || !deviceId) throw new Error(tr("This device isn't set up on your account yet. Sign in to your account on it again."));
   return signWithAccountDeviceKey(umk, accountId, deviceId, bytes);
 }
 
@@ -167,7 +168,7 @@ export async function renderServiceAccess(service) {
   const serviceRef = service.serviceId;
   const session = getSession();
   if (!session.username || !session.umk) {
-    root.innerHTML = `<div class="card"><p class="err-text">Unlock the webapp first.</p></div>`;
+    root.innerHTML = `<div class="card"><p class="err-text">${tr("Unlock the webapp first.")}</p></div>`;
     return;
   }
 
@@ -177,11 +178,11 @@ export async function renderServiceAccess(service) {
   root.innerHTML = `
     <div class="card">
       <div class="card-title">${escapeHtml(service.slug ?? serviceRef)}</div>
-      <div class="muted-sm text-xs mt-1">id: ${escapeHtml(serviceRef)}</div>
+      <div class="muted-sm text-xs mt-1">${tr("id: {0}", escapeHtml(serviceRef))}</div>
     </div>
 
     <div class="card mt-3">
-      <div class="fs-segmented" id="sa-mode" role="radiogroup" aria-label="Who can open it"${admin ? "" : ' aria-disabled="true"'}>
+      <div class="fs-segmented" id="sa-mode" role="radiogroup" aria-label="${tr("Who can open it")}"${admin ? "" : ' aria-disabled="true"'}>
         <button type="button" role="radio" data-mode="open" aria-checked="${mode === "open"}"${admin ? "" : " disabled"}>${MODE_LABEL.open}</button>
         <button type="button" role="radio" data-mode="restricted" aria-checked="${mode === "restricted"}"${admin ? "" : " disabled"}>${MODE_LABEL.restricted}</button>
       </div>
@@ -189,67 +190,62 @@ export async function renderServiceAccess(service) {
       ${admin ? "" : `<p id="sa-mode-locked" class="note mt-1">${escapeHtml(ADMIN_ONLY_MODE_NOTE)}</p>`}
     </div>
 
-    <h2 class="mt-4" id="sa-account-title">Account members</h2>
-    <div id="sa-account-people"><div class="card placeholder">loading…</div></div>
+    <h2 class="mt-4" id="sa-account-title">${tr("Account members")}</h2>
+    <div id="sa-account-people"><div class="card placeholder">${tr("loading…")}</div></div>
 
-    <h2 class="mt-4" id="sa-members-title">Members</h2>
+    <h2 class="mt-4" id="sa-members-title">${tr("Members")}</h2>
     <div class="row-2" id="sa-add-row">
-      <button id="sa-add-person" class="secondary" type="button">+ Add person</button>
-      <button id="sa-add-group" class="secondary" type="button">+ Add group</button>
+      <button id="sa-add-person" class="secondary" type="button">${tr("+ Add person")}</button>
+      <button id="sa-add-group" class="secondary" type="button">${tr("+ Add group")}</button>
     </div>
     <p id="sa-add-why" class="note hidden"></p>
     <div id="sa-add-card" class="card mt-2 hidden">
-      <div class="card-title" id="sa-add-title">Add a person</div>
+      <div class="card-title" id="sa-add-title">${tr("Add a person")}</div>
       <p class="note mt-1">
-        Names &amp; photos stay encrypted to your account — flagshipserver.com
-        stores only ciphertext and never sees them. Send the link over a private channel.
+        ${tr("Names &amp; photos stay encrypted to your account — flagshipserver.com stores only ciphertext and never sees them. Send the link over a private channel.")}
       </p>
-      <label class="mt-2" id="sa-name-label">Name <span class="faint-sm">(only you and your servers see it)</span></label>
-      <input id="sa-name" type="text" placeholder="Alex" autocomplete="off" maxlength="120" />
-      <label class="mt-2" for="sa-new-role">Rank</label>
+      <label class="mt-2" id="sa-name-label">${tr("Name")} <span class="faint-sm">${tr("(only you and your servers see it)")}</span></label>
+      <input id="sa-name" type="text" placeholder="${tr("Alex")}" autocomplete="off" maxlength="120" />
+      <label class="mt-2" for="sa-new-role">${tr("Rank")}</label>
       <select id="sa-new-role">${roleOptionsHtml("member", true)}</select>
       <p id="sa-rank-locked" class="note mt-1 hidden">${escapeHtml(ADMIN_ONLY_RANK_NOTE)}</p>
       <div id="sa-person-opts">
-        <label class="mt-2">Photo <span class="faint-sm">(optional)</span></label>
+        <label class="mt-2">${tr("Photo")} <span class="faint-sm">${tr("(optional)")}</span></label>
         <input id="sa-photo" type="file" accept="image/*" />
         <div id="sa-photo-preview" class="mt-2"></div>
-        <label class="inline-check mt-2"><input type="checkbox" id="sa-approve" /> I approve them before they get in (most secure)</label>
+        <label class="inline-check mt-2"><input type="checkbox" id="sa-approve" /> ${tr("I approve them before they get in (most secure)")}</label>
       </div>
       <div id="sa-group-opts" class="hidden mt-2">
-        <p class="note">Anyone the link reaches (up to the limit) joins with this rank. Set a limit and an expiry.</p>
-        <label>Max uses <span class="faint-sm">(0 = unlimited)</span></label>
+        <p class="note">${tr("Anyone the link reaches (up to the limit) joins with this rank. Set a limit and an expiry.")}</p>
+        <label>${tr("Max uses")} <span class="faint-sm">${tr("(0 = unlimited)")}</span></label>
         <input id="sa-maxn" type="number" min="0" step="1" value="10" />
-        <label class="mt-2">Expires in days <span class="faint-sm">(optional — a forever link is a liability)</span></label>
+        <label class="mt-2">${tr("Expires in days")} <span class="faint-sm">${tr("(optional — a forever link is a liability)")}</span></label>
         <input id="sa-expiry-days" type="number" min="0" step="1" placeholder="30" />
       </div>
-      <button id="sa-add-go" class="full-width mt-3">Create invite link</button>
+      <button id="sa-add-go" class="full-width mt-3">${tr("Create invite link")}</button>
       <div id="sa-add-status" class="mt-2 text-sm"></div>
       <div id="sa-add-result" class="mt-2 hidden">
-        <label>Shareable link</label>
+        <label>${tr("Shareable link")}</label>
         <input id="sa-link" type="text" readonly class="mt-1" />
         <div id="sa-qr" class="mt-2" style="text-align:center;"></div>
         <div class="row-2 mt-2">
-          <button id="sa-share" class="secondary">Share…</button>
-          <button id="sa-copy" class="secondary">Copy link</button>
+          <button id="sa-share" class="secondary">${tr("Share…")}</button>
+          <button id="sa-copy" class="secondary">${tr("Copy link")}</button>
         </div>
         <p id="sa-manual-hint" class="note mt-2 hidden">
-          You approve this one. After they open the link, they'll send you back
-          an acceptance code — paste it under &ldquo;Finalize an acceptance&rdquo;
-          below to let them in.
+          ${tr("You approve this one. After they open the link, they'll send you back an acceptance code — paste it under &ldquo;Finalize an acceptance&rdquo; below to let them in.")}
         </p>
       </div>
     </div>
-    <div id="sa-people" class="mt-2"><div class="card placeholder">loading…</div></div>
+    <div id="sa-people" class="mt-2"><div class="card placeholder">${tr("loading…")}</div></div>
 
-    <h2 class="mt-4">Finalize an acceptance</h2>
+    <h2 class="mt-4">${tr("Finalize an acceptance")}</h2>
     <div class="card">
       <p class="note">
-        For an invite you approve: paste the acceptance code (or link) your
-        friend sent back. It never reveals who they are — you're just
-        confirming it really came from them.
+        ${tr("For an invite you approve: paste the acceptance code (or link) your friend sent back. It never reveals who they are — you're just confirming it really came from them.")}
       </p>
       <textarea id="sa-accept-input" rows="2" placeholder="https://flagshipserver.com/invite-accept?…" class="mt-1"></textarea>
-      <button id="sa-accept-go" class="full-width mt-2">Finalize &amp; grant access</button>
+      <button id="sa-accept-go" class="full-width mt-2">${tr("Finalize &amp; grant access")}</button>
       <div id="sa-accept-status" class="mt-2 text-sm"></div>
     </div>
   `;
@@ -276,13 +272,13 @@ export async function renderServiceAccess(service) {
   await renderPeople(serviceRef);
 }
 
-const MODE_LABEL = { open: "Open to all", restricted: "Members only" };
+const MODE_LABEL = { open: tr("Open to all"), restricted: tr("Members only") };
 
 /** The line under the toggle. */
 function modeNote(mode) {
   return mode === "restricted"
-    ? "Only members and you can open it. Anyone else is asked to sign in."
-    : "Anyone can open it. Members who sign in get their rank.";
+    ? tr("Only members and you can open it. Anyone else is asked to sign in.")
+    : tr("Anyone can open it. Members who sign in get their rank.");
 }
 
 /** Rank options; `withDescriptions` adds the app's one line per rank (the add card has room). */
@@ -311,11 +307,11 @@ function openAddCard(kind) {
   const status = $("sa-add-status");
   if (status) status.textContent = "";
   const group = kind === "group";
-  $("sa-add-title").textContent = group ? "Add a group" : "Add a person";
+  $("sa-add-title").textContent = group ? tr("Add a group") : tr("Add a person");
   $("sa-name-label").innerHTML = group
     ? 'Group name <span class="faint-sm">(only you and your servers see it)</span>'
     : 'Name <span class="faint-sm">(only you and your servers see it)</span>';
-  $("sa-name").placeholder = group ? "Chess club" : "Alex";
+  $("sa-name").placeholder = group ? tr("Chess club") : tr("Alex");
   $("sa-person-opts")?.classList.toggle("hidden", group);
   $("sa-group-opts")?.classList.toggle("hidden", !group);
   const admin = isAdminDevice(getSession());
@@ -350,11 +346,11 @@ async function onPickMode(serviceRef, mode) {
     const n = lastMembers?.members?.length ?? 0;
     const { inlineConfirm } = await import("../lib/modal.js");
     const ok = await inlineConfirm({
-      title: "Members only?",
+      title: tr("Members only?"),
       message: n === 1
-        ? "Only this 1 person will be able to open it."
-        : `Only these ${n} people will be able to open it.`,
-      okLabel: "Members only",
+        ? tr("Only this 1 person will be able to open it.")
+        : tr("Only these {0} people will be able to open it.", n),
+      okLabel: tr("Members only"),
     });
     if (!ok) return;
   }
@@ -365,18 +361,18 @@ async function onPickMode(serviceRef, mode) {
   group.dataset.saving = "1";
   if (status) {
     status.className = "mt-2 text-xs muted-sm";
-    status.textContent = "Saving…";
+    status.textContent = tr("Saving…");
   }
   try {
     await setServiceAccessMode({ baseUrl: podBaseUrl(), serviceRef, mode, umk: session.umk, signWithIrk: sensitiveSigner() });
     rememberMode(serviceRef, mode);
     if (status) status.textContent = modeNote(mode);
-    toast(mode === "restricted" ? "Now members only." : "Now open to all.");
+    toast(mode === "restricted" ? tr("Now members only.") : tr("Now open to all."));
   } catch (e) {
     setModeUi(current);
     if (status) {
       status.className = "mt-2 text-xs err-text";
-      status.textContent = "Couldn't change access. Try again in a moment.";
+      status.textContent = tr("Couldn't change access. Try again in a moment.");
     }
     throw e;
   } finally {
@@ -396,7 +392,7 @@ function onPhotoPicked(ev) {
   if (!file) return;
   // Cap at ~256 KB encoded so the sealed bundle stays small (.com stores it).
   if (file.size > 256 * 1024) {
-    toast("Photo is too large (max 256 KB). Pick a smaller image.", "err");
+    toast(tr("Photo is too large (max 256 KB). Pick a smaller image."), "err");
     if (ev.currentTarget) ev.currentTarget.value = "";
     return;
   }
@@ -407,7 +403,7 @@ function onPhotoPicked(ev) {
       preview.innerHTML = `<img src="${escapeHtml(pickedPhotoDataUri)}" alt="" style="max-height:64px;border-radius:8px;" />`;
     }
   };
-  reader.onerror = () => toast("Couldn't read that image.", "err");
+  reader.onerror = () => toast(tr("Couldn't read that image."), "err");
   reader.readAsDataURL(file);
 }
 
@@ -438,7 +434,7 @@ async function onAdd(serviceRef) {
   if (!name) {
     if (status) {
       status.className = "mt-2 text-sm err-text";
-      status.textContent = "Name is required (kept private to your account).";
+      status.textContent = tr("Name is required (kept private to your account).");
     }
     return;
   }
@@ -460,9 +456,9 @@ async function onAdd(serviceRef) {
   // and its rank (owner rule: one biometric per invite).
   if (admin) {
     const unlocked = await freshAdminUnlock({
-      title: isGroup ? `Create the group ${name}?` : `Invite ${name}?`,
-      message: `${isGroup ? "Everyone who joins" : "They"} will open this app as ${roleLabel(role)}.`,
-      okLabel: "Create invite",
+      title: isGroup ? tr("Create the group {0}?", name) : tr("Invite {0}?", name),
+      message: tr("{0} will open this app as {1}.", isGroup ? tr("Everyone who joins") : "They", roleLabel(role)),
+      okLabel: tr("Create invite"),
     });
     if (!unlocked) {
       if (status) status.textContent = "";
@@ -472,11 +468,11 @@ async function onAdd(serviceRef) {
 
   if (status) {
     status.className = "mt-2 text-sm";
-    status.textContent = "creating…";
+    status.textContent = tr("creating…");
   }
   if (goBtn) {
     goBtn.disabled = true;
-    goBtn.textContent = "Creating…";
+    goBtn.textContent = tr("Creating…");
   }
   try {
     const [aid, householdKey] = await Promise.all([
@@ -516,7 +512,7 @@ async function onAdd(serviceRef) {
     }
     if (status) {
       status.className = roleNote ? "mt-2 text-sm err-text" : "mt-2 text-sm ok-text";
-      status.textContent = `${isGroup ? "Group" : "Invite for"} ${name} created.${roleNote}`;
+      status.textContent = tr("{0} {1} created.{2}", isGroup ? "Group" : tr("Invite for"), name, roleNote);
     }
     const result = $("sa-add-result");
     const linkEl = $("sa-link");
@@ -545,7 +541,7 @@ async function onAdd(serviceRef) {
   } finally {
     if (goBtn) {
       goBtn.disabled = false;
-      goBtn.textContent = "Create invite link";
+      goBtn.textContent = tr("Create invite link");
     }
   }
 }
@@ -562,7 +558,7 @@ export async function runFinalizeAccept(
   { podBaseUrl, parseAcceptReply, submitAccept },
 ) {
   const parsed = parseAcceptReply(raw);
-  if (!parsed) throw err("That doesn't look like an acceptance code. Paste the whole thing.", "bad-accept");
+  if (!parsed) throw err(tr("That doesn't look like an acceptance code. Paste the whole thing."), "bad-accept");
   const r = await submitAccept({
     baseUrl: podBaseUrl(),
     accept: parsed.accept,
@@ -577,14 +573,14 @@ async function onFinalizeAccept(serviceRef) {
   if (btn?.disabled) return;
   const raw = ($("sa-accept-input")?.value || "").trim();
   if (!raw) {
-    if (status) { status.className = "mt-2 text-sm err-text"; status.textContent = "Paste the acceptance code first."; }
+    if (status) { status.className = "mt-2 text-sm err-text"; status.textContent = tr("Paste the acceptance code first."); }
     return;
   }
-  if (status) { status.className = "mt-2 text-sm"; status.textContent = "finalizing…"; }
-  if (btn) { btn.disabled = true; btn.textContent = "Finalizing…"; }
+  if (status) { status.className = "mt-2 text-sm"; status.textContent = tr("finalizing…"); }
+  if (btn) { btn.disabled = true; btn.textContent = tr("Finalizing…"); }
   try {
     await runFinalizeAccept({ raw }, { podBaseUrl, parseAcceptReply, submitAccept });
-    if (status) { status.className = "mt-2 text-sm ok-text"; status.textContent = "Granted — they can open it now."; }
+    if (status) { status.className = "mt-2 text-sm ok-text"; status.textContent = tr("Granted — they can open it now."); }
     if ($("sa-accept-input")) $("sa-accept-input").value = "";
     await renderPeople(serviceRef);
   } catch (e) {
@@ -593,7 +589,7 @@ async function onFinalizeAccept(serviceRef) {
     if (status) { status.className = "mt-2 text-sm err-text"; status.textContent = text; }
     throw e;
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "Finalize & grant access"; }
+    if (btn) { btn.disabled = false; btn.textContent = tr("Finalize & grant access"); }
   }
 }
 
@@ -686,9 +682,9 @@ async function renderPeople(serviceRef) {
   }
   lastInvites = invites.value;
   const title = $("sa-members-title");
-  if (title) title.textContent = `Members (${lastInvites.length})`;
+  if (title) title.textContent = tr("Members ({0})", lastInvites.length);
   if (lastInvites.length === 0) {
-    root.innerHTML = `<div class="card placeholder">${ability.canInvite ? "No members yet. Add a person or a group." : "No members yet."}</div>`;
+    root.innerHTML = `<div class="card placeholder">${ability.canInvite ? tr("No members yet. Add a person or a group.") : tr("No members yet.")}</div>`;
     return;
   }
   const labelOf = (id) => {
@@ -744,7 +740,7 @@ async function freshAdminUnlock(opts) {
 /** Admin devices: sign one flagship/app-rank/v1 with the admin root and send it. */
 async function sendRank(serviceRef, target, rank) {
   const session = getSession();
-  if (!isAdminDevice(session)) throw new Error("Only an admin device can change a rank.");
+  if (!isAdminDevice(session)) throw new Error(tr("Only an admin device can change a rank."));
   await setAppRank({
     serviceId: serviceRef,
     target,
@@ -766,9 +762,9 @@ async function onPickRole(serviceRef, sel) {
   }
   const name = sel.getAttribute("data-name") || "them";
   const unlocked = await freshAdminUnlock({
-    title: `Make ${name} ${roleLabel(role)}?`,
-    message: `${name} gets what a ${roleLabel(role)} may do in this app.`,
-    okLabel: "Change rank",
+    title: tr("Make {0} {1}?", name, roleLabel(role)),
+    message: tr("{0} gets what a {1} may do in this app.", name, roleLabel(role)),
+    okLabel: tr("Change rank"),
   });
   if (!unlocked) {
     sel.value = before;
@@ -777,7 +773,7 @@ async function onPickRole(serviceRef, sel) {
   sel.disabled = true;
   try {
     await sendRank(serviceRef, sel.getAttribute("data-target"), role);
-    toast(`Now ${roleLabel(role)}.`);
+    toast(tr("Now {0}.", roleLabel(role)));
     await renderPeople(serviceRef);
   } catch (e) {
     sel.value = before;
@@ -792,16 +788,16 @@ async function onRefuse(serviceRef, btn) {
   const name = btn.getAttribute("data-name") || "them";
   const { inlineConfirm } = await import("../lib/modal.js");
   const ok = await inlineConfirm({
-    title: `Refuse ${name}?`,
-    message: "They can't open this app until an admin gives them a rank again.",
-    okLabel: "Refuse",
+    title: tr("Refuse {0}?", name),
+    message: tr("They can't open this app until an admin gives them a rank again."),
+    okLabel: tr("Refuse"),
     danger: true,
   });
   if (!ok) return;
   btn.disabled = true;
   try {
     await sendRank(serviceRef, btn.getAttribute("data-target"), RANK_REFUSED);
-    toast(`${name} is refused in this app.`);
+    toast(tr("{0} is refused in this app.", name));
     await renderPeople(serviceRef);
   } finally {
     btn.disabled = false;
@@ -855,11 +851,9 @@ export function accountMemberRowHtml(row, ctx = { isAdmin: false, devicePub: "",
   let actions;
   if (ctx.isAdmin) {
     const refusedOption = row.refused ? `<option value="${RANK_REFUSED}" selected disabled>${escapeHtml(roleLabel(RANK_REFUSED))}</option>` : "";
-    actions = `${row.refused ? "" : crownHtml(current)}<select data-action="sa-acct-rank" data-target="${escapeHtml(target)}" data-current="${escapeHtml(current)}" data-name="${escapeHtml(name)}" aria-label="Rank for ${escapeHtml(name)}">${refusedOption}${roleOptionsHtml(row.refused ? "" : current)}</select>${
-      row.refused
+    actions = `${row.refused ? "" : crownHtml(current)}<select data-action="sa-acct-rank" data-target="${escapeHtml(target)}" data-current="${escapeHtml(current)}" data-name="${escapeHtml(name)}" aria-label="${tr("Rank for {0}", escapeHtml(name))}">${refusedOption}${roleOptionsHtml(row.refused ? "" : current)}</select>${row.refused
         ? ""
-        : `<button class="sa-remove" type="button" data-action="sa-acct-refuse" data-target="${escapeHtml(target)}" data-name="${escapeHtml(name)}">Refuse</button>`
-    }`;
+        : `<button class="sa-remove" type="button" data-action="sa-acct-refuse" data-target="${escapeHtml(target)}" data-name="${escapeHtml(name)}">${tr("Refuse")}</button>`}`;
   } else {
     actions = `${row.refused ? "" : crownHtml(current)}<span class="sa-rank" data-rank="${escapeHtml(current)}">${escapeHtml(roleLabel(current))}</span>`;
   }
@@ -885,7 +879,7 @@ export function accountMemberRowHtml(row, ctx = { isAdmin: false, devicePub: "",
  */
 export function peopleRowHtml(i, members, labelOf, ctx = { isAdmin: false, deviceId: "", devicePub: "", managerClass: false, members: null, deviceNames: null }) {
   // A co-manager's invitee is named under their key, which this account can't open.
-  const name = i.bundle?.name ?? (i.creatorTier === "co-manager" ? "Someone they invited" : "unknown");
+  const name = i.bundle?.name ?? (i.creatorTier === "co-manager" ? tr("Someone they invited") : "unknown");
   const photo = i.bundle?.photo;
   const isGroup = i.maxRedemptions !== null && i.maxRedemptions !== undefined;
   let statusText;
@@ -912,7 +906,7 @@ export function peopleRowHtml(i, members, labelOf, ctx = { isAdmin: false, devic
   const picker = !role
     ? ""
     : ctx.isAdmin
-      ? `${crownHtml(role)}<select data-action="sa-role" data-target="${escapeHtml(target)}" data-current="${escapeHtml(role)}" data-name="${escapeHtml(name)}" aria-label="Rank for ${escapeHtml(name)}">${roleOptionsHtml(role)}</select>`
+      ? `${crownHtml(role)}<select data-action="sa-role" data-target="${escapeHtml(target)}" data-current="${escapeHtml(role)}" data-name="${escapeHtml(name)}" aria-label="${tr("Rank for {0}", escapeHtml(name))}">${roleOptionsHtml(role)}</select>`
       : `${crownHtml(role)}<span class="sa-rank" data-rank="${escapeHtml(role)}">${escapeHtml(roleLabel(role))}</span>`;
   const removeLabel = isGroup ? "Revoke" : "Remove";
   const invitedBy = invitedByText(i, ctx);
@@ -969,7 +963,7 @@ export async function runRemovePerson(
     } catch (e) {
       if (!isAdmin) {
         throw err(
-          `Withdrawn on flagshipserver.com, but your server didn't take it yet (${humanError(e)}). Anyone who joined keeps access until it next checks.`,
+          tr("Withdrawn on flagshipserver.com, but your server didn't take it yet ({0}). Anyone who joined keeps access until it next checks.", humanError(e)),
           "box-prune-failed",
         );
       }
@@ -994,7 +988,7 @@ export async function runRemovePerson(
       });
     } catch (e) {
       throw err(
-        `Revoked on flagshipserver.com, but couldn't remove their access on your server (${humanError(e)}). They may still have access — try again.`,
+        tr("Revoked on flagshipserver.com, but couldn't remove their access on your server ({0}). They may still have access — try again.", humanError(e)),
         "box-prune-failed",
       );
     }
@@ -1012,15 +1006,15 @@ async function onRemovePerson(serviceRef, inviteId, name, boundAID, isGroup) {
   const restricted = (lastMembers?.mode ?? lastKnownMode(serviceRef)) === "restricted";
   const { inlineConfirm } = await import("../lib/modal.js");
   const ok = await inlineConfirm({
-    title: isGroup ? `Revoke the "${name}" group?` : `Remove ${name || "this person"}?`,
+    title: isGroup ? tr("Revoke the \"{0}\" group?", name) : tr("Remove {0}?", name || "this person"),
     message: isGroup
       ? (restricted
-          ? "Everyone who joined through this link loses access, unless they were also invited another way."
-          : "Everyone who joined through this link loses their rank and can still visit as anyone can.")
+          ? tr("Everyone who joined through this link loses access, unless they were also invited another way.")
+          : tr("Everyone who joined through this link loses their rank and can still visit as anyone can."))
       : (restricted
-          ? "They're signed out and kept out. You can invite them again later."
-          : "They lose their rank and can still visit as anyone can. You can invite them again later."),
-    okLabel: isGroup ? "Revoke" : "Remove",
+          ? tr("They're signed out and kept out. You can invite them again later.")
+          : tr("They lose their rank and can still visit as anyone can. You can invite them again later.")),
+    okLabel: isGroup ? tr("Revoke") : tr("Remove"),
     danger: true,
   });
   if (!ok) return;
@@ -1043,7 +1037,7 @@ async function onRemovePerson(serviceRef, inviteId, name, boundAID, isGroup) {
     await renderPeople(serviceRef);
     throw e;
   }
-  toast(isGroup ? "Group revoked." : "Removed.");
+  toast(isGroup ? tr("Group revoked.") : tr("Removed."));
   await renderPeople(serviceRef);
 }
 
@@ -1057,7 +1051,7 @@ function err(message, code) {
 async function shareIt(link) {
   if (typeof navigator.share === "function") {
     try {
-      await navigator.share({ title: "Flagship invite", url: link });
+      await navigator.share({ title: tr("Flagship invite"), url: link });
     } catch {
       /* user cancelled */
     }
@@ -1069,9 +1063,9 @@ async function shareIt(link) {
 async function copyIt(link) {
   try {
     await navigator.clipboard.writeText(link);
-    toast("Link copied.");
+    toast(tr("Link copied."));
   } catch {
-    toast("Couldn't copy — long-press the field to copy.", "err");
+    toast(tr("Couldn't copy — long-press the field to copy."), "err");
   }
 }
 

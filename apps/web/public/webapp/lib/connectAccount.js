@@ -5,19 +5,20 @@
 
 import { parseJoinLink } from "./crossDevicePairing.js";
 
-export const CONNECT_TITLE = "Connect to an existing account";
-export const CONNECT_NAME_HEADING = "Sign in with your account name";
-export const CONNECT_NAME_HELPER = "The name you picked when you made the account.";
-export const CONNECT_PAIR_HEADING = "Join with a pairing code";
+import { tr } from "./i18n.js";
+export const CONNECT_TITLE = tr("Connect to an existing account");
+export const CONNECT_NAME_HEADING = tr("Sign in with your account name");
+export const CONNECT_NAME_HELPER = tr("The name you picked when you made the account.");
+export const CONNECT_PAIR_HEADING = tr("Join with a pairing code");
 export const CONNECT_PAIR_HELPER =
-  "On a device of that account, open Settings → Trusted devices → Add device.";
-export const CONNECT_ROUTED_TO_JOIN = "That's a pairing link, so we're joining with it.";
+  tr("On a device of that account, open Settings → Trusted devices → Add device.");
+export const CONNECT_ROUTED_TO_JOIN = tr("That's a pairing link, so we're joining with it.");
 export const CONNECT_NOT_A_CODE =
-  "That isn't a pairing code. Paste the whole link from the other device, or scan its code.";
+  tr("That isn't a pairing code. Paste the whole link from the other device, or scan its code.");
 export const CONNECT_NAME_IN_CODE =
-  "That looks like an account name. Type it under Sign in with your account name.";
+  tr("That looks like an account name. Type it under Sign in with your account name.");
 export const CONNECT_BAD_LINK =
-  "That link isn't a pairing link. Ask the other device to show a new code.";
+  tr("That link isn't a pairing link. Ask the other device to show a new code.");
 
 /** What a typed or pasted value is.
  *  @param {string} text

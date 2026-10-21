@@ -5,6 +5,7 @@
 // under a passphrase the owner chose, since the lock screen asks for exactly
 // that one on the next load. A generated passphrase nobody kept would lock the
 // owner out of the account here after a reload.
+import { tr } from "./i18n.js";
 
 export const LOCAL_PASSPHRASE_MIN = 8;
 
@@ -21,18 +22,18 @@ export function isLocalPassphrase(p) {
  */
 export async function askLocalPassphrase(prompt) {
   const pass = await prompt({
-    title: "Lock this browser",
+    title: tr("Lock this browser"),
     message:
-      "Choose a passphrase (8+ characters). You'll type it to unlock this account on this browser. flagshipserver.com never sees it.",
+      tr("Choose a passphrase (8+ characters). You'll type it to unlock this account on this browser. flagshipserver.com never sees it."),
     placeholder: "passphrase",
     type: "password",
-    okLabel: "Continue",
-    validate: (v) => (isLocalPassphrase(v) ? null : "Use at least 8 characters"),
+    okLabel: tr("Continue"),
+    validate: (v) => (isLocalPassphrase(v) ? null : tr("Use at least 8 characters")),
   });
   if (!pass) return null;
   const again = await prompt({
-    title: "Confirm passphrase",
-    message: "Type it again.",
+    title: tr("Confirm passphrase"),
+    message: tr("Type it again."),
     placeholder: "passphrase",
     type: "password",
     validate: (v) => (v !== pass ? "passphrases don't match" : null),

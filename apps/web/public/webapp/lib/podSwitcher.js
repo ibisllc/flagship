@@ -15,6 +15,7 @@
 
 import { currentServerOrder, rankPods } from "./serverOrder.js";
 
+import { tr } from "./i18n.js";
 /** The pod base URL for a pod is `https://<serverDomain>`. A pod is
  *  identified, like iOS, by its FQDN; this is the only derivation the
  *  switcher needs to map a pod ↔ the active-pod slot in lib/api.js. */
@@ -145,7 +146,7 @@ export function buildPodSwitcherModel(pods, activeBaseUrl, leaderFqdn) {
   // The "All servers" pseudo-option is always first.
   const allOption = {
     podId: "pod-all",
-    name: "All servers",
+    name: tr("All servers"),
     fqdn: "",
     baseUrl: ALL_PODS_BASE_URL,
     selected: false,

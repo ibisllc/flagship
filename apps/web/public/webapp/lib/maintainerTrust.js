@@ -22,6 +22,7 @@
 // baseline and no JS-vendored fallback is needed. SHA-256 uses
 // crypto.subtle.digest. Everything is async because pin-hashing the mandate
 // log is async under WebCrypto.
+import { tr } from "./i18n.js";
 
 const SEP = "|";
 const TAG_PREFIX = "maintainers";
@@ -69,11 +70,11 @@ export async function edVerify(sigHex, msg, pubHex) {
     const key = await crypto.subtle.importKey(
       "raw",
       hexToBytes(pubHex),
-      { name: "Ed25519" },
+      { name: tr("Ed25519") },
       false,
       ["verify"],
     );
-    return await crypto.subtle.verify({ name: "Ed25519" }, key, hexToBytes(sigHex), msg);
+    return await crypto.subtle.verify({ name: tr("Ed25519") }, key, hexToBytes(sigHex), msg);
   } catch {
     return false;
   }
