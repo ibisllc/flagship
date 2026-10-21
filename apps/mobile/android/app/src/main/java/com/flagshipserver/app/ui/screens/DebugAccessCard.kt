@@ -5,6 +5,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import com.flagshipserver.app.ui.components.fsFocusRing
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
@@ -54,7 +58,7 @@ import java.util.Date
 
 /** "Debug access is on until <time>." */
 internal fun debugAccessBannerText(expiresAt: Long): String =
-    "Debug access is on until ${DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(expiresAt))}."
+    FSStrings.get(R.string.debug_access_is_on_until, DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(expiresAt)))
 
 /** Shown at the top of the server page while debug access is on. */
 @Composable
@@ -87,7 +91,7 @@ internal fun DebugAccessCard(vm: DebugAccessViewModel, onChanged: () -> Unit) {
     val on = vm.isOn()
     val view = state.view
 
-    com.flagshipserver.app.ui.components.FSSectionHeader("Debug access")
+    com.flagshipserver.app.ui.components.FSSectionHeader(stringResource(R.string.debug_access))
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             if (on && view != null) {
@@ -98,14 +102,14 @@ internal fun DebugAccessCard(vm: DebugAccessViewModel, onChanged: () -> Unit) {
                 )
                 view.keyFingerprint?.let {
                     Text(
-                        "Key $it",
+                        fsString(R.string.key_2, it),
                         color = FS.colors.textMuted,
                         style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                     )
                 }
             } else {
                 Text(
-                    "Off. Turn it on to let one SSH key in as the debug user for a while.",
+                    stringResource(R.string.off_turn_it_on_to_let),
                     color = FS.colors.textMuted,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -122,8 +126,8 @@ internal fun DebugAccessCard(vm: DebugAccessViewModel, onChanged: () -> Unit) {
                 FSField(
                     value = key,
                     onValueChange = { key = it },
-                    label = "SSH public key",
-                    placeholder = "ssh-ed25519 AAAA… you@laptop",
+                    label = stringResource(R.string.ssh_public_key),
+                    placeholder = stringResource(R.string.ssh_ed25519_aaaa_you_laptop),
                     fieldTag = "sd-debug-access-key",
                 )
                 DebugAccess.Duration.values().forEach { d ->
@@ -144,7 +148,7 @@ internal fun DebugAccessCard(vm: DebugAccessViewModel, onChanged: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                 )
                 FSPrimaryButton(
-                    label = if (state.busy) "Signing…" else if (on) "Renew" else "Turn on",
+                    label = if (state.busy) stringResource(R.string.signing) else if (on) stringResource(R.string.renew) else stringResource(R.string.turn_on),
                     onClick = {
                         scope.launch {
                             if (vm.turnOn(key, duration)) {
@@ -158,10 +162,10 @@ internal fun DebugAccessCard(vm: DebugAccessViewModel, onChanged: () -> Unit) {
                     block = true,
                     modifier = Modifier.testTag("sd-debug-access-submit"),
                 )
-                FSSecondaryButton(label = "Cancel", onClick = { editing = false }, block = true)
+                FSSecondaryButton(label = stringResource(R.string.cancel), onClick = { editing = false }, block = true)
             } else {
                 FSPrimaryButton(
-                    label = if (on) "Renew…" else "Turn on…",
+                    label = if (on) stringResource(R.string.renew_2) else stringResource(R.string.turn_on_2),
                     onClick = { editing = true },
                     enabled = !state.busy,
                     block = true,
@@ -169,7 +173,7 @@ internal fun DebugAccessCard(vm: DebugAccessViewModel, onChanged: () -> Unit) {
                 )
                 if (on) {
                     FSDangerButton(
-                        label = if (state.busy) "Turning off…" else "Turn off",
+                        label = if (state.busy) stringResource(R.string.turning_off) else stringResource(R.string.turn_off),
                         onClick = { confirmOff = true },
                         enabled = !state.busy,
                         block = true,
@@ -189,8 +193,8 @@ internal fun DebugAccessCard(vm: DebugAccessViewModel, onChanged: () -> Unit) {
     if (confirmOff) {
         AlertDialog(
             onDismissRequest = { confirmOff = false },
-            title = { Text("Turn off debug access?") },
-            text = { Text("The key stops working now and anyone signed in with it is disconnected.") },
+            title = { Text(stringResource(R.string.turn_off_debug_access)) },
+            text = { Text(stringResource(R.string.the_key_stops_working_now_and)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -198,9 +202,9 @@ internal fun DebugAccessCard(vm: DebugAccessViewModel, onChanged: () -> Unit) {
                         scope.launch { if (vm.turnOff()) onChanged() }
                     },
                     modifier = Modifier.testTag("sd-debug-access-confirm-off"),
-                ) { Text("Turn off") }
+                ) { Text(stringResource(R.string.turn_off)) }
             },
-            dismissButton = { TextButton(onClick = { confirmOff = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmOff = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }

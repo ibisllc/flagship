@@ -3,6 +3,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,11 +39,11 @@ fun RestoreFromBackupScreen(
     onPhone: () -> Unit,
     onBack: () -> Unit,
 ) {
-    FSScreen(title = "Restore from backup", onBack = onBack, modifier = Modifier.testTag("restore-chooser")) {
+    FSScreen(title = stringResource(R.string.restore_from_backup), onBack = onBack, modifier = Modifier.testTag("restore-chooser")) {
         FSGroup {
             FSRow(
-                title = "From a file",
-                subtitle = "Pick a .flagship backup file.",
+                title = stringResource(R.string.from_a_file),
+                subtitle = stringResource(R.string.pick_a_flagship_backup_file),
                 icon = Icons.Outlined.FileOpen,
                 iconTint = FS.colors.accent,
                 onClick = onFile,
@@ -48,8 +51,8 @@ fun RestoreFromBackupScreen(
             )
             FSDivider()
             FSRow(
-                title = "From other servers",
-                subtitle = "Rebuild a lost server from pieces other servers keep.",
+                title = stringResource(R.string.from_other_servers),
+                subtitle = stringResource(R.string.rebuild_a_lost_server_from_pieces),
                 icon = Icons.Outlined.Dns,
                 iconTint = FS.colors.accent,
                 onClick = onPeers,
@@ -57,8 +60,8 @@ fun RestoreFromBackupScreen(
             )
             FSDivider()
             FSRow(
-                title = "From this phone",
-                subtitle = "Use a copy this phone kept when backups ran.",
+                title = stringResource(R.string.from_this_phone),
+                subtitle = stringResource(R.string.use_a_copy_this_phone_kept),
                 icon = Icons.Outlined.PhoneAndroid,
                 iconTint = FS.colors.accent,
                 onClick = onPhone,
@@ -80,11 +83,11 @@ fun RestoreFromPhoneScreen(onPick: (PhoneBackupCopies.Copy) -> Unit, onBack: () 
     val known = pods.map { it.fqdn.lowercase() to it.name.ifEmpty { it.fqdn.substringBefore('.') } }
     val extra = copies.servers().filter { s -> known.none { it.first == s } }.map { it to it.substringBefore('.') }
     val servers = known + extra
-    FSScreen(title = "From this phone", onBack = onBack, modifier = Modifier.testTag("restore-phone")) {
+    FSScreen(title = stringResource(R.string.from_this_phone), onBack = onBack, modifier = Modifier.testTag("restore-phone")) {
         if (servers.isEmpty()) {
             FSEmptyState(
-                title = "No copies on this phone",
-                message = "A server with the phone backup policy keeps its newest backups here. Nothing has been kept yet.",
+                title = stringResource(R.string.no_copies_on_this_phone),
+                message = stringResource(R.string.a_server_with_the_phone_backup),
                 icon = Icons.Outlined.PhoneAndroid,
             )
             return@FSScreen
@@ -96,8 +99,8 @@ fun RestoreFromPhoneScreen(onPick: (PhoneBackupCopies.Copy) -> Unit, onBack: () 
                 FSGroup {
                     if (kept.isEmpty()) {
                         FSRow(
-                            title = "No copy on this phone yet",
-                            subtitle = copies.note(fqdn) ?: "This phone keeps a copy when the server's backup policy is on this phone.",
+                            title = stringResource(R.string.no_copy_on_this_phone_yet),
+                            subtitle = copies.note(fqdn) ?: stringResource(R.string.this_phone_keeps_a_copy_when),
                             enabled = false,
                             modifier = Modifier.testTag("restore-phone-missing-$fqdn"),
                         )
@@ -106,7 +109,7 @@ fun RestoreFromPhoneScreen(onPick: (PhoneBackupCopies.Copy) -> Unit, onBack: () 
                         if (i > 0) FSDivider(inset = FS.space.s4)
                         FSRow(
                             title = BackupsText.whenText(c.meta.createdAt),
-                            subtitle = "${BackupsText.size(c.meta)} · ${c.meta.apps.size} apps",
+                            subtitle = fsString(R.string.apps, BackupsText.size(c.meta), c.meta.apps.size),
                             onClick = { onPick(c) },
                             modifier = Modifier.testTag("restore-phone-copy-${c.meta.archiveId}"),
                         )

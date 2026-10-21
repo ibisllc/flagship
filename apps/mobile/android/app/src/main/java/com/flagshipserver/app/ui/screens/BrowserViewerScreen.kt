@@ -8,6 +8,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -92,14 +95,14 @@ fun BrowserViewerScreen(
     var keyboardVisible by remember { mutableStateOf(false) }
 
     FSScreen(
-        title = "Browser",
+        title = stringResource(R.string.browser),
         onBack = { nav.popBackStack() },
         scrollable = false,
         spacing = FS.space.s2,
         actions = {
             FSBarAction(
                 icon = if (keyboardVisible) Icons.Outlined.KeyboardHide else Icons.Outlined.Keyboard,
-                label = if (keyboardVisible) "Hide keyboard" else "Show keyboard",
+                label = if (keyboardVisible) stringResource(R.string.hide_keyboard) else stringResource(R.string.show_keyboard),
                 onClick = { keyboardVisible = !keyboardVisible },
             )
         },
@@ -111,17 +114,17 @@ fun BrowserViewerScreen(
         ) {
             when (val s = status) {
                 is BrowserViewerViewModel.Status.Idle ->
-                    Text("Idle", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.idle), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                 is BrowserViewerViewModel.Status.Connecting -> {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                    Text("Connecting…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.connecting), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                 }
                 is BrowserViewerViewModel.Status.Streaming -> {
                     Icon(Icons.Outlined.Sensors, contentDescription = null, tint = FS.colors.success, modifier = Modifier.size(18.dp))
-                    Text("Streaming tab $tabId", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
+                    Text(fsString(R.string.streaming_tab, tabId), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
                 }
                 is BrowserViewerViewModel.Status.Closed ->
-                    Text("Stream closed", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.stream_closed), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                 is BrowserViewerViewModel.Status.Failed -> {
                     Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
                     Text(s.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
@@ -148,7 +151,7 @@ fun BrowserViewerScreen(
                     prevText.value = newText
                     keyboardText = newText
                 },
-                placeholder = { Text("Type to send keys to the page") },
+                placeholder = { Text(stringResource(R.string.type_to_send_keys_to_the)) },
                 singleLine = true,
                 shape = MaterialTheme.shapes.small,
                 modifier = Modifier
@@ -219,7 +222,7 @@ fun BrowserViewerScreen(
             if (current != null) {
                 Image(
                     bitmap = current.asImageBitmap(),
-                    contentDescription = "browser framebuffer",
+                    contentDescription = stringResource(R.string.browser_framebuffer),
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit,
                 )
@@ -230,7 +233,7 @@ fun BrowserViewerScreen(
                 ) {
                     CircularProgressIndicator()
                     Text(
-                        "Waiting for first frame…",
+                        stringResource(R.string.waiting_for_first_frame),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
                     )

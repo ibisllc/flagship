@@ -6,6 +6,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -113,7 +116,7 @@ fun MigrateServerScreen(vm: MigrationViewModel) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(FS.space.s3))
                     Text(
-                        "Checking for a migration in progress…",
+                        stringResource(R.string.checking_for_a_migration_in_progress),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyLarge,
                     )
@@ -125,12 +128,12 @@ fun MigrateServerScreen(vm: MigrationViewModel) {
                 val retryScope = rememberCoroutineScope()
                 MigrateCallout(m.message, FS.colors.danger)
                 Text(
-                    "Check that the server is online, then try again.",
+                    stringResource(R.string.check_that_the_server_is_online),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 com.flagshipserver.app.ui.components.FSSecondaryButton(
-                    label = "Try again",
+                    label = stringResource(R.string.try_again),
                     onClick = { retryScope.launch { vm.load() } },
                     block = true,
                     modifier = Modifier.testTag("migrate-retry"),
@@ -148,30 +151,30 @@ private fun InitiateMode(vm: MigrationViewModel) {
     val errorMessage by vm.errorMessage.collectAsState()
     val scope = rememberCoroutineScope()
 
-    Text("Migrate to a new server", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
+    Text(stringResource(R.string.migrate_to_a_new_server), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
     Text(vm.serverFqdn, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
     if (vm.backupMissing) {
         MigrateCallout(
-            "No backup is set up for this server. The migration moves data through backup, so turn backup on first.",
+            stringResource(R.string.no_backup_is_set_up_for),
             FS.colors.warning,
         )
     } else {
         MigrateCallout(
-            "Peer backup is on. The new server restores from it while this one keeps serving.",
+            stringResource(R.string.peer_backup_is_on_the_new),
             FS.colors.primary,
         )
     }
 
     if (vm.backupMissing) {
         Text(
-            "This server has no backup yet, so it can't be migrated. Enable backup first, or back up this server and import the file onto the new server.",
+            stringResource(R.string.this_server_has_no_backup_yet),
             color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodyMedium,
         )
     }
 
     Text(
-        "The old server is retired and wiped only after the new one has restored the data and taken over the name: from then on it can't unlock or connect, and it wipes itself as soon as it is reachable. If anything fails first, the old server keeps serving with all its data.",
+        stringResource(R.string.the_old_server_is_retired_and),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.bodyMedium,
     )
@@ -179,7 +182,7 @@ private fun InitiateMode(vm: MigrationViewModel) {
     errorMessage?.let { MigrateCallout(it, FS.colors.danger) }
 
     FSPrimaryButton(
-        label = if (working) "Signing…" else "Start migration",
+        label = if (working) stringResource(R.string.signing) else stringResource(R.string.start_migration),
         onClick = { if (!working && !vm.startBlocked) scope.launch { vm.start() } },
         enabled = !working && !vm.startBlocked,
         block = true,
@@ -197,7 +200,7 @@ private fun ProgressMode(vm: MigrationViewModel) {
     val errorMessage by vm.errorMessage.collectAsState()
     val scope = rememberCoroutineScope()
 
-    Text("Moving to a new server", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
+    Text(stringResource(R.string.moving_to_a_new_server), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
     Text(vm.serverFqdn, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
 
     if (session?.phase == "initiated") {
@@ -227,7 +230,7 @@ private fun ProgressMode(vm: MigrationViewModel) {
 
     when (session?.phase) {
         "pre-seeded" -> FSPrimaryButton(
-            label = if (working) "Signing…" else "Hand off to the new server now",
+            label = if (working) stringResource(R.string.signing) else stringResource(R.string.hand_off_to_the_new_server),
             onClick = { if (!working) scope.launch { vm.handOff() } },
             enabled = !working,
             block = true,
@@ -235,7 +238,7 @@ private fun ProgressMode(vm: MigrationViewModel) {
             modifier = Modifier.semantics { contentDescription = "migrate-hand-off" },
         )
         "ready" -> FSPrimaryButton(
-            label = if (working) "Signing…" else "Freeze old server and hand off",
+            label = if (working) stringResource(R.string.signing) else stringResource(R.string.freeze_old_server_and_hand_off),
             onClick = { if (!working) scope.launch { vm.handOff() } },
             enabled = !working,
             block = true,
@@ -246,12 +249,12 @@ private fun ProgressMode(vm: MigrationViewModel) {
 
     if (session?.abortedAt != null) {
         MigrateCallout(
-            "Migration stopped. Your old server stays active with all its data.",
+            stringResource(R.string.migration_stopped_your_old_server_stays),
             FS.colors.warning,
         )
     } else if (session?.done == true) {
         MigrateCallout(
-            "Migration complete. ${vm.serverFqdn} now runs on the new server.",
+            fsString(R.string.migration_complete_now_runs_on_the, vm.serverFqdn),
             FS.colors.success,
         )
     }
@@ -260,14 +263,14 @@ private fun ProgressMode(vm: MigrationViewModel) {
         // Secondary, not danger — aborting is the SAFE exit (mirrors the
         // webapp): the old server stays active with all its data.
         FSSecondaryButton(
-            label = if (working) "Working…" else "Stop the migration",
+            label = if (working) stringResource(R.string.working) else stringResource(R.string.stop_the_migration),
             onClick = { if (!working) scope.launch { vm.abort() } },
             enabled = !working,
             block = true,
             modifier = Modifier.semantics { contentDescription = "migrate-abort" },
         )
         Text(
-            "Safe to stop: the old server keeps all its data.",
+            stringResource(R.string.safe_to_stop_the_old_server),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
         )

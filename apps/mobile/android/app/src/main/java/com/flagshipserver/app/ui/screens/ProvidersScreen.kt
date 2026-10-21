@@ -9,6 +9,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -53,18 +56,18 @@ private data class ProviderForm(
 fun ProvidersScreen(nav: NavController, onSave: ((List<ProviderConfig>) -> Unit)? = null) {
     val providers = remember {
         mutableListOf(
-            ProviderForm("anthropic", "Anthropic Claude", "https://api.anthropic.com"),
+            ProviderForm("anthropic", FSStrings.get(R.string.anthropic_claude), "https://api.anthropic.com"),
             ProviderForm("openai", "OpenAI", "https://api.openai.com/v1"),
-            ProviderForm("google", "Google AI", "https://generativelanguage.googleapis.com"),
+            ProviderForm("google", FSStrings.get(R.string.google_ai), "https://generativelanguage.googleapis.com"),
             ProviderForm("groq", "Groq", "https://api.groq.com/openai/v1"),
-            ProviderForm("ollama", "Ollama (local)", "http://localhost:11434"),
+            ProviderForm("ollama", FSStrings.get(R.string.ollama_local), "http://localhost:11434"),
         )
     }
 
     FSScreen(
-        title = "AI providers",
+        title = stringResource(R.string.ai_providers),
         onBack = { nav.popBackStack() },
-        subtitle = "Plug in your own keys. Flagship never proxies LLM traffic — calls go direct from your server to the provider you pick.",
+        subtitle = stringResource(R.string.plug_in_your_own_keys_flagship),
         spacing = FS.space.s3,
     ) {
         providers.forEach { p ->
@@ -77,7 +80,7 @@ fun ProvidersScreen(nav: NavController, onSave: ((List<ProviderConfig>) -> Unit)
         }
 
         FSPrimaryButton(
-            label = "Save",
+            label = stringResource(R.string.save),
             onClick = {
                 onSave?.invoke(
                     providers.filter { it.enabled && it.apiKey.isNotBlank() }.map {
@@ -128,13 +131,13 @@ private fun ProviderCard(
                     FSField(
                         value = apiKey,
                         onValueChange = { apiKey = it; onApiKey(it) },
-                        label = "API key",
-                        placeholder = "sk-…",
+                        label = stringResource(R.string.api_key),
+                        placeholder = stringResource(R.string.sk),
                     )
                     FSField(
                         value = baseUrl,
                         onValueChange = { baseUrl = it; onBaseUrl(it) },
-                        label = "Custom base URL (optional)",
+                        label = stringResource(R.string.custom_base_url_optional),
                         placeholder = provider.defaultBaseUrl,
                     )
                 }

@@ -4,6 +4,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
@@ -48,7 +50,7 @@ class WipeRestartViewModel(
     suspend fun run(currentEtag: String?) {
         val user = username()
         if (user.isNullOrEmpty()) {
-            _phase.value = WipeRestartPhase.Failed("No active account on this device.")
+            _phase.value = WipeRestartPhase.Failed(FSStrings.get(R.string.no_active_account_on_this_device))
             return
         }
         _phase.value = WipeRestartPhase.PreparingKeys
@@ -60,14 +62,14 @@ class WipeRestartViewModel(
         val oldIrkPubHex: String
         try {
             oldUmk = Keystore.currentUmkSeed()
-            oldIrkSign = Keystore.deriveIRK("Authorize wipe", version = Keystore.currentIrkVersion())
+            oldIrkSign = Keystore.deriveIRK(FSStrings.get(R.string.authorize_wipe), version = Keystore.currentIrkVersion())
             // We need the OLD IRK pub for the canonical-bytes claim.
             // Re-derive via the cached seed slot.
             val oldSeed = Keystore.requireIrkSeedForVersion(Keystore.currentIrkVersion())
             val pair = Ed25519Sign.KeyPair.newKeyPairFromSeed(oldSeed)
             oldIrkPubHex = HexUtil.encode(pair.publicKey)
         } catch (e: Throwable) {
-            _phase.value = WipeRestartPhase.Failed("Couldn't access your current key: ${UserErrorText.reason(e)}")
+            _phase.value = WipeRestartPhase.Failed(FSStrings.get(R.string.couldnt_access_your_current_key, UserErrorText.reason(e)))
             return
         }
 
@@ -78,14 +80,14 @@ class WipeRestartViewModel(
         try {
             credentialId = webAuthn.register()
         } catch (e: Throwable) {
-            _phase.value = WipeRestartPhase.Failed("Passkey registration failed: ${e.message}")
+            _phase.value = WipeRestartPhase.Failed(FSStrings.get(R.string.passkey_registration_failed, e.message))
             return
         }
         val prfSecret: ByteArray
         try {
             prfSecret = webAuthn.prfAssert(credentialId)
         } catch (e: Throwable) {
-            _phase.value = WipeRestartPhase.Failed("PRF assertion failed: ${e.message}")
+            _phase.value = WipeRestartPhase.Failed(FSStrings.get(R.string.prf_assertion_failed, e.message))
             return
         }
 
@@ -141,10 +143,10 @@ class WipeRestartViewModel(
         } catch (e: Throwable) {
             val msg = e.message.orEmpty()
             val friendly = when {
-                msg.contains("412") -> "Your device list changed in the background. Refresh and try again."
-                msg.contains("429") -> "Wipe rate-limited (1 per hour). Try again later."
-                msg.contains("409") -> "Another rotation completed first. Your account is fine — refresh and check Activity for the audit trail."
-                else -> "Couldn't reach the server: $msg"
+                msg.contains("412") -> FSStrings.get(R.string.your_device_list_changed_in_the)
+                msg.contains("429") -> FSStrings.get(R.string.wipe_rate_limited_1_per_hour)
+                msg.contains("409") -> FSStrings.get(R.string.another_rotation_completed_first_your)
+                else -> FSStrings.get(R.string.couldnt_reach_the_server, msg)
             }
             _phase.value = WipeRestartPhase.Failed(friendly)
             return
@@ -163,7 +165,7 @@ class WipeRestartViewModel(
             Keystore.clearWatchDelegate()
         } catch (e: Throwable) {
             _phase.value = WipeRestartPhase.Failed(
-                "Server committed but local install failed: ${e.message}. Open the app fresh to recover.",
+                FSStrings.get(R.string.server_committed_but_local_install_failed, e.message),
             )
             return
         }

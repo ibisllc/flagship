@@ -20,6 +20,10 @@
 
 package com.flagshipserver.app.ui.onboarding
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -169,18 +173,18 @@ private fun RecoveringView(onCancel: () -> Unit) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(FS.space.s4)) {
             CircularProgressIndicator()
             Text(
-                "Authenticate with your passkey",
+                stringResource(R.string.authenticate_with_your_passkey),
                 color = FS.colors.text,
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Medium),
             )
             Text(
-                "We'll unwrap your account key and bring this device into your existing Flagship account.",
+                stringResource(R.string.well_unwrap_your_account_key_and),
                 color = FS.colors.textMuted,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(horizontal = FS.space.s8),
             )
         }
-        FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+        FSGhostButton(label = stringResource(R.string.cancel), onClick = onCancel, block = true)
     }
 }
 
@@ -193,7 +197,7 @@ private fun NoCloudBackupView(single: Boolean, onImport: () -> Unit, onBack: () 
         verticalArrangement = Arrangement.spacedBy(FS.space.s4),
     ) {
         Text(
-            "No cloud backup on this account",
+            stringResource(R.string.no_cloud_backup_on_this_account),
             color = FS.colors.text,
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
         )
@@ -201,14 +205,14 @@ private fun NoCloudBackupView(single: Boolean, onImport: () -> Unit, onBack: () 
         // the decision tree, NOT a 404. Copy verbatim from
         // docs/login-and-account-redesign.md.
         Text(
-            if (single) "Use a device that still has access."
-            else "Use another device, or one of your recovery codes.",
+            if (single) stringResource(R.string.use_a_device_that_still_has)
+            else stringResource(R.string.use_another_device_or_one_of),
             color = FS.colors.textMuted,
             style = MaterialTheme.typography.bodyLarge,
         )
         ImportBackupOption(onImport = onImport)
         Box(Modifier.height(FS.space.s4))
-        FSPrimaryButton(label = "Back", onClick = onBack, block = true, large = true)
+        FSPrimaryButton(label = stringResource(R.string.back), onClick = onBack, block = true, large = true)
     }
 }
 
@@ -227,7 +231,7 @@ private fun ImportBackupOption(onImport: () -> Unit) {
         ) {
             Icon(Icons.Outlined.Lock, contentDescription = null, tint = FS.colors.accent, modifier = Modifier.size(20.dp))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Import backup file", color = FS.colors.text, style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.import_backup_file), color = FS.colors.text, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
@@ -247,25 +251,25 @@ private fun PassphraseView(
         verticalArrangement = Arrangement.spacedBy(FS.space.s4),
     ) {
         Text(
-            "Enter your recovery passphrase",
+            stringResource(R.string.enter_your_recovery_passphrase),
             color = FS.colors.text,
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
         )
         Text(
-            "This is the passphrase you chose when you backed up this account. We use it to unlock your wrapped account key — you'll also confirm your passkey.",
+            stringResource(R.string.this_is_the_passphrase_you_chose),
             color = FS.colors.textMuted,
             style = MaterialTheme.typography.bodyLarge,
         )
         FSField(
             value = passphrase,
             onValueChange = { passphrase = it },
-            label = "Recovery passphrase",
+            label = stringResource(R.string.recovery_passphrase),
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.semantics { contentDescription = "login-passphrase-field" },
         )
         Spacer(Modifier.height(FS.space.s2))
         FSPrimaryButton(
-            label = "Continue",
+            label = stringResource(R.string.continue_label),
             onClick = { onSubmit(passphrase) },
             enabled = passphrase.length >= CloudRecoveryEnrollment.MIN_PASSPHRASE,
             block = true,
@@ -273,7 +277,7 @@ private fun PassphraseView(
             modifier = Modifier.semantics { contentDescription = "login-passphrase-continue" },
         )
         ImportBackupOption(onImport = onImport)
-        FSGhostButton(label = "Back", onClick = onBack, block = true)
+        FSGhostButton(label = stringResource(R.string.back), onClick = onBack, block = true)
     }
 }
 
@@ -291,38 +295,37 @@ private fun SecondFactorView(
         verticalArrangement = Arrangement.spacedBy(FS.space.s4),
     ) {
         Text(
-            "Enter your recovery code",
+            stringResource(R.string.enter_your_recovery_code),
             color = FS.colors.text,
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
         )
         Text(
-            "This account is protected by a second factor. Enter the current 6-digit code from your authenticator, " +
-                "or use one of the recovery codes you saved when you set this up.",
+            stringResource(R.string.this_account_is_protected_by_a),
             color = FS.colors.textMuted,
             style = MaterialTheme.typography.bodyLarge,
         )
         FSField(
             value = code,
             onValueChange = { code = it },
-            label = if (useRecoveryCode) "Recovery code" else "6-digit code",
+            label = if (useRecoveryCode) stringResource(R.string.recovery_code) else "6-digit code",
             placeholder = if (useRecoveryCode) "AAAA-BBBB" else "123456",
             keyboardType = if (useRecoveryCode) KeyboardType.Text else KeyboardType.Number,
         )
         FSGhostButton(
-            label = if (useRecoveryCode) "Use my authenticator code instead" else "Use a recovery code instead",
+            label = if (useRecoveryCode) stringResource(R.string.use_my_authenticator_code_instead) else stringResource(R.string.use_a_recovery_code_instead),
             onClick = { useRecoveryCode = !useRecoveryCode; code = "" },
             block = true,
         )
         Spacer(Modifier.height(FS.space.s2))
         FSPrimaryButton(
-            label = "Continue",
+            label = stringResource(R.string.continue_label),
             onClick = { onSubmit(code, useRecoveryCode) },
             enabled = code.isNotBlank(),
             block = true,
             large = true,
             modifier = Modifier.semantics { contentDescription = "login-second-factor-continue" },
         )
-        FSGhostButton(label = "Back", onClick = onBack, block = true)
+        FSGhostButton(label = stringResource(R.string.back), onClick = onBack, block = true)
     }
 }
 
@@ -337,13 +340,13 @@ private fun TakeoverExplainerView(
     val (graceLine, detail) = when (graceModel) {
         AccountResolution.GraceModel.TwentyFourHourTotp ->
             "This device takes over in 24 hours." to
-                "Your other devices are alerted now."
+                stringResource(R.string.your_other_devices_are_alerted_now)
         AccountResolution.GraceModel.ThreeDay ->
             "This device takes over in 3 days." to
-                "Your old device is alerted now. After the grace window this device becomes the admin."
+                stringResource(R.string.your_old_device_is_alerted_now)
         else ->
             "This device will take over your account." to
-                "Your other devices are alerted now."
+                stringResource(R.string.your_other_devices_are_alerted_now)
     }
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -352,7 +355,7 @@ private fun TakeoverExplainerView(
         verticalArrangement = Arrangement.spacedBy(FS.space.s4),
     ) {
         Text(
-            "Take over @$username",
+            fsString(R.string.take_over, username),
             color = FS.colors.text,
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
         )
@@ -365,7 +368,7 @@ private fun TakeoverExplainerView(
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Icon(Icons.Outlined.Info, contentDescription = null, tint = FS.colors.accent, modifier = Modifier.size(20.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("This device becomes the admin", color = FS.colors.text, style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.this_device_becomes_the_admin), color = FS.colors.text, style = MaterialTheme.typography.bodyMedium)
                     Text(
                         detail,
                         color = FS.colors.textMuted,
@@ -376,14 +379,14 @@ private fun TakeoverExplainerView(
         }
         Box(Modifier.height(FS.space.s4))
         FSPrimaryButton(
-            label = "Take over this account",
+            label = stringResource(R.string.take_over_this_account),
             onClick = onConfirm,
             block = true,
             large = true,
             modifier = Modifier.semantics { contentDescription = "login-takeover-confirm" },
         )
         ImportBackupOption(onImport = onImport)
-        FSGhostButton(label = "Back", onClick = onBack, block = true)
+        FSGhostButton(label = stringResource(R.string.back), onClick = onBack, block = true)
     }
 }
 
@@ -409,7 +412,7 @@ private fun GraceCountdownView(
         verticalArrangement = Arrangement.spacedBy(FS.space.s4),
     ) {
         Text(
-            "Takeover started",
+            stringResource(R.string.takeover_started),
             color = FS.colors.text,
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
         )
@@ -417,8 +420,8 @@ private fun GraceCountdownView(
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Icon(Icons.Outlined.Info, contentDescription = null, tint = FS.colors.accent, modifier = Modifier.size(20.dp))
                 Text(
-                    if (elapsed) "The grace period has elapsed — you can take over now."
-                    else "This device takes over in ${formatRemaining(remaining)}. Your other devices are alerted.",
+                    if (elapsed) stringResource(R.string.the_grace_period_has_elapsed_you)
+                    else fsString(R.string.this_device_takes_over_in_your, formatRemaining(remaining)),
                     color = FS.colors.text,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -426,14 +429,14 @@ private fun GraceCountdownView(
         }
         Box(Modifier.height(FS.space.s4))
         FSPrimaryButton(
-            label = "Take over now",
+            label = stringResource(R.string.take_over_now),
             onClick = onTakeOver,
             enabled = elapsed,
             block = true,
             large = true,
             modifier = Modifier.semantics { contentDescription = "login-take-over-now" },
         )
-        FSGhostButton(label = "Back", onClick = onBack, block = true)
+        FSGhostButton(label = stringResource(R.string.back), onClick = onBack, block = true)
     }
 }
 
@@ -441,9 +444,9 @@ private fun formatRemaining(ms: Long): String {
     val s = ms / 1000
     val d = s / 86400; val h = (s % 86400) / 3600; val m = (s % 3600) / 60; val sec = s % 60
     return when {
-        d > 0 -> "${d}d ${h}h"
-        h > 0 -> "${h}h ${m}m"
-        m > 0 -> "${m}m ${sec}s"
+        d > 0 -> FSStrings.get(R.string.d_h, d, h)
+        h > 0 -> FSStrings.get(R.string.h_m, h, m)
+        m > 0 -> FSStrings.get(R.string.m_s, m, sec)
         else -> "${sec}s"
     }
 }
@@ -458,7 +461,7 @@ private fun TakingOverView() {
     ) {
         CircularProgressIndicator()
         Spacer(Modifier.height(FS.space.s4))
-        Text("Bringing this device into your account…", color = FS.colors.textMuted, style = MaterialTheme.typography.bodyLarge)
+        Text(stringResource(R.string.bringing_this_device_into_your_account), color = FS.colors.textMuted, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
@@ -471,12 +474,12 @@ private fun FailureView(message: String, onBack: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(FS.space.s4),
     ) {
         Text(
-            "Couldn't take over the account",
+            stringResource(R.string.couldnt_take_over_the_account),
             color = FS.colors.text,
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
         )
         Text(message, color = FS.colors.textMuted, style = MaterialTheme.typography.bodyLarge)
         Box(Modifier.height(FS.space.s4))
-        FSSecondaryButton(label = "Back", onClick = onBack, block = true, large = true)
+        FSSecondaryButton(label = stringResource(R.string.back), onClick = onBack, block = true, large = true)
     }
 }

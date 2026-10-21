@@ -10,6 +10,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
@@ -99,7 +101,7 @@ class KeyfileExportViewModel(
             throw e
         } catch (t: Throwable) {
             _phase.value = KeyfileExportPhase.Failed(
-                "Couldn't create the backup file. " + com.flagshipserver.app.core.NetworkErrorHumanizer.humanize(t, "key-backup"),
+                FSStrings.get(R.string.couldnt_create_the_backup_file) + com.flagshipserver.app.core.NetworkErrorHumanizer.humanize(t, "key-backup"),
             )
         }
     }
@@ -109,8 +111,8 @@ class KeyfileExportViewModel(
     }
 
     companion object {
-        const val RULE = "At least 12 characters, mixing at least three of: lowercase, uppercase, numbers, symbols."
-        const val RULE_ERROR = "Too weak. $RULE"
+        val RULE get() = FSStrings.get(R.string.at_least_12_characters_mixing_at)
+        val RULE_ERROR get() = FSStrings.get(R.string.too_weak, RULE)
 
         /** A simple, defensible strength rule. The keyfile floor is 8;
          *  we ask for more in the UI since this file is the keys to the

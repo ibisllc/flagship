@@ -20,6 +20,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.AddPairedSessionInner
 import com.flagshipserver.app.api.AddPairedSessionRequest
@@ -73,9 +75,9 @@ class PodPairViewModel(
         _phase.value = PodPairPhase.Signing
         val irk: Ed25519Sign
         try {
-            irk = signer("Pair this device with $serverDomain")
+            irk = signer(FSStrings.get(R.string.pair_this_device_with, serverDomain))
         } catch (e: Throwable) {
-            _phase.value = PodPairPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
+            _phase.value = PodPairPhase.Failed(FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(e)))
             return
         }
 
@@ -85,7 +87,7 @@ class PodPairViewModel(
         try {
             signature = irk.sign(AddPairedSessionOrder.canonicalBytes(serverDomain, token, issuedAt))
         } catch (e: Throwable) {
-            _phase.value = PodPairPhase.Failed("Couldn't sign: ${UserErrorText.reason(e)}")
+            _phase.value = PodPairPhase.Failed(FSStrings.get(R.string.couldnt_sign, UserErrorText.reason(e)))
             return
         }
 
@@ -101,9 +103,9 @@ class PodPairViewModel(
         } catch (e: HttpException) {
             _phase.value = PodPairPhase.Failed(
                 when (e.status) {
-                    403 -> "The server rejected the request. Sign in again and retry."
-                    404, 502, 503 -> "The server isn't reachable right now."
-                    else -> "Server error (${e.status})."
+                    403 -> FSStrings.get(R.string.the_server_rejected_the_request_sign)
+                    404, 502, 503 -> FSStrings.get(R.string.the_server_isnt_reachable_right_now)
+                    else -> FSStrings.get(R.string.server_error_2, e.status)
                 },
             )
             return
@@ -159,7 +161,7 @@ class PodAutoPairCoordinator(
         if (targets.isEmpty()) return emptyList()
 
         val irk: Ed25519Sign = try {
-            deriveIrk("Set up secure access to your servers")
+            deriveIrk(FSStrings.get(R.string.set_up_secure_access_to_your))
         } catch (_: Throwable) {
             return emptyList()
         }

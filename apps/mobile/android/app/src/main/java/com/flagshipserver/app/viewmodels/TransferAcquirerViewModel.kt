@@ -9,6 +9,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.ServerTransferClient
 import com.flagshipserver.app.core.AddServerGate
@@ -68,24 +70,24 @@ class TransferAcquirerViewModel(
     fun ingest(qrText: String): Boolean {
         val json = ServerTransferFlow.offerJsonFrom(qrText)
         if (json == null) {
-            _phase.value = TransferAcquirerPhase.Failed("That isn't a Flagship transfer code.")
+            _phase.value = TransferAcquirerPhase.Failed(FSStrings.get(R.string.that_isnt_a_flagship_transfer_code))
             return false
         }
         val parsed = try {
             ServerTransferFlow.parseQR(json)
         } catch (_: Throwable) {
-            _phase.value = TransferAcquirerPhase.Failed("That isn't a Flagship transfer code.")
+            _phase.value = TransferAcquirerPhase.Failed(FSStrings.get(R.string.that_isnt_a_flagship_transfer_code))
             return false
         }
         if (!ServerTransferFlow.verifyOfferSignature(parsed)) {
             _phase.value = TransferAcquirerPhase.Failed(
-                "This transfer code didn't verify — its signature doesn't match the owner. Ask them for a fresh one.",
+                FSStrings.get(R.string.this_transfer_code_didnt_verify_its),
             )
             return false
         }
         if (parsed.expiresAt <= now()) {
             _phase.value = TransferAcquirerPhase.Failed(
-                "This transfer code has expired. Ask the owner for a new one.",
+                FSStrings.get(R.string.this_transfer_code_has_expired_ask),
             )
             return false
         }
@@ -98,7 +100,7 @@ class TransferAcquirerViewModel(
     suspend fun confirm() {
         val parsed = offer
         if (parsed == null) {
-            _phase.value = TransferAcquirerPhase.Failed("Scan a transfer code first.")
+            _phase.value = TransferAcquirerPhase.Failed(FSStrings.get(R.string.scan_a_transfer_code_first))
             return
         }
         _phase.value = TransferAcquirerPhase.Signing
@@ -106,11 +108,11 @@ class TransferAcquirerViewModel(
         val pub: String
         val orderKey: Ed25519Sign?
         try {
-            key = signer("Take over ${parsed.serverDomain}")
+            key = signer(FSStrings.get(R.string.take_over_2, parsed.serverDomain))
             pub = irkPubHex()
-            orderKey = orderSigner("Take over ${parsed.serverDomain}")
+            orderKey = orderSigner(FSStrings.get(R.string.take_over_2, parsed.serverDomain))
         } catch (e: Throwable) {
-            _phase.value = TransferAcquirerPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
+            _phase.value = TransferAcquirerPhase.Failed(FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(e)))
             return
         }
         try {
@@ -123,13 +125,13 @@ class TransferAcquirerViewModel(
             _phase.value = TransferAcquirerPhase.Claimed(result.newServerDomain)
         } catch (e: ServerTransferFlow.TransferException) {
             _phase.value = if (e.message == "expired") {
-                TransferAcquirerPhase.Failed("This transfer code has expired. Ask the owner for a new one.")
+                TransferAcquirerPhase.Failed(FSStrings.get(R.string.this_transfer_code_has_expired_ask))
             } else {
-                TransferAcquirerPhase.Failed("That transfer code is invalid.")
+                TransferAcquirerPhase.Failed(FSStrings.get(R.string.that_transfer_code_is_invalid))
             }
         } catch (e: Throwable) {
             _phase.value = TransferAcquirerPhase.Failed(
-                if (AddServerGate.isServerRefusal(e)) AddServerGate.ADMIN_ONLY else "Couldn't claim the server. ${UserErrorText.of(e)}",
+                if (AddServerGate.isServerRefusal(e)) AddServerGate.ADMIN_ONLY else FSStrings.get(R.string.couldnt_claim_the_server, UserErrorText.of(e)),
             )
         }
     }
