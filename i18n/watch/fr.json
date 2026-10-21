@@ -1,0 +1,9 @@
+{
+  "Provisioning": "Provisionnement",
+  "Install complete": "Installation terminée",
+  "Install failed": "Échec de l’installation",
+  "Done": "Terminé",
+  "Failed — %@": "Échec : %@",
+  "Couldn't reach iPhone: %@": "Impossible de joindre l’iPhone : %@",
+  "Approval failed.": "Échec de l’approbation."
+}

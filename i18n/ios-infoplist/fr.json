@@ -1,0 +1,5 @@
+{
+  "NSCameraUsageDescription": "Flagship utilise l’appareil photo pour scanner un QR d’association affiché par votre serveur.",
+  "NSFaceIDUsageDescription": "Flagship utilise Face ID pour confirmer des actions sensibles, comme approuver un déverrouillage ou révoquer un serveur.",
+  "NSLocalNetworkUsageDescription": "Flagship communique directement avec votre serveur lorsqu’il est sur le même réseau, ce qui est plus rapide que de passer par le relais."
+}
