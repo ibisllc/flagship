@@ -61,6 +61,8 @@ data class SmokeModeConfig(
     /** Real biometric prompts and the lock-on-background setting, for the
      *  app-lock scenarios (the other scenarios pass every prompt). */
     val realBiometrics: Boolean = false,
+    /** Every biometric prompt is dismissed (GymSeams.refuseBiometricGates). */
+    val refuseBiometrics: Boolean = false,
     /** Persist a signed-in device (keystore profile + account key, lock on)
      *  so a later plain launch is a cold start of a real account. */
     val persistSession: Boolean = false,
@@ -90,6 +92,7 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_LIVE = "flagship.smokeLive"
         const val EXTRA_SMOKE_FAKE_PASSKEYS = "flagship.smokeFakePasskeys"
         const val EXTRA_SMOKE_REAL_BIOMETRICS = "flagship.smokeRealBiometrics"
+        const val EXTRA_SMOKE_REFUSE_BIOMETRICS = "flagship.smokeRefuseBiometrics"
         const val EXTRA_SMOKE_PERSIST_SESSION = "flagship.smokePersistSession"
         const val EXTRA_SMOKE_BACKUPS = "flagship.smokeBackups"
         const val EXTRA_SMOKE_ONBOARDING = "flagship.smokeOnboarding"
@@ -120,6 +123,7 @@ data class SmokeModeConfig(
                 live = intent.getBooleanExtra(EXTRA_SMOKE_LIVE, false),
                 fakePasskeys = intent.getBooleanExtra(EXTRA_SMOKE_FAKE_PASSKEYS, false),
                 realBiometrics = intent.getBooleanExtra(EXTRA_SMOKE_REAL_BIOMETRICS, false),
+                refuseBiometrics = intent.getBooleanExtra(EXTRA_SMOKE_REFUSE_BIOMETRICS, false),
                 persistSession = intent.getBooleanExtra(EXTRA_SMOKE_PERSIST_SESSION, false),
                 backups = intent.getStringExtra(EXTRA_SMOKE_BACKUPS)?.trim()?.lowercase()
                     ?.takeIf { it in setOf("empty", "failed", "unset", "over", "restore-partial") },
@@ -205,6 +209,7 @@ object SmokeMode {
         GymSeams.forceAdminRoot = config.seedAdminRoot
         GymSeams.deviceRank = config.deviceRank
         GymSeams.bypassBiometricGates = !config.realBiometrics
+        GymSeams.refuseBiometricGates = config.refuseBiometrics
         if (config.realBiometrics) appState.setRequireBiometricAtLaunch(true)
         GymSeams.fakePasskeysNoPrfOnCreate = config.fakePasskeys
         // The account is admin-pinned, as every real one is: an admin device
