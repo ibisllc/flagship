@@ -215,7 +215,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > when done. History up to 2026-10-10 is frozen verbatim in
 > `docs/archive/status-log-through-2026-10-10.md`; read it for the why behind
 > anything below. Keep this section short: it loads into every agent session.
-> Last updated **2026-10-19**.
+> Last updated **2026-10-21**.
 
 ### Launch
 
@@ -235,14 +235,19 @@ version must climb), Android versionCode 9 (wear +1,000,000), Studio 0.2.0.
 About reads "Flagship 0.2 Beta (iOS 1.1, build 5)" / "(build 9)". Protocol
 levels and the webapp shell number are separate and unchanged.
 
-**Live state read 2026-10-20 (reviewer, read-only):** `.com` runs code from 2026-10-18 or later
-(webapp shell **v153**, `account-not-found` answered, admin-only add-server already refusing the
-old store builds, which is accepted: no users yet, everything is updated at GA); the relay echo is
-not deployed (`:8444` resets, `/api/stats` 404); the root wildcard is live; the apex CAA also lists
-`digicert.com`, `pki.goog`, `ssl.com`, `comodoca.com` (probably Cloudflare Universal SSL: switch it
-off, then `npm run zone-health`); the newest endorsed box release is `875ad977`, which has none of
-the 2026-10-20 box changes (peer gate, backup check, loop-volume check, restore-only-when-all-apps-in):
-endorse a new release at or after the last box commit before store builds go out.
+**Release run 2026-10-20/21 (commit `e9155777e`, all 27 steps done).** Deployed: `.com`
+(webapp shell **v156**), `.services`, `webapp.`. The endorsed box release is `dbdf2e08`; no box
+code changed after it. VM appliances published: amd64 `67e45517`, arm64 `d636f161`. Versions: iOS
+1.1 (5), Android code 9 (wear +1,000,000), Studio 0.2.0 (Mac DMG signed, notarized, stapled;
+Windows and Linux unsigned). Android minimum is API 33 (owner, 2026-10-17), so Play drops about
+7,800 devices that ran Android 9 to 12. Receipts: `d1-export` recorded; 19 hardware receipts are
+missing and accepted as known gaps (`npm run release-manifest`). Still manual: submit iOS 1.1 (5)
+in App Store Connect; promote Android 9 from the internal track (Wear under Wear OS); switch
+Universal SSL off for `flagship.services` so the apex CAA lists only Let's Encrypt, then
+`npm run zone-health` and `schema-status` with the production admin secret; reap the leftover DNS
+records; never tear down the review account `playstore-test-0725` while a store review is open.
+Old store builds (iOS 1.0 build 4) lose env edits and co-manager share acceptance against this
+backend; no minimum-app-version check exists yet.
 
 **Release readiness (2026-10-15):** `npm run ready` is the scoreboard to re-run
 after each batch of fixes (branch drift, tsc, vitest, e2e, locked gym, cross-
