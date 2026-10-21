@@ -1,0 +1,8 @@
+{
+  "Flagship servers": "Flagship サーバー",
+  "Shows a server's install while one is under way, else how your servers are doing.": "インストール中はサーバーのインストール状況を、それ以外はサーバーの状態を表示します。",
+  "Install failed": "インストール失敗",
+  "Server is live": "サーバー稼働中",
+  "No install in flight": "進行中のインストールはありません",
+  "%lld servers": "%lld 台のサーバー"
+}

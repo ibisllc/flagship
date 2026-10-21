@@ -16,12 +16,6 @@
     "Failed — %@": {
       "extractionState": "manual"
     },
-    "Home": {
-      "extractionState": "manual"
-    },
-    "Office": {
-      "extractionState": "manual"
-    },
     "Couldn't reach iPhone: %@": {
       "extractionState": "manual"
     },
