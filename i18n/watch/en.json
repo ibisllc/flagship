@@ -21,11 +21,13 @@
   },
   "Home": {
     "en": "Home",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:106"
+    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:106",
+    "translatable": false
   },
   "Office": {
     "en": "Office",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:107"
+    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:107",
+    "translatable": false
   },
   "Couldn't reach iPhone: %@": {
     "en": "Couldn't reach iPhone: %@",

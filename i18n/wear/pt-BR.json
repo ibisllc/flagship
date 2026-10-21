@@ -1,0 +1,16 @@
+{
+  "tile_label": "Servidores Flagship",
+  "phone_not_reachable_bring_it_nearby": "Celular fora de alcance. Aproxime-o e tente de novo.",
+  "couldnt_read_your_phones_answer": "Não foi possível ler a resposta do seu celular.",
+  "couldnt_reach_your_phone": "Não foi possível alcançar seu celular: %1$s",
+  "new_server": "Novo servidor",
+  "waiting_for_you": "Aguardando você",
+  "waiting_to_unlock": "Aguardando desbloqueio",
+  "servers": "Servidores",
+  "recent_activity": "Atividade recente",
+  "open_flagship_on_your_phone_to": "Abra o Flagship no seu celular para ver seus servidores aqui.",
+  "approved": "Aprovado",
+  "approval_failed": "Falha na aprovação.",
+  "approve": "Aprovar",
+  "this_server_isnt_waiting_any_more": "Este servidor não está mais aguardando."
+}

@@ -1,0 +1,12 @@
+{
+  "Provisioning %@…": "%@ wird bereitgestellt …",
+  "Servers": "Server",
+  "Online/offline status for your Flagship servers.": "Online-/Offline-Status deiner Flagship-Server.",
+  "Online": "Online",
+  "Offline": "Offline",
+  "Pending": "Ausstehend",
+  "Unknown": "Unbekannt",
+  "LEADER": "LEADER",
+  "No servers yet": "Noch keine Server",
+  "Pair a server to see status here.": "Koppel einen Server, um hier seinen Status zu sehen."
+}
