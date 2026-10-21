@@ -121,11 +121,13 @@
   },
   "CLI locate failed: {0}": {
     "en": "CLI locate failed: {0}",
-    "ctx": "wizard.py:1303 (prose)"
+    "ctx": "wizard.py:1303 (prose)",
+    "translatable": false
   },
   "CLI exited {0}": {
     "en": "CLI exited {0}",
-    "ctx": "wizard.py:1325 (prose)"
+    "ctx": "wizard.py:1325 (prose)",
+    "translatable": false
   },
   "Flagship Studio (Experimental)": {
     "en": "Flagship Studio (Experimental)",
@@ -457,7 +459,8 @@
   },
   "FLAGSHIP_PAIR ": {
     "en": "FLAGSHIP_PAIR ",
-    "ctx": "pair_session.py:27 (prose)"
+    "ctx": "pair_session.py:27 (prose)",
+    "translatable": false
   },
   "(unknown model)": {
     "en": "(unknown model)",
@@ -469,7 +472,8 @@
   },
   "Flagship Studio Wi-Fi": {
     "en": "Flagship Studio Wi-Fi",
-    "ctx": "wifi_store.py:56 (prose)"
+    "ctx": "wifi_store.py:56 (prose)",
+    "translatable": false
   },
   "No way to elevate the raw USB write: pkexec (PolicyKit) is not installed and passwordless sudo isn't available. Install pkexec (Debian/Ubuntu: sudo apt install pkexec; Fedora: sudo dnf install polkit) and retry.": {
     "en": "No way to elevate the raw USB write: pkexec (PolicyKit) is not installed and passwordless sudo isn't available. Install pkexec (Debian/Ubuntu: sudo apt install pkexec; Fedora: sudo dnf install polkit) and retry.",
@@ -613,19 +617,23 @@
   },
   "VM {0}: stopped because the app quit": {
     "en": "VM {0}: stopped because the app quit",
-    "ctx": "vm/manager.py:530 (prose)"
+    "ctx": "vm/manager.py:530 (prose)",
+    "translatable": false
   },
   "VM {0}: {1}": {
     "en": "VM {0}: {1}",
-    "ctx": "vm/manager.py:541 (prose)"
+    "ctx": "vm/manager.py:541 (prose)",
+    "translatable": false
   },
   "VM {0}: ignored {1} in state {2}": {
     "en": "VM {0}: ignored {1} in state {2}",
-    "ctx": "vm/manager.py:554 (prose)"
+    "ctx": "vm/manager.py:554 (prose)",
+    "translatable": false
   },
   "VM {0}: waiting for the previous shutdown to finish": {
     "en": "VM {0}: waiting for the previous shutdown to finish",
-    "ctx": "vm/manager.py:644 (prose)"
+    "ctx": "vm/manager.py:644 (prose)",
+    "translatable": false
   },
   "QEMU is not installed.": {
     "en": "QEMU is not installed.",
@@ -633,27 +641,33 @@
   },
   "VM {0}: cannot start — {1}": {
     "en": "VM {0}: cannot start — {1}",
-    "ctx": "vm/manager.py:658 (prose)"
+    "ctx": "vm/manager.py:658 (prose)",
+    "translatable": false
   },
   "VM {0}: started ({1} vCPU, {2} GiB, {3})": {
     "en": "VM {0}: started ({1} vCPU, {2} GiB, {3})",
-    "ctx": "vm/manager.py:678 (prose)"
+    "ctx": "vm/manager.py:678 (prose)",
+    "translatable": false
   },
   "VM {0}: failed to start — {1}": {
     "en": "VM {0}: failed to start — {1}",
-    "ctx": "vm/manager.py:683 (prose)"
+    "ctx": "vm/manager.py:683 (prose)",
+    "translatable": false
   },
   "VM {0}: {1} finished — booting sealed disk": {
     "en": "VM {0}: {1} finished — booting sealed disk",
-    "ctx": "vm/manager.py:729 (prose)"
+    "ctx": "vm/manager.py:729 (prose)",
+    "translatable": false
   },
   "VM {0}: installer checkpoint — {1}": {
     "en": "VM {0}: installer checkpoint — {1}",
-    "ctx": "vm/manager.py:834 (prose)"
+    "ctx": "vm/manager.py:834 (prose)",
+    "translatable": false
   },
   "VM {0}: no guest checkpoint for {1} minutes; last: {2}": {
     "en": "VM {0}: no guest checkpoint for {1} minutes; last: {2}",
-    "ctx": "vm/manager.py:849 (prose)"
+    "ctx": "vm/manager.py:849 (prose)",
+    "translatable": false
   },
   "Keeping this PC awake while it hosts servers": {
     "en": "Keeping this PC awake while it hosts servers",
@@ -665,11 +679,13 @@
   },
   "VM {0}: health back to normal": {
     "en": "VM {0}: health back to normal",
-    "ctx": "vm/manager.py:922 (prose)"
+    "ctx": "vm/manager.py:922 (prose)",
+    "translatable": false
   },
   "VM {0}: health — {1}": {
     "en": "VM {0}: health — {1}",
-    "ctx": "vm/manager.py:924 (prose)"
+    "ctx": "vm/manager.py:924 (prose)",
+    "translatable": false
   },
   "Installing…": {
     "en": "Installing…",
@@ -701,7 +717,8 @@
   },
   "Install verdict requested in state {0}.": {
     "en": "Install verdict requested in state {0}.",
-    "ctx": "vm/lifecycle.py:230 (prose)"
+    "ctx": "vm/lifecycle.py:230 (prose)",
+    "translatable": false
   },
   "Appliance (hardware)": {
     "en": "Appliance (hardware)",
@@ -713,11 +730,13 @@
   },
   "Not a valid recipe: top-level is not an object.": {
     "en": "Not a valid recipe: top-level is not an object.",
-    "ctx": "vm/recipe_info.py:66 (prose)"
+    "ctx": "vm/recipe_info.py:66 (prose)",
+    "translatable": false
   },
   "Not a valid recipe: missing field \"{0}\".": {
     "en": "Not a valid recipe: missing field \"{0}\".",
-    "ctx": "vm/recipe_info.py:72 (prose)"
+    "ctx": "vm/recipe_info.py:72 (prose)",
+    "translatable": false
   },
   "KVM is available.": {
     "en": "KVM is available.",
