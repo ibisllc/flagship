@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { apnsAlertFor, buildPushForwarder, secretRequestDisplayData } from "../src/pushBridge.js";
+import { apnsAlertFor, apnsLocalizedAlertFor, buildPushForwarder, secretRequestDisplayData } from "../src/pushBridge.js";
 
 interface Captured {
   url: string;
@@ -75,11 +75,13 @@ describe("buildPushForwarder — APNs", () => {
     expect(body.aps.category).toBe("cert-alert");
     expect(body["flagship-sealed"]).toBe("deadbeef");
     // iOS shows nothing for a closed app without aps.alert.
-    expect(body.aps.alert).toEqual({ title: "Flagship", body: "One of your servers needs your attention." });
+    expect(body.aps.alert).toEqual({ title: "Flagship", body: "One of your servers needs your attention.", "loc-key": "One of your servers needs your attention." });
   });
 
   it("gives every category a fixed alert that names no server, app or host", () => {
     expect(apnsAlertFor("app-access")).toEqual({ title: "Flagship", body: "One of your apps wants to reach the internet." });
+    // the phone localises it: loc-key is the English sentence, a key the app's catalog carries
+    expect(apnsLocalizedAlertFor("app-access")["loc-key"]).toBe("One of your apps wants to reach the internet.");
     expect(apnsAlertFor("some-future-category")).toEqual({ title: "Flagship", body: "Open Flagship to see what's new." });
     expect(apnsAlertFor("secret-request")).toEqual({ title: "Flagship", body: "A server is waiting for your approval." });
     expect(apnsAlertFor("secret-request", "share-start-up")).toEqual({
