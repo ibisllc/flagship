@@ -71,6 +71,7 @@ import {
   alertCircleIcon,
   downloadIcon,
   scanIcon,
+  flagIcon,
 } from "./lib/icons.js";
 import { getSession, unlockSession } from "./lib/state.js";
 import { dispatchInitialView } from "./lib/deepLink.js";
@@ -111,6 +112,8 @@ import {
   enterCompanionRequests,
   refreshBadgeOnce as refreshCompanionRequestsBadge,
 } from "./views/companion-requests.js";
+import { enterNameDibs } from "./views/name-dibs.js";
+import { fetchDibsWindow } from "./lib/nameDibs.js";
 import { initVibeCodeView, enterVibeCode, openVibeCodeSessionById } from "./views/vibe-code.js";
 import { initServiceEnvView, enterServiceEnv } from "./views/service-env.js";
 import { initBuildSourceView, enterBuildSource } from "./views/build-source.js";
@@ -225,6 +228,7 @@ const SETTINGS_ROW_ICONS = {
   dock: monitorIcon,
   requests: usersIcon,
   profiles: userIcon,
+  dibs: flagIcon,
   appearance: monitorIcon,
   privacy: shieldIcon,
   about: alertCircleIcon,
@@ -256,6 +260,11 @@ async function enterSettingsTab() {
   decorateSettingsTab();
   applyDemoSettingsRestrictions(isDemoProfile(getActiveProfile()));
   void refreshSessionGates();
+  // The dibs row shows only while the window is open (and never for a demo,
+  // which can't change its operator-managed name).
+  fetchDibsWindow()
+    .then((w) => $("settings-tab-name-dibs")?.classList.toggle("hidden", !w.open || isDemoProfile(getActiveProfile())))
+    .catch(() => $("settings-tab-name-dibs")?.classList.add("hidden"));
   // P14 Phase 2 — refresh the companion-requests badge on Settings entry.
   // Best-effort; an older daemon (503) leaves the badge at 0.
   refreshCompanionRequestsBadge().catch(() => { /* swallow */ });
@@ -303,6 +312,7 @@ function wireSettingsTabEntries() {
     await renderProviders();
     document.querySelector("#push-switch")?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
+  wire("settings-tab-name-dibs", enterNameDibs);
   wire("settings-tab-recovery", enterRecovery);
   // "Back up account key" reuses the Recovery screen's `.flagshipkey`
   // export ceremony — jump there and focus the backup button.
