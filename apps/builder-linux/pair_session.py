@@ -14,6 +14,8 @@ session report).
 """
 from __future__ import annotations
 
+from i18n import tr
+
 import json
 import os
 import tempfile
@@ -24,7 +26,7 @@ from typing import Callable, Optional
 
 from cli_runner import CLIRunner, LogLine, Resolved, args_pair, locate
 
-PAIR_EVENT_PREFIX = "FLAGSHIP_PAIR "
+PAIR_EVENT_PREFIX = tr("FLAGSHIP_PAIR ")
 
 
 @dataclass(frozen=True)

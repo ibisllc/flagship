@@ -77,13 +77,13 @@ public final class PreseedEngine {
             case .bundleMissing:
                 return "preseed-engine.js resource not found in the bundle."
             case .evaluationFailed(let m):
-                return "Failed to evaluate the preseed engine: \(m)"
+                return String(localized: "Failed to evaluate the preseed engine: \(m)")
             case .globalMissing:
-                return "FlagshipPreseed global not installed by the preseed engine."
+                return String(localized: "FlagshipPreseed global not installed by the preseed engine.")
             case .threw(let m):
-                return "The preseed engine threw: \(m)"
+                return String(localized: "The preseed engine threw: \(m)")
             case .nonStringResult:
-                return "The preseed engine returned a non-string result."
+                return String(localized: "The preseed engine returned a non-string result.")
             }
         }
     }
