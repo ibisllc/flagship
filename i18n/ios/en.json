@@ -2244,7 +2244,8 @@
   },
   "https://": {
     "en": "https://",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:278"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:278",
+    "translatable": false
   },
   ".%@": {
     "en": ".%@",
@@ -2309,7 +2310,8 @@
   },
   "%@ — %lld file%@.": {
     "en": "%@ — %lld file%@.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:402"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:402",
+    "translatable": false
   },
   "Install it": {
     "en": "Install it",
@@ -2545,7 +2547,8 @@
   },
   "Started %@ · %lld step%@": {
     "en": "Started %@ · %lld step%@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:945"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:945",
+    "translatable": false
   },
   "Deploy it again": {
     "en": "Deploy it again",
@@ -2609,7 +2612,8 @@
   },
   "ABCD-EFGH": {
     "en": "ABCD-EFGH",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:111"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuilderPairScreen.swift:111",
+    "translatable": false
   },
   "The Flagship Studio is a small desktop app that writes your server to a USB stick. On your computer, go to flagshipserver.com/studio, install it, and open it to see the code to scan here.": {
     "en": "The Flagship Studio is a small desktop app that writes your server to a USB stick. On your computer, go to flagshipserver.com/studio, install it, and open it to see the code to scan here.",
@@ -2697,7 +2701,8 @@
   },
   "photo-%lld.%@": {
     "en": "photo-%lld.%@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatAttachments.swift:132"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatAttachments.swift:132",
+    "translatable": false
   },
   "The AI will see what you attach.": {
     "en": "The AI will see what you attach.",
@@ -3105,7 +3110,8 @@
   },
   "%lld hour%@": {
     "en": "%lld hour%@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:372"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:372",
+    "translatable": false
   },
   "Reboots on its own": {
     "en": "Reboots on its own",
@@ -3798,7 +3804,8 @@
   },
   "token: %@…": {
     "en": "token: %@…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/HomeTab.swift:1211"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/HomeTab.swift:1211",
+    "translatable": false
   },
   "You're offline. Check your connection and try again.": {
     "en": "You're offline. Check your connection and try again.",
