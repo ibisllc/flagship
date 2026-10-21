@@ -85,7 +85,7 @@ public final class OpenAccountViewModel {
         if let provided, !provided.trimmingCharacters(in: .whitespaces).isEmpty {
             return provided
         }
-        return "\(username)'s iPhone"
+        return String(localized: "\(username)'s iPhone")
     }
 
     /// The device name the account opens with — the typed value, or the
@@ -153,16 +153,16 @@ public final class OpenAccountViewModel {
             let adminRoot: Curve25519.Signing.PrivateKey
             var adminRootPubHex: String?
             if !Keystore.hasWrappedUMK {
-                let roots = try await Keystore.openAccountRoots(reason: "Open your Flagship account")
+                let roots = try await Keystore.openAccountRoots(reason: String(localized: "Open your Flagship account"))
                 irk = roots.irk
                 adminRoot = roots.adminRoot
                 adminRootPubHex = roots.adminRootPubHex
             } else {
                 do {
-                    irk = try await Keystore.deriveIRK(reason: "Open account \(username)")
+                    irk = try await Keystore.deriveIRK(reason: String(localized: "Open account \(username)"))
                 } catch Keystore.KeystoreError.unwrapFailed {
                     Keystore.wipe()
-                    let roots = try await Keystore.openAccountRoots(reason: "Open your Flagship account")
+                    let roots = try await Keystore.openAccountRoots(reason: String(localized: "Open your Flagship account"))
                     irk = roots.irk
                     adminRootPubHex = roots.adminRootPubHex
                 }
@@ -175,12 +175,12 @@ public final class OpenAccountViewModel {
                         adminRootPubHex = try? await Keystore.generateAdminRoot()
                     }
                 }
-                adminRoot = try await Keystore.adminRootKey(reason: "Authorize your private account name")
+                adminRoot = try await Keystore.adminRootKey(reason: String(localized: "Authorize your private account name"))
             }
             guard let adminRootPubHex else { throw Keystore.KeystoreError.keyNotFound }
             let irkPubHex = HexUtil.encode(irk.publicKey.rawRepresentation)
             let now = Int64(Date().timeIntervalSince1970 * 1000)
-            let umkKey = try await Keystore.currentUMK(reason: "Create your private account directory")
+            let umkKey = try await Keystore.currentUMK(reason: String(localized: "Create your private account directory"))
             let umk = umkKey.withUnsafeBytes { Data($0) }
             let identity = try pendingIdentity ?? (AccountMetadata.generateDeviceId(), UUID().uuidString.lowercased())
             pendingIdentity = identity

@@ -68,12 +68,12 @@ public final class KnockAuthorizeViewModel {
     private let now: () -> Int64
 
     public static let notYourServerMessage =
-        "This isn't one of your servers. Open its invite link on this phone first, then try again."
+        String(localized: "This isn't one of your servers. Open its invite link on this phone first, then try again.")
     /// Our own server, but this profile has no account device id to sign
     /// with. Refused rather than signing with the account-wide id, which
     /// would let every app link this device (the webapp's NO_DEVICE_KEY).
     public static let noDeviceKeyMessage =
-        "This device isn't set up on your account yet. Sign in to your account on it again, then try again."
+        String(localized: "This device isn't set up on your account yet. Sign in to your account on it again, then try again.")
 
     struct NoDeviceKey: Error {}
 
@@ -124,7 +124,7 @@ public final class KnockAuthorizeViewModel {
     /// ("Open home?" when no svc label rode the link).
     public nonisolated static func title(svc: String, serverDomain: String) -> String {
         let server = serverDomain.split(separator: ".").first.map(String.init) ?? serverDomain
-        return svc.isEmpty ? "Open \(server)?" : "Open \(svc) on \(server)?"
+        return svc.isEmpty ? String(localized: "Open \(server)?") : String(localized: "Open \(svc) on \(server)?")
     }
 
     public var title: String { Self.title(svc: svc, serverDomain: serverDomain) }
@@ -172,12 +172,12 @@ public final class KnockAuthorizeViewModel {
     public func authorize() async {
         if case .authorizing = phase { return }
         guard !serverDomain.isEmpty, !serviceRef.isEmpty, !pageId.isEmpty else {
-            phase = .failed("This link is missing or malformed — refresh the page and try again.")
+            phase = .failed(String(localized: "This link is missing or malformed — refresh the page and try again."))
             return
         }
         phase = .authorizing
         do {
-            guard let key = try await signingKey(reason: "Open this app") else {
+            guard let key = try await signingKey(reason: String(localized: "Open this app")) else {
                 phase = .failed(Self.notYourServerMessage)
                 return
             }
@@ -216,15 +216,15 @@ public final class KnockAuthorizeViewModel {
         } catch is NoDeviceKey {
             phase = .failed(Self.noDeviceKeyMessage)
         } catch ServiceAccessError.knockNotAllowed {
-            phase = .failed("You don't have access to this service.")
+            phase = .failed(String(localized: "You don't have access to this service."))
         } catch ServiceAccessError.knockBadRequest {
-            phase = .failed("Couldn't sign in. Try refreshing the page.")
+            phase = .failed(String(localized: "Couldn't sign in. Try refreshing the page."))
         } catch ServiceAccessError.knockPageExpired {
-            phase = .failed("The page expired — refresh it and try again.")
+            phase = .failed(String(localized: "The page expired — refresh it and try again."))
         } catch let e as ScreensClientError {
-            phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
+            phase = .failed(e.errorDescription ?? String(localized: "That didn't work. Try again in a moment."))
         } catch {
-            phase = .failed("Couldn't reach the server. Check your connection and try again.")
+            phase = .failed(String(localized: "Couldn't reach the server. Check your connection and try again."))
         }
     }
 }

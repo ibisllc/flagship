@@ -10,50 +10,50 @@ import CryptoKit
 // devices read them. Strings match the webapp's `CO_INVITE_*`.
 
 public enum ShareCoInviteCopy {
-    public static let open = "Invite people"
-    public static let line = "People you invite join as Member. You can withdraw your own invites."
+    public static let open = String(localized: "Invite people")
+    public static let line = String(localized: "People you invite join as Member. You can withdraw your own invites.")
     public static let addPerson = "+ Add person"
     public static let addGroup = "+ Add group"
     public static let nameLabel = "Name"
-    public static let groupNameLabel = "Group name"
-    public static let nameHint = "Only your devices see it."
+    public static let groupNameLabel = String(localized: "Group name")
+    public static let nameHint = String(localized: "Only your devices see it.")
     public static let namePlaceholder = "Alex"
-    public static let groupNamePlaceholder = "Chess club"
-    public static let maxUsesLabel = "Max uses"
+    public static let groupNamePlaceholder = String(localized: "Chess club")
+    public static let maxUsesLabel = String(localized: "Max uses")
     public static let maxUsesHint = "0 = unlimited"
-    public static let daysLabel = "Expires in days"
+    public static let daysLabel = String(localized: "Expires in days")
     public static let daysHint = "optional"
     public static let rankLine = "Rank: Member"
-    public static let create = "Create invite link"
-    public static let linkLine = "Send the link over a private channel. Whoever opens it joins as Member."
-    public static let copyLink = "Copy link"
-    public static let yours = "Your invites"
-    public static let none = "You haven't invited anyone to this app yet."
+    public static let create = String(localized: "Create invite link")
+    public static let linkLine = String(localized: "Send the link over a private channel. Whoever opens it joins as Member.")
+    public static let copyLink = String(localized: "Copy link")
+    public static let yours = String(localized: "Your invites")
+    public static let none = String(localized: "You haven't invited anyone to this app yet.")
     public static let withdraw = "Withdraw"
-    public static let withdrawTitle = "Withdraw this invite?"
+    public static let withdrawTitle = String(localized: "Withdraw this invite?")
     public static let unnamed = "Someone"
-    public static let created = "Invite created"
-    public static let withdrawn = "Invite withdrawn"
-    public static let linkCopied = "Link copied"
-    public static let noName = "Give them a name."
-    public static let noGroupName = "Give the group a name."
-    public static let noOwner = "This server can't take invites yet."
-    public static let readFailed = "Couldn't read your invites from this server."
-    public static let createFailed = "Couldn't create the invite. Try again."
-    public static let withdrawFailed = "Couldn't withdraw the invite. Try again."
+    public static let created = String(localized: "Invite created")
+    public static let withdrawn = String(localized: "Invite withdrawn")
+    public static let linkCopied = String(localized: "Link copied")
+    public static let noName = String(localized: "Give them a name.")
+    public static let noGroupName = String(localized: "Give the group a name.")
+    public static let noOwner = String(localized: "This server can't take invites yet.")
+    public static let readFailed = String(localized: "Couldn't read your invites from this server.")
+    public static let createFailed = String(localized: "Couldn't create the invite. Try again.")
+    public static let withdrawFailed = String(localized: "Couldn't withdraw the invite. Try again.")
 
     /// Why B can't invite (the box sends the same sentence as `whyText`; this is the fallback).
     public static let why: [String: String] = [
-        "not-shared": "This server isn't shared with you anymore.",
-        "view-only": "You can view this server but not manage it, so you can't invite people to its apps.",
-        "demoted": "An admin made you a Member of this app, so you can't invite people to it.",
-        "refused": "An admin turned off your access to this app.",
-        "catching-up": "This server is catching up with the app's other servers. Try again in a moment.",
+        "not-shared": String(localized: "This server isn't shared with you anymore."),
+        "view-only": String(localized: "You can view this server but not manage it, so you can't invite people to its apps."),
+        "demoted": String(localized: "An admin made you a Member of this app, so you can't invite people to it."),
+        "refused": String(localized: "An admin turned off your access to this app."),
+        "catching-up": String(localized: "This server is catching up with the app's other servers. Try again in a moment."),
     ]
     public static var viewOnly: String { why["view-only"]! }
 
     public static func withdrawMessage(_ appName: String) -> String {
-        "The link stops working, and anyone who joined through it loses access to \(appName)."
+        String(localized: "The link stops working, and anyone who joined through it loses access to \(appName).")
     }
 
     /// "Not opened yet", "1 person joined", "3 of 10 joined", "3 joined" (a group with no limit).
@@ -61,9 +61,9 @@ public enum ShareCoInviteCopy {
         let n = inv.joined
         var text: String
         if let max = inv.maxRedemptions {
-            text = max == 0 ? "\(n) joined" : "\(n) of \(max) joined"
+            text = max == 0 ? String(localized: "\(n) joined") : String(localized: "\(n) of \(max) joined")
         } else {
-            text = n == 0 ? "Not opened yet" : n == 1 ? "1 person joined" : "\(n) people joined"
+            text = n == 0 ? String(localized: "Not opened yet") : n == 1 ? "1 person joined" : String(localized: "\(n) people joined")
         }
         if let exp = inv.expiresAt, exp <= now { text += " · expired" }
         return text
@@ -250,7 +250,7 @@ extension ServerShareMemberFlow {
         } catch let e as ServerShareHTTPError where e.status != 0 && e.status != 401 {
             throw ShareInviteRefusal(e, fallback: ShareCoInviteCopy.readFailed)
         }
-        let seed = try await umkSeed("See who you invited to \(entry.displayName)")
+        let seed = try await umkSeed(String(localized: "See who you invited to \(entry.displayName)"))
         return ShareCoInviteState.from(body, bundleKey: try ServerShare.deriveShareInviteBundleKey(umkSeed: seed, shareId: entry.shareId))
     }
 
@@ -267,7 +267,7 @@ extension ServerShareMemberFlow {
         guard let ownerAid, ServerShare.isLowerHex(ownerAid, 64) else {
             throw ShareInviteRefusal(code: "no-owner", message: ShareCoInviteCopy.noOwner)
         }
-        let seed = try await umkSeed("Invite someone to \(entry.displayName)")
+        let seed = try await umkSeed(String(localized: "Invite someone to \(entry.displayName)"))
         let member = try ServerShare.deriveShareMemberKey(umkSeed: seed, shareId: entry.shareId)
         let bundleKey = try ServerShare.deriveShareInviteBundleKey(umkSeed: seed, shareId: entry.shareId)
         let rand = random ?? { ServerShare.randomBytes($0) }
@@ -292,7 +292,7 @@ extension ServerShareMemberFlow {
 
     /// Withdraw one of B's own invites: `flagship/service-invite/revoke/v1` signed with B's member key.
     public func withdrawCoInvite(_ entry: SharedServerEntry, shareToken: String, inviteId: String) async throws {
-        let member = try await memberKey(shareId: entry.shareId, reason: "Withdraw an invite to \(entry.displayName)")
+        let member = try await memberKey(shareId: entry.shareId, reason: String(localized: "Withdraw an invite to \(entry.displayName)"))
         let revoke = ShareInviteRevoke(inviteId: inviteId, issuedAt: now())
         let signature = HexUtil.encode(try member.signature(for: try revoke.canonicalBytes()))
         do {

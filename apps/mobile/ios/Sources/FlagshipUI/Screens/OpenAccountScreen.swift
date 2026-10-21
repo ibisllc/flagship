@@ -50,9 +50,9 @@ public struct OpenAccountScreen: View {
                             get: { vm.accountName },
                             set: { vm.accountName = $0 }
                         ),
-                        label: "Account display name",
-                        placeholder: "Johnson Family",
-                        helper: "Encrypted and shown above @\(username). It is never used in links."
+                        label: String(localized: "Account display name"),
+                        placeholder: String(localized: "Johnson Family"),
+                        helper: String(localized: "Encrypted and shown above @\(username). It is never used in links.")
                     )
                     .textInputAutocapitalization(.words)
                     .accessibilityIdentifier("open-account-account-name")
@@ -62,9 +62,9 @@ public struct OpenAccountScreen: View {
                             get: { vm.deviceName },
                             set: { vm.deviceName = $0 }
                         ),
-                        label: "Name this device",
-                        placeholder: "\(username)'s iPhone",
-                        helper: "Shown wherever your devices are listed. You can change it later.",
+                        label: String(localized: "Name this device"),
+                        placeholder: String(localized: "\(username)'s iPhone"),
+                        helper: String(localized: "Shown wherever your devices are listed. You can change it later."),
                         error: errorText
                     )
                     .textInputAutocapitalization(.words)
@@ -110,7 +110,7 @@ public struct OpenAccountScreen: View {
 
     private var ctaLabel: String {
         if case .opening = vm?.phase { return "Opening…" }
-        return "Open account"
+        return String(localized: "Open account")
     }
 
     private var errorText: String? {

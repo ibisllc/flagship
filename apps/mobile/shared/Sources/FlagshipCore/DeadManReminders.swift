@@ -49,8 +49,8 @@ public enum DeadManReminders {
         let pending = pendingFireDates(leaseExpiryMs: leaseExpiryMs, nowMs: nowMs)
         for p in pending {
             let content = UNMutableNotificationContent()
-            content.title = "Keep \(serverName) unlocked?"
-            content.body = "Tap to affirm — otherwise it locks when the window lapses."
+            content.title = String(localized: "Keep \(serverName) unlocked?")
+            content.body = String(localized: "Tap to affirm — otherwise it locks when the window lapses.")
             content.sound = .default
             content.categoryIdentifier = "deadman-affirm"
             content.userInfo = ["category": "deadman-affirm", "serverDomain": serverDomain]

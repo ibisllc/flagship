@@ -61,7 +61,7 @@ public final class KeyfileImportViewModel {
     /// read from the picked file.
     public func importBackup(fileText: String) async {
         guard canImport else {
-            phase = .failed("Enter the passphrase for this backup file.")
+            phase = .failed(String(localized: "Enter the passphrase for this backup file."))
             return
         }
         phase = .working
@@ -75,7 +75,7 @@ public final class KeyfileImportViewModel {
             phase = .failed(humanizedKeyfileError(e))
             return
         } catch {
-            phase = .failed("This isn't a Flagship key file.")
+            phase = .failed(String(localized: "This isn't a Flagship key file."))
             return
         }
 
@@ -87,9 +87,9 @@ public final class KeyfileImportViewModel {
         // to v1 under the imported UMK.
         Keystore.setActiveProfile(username)
         do {
-            try await installUMK(seed, "Bring this device into your Flagship account")
+            try await installUMK(seed, String(localized: "Bring this device into your Flagship account"))
         } catch {
-            phase = .failed("Couldn't install your account key. \(HumanError.humanize(error))")
+            phase = .failed(String(localized: "Couldn't install your account key. \(HumanError.humanize(error))"))
             return
         }
 
@@ -110,9 +110,9 @@ public final class KeyfileImportViewModel {
             // accounts. The keyfile sheet has no second-factor field
             // (yet); route the user to the sign-in flow, which prompts
             // for it.
-            phase = .failed("This account has a second factor enrolled. Choose \"Connect to an existing account\" and sign in with your account name — it will ask for your authenticator or recovery code.")
+            phase = .failed(String(localized: "This account has a second factor enrolled. Choose \"Connect to an existing account\" and sign in with your account name — it will ask for your authenticator or recovery code."))
         } catch {
-            phase = .failed("Couldn't start bringing this device in. \(HumanError.humanize(error))")
+            phase = .failed(String(localized: "Couldn't start bringing this device in. \(HumanError.humanize(error))"))
         }
     }
 
@@ -136,12 +136,12 @@ public final class KeyfileImportViewModel {
         } catch ScreensClientError.http(let status, _) where status == 425 {
             phase = .completed(username: username, completesAt: completesAt)
         } catch ScreensClientError.http(let status, _) where status == 403 || status == 409 {
-            phase = .failed("This was cancelled. If it's still you, try again.")
+            phase = .failed(String(localized: "This was cancelled. If it's still you, try again."))
         } catch ScreensClientError.http(let status, _) where status == 410 {
             // #52 — completion window elapsed; the cloud swept the row.
-            phase = .failed("This expired before it was completed. Start again.")
+            phase = .failed(String(localized: "This expired before it was completed. Start again."))
         } catch {
-            phase = .failed("Couldn't finish bringing this device in. \(HumanError.humanize(error))")
+            phase = .failed(String(localized: "Couldn't finish bringing this device in. \(HumanError.humanize(error))"))
         }
     }
 
@@ -155,7 +155,7 @@ public final class KeyfileImportViewModel {
     /// with.
     private func signedCompleteBody(username: String) async throws -> RePairCompleteRequest {
         let version = Keystore.pendingIrkRotationVersion() ?? Keystore.currentIrkVersion()
-        let key = try await Keystore.deriveIRK(reason: "Finish bringing this device in", version: version)
+        let key = try await Keystore.deriveIRK(reason: String(localized: "Finish bringing this device in"), version: version)
         let pubHex = HexUtil.encode(key.publicKey.rawRepresentation)
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
         let canonical = RePairComplete.canonicalBytes(
@@ -184,8 +184,8 @@ public final class KeyfileImportViewModel {
         // (completeTakeover), exactly like ReplaceDeviceViewModel.
         let oldVersion = Keystore.currentIrkVersion()
         let newVersion = oldVersion + 1
-        let oldKey = try await Keystore.deriveIRK(reason: "Confirm import", version: oldVersion)
-        let newKey = try await Keystore.deriveIRK(reason: "Authorize this device", version: newVersion)
+        let oldKey = try await Keystore.deriveIRK(reason: String(localized: "Confirm import"), version: oldVersion)
+        let newKey = try await Keystore.deriveIRK(reason: String(localized: "Authorize this device"), version: newVersion)
         let oldPubHex = HexUtil.encode(oldKey.publicKey.rawRepresentation)
         let newPubHex = HexUtil.encode(newKey.publicKey.rawRepresentation)
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
@@ -232,9 +232,9 @@ public final class KeyfileImportViewModel {
 
     private func humanizedKeyfileError(_ e: Keyfile.KeyfileError) -> String {
         switch e {
-        case .badPassphrase: return "That passphrase didn't open the file."
-        case .malformed:     return "This isn't a Flagship key file."
-        case .version:       return "This backup was made by a newer version of Flagship. Update the app and try again."
+        case .badPassphrase: return String(localized: "That passphrase didn't open the file.")
+        case .malformed:     return String(localized: "This isn't a Flagship key file.")
+        case .version:       return String(localized: "This backup was made by a newer version of Flagship. Update the app and try again.")
         }
     }
 }

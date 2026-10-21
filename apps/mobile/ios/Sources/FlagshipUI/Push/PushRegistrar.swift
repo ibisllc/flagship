@@ -90,7 +90,7 @@ public final class PushRegistrar: PushRegistrarHandle {
             // Revoke is now IRK-signed (SEC): .com verifies the envelope
             // against the token owner's registered IRK before deleting the
             // tether. We sign behind the biometric, exactly like register.
-            let irk = try await Keystore.deriveIRK(reason: "Revoke push token from Flagship")
+            let irk = try await Keystore.deriveIRK(reason: String(localized: "Revoke push token from Flagship"))
             let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
             let bytes = PushTokenRevoke.canonicalBytes(tokenId: tokenId, issuedAt: issuedAt)
             let sig = try irk.signature(for: bytes)
@@ -128,7 +128,7 @@ public final class PushRegistrar: PushRegistrarHandle {
         do {
             let providerTokenHex = HexUtil.encode(token)
             let irk = try await Keystore.deriveIRK(
-                reason: "Register push token with Flagship"
+                reason: String(localized: "Register push token with Flagship")
             )
             let pushKeypair = try Keystore.loadOrCreatePushX25519()
             let pushPubHex = HexUtil.encode(pushKeypair.publicKey.rawRepresentation)

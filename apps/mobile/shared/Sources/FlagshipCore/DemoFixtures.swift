@@ -17,22 +17,22 @@ public enum DemoFixtures {
         return [
             PodInfo(
                 podId: "demo-home-\(suffix())",
-                name: "Home",
-                description: "Living-room mini-PC",
+                name: String(localized: "Home"),
+                description: String(localized: "Living-room mini-PC"),
                 fqdn: "home.\(username).flagship.services",
                 status: .online
             ),
             PodInfo(
                 podId: "demo-office-\(suffix())",
-                name: "Office",
-                description: "Office tower, work failover",
+                name: String(localized: "Office"),
+                description: String(localized: "Office tower, work failover"),
                 fqdn: "office.\(username).flagship.services",
                 status: .online
             ),
             PodInfo(
                 podId: "demo-music-\(suffix())",
-                name: "Music",
-                description: "Garage rack, music studio",
+                name: String(localized: "Music"),
+                description: String(localized: "Garage rack, music studio"),
                 fqdn: "music.\(username).flagship.services",
                 status: .offline,
                 // Was live, stopped reporting a few hours ago: the honest
@@ -55,8 +55,8 @@ public enum DemoFixtures {
         pods.append(
             PodInfo(
                 podId: "demo-cabin-\(suffix())",
-                name: "Cabin",
-                description: "Remote box, waiting to unlock",
+                name: String(localized: "Cabin"),
+                description: String(localized: "Remote box, waiting to unlock"),
                 fqdn: "cabin.\(username).flagship.services",
                 status: .offline,
                 cameOnline: false,
@@ -81,8 +81,8 @@ public enum DemoFixtures {
         pods.append(
             PodInfo(
                 podId: "demo-attic-\(suffix())",
-                name: "Attic",
-                description: "Old box that never came online",
+                name: String(localized: "Attic"),
+                description: String(localized: "Old box that never came online"),
                 fqdn: "attic.\(username).flagship.services",
                 status: .offline,
                 cameOnline: false,
@@ -103,8 +103,8 @@ public enum DemoFixtures {
         pods.append(
             PodInfo(
                 podId: "demo-garage-\(suffix())",
-                name: "Garage",
-                description: "Revoked after it went missing",
+                name: String(localized: "Garage"),
+                description: String(localized: "Revoked after it went missing"),
                 fqdn: "garage.\(username).flagship.services",
                 status: .offline,
                 revokedAt: twoDaysAgoMs,

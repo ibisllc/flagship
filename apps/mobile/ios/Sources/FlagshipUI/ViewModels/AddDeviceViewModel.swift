@@ -54,7 +54,7 @@ public final class AddDeviceViewModel {
         case invalidated(String)
     }
 
-    public private(set) var phase: Phase = .failed("Not started")
+    public private(set) var phase: Phase = .failed(String(localized: "Not started"))
 
     /// D-4 — the assurance-gated "Also make this device an admin" toggle.
     /// Default OFF. Bound by `AddDeviceScreen`, and offered ONLY here (the
@@ -143,7 +143,7 @@ public final class AddDeviceViewModel {
                 adminPrivateKey: sk
             )
             guard devicePubRaw.count == 80 else {
-                phase = .failed("The other device sent an invalid key.")
+                phase = .failed(String(localized: "The other device sent an invalid key."))
                 return
             }
             let publicKey = Data(devicePubRaw.prefix(32))
@@ -171,7 +171,7 @@ public final class AddDeviceViewModel {
             phase = .failed(PairingRelayError.addDeviceUnavailable)
         } catch is PairingRelayError {
             if case .invalidated = phase { return }
-            phase = .failed("Pairing didn't complete. Show a new code and try again.")
+            phase = .failed(String(localized: "Pairing didn't complete. Show a new code and try again."))
         } catch {
             phase = .failed(HumanError.humanize(error))
         }
@@ -194,9 +194,9 @@ public final class AddDeviceViewModel {
                 newDevicePubHex: devicePubHex,
                 issuedAt: issuedAt
             )
-            let irk = try await deriveIRK("Add a device to your Flagship account")
+            let irk = try await deriveIRK(String(localized: "Add a device to your Flagship account"))
             let admitSig = try admit.sign(with: irk)
-            let umkHex = try await currentUMKHex("Share your account key with the new device")
+            let umkHex = try await currentUMKHex(String(localized: "Share your account key with the new device"))
 
             // D-4 promote-at-add: seal the admin master root INTO the bundle
             // (carried like `umkSeedHex`, wrapped by the outer AEAD seal) ONLY
@@ -205,7 +205,7 @@ public final class AddDeviceViewModel {
             // non-admin peer.
             var wrappedAdminRoot: String? = nil
             if promoteNewDeviceToAdmin && canPromoteToAdmin {
-                wrappedAdminRoot = try await adminRootSeedHex("Make the new device an admin")
+                wrappedAdminRoot = try await adminRootSeedHex(String(localized: "Make the new device an admin"))
             }
 
             let grantId = UUID().uuidString.lowercased()
@@ -265,14 +265,14 @@ public final class AddDeviceViewModel {
             phase = .admitted(deviceDisplayNameHint: nil)
             await relay.close()
         } catch {
-            phase = .failed("Couldn't add the device. \(HumanError.humanize(error))")
+            phase = .failed(String(localized: "Couldn't add the device. \(HumanError.humanize(error))"))
         }
     }
 
     /// Safeguard #1 — invalidate the pairing session (screenshot taken,
     /// TTL elapsed, or the user backed out). Tears down the relay so a
     /// leaked QR still can't complete a pairing.
-    public func invalidate(reason: String = "For your security this pairing code was cancelled. Start again to add a device.") {
+    public func invalidate(reason: String = String(localized: "For your security this pairing code was cancelled. Start again to add a device.")) {
         ttlTask?.cancel()
         // Don't clobber a successful admit.
         if case .admitted = phase { return }
@@ -294,7 +294,7 @@ public final class AddDeviceViewModel {
             case .admitted, .invalidated, .admitting:
                 return
             default:
-                self.invalidate(reason: "This pairing code expired. Start again to add a device.")
+                self.invalidate(reason: String(localized: "This pairing code expired. Start again to add a device."))
             }
         }
     }

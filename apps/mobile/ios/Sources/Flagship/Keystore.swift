@@ -34,11 +34,11 @@ public struct Keystore {
         public var errorDescription: String? {
             switch self {
             case .keyNotFound:
-                return "This device doesn't hold your account key yet."
+                return String(localized: "This device doesn't hold your account key yet.")
             case .biometricFailed:
-                return "This device couldn't confirm it was you. Try again."
+                return String(localized: "This device couldn't confirm it was you. Try again.")
             case .derivationFailed, .wrapFailed, .unwrapFailed, .keychainFailed:
-                return "Your account key couldn't be read on this device. Try again."
+                return String(localized: "Your account key couldn't be read on this device. Try again.")
             }
         }
     }
@@ -209,7 +209,7 @@ public struct Keystore {
 
     /// Generate a fresh UMK seed, wrap it under a Secure-Enclave-derived
     /// key, and persist the ciphertext + ephemeral public key.
-    public static func generateUMK(reason: String = "Create your Flagship account") async throws {
+    public static func generateUMK(reason: String = String(localized: "Create your Flagship account")) async throws {
         try await installUMK(SymmetricKey(size: .bits256), reason: reason)
     }
 
@@ -607,7 +607,7 @@ public struct Keystore {
     /// byte-identical to `deriveIRK()` run right after `generateUMK()`:
     /// `installUMK` resets the IRK version to v1 and we derive at that version.
     public static func generateUMKAndDeriveIRK(
-        reason: String = "Open your Flagship account"
+        reason: String = String(localized: "Open your Flagship account")
     ) async throws -> Curve25519.Signing.PrivateKey {
         let umkSeed = SymmetricKey(size: .bits256)
         try await installUMK(umkSeed, reason: reason)
@@ -661,7 +661,7 @@ public struct Keystore {
     /// root's pubkey hex (published to `.com` at claim + pinned into the recipe
     /// AuthCode).
     public static func openAccountRoots(
-        reason: String = "Open your Flagship account"
+        reason: String = String(localized: "Open your Flagship account")
     ) async throws -> (irk: Curve25519.Signing.PrivateKey, adminRoot: Curve25519.Signing.PrivateKey, adminRootPubHex: String) {
         let umkSeed = SymmetricKey(size: .bits256)
         let umkBytes = umkSeed.withUnsafeBytes { Data($0) }
@@ -710,7 +710,7 @@ public struct Keystore {
     /// existing admin-root slots — callers gate on `hasAdminRoot`.
     @discardableResult
     public static func generateAdminRoot(
-        reason: String = "Create your Flagship admin key"
+        reason: String = String(localized: "Create your Flagship admin key")
     ) async throws -> String {
         let ephemeral = P256.KeyAgreement.PrivateKey()
         let wrapper = try await WrappingKeypair.createOrLoad(reason: reason)
@@ -746,7 +746,7 @@ public struct Keystore {
     @discardableResult
     public static func importAdminRoot(
         seed: Data,
-        reason: String = "Set up your admin key on this device"
+        reason: String = String(localized: "Set up your admin key on this device")
     ) async throws -> String {
         // Round-trips through CryptoKit so a malformed seed throws here rather
         // than silently persisting an unusable authority root.
@@ -776,7 +776,7 @@ public struct Keystore {
     /// wrapping key. Signs sensitive/destructive orders (§8.3). Throws
     /// `.keyNotFound` if this device holds no admin root.
     public static func adminRootKey(
-        reason: String = "Authorize an admin action"
+        reason: String = String(localized: "Authorize an admin action")
     ) async throws -> Curve25519.Signing.PrivateKey {
         #if DEBUG
         if let gym = gymAdminRoot() { return gym }
@@ -843,7 +843,7 @@ public struct Keystore {
     /// the signing key changes. Non-sensitive orders (pairing, deposits) keep
     /// calling `deriveIRK` directly and are unaffected.
     public static func sensitiveOrderSigningKey(
-        reason: String = "Authorize this action"
+        reason: String = String(localized: "Authorize this action")
     ) async throws -> Curve25519.Signing.PrivateKey {
         if hasAdminRoot {
             return try await adminRootKey(reason: reason)

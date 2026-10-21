@@ -69,13 +69,13 @@ final class WatchBridge: NSObject {
                     return SecretRequestCoordinator(
                         mailbox: mailbox,
                         username: username,
-                        irkProvider: { try await Keystore.deriveIRK(reason: "Approve your box's boot unlock") },
+                        irkProvider: { try await Keystore.deriveIRK(reason: String(localized: "Approve your box's boot unlock")) },
                         unsealSeedProvider: { serverDomain in
                             var seeds: [Data] = []
-                            if let bak = try? await Keystore.deriveBAK(serverId: serverDomain, reason: "Unseal the disk key") {
+                            if let bak = try? await Keystore.deriveBAK(serverId: serverDomain, reason: String(localized: "Unseal the disk key")) {
                                 seeds.append(bak.rawRepresentation)
                             }
-                            if let irk = try? await Keystore.deriveIRK(reason: "Unseal the disk key") {
+                            if let irk = try? await Keystore.deriveIRK(reason: String(localized: "Unseal the disk key")) {
                                 seeds.append(irk.rawRepresentation)
                             }
                             return seeds

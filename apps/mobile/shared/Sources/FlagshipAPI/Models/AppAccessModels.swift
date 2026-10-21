@@ -150,7 +150,7 @@ public enum AppAccessList {
         var target = tokens[1].lowercased()
         if target.contains("://") { return fail("write the host only, without http:// or https://") }
         if target.contains("/") { return fail("write the host only, without a path") }
-        if isIPv6Literal(target) { return fail("IP addresses can't be allowed or denied; use a host name") }
+        if isIPv6Literal(target) { return fail(String(localized: "IP addresses can't be allowed or denied; use a host name")) }
         if target.contains(":") { return fail("write the host only, without a port") }
         if target.hasSuffix("."), target.count > 1 { target.removeLast() }
         if target == "all" { return .rule(AppAccessRule(line: number, action: action, target: "all")) }
@@ -163,12 +163,12 @@ public enum AppAccessList {
             host = String(target.dropFirst(2))
         }
         if !host.isEmpty, host.allSatisfy({ $0 == "." || ("0"..."9").contains($0) }) {
-            return fail("IP addresses can't be allowed or denied; use a host name")
+            return fail(String(localized: "IP addresses can't be allowed or denied; use a host name"))
         }
         if host == "localhost" || host.hasSuffix(".localhost") {
-            return fail("\"localhost\" is not a public host name")
+            return fail(String(localized: "\"localhost\" is not a public host name"))
         }
-        guard isValidHostName(host) else { return fail("\"\(target)\" is not a valid host name") }
+        guard isValidHostName(host) else { return fail(String(localized: "\"\(target)\" is not a valid host name")) }
         return .rule(AppAccessRule(line: number, action: action, target: target))
     }
 

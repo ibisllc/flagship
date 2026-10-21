@@ -88,9 +88,9 @@ public final class TransferGiverViewModel {
         phase = .signing
         let key: Curve25519.Signing.PrivateKey
         do {
-            key = try await signer("Transfer \(serverDomain) to another account")
+            key = try await signer(String(localized: "Transfer \(serverDomain) to another account"))
         } catch {
-            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't access your account key: \(UserErrorText.of(error))"))
             return
         }
         irk = key
@@ -99,7 +99,7 @@ public final class TransferGiverViewModel {
             // admin master root when present; the mailbox auth stays IRK, and the
             // stored `irk` above (used for the later disk-key re-seal) is unchanged.
             let orderKey = hasAdminRoot()
-                ? try await adminRootKey("Transfer \(serverDomain) to another account")
+                ? try await adminRootKey(String(localized: "Transfer \(serverDomain) to another account"))
                 : nil
             let (body, qr) = try ServerTransferFlow.buildOffer(
                 serverDomain: serverDomain, username: username, irk: key, orderKey: orderKey,
@@ -114,9 +114,9 @@ public final class TransferGiverViewModel {
             qrText = try ServerTransferFlow.transferUniversalLink(qr)
             phase = .awaitingClaim
         } catch let e as ScreensClientError {
-            phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
+            phase = .failed(e.errorDescription ?? String(localized: "That didn't work. Try again in a moment."))
         } catch {
-            phase = .failed("Couldn't reach the broker. Check your connection and try again.")
+            phase = .failed(String(localized: "Couldn't reach the broker. Check your connection and try again."))
         }
     }
 
@@ -153,7 +153,7 @@ public final class TransferGiverViewModel {
                 try await client.postDiskKey(serverDomain: serverDomain, body: auth)
             }
         } catch {
-            phase = .failed("Ownership moved, but the disk key re-seal failed: \(UserErrorText.of(error)). The new owner can retry from their device.")
+            phase = .failed(String(localized: "Ownership moved, but the disk key re-seal failed: \(UserErrorText.of(error)). The new owner can retry from their device."))
             return true
         }
         // §9.8 — hand off admin authority: the box only trusts a new admin root
@@ -165,7 +165,7 @@ public final class TransferGiverViewModel {
         // role. A box with no pinned admin root REFUSES to re-home without it.
         if hasAdminRoot() {
             do {
-                let giverRoot = try await adminRootKey("Hand off admin of \(serverDomain)")
+                let giverRoot = try await adminRootKey(String(localized: "Hand off admin of \(serverDomain)"))
                 let body = try ServerTransferFlow.buildAdminHandoff(
                     serverDomain: serverDomain,
                     giverUsername: username,
@@ -179,7 +179,7 @@ public final class TransferGiverViewModel {
             } catch {
                 // Same shape as the re-seal failure: ownership already moved,
                 // so degrade to retryable completed-with-warning.
-                phase = .failed("Ownership moved, but the admin hand-off failed: \(UserErrorText.of(error)). The new owner's server will wait for this hand-off before re-homing while it has a pinned admin key — retry the transfer hand-off from this device.")
+                phase = .failed(String(localized: "Ownership moved, but the admin hand-off failed: \(UserErrorText.of(error)). The new owner's server will wait for this hand-off before re-homing while it has a pinned admin key — retry the transfer hand-off from this device."))
                 return true
             }
         } else if let newDomain = claimed.newServerDomain {
@@ -196,7 +196,7 @@ public final class TransferGiverViewModel {
                 )
                 try await client.postRehomeAuth(serverDomain: serverDomain, body: body)
             } catch {
-                phase = .failed("Ownership moved, but the re-home authorization failed: \(UserErrorText.of(error)). The new owner's server will wait for this authorization before re-homing — retry the transfer hand-off from this device.")
+                phase = .failed(String(localized: "Ownership moved, but the re-home authorization failed: \(UserErrorText.of(error)). The new owner's server will wait for this authorization before re-homing — retry the transfer hand-off from this device."))
                 return true
             }
         }
