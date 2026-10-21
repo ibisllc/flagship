@@ -12,6 +12,8 @@ run inline.
 """
 from __future__ import annotations
 
+from i18n import tr
+
 import platform
 import json
 import re
@@ -57,19 +59,19 @@ STOP_GRACE_SECONDS = 60.0
 # (vm-core-vectors.json "awaitingUnlockCopy"). The phone, not Studio, decides
 # whether a restart needs an approval, so no line promises nobody has to act.
 AWAITING_UNLOCK_STALLED = (
-    "Taking longer than expected — the box may not have reached the network, or it "
+    tr("Taking longer than expected — the box may not have reached the network, or it "
     "may be waiting for you to approve the unlock on your phone. Check that it's "
-    "online, or power off and retry."
+    "online, or power off and retry.")
 )
 AWAITING_UNLOCK_ON_ITS_OWN = (
-    "Unlocking its disk with the key your phone left it. If your phone asks you to "
-    "approve, approve it there."
+    tr("Unlocking its disk with the key your phone left it. If your phone asks you to "
+    "approve, approve it there.")
 )
 AWAITING_UNLOCK_FIRST_BOOT = (
-    "The disk is sealed — approve the first unlock on your phone. After that it "
-    "should unlock on its own; if your phone asks again, approve it there."
+    tr("The disk is sealed — approve the first unlock on your phone. After that it "
+    "should unlock on its own; if your phone asks again, approve it there.")
 )
-AWAITING_UNLOCK_APPROVE_EVERY_BOOT = "The disk is sealed — approve the unlock on your phone."
+AWAITING_UNLOCK_APPROVE_EVERY_BOOT = tr("The disk is sealed — approve the unlock on your phone.")
 
 
 class InstallObservation:
@@ -83,17 +85,17 @@ class InstallObservation:
         if self.detail:
             return self.detail
         return {
-            "booting": "Booting the installer",
-            "partitioning": "Preparing the encrypted disk",
-            "installing": "Installing Debian",
-            "downloading": "Downloading Flagship software",
-            "registering": "Registering the server",
-            "sealing": "Sealing the disk key",
-            "installed": "Installation complete",
-            "pairing": "Pairing with your phone",
-            "live": "Server is live",
-            "error": "Installation reported an error",
-        }.get(self.phase, "Waiting for an installer checkpoint")
+            "booting": tr("Booting the installer"),
+            "partitioning": tr("Preparing the encrypted disk"),
+            "installing": tr("Installing Debian"),
+            "downloading": tr("Downloading Flagship software"),
+            "registering": tr("Registering the server"),
+            "sealing": tr("Sealing the disk key"),
+            "installed": tr("Installation complete"),
+            "pairing": tr("Pairing with your phone"),
+            "live": tr("Server is live"),
+            "error": tr("Installation reported an error"),
+        }.get(self.phase, tr("Waiting for an installer checkpoint"))
 
     def stale_minutes(self, now: float) -> int:
         return max(0, int(now - self.updated_at) // 60)
@@ -150,21 +152,20 @@ class HostedServer:
         if s.kind == VMStateKind.INSTALLING:
             observation = self.install_observation
             if observation is None:
-                return "Waiting for the first guest checkpoint."
+                return tr("Waiting for the first guest checkpoint.")
             now = time.time()
             if observation.is_stale(now):
                 return (
-                    f"No new guest checkpoint for {observation.stale_minutes(now)} minutes. "
-                    f"Last reported: {observation.summary}. The VM may be stalled."
+                    tr('No new guest checkpoint for {0} minutes. Last reported: {1}. The VM may be stalled.').format(observation.stale_minutes(now), observation.summary)
                 )
             return f"{observation.summary}. Guest checkpoint is current."
         if s.kind == VMStateKind.RUNNING:
-            return f"Serving at https://{c.server_domain}/"
+            return tr('Serving at https://{0}/').format(c.server_domain)
         if s.kind == VMStateKind.FAILED:
             return s.failure.reason if s.failure else ""
         if s.kind in (VMStateKind.INSTALLED, VMStateKind.STOPPED):
-            return "Start the server to bring it online."
-        return "Preparing the installer…"
+            return tr("Start the server to bring it online.")
+        return tr("Preparing the installer…")
 
     def coming_up_stalled(self, now: float) -> bool:
         """True iff this sealed guest has awaited unlock past the stall
@@ -182,7 +183,7 @@ class HostedServer:
     @property
     def spec_summary(self) -> str:
         c = self.record.config
-        enc = "Encrypted (LUKS)" if c.disk_encrypted else "Unencrypted"
+        enc = tr("Encrypted (LUKS)") if c.disk_encrypted else "Unencrypted"
         return (
             f"{c.cpu_count} vCPU · {c.memory_bytes // resource_plan.GIB} GiB RAM · "
             f"{c.main_disk_size_bytes // resource_plan.GIB} GiB disk · {enc}"
@@ -319,8 +320,7 @@ class VMManager:
         host = host_arch.current()
         if host is None:
             error = (
-                "Hosting isn't supported on this CPU architecture "
-                f"({platform.machine()})."
+                tr("Hosting isn't supported on this CPU architecture ({0}).").format(platform.machine())
             )
         else:
             try:
@@ -386,7 +386,7 @@ class VMManager:
                     record,
                     state=VMState.failed(
                         VMFailurePhase.INSTALL,
-                        "The app quit while the install was running.",
+                        tr("The app quit while the install was running."),
                     ),
                     state_changed_at=self._clock(),
                 )
@@ -468,7 +468,7 @@ class VMManager:
         self._apply(VMEvent.start_install(), name)
 
     def cancel_install(self, name: str) -> None:
-        self._apply(VMEvent.install_failed("Installation stopped by you."), name)
+        self._apply(VMEvent.install_failed(tr("Installation stopped by you.")), name)
 
     def power_on(self, name: str) -> None:
         self._apply(VMEvent.power_on(), name)
@@ -527,7 +527,7 @@ class VMManager:
                 host.force_stop()
             except Exception:
                 pass
-            self.log(f"VM {name}: stopped because the app quit")
+            self.log(tr('VM {0}: stopped because the app quit').format(name))
 
     def _apply(self, event: VMEvent, name: str) -> None:
         """Feed one event through the pure state machine, persist the new
@@ -538,7 +538,7 @@ class VMManager:
         if event.kind in (VMEventKind.START_INSTALL, VMEventKind.POWER_ON):
             refusal = self.arch_refusal(server.record.config)
             if refusal is not None:
-                self.log(f"VM {name}: {refusal}")
+                self.log(tr('VM {0}: {1}').format(name, refusal))
                 return
         lc = self._lifecycles.get(name)
         if lc is None:
@@ -551,7 +551,7 @@ class VMManager:
         try:
             effects = lc.handle(event)
         except VMLifecycleError:
-            self.log(f"VM {name}: ignored {event.kind.value} in state {server.record.state.label}")
+            self.log(tr('VM {0}: ignored {1} in state {2}').format(name, event.kind.value, server.record.state.label))
             return
         server.record = replace(
             server.record,
@@ -641,7 +641,7 @@ class VMManager:
         with self._stopping_lock:
             done = self._stopping.get(name)
         if done is not None:
-            self.log(f"VM {name}: waiting for the previous shutdown to finish")
+            self.log(tr('VM {0}: waiting for the previous shutdown to finish').format(name))
             done.wait()
 
     def _current_state_kind(self, name: str) -> VMStateKind:
@@ -654,8 +654,8 @@ class VMManager:
         # the same disk in a second VM.
         self._wait_for_stop(name)
         if self.toolchain is None:
-            reason = self.toolchain_error or "QEMU is not installed."
-            self.log(f"VM {name}: cannot start — {reason}")
+            reason = self.toolchain_error or tr("QEMU is not installed.")
+            self.log(tr('VM {0}: cannot start — {1}').format(name, reason))
             self._fail_from_state(name, reason)
             return
         # KVM commits guest RAM lazily, so only a host that cannot back the
@@ -666,7 +666,7 @@ class VMManager:
             headroom_bytes=0,
         )
         if too_little is not None:
-            self.log(f"VM {name}: cannot start — {too_little}")
+            self.log(tr('VM {0}: cannot start — {1}').format(name, too_little))
             self._fail_from_state(name, too_little)
             return
         try:
@@ -675,12 +675,11 @@ class VMManager:
             self._hosts[name] = host
             host.start(config, self.store.layout, bool(self._attach_iso.get(name)))
             self.log(
-                f"VM {name}: started ({config.cpu_count} vCPU, "
-                f"{config.memory_bytes // resource_plan.GIB} GiB, {self.accel})"
+                tr('VM {0}: started ({1} vCPU, {2} GiB, {3})').format(name, config.cpu_count, config.memory_bytes // resource_plan.GIB, self.accel)
             )
         except (QemuHostError, OSError) as e:
             self._hosts.pop(name, None)
-            self.log(f"VM {name}: failed to start — {e}")
+            self.log(tr('VM {0}: failed to start — {1}').format(name, e))
             self._fail_from_state(name, str(e))
 
     def _fail_from_state(self, name: str, reason: str) -> None:
@@ -726,13 +725,13 @@ class VMManager:
                         == VMProvisioningMode.PREBUILT_APPLIANCE
                     else "install"
                 )
-                self.log(f"VM {name}: {verb} finished — booting sealed disk")
+                self.log(tr('VM {0}: {1} finished — booting sealed disk').format(name, verb))
                 self._apply(VMEvent.install_succeeded(), name)
                 # First boot from disk follows immediately; an encrypted guest
                 # then sits sealed in awaiting-phone-unlock.
                 self._apply(VMEvent.power_on(), name)
             else:
-                self.log(f"VM {name}: {verdict.reason}")
+                self.log(tr('VM {0}: {1}').format(name, verdict.reason))
                 self._apply(verdict, name)
         elif kind in (VMStateKind.AWAITING_PHONE_UNLOCK, VMStateKind.RUNNING):
             if exit_code != 0:
@@ -831,7 +830,7 @@ class VMManager:
                             if prior is None or (
                                 prior.phase, prior.detail, prior.updated_at
                             ) != (observation.phase, observation.detail, observation.updated_at):
-                                self.log(f"VM {name}: installer checkpoint — {observation.summary}")
+                                self.log(tr('VM {0}: installer checkpoint — {1}').format(name, observation.summary))
                                 self.on_change()
                             if not observation.is_stale(self._clock()):
                                 self._install_stall_logged.discard(name)
@@ -846,9 +845,7 @@ class VMManager:
                 ):
                     self._install_stall_logged.add(name)
                     self.log(
-                        f"VM {name}: no guest checkpoint for "
-                        f"{observation.stale_minutes(self._clock())} minutes; "
-                        f"last: {observation.summary}"
+                        tr('VM {0}: no guest checkpoint for {1} minutes; last: {2}').format(name, observation.stale_minutes(self._clock()), observation.summary)
                     )
                     self.on_change()
                 stop.wait(15)
@@ -882,9 +879,9 @@ class VMManager:
             return
         self._wake_held = wanted
         self.log(
-            "Keeping this PC awake while it hosts servers"
+            tr("Keeping this PC awake while it hosts servers")
             if wanted
-            else "No server running: this PC may sleep again"
+            else tr("No server running: this PC may sleep again")
         )
         self.on_wake_hold(wanted)
 
@@ -919,9 +916,9 @@ class VMManager:
                     issues = [] if v.ok else v.lines
                     if issues != last_issues:
                         self.log(
-                            f"VM {name}: health back to normal"
+                            tr('VM {0}: health back to normal').format(name)
                             if not issues
-                            else f"VM {name}: health — {' '.join(issues)}"
+                            else tr('VM {0}: health — {1}').format(name, ' '.join(issues))
                         )
                         last_issues = issues
                     self.on_change()
