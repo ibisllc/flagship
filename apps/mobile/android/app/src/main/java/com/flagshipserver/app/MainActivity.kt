@@ -1,5 +1,6 @@
 package com.flagshipserver.app
 
+import com.flagshipserver.app.core.FSStrings
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
@@ -665,7 +666,7 @@ class MainActivity : FragmentActivity() {
                     LocalVibeCodeEnvelopeSigner provides { change ->
                         val bytes = change.canonicalBytes()
                         HexUtil.encode(
-                            Keystore.deriveIRK("Sign service configuration").sign(bytes),
+                            Keystore.deriveIRK(FSStrings.get(R.string.sign_service_configuration)).sign(bytes),
                         )
                     },
                 ) {

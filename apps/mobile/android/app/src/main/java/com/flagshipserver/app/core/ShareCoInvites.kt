@@ -9,53 +9,54 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import kotlinx.serialization.Serializable
 
 object ShareCoInviteCopy {
-    const val OPEN = "Invite people"
-    const val LINE = "People you invite join as Member. You can withdraw your own invites."
+    val OPEN get() = FSStrings.get(R.string.invite_people)
+    val LINE get() = FSStrings.get(R.string.people_you_invite_join_as_member)
     const val ADD_PERSON = "+ Add person"
     const val ADD_GROUP = "+ Add group"
     const val NAME_LABEL = "Name"
-    const val GROUP_NAME_LABEL = "Group name"
-    const val NAME_HINT = "Only your devices see it."
+    val GROUP_NAME_LABEL get() = FSStrings.get(R.string.group_name)
+    val NAME_HINT get() = FSStrings.get(R.string.only_your_devices_see_it)
     const val NAME_PLACEHOLDER = "Alex"
-    const val GROUP_NAME_PLACEHOLDER = "Chess club"
-    const val MAX_USES_LABEL = "Max uses"
+    val GROUP_NAME_PLACEHOLDER get() = FSStrings.get(R.string.chess_club)
+    val MAX_USES_LABEL get() = FSStrings.get(R.string.max_uses)
     const val MAX_USES_HINT = "0 = unlimited"
-    const val DAYS_LABEL = "Expires in days"
+    val DAYS_LABEL get() = FSStrings.get(R.string.expires_in_days)
     const val DAYS_HINT = "optional"
     const val RANK_LINE = "Rank: Member"
-    const val CREATE = "Create invite link"
-    const val LINK_LINE = "Send the link over a private channel. Whoever opens it joins as Member."
-    const val COPY_LINK = "Copy link"
-    const val YOURS = "Your invites"
-    const val NONE = "You haven't invited anyone to this app yet."
+    val CREATE get() = FSStrings.get(R.string.create_invite_link)
+    val LINK_LINE get() = FSStrings.get(R.string.send_the_link_over_a_private)
+    val COPY_LINK get() = FSStrings.get(R.string.copy_link)
+    val YOURS get() = FSStrings.get(R.string.your_invites)
+    val NONE get() = FSStrings.get(R.string.you_havent_invited_anyone_to_this)
     const val WITHDRAW = "Withdraw"
-    const val WITHDRAW_TITLE = "Withdraw this invite?"
+    val WITHDRAW_TITLE get() = FSStrings.get(R.string.withdraw_this_invite)
     const val UNNAMED = "Someone"
-    const val CREATED = "Invite created"
-    const val WITHDRAWN = "Invite withdrawn"
-    const val LINK_COPIED = "Link copied"
-    const val NO_NAME = "Give them a name."
-    const val NO_GROUP_NAME = "Give the group a name."
-    const val NO_OWNER = "This server can't take invites yet."
-    const val READ_FAILED = "Couldn't read your invites from this server."
-    const val CREATE_FAILED = "Couldn't create the invite. Try again."
-    const val WITHDRAW_FAILED = "Couldn't withdraw the invite. Try again."
+    val CREATED get() = FSStrings.get(R.string.invite_created)
+    val WITHDRAWN get() = FSStrings.get(R.string.invite_withdrawn)
+    val LINK_COPIED get() = FSStrings.get(R.string.link_copied)
+    val NO_NAME get() = FSStrings.get(R.string.give_them_a_name)
+    val NO_GROUP_NAME get() = FSStrings.get(R.string.give_the_group_a_name)
+    val NO_OWNER get() = FSStrings.get(R.string.this_server_cant_take_invites_yet)
+    val READ_FAILED get() = FSStrings.get(R.string.couldnt_read_your_invites_from_this)
+    val CREATE_FAILED get() = FSStrings.get(R.string.couldnt_create_the_invite_try_again)
+    val WITHDRAW_FAILED get() = FSStrings.get(R.string.couldnt_withdraw_the_invite_try_again)
 
     /** Why B can't invite (the box sends the same sentence as `whyText`; this is the fallback). */
-    val WHY: Map<String, String> = mapOf(
-        "not-shared" to "This server isn't shared with you anymore.",
-        "view-only" to "You can view this server but not manage it, so you can't invite people to its apps.",
-        "demoted" to "An admin made you a Member of this app, so you can't invite people to it.",
-        "refused" to "An admin turned off your access to this app.",
-        "catching-up" to "This server is catching up with the app's other servers. Try again in a moment.",
+    val WHY: Map<String, String> get() = mapOf(
+        "not-shared" to FSStrings.get(R.string.this_server_isnt_shared_with_you_2),
+        "view-only" to FSStrings.get(R.string.you_can_view_this_server_but),
+        "demoted" to FSStrings.get(R.string.an_admin_made_you_a_member),
+        "refused" to FSStrings.get(R.string.an_admin_turned_off_your_access),
+        "catching-up" to FSStrings.get(R.string.this_server_is_catching_up_with),
     )
     val VIEW_ONLY: String = WHY.getValue("view-only")
 
     fun withdrawMessage(appName: String): String =
-        "The link stops working, and anyone who joined through it loses access to $appName."
+        FSStrings.get(R.string.the_link_stops_working_and_anyone, appName)
 
     /** "Not opened yet", "1 person joined", "3 of 10 joined", "3 joined" (a group with no limit). */
     fun statusText(inv: ShareCoInvite, now: Long = System.currentTimeMillis()): String {
@@ -63,12 +64,12 @@ object ShareCoInviteCopy {
         val max = inv.maxRedemptions
         var text = when {
             max == null -> when (n) {
-                0 -> "Not opened yet"
+                0 -> FSStrings.get(R.string.not_opened_yet)
                 1 -> "1 person joined"
-                else -> "$n people joined"
+                else -> FSStrings.get(R.string.people_joined, n)
             }
-            max == 0 -> "$n joined"
-            else -> "$n of $max joined"
+            max == 0 -> FSStrings.get(R.string.joined, n)
+            else -> FSStrings.get(R.string.of_joined, n, max)
         }
         val exp = inv.expiresAt
         if (exp != null && exp <= now) text += " · expired"

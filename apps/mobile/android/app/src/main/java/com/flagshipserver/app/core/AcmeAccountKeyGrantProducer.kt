@@ -17,6 +17,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.google.crypto.tink.subtle.Ed25519Sign
 import java.math.BigInteger
 import java.security.KeyFactory
@@ -63,14 +64,14 @@ object AcmeAccountKeyGrantProducer {
         val domain = ECDomainParameters(spec.curve, spec.g, spec.n, spec.h, spec.seed)
         val params = ECPrivateKeyParameters(s, domain)
         val der = PrivateKeyInfoFactory.createPrivateKeyInfo(params).encoded
-        return derToPem(der, "PRIVATE KEY")
+        return derToPem(der, FSStrings.get(R.string.private_key))
     }
 
     /** Reverse of [scalarToPkcs8Pem] for tests / re-parse: parse a PKCS#8 PEM
      *  back into a JCE PrivateKey via the secp256r1 spec, so a round-trip can
      *  assert the same scalar. */
     fun pkcs8PemToPrivateKey(pem: String): PrivateKey {
-        val der = pemToDer(pem, "PRIVATE KEY")
+        val der = pemToDer(pem, FSStrings.get(R.string.private_key))
         val kf = KeyFactory.getInstance("EC", org.bouncycastle.jce.provider.BouncyCastleProvider())
         return kf.generatePrivate(java.security.spec.PKCS8EncodedKeySpec(der))
     }

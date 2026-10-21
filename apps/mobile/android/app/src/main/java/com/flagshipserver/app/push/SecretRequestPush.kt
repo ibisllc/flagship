@@ -10,6 +10,9 @@
 
 package com.flagshipserver.app.push
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
+
 /** A `secret-request` push: one of the user's boxes posted a SecretRequest to
  *  its `.com` mailbox and `.com` woke the phone to come finish the handshake. */
 data class SecretRequestEvent(
@@ -19,7 +22,7 @@ data class SecretRequestEvent(
 
 object SecretRequestPush {
     const val TITLE = "Flagship"
-    const val BODY = "A server is waiting for your approval."
+    val BODY get() = FSStrings.get(R.string.a_server_is_waiting_for_your)
 
     /** Null for any other push, including a shared server's start-up notice,
      *  which rides the same category but opens Home instead. */

@@ -11,6 +11,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import android.app.Activity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
@@ -113,14 +117,14 @@ fun RecoveryScreen(nav: NavController) {
     }
 
     FSScreen(
-        title = "Cloud recovery",
+        title = stringResource(R.string.cloud_recovery),
         onBack = { nav.popBackStack() },
     ) {
         if (showReattachProgress) {
             FSGroup {
                 FSRow(
-                    title = "Re-attach progress",
-                    subtitle = "See per-app re-anchoring after recovery.",
+                    title = stringResource(R.string.re_attach_progress),
+                    subtitle = stringResource(R.string.see_per_app_re_anchoring_after),
                     icon = Icons.Outlined.Sync,
                     onClick = { nav.navigate("post-recovery") },
                     modifier = Modifier.semantics { testTag = "recovery-open-reattach-progress" },
@@ -152,7 +156,7 @@ fun RecoveryScreen(nav: NavController) {
                 onPassphraseConfirm = { passphraseConfirm = it },
                 onConfigure = {
                     if (activity == null) {
-                        error = "Open this screen from the foreground activity to use a passkey."
+                        error = FSStrings.get(R.string.open_this_screen_from_the_foreground_2)
                         return@SetupCard
                     }
                     scope.launch {
@@ -161,7 +165,7 @@ fun RecoveryScreen(nav: NavController) {
                             val username = app.currentUser.value ?: "you"
                             // IRK access prompt up front (biometric) so the
                             // Argon2id + passkey work happens after consent.
-                            val irkMaterial = KeystoreIrkAccess().resolve("Set up cloud recovery")
+                            val irkMaterial = KeystoreIrkAccess().resolve(FSStrings.get(R.string.set_up_cloud_recovery))
                             val umk = Keystore.loadOrCreateUmkSeed()
                             val acmeScalar = try {
                                 Keystore.loadOrCreateAcmeAccountKeyScalar()
@@ -208,7 +212,7 @@ fun RecoveryScreen(nav: NavController) {
                             app.setHasCloudRecovery(true)
                             savedIn = ceremony.lastProvider
                             RecoveryProviderStore.write(ctx, savedIn)
-                            toasts.success("Cloud recovery configured.")
+                            toasts.success(FSStrings.get(R.string.cloud_recovery_configured))
                             mode = RecoveryMode.Choose
                         } catch (t: Throwable) {
                             error = if (t is CloudRecoveryEnrollment.ValidationError) t.message
@@ -237,27 +241,27 @@ private fun ChooseCard(
     FSCard {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                Text("Cloud recovery", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Text(stringResource(R.string.cloud_recovery), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 FSPill(
                     when (cloudStatus) {
-                        CloudStatus.Configured -> "Configured"
-                        CloudStatus.NotConfigured -> "Not set up"
-                        CloudStatus.Failed -> "Couldn't check"
-                        CloudStatus.Unknown -> "Checking…"
+                        CloudStatus.Configured -> stringResource(R.string.configured)
+                        CloudStatus.NotConfigured -> stringResource(R.string.not_set_up)
+                        CloudStatus.Failed -> stringResource(R.string.couldnt_check)
+                        CloudStatus.Unknown -> stringResource(R.string.checking)
                     },
                     kind = if (cloudStatus == CloudStatus.Configured) FSPillKind.Online else FSPillKind.Idle,
                 )
             }
             if (cloudStatus == CloudStatus.Configured) {
                 Text(
-                    "Recovery active",
+                    stringResource(R.string.recovery_active),
                     color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.semantics { testTag = "recovery-active" },
                 )
                 if (savedIn != null) {
                     Text(
-                        "Your passkey is saved in $savedIn.",
+                        fsString(R.string.your_passkey_is_saved_in, savedIn),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -270,12 +274,12 @@ private fun ChooseCard(
                 )
             } else {
                 Text(
-                    "Store an encrypted copy of your account key for a new Android device.",
+                    stringResource(R.string.store_an_encrypted_copy_of_your),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 FSPrimaryButton(
-                    label = "Set up cloud recovery",
+                    label = stringResource(R.string.set_up_cloud_recovery),
                     onClick = onSetup,
                     block = true,
                     modifier = Modifier.semantics { testTag = "recovery-setup" },
@@ -300,32 +304,32 @@ private fun SetupCard(
         passphrase == passphraseConfirm
     FSCard {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            Text("Set up cloud recovery", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.set_up_cloud_recovery), style = MaterialTheme.typography.titleMedium)
             Text(
-                "Pick a passphrase (8+ characters) — treat it like a password and write it down somewhere safe. You'll need it, plus your passkey, to get back in on a new device. We can't reset it.",
+                stringResource(R.string.pick_a_passphrase_8_characters_treat),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
             FSField(
                 value = passphrase,
                 onValueChange = onPassphrase,
-                label = "Recovery passphrase",
-                helper = "8 characters minimum",
+                label = stringResource(R.string.recovery_passphrase),
+                helper = stringResource(R.string.n_8_characters_minimum),
                 visualTransformation = PasswordVisualTransformation(),
             )
             FSField(
                 value = passphraseConfirm,
                 onValueChange = onPassphraseConfirm,
-                label = "Confirm passphrase",
+                label = stringResource(R.string.confirm_passphrase),
                 visualTransformation = PasswordVisualTransformation(),
             )
             FSPrimaryButton(
-                label = if (working) "Configuring…" else "Configure",
+                label = if (working) stringResource(R.string.configuring) else stringResource(R.string.configure),
                 onClick = onConfigure,
                 enabled = canSubmit,
                 block = true,
             )
-            FSSecondaryButton(label = "Cancel", onClick = onCancel, enabled = !working, block = true)
+            FSSecondaryButton(label = stringResource(R.string.cancel), onClick = onCancel, enabled = !working, block = true)
         }
     }
 }
@@ -336,7 +340,7 @@ private fun HowRecoveryWorksCard() {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Icon(Icons.Outlined.Info, contentDescription = null, tint = FS.colors.accent, modifier = Modifier.size(24.dp))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("How this works", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.how_this_works), style = MaterialTheme.typography.titleSmall)
                 Text(
                     RECOVERY_HOW_IT_WORKS,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -349,13 +353,13 @@ private fun HowRecoveryWorksCard() {
 
 /** Provider-neutral: on Android the passkey may land in Google Password
  *  Manager, Samsung Pass or another passkey app. */
-internal const val RECOVERY_HOW_IT_WORKS =
-    "Recovery needs both your recovery passphrase and the passkey you saved for Flagship, in Google Password Manager, Samsung Pass or another passkey app. Together they unlock the encrypted copy of your account key; we cannot read it or reset your passphrase."
+internal val RECOVERY_HOW_IT_WORKS get() =
+    FSStrings.get(R.string.recovery_needs_both_your_recovery_passphrase)
 
 /** Shown while the passkey app asks a second time right after the create. */
-internal const val SECOND_PASSKEY_PROMPT =
-    "Your passkey app needs one more check to hand Flagship the key it derives from your new passkey."
+internal val SECOND_PASSKEY_PROMPT get() =
+    FSStrings.get(R.string.your_passkey_app_needs_one_more)
 
 /** Where restoring happens (iOS RecoveryScreen's line). */
-internal const val RECOVER_ON_NEW_DEVICE =
-    "If you lose this device, install Flagship on a new one, choose \"Connect to an existing account,\" and recover with your passphrase."
+internal val RECOVER_ON_NEW_DEVICE get() =
+    FSStrings.get(R.string.if_you_lose_this_device_install)

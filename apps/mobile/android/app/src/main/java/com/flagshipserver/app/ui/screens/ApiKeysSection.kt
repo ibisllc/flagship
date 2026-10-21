@@ -5,6 +5,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
@@ -99,11 +103,11 @@ fun ApiKeysSection(
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             when (val p = phase) {
                 is AppApiKeysViewModel.Phase.Loading, AppApiKeysViewModel.Phase.Unsupported -> {
-                    Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.loading), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                 }
                 is AppApiKeysViewModel.Phase.Failed -> {
                     Text(p.message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-                    FSSecondaryButton("Try again", onClick = { scope.launch { vm.load() } })
+                    FSSecondaryButton(stringResource(R.string.try_again), onClick = { scope.launch { vm.load() } })
                 }
                 is AppApiKeysViewModel.Phase.Loaded -> {
                     if (p.keys.isEmpty()) {
@@ -165,7 +169,7 @@ fun ApiKeysSection(
     revoking?.let { key ->
         AlertDialog(
             onDismissRequest = { if (!busy) revoking = null },
-            title = { Text("Revoke ${AppApiKeysViewModel.displayLabel(key)}?") },
+            title = { Text(fsString(R.string.revoke, AppApiKeysViewModel.displayLabel(key))) },
             text = {
                 Column {
                     Text(vm.revokeConfirmText(key))
@@ -182,15 +186,15 @@ fun ApiKeysSection(
                         scope.launch {
                             if (vm.revoke(key.keyId)) {
                                 revoking = null
-                                toasts.success("Revoked ${AppApiKeysViewModel.displayLabel(key)}.")
+                                toasts.success(FSStrings.get(R.string.revoked_2, AppApiKeysViewModel.displayLabel(key)))
                             }
                         }
                     },
                     modifier = Modifier.testTag("api-key-revoke-confirm"),
-                ) { Text(if (busy) "Revoking…" else AppApiKeysViewModel.REVOKE, color = MaterialTheme.colorScheme.error) }
+                ) { Text(if (busy) stringResource(R.string.revoking) else AppApiKeysViewModel.REVOKE, color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(enabled = !busy, onClick = { revoking = null; vm.clearError() }) { Text("Cancel") }
+                TextButton(enabled = !busy, onClick = { revoking = null; vm.clearError() }) { Text(stringResource(R.string.cancel)) }
             },
             modifier = Modifier.testTag("api-key-revoke-dialog"),
         )
@@ -200,7 +204,7 @@ fun ApiKeysSection(
         AlertDialog(
             // The key can't be shown again, so only Done closes this.
             onDismissRequest = {},
-            title = { Text("Your key for ${c.label}") },
+            title = { Text(fsString(R.string.your_key_for, c.label)) },
             text = {
                 Column {
                     Text(
@@ -218,7 +222,7 @@ fun ApiKeysSection(
                         )
                     }
                     Spacer(Modifier.height(FS.space.s3))
-                    Text("Send it with each request:", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.send_it_with_each_request), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                     Text(
                         AppApiKeysViewModel.usageLine("<key>"),
                         color = MaterialTheme.colorScheme.onSurface,
@@ -237,7 +241,7 @@ fun ApiKeysSection(
                 TextButton(
                     onClick = {
                         copySecret(ctx, c.key)
-                        toasts.success("Copied.")
+                        toasts.success(FSStrings.get(R.string.copied))
                     },
                     modifier = Modifier.testTag("api-key-created-copy"),
                 ) { Text(AppApiKeysViewModel.COPY) }
@@ -275,7 +279,7 @@ private fun ApiKeyRow(
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 FSPill(
-                    if (expired) "Expired" else AppApiKeysViewModel.scopeText(key.scope),
+                    if (expired) stringResource(R.string.expired) else AppApiKeysViewModel.scopeText(key.scope),
                     kind = when {
                         expired -> FSPillKind.Offline
                         key.scope == AppApiKey.SCOPE_WRITE -> FSPillKind.Pending
@@ -317,14 +321,14 @@ private fun CreateApiKeyDialog(
                 OutlinedTextField(
                     value = label,
                     onValueChange = { label = it },
-                    label = { Text("Name") },
-                    placeholder = { Text("Garden sensor") },
+                    label = { Text(stringResource(R.string.name)) },
+                    placeholder = { Text(stringResource(R.string.garden_sensor)) },
                     singleLine = true,
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth().testTag("api-key-create-label"),
                 )
                 Spacer(Modifier.height(FS.space.s3))
-                Text("Access", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
+                Text(stringResource(R.string.access), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
                 AppApiKeysViewModel.SCOPES.forEach { s ->
                     Choice(
                         selected = keyScope == s,
@@ -346,10 +350,10 @@ private fun CreateApiKeyDialog(
                 enabled = !busy && label.isNotBlank(),
                 onClick = { onCreate(label, keyScope) },
                 modifier = Modifier.testTag("api-key-create-confirm"),
-            ) { Text(if (busy) "Creating…" else "Create") }
+            ) { Text(if (busy) stringResource(R.string.creating) else stringResource(R.string.create)) }
         },
         dismissButton = {
-            TextButton(enabled = !busy, onClick = onCancel) { Text("Cancel") }
+            TextButton(enabled = !busy, onClick = onCancel) { Text(stringResource(R.string.cancel)) }
         },
         modifier = Modifier.testTag("api-key-create-dialog"),
     )
@@ -382,7 +386,7 @@ private fun Choice(
 /** Copies the key, flagged sensitive so the system doesn't preview it. */
 private fun copySecret(ctx: Context, key: String) {
     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val clip = ClipData.newPlainText("Flagship API key", key)
+    val clip = ClipData.newPlainText(FSStrings.get(R.string.flagship_api_key), key)
     clip.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
     cm.setPrimaryClip(clip)
 }

@@ -10,20 +10,22 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
+
 object AdminOrderGate {
     fun allows(holdsAdminRoot: Boolean, isDemoAccount: Boolean): Boolean =
         AddServerGate.allows(holdsAdminRoot, isDemoAccount)
 
     fun allows(app: AppState): Boolean = AddServerGate.allows(app)
 
-    const val UNINSTALL = "Only an admin device can remove an app."
-    const val RUNS_ON = "Only an admin device can change where this app runs."
-    const val ACCESS_LIST = "Only an admin device can change this app's internet access."
-    const val API_KEYS = "Only an admin device can create or revoke API keys."
-    const val DATABASE_WRITE = "Only an admin device can change this app's data."
+    val UNINSTALL get() = FSStrings.get(R.string.only_an_admin_device_can_remove)
+    val RUNS_ON get() = FSStrings.get(R.string.only_an_admin_device_can_change)
+    val ACCESS_LIST get() = FSStrings.get(R.string.only_an_admin_device_can_change_2)
+    val API_KEYS get() = FSStrings.get(R.string.only_an_admin_device_can_create)
+    val DATABASE_WRITE get() = FSStrings.get(R.string.only_an_admin_device_can_change_3)
     /** The server page's orders (the webapp's SERVER_ADMIN_ONLY). */
-    const val SERVER = "Only an admin device can change this server. This device can see it."
+    val SERVER get() = FSStrings.get(R.string.only_an_admin_device_can_change_4)
     /** `.com` checks the server order under the admin root (serverOrder.ts). */
-    const val SERVER_ORDER = "Only an admin device can change the server order."
-    const val SHARE = "Only an admin device can share this server."
+    val SERVER_ORDER get() = FSStrings.get(R.string.only_an_admin_device_can_change_5)
+    val SHARE get() = FSStrings.get(R.string.only_an_admin_device_can_share)
 }

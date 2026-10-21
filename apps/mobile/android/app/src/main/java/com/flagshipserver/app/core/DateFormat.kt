@@ -1,5 +1,6 @@
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -31,9 +32,9 @@ object FlagshipDateFormat {
     ): String {
         val deltaMs = nowMs - epochMs
         if (deltaMs >= 0) {
-            if (deltaMs < 60_000L) return "just now"
-            if (deltaMs < 3_600_000L) return "${deltaMs / 60_000L}m ago"
-            if (deltaMs < 86_400_000L) return "${deltaMs / 3_600_000L}h ago"
+            if (deltaMs < 60_000L) return FSStrings.get(R.string.just_now)
+            if (deltaMs < 3_600_000L) return FSStrings.get(R.string.m_ago, deltaMs / 60_000L)
+            if (deltaMs < 86_400_000L) return FSStrings.get(R.string.h_ago, deltaMs / 3_600_000L)
         }
 
         val cal = Calendar.getInstance(timeZone, locale)

@@ -4,6 +4,8 @@
 
 package com.flagshipserver.app.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -52,7 +54,7 @@ fun RunsOnRow(modifier: Modifier = Modifier, locked: Boolean = false) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text("Runs on", color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium))
+            Text(stringResource(R.string.runs_on), color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     scope.pod.name,
@@ -62,19 +64,19 @@ fun RunsOnRow(modifier: Modifier = Modifier, locked: Boolean = false) {
                 )
                 if (scope.pod.podId == leaderId) {
                     Spacer(Modifier.width(FS.space.s2))
-                    FSPill(label = "Preferred", kind = FSPillKind.Idle)
+                    FSPill(label = stringResource(R.string.preferred), kind = FSPillKind.Idle)
                 }
             }
         }
         if (canPick) {
-            TextButton(onClick = { open = true }, modifier = Modifier.testTag("runs-on-change")) { Text("Change") }
+            TextButton(onClick = { open = true }, modifier = Modifier.testTag("runs-on-change")) { Text(stringResource(R.string.change)) }
         }
     }
 
     if (open && canPick) {
         AlertDialog(
             onDismissRequest = { open = false },
-            title = { Text("Where should it run?") },
+            title = { Text(stringResource(R.string.where_should_it_run)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
                     options.forEach { opt ->
@@ -113,7 +115,7 @@ fun RunsOnRow(modifier: Modifier = Modifier, locked: Boolean = false) {
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { open = false }) { Text("Done") } },
+            confirmButton = { TextButton(onClick = { open = false }) { Text(stringResource(R.string.done)) } },
         )
     }
 }

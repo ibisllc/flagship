@@ -13,6 +13,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -90,7 +94,7 @@ fun JoinDeviceScreen(
     // Mock debug runs use the in-memory relay so the gym can drive it.
     val relays = remember { com.flagshipserver.app.core.Variant.devicePairingRelays() }
     if (relays == null) {
-        DevicePairingUnavailable(title = "Join an account", onCancel = onCancel, message = com.flagshipserver.app.core.DEVICE_JOIN_UNAVAILABLE)
+        DevicePairingUnavailable(title = stringResource(R.string.join_an_account), onCancel = onCancel, message = com.flagshipserver.app.core.DEVICE_JOIN_UNAVAILABLE)
         return
     }
 
@@ -100,7 +104,7 @@ fun JoinDeviceScreen(
 
     var link by remember { mutableStateOf(initialLink) }
     var scanError by remember { mutableStateOf<String?>(null) }
-    var deviceName by remember { mutableStateOf("This Android device") }
+    var deviceName by remember { mutableStateOf(FSStrings.get(R.string.this_android_device)) }
 
     if (link == null) {
         ScannerEntry(
@@ -108,7 +112,7 @@ fun JoinDeviceScreen(
             onScanned = { raw ->
                 val parsed = JoinLink.parse(raw)
                 if (parsed == null) {
-                    scanError = "That QR isn't a Flagship pairing invite."
+                    scanError = FSStrings.get(R.string.that_qr_isnt_a_flagship_pairing)
                 } else {
                     scanError = null
                     link = parsed
@@ -132,20 +136,18 @@ fun JoinDeviceScreen(
     LaunchedEffect(vm) { vm.start() }
 
     FSScreen(
-        title = "Join an account",
+        title = stringResource(R.string.join_an_account),
         onBack = { vm.cancel(); onCancel() },
         modifier = Modifier.semantics { contentDescription = "join-device" },
     ) {
         RiskWarning(
-            "You're about to bring this device into someone else's Flagship " +
-                "account. It will hold that account's keys. Only continue if " +
-                "the account owner is adding you right now and the codes match.",
+            stringResource(R.string.youre_about_to_bring_this_device),
         )
 
         when (val p = phase) {
             JoinDevicePhase.Connecting -> StatusPanel(
-                title = "Connecting…",
-                message = "Setting up a secure channel with the admin's device.",
+                title = stringResource(R.string.connecting),
+                message = stringResource(R.string.setting_up_a_secure_channel_with),
                 icon = Icons.Outlined.Sensors,
                 spinner = true,
             )
@@ -160,20 +162,20 @@ fun JoinDeviceScreen(
                 onCancel = { vm.cancel(); onCancel() },
             )
             JoinDevicePhase.Joining -> StatusPanel(
-                title = "Joining the account…",
-                message = "Verifying the admin's authorization and installing your account key.",
+                title = stringResource(R.string.joining_the_account),
+                message = stringResource(R.string.verifying_the_admins_authorization_and),
                 icon = Icons.Outlined.Lock,
                 spinner = true,
             )
             is JoinDevicePhase.Joined -> JoinedPanel(quarantineUntil = p.quarantineUntil, onDone = onJoined)
             is JoinDevicePhase.Failed -> {
                 StatusPanel(
-                    title = "Couldn't join",
+                    title = stringResource(R.string.couldnt_join),
                     message = p.message,
                     icon = Icons.Outlined.ErrorOutline,
                     danger = true,
                 )
-                FSSecondaryButton(label = "Back", onClick = onCancel, block = true)
+                FSSecondaryButton(label = stringResource(R.string.back), onClick = onCancel, block = true)
             }
         }
     }
@@ -182,21 +184,19 @@ fun JoinDeviceScreen(
 @Composable
 private fun ScannerEntry(error: String?, onScanned: (String) -> Unit, onCancel: () -> Unit) {
     FSScreen(
-        title = "Scan the pairing code",
+        title = stringResource(R.string.scan_the_pairing_code),
         onBack = onCancel,
         modifier = Modifier.semantics { contentDescription = "join-device-scan" },
-        subtitle = "Point your camera at the “Add a device” code on the account owner's phone.",
+        subtitle = stringResource(R.string.point_your_camera_at_the_add),
     ) {
         RiskWarning(
-            "Scanning brings this device into the owner's account and shares " +
-                "their account keys with it. Only scan a code the owner is " +
-                "showing you right now.",
+            stringResource(R.string.scanning_brings_this_device_into_the),
         )
         QRScanner(onScanned = onScanned)
         error?.let {
             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
         }
-        FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
+        FSSecondaryButton(label = stringResource(R.string.cancel), onClick = onCancel, block = true)
     }
 }
 
@@ -213,9 +213,9 @@ private fun VerifyPanel(
             verticalArrangement = Arrangement.spacedBy(FS.space.s3),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Confirm this code", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.confirm_this_code), style = MaterialTheme.typography.titleMedium)
             Text(
-                "It must match the code on the account owner's phone.",
+                stringResource(R.string.it_must_match_the_code_on),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -231,18 +231,18 @@ private fun VerifyPanel(
             FSField(
                 value = deviceName,
                 onValueChange = onDeviceNameChange,
-                label = "Name in this account",
-                helper = "This encrypted name applies only inside the account you are joining.",
+                label = stringResource(R.string.name_in_this_account),
+                helper = stringResource(R.string.this_encrypted_name_applies_only_inside),
             )
             FSPrimaryButton(
-                label = "Confirm name and join",
+                label = stringResource(R.string.confirm_name_and_join),
                 onClick = onConfirm,
                 enabled = deviceName.isNotBlank(),
                 block = true,
             )
         }
     }
-    FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
+    FSSecondaryButton(label = stringResource(R.string.cancel), onClick = onCancel, block = true)
 }
 
 @Composable
@@ -251,7 +251,7 @@ private fun JoinedPanel(quarantineUntil: Long?, onDone: () -> Unit) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = FS.colors.success)
-                Text("You're in", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.youre_in), style = MaterialTheme.typography.titleMedium)
             }
             Text(
                 quarantineCopy(quarantineUntil),
@@ -261,7 +261,7 @@ private fun JoinedPanel(quarantineUntil: Long?, onDone: () -> Unit) {
             )
         }
     }
-    FSPrimaryButton(label = "Continue", onClick = onDone, block = true)
+    FSPrimaryButton(label = stringResource(R.string.continue_label), onClick = onDone, block = true)
 }
 
 @Composable
@@ -299,11 +299,11 @@ private fun StatusPanel(
  *  test can assert the byte-string without Compose scaffolding. */
 internal fun quarantineCopy(quarantineUntil: Long?, now: Long = System.currentTimeMillis()): String {
     if (quarantineUntil == null || quarantineUntil <= now) {
-        return "This device is now on the account. It starts as a non-admin device."
+        return FSStrings.get(R.string.this_device_is_now_on_the)
     }
     val days = ((quarantineUntil - now) + 86_399_999) / 86_400_000  // ceil to days
     val until = FlagshipDateFormat.format(quarantineUntil, nowMs = now)
-    return "This device is a non-admin device for about $days more day" +
+    return FSStrings.get(R.string.this_device_is_a_non_admin, days) +
         (if (days == 1L) "" else "s") +
         " (until $until). The account owner is being reminded to review trusted devices."
 }

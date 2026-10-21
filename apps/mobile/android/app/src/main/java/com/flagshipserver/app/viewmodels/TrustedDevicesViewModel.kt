@@ -5,6 +5,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -83,7 +85,7 @@ class TrustedDevicesViewModel(
             }
             val activeProfile = profile()
             if (activeProfile == null || activeProfile.deviceId.length != 32) {
-                _state.value = State.Failed("This device has no account-scoped identity.")
+                _state.value = State.Failed(FSStrings.get(R.string.this_device_has_no_account_scoped))
                 return@launch
             }
             _state.value = State.Loading
@@ -134,7 +136,7 @@ class TrustedDevicesViewModel(
                     val scopes = grants[device.deviceId].orEmpty().flatMap { it.scopes(kotlinx.serialization.json.Json) }.toSet()
                     DirectoryDevice(
                         deviceId = device.deviceId,
-                        displayName = decrypted ?: "${AccountDeviceNames.platformLabel(device.platformClass)} · Device ${device.supportCode}",
+                        displayName = decrypted ?: FSStrings.get(R.string.device, AccountDeviceNames.platformLabel(device.platformClass), device.supportCode),
                         platformClass = device.platformClass,
                         supportCode = device.supportCode,
                         createdAt = device.createdAt,
@@ -149,7 +151,7 @@ class TrustedDevicesViewModel(
                 _state.value = State.Loaded(devices)
                 cacheNames(accountName ?: user, devices.firstOrNull { it.isCurrent }?.displayName)
             } catch (t: Throwable) {
-                _state.value = State.Failed(UserErrorText.of(t, "Couldn't load trusted devices. Try again."))
+                _state.value = State.Failed(UserErrorText.of(t, FSStrings.get(R.string.couldnt_load_trusted_devices_try_again)))
             }
             loadPendingRePair()
         }
@@ -192,7 +194,7 @@ class TrustedDevicesViewModel(
         val path = "/api/accounts/${user.lowercase()}/profile"
         return runCatching {
             val context = directoryContext("PUT", path)
-            val admin = Keystore.adminRootKey("Rename this account")
+            val admin = Keystore.adminRootKey(FSStrings.get(R.string.rename_this_account))
             val signerPub = requireNotNull(Keystore.adminRootPubHex())
             val ciphertext = AccountMetadata.encrypt(
                 displayName,
@@ -264,7 +266,7 @@ class TrustedDevicesViewModel(
         val path = "/api/accounts/${user.lowercase()}/devices/$deviceId/managed-profile"
         return runCatching {
             val context = directoryContext("PUT", path)
-            val admin = Keystore.adminRootKey("Manage this device name")
+            val admin = Keystore.adminRootKey(FSStrings.get(R.string.manage_this_device_name))
             val signerPub = requireNotNull(Keystore.adminRootPubHex())
             val ciphertext = AccountMetadata.encrypt(
                 displayName,
@@ -296,7 +298,7 @@ class TrustedDevicesViewModel(
         val expected = directorySnapshot?.managedProfiles?.firstOrNull { it.deviceId == deviceId }?.revision ?: return false
         val path = "/api/accounts/${user.lowercase()}/devices/$deviceId/managed-profile"
         return runCatching {
-            Keystore.adminRootKey("Remove the managed device name")
+            Keystore.adminRootKey(FSStrings.get(R.string.remove_the_managed_device_name))
             val context = directoryContext("DELETE", path)
             server.deleteDeviceManagedProfile(user, deviceId, context.authorization, expected)
             load()

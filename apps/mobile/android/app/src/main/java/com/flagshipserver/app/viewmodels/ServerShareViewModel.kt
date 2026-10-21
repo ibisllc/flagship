@@ -4,6 +4,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import android.content.Context
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.flagshipserver.app.api.AccessRequest
@@ -96,32 +98,32 @@ class ServerShareRuntime(
 val LocalServerShares = staticCompositionLocalOf<ServerShareRuntime?> { null }
 
 object ShareCopy {
-    const val CAN_VIEW = "Can view"
-    const val CAN_MANAGE = "Can manage"
-    const val VIEW_LINE = "See the server's status, monitoring and apps."
-    const val MANAGE_LINE = "Also build apps with AI, accept app updates, update the server and change what apps can reach on the internet."
-    const val UNLOCK_TITLE = "Let them approve start-up"
-    const val UNLOCK_LINE = "Their phone gets a copy of this server's disk key, which they could keep."
-    const val DATA_TITLE = "Let them see app data"
-    const val DATA_LINE = "They can read what your apps store, and at Can manage change it."
-    const val NEVER_LINE = "They can never delete, move or turn off this server, or see who else has it."
-    const val HOUSE_KEY_LINE = "Only give this to someone you'd give a house key. Ending the share deletes their copy, but they could have kept one."
+    val CAN_VIEW get() = FSStrings.get(R.string.can_view)
+    val CAN_MANAGE get() = FSStrings.get(R.string.can_manage)
+    val VIEW_LINE get() = FSStrings.get(R.string.see_the_servers_status_monitoring_and)
+    val MANAGE_LINE get() = FSStrings.get(R.string.also_build_apps_with_ai_accept)
+    val UNLOCK_TITLE get() = FSStrings.get(R.string.let_them_approve_start_up)
+    val UNLOCK_LINE get() = FSStrings.get(R.string.their_phone_gets_a_copy_of)
+    val DATA_TITLE get() = FSStrings.get(R.string.let_them_see_app_data)
+    val DATA_LINE get() = FSStrings.get(R.string.they_can_read_what_your_apps)
+    val NEVER_LINE get() = FSStrings.get(R.string.they_can_never_delete_move_or)
+    val HOUSE_KEY_LINE get() = FSStrings.get(R.string.only_give_this_to_someone_youd)
 
-    const val NOTICES_TITLE = "Notify this device when it needs to start"
-    const val NOTICES_LINE = "Turning this on lets Flagship's service know this device helps with this server, so it can wake you. The notice itself names no server."
+    val NOTICES_TITLE get() = FSStrings.get(R.string.notify_this_device_when_it_needs)
+    val NOTICES_LINE get() = FSStrings.get(R.string.turning_this_on_lets_flagships_service)
     // A co-manager is manager-class in every app of a shared server (owner rule
     // "Three ranks"), so a members-only app still lets them in.
-    const val MEMBERS_ONLY_HINT = "Members only. As a co-manager you can open it."
+    val MEMBERS_ONLY_HINT get() = FSStrings.get(R.string.members_only_as_a_co_manager)
 
     const val UPDATE_TITLE = "Update"
-    const val UPDATE_CURRENT = "Up to date."
+    val UPDATE_CURRENT get() = FSStrings.get(R.string.up_to_date)
 
-    fun updateButton(tag: String?, commit: String): String = "Update to ${tag?.takeIf { it.isNotBlank() } ?: commit.take(8)}"
+    fun updateButton(tag: String?, commit: String): String = FSStrings.get(R.string.update_to, tag?.takeIf { it.isNotBlank() } ?: commit.take(8))
 
     fun updateConfirm(serverName: String): String =
-        "$serverName restarts on the new release. Only releases Flagship's maintainers endorsed will install."
+        FSStrings.get(R.string.restarts_on_the_new_release_only, serverName)
 
-    fun updating(serverName: String): String = "Updating $serverName. It restarts in a few minutes."
+    fun updating(serverName: String): String = FSStrings.get(R.string.updating_it_restarts_in_a_few, serverName)
 
     fun level(level: String): String = if (level == ServerShare.LEVEL_MANAGE) CAN_MANAGE else CAN_VIEW
 
@@ -129,7 +131,7 @@ object ShareCopy {
 
     /** "Sam · started an app build with AI", "You · shared this server". */
     fun activityLine(e: ActivityEntry): String {
-        val who = if (e.actor.kind == "share") e.actor.label?.takeIf { it.isNotBlank() } ?: "Someone you shared with" else "You"
+        val who = if (e.actor.kind == "share") e.actor.label?.takeIf { it.isNotBlank() } ?: FSStrings.get(R.string.someone_you_shared_with) else "You"
         val person = e.target?.takeIf { it.isNotBlank() } ?: "someone"
         val what = when (e.action) {
             "share.granted" -> "gave $person access"
@@ -139,7 +141,7 @@ object ShareCopy {
                 (e.target?.takeIf { it.isNotBlank() && !e.action.startsWith("share.") }?.let { " ($it)" } ?: "")
         }
         val failed = if (e.ok) "" else ", refused"
-        return "$who · $what$failed"
+        return FSStrings.get(R.string.text_2, who, what, failed)
     }
 
     private val ACTIONS = mapOf(
@@ -157,8 +159,8 @@ object ShareCopy {
 }
 
 private fun Throwable.shareMessage(): String = when (this) {
-    is ShareException -> message ?: "Something went wrong. Try again."
-    is ShareInviteRefusal -> message ?: "Something went wrong. Try again."
+    is ShareException -> message ?: FSStrings.get(R.string.something_went_wrong_try_again)
+    is ShareInviteRefusal -> message ?: FSStrings.get(R.string.something_went_wrong_try_again)
     else -> userFacing()
 }
 
@@ -225,7 +227,7 @@ class OwnerShareViewModel(
     }.also { if (it != null) load() } != null
 
     private fun session(): String = ownerSession()
-        ?: throw ShareException(ShareException.Kind.Refused, "This phone isn't signed in to this server yet.")
+        ?: throw ShareException(ShareException.Kind.Refused, FSStrings.get(R.string.this_phone_isnt_signed_in_to))
 
     private suspend fun <T> act(id: String, block: suspend () -> T): T? {
         if (id in _ui.value.busy) return null
@@ -265,7 +267,7 @@ class ShareAcceptViewModel(
     suspend fun open(text: String) {
         val link = ServerShare.parseShareLink(text)
         if (link == null) {
-            _phase.value = Phase.Failed("That isn't a share link. Ask the owner to send it again.")
+            _phase.value = Phase.Failed(FSStrings.get(R.string.that_isnt_a_share_link_ask))
             return
         }
         _phase.value = Phase.Opening
@@ -310,7 +312,7 @@ class ShareAcceptViewModel(
                 true
             }
             ShareSignIn.Ended -> {
-                _phase.value = Phase.Failed("The owner stopped sharing this server.")
+                _phase.value = Phase.Failed(FSStrings.get(R.string.the_owner_stopped_sharing_this_server))
                 false
             }
             ShareSignIn.Waiting -> false
@@ -550,7 +552,7 @@ class SharedServerViewModel(
         val target = _ui.value.releases?.latest?.commit ?: return false
         val from = _ui.value.detail?.currentCommit ?: _ui.value.releases?.currentCommit
         if (from == null) {
-            _ui.update { it.copy(message = "This server hasn't said which version it runs. Refresh and try again.") }
+            _ui.update { it.copy(message = FSStrings.get(R.string.this_server_hasnt_said_which_version)) }
             return false
         }
         return busy { client.orderUpdate(entry, target, from) }
@@ -600,7 +602,7 @@ class SharedServerViewModel(
         if (ok) {
             _ui.update { it.copy(accessRequests = it.accessRequests.filterNot { r -> r.serviceId == request.serviceId && r.host == request.host }) }
         } else {
-            _ui.update { it.copy(message = vm.error.value ?: "Couldn't save that answer.") }
+            _ui.update { it.copy(message = vm.error.value ?: FSStrings.get(R.string.couldnt_save_that_answer)) }
         }
         return ok
     }

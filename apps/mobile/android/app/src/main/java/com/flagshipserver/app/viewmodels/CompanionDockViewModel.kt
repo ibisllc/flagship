@@ -8,6 +8,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.CompanionListResponse
 import com.flagshipserver.app.api.CompanionMintTicketRequest
@@ -49,7 +51,7 @@ class CompanionDockViewModel(
             // A fresh, explicit ceremony even when the rest of the unlocked
             // app session has a warm biometric latch.
             authority.invalidate()
-            authority.ensureFresh("Let this browser in", reason)
+            authority.ensureFresh(FSStrings.get(R.string.let_this_browser_in_2), reason)
         }
     },
 ) {
@@ -96,7 +98,7 @@ class CompanionDockViewModel(
 
     fun load(): Job = scope.launch {
         val server = selected ?: run {
-            _state.value = LoadingState.Failed("No server on this phone can take a browser yet.")
+            _state.value = LoadingState.Failed(FSStrings.get(R.string.no_server_on_this_phone_can))
             return@launch
         }
         _state.value = LoadingState.Loading
@@ -113,7 +115,7 @@ class CompanionDockViewModel(
         _approvalError.value = null
         val qr = RemoteApprovalLink.parse(raw)
         if (qr == null) {
-            _approvalError.value = "That isn't the code from ${com.flagshipserver.app.core.Endpoints.remoteHost}."
+            _approvalError.value = FSStrings.get(R.string.that_isnt_the_code_from, com.flagshipserver.app.core.Endpoints.remoteHost)
             return false
         }
         if (_phase.value is Phase.Connecting || _phase.value is Phase.Approving) return false
@@ -147,14 +149,14 @@ class CompanionDockViewModel(
     fun approve(): Job = scope.launch {
         val matching = _phase.value as? Phase.Matching ?: return@launch
         if (!matching.gateOpen) return@launch
-        val server = selected ?: return@launch fail(IllegalStateException("Pick a server first."))
+        val server = selected ?: return@launch fail(IllegalStateException(FSStrings.get(R.string.pick_a_server_first)))
         val s = session ?: return@launch
         val r = relay ?: return@launch
-        val user = username() ?: return@launch fail(IllegalStateException("Sign in to your account first."))
+        val user = username() ?: return@launch fail(IllegalStateException(FSStrings.get(R.string.sign_in_to_your_account_first)))
         _phase.value = Phase.Approving
         _approvalError.value = null
         try {
-            authenticate("Let this browser use ${server.pod.name} for four hours, without a key")
+            authenticate(FSStrings.get(R.string.let_this_browser_use_for_four, server.pod.name))
             val ticket = server.client.companionMintTicket(CompanionMintTicketRequest())
             val payload = RemoteTicketPayload(
                 ticketId = ticket.ticketId,
@@ -209,7 +211,7 @@ class CompanionDockViewModel(
         is ScreensError.Http -> NetworkErrorHumanizer.humanize(t, "remote")
         else -> {
             com.flagshipserver.app.core.ErrorLog.caught("remote", t, NetworkErrorHumanizer.errorCode(t))
-            UserErrorText.of(t, "Something went wrong. Try again.")
+            UserErrorText.of(t, FSStrings.get(R.string.something_went_wrong_try_again))
         }
     }
 

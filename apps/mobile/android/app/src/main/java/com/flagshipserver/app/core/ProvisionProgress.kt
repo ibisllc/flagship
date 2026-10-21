@@ -11,6 +11,8 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
+
 object ProvisionProgress {
 
     /** The ONE ordered ladder, in order, EXCLUDING the terminal `error`
@@ -36,17 +38,17 @@ object ProvisionProgress {
 
     /** Canonical phase title per phase. Single source — every surface
      *  uses these (provisionStatus.ts PHASE_TITLES, byte-identical). */
-    val phaseTitles: Map<String, String> = mapOf(
-        "booting" to "Booting up",
+    val phaseTitles: Map<String, String> get() = mapOf(
+        "booting" to FSStrings.get(R.string.booting_up),
         "downloading" to "Downloading",
-        "partitioning" to "Partitioning disk",
+        "partitioning" to FSStrings.get(R.string.partitioning_disk),
         "installing" to "Installing",
-        "installed" to "Install complete",
-        "registering" to "Registering with Flagship",
-        "sealing" to "Sealing your disk key",
-        "pairing" to "Pairing with your phone",
-        "live" to "Your server is live",
-        "error" to "Setup hit a problem",
+        "installed" to FSStrings.get(R.string.install_complete),
+        "registering" to FSStrings.get(R.string.registering_with_flagship),
+        "sealing" to FSStrings.get(R.string.sealing_your_disk_key),
+        "pairing" to FSStrings.get(R.string.pairing_with_your_phone),
+        "live" to FSStrings.get(R.string.your_server_is_live),
+        "error" to FSStrings.get(R.string.setup_hit_a_problem),
     )
 
     /** The canonical UI group projection, re-keyed onto the phases.
@@ -64,17 +66,17 @@ object ProvisionProgress {
 
     /** Detail shown on the Installed row when the current phase is
      *  `installed` (action-needed: install finished, box powered off). */
-    const val INSTALLED_UNPLUG_DETAIL =
-        "Install complete. If it ran from a USB stick, unplug it and power the server back on."
+    val INSTALLED_UNPLUG_DETAIL get() =
+        FSStrings.get(R.string.install_complete_if_it_ran_from)
 
     /** The user-facing groups, in order. `installed` is its own rung after
      *  Securing (see above). */
-    val stepGroups: List<StepGroup> = listOf(
+    val stepGroups: List<StepGroup> get() = listOf(
         StepGroup(StepKey.BOOTING, "Booting", listOf("booting", "partitioning")),
         StepGroup(StepKey.INSTALLING, "Installing", listOf("installing", "downloading")),
         StepGroup(StepKey.REGISTERING, "Registering", listOf("registering", "pairing")),
         StepGroup(StepKey.SECURING, "Securing", listOf("sealing")),
-        StepGroup(StepKey.INSTALLED, "Install complete", listOf("installed")),
+        StepGroup(StepKey.INSTALLED, FSStrings.get(R.string.install_complete), listOf("installed")),
         StepGroup(StepKey.READY, "Ready", listOf("live")),
     )
 

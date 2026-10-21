@@ -1,5 +1,6 @@
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.google.crypto.tink.subtle.Ed25519Sign
 import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.serialization.json.JsonObject
@@ -24,9 +25,9 @@ object DebugAccess {
     const val DEFAULT_MS = 24 * HOUR_MS
     const val MAX_MS = 7 * 24 * HOUR_MS
 
-    const val WARNING = "Anyone with this key can read everything on this server while it's on."
-    const val CREATE_WARNING = "$WARNING It turns off by itself 7 days from now."
-    const val ADMIN_ONLY = "Only an admin device can turn debug access on or off."
+    val WARNING get() = FSStrings.get(R.string.anyone_with_this_key_can_read)
+    val CREATE_WARNING get() = FSStrings.get(R.string.it_turns_off_by_itself_7, WARNING)
+    val ADMIN_ONLY get() = FSStrings.get(R.string.only_an_admin_device_can_turn)
 
     /** The lengths the apps offer; 24 hours is the default. */
     enum class Duration(val ms: Long, val label: String) {
@@ -85,12 +86,12 @@ object DebugAccess {
 
     /** Why a grant can't be signed, as the sentence to show; null when it can. */
     fun grantProblem(g: Grant): String? = when {
-        g.serverDomain.isEmpty() -> "The debug access grant doesn't name a server."
-        g.sshPublicKey.isBlank() -> "Debug access needs an SSH public key."
-        normalizeSshPublicKey(g.sshPublicKey) != g.sshPublicKey -> "That isn't an SSH public key this server can use."
-        g.issuedAt <= 0 -> "The debug access grant has no valid time."
-        g.expiresAt <= g.issuedAt -> "Debug access has to end after it starts."
-        g.expiresAt - g.issuedAt > MAX_MS -> "Debug access can be on for at most 7 days at a time."
+        g.serverDomain.isEmpty() -> FSStrings.get(R.string.the_debug_access_grant_doesnt_name)
+        g.sshPublicKey.isBlank() -> FSStrings.get(R.string.debug_access_needs_an_ssh_public)
+        normalizeSshPublicKey(g.sshPublicKey) != g.sshPublicKey -> FSStrings.get(R.string.that_isnt_an_ssh_public_key)
+        g.issuedAt <= 0 -> FSStrings.get(R.string.the_debug_access_grant_has_no)
+        g.expiresAt <= g.issuedAt -> FSStrings.get(R.string.debug_access_has_to_end_after)
+        g.expiresAt - g.issuedAt > MAX_MS -> FSStrings.get(R.string.debug_access_can_be_on_for)
         else -> null
     }
 

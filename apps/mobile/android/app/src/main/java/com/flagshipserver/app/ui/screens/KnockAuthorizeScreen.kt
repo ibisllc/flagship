@@ -8,6 +8,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -75,7 +79,7 @@ fun KnockAuthorizeScreen(
                 if (user.isNullOrEmpty() || deviceId == null || !Keystore.hasUmkSeed()) {
                     null
                 } else {
-                    BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = reason)
+                    BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = reason)
                     val umk = Keystore.currentUmkSeed()
                     Keystore.accountDeviceSigner(umk, user, deviceId) to Keystore.accountDevicePublicKey(umk, user, deviceId)
                 }
@@ -98,22 +102,22 @@ fun KnockAuthorizeScreen(
     }
     val phase by vm.phase.collectAsState()
 
-    FSScreen(title = "Open app", onBack = onDone) {
+    FSScreen(title = stringResource(R.string.open_app), onBack = onDone) {
         when (val p = phase) {
             is KnockAuthorizePhase.Done -> FSCard(padding = PaddingValues(FS.space.s4)) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                         Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = FS.colors.success)
-                        Text("Signed in", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
+                        Text(stringResource(R.string.signed_in), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
                     }
                     Text(
-                        "Go back to that page: it opens ${svc.ifBlank { "the app" }} on its own." +
+                        fsString(R.string.go_back_to_that_page_it, svc.ifBlank { stringResource(R.string.the_app) }) +
                             if (p.browserAgent.isNotBlank()) "\n\nBrowser: ${p.browserAgent}" else "",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyLarge,
                     )
                     FSPrimaryButton(
-                        label = "Done",
+                        label = stringResource(R.string.done),
                         block = true,
                         large = true,
                         onClick = onDone,
@@ -131,21 +135,20 @@ fun KnockAuthorizeScreen(
                         modifier = Modifier.semantics { testTag = "knock-authorize-target" },
                     )
                     Text(
-                        "This signs the browser at ${vm.target} in as you. " +
-                            "Only do this for a browser you opened yourself.",
+                        fsString(R.string.this_signs_the_browser_at_in, vm.target),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyLarge,
                     )
                     val busy = p is KnockAuthorizePhase.Authorizing
                     FSPrimaryButton(
-                        label = if (busy) "Signing in…" else "Open",
+                        label = if (busy) stringResource(R.string.signing_in) else stringResource(R.string.open_2),
                         enabled = !busy,
                         block = true,
                         large = true,
                         onClick = { scope.launch { vm.authorize() } },
                         modifier = Modifier.semantics { testTag = "knock-authorize-accept" },
                     )
-                    FSSecondaryButton(label = "Cancel", enabled = !busy, block = true, onClick = onDone)
+                    FSSecondaryButton(label = stringResource(R.string.cancel), enabled = !busy, block = true, onClick = onDone)
                     (p as? KnockAuthorizePhase.Failed)?.let {
                         Text(
                             it.message,

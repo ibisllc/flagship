@@ -4,6 +4,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.AppApiKeyCreateRequest
 import com.flagshipserver.app.api.AppApiKeyGrantBody
@@ -98,15 +100,15 @@ class AppApiKeysViewModel(
             val domain = runCatching { client.boxFqdn() }.getOrNull()?.takeIf { it.isNotEmpty() }
                 ?: fallbackServerDomain()?.takeIf { it.isNotEmpty() }
             if (domain == null) {
-                _error.value = "Couldn't tell which server this app is on."
+                _error.value = FSStrings.get(R.string.couldnt_tell_which_server_this_app)
                 return false
             }
             val key = try {
-                signer("Create an API key for $appName")
+                signer(FSStrings.get(R.string.create_an_api_key_for, appName))
             } catch (e: CancellationException) {
                 throw e
             } catch (t: Throwable) {
-                _error.value = "Couldn't access your account key: ${UserErrorText.reason(t)}"
+                _error.value = FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(t))
                 return false
             }
             val issuedAt = now()
@@ -183,7 +185,7 @@ class AppApiKeysViewModel(
     }
 
     fun revokeConfirmText(key: AppApiKeyInfo): String =
-        "Anything using ${displayLabel(key)} loses access to $appName right away. This can't be undone."
+        FSStrings.get(R.string.anything_using_loses_access_to_right, displayLabel(key), appName)
 
     private suspend fun reload(fallback: List<AppApiKeyInfo>) {
         val fresh = runCatching { client.serviceApiKeys(serviceId).keys }
@@ -192,20 +194,20 @@ class AppApiKeysViewModel(
     }
 
     companion object {
-        const val TITLE = "API keys"
-        const val CREATE = "Create key"
+        val TITLE get() = FSStrings.get(R.string.api_keys)
+        val CREATE get() = FSStrings.get(R.string.create_key)
         const val REVOKE = "Revoke"
         const val COPY = "Copy"
         const val DONE = "Done"
-        const val EMPTY = "No API keys yet. A key lets a script, device or another server call this app."
-        const val READ_ONLY_NOTE = "This device can see the keys but not change them."
-        const val ONCE_WARNING = "Copy it now. Flagship can't show it again."
-        const val LABEL_REQUIRED = "Give the key a name."
+        val EMPTY get() = FSStrings.get(R.string.no_api_keys_yet_a_key)
+        val READ_ONLY_NOTE get() = FSStrings.get(R.string.this_device_can_see_the_keys)
+        val ONCE_WARNING get() = FSStrings.get(R.string.copy_it_now_flagship_cant_show)
+        val LABEL_REQUIRED get() = FSStrings.get(R.string.give_the_key_a_name)
         const val LABEL_MAX = 64
-        const val LABEL_TOO_LONG = "Keep the name to $LABEL_MAX characters or fewer."
-        const val NO_KEY_RETURNED = "Your server didn't return the new key."
+        val LABEL_TOO_LONG get() = FSStrings.get(R.string.keep_the_name_to_characters_or, LABEL_MAX)
+        val NO_KEY_RETURNED get() = FSStrings.get(R.string.your_server_didnt_return_the_new)
         const val READ_HELP = "GET, HEAD and OPTIONS requests only."
-        const val WRITE_HELP = "Every request, including changes."
+        val WRITE_HELP get() = FSStrings.get(R.string.every_request_including_changes)
 
         /** The least access by default. Keys don't expire (owner decision). */
         const val DEFAULT_SCOPE = AppApiKey.SCOPE_READ
@@ -213,7 +215,7 @@ class AppApiKeysViewModel(
         val SCOPES = listOf(AppApiKey.SCOPE_READ, AppApiKey.SCOPE_WRITE)
 
         fun scopeText(scope: String): String = when (scope) {
-            AppApiKey.SCOPE_WRITE -> "Read & write"
+            AppApiKey.SCOPE_WRITE -> FSStrings.get(R.string.read_write)
             else -> "Read"
         }
 
@@ -234,23 +236,23 @@ class AppApiKeysViewModel(
         }
 
         fun createdText(key: AppApiKeyInfo, zone: ZoneId = ZoneId.systemDefault()): String =
-            if (key.createdAt > 0) "Created ${dateText(key.createdAt, zone)}" else "Created earlier"
+            if (key.createdAt > 0) FSStrings.get(R.string.created, dateText(key.createdAt, zone)) else FSStrings.get(R.string.created_earlier)
 
         fun lastUsedText(key: AppApiKeyInfo, now: Long, zone: ZoneId = ZoneId.systemDefault()): String {
-            val used = key.lastUsedAt?.takeIf { it > 0 } ?: return "Never used"
+            val used = key.lastUsedAt?.takeIf { it > 0 } ?: return FSStrings.get(R.string.never_used)
             val mins = (now - used).coerceAtLeast(0) / 60_000
             return when {
-                mins < 1 -> "Last used just now"
-                mins < 60 -> "Last used $mins min ago"
-                mins < 60 * 24 -> "Last used ${mins / 60} hr ago"
-                mins < 60 * 24 * 30 -> "Last used ${mins / (60 * 24)} d ago"
-                else -> "Last used ${dateText(used, zone)}"
+                mins < 1 -> FSStrings.get(R.string.last_used_just_now)
+                mins < 60 -> FSStrings.get(R.string.last_used_min_ago, mins)
+                mins < 60 * 24 -> FSStrings.get(R.string.last_used_hr_ago, mins / 60)
+                mins < 60 * 24 * 30 -> FSStrings.get(R.string.last_used_d_ago, mins / (60 * 24))
+                else -> FSStrings.get(R.string.last_used_2, dateText(used, zone))
             }
         }
 
         /** Only for a key a box says has lapsed; the app never sets an expiry. */
         fun expiredText(key: AppApiKeyInfo, now: Long, zone: ZoneId = ZoneId.systemDefault()): String? =
-            if (isExpired(key, now)) "Expired ${dateText(key.expiresAt!!, zone)}" else null
+            if (isExpired(key, now)) FSStrings.get(R.string.expired_2, dateText(key.expiresAt!!, zone)) else null
 
         fun detailText(key: AppApiKeyInfo, now: Long, zone: ZoneId = ZoneId.systemDefault()): String =
             listOfNotNull(createdText(key, zone), lastUsedText(key, now, zone), expiredText(key, now, zone))
@@ -263,11 +265,11 @@ class AppApiKeysViewModel(
             if (t !is ScreensError.Http) return t.userFacing()
             val box = t.boxError()
             return when (t.status) {
-                400 -> "The server couldn't read this key${box?.let { ": $it" } ?: ""}."
-                403 -> box?.let { "The server refused this key: $it." }
-                    ?: "The server refused this key. Check this phone's clock and try again."
-                404 -> "This app is no longer installed on the server."
-                409 -> "Couldn't pick a free key id. Try again."
+                400 -> FSStrings.get(R.string.the_server_couldnt_read_this_key, box?.let { ": $it" } ?: "")
+                403 -> box?.let { FSStrings.get(R.string.the_server_refused_this_key, it) }
+                    ?: FSStrings.get(R.string.the_server_refused_this_key_check)
+                404 -> FSStrings.get(R.string.this_app_is_no_longer_installed)
+                409 -> FSStrings.get(R.string.couldnt_pick_a_free_key_id)
                 else -> box ?: t.userFacing()
             }
         }
@@ -276,7 +278,7 @@ class AppApiKeysViewModel(
             if (t !is ScreensError.Http) return t.userFacing()
             val box = t.boxError()
             return when (t.status) {
-                401, 403 -> "This device can't revoke keys${box?.let { ": $it" } ?: ""}."
+                401, 403 -> FSStrings.get(R.string.this_device_cant_revoke_keys, box?.let { ": $it" } ?: "")
                 else -> box ?: t.userFacing()
             }
         }

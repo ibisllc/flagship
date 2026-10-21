@@ -6,6 +6,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -61,18 +65,18 @@ import com.flagshipserver.app.viewmodels.AiKeysViewModel
 import com.flagshipserver.app.viewmodels.SavedKeyRow
 import kotlinx.coroutines.launch
 
-private const val REASSURANCE =
-    "AI keys power app builds but stay on this phone. Your server sends them only to the provider; Flagship never sees them."
+private val REASSURANCE get() =
+    FSStrings.get(R.string.ai_keys_power_app_builds_but)
 
 /** Copy for the build-flow key step. Mirror of iOS BuildKeyScreen. */
 object AiKeyStep {
-    const val TITLE = "AI Key"
-    const val SECURITY_NOTE = "The keys are stored safely in your mobile app and your own servers."
-    const val ADD_LABEL = "Add an API key"
-    const val DELETE_TITLE = "Delete this key?"
+    val TITLE get() = FSStrings.get(R.string.ai_key)
+    val SECURITY_NOTE get() = FSStrings.get(R.string.the_keys_are_stored_safely_in)
+    val ADD_LABEL get() = FSStrings.get(R.string.add_an_api_key)
+    val DELETE_TITLE get() = FSStrings.get(R.string.delete_this_key)
 
     fun deleteMessage(label: String): String =
-        "$label will be removed from this phone. Builds that are already running keep working."
+        FSStrings.get(R.string.will_be_removed_from_this_phone, label)
 }
 
 /**
@@ -148,7 +152,7 @@ fun AiKeyStepScreen(
 
         if (showForm) {
             AiKeyEntryForm(
-                confirmLabel = "Add key",
+                confirmLabel = stringResource(R.string.add_key),
                 showSaveToggle = false,
                 onCancel = if (keys.isNotEmpty()) ({ showForm = false }) else null,
                 onSubmit = { provider, apiKey, label, baseUrl, _, relay ->
@@ -171,7 +175,7 @@ fun AiKeyStepScreen(
 
         if (keys.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                FSSectionHeader("Saved keys")
+                FSSectionHeader(stringResource(R.string.saved_keys))
                 AiKeysViewModel.ordered(keys, activeId).forEach { row ->
                     SavedKeyStepRow(
                         row = row,
@@ -222,16 +226,16 @@ fun AiKeyStepScreen(
                             val ok = runCatching {
                                 BiometricAuthority.current()?.ensureFresh(
                                     title = AiKeyStep.DELETE_TITLE,
-                                    subtitle = "Delete the AI key ${row.label}",
+                                    subtitle = FSStrings.get(R.string.delete_the_ai_key, row.label),
                                 )
                             }.isSuccess
-                            if (ok) vm.delete(row.id) else deleteError = "The key wasn't deleted."
+                            if (ok) vm.delete(row.id) else deleteError = FSStrings.get(R.string.the_key_wasnt_deleted)
                         }
                     },
                     modifier = Modifier.testTag("build-key-delete-confirm"),
-                ) { Text("Delete key", color = MaterialTheme.colorScheme.error) }
+                ) { Text(stringResource(R.string.delete_key), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }
@@ -255,14 +259,14 @@ private fun SavedKeyStepRow(row: SavedKeyRow, lastUsed: Boolean, onUse: () -> Un
                     modifier = Modifier.testTag("build-key-relay-caption"),
                 )
                 if (lastUsed) {
-                    Text("Last used", color = FS.colors.accentText, style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.last_used), color = FS.colors.accentText, style = MaterialTheme.typography.bodySmall)
                 }
             }
             IconButton(onClick = onDelete, modifier = Modifier.testTag("build-key-delete")) {
-                Icon(Icons.Outlined.Delete, contentDescription = "Delete ${row.label}", tint = MaterialTheme.colorScheme.error)
+                Icon(Icons.Outlined.Delete, contentDescription = fsString(R.string.delete, row.label), tint = MaterialTheme.colorScheme.error)
             }
             FSPrimaryButton(
-                label = "Use this",
+                label = stringResource(R.string.use_this),
                 onClick = onUse,
                 modifier = Modifier.testTag(if (lastUsed) "build-key-confirm-active" else "build-key-use-saved"),
             )
@@ -296,7 +300,7 @@ fun AiKeyEntryForm(
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
                 Text(
-                    "Provider",
+                    stringResource(R.string.provider),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelLarge,
                 )
@@ -317,8 +321,8 @@ fun AiKeyEntryForm(
             FSField(
                 value = apiKey,
                 onValueChange = { apiKey = it },
-                label = "API key",
-                placeholder = "sk-…",
+                label = stringResource(R.string.api_key),
+                placeholder = stringResource(R.string.sk),
                 // Tag the editable field itself (not the Column wrapper) so a UI
                 // test's performTextInput finds a focusable node.
                 fieldTag = "ai-key-field",
@@ -326,20 +330,20 @@ fun AiKeyEntryForm(
             FSField(
                 value = label,
                 onValueChange = { label = it },
-                label = "Label (optional)",
-                placeholder = "Personal",
+                label = stringResource(R.string.label_optional),
+                placeholder = stringResource(R.string.personal),
             )
             FSField(
                 value = baseUrl,
                 onValueChange = { baseUrl = it },
-                label = "Custom base URL (optional)",
+                label = stringResource(R.string.custom_base_url_optional),
                 placeholder = "https://…",
             )
 
             if (showSaveToggle) {
                 ToggleRow(
-                    title = "Save on this device",
-                    note = "Recall it next time without re-typing. Stored encrypted on this device only.",
+                    title = stringResource(R.string.save_on_this_device),
+                    note = stringResource(R.string.recall_it_next_time_without_re),
                     checked = save,
                     onCheckedChange = { save = it },
                 )
@@ -355,7 +359,7 @@ fun AiKeyEntryForm(
                 modifier = Modifier.testTag(confirmTag),
             )
             if (onCancel != null) {
-                FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
+                FSSecondaryButton(label = stringResource(R.string.cancel), onClick = onCancel, block = true)
             }
         }
     }
@@ -441,7 +445,7 @@ fun AiKeysManagerScreen(
     LaunchedEffect(Unit) { vm.loadFreeAi(freeAiService) }
 
     FSScreen(
-        title = "AI keys",
+        title = stringResource(R.string.ai_keys),
         titleTag = "ai-keys-title",
         onBack = { nav.popBackStack() },
         subtitle = REASSURANCE,
@@ -455,7 +459,7 @@ fun AiKeysManagerScreen(
         )
 
         if (keys.isEmpty()) {
-            FSNote("No keys saved yet.")
+            FSNote(stringResource(R.string.no_keys_saved_yet))
         } else {
             keys.forEach { row ->
                 val isActive = row.id == activeId
@@ -471,13 +475,13 @@ fun AiKeysManagerScreen(
                                 )
                                 if (isActive) {
                                     Text(
-                                        "Default for new builds",
+                                        stringResource(R.string.default_for_new_builds),
                                         color = FS.colors.accentText,
                                         style = MaterialTheme.typography.bodySmall,
                                     )
                                 }
                             }
-                            FSDangerButton(label = "Delete", onClick = { vm.delete(row.id) })
+                            FSDangerButton(label = stringResource(R.string.delete_2), onClick = { vm.delete(row.id) })
                         }
                         RelayToggleRow(
                             checked = row.relay,
@@ -489,7 +493,7 @@ fun AiKeysManagerScreen(
                         // AiKeysScreen + the webapp providers manager.
                         if (!isActive) {
                             FSSecondaryButton(
-                                label = "Make default",
+                                label = stringResource(R.string.make_default),
                                 onClick = { vm.setActive(row.id) },
                             )
                         }
@@ -500,7 +504,7 @@ fun AiKeysManagerScreen(
 
         if (showForm) {
             AiKeyEntryForm(
-                confirmLabel = "Save key",
+                confirmLabel = stringResource(R.string.save_key),
                 // Settings always saves the key on this device, so no toggle.
                 showSaveToggle = false,
                 onCancel = { showForm = false },
@@ -510,7 +514,7 @@ fun AiKeysManagerScreen(
             )
         } else {
             FSPrimaryButton(
-                label = "Add an AI key",
+                label = stringResource(R.string.add_an_ai_key),
                 onClick = { showForm = true },
                 block = true,
                 modifier = Modifier.testTag("ai-key-add"),
@@ -538,7 +542,7 @@ fun DefaultModelRow(keyId: String, credential: AiCredential?) {
         AiKeyStore.setDefaultModel(keyId, c)
     }
     Column(Modifier.testTag("default-model-$keyId"), verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-        Text("Default model", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
+        Text(stringResource(R.string.default_model), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
         val m = menu
         if (m == null) {
             Text(com.flagshipserver.app.core.FreeAiCopy.CHECKING, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)

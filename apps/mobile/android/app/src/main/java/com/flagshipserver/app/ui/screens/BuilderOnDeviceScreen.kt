@@ -9,6 +9,8 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import com.flagshipserver.app.ui.components.fsFocusRing
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
@@ -108,15 +110,15 @@ fun BuilderOnDeviceScreen(recipeJson: String, onDone: () -> Unit) {
     }
 
     FSScreen(
-        title = "Burn to USB",
+        title = stringResource(R.string.burn_to_usb),
         onBack = onDone,
-        subtitle = "Connect a USB drive with an OTG adapter, then write the bootable installer right here — no computer needed.",
+        subtitle = stringResource(R.string.connect_a_usb_drive_with_an),
         spacing = 0.dp,
     ) {
         Spacer(Modifier.height(FS.space.s4))
         state.recipe?.let { r ->
             FSCard {
-                Text("Server", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(R.string.server_2), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
                 Spacer(Modifier.height(FS.space.s1))
                 Text(r.serverName, style = MaterialTheme.typography.titleMedium)
                 Text(r.serverDomain, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
@@ -133,16 +135,16 @@ fun BuilderOnDeviceScreen(recipeJson: String, onDone: () -> Unit) {
                 Spacer(Modifier.height(FS.space.s4))
                 when (state.phase) {
                     BuilderOnDeviceViewModel.Phase.NeedPermission -> {
-                        WarningCard("Allow access to this USB drive to continue.")
+                        WarningCard(stringResource(R.string.allow_access_to_this_usb_drive))
                         Spacer(Modifier.height(FS.space.s3))
-                        FSPrimaryButton(label = "Allow USB access", onClick = { requestPermission() }, block = true)
+                        FSPrimaryButton(label = stringResource(R.string.allow_usb_access), onClick = { requestPermission() }, block = true)
                     }
 
                     BuilderOnDeviceViewModel.Phase.Ready -> {
-                        WarningCard("Writing ERASES everything on the selected drive. Make sure it's the right one.")
+                        WarningCard(stringResource(R.string.writing_erases_everything_on_the_selected))
                         Spacer(Modifier.height(FS.space.s3))
                         FSPrimaryButton(
-                            label = "Erase and write",
+                            label = stringResource(R.string.erase_and_write),
                             onClick = { vm.startBurn() },
                             enabled = state.selected != null,
                             block = true,
@@ -169,7 +171,7 @@ private fun DrivePicker(
     onSelect: (UsbMassStorageDevice) -> Unit,
     onRefresh: () -> Unit,
 ) {
-    com.flagshipserver.app.ui.components.FSSectionHeader("USB drive")
+    com.flagshipserver.app.ui.components.FSSectionHeader(stringResource(R.string.usb_drive))
     Spacer(Modifier.height(FS.space.s2))
     com.flagshipserver.app.ui.components.FSGroup {
         state.devices.forEachIndexed { i, d ->
@@ -190,7 +192,7 @@ private fun DrivePicker(
         }
     }
     Spacer(Modifier.height(FS.space.s2))
-    FSSecondaryButton(label = "Rescan", onClick = onRefresh)
+    FSSecondaryButton(label = stringResource(R.string.rescan), onClick = onRefresh)
 }
 
 @Composable
@@ -212,10 +214,10 @@ private fun WarningCard(text: String) {
 @Composable
 private fun ProgressBlock(state: BuilderOnDeviceViewModel.State) {
     val label = when (state.phase) {
-        BuilderOnDeviceViewModel.Phase.Downloading -> "Downloading"
-        BuilderOnDeviceViewModel.Phase.Verifying -> "Verifying"
-        BuilderOnDeviceViewModel.Phase.Injecting -> "Preparing"
-        BuilderOnDeviceViewModel.Phase.Writing -> "Writing"
+        BuilderOnDeviceViewModel.Phase.Downloading -> stringResource(R.string.downloading_2)
+        BuilderOnDeviceViewModel.Phase.Verifying -> stringResource(R.string.verifying)
+        BuilderOnDeviceViewModel.Phase.Injecting -> stringResource(R.string.preparing_2)
+        BuilderOnDeviceViewModel.Phase.Writing -> stringResource(R.string.writing)
         else -> ""
     }
     FSCard {
@@ -247,13 +249,13 @@ private fun DoneBlock(message: String, onDone: () -> Unit) {
     FSCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(FS.space.s2)) {
             Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = FS.colors.success)
-            Text("All done", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.all_done), style = MaterialTheme.typography.titleMedium)
         }
         Spacer(Modifier.height(FS.space.s2))
         Text(message, style = MaterialTheme.typography.bodyMedium)
     }
     Spacer(Modifier.height(FS.space.s4))
-    FSPrimaryButton(label = "Done", onClick = onDone, block = true)
+    FSPrimaryButton(label = stringResource(R.string.done), onClick = onDone, block = true)
 }
 
 @Composable
@@ -261,13 +263,13 @@ private fun ErrorBlock(error: String?, onRetry: () -> Unit) {
     FSCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(FS.space.s2)) {
             Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-            Text("Couldn't write the drive", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.couldnt_write_the_drive), style = MaterialTheme.typography.titleMedium)
         }
         Spacer(Modifier.height(FS.space.s2))
-        Text(error ?: "Unknown error.", style = MaterialTheme.typography.bodyMedium)
+        Text(error ?: stringResource(R.string.unknown_error), style = MaterialTheme.typography.bodyMedium)
     }
     Spacer(Modifier.height(FS.space.s4))
-    FSSecondaryButton(label = "Try again", onClick = onRetry, block = true)
+    FSSecondaryButton(label = stringResource(R.string.try_again), onClick = onRetry, block = true)
 }
 
 @Composable
@@ -275,15 +277,15 @@ private fun NoUsbBlock(onRefresh: () -> Unit) {
     FSCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(FS.space.s2)) {
             Icon(Icons.Outlined.Usb, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("No USB drive detected", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.no_usb_drive_detected), style = MaterialTheme.typography.titleMedium)
         }
         Spacer(Modifier.height(FS.space.s2))
         Text(
-            "Plug a USB drive into this phone with a USB-OTG adapter, then tap Rescan.",
+            stringResource(R.string.plug_a_usb_drive_into_this),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium,
         )
     }
     Spacer(Modifier.height(FS.space.s4))
-    FSPrimaryButton(label = "Rescan", onClick = onRefresh, block = true)
+    FSPrimaryButton(label = stringResource(R.string.rescan), onClick = onRefresh, block = true)
 }

@@ -21,6 +21,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.LastUpdate
 import com.flagshipserver.app.api.SecretMailboxClient
@@ -113,9 +115,9 @@ class UpdateServerViewModel(
         val t = raw.trim().lowercase()
         if (t.isEmpty()) return null
         if (!ServerUpdateDeposit.isValidCommit(t)) {
-            return "Enter the full 40-character commit hash of the blessed release."
+            return FSStrings.get(R.string.enter_the_full_40_character_commit)
         }
-        if (t == currentCommit) return "The server is already running this release."
+        if (t == currentCommit) return FSStrings.get(R.string.the_server_is_already_running_this)
         return null
     }
 
@@ -131,23 +133,23 @@ class UpdateServerViewModel(
     suspend fun update(targetCommit: String, targetTag: String? = null): Boolean {
         val from = currentCommit
         if (from == null || !ServerUpdateDeposit.isValidCommit(from)) {
-            _phase.value = Phase.Failed("This server hasn't reported its current version yet.")
+            _phase.value = Phase.Failed(FSStrings.get(R.string.this_server_hasnt_reported_its_current))
             return false
         }
         val target = targetCommit.trim().lowercase()
         if (!ServerUpdateDeposit.isValidCommit(target)) {
-            _phase.value = Phase.Failed("Enter the full 40-character commit hash of the blessed release.")
+            _phase.value = Phase.Failed(FSStrings.get(R.string.enter_the_full_40_character_commit))
             return false
         }
         if (target == from) {
-            _phase.value = Phase.Failed("The server is already running this release.")
+            _phase.value = Phase.Failed(FSStrings.get(R.string.the_server_is_already_running_this))
             return false
         }
 
         _phase.value = Phase.Signing
         return try {
             val issuedAt = now()
-            val reason = "Update $serverFqdn"
+            val reason = FSStrings.get(R.string.update, serverFqdn)
             val irk = signer(reason)
             val pub = irkPubHex()
             val orderKey = orderSigner(reason)
@@ -174,7 +176,7 @@ class UpdateServerViewModel(
             _phase.value = Phase.Done
             true
         } catch (t: Throwable) {
-            _phase.value = Phase.Failed(UserErrorText.of(t, "That didn't work. Try again in a moment."))
+            _phase.value = Phase.Failed(UserErrorText.of(t, FSStrings.get(R.string.that_didnt_work_try_again_in)))
             false
         }
     }

@@ -5,6 +5,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.AccountDirectoryAuthorization
 import com.flagshipserver.app.api.AccountDirectoryDevice
 import com.flagshipserver.app.api.AccountDirectoryResponse
@@ -45,7 +47,7 @@ object AccountDeviceNames {
     fun platformLabel(value: String?): String = when (value) {
         "ios" -> "iPhone"
         "android" -> "Android"
-        "web" -> "Web browser"
+        "web" -> FSStrings.get(R.string.web_browser)
         "macos" -> "Mac"
         else -> "Device"
     }
@@ -55,7 +57,7 @@ object AccountDeviceNames {
     fun names(directory: AccountDirectoryResponse, user: String, umk: ByteArray): Map<String, String> {
         val directoryKey = AccountMetadata.deriveDeviceDirectoryKey(umk)
         return directory.devices.associate { d ->
-            d.deviceId to (decryptedName(directory, d, user, directoryKey) ?: "${platformLabel(d.platformClass)} · Device ${d.supportCode}")
+            d.deviceId to (decryptedName(directory, d, user, directoryKey) ?: FSStrings.get(R.string.device, platformLabel(d.platformClass), d.supportCode))
         }
     }
 

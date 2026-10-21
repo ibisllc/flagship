@@ -18,6 +18,8 @@
 
 package com.flagshipserver.app.api
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import kotlinx.serialization.Serializable
 
 // ---------- git mode ---------------------------------------------------
@@ -150,7 +152,7 @@ data class BuildMcpConnection(
     /** Each IDE's config, or the generic one (as a single "IDE" choice) from an older box. */
     fun ideChoices(): List<McpIdeConfig> =
         ideConfigs?.takeIf { it.isNotEmpty() }
-            ?: listOf(McpIdeConfig(id = "generic", name = "IDE", where = "Your IDE's MCP settings", config = ideConfig))
+            ?: listOf(McpIdeConfig(id = "generic", name = "IDE", where = FSStrings.get(R.string.your_ides_mcp_settings), config = ideConfig))
 }
 
 /** One IDE's config for an MCP connection: where it goes, the JSON, and a
@@ -213,7 +215,7 @@ data class BuildSummary(
         get() {
             if (!name.isNullOrEmpty()) return name
             val slug = serviceId?.substringAfterLast("--")
-            return if (slug.isNullOrEmpty()) "Unnamed build" else slug
+            return if (slug.isNullOrEmpty()) FSStrings.get(R.string.unnamed_build) else slug
         }
 
     /** How it was made, for the pill beside the name. */
@@ -221,9 +223,9 @@ data class BuildSummary(
 
     companion object {
         fun methodLabel(mode: String): String = when (mode) {
-            "git" -> "From Git"
-            "mcp" -> "From your IDE"
-            else -> "AI chat"
+            "git" -> FSStrings.get(R.string.from_git)
+            "mcp" -> FSStrings.get(R.string.from_your_ide)
+            else -> FSStrings.get(R.string.ai_chat)
         }
     }
 }

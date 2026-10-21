@@ -4,6 +4,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.VerifiedUser
@@ -184,12 +188,12 @@ fun SettingsScreen(nav: NavController) {
     val ctx = LocalContext.current
     var iconVariant by remember { mutableStateOf(AppIconSwitcher.current(ctx)) }
     val showRecoveryRequiredToast = {
-        Toast.makeText(ctx, "Set up account recovery to use this.", Toast.LENGTH_LONG).show()
+        Toast.makeText(ctx, FSStrings.get(R.string.set_up_account_recovery_to_use), Toast.LENGTH_LONG).show()
     }
     val sessionGated = signOutPolicy == SignOutPolicy.BLOCKED_NO_RECOVERY
 
     FSScreen(
-        title = "Settings",
+        title = stringResource(R.string.settings),
         titleTag = "settings-title",
         subtitle = "@${username.removePrefix("@")}",
         subtitleTag = "settings-cloud-username",
@@ -199,8 +203,8 @@ fun SettingsScreen(nav: NavController) {
         if (showPromo) {
             FSAnnouncementCard(
                 icon = Icons.Outlined.AutoAwesome,
-                title = "Welcome to Flagship",
-                message = "Your stuff, on your hardware, with a real green padlock.",
+                title = stringResource(R.string.welcome_to_flagship),
+                message = stringResource(R.string.your_stuff_on_your_hardware_with),
                 onDismiss = { showPromo = false },
             )
         }
@@ -209,49 +213,49 @@ fun SettingsScreen(nav: NavController) {
         // Companions · Web access · Backup & peers · App · session actions ·
         // Danger zone · Developer (hidden) · About.
         FSSettingsGroup(
-            header = "Account",
+            header = stringResource(R.string.account),
             rows = listOf(
                 // Account security leads; the live account type (single vs
                 // multi-device + 2FA) rides the subtitle.
                 FSSettingsRowData(
                     icon = if (accountType == "multi") Icons.Outlined.VerifiedUser else Icons.Outlined.Shield,
                     iconTint = if (accountType == "multi") FS.colors.success else null,
-                    title = "Account security",
+                    title = stringResource(R.string.account_security),
                     subtitle = when (accountType) {
-                        "multi" -> "Code protection on — recovery needs a code."
-                        "single" -> "Single-device — recovery is a 3-day wait."
-                        else -> "Single-device, or code protection on."
+                        "multi" -> stringResource(R.string.code_protection_on_recovery_needs_a)
+                        "single" -> stringResource(R.string.single_device_recovery_is_a_3)
+                        else -> stringResource(R.string.single_device_or_code_protection_on)
                     },
                     onClick = { nav.navigate("account-security") },
                     testTag = "settings-open-account-security",
                 ),
                 FSSettingsRowData(
                     icon = Icons.Outlined.AutoAwesome,
-                    title = "AI keys",
-                    subtitle = "Bring-your-own keys for building apps",
+                    title = stringResource(R.string.ai_keys),
+                    subtitle = stringResource(R.string.bring_your_own_keys_for_building),
                     onClick = { nav.navigate("ai-keys") },
                     testTag = "settings-ai-keys",
                 ),
             ) + (if (isDemoAccountSession) emptyList() else listOf(
                 FSSettingsRowData(
                     icon = Icons.Outlined.VpnKey,
-                    title = "Cloud recovery",
-                    subtitle = "Recover on a new device",
+                    title = stringResource(R.string.cloud_recovery),
+                    subtitle = stringResource(R.string.recover_on_a_new_device),
                     onClick = { nav.navigate("recovery") },
                     testTag = "settings-cloud-recovery",
                 ),
                 FSSettingsRowData(
                     icon = Icons.Outlined.Save,
-                    title = "Back up account key",
-                    subtitle = "Save an encrypted key file",
+                    title = stringResource(R.string.back_up_account_key),
+                    subtitle = stringResource(R.string.save_an_encrypted_key_file),
                     onClick = { nav.navigate("keyfile-export") },
                     testTag = "settings-backup-key",
                 ),
             )) + listOf(
                 FSSettingsRowData(
                     icon = Icons.Outlined.Cloud,
-                    title = "Profiles",
-                    subtitle = "Switch between your clouds",
+                    title = stringResource(R.string.profiles),
+                    subtitle = stringResource(R.string.switch_between_your_clouds),
                     onClick = { nav.navigate("profiles") },
                     testTag = "settings-profiles",
                 ),
@@ -261,12 +265,12 @@ fun SettingsScreen(nav: NavController) {
         // The single home for Add / Replace / Wipe / Remove device is the
         // Trusted devices screen, plus the browser sessions list.
         FSSettingsGroup(
-            header = "Devices",
+            header = stringResource(R.string.devices),
             rows = (if (isDemoAccountSession) emptyList() else listOf(
                 FSSettingsRowData(
                     icon = Icons.Outlined.Devices,
-                    title = "Trusted devices",
-                    subtitle = "Add, replace or remove the devices that hold your keys",
+                    title = stringResource(R.string.trusted_devices),
+                    subtitle = stringResource(R.string.add_replace_or_remove_the_devices),
                     onClick = { nav.navigate("trusted-devices") },
                     testTag = "settings-trusted-devices",
                 ),
@@ -275,15 +279,15 @@ fun SettingsScreen(nav: NavController) {
                 // of yours) by scanning the code that account's device shows.
                 FSSettingsRowData(
                     icon = Icons.Outlined.QrCodeScanner,
-                    title = "Scan a pairing code",
-                    subtitle = "Add this phone to another account",
+                    title = stringResource(R.string.scan_a_pairing_code),
+                    subtitle = stringResource(R.string.add_this_phone_to_another_account),
                     onClick = { nav.navigate("join-device-scan") },
                     testTag = "settings-scan-pairing-code",
                 ),
                 FSSettingsRowData(
                     icon = Icons.Outlined.Computer,
-                    title = "Browser sessions",
-                    subtitle = "Browsers you opened through Remote",
+                    title = stringResource(R.string.browser_sessions),
+                    subtitle = stringResource(R.string.browsers_you_opened_through_remote),
                     onClick = { nav.navigate("paired-sessions") },
                     testTag = "settings-browser-sessions",
                 ),
@@ -291,18 +295,18 @@ fun SettingsScreen(nav: NavController) {
         )
 
         FSSettingsGroup(
-            header = "Companions",
+            header = stringResource(R.string.companions),
             rows = listOf(
                 FSSettingsRowData(
                     icon = Icons.Outlined.ScreenShare,
-                    title = "Remote",
-                    subtitle = "Read-only browser session (4h)",
+                    title = stringResource(R.string.remote),
+                    subtitle = stringResource(R.string.read_only_browser_session_4h),
                     onClick = { nav.navigate("companion-dock") },
                     testTag = "settings-remote",
                 ),
                 FSSettingsRowData(
                     icon = Icons.Outlined.Inbox,
-                    title = "Companion requests",
+                    title = stringResource(R.string.companion_requests),
                     subtitle = companionRequestsSubtitle(companionPending),
                     badge = companionPending.takeIf { it > 0 },
                     onClick = { nav.navigate("companion-requests") },
@@ -312,19 +316,19 @@ fun SettingsScreen(nav: NavController) {
         )
 
         FSSettingsGroup(
-            header = "Web access",
+            header = stringResource(R.string.web_access),
             rows = listOf(
                 FSSettingsRowData(
                     icon = Icons.Outlined.Public,
-                    title = "Open secured sessions",
-                    subtitle = "Sites you've signed a browser into",
+                    title = stringResource(R.string.open_secured_sessions),
+                    subtitle = stringResource(R.string.sites_youve_signed_a_browser_into),
                     onClick = { nav.navigate("secured-sessions") },
                     testTag = "settings-secured-sessions",
                 ),
                 FSSettingsRowData(
                     icon = Icons.Outlined.Link,
-                    title = "Process URL",
-                    subtitle = "Open a sign-in link you copied",
+                    title = stringResource(R.string.process_url),
+                    subtitle = stringResource(R.string.open_a_sign_in_link_you),
                     onClick = { nav.navigate("process-url") },
                     testTag = "settings-process-url",
                 ),
@@ -332,12 +336,12 @@ fun SettingsScreen(nav: NavController) {
         )
 
         FSSettingsGroup(
-            header = "Backup & peers",
+            header = stringResource(R.string.backup_peers),
             rows = listOf(
                 FSSettingsRowData(
                     icon = Icons.Outlined.Backup,
-                    title = "Peer-backup",
-                    subtitle = "Shard health across peers",
+                    title = stringResource(R.string.peer_backup),
+                    subtitle = stringResource(R.string.shard_health_across_peers),
                     onClick = { nav.navigate("peer-backup") },
                     testTag = "settings-peer-backup",
                 ),
@@ -350,19 +354,19 @@ fun SettingsScreen(nav: NavController) {
         // APP: appearance, app icon, Privacy and About. Appearance writes
         // straight to PrivacySettings; MainActivity applies it app-wide.
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            FSSectionHeader("App")
+            FSSectionHeader(stringResource(R.string.app_2))
             FSGroup {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(FS.space.s3),
                     modifier = Modifier.padding(FS.space.s4),
                 ) {
                     val view = androidx.compose.ui.platform.LocalView.current
-                    Text("Appearance", style = MaterialTheme.typography.bodyLarge)
+                    Text(stringResource(R.string.appearance), style = MaterialTheme.typography.bodyLarge)
                     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                         val modes = listOf(
-                            Triple(ThemeMode.LIGHT, "Light", Icons.Outlined.LightMode),
-                            Triple(ThemeMode.DARK, "Dark", Icons.Outlined.DarkMode),
-                            Triple(ThemeMode.AUTO, "Auto", Icons.Outlined.BrightnessAuto),
+                            Triple(ThemeMode.LIGHT, stringResource(R.string.light), Icons.Outlined.LightMode),
+                            Triple(ThemeMode.DARK, stringResource(R.string.dark), Icons.Outlined.DarkMode),
+                            Triple(ThemeMode.AUTO, stringResource(R.string.auto), Icons.Outlined.BrightnessAuto),
                         )
                         modes.forEachIndexed { i, (mode, label, icon) ->
                             SegmentedButton(
@@ -374,9 +378,9 @@ fun SettingsScreen(nav: NavController) {
                             ) { Text(label) }
                         }
                     }
-                    Text("App icon", style = MaterialTheme.typography.bodyLarge)
+                    Text(stringResource(R.string.app_icon), style = MaterialTheme.typography.bodyLarge)
                     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                        val icons = listOf(AppIconVariant.CLASSIC to "Classic", AppIconVariant.LEGACY to "Legacy")
+                        val icons = listOf(AppIconVariant.CLASSIC to stringResource(R.string.classic), AppIconVariant.LEGACY to stringResource(R.string.legacy))
                         icons.forEachIndexed { i, (variant, label) ->
                             SegmentedButton(
                                 selected = iconVariant == variant,
@@ -394,8 +398,8 @@ fun SettingsScreen(nav: NavController) {
                 FSSettingsRow(
                     FSSettingsRowData(
                         icon = Icons.Outlined.Lock,
-                        title = "Privacy",
-                        subtitle = "App lock, app-level gating",
+                        title = stringResource(R.string.privacy),
+                        subtitle = stringResource(R.string.app_lock_app_level_gating),
                         onClick = { nav.navigate("privacy") },
                         testTag = "settings-privacy",
                     ),
@@ -406,8 +410,8 @@ fun SettingsScreen(nav: NavController) {
                 FSSettingsRow(
                     FSSettingsRowData(
                         icon = Icons.Outlined.Info,
-                        title = "About Flagship",
-                        subtitle = "${productAboutLine(BuildConfig.VERSION_NAME, BuildConfig.PRODUCT_LABEL, BuildConfig.VERSION_CODE)} · BUSL-1.1 · Patent Pending",
+                        title = stringResource(R.string.about_flagship),
+                        subtitle = fsString(R.string.busl_1_1_patent_pending, productAboutLine(BuildConfig.VERSION_NAME, BuildConfig.PRODUCT_LABEL, BuildConfig.VERSION_CODE)),
                         showsChevron = false,
                         onClick = {},
                     ),
@@ -432,7 +436,7 @@ fun SettingsScreen(nav: NavController) {
         FSCard {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 com.flagshipserver.app.ui.components.FSSecondaryButton(
-                    label = "Lock the app",
+                    label = stringResource(R.string.lock_the_app),
                     onClick = {
                         // Tier 1 — LOCK. Re-gate behind biometrics with zero side
                         // effects: no network, the key + session stay in the
@@ -444,7 +448,7 @@ fun SettingsScreen(nav: NavController) {
                     modifier = Modifier.testTag("settings-lock-btn"),
                 )
                 FSDangerButton(
-                    label = "Sign out",
+                    label = stringResource(R.string.sign_out_2),
                     muted = sessionGated,
                     onClick = {
                         when {
@@ -464,11 +468,11 @@ fun SettingsScreen(nav: NavController) {
         // carry the warnings; their copy adapts to whether cloud recovery is
         // enrolled. Delete account opens the guarded deletion ceremony.
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            FSSectionHeader("Danger zone")
+            FSSectionHeader(stringResource(R.string.danger_zone))
             FSCard {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                     FSDangerButton(
-                        label = "Remove this device from account",
+                        label = stringResource(R.string.remove_this_device_from_account),
                         muted = sessionGated,
                         onClick = {
                             when {
@@ -481,7 +485,7 @@ fun SettingsScreen(nav: NavController) {
                         modifier = Modifier.testTag("settings-remove-device-btn"),
                     )
                     FSDangerButton(
-                        label = "Delete account",
+                        label = stringResource(R.string.delete_account),
                         onClick = {
                             if (isDemoAccountSession) showDemoDeleteNotice = true else nav.navigate("delete-account")
                         },
@@ -501,20 +505,18 @@ fun SettingsScreen(nav: NavController) {
                         Keystore.wipe()
                         app.signOut()
                     }) {
-                        Text("Remove from this device", color = FS.colors.danger)
+                        Text(stringResource(R.string.remove_from_this_device), color = FS.colors.danger)
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showDemoDeleteNotice = false }) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.cancel))
                     }
                 },
-                title = { Text("Demo account") },
+                title = { Text(stringResource(R.string.demo_account)) },
                 text = {
                     Text(
-                        "This demo account is managed by Flagship, so it can't be deleted from the " +
-                            "app — you can remove it from this device instead. Accounts you create " +
-                            "yourself are permanently deleted from here.",
+                        stringResource(R.string.this_demo_account_is_managed_by),
                     )
                 },
                 modifier = Modifier.testTag("settings-demo-delete-notice"),
@@ -543,7 +545,7 @@ fun SettingsScreen(nav: NavController) {
                             val tokenId = Keystore.pushTokenId()
                             if (!tokenId.isNullOrEmpty()) {
                                 runCatching {
-                                    val irk = Keystore.deriveIRK(reason = "Remove this device from Flagship")
+                                    val irk = Keystore.deriveIRK(reason = FSStrings.get(R.string.remove_this_device_from_flagship))
                                     val issuedAt = System.currentTimeMillis()
                                     val canonical = PushTokenRevoke.canonicalBytes(tokenId = tokenId, issuedAt = issuedAt)
                                     server.revokePushToken(
@@ -560,7 +562,7 @@ fun SettingsScreen(nav: NavController) {
                         }
                     }) {
                         Text(
-                            if (removalWarning) com.flagshipserver.app.core.AdminKeyWarning.REMOVE_ANYWAY else "Remove this device",
+                            if (removalWarning) com.flagshipserver.app.core.AdminKeyWarning.REMOVE_ANYWAY else stringResource(R.string.remove_this_device),
                             color = FS.colors.danger,
                             modifier = Modifier.testTag("settings-remove-confirm"),
                         )
@@ -574,27 +576,24 @@ fun SettingsScreen(nav: NavController) {
                         ) { Text(com.flagshipserver.app.core.AdminKeyWarning.SAVE_FIRST) }
                     } else {
                         TextButton(onClick = { showRemoveConfirm = false }) {
-                            Text("Cancel")
+                            Text(stringResource(R.string.cancel))
                         }
                     }
                 },
                 title = {
                     Text(
                         if (removalWarning) com.flagshipserver.app.core.AdminKeyWarning.REMOVE_TITLE
-                        else if (hasRecovery) "Remove this device from your account?"
-                        else "Permanently remove this device?",
+                        else if (hasRecovery) stringResource(R.string.remove_this_device_from_your_account)
+                        else stringResource(R.string.permanently_remove_this_device),
                     )
                 },
                 text = {
                     Text(
                         if (removalWarning) com.flagshipserver.app.core.AdminKeyWarning.REMOVE_MESSAGE
                         else if (hasRecovery)
-                            "We'll revoke this device's notification access and erase its local keys. " +
-                                "Use your recovery passkey to sign in again later."
+                            stringResource(R.string.well_revoke_this_devices_notification_access)
                         else
-                            "You have no cloud recovery on this account. After removal, no other " +
-                                "device can take over — your account is gone for good. Set up " +
-                                "recovery first if you might want to come back.",
+                            stringResource(R.string.you_have_no_cloud_recovery_on),
                     )
                 },
             )
@@ -645,7 +644,7 @@ fun SettingsScreen(nav: NavController) {
                         modifier = Modifier.testTag("settings-sign-out-confirm"),
                     ) {
                         Text(
-                            if (notBackedUp) com.flagshipserver.app.core.AdminKeyWarning.SIGN_OUT_ANYWAY else "Sign out",
+                            if (notBackedUp) com.flagshipserver.app.core.AdminKeyWarning.SIGN_OUT_ANYWAY else stringResource(R.string.sign_out_2),
                             color = FS.colors.danger,
                         )
                     }
@@ -657,7 +656,7 @@ fun SettingsScreen(nav: NavController) {
                             modifier = Modifier.testTag("settings-sign-out-save-first"),
                         ) { Text(com.flagshipserver.app.core.AdminKeyWarning.SAVE_FIRST) }
                     } else {
-                        TextButton(onClick = { showSignOutConfirm = false }) { Text("Cancel") }
+                        TextButton(onClick = { showSignOutConfirm = false }) { Text(stringResource(R.string.cancel)) }
                     }
                 },
                 title = { Text(com.flagshipserver.app.core.AdminKeyWarning.SIGN_OUT_TITLE) },
@@ -665,10 +664,7 @@ fun SettingsScreen(nav: NavController) {
                     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                         when (adminWarning) {
                             null -> Text(
-                                "This erases this device's account key and data so nothing " +
-                                    "sensitive is left at rest. Your account and your servers are " +
-                                    "untouched — sign back in with your recovery passkey and the " +
-                                    "same key is restored, no re-pair.",
+                                stringResource(R.string.this_erases_this_devices_account_key),
                             )
                             com.flagshipserver.app.core.AdminKeyWarning.SignOutWarning.NotBackedUp -> Text(
                                 com.flagshipserver.app.core.AdminKeyWarning.SIGN_OUT_NOT_BACKED_UP,
@@ -690,9 +686,9 @@ fun SettingsScreen(nav: NavController) {
 /** P14 Phase 2 — Companion-requests row subtitle, mirroring iOS's
  *  companionRequestsSubtitle. */
 private fun companionRequestsSubtitle(pending: Int): String = when {
-    pending == 0 -> "Approve writes from remote browsers."
+    pending == 0 -> FSStrings.get(R.string.approve_writes_from_remote_browsers)
     pending == 1 -> "1 pending write from a remote browser."
-    else -> "$pending pending writes from remote browsers."
+    else -> FSStrings.get(R.string.pending_writes_from_remote_browsers, pending)
 }
 
 /** Settings → Push notifications: on by default; off drops this device's
@@ -701,7 +697,7 @@ private fun companionRequestsSubtitle(pending: Int): String = when {
 private fun PushNotificationsCard() {
     val pushSwitch = LocalPushNotificationsSwitch.current ?: return
     val on by pushSwitch.enabled.collectAsState()
-    FSGroup(header = "Notifications") {
+    FSGroup(header = stringResource(R.string.notifications)) {
         FSRow(
             title = PushNotificationsSwitch.TITLE,
             subtitle = PushNotificationsSwitch.SUBTEXT,

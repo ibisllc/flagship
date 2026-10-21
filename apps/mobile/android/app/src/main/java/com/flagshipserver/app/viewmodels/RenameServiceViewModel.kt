@@ -13,6 +13,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.AppLinksResponse
@@ -53,19 +55,19 @@ class RenameServiceViewModel(
     suspend fun rename(draft: String): Boolean {
         val user = username()
         if (user.isNullOrEmpty()) {
-            _phase.value = RenameServicePhase.Failed("No active account on this device.")
+            _phase.value = RenameServicePhase.Failed(FSStrings.get(R.string.no_active_account_on_this_device))
             return false
         }
         val trimmed = draft.trim().lowercase()
         if (trimmed.isEmpty()) {
-            _phase.value = RenameServicePhase.Failed("Pick a non-empty label.")
+            _phase.value = RenameServicePhase.Failed(FSStrings.get(R.string.pick_a_non_empty_label))
             return false
         }
         _phase.value = RenameServicePhase.Signing
         val signer = try {
-            Keystore.deriveIRK("Rename service URL stem")
+            Keystore.deriveIRK(FSStrings.get(R.string.rename_service_url_stem))
         } catch (e: Throwable) {
-            _phase.value = RenameServicePhase.Failed("Couldn't access your account keys: ${UserErrorText.reason(e)}")
+            _phase.value = RenameServicePhase.Failed(FSStrings.get(R.string.couldnt_access_your_account_keys, UserErrorText.reason(e)))
             return false
         }
         val issuedAt = System.currentTimeMillis()
@@ -109,10 +111,10 @@ class RenameServiceViewModel(
         } catch (e: Throwable) {
             val msg = e.message.orEmpty()
             val friendly = when {
-                msg.contains("409") -> "Another service already uses that name. Pick something else."
-                msg.contains("400") -> "That name isn't valid — use lowercase letters, digits, or hyphens (1–40 chars)."
-                msg.contains("403") -> "Sign-in is needed. Re-open the app and try again."
-                else -> "Couldn't rename: $msg"
+                msg.contains("409") -> FSStrings.get(R.string.another_service_already_uses_that_name)
+                msg.contains("400") -> FSStrings.get(R.string.that_name_isnt_valid_use_lowercase)
+                msg.contains("403") -> FSStrings.get(R.string.sign_in_is_needed_re_open)
+                else -> FSStrings.get(R.string.couldnt_rename, msg)
             }
             _phase.value = RenameServicePhase.Failed(friendly)
             false

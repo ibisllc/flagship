@@ -6,6 +6,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -105,18 +108,18 @@ fun ServiceEnvScreen(
     LaunchedEffect(Unit) { reload() }
 
     FSScreen(
-        title = "Configure environment",
+        title = stringResource(R.string.configure_environment),
         onBack = { nav.popBackStack() },
     ) {
         FSCard {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Text(
-                    "Environment variables",
+                    stringResource(R.string.environment_variables),
                     color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    "Names appear here; values stay on this server. They're sealed at rest and never leave it.",
+                    stringResource(R.string.names_appear_here_values_stay_on),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -129,8 +132,8 @@ fun ServiceEnvScreen(
             ServerCardSkeleton()
         } else if (names.isEmpty()) {
             FSEmptyState(
-                title = "No env vars set",
-                message = "Tap below to add one.",
+                title = stringResource(R.string.no_env_vars_set),
+                message = stringResource(R.string.tap_below_to_add_one),
                 icon = Icons.Outlined.Key,
             )
         } else {
@@ -161,7 +164,7 @@ fun ServiceEnvScreen(
                                     }
                                 },
                             ) {
-                                Icon(Icons.Outlined.Delete, contentDescription = "Remove $name", tint = MaterialTheme.colorScheme.error)
+                                Icon(Icons.Outlined.Delete, contentDescription = fsString(R.string.remove, name), tint = MaterialTheme.colorScheme.error)
                             }
                         },
                     )
@@ -170,7 +173,7 @@ fun ServiceEnvScreen(
         }
 
         FSPrimaryButton(
-            label = "Add environment variable",
+            label = stringResource(R.string.add_environment_variable),
             onClick = { showAddDialog = true },
             block = true,
             modifier = Modifier.semantics { testTag = "service-env-add-btn" },
@@ -217,13 +220,13 @@ private fun AddEnvVarDialog(
     var nameError by remember { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New environment variable") },
+        title = { Text(stringResource(R.string.new_environment_variable)) },
         text = {
             Column {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it; nameError = null },
-                    label = { Text("Name (e.g. OPENAI_API_KEY)") },
+                    label = { Text(stringResource(R.string.name_e_g_openai_api_key)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -233,7 +236,7 @@ private fun AddEnvVarDialog(
                 OutlinedTextField(
                     value = value,
                     onValueChange = { value = it },
-                    label = { Text("Value") },
+                    label = { Text(stringResource(R.string.value)) },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     modifier = Modifier
@@ -251,7 +254,7 @@ private fun AddEnvVarDialog(
                 }
                 Spacer(Modifier.height(FS.space.s2))
                 Text(
-                    "The value is sent once to your server. The Flagship phone app does not save it.",
+                    stringResource(R.string.the_value_is_sent_once_to),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -266,10 +269,10 @@ private fun AddEnvVarDialog(
                 },
                 enabled = name.isNotEmpty() && value.isNotEmpty(),
                 modifier = Modifier.semantics { testTag = "service-env-save-btn" },
-            ) { Text("Save") }
+            ) { Text(stringResource(R.string.save)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         },
     )
 }

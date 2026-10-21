@@ -9,6 +9,8 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
+
 /** A single scheduled affirmation reminder. */
 data class DeadManReminder(
     /** Epoch-ms the reminder should fire. */
@@ -45,6 +47,6 @@ object DeadManReminders {
         val totalMin = ms / 60_000
         val h = totalMin / 60
         val m = totalMin % 60
-        return if (h > 0) "${h}h ${m}m left" else "${m}m left"
+        return if (h > 0) FSStrings.get(R.string.h_m_left, h, m) else FSStrings.get(R.string.m_left, m)
     }
 }

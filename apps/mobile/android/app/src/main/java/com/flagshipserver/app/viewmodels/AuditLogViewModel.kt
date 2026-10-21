@@ -10,6 +10,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.AuditEvent
 import com.flagshipserver.app.api.FlagshipServerClient
@@ -33,39 +35,39 @@ const val AUDIT_LOG_PAGE_SIZE = 20
  *  writes. Unknown kinds are humanized rather than shown raw. Mirrors iOS
  *  AuditLogViewModel.label(for:). */
 fun auditEventLabel(kind: String): String = when (kind) {
-    "device-disconnected" -> "Disconnected device"
-    "device-replaced"     -> "Replaced device"
-    "device-added"        -> "Added device"
-    "wipe-restart"        -> "Wiped & restarted account"
-    "recovery-set-up"     -> "Set up recovery"
-    "recovery-rotated"    -> "Rotated recovery passkey"
-    "recovery-code-consumed" -> "Used a recovery code"
-    "app-renamed"         -> "Renamed app URL"
-    "server-created"      -> "Created server"
-    "server-online"       -> "Server came online"
-    "server-migration-started"    -> "Started moving a server"
-    "server-migration-taken-over" -> "Moved a server to a new machine / VM"
-    "server-migration-aborted"    -> "Cancelled a server move"
-    "server-revoked"      -> "Revoked server"
-    "server-unrevoked"    -> "Restored server"
-    "server-transfer-offered" -> "Offered a server transfer"
-    "server-transfer-claimed" -> "Server transfer claimed"
-    "servers-self-delete-issued" -> "Requested server deletion"
-    "demo-vps-provisioned" -> "Demo server provisioned"
-    "totp-enrolled"       -> "Turned on authenticator codes"
-    "totp-disabled"       -> "Turned off authenticator codes"
-    "totp-failed-rate"    -> "Repeated authenticator code failures"
-    "re-pair-initiated"   -> "Started device replacement"
-    "re-pair-expired"     -> "Device replacement expired"
-    "re-pair-refused-no-credential" -> "Refused a device replacement"
-    "account-type-changed-single-to-multi" -> "Turned on code protection"
-    "account-type-changed-multi-to-single" -> "Switched to single-device"
-    "ct-unexpected-cert"  -> "Unexpected certificate observed"
-    "invite-created"      -> "Someone was invited to an app"
-    "account-deleted"     -> "Deleted account"
-    "username-reclaimed"  -> "Username reclaimed"
+    "device-disconnected" -> FSStrings.get(R.string.disconnected_device)
+    "device-replaced"     -> FSStrings.get(R.string.replaced_device)
+    "device-added"        -> FSStrings.get(R.string.added_device)
+    "wipe-restart"        -> FSStrings.get(R.string.wiped_restarted_account)
+    "recovery-set-up"     -> FSStrings.get(R.string.set_up_recovery)
+    "recovery-rotated"    -> FSStrings.get(R.string.rotated_recovery_passkey)
+    "recovery-code-consumed" -> FSStrings.get(R.string.used_a_recovery_code)
+    "app-renamed"         -> FSStrings.get(R.string.renamed_app_url)
+    "server-created"      -> FSStrings.get(R.string.created_server)
+    "server-online"       -> FSStrings.get(R.string.server_came_online)
+    "server-migration-started"    -> FSStrings.get(R.string.started_moving_a_server)
+    "server-migration-taken-over" -> FSStrings.get(R.string.moved_a_server_to_a_new)
+    "server-migration-aborted"    -> FSStrings.get(R.string.cancelled_a_server_move)
+    "server-revoked"      -> FSStrings.get(R.string.revoked_server)
+    "server-unrevoked"    -> FSStrings.get(R.string.restored_server)
+    "server-transfer-offered" -> FSStrings.get(R.string.offered_a_server_transfer)
+    "server-transfer-claimed" -> FSStrings.get(R.string.server_transfer_claimed)
+    "servers-self-delete-issued" -> FSStrings.get(R.string.requested_server_deletion)
+    "demo-vps-provisioned" -> FSStrings.get(R.string.demo_server_provisioned)
+    "totp-enrolled"       -> FSStrings.get(R.string.turned_on_authenticator_codes)
+    "totp-disabled"       -> FSStrings.get(R.string.turned_off_authenticator_codes)
+    "totp-failed-rate"    -> FSStrings.get(R.string.repeated_authenticator_code_failures)
+    "re-pair-initiated"   -> FSStrings.get(R.string.started_device_replacement)
+    "re-pair-expired"     -> FSStrings.get(R.string.device_replacement_expired)
+    "re-pair-refused-no-credential" -> FSStrings.get(R.string.refused_a_device_replacement)
+    "account-type-changed-single-to-multi" -> FSStrings.get(R.string.turned_on_code_protection)
+    "account-type-changed-multi-to-single" -> FSStrings.get(R.string.switched_to_single_device)
+    "ct-unexpected-cert"  -> FSStrings.get(R.string.unexpected_certificate_observed)
+    "invite-created"      -> FSStrings.get(R.string.someone_was_invited_to_an_app)
+    "account-deleted"     -> FSStrings.get(R.string.deleted_account)
+    "username-reclaimed"  -> FSStrings.get(R.string.username_reclaimed)
     else -> kind.replace(Regex("[._-]+"), " ").trim()
-        .ifEmpty { "Account event" }
+        .ifEmpty { FSStrings.get(R.string.account_event) }
         .replaceFirstChar { it.uppercaseChar() }
 }
 
@@ -139,7 +141,7 @@ class AuditLogViewModel(
                     _state.value = LoadingState.Loaded(AuditLogPage(events = events, canLoadMore = canLoadMore))
                 },
                 onFailure = { t ->
-                    _state.value = LoadingState.Failed(UserErrorText.of(t, "Couldn't load the activity log. Try again."))
+                    _state.value = LoadingState.Failed(UserErrorText.of(t, FSStrings.get(R.string.couldnt_load_the_activity_log_try)))
                 },
             )
     }

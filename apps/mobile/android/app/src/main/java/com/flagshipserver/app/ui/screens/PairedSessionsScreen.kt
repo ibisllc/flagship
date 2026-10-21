@@ -3,6 +3,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -80,18 +84,18 @@ fun PairedSessionsScreen(nav: NavController) {
         }
     }
 
-    FSScreen(title = "Browser sessions", onBack = { nav.popBackStack() }) {
+    FSScreen(title = stringResource(R.string.browser_sessions), onBack = { nav.popBackStack() }) {
         when {
             error != null -> ErrorCard(message = error!!, onRetry = { attempt++ })
             !loaded -> ServerCardSkeleton()
             sessions.isEmpty() -> FSEmptyState(
-                title = "No browser sessions",
-                message = "Connect a remote browser to manage this account from a computer.",
+                title = stringResource(R.string.no_browser_sessions),
+                message = stringResource(R.string.connect_a_remote_browser_to_manage),
                 icon = Icons.Outlined.Laptop,
             )
             else -> Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Text(
-                    "Computers you've docked a browser from. They can manage this account for a few hours, then expire.",
+                    stringResource(R.string.computers_youve_docked_a_browser_from),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = FS.space.s1),
@@ -99,16 +103,16 @@ fun PairedSessionsScreen(nav: NavController) {
                 FSGroup {
                     sessions.forEachIndexed { idx, session ->
                         FSRow(
-                            title = "Session ${session.tokenPrefix}",
-                            subtitle = "Paired ${FlagshipDateFormat.format(session.addedAt)}",
+                            title = fsString(R.string.session, session.tokenPrefix),
+                            subtitle = fsString(R.string.paired, FlagshipDateFormat.format(session.addedAt)),
                             icon = if (session.current) Icons.Outlined.PhoneAndroid else Icons.Outlined.Laptop,
                             iconTint = if (session.current) FS.colors.success else null,
                             trailing = {
                                 if (session.current) {
-                                    FSPill("This device", kind = FSPillKind.Online)
+                                    FSPill(stringResource(R.string.this_device), kind = FSPillKind.Online)
                                 } else {
                                     FSDangerButton(
-                                        label = "Revoke",
+                                        label = stringResource(R.string.revoke_2),
                                         onClick = { revokeTarget = session },
                                         modifier = Modifier.testTag("revoke-session-${session.tokenPrefix}"),
                                     )
@@ -132,20 +136,20 @@ fun PairedSessionsScreen(nav: NavController) {
                         try {
                             client.revokePairedSession(target.tokenPrefix)
                             sessions.removeAll { it.tokenPrefix == target.tokenPrefix }
-                            toasts.success("Session revoked.")
+                            toasts.success(FSStrings.get(R.string.session_revoked))
                         } catch (t: Throwable) {
-                            toasts.error(UserErrorText.of(t, "Couldn't revoke."))
+                            toasts.error(UserErrorText.of(t, FSStrings.get(R.string.couldnt_revoke)))
                         }
                     }
                 }) {
-                    Text("Revoke", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.revoke_2), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { revokeTarget = null }) { Text("Cancel") }
+                TextButton(onClick = { revokeTarget = null }) { Text(stringResource(R.string.cancel)) }
             },
-            title = { Text("Revoke this session?") },
-            text = { Text("Session ${target.tokenPrefix} loses access to this account.") },
+            title = { Text(stringResource(R.string.revoke_this_session)) },
+            text = { Text(fsString(R.string.session_loses_access_to_this_account, target.tokenPrefix)) },
         )
     }
 }

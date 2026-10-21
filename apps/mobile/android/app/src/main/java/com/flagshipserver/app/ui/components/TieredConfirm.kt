@@ -15,6 +15,9 @@
 
 package com.flagshipserver.app.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -88,13 +91,13 @@ fun TieredConfirm(
             FSField(
                 value = typed,
                 onValueChange = { typed = it },
-                label = "Type “$confirmWord” to confirm",
+                label = fsString(R.string.type_to_confirm, confirmWord),
                 placeholder = confirmWord,
                 fieldTag = fieldTag,
             )
         }
         val btnMod = if (buttonTag != null) Modifier.testTag(buttonTag) else Modifier
-        val label = if (working) "Working…" else confirmLabel
+        val label = if (working) stringResource(R.string.working) else confirmLabel
         if (tier == ConfirmTier.SEVERE) {
             FSDangerButton(
                 label = label,

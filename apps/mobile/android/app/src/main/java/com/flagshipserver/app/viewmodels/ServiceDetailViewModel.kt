@@ -18,6 +18,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.flagshipserver.app.api.AppDetailResponse
@@ -68,12 +70,12 @@ class ServiceDetailViewModel(
     suspend fun uninstall() {
         val domain = runCatching { client.boxFqdn() }.getOrNull()?.takeIf { it.isNotEmpty() }
             ?: fallbackServerDomain()?.takeIf { it.isNotEmpty() }
-            ?: throw IllegalStateException("Couldn't tell which server this app is on.")
+            ?: throw IllegalStateException(FSStrings.get(R.string.couldnt_tell_which_server_this_app))
         val app = (_detail.value as? LoadingState.Loaded)?.value?.app
         val (creator, slug) = app?.takeIf { it.creator.isNotEmpty() && it.slug.isNotEmpty() }?.let { it.creator to it.slug }
             ?: UninstallServiceOrder.split(serviceId)
-            ?: throw IllegalStateException("Couldn't identify the app to remove.")
-        val key = uninstallSigner("Remove $slug")
+            ?: throw IllegalStateException(FSStrings.get(R.string.couldnt_identify_the_app_to_remove))
+        val key = uninstallSigner(FSStrings.get(R.string.remove, slug))
         client.uninstallService(serviceId, UninstallServiceOrder.body(key, domain, creator, slug, now()))
     }
 }

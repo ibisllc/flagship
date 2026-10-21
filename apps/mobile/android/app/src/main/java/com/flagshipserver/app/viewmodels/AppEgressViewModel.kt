@@ -5,6 +5,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.AppEgress
 import com.flagshipserver.app.api.AppEgressGrantBody
@@ -48,11 +50,11 @@ class AppEgressViewModel(
     /** Allow every host the app declares. */
     suspend fun allow(): Boolean {
         val declared = _egress.value?.declared ?: return false
-        return send(declared, "Allow $serviceId to reach the internet")
+        return send(declared, FSStrings.get(R.string.allow_to_reach_the_internet, serviceId))
     }
 
     /** Revoke: the app reaches no internet host again. */
-    suspend fun stopAccess(): Boolean = send(emptyList(), "Stop $serviceId reaching the internet")
+    suspend fun stopAccess(): Boolean = send(emptyList(), FSStrings.get(R.string.stop_reaching_the_internet, serviceId))
 
     private suspend fun send(hosts: List<String>, reason: String): Boolean {
         if (_busy.value) return false
@@ -61,7 +63,7 @@ class AppEgressViewModel(
         try {
             val domain = runCatching { client.boxFqdn() }.getOrNull() ?: fallbackServerDomain()
             if (domain.isNullOrEmpty()) {
-                _error.value = "Couldn't tell which server this app is on."
+                _error.value = FSStrings.get(R.string.couldnt_tell_which_server_this_app)
                 return false
             }
             val sorted = AppEgressGrant.normalizeHosts(hosts)
@@ -71,7 +73,7 @@ class AppEgressViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                _error.value = "Couldn't access your account key: ${UserErrorText.reason(e)}"
+                _error.value = FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(e))
                 return false
             }
             val r = client.serviceEgressSet(
@@ -94,24 +96,24 @@ class AppEgressViewModel(
     }
 
     companion object {
-        const val PENDING_TITLE = "This app wants to reach the internet"
-        const val PENDING_NOTE =
-            "Until you allow them, the app can't reach any of these. Only allow hosts you expect this app to need."
+        val PENDING_TITLE get() = FSStrings.get(R.string.this_app_wants_to_reach_the)
+        val PENDING_NOTE get() =
+            FSStrings.get(R.string.until_you_allow_them_the_app)
         const val ALLOW = "Allow"
-        const val APPROVED_TITLE = "Internet access"
-        const val APPROVED_NOTE = "The app can reach only these hosts."
-        const val STOP = "Stop access"
-        const val BADGE = "Wants internet"
+        val APPROVED_TITLE get() = FSStrings.get(R.string.internet_access)
+        val APPROVED_NOTE get() = FSStrings.get(R.string.the_app_can_reach_only_these)
+        val STOP get() = FSStrings.get(R.string.stop_access)
+        val BADGE get() = FSStrings.get(R.string.wants_internet)
 
         fun friendlyError(t: Throwable): String {
             if (t !is ScreensError.Http) return t.userFacing()
             val box = t.boxError()
             return when (t.status) {
-                400 -> "The server couldn't read this approval${box?.let { ": $it" } ?: ""}."
-                403 -> "The server refused this approval${box?.let { ": $it" } ?: ""}. Check this phone's clock and try again."
-                404 -> "This app is no longer installed on the server."
-                409 -> "A newer approval is already in place. Reload the page and try again."
-                422 -> box ?: "The app doesn't declare one of these hosts."
+                400 -> FSStrings.get(R.string.the_server_couldnt_read_this_approval, box?.let { ": $it" } ?: "")
+                403 -> FSStrings.get(R.string.the_server_refused_this_approval_check, box?.let { ": $it" } ?: "")
+                404 -> FSStrings.get(R.string.this_app_is_no_longer_installed)
+                409 -> FSStrings.get(R.string.a_newer_approval_is_already_in)
+                422 -> box ?: FSStrings.get(R.string.the_app_doesnt_declare_one_of)
                 else -> box ?: t.userFacing()
             }
         }

@@ -8,6 +8,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import com.flagshipserver.app.ui.components.fsFocusRing
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
@@ -135,7 +139,7 @@ data class BackupPolicyChoice(val policy: String, val phoneReserveBytes: Long)
 
 /** The pairing order couldn't be built, so a server made to restore a backup can't be told which one. */
 internal class RestoreNeedsPairingException :
-    Exception("This server couldn't be prepared to receive the backup. Try again.")
+    Exception(FSStrings.get(R.string.this_server_couldnt_be_prepared_to))
 
 /** Saves the design and chooser phases; the live ones restore as the chooser. */
 private val PhaseSaver = androidx.compose.runtime.saveable.Saver<Phase, String>(
@@ -255,7 +259,7 @@ fun CreateServerScreen(
     // to register when it phones home, regardless of delivery channel), reusing
     // the shared minter so the recipe is byte-identical across delivery methods.
     suspend fun mintAndRegister(): MintedBundle {
-        com.flagshipserver.app.core.ErrorLog.step("create-server", "mint start")
+        com.flagshipserver.app.core.ErrorLog.step("create-server", FSStrings.get(R.string.mint_start))
         val username = app.currentUser.value ?: throw IllegalStateException("not paired yet")
         val minted = mintRecipeBundle(
             username = username,
@@ -364,14 +368,14 @@ fun CreateServerScreen(
     // Small per-page title, like iOS's compact header per step/page.
     val pageTitle = when (phase) {
         Phase.Design -> when (designStep) {
-            0 -> "Name your server"
-            1 -> "Boot unlock"
-            else -> "Backups"
+            0 -> stringResource(R.string.name_your_server)
+            1 -> stringResource(R.string.boot_unlock)
+            else -> stringResource(R.string.backups)
         }
-        Phase.DeliveryChooser -> "Get it to a builder"
-        Phase.Scan -> "Scan the QR"
-        Phase.Match -> "Confirm match code"
-        else -> "New server"
+        Phase.DeliveryChooser -> stringResource(R.string.get_it_to_a_builder)
+        Phase.Scan -> stringResource(R.string.scan_the_qr)
+        Phase.Match -> stringResource(R.string.confirm_match_code)
+        else -> stringResource(R.string.new_server)
     }
     androidx.activity.compose.BackHandler(enabled = phase == Phase.Design && designStep > 0) { designStep -= 1 }
     FSScreen(
@@ -387,7 +391,7 @@ fun CreateServerScreen(
     ) {
         if (phase == Phase.Design && pendingBuilderLink != null) {
             Text(
-                "Flagship Studio is waiting. Set up your server and it goes straight to Studio.",
+                stringResource(R.string.flagship_studio_is_waiting_set_up),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.testTag("create-server-studio-waiting"),
@@ -439,7 +443,7 @@ fun CreateServerScreen(
                 onNext = {
                     // Step 0 gates on a valid subdomain; later steps advance freely.
                     if (designStep == 0 && !ServerLabel.isValid(name)) {
-                        error = ServerLabel.errorMessage(name) ?: "Enter a subdomain."
+                        error = ServerLabel.errorMessage(name) ?: FSStrings.get(R.string.enter_a_subdomain)
                         return@DesignPhase
                     }
                     error = null
@@ -481,7 +485,7 @@ fun CreateServerScreen(
                             val minted = mintAndRegister()
                             val json = Json.encodeToString(InstallBlobBundle.serializer(), minted.bundle)
                             copyRecipeToClipboard(context, json)
-                            toasts.success("Recipe copied.")
+                            toasts.success(FSStrings.get(R.string.recipe_copied))
                             recordDelivered(minted.serverDomain)
                             onDeliveredVisible(minted.serverDomain, minted.serial, name, description)
                             onDelivered(minted.serverDomain, minted.serial, name, description)
@@ -612,7 +616,7 @@ fun CreateServerScreen(
                             // server" starts at the defaults rather than ghost-
                             // restoring this build's pick (mirrors iOS).
                             draftStore.reset()
-                            toasts.success("Delivered. Watch Home for the new server.")
+                            toasts.success(FSStrings.get(R.string.delivered_watch_home_for_the_new))
                             onDeliveredVisible(
                                 delivery.bundle.blob.serverDomain,
                                 delivery.bundle.blob.authCode.serial,
@@ -685,7 +689,7 @@ private fun DesignPhase(
     onCancel: () -> Unit,
 ) {
     Text(
-        "Step ${step + 1} of $stepCount",
+        fsString(R.string.step_of, step + 1, stepCount),
         color = MaterialTheme.colorScheme.onSurface,
         style = MaterialTheme.typography.titleSmall,
     )
@@ -706,7 +710,7 @@ private fun DesignPhase(
                     FSField(
                         value = name,
                         onValueChange = onName,
-                        label = "Server name",
+                        label = stringResource(R.string.server_name),
                         error = ServerLabel.errorMessage(name),
                         modifier = Modifier.testTag("cs-name-field"),
                     )
@@ -724,7 +728,7 @@ private fun DesignPhase(
                     FSField(
                         value = description,
                         onValueChange = onDescription,
-                        label = "Short description (optional)",
+                        label = stringResource(R.string.short_description_optional),
                     )
                     Spacer(Modifier.height(FS.space.s4))
                     RecipeTtlPicker(recipeTtlMs = recipeTtlMs, onRecipeTtlMs = onRecipeTtlMs)
@@ -764,14 +768,14 @@ private fun DesignPhase(
     Spacer(Modifier.height(FS.space.s4))
     if (step < stepCount - 1) {
         FSPrimaryButton(
-            label = "Next",
+            label = stringResource(R.string.next),
             onClick = onNext,
             block = true,
             modifier = Modifier.testTag("cs-next-button"),
         )
     } else {
         FSPrimaryButton(
-            label = "Continue",
+            label = stringResource(R.string.continue_label),
             onClick = onContinue,
             enabled = backupPolicy != null,
             block = true,
@@ -780,9 +784,9 @@ private fun DesignPhase(
     }
     Spacer(Modifier.height(FS.space.s2))
     if (step > 0) {
-        FSSecondaryButton(label = "Back", onClick = onBack, block = true)
+        FSSecondaryButton(label = stringResource(R.string.back), onClick = onBack, block = true)
     } else {
-        FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
+        FSSecondaryButton(label = stringResource(R.string.cancel), onClick = onCancel, block = true)
     }
 }
 
@@ -795,7 +799,7 @@ private fun RecipeTtlPicker(
     val hours = recipeTtlMs.toDouble() / 3_600_000.0
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            "Recipe expires in",
+            stringResource(R.string.recipe_expires_in),
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f),
         )
@@ -814,15 +818,15 @@ private fun RecipeTtlPicker(
         track = { state -> androidx.compose.material3.SliderDefaults.Track(state, drawStopIndicator = null) },
     )
     Text(
-        "After this window, the unused USB can't install — re-mint from this screen.",
+        stringResource(R.string.after_this_window_the_unused_usb),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.bodySmall,
     )
 }
 
 private fun ttlLabel(hours: Double): String = when {
-    hours < 1.0 -> "${(hours * 60).toInt()} min"
-    hours == hours.toInt().toDouble() -> "${hours.toInt()} hour${if (hours == 1.0) "" else "s"}"
+    hours < 1.0 -> FSStrings.get(R.string.min, (hours * 60).toInt())
+    hours == hours.toInt().toDouble() -> FSStrings.get(R.string.hour, hours.toInt(), if (hours == 1.0) "" else "s")
     else -> String.format("%.1f hours", hours)
 }
 
@@ -835,21 +839,21 @@ private fun BootUnlockPicker(
     onMode: (ServerSettingsStore.Mode) -> Unit,
 ) {
     Text(
-        "Boot unlock",
+        stringResource(R.string.boot_unlock),
         style = MaterialTheme.typography.titleSmall,
     )
     Spacer(Modifier.height(FS.space.s2))
     BootUnlockOption(
         selected = mode == ServerSettingsStore.Mode.AUTO,
-        title = "Reboots on its own",
-        subtitle = "Best for flaky power or connections. After you approve its first boot, the server unlocks itself on every reboot — no phone needed. Revocable any time.",
+        title = stringResource(R.string.reboots_on_its_own),
+        subtitle = stringResource(R.string.best_for_flaky_power_or_connections),
         onClick = { onMode(ServerSettingsStore.Mode.AUTO) },
     )
     Spacer(Modifier.height(FS.space.s2))
     BootUnlockOption(
         selected = mode == ServerSettingsStore.Mode.APPROVE,
-        title = "Authorize each boot",
-        subtitle = "Most theft-resistant. The server asks your phone on every reboot. Best for critical servers on stable infrastructure.",
+        title = stringResource(R.string.authorize_each_boot),
+        subtitle = stringResource(R.string.most_theft_resistant_the_server_asks),
         onClick = { onMode(ServerSettingsStore.Mode.APPROVE) },
     )
 }
@@ -865,22 +869,22 @@ private fun DiskEncryptionPicker(
     onEncryptDisk: (Boolean) -> Unit,
 ) {
     Text(
-        "Encrypt disk",
+        stringResource(R.string.encrypt_disk),
         style = MaterialTheme.typography.titleSmall,
         modifier = Modifier.testTag("cs-encrypt-disk-toggle"),
     )
     Spacer(Modifier.height(FS.space.s2))
     BootUnlockOption(
         selected = encryptDisk,
-        title = "Encrypt the disk (recommended)",
-        subtitle = "The whole disk is encrypted. The server fetches its unlock key at boot, so it needs a network connection to come back up after a power cut.",
+        title = stringResource(R.string.encrypt_the_disk_recommended),
+        subtitle = stringResource(R.string.the_whole_disk_is_encrypted_the),
         onClick = { onEncryptDisk(true) },
     )
     Spacer(Modifier.height(FS.space.s2))
     BootUnlockOption(
         selected = !encryptDisk,
-        title = "Don't encrypt my disk",
-        subtitle = "Less safe — anyone with the disk can read it. Choose this only for a server that can't keep network at boot (Wi-Fi-only): it boots with no connection.",
+        title = stringResource(R.string.dont_encrypt_my_disk),
+        subtitle = stringResource(R.string.less_safe_anyone_with_the_disk),
         onClick = { onEncryptDisk(false) },
     )
 }
@@ -904,9 +908,9 @@ private fun AdvancedModePicker(
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text("Advanced mode", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.advanced_mode), style = MaterialTheme.typography.titleSmall)
             Text(
-                "For people who know what they're doing.",
+                stringResource(R.string.for_people_who_know_what_theyre),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -921,7 +925,7 @@ private fun AdvancedModePicker(
         Spacer(Modifier.height(FS.space.s2))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "Embed secrets for offline install",
+                stringResource(R.string.embed_secrets_for_offline_install),
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.weight(1f),
             )
@@ -932,14 +936,14 @@ private fun AdvancedModePicker(
             )
         }
         Text(
-            "This embeds security keys directly in the recipe. Hence, the server will be able to boot even if the phone is offline.",
+            stringResource(R.string.this_embeds_security_keys_directly_in),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
         )
         Spacer(Modifier.height(FS.space.s2))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "Debug-friendly server",
+                stringResource(R.string.debug_friendly_server),
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.weight(1f),
             )
@@ -959,8 +963,8 @@ private fun AdvancedModePicker(
             FSField(
                 value = debugSshKey,
                 onValueChange = onDebugSshKey,
-                label = "SSH public key",
-                placeholder = "ssh-ed25519 AAAA… you@laptop",
+                label = stringResource(R.string.ssh_public_key),
+                placeholder = stringResource(R.string.ssh_ed25519_aaaa_you_laptop),
                 error = debugSshKey.takeIf { it.isNotBlank() }?.let { debugSshKeyProblem(it) },
                 fieldTag = "cs-debug-ssh-key",
             )
@@ -981,7 +985,7 @@ private fun BackupPolicyPicker(
     phoneFreeBytes: Long,
 ) {
     Text(
-        "Where should backups go?",
+        stringResource(R.string.where_should_backups_go),
         style = MaterialTheme.typography.titleSmall,
     )
     Spacer(Modifier.height(FS.space.s2))
@@ -1037,24 +1041,24 @@ private fun ScanPhase(
     onCancel: () -> Unit,
 ) {
     Text(
-        "Scan the code shown on flagshipserver.com. Both screens stay open until the browser acks.",
+        stringResource(R.string.scan_the_code_shown_on_flagshipserver),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.bodyMedium,
     )
     Spacer(Modifier.height(FS.space.s4))
     QRScanner(onScanned = onScanned)
     Spacer(Modifier.height(FS.space.s4))
-    FSField(value = qrText, onValueChange = onQrText, label = "Or paste code manually")
+    FSField(value = qrText, onValueChange = onQrText, label = stringResource(R.string.or_paste_code_manually))
     if (qrText.isNotBlank()) {
         Spacer(Modifier.height(FS.space.s2))
-        FSPrimaryButton(label = "Use this code", onClick = { onScanned(qrText) }, block = true)
+        FSPrimaryButton(label = stringResource(R.string.use_this_code), onClick = { onScanned(qrText) }, block = true)
     }
     if (error != null) {
         Spacer(Modifier.height(FS.space.s2))
         Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
     }
     Spacer(Modifier.height(FS.space.s2))
-    FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
+    FSSecondaryButton(label = stringResource(R.string.cancel), onClick = onCancel, block = true)
 }
 
 @Composable
@@ -1065,7 +1069,7 @@ private fun MatchPhase(
     onCancel: () -> Unit,
 ) {
     Text(
-        "Compare the code on this phone and the one shown on the browser. Confirm only if they match exactly — otherwise the relay has been tampered with.",
+        stringResource(R.string.compare_the_code_on_this_phone),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.bodyMedium,
     )
@@ -1085,9 +1089,9 @@ private fun MatchPhase(
         Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
     }
     Spacer(Modifier.height(FS.space.s6))
-    FSPrimaryButton(label = "Codes match — deliver", onClick = onConfirm, block = true)
+    FSPrimaryButton(label = stringResource(R.string.codes_match_deliver), onClick = onConfirm, block = true)
     Spacer(Modifier.height(FS.space.s2))
-    FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
+    FSSecondaryButton(label = stringResource(R.string.cancel), onClick = onCancel, block = true)
 }
 
 // Delivery-method chooser shown after the design step. Mirrors iOS
@@ -1105,8 +1109,8 @@ private fun DeliveryChooserPhase(
 ) {
     DeliveryCard(
         icon = Icons.Outlined.QrCodeScanner,
-        title = "Pair with the builder app",
-        body = "Scan the builder's QR (or type its code) and the recipe is sent over a secure live link. Easiest if the builder is open in front of you.",
+        title = stringResource(R.string.pair_with_the_builder_app),
+        body = stringResource(R.string.scan_the_builders_qr_or_type),
         enabled = !busy,
         testTag = "cs-delivery-pair",
         onClick = onPair,
@@ -1114,8 +1118,8 @@ private fun DeliveryChooserPhase(
     Spacer(Modifier.height(FS.space.s3))
     DeliveryCard(
         icon = Icons.Outlined.Share,
-        title = "Save / share recipe file",
-        body = "Save the recipe as a file or send it. Whoever builds the server opens it in the builder. No secrets in the file.",
+        title = stringResource(R.string.save_share_recipe_file),
+        body = stringResource(R.string.save_the_recipe_as_a_file),
         enabled = !busy,
         testTag = "cs-delivery-share",
         onClick = onShare,
@@ -1123,8 +1127,8 @@ private fun DeliveryChooserPhase(
     Spacer(Modifier.height(FS.space.s3))
     DeliveryCard(
         icon = Icons.Outlined.ContentCopy,
-        title = "Copy recipe to clipboard",
-        body = "Copy the recipe text, then paste it into the builder's \"I have a recipe\" field.",
+        title = stringResource(R.string.copy_recipe_to_clipboard),
+        body = stringResource(R.string.copy_the_recipe_text_then_paste),
         enabled = !busy,
         testTag = "cs-delivery-copy",
         onClick = onCopy,
@@ -1132,8 +1136,8 @@ private fun DeliveryChooserPhase(
     Spacer(Modifier.height(FS.space.s3))
     DeliveryCard(
         icon = Icons.Outlined.Usb,
-        title = "Burn to USB on this device",
-        body = "Connect a USB drive with an OTG adapter and write the bootable installer right here — no computer needed.",
+        title = stringResource(R.string.burn_to_usb_on_this_device),
+        body = stringResource(R.string.connect_a_usb_drive_with_an_2),
         enabled = !busy,
         testTag = "cs-delivery-burn",
         onClick = onBurn,
@@ -1148,7 +1152,7 @@ private fun DeliveryChooserPhase(
     }
     Spacer(Modifier.height(FS.space.s4))
     Spacer(Modifier.height(FS.space.s2))
-    FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
+    FSSecondaryButton(label = stringResource(R.string.cancel), onClick = onCancel, block = true)
 }
 
 @Composable
@@ -1191,14 +1195,14 @@ private fun shareRecipeFile(ctx: Context, serverName: String, json: String) {
         putExtra(Intent.EXTRA_STREAM, uri)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    val chooser = Intent.createChooser(send, "Share recipe")
+    val chooser = Intent.createChooser(send, FSStrings.get(R.string.share_recipe))
     chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     ctx.startActivity(chooser)
 }
 
 private fun copyRecipeToClipboard(ctx: Context, json: String) {
     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    cm.setPrimaryClip(ClipData.newPlainText("Flagship recipe", json))
+    cm.setPrimaryClip(ClipData.newPlainText(FSStrings.get(R.string.flagship_recipe), json))
 }
 
 // ── Plumbing ──────────────────────────────────────────────────────
@@ -1356,8 +1360,8 @@ internal suspend fun mintRecipeBundle(
     val expiresAt = now + recipeTtlMs.coerceIn(MIN_RECIPE_TTL_MS, MAX_RECIPE_TTL_MS)
 
     com.flagshipserver.app.core.ErrorLog.step("create-server", "admin pin ok; asking for the account key")
-    val irk = Keystore.deriveIRK("Create server $serverName")
-    com.flagshipserver.app.core.ErrorLog.step("create-server", "account key ok")
+    val irk = Keystore.deriveIRK(FSStrings.get(R.string.create_server, serverName))
+    com.flagshipserver.app.core.ErrorLog.step("create-server", FSStrings.get(R.string.account_key_ok))
     val irkPubHex = Keystore.irkPubHex()
     val irkPubBytes = HexUtil.decode(irkPubHex) ?: error("corrupt account key")
 
@@ -1444,7 +1448,7 @@ internal suspend fun mintRecipeBundle(
         )
         // An admin-pinned box takes a restore order only from the admin root
         // (adding a server is admin-only); a demo account signs with the IRK.
-        val restoreSigner = if (adminRootPinHex != null) Keystore.adminRootKey("Restore a backup on $serverName") else irk
+        val restoreSigner = if (adminRootPinHex != null) Keystore.adminRootKey(FSStrings.get(R.string.restore_a_backup_on, serverName)) else irk
         val sig = restoreSigner.sign(order.canonicalBytes())
         pairingOrderJson = ServerBackupFormat.attachRestore(json, order, HexUtil.encode(sig))
     }
@@ -1454,7 +1458,7 @@ internal suspend fun mintRecipeBundle(
         val choice = backupPolicy ?: return@let json
         val order = com.flagshipserver.app.core.BackupPolicyOrder.make(serverDomain, choice.policy, choice.phoneReserveBytes, now)
         if (!order.isValid) return@let json
-        val signer = if (adminRootPinHex != null) Keystore.adminRootKey("Set the backup policy of $serverName") else irk
+        val signer = if (adminRootPinHex != null) Keystore.adminRootKey(FSStrings.get(R.string.set_the_backup_policy_of, serverName)) else irk
         ServerBackupFormat.attachBackupPolicy(json, order, HexUtil.encode(signer.sign(order.canonicalBytes())))
     }
 
@@ -1489,7 +1493,7 @@ internal suspend fun mintRecipeBundle(
     // account (no root) signs with the IRK. Every grant asks for its own
     // biometric, even in an unlocked session. null for the production default.
     val debugGrantSibling = debugKey?.let { key ->
-        val reason = "Turn on debug access for $serverName"
+        val reason = FSStrings.get(R.string.turn_on_debug_access_for, serverName)
         val signer = if (adminRootPinHex != null) {
             Keystore.adminRootKeyConfirmed(reason)
         } else {
@@ -1537,8 +1541,8 @@ internal suspend fun mintRecipeBundle(
 
 /** Why a pasted key can't be used for debug access, or null when it can. */
 internal fun debugSshKeyProblem(input: String): String? = when {
-    input.isBlank() -> "Debug access needs an SSH public key."
-    DebugAccess.normalizeSshPublicKey(input) == null -> "That isn't an SSH public key this server can use."
+    input.isBlank() -> FSStrings.get(R.string.debug_access_needs_an_ssh_public)
+    DebugAccess.normalizeSshPublicKey(input) == null -> FSStrings.get(R.string.that_isnt_an_ssh_public_key)
     else -> null
 }
 
@@ -1596,8 +1600,8 @@ internal suspend fun registerControlPlane(
     val now = System.currentTimeMillis()
     val wire = bundle.blob.authCode
     val pinsRoot = wire.adminRootPubKey != null
-    val rckSigner = if (pinsRoot) Keystore.adminRootKey("Add ${wire.serverName} to your account")
-    else Keystore.adminSigningKey("Authorize server routing")
+    val rckSigner = if (pinsRoot) Keystore.adminRootKey(FSStrings.get(R.string.add_to_your_account, wire.serverName))
+    else Keystore.adminSigningKey(FSStrings.get(R.string.authorize_server_routing))
     val adminSignature = if (pinsRoot) {
         val code = AuthCodeBytes(
             version = wire.version,

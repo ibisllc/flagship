@@ -1,5 +1,9 @@
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -86,9 +90,9 @@ import kotlinx.coroutines.launch
 @Composable
 fun VibeCodeProviderPickScreen(nav: NavController) {
     FSScreen(
-        title = "How would you like to build it?",
+        title = stringResource(R.string.how_would_you_like_to_build),
         onBack = { nav.popBackStack() },
-        subtitle = "Pick the AI that writes the code. You can change this any time.",
+        subtitle = stringResource(R.string.pick_the_ai_that_writes_the),
     ) {
         // Flagship Inference card
         FSCard(padding = PaddingValues(FS.space.s5)) {
@@ -119,18 +123,18 @@ fun VibeCodeProviderPickScreen(nav: NavController) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                     Icon(Icons.Outlined.Key, contentDescription = null, tint = FS.colors.accent)
                     Text(
-                        text = "Bring your own key",
+                        text = stringResource(R.string.bring_your_own_key),
                         color = MaterialTheme.colorScheme.onSurface,
                         style = MaterialTheme.typography.titleLarge,
                     )
                 }
                 Text(
-                    text = "Anthropic, OpenAI, or Google. No daily limits. Your key, your bill, your choice of model.",
+                    text = stringResource(R.string.anthropic_openai_or_google_no_daily),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 FSSecondaryButton(
-                    label = "Set up a key",
+                    label = stringResource(R.string.set_up_a_key),
                     onClick = { nav.navigate("vibe/key") },
                     block = true,
                 )
@@ -146,23 +150,23 @@ object VibeCodeDescribe {
     const val INVITE_ONLY = "just-me"
     const val ANYONE_WITH_LINK = "link"
 
-    val visibilities = listOf(INVITE_ONLY to "Invite only", ANYONE_WITH_LINK to "Anyone with the link")
+    val visibilities get() = listOf(INVITE_ONLY to FSStrings.get(R.string.invite_only), ANYONE_WITH_LINK to FSStrings.get(R.string.anyone_with_the_link))
 
     fun explanation(visibility: String): String =
         if (visibility == ANYONE_WITH_LINK) {
-            "Anyone with the address can open it. Where it needs to know who someone is, they sign in with Flagship."
+            FSStrings.get(R.string.anyone_with_the_address_can_open)
         } else {
-            "Only you and the people you invite on Flagship can open it."
+            FSStrings.get(R.string.only_you_and_the_people_you)
         }
 
-    val examples = listOf(
-        "Habit tracker" to "A habit tracker: I tick off my daily habits and see my streaks for the last month.",
-        "Family wishlist" to "A family wishlist: everyone keeps a list, and the others can quietly mark what they'll buy.",
-        "Recipe jar" to "A recipe jar: save recipes with a photo, ingredients and steps, and search them by ingredient.",
-        "Sleep journal" to "A sleep journal: log when I went to bed, when I woke up and how I slept, with a weekly chart.",
+    val examples get() = listOf(
+        "Habit tracker" to FSStrings.get(R.string.a_habit_tracker_i_tick_off),
+        "Family wishlist" to FSStrings.get(R.string.a_family_wishlist_everyone_keeps_a),
+        "Recipe jar" to FSStrings.get(R.string.a_recipe_jar_save_recipes_with),
+        "Sleep journal" to FSStrings.get(R.string.a_sleep_journal_log_when_i),
     )
 
-    const val CONFLICT_TITLE = "That name is taken"
+    val CONFLICT_TITLE get() = FSStrings.get(R.string.that_name_is_taken)
 
     /** The address label the box will serve at. Lowercased; only the safe slug
      *  characters survive (the daemon is the authority, this is the preview +
@@ -172,16 +176,16 @@ object VibeCodeDescribe {
     fun conflictMessage(check: VibeCodeNameCheck, name: String): String {
         val n = check.name ?: name
         return when (check.kind) {
-            "session" -> "A build session already uses \"$n\". To use the name for a new build, open Build sessions and discard that one first."
-            "app" -> "You already have a service called \"$n\". Pick another name."
-            else -> check.message ?: "Pick another name."
+            "session" -> FSStrings.get(R.string.a_build_session_already_uses_to, n)
+            "app" -> FSStrings.get(R.string.you_already_have_a_service_called, n)
+            else -> check.message ?: FSStrings.get(R.string.pick_another_name_2)
         }
     }
 
     /** The red line under the name field, or null when there's nothing wrong. */
     fun warning(check: VibeCodeNameCheck?, name: String): String? = when {
         check == null || check.ok -> null
-        check.kind == "invalid" -> check.message ?: "That can't be a web address."
+        check.kind == "invalid" -> check.message ?: FSStrings.get(R.string.that_cant_be_a_web_address)
         else -> conflictMessage(check, name)
     }
 
@@ -285,7 +289,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
     }
 
     FSScreen(
-        title = "New service",
+        title = stringResource(R.string.new_service),
         onBack = { nav.popBackStack() },
         // Scrollable: the form pushes "Build it" below the fold on shorter
         // screens (and under the keyboard); a scroll keeps it reachable.
@@ -298,7 +302,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
             FSField(
                 value = name,
                 onValueChange = { name = it },
-                label = "Name",
+                label = stringResource(R.string.name),
                 placeholder = "plant-tracker",
                 fieldTag = "vibe-describe-name",
             )
@@ -320,7 +324,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
             if (warning != null) {
                 NameStatusLine(warning, ok = false, textModifier = Modifier.testTag("vibe-describe-name-taken"))
             } else if (currentCheck != null && currentCheck.ok && currentCheck.name != null) {
-                NameStatusLine("Available", ok = true)
+                NameStatusLine(stringResource(R.string.available), ok = true)
             }
         }
 
@@ -328,7 +332,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
             OutlinedTextField(
                 value = prompt,
                 onValueChange = { prompt = it },
-                label = { Text("What should it do?") },
+                label = { Text(stringResource(R.string.what_should_it_do)) },
                 minLines = 6,
                 maxLines = 12,
                 textStyle = MaterialTheme.typography.bodyLarge,
@@ -367,7 +371,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            FSSectionHeader("Who can open it")
+            FSSectionHeader(stringResource(R.string.who_can_open_it))
             VisibilityPicker(visibility) { visibility = it }
             Text(
                 text = VibeCodeDescribe.explanation(visibility),
@@ -384,7 +388,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                 modifier = Modifier.testTag("vibe-describe-model"),
             ) {
                 Text(
-                    text = "AI model",
+                    text = stringResource(R.string.ai_model),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelLarge,
                 )
@@ -446,8 +450,8 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                     // the box paired session isn't ready) so the owner knows
                     // the build didn't start. Mirror of iOS's un-swallowed
                     // vibeCodeStart error. The owner can retry the tap.
-                    android.util.Log.e("VibeCodeStart", "failed: ${t::class.java.name}: ${t.message}", t)
-                    toasts.error("Couldn't start the build: ${t.boxError() ?: NetworkErrorHumanizer.humanize(t)}")
+                    android.util.Log.e(FSStrings.get(R.string.vibecodestart), "failed: ${t::class.java.name}: ${t.message}", t)
+                    toasts.error(FSStrings.get(R.string.couldnt_start_the_build, t.boxError() ?: NetworkErrorHumanizer.humanize(t)))
                 } finally {
                     starting = false
                 }
@@ -459,7 +463,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             FSPrimaryButton(
-                label = if (starting) "Starting…" else "Build it",
+                label = if (starting) stringResource(R.string.starting) else stringResource(R.string.build_it),
                 modifier = Modifier.testTag("vibe-describe-build"),
                 onClick = {
                     if (starting) return@FSPrimaryButton
@@ -474,7 +478,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                 large = true,
             )
             Text(
-                text = "About 90 seconds",
+                text = stringResource(R.string.about_90_seconds),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -505,14 +509,14 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                             nav.openBuildSessions()
                         },
                         modifier = Modifier.testTag("vibe-describe-open-sessions"),
-                    ) { Text("Open build sessions") }
+                    ) { Text(stringResource(R.string.open_build_sessions)) }
                 } else {
-                    TextButton(onClick = { conflict = null }) { Text("Pick another name") }
+                    TextButton(onClick = { conflict = null }) { Text(stringResource(R.string.pick_another_name)) }
                 }
             },
             dismissButton = {
                 if (c.kind == "session") {
-                    TextButton(onClick = { conflict = null }) { Text("Pick another name") }
+                    TextButton(onClick = { conflict = null }) { Text(stringResource(R.string.pick_another_name)) }
                 }
             },
         )
@@ -647,11 +651,11 @@ fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
     }
 
     val headline = when (status) {
-        VibeCodeStreamViewModel.Status.STREAMING -> "Generating…"
-        VibeCodeStreamViewModel.Status.BUILDING -> "Building…"
-        VibeCodeStreamViewModel.Status.DEPLOYED -> "Live."
-        VibeCodeStreamViewModel.Status.DONE -> "Done."
-        VibeCodeStreamViewModel.Status.FAILED -> "Stopped."
+        VibeCodeStreamViewModel.Status.STREAMING -> stringResource(R.string.generating_2)
+        VibeCodeStreamViewModel.Status.BUILDING -> stringResource(R.string.building)
+        VibeCodeStreamViewModel.Status.DEPLOYED -> stringResource(R.string.live_2)
+        VibeCodeStreamViewModel.Status.DONE -> stringResource(R.string.done_2)
+        VibeCodeStreamViewModel.Status.FAILED -> stringResource(R.string.stopped_2)
     }
 
     FSScreen(
@@ -660,7 +664,7 @@ fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
         scrollable = false,
     ) {
         Text(
-            text = "Session $sessionId",
+            text = fsString(R.string.session, sessionId),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
             modifier = Modifier.padding(horizontal = FS.space.s1),
@@ -677,7 +681,7 @@ fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
             ) {
                 item {
                     Text(
-                        text = "Assistant",
+                        text = stringResource(R.string.assistant),
                         color = FS.colors.accentText,
                         style = MaterialTheme.typography.labelLarge,
                     )
@@ -691,7 +695,7 @@ fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
                     item {
                         Spacer(Modifier.height(FS.space.s2))
                         Text(
-                            text = "Build logs",
+                            text = stringResource(R.string.build_logs),
                             color = FS.colors.accentText,
                             style = MaterialTheme.typography.labelLarge,
                         )
@@ -712,7 +716,7 @@ fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                             Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = FS.colors.success, modifier = Modifier.size(20.dp))
                             Text(
-                                text = "Deployed",
+                                text = stringResource(R.string.deployed),
                                 color = FS.colors.success,
                                 style = MaterialTheme.typography.titleSmall,
                             )
@@ -737,7 +741,7 @@ fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
         // Interrupt routes to the chat surface — the live reply path for the
         // running session (talkToUser / follow-up turns POST to /reply there).
         FSSecondaryButton(
-            "Interrupt with a follow-up",
+            stringResource(R.string.interrupt_with_a_follow_up),
             onClick = { nav.navigate("vibe-code-chat/$sessionId") },
             block = true,
             modifier = Modifier.padding(bottom = FS.space.s4),

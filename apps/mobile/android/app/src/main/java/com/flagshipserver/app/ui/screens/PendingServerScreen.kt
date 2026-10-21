@@ -14,6 +14,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -112,9 +116,9 @@ fun PendingServerScreen(
     ) {
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                FSPill("Pending", kind = FSPillKind.Pending)
+                FSPill(stringResource(R.string.pending), kind = FSPillKind.Pending)
                 Text(
-                    "Plug in the USB and power on. This screen tracks the install live and turns Online at the end.",
+                    stringResource(R.string.plug_in_the_usb_and_power),
                     color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.bodyLarge,
                 )
@@ -126,7 +130,7 @@ fun PendingServerScreen(
                 Column(Modifier.padding(top = FS.space.s2)) {
                     if (status == null) {
                         Text(
-                            "Waiting for the server to phone home…",
+                            stringResource(R.string.waiting_for_the_server_to_phone),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(vertical = FS.space.s2),
@@ -155,7 +159,7 @@ fun PendingServerScreen(
             FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("pending-server-domain")) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
                     Text(
-                        "Address",
+                        stringResource(R.string.address),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelLarge,
                     )
@@ -168,7 +172,7 @@ fun PendingServerScreen(
                     }
                     if (pod.pendingAuthCodeSerial != null) {
                         Text(
-                            "Order ${pod.pendingAuthCodeSerial}",
+                            fsString(R.string.order, pod.pendingAuthCodeSerial),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodySmall,
                         )
@@ -185,7 +189,7 @@ fun PendingServerScreen(
             )
         }
         FSDangerButton(
-            label = if (cancelling) "Cancelling…" else if (cancelError != null) "Try cancelling again" else "Cancel order",
+            label = if (cancelling) stringResource(R.string.cancelling) else if (cancelError != null) stringResource(R.string.try_cancelling_again) else stringResource(R.string.cancel_order),
             enabled = !cancelling,
             onClick = {
                 scope.launch {
@@ -207,8 +211,8 @@ fun PendingServerScreen(
                         is CancelPendingOrder.Outcome.Cancelled -> {
                             PendingRckStore.from(context).clear(pod.fqdn)
                             toasts.success(
-                                if (out.releasedName) "Server \"${pod.name}\" cancelled — the name is free again."
-                                else "Removed \"${pod.name}\" from your servers.",
+                                if (out.releasedName) FSStrings.get(R.string.server_cancelled_the_name_is_free, pod.name)
+                                else FSStrings.get(R.string.removed_from_your_servers, pod.name),
                             )
                             onCancel()
                         }

@@ -7,6 +7,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.CompanionPendingWrite
 import com.flagshipserver.app.api.CompanionResolvePendingRequest
@@ -118,7 +120,7 @@ class CompanionRequestsViewModel(
                 "release-server" -> dispatchReleaseServer(request.intent)
                 "revoke-server" -> dispatchRevokeServer(request.intent)
                 else -> {
-                    setRowError(request.requestId, "Unsupported request kind — open your browser to handle")
+                    setRowError(request.requestId, FSStrings.get(R.string.unsupported_request_kind_open_your_browser))
                     return@launch
                 }
             }
@@ -161,12 +163,12 @@ class CompanionRequestsViewModel(
 
     private suspend fun dispatchReleaseServer(intent: JsonObject) {
         val user = username().orEmpty()
-        if (user.isEmpty()) throw CompanionRequestsError("No active account on this device.")
+        if (user.isEmpty()) throw CompanionRequestsError(FSStrings.get(R.string.no_active_account_on_this_device))
         val serverDomain = stringField(intent, "serverDomain")
             ?: throw CompanionRequestsError("Companion intent is missing field: serverDomain")
         val intentUsername = stringField(intent, "username") ?: user
         val issuedAt = now()
-        val irk = signer("Approve release-server for $serverDomain")
+        val irk = signer(FSStrings.get(R.string.approve_release_server_for, serverDomain))
         val canonical = ReleaseServerName.canonicalBytes(
             username = intentUsername,
             serverDomain = serverDomain,
@@ -187,7 +189,7 @@ class CompanionRequestsViewModel(
 
     private suspend fun dispatchRevokeServer(intent: JsonObject) {
         val user = username().orEmpty()
-        if (user.isEmpty()) throw CompanionRequestsError("No active account on this device.")
+        if (user.isEmpty()) throw CompanionRequestsError(FSStrings.get(R.string.no_active_account_on_this_device))
         val serverId = stringField(intent, "revokedServerId")
             ?: throw CompanionRequestsError("Companion intent is missing field: revokedServerId")
         val reason = stringField(intent, "reason")
@@ -197,7 +199,7 @@ class CompanionRequestsViewModel(
         }
         val userId = stringField(intent, "userId") ?: user
         val issuedAt = now()
-        val irk = signer("Approve revoke-server for $serverId")
+        val irk = signer(FSStrings.get(R.string.approve_revoke_server_for, serverId))
         val canonical = ServerRevocationClaim.canonicalBytes(
             userId = userId,
             revokedServerId = serverId,
@@ -241,8 +243,8 @@ class CompanionRequestsViewModel(
 
     private fun failureMessage(t: Throwable): String = when (t) {
         is ScreensError.Http -> NetworkErrorHumanizer.humanize(t)
-        is CompanionRequestsError -> UserErrorText.of(t, "Companion intent is malformed.")
-        else -> UserErrorText.of(t, "Couldn't complete that. Try again.")
+        is CompanionRequestsError -> UserErrorText.of(t, FSStrings.get(R.string.companion_intent_is_malformed))
+        else -> UserErrorText.of(t, FSStrings.get(R.string.couldnt_complete_that_try_again))
     }
 
     companion object {

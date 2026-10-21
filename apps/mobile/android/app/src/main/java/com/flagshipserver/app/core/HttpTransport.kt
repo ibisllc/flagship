@@ -8,6 +8,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
@@ -24,7 +25,7 @@ import kotlin.coroutines.suspendCoroutine
 open class HttpException(
     val status: Int,
     val body: String,
-    message: String = "HTTP $status: $body",
+    message: String = FSStrings.get(R.string.http, status, body),
 ) : RuntimeException(message)
 
 interface JsonHttpTransport {

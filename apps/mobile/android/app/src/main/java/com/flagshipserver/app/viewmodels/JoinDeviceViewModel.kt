@@ -27,6 +27,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.DeviceAdmitRequest
@@ -132,7 +134,7 @@ class JoinDeviceViewModel(
         _phase.value = JoinDevicePhase.Joining
         try {
             val deviceDisplayName = requireNotNull(confirmedDisplayName) {
-                "Confirm this device's account-specific name before joining."
+                FSStrings.get(R.string.confirm_this_devices_account_specific_name)
             }
             val (ct, nonce) = relay.awaitDelivery()
             // AEAD-open under the relay kEnc. A bad tag throws — that's a
@@ -145,7 +147,7 @@ class JoinDeviceViewModel(
             if (!bundle.admit.newDevicePubHex.equals(devicePubHex, ignoreCase = true) ||
                 bundle.admit.deviceId != deviceId) {
                 _phase.value = JoinDevicePhase.Failed(
-                    "This invite was issued for a different device. Start over.",
+                    FSStrings.get(R.string.this_invite_was_issued_for_a),
                 )
                 return
             }
@@ -165,7 +167,7 @@ class JoinDeviceViewModel(
             )
             if (!DeviceAdmitClaim.verify(admitForVerify, admitSig, irkPub)) {
                 _phase.value = JoinDevicePhase.Failed(
-                    "Couldn't verify the invite. This device was NOT added.",
+                    FSStrings.get(R.string.couldnt_verify_the_invite_this_device),
                 )
                 return
             }
@@ -177,7 +179,7 @@ class JoinDeviceViewModel(
                 grant.deviceId != deviceId ||
                 !grant.devicePubHex.equals(devicePubHex, ignoreCase = true) ||
                 "view-directory" !in grant.scopes) {
-                _phase.value = JoinDevicePhase.Failed("The device permission grant was malformed.")
+                _phase.value = JoinDevicePhase.Failed(FSStrings.get(R.string.the_device_permission_grant_was_malformed))
                 return
             }
             val grantAuthority = when (grant.signerRoot) {
@@ -193,7 +195,7 @@ class JoinDeviceViewModel(
                     grant.issuedAt, grant.expiresAt,
                 )) {
                 _phase.value = JoinDevicePhase.Failed(
-                    "The device permission grant couldn't be verified. Don't continue.",
+                    FSStrings.get(R.string.the_device_permission_grant_couldnt_be),
                 )
                 return
             }
@@ -334,10 +336,10 @@ class JoinDeviceViewModel(
         val m = t.message?.lowercase().orEmpty()
         return when {
             m.contains("tag mismatch") || m.contains("aead") || m.contains("bad") && m.contains("tag") ->
-                "Couldn't decrypt the invite — the codes may not have matched. Start over."
+                FSStrings.get(R.string.couldnt_decrypt_the_invite_the_codes)
             m.contains("401") || m.contains("invalid admit") ->
-                "The account rejected this invite. Ask the admin to generate a fresh code."
-            else -> UserErrorText.of(t, "Couldn't join. Start over.")
+                FSStrings.get(R.string.the_account_rejected_this_invite_ask)
+            else -> UserErrorText.of(t, FSStrings.get(R.string.couldnt_join_start_over))
         }
     }
 }

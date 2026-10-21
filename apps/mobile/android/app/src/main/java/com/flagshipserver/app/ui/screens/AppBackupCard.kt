@@ -4,6 +4,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
@@ -57,13 +61,13 @@ fun AppBackupCard(serviceId: String, client: ScreensClient, lastBackup: String?)
                 Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
             Text(
-                "The app's code, and its data if you include it. It comes straight from your server to this phone.",
+                stringResource(R.string.the_apps_code_and_its_data),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "Include the app's data",
+                    stringResource(R.string.include_the_apps_data),
                     color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.weight(1f),
@@ -78,7 +82,7 @@ fun AppBackupCard(serviceId: String, client: ScreensClient, lastBackup: String?)
             FSField(
                 value = password,
                 onValueChange = { password = it },
-                label = "Password to encrypt it (optional)",
+                label = stringResource(R.string.password_to_encrypt_it_optional),
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardType = KeyboardType.Password,
                 enabled = !busy,
@@ -86,12 +90,12 @@ fun AppBackupCard(serviceId: String, client: ScreensClient, lastBackup: String?)
             when (val p = phase) {
                 is AppBackupViewModel.Phase.Ready -> {
                     Text(
-                        "Ready: ${p.bytes.size / 1024} KB${if (p.encrypted) ", encrypted" else ""}",
+                        fsString(R.string.ready_kb, p.bytes.size / 1024, if (p.encrypted) ", encrypted" else ""),
                         color = FS.colors.success,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     FSPrimaryButton(
-                        label = "Save backup",
+                        label = stringResource(R.string.save_backup),
                         block = true,
                         modifier = Modifier.testTag("service-detail-backup-save"),
                         onClick = { scope.launch { shareBackup(ctx, p.fileName, p.bytes) } },
@@ -102,9 +106,9 @@ fun AppBackupCard(serviceId: String, client: ScreensClient, lastBackup: String?)
                 else -> Unit
             }
             val backUpLabel = when (phase) {
-                is AppBackupViewModel.Phase.Creating -> "Packing…"
-                is AppBackupViewModel.Phase.Downloading -> "Downloading…"
-                else -> "Back up now"
+                is AppBackupViewModel.Phase.Creating -> stringResource(R.string.packing)
+                is AppBackupViewModel.Phase.Downloading -> stringResource(R.string.downloading)
+                else -> stringResource(R.string.back_up_now)
             }
             val backUp = {
                 scope.launch {
@@ -151,5 +155,5 @@ private suspend fun shareBackup(ctx: Context, name: String, bytes: ByteArray) {
         putExtra(Intent.EXTRA_SUBJECT, name)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    ctx.startActivity(Intent.createChooser(send, "Save $name").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    ctx.startActivity(Intent.createChooser(send, FSStrings.get(R.string.save_2, name)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }

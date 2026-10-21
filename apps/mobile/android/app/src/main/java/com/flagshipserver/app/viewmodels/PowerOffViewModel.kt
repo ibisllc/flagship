@@ -12,6 +12,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.LockPowerClient
@@ -55,13 +57,13 @@ class PowerOffViewModel(
         val irk: Ed25519Sign
         try {
             val reason = if (mode == PowerMode.RESTART) {
-                "Lock and restart $serverDomain"
+                FSStrings.get(R.string.lock_and_restart, serverDomain)
             } else {
-                "Lock and turn off $serverDomain"
+                FSStrings.get(R.string.lock_and_turn_off, serverDomain)
             }
             irk = signer(reason)
         } catch (e: Throwable) {
-            _phase.value = PowerOffPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
+            _phase.value = PowerOffPhase.Failed(FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(e)))
             return
         }
         val issuedAt = now()
@@ -69,7 +71,7 @@ class PowerOffViewModel(
         try {
             signature = irk.sign(PowerOffOrder.canonicalBytes(serverDomain, mode, issuedAt))
         } catch (e: Throwable) {
-            _phase.value = PowerOffPhase.Failed("Couldn't sign: ${UserErrorText.reason(e)}")
+            _phase.value = PowerOffPhase.Failed(FSStrings.get(R.string.couldnt_sign, UserErrorText.reason(e)))
             return
         }
 
@@ -88,9 +90,9 @@ class PowerOffViewModel(
             )
         } catch (e: HttpException) {
             val friendly = when (e.status) {
-                403 -> "The server rejected the request. Sign in again and retry."
-                404, 502, 503 -> "The server isn't reachable right now."
-                else -> "Server error (${e.status}): ${e.body}"
+                403 -> FSStrings.get(R.string.the_server_rejected_the_request_sign)
+                404, 502, 503 -> FSStrings.get(R.string.the_server_isnt_reachable_right_now)
+                else -> FSStrings.get(R.string.server_error, e.status, e.body)
             }
             _phase.value = PowerOffPhase.Failed(friendly)
             return

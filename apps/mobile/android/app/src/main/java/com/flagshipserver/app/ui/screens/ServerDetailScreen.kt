@@ -6,6 +6,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.ui.components.fsFocusRing
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -200,7 +204,7 @@ fun ServerDetailScreen(
     val metricsVm = remember(podId, client) { client?.let { ServerMetricsViewModel(podId = podId, client = it) } }
     val notPaired = remember {
         kotlinx.coroutines.flow.MutableStateFlow<LoadingState<Nothing>>(
-            LoadingState.Failed("This device isn't paired with this server yet."),
+            LoadingState.Failed(FSStrings.get(R.string.this_device_isnt_paired_with_this)),
         )
     }
     val detail by (detailVm?.state ?: notPaired).collectAsState()
@@ -256,7 +260,7 @@ fun ServerDetailScreen(
                         )
                         pairedGeneration++
                     } catch (_: Throwable) {
-                        pairToasts.error("The demo server is online, but this device couldn't create a paired session. Try again.")
+                        pairToasts.error(FSStrings.get(R.string.the_demo_server_is_online_but))
                     }
                     return@launch
                 }
@@ -279,7 +283,7 @@ fun ServerDetailScreen(
 
     val title = pod?.name?.takeIf { it.isNotBlank() }
         ?: serverFqdn?.substringBefore('.')?.takeIf { it.isNotBlank() }
-        ?: "Server"
+        ?: stringResource(R.string.server_2)
     // Every order on this page signs under the admin root (`.com` and an
     // admin-pinned box refuse the IRK): another device sees it read-only.
     val serverReadOnly = !com.flagshipserver.app.core.AdminOrderGate.allows(LocalAppState.current)
@@ -461,20 +465,20 @@ private fun BootUnlockCard(serverDomain: String) {
     var revoking by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
-        FSSectionHeader("Boot unlock")
+        FSSectionHeader(stringResource(R.string.boot_unlock))
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 when (mode) {
                     ServerSettingsStore.Mode.AUTO -> {
-                        IconLine(Icons.Outlined.Bolt, "Reboots on its own")
+                        IconLine(Icons.Outlined.Bolt, stringResource(R.string.reboots_on_its_own))
                         if (leaseId != null) {
                             Text(
-                                "This server unlocks its encrypted disk by itself after a reboot, no phone needed. flagshipserver.com only ever holds a key it can't read.",
+                                stringResource(R.string.this_server_unlocks_its_encrypted_disk),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                             FSDangerButton(
-                                label = if (revoking) "Disabling…" else "Require my phone each boot",
+                                label = if (revoking) stringResource(R.string.disabling) else stringResource(R.string.require_my_phone_each_boot),
                                 onClick = onClick@{
                                     val id = leaseId ?: return@onClick
                                     val user = username ?: return@onClick
@@ -489,9 +493,9 @@ private fun BootUnlockCard(serverDomain: String) {
                                             coord.revokeAutoUnlockLease(serverDomain, id)
                                             store.setLeaseId(serverDomain, null)
                                             leaseId = null
-                                            toasts.success("Auto-unlock disabled. This server will ask your phone on its next reboot.")
+                                            toasts.success(FSStrings.get(R.string.auto_unlock_disabled_this_server_will))
                                         } catch (t: Throwable) {
-                                            toasts.error("Couldn't disable auto-unlock. ${UserErrorText.of(t)}")
+                                            toasts.error(FSStrings.get(R.string.couldnt_disable_auto_unlock, UserErrorText.of(t)))
                                         } finally {
                                             revoking = false
                                         }
@@ -502,16 +506,16 @@ private fun BootUnlockCard(serverDomain: String) {
                             )
                         } else {
                             Text(
-                                "After you approve its first boot, this server unlocks by itself on future reboots. Nothing to do until then.",
+                                stringResource(R.string.after_you_approve_its_first_boot),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                         }
                     }
                     ServerSettingsStore.Mode.APPROVE -> {
-                        IconLine(Icons.Outlined.Fingerprint, "Authorize each boot")
+                        IconLine(Icons.Outlined.Fingerprint, stringResource(R.string.authorize_each_boot))
                         Text(
-                            "This server asks your phone for approval on every reboot, the most theft-resistant mode.",
+                            stringResource(R.string.this_server_asks_your_phone_for),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -541,15 +545,15 @@ private fun BootUnlockApprovalCard(
     val username by app.currentUser.collectAsState()
     val store = remember { ServerSettingsStore.from(context) }
     val isEntitlement = purpose == SecretPurpose.ENTITLEMENT
-    val headline = if (isEntitlement) "Your server is waiting for authorization to serve"
-                   else "Your server is waiting for your approval to unlock"
+    val headline = if (isEntitlement) stringResource(R.string.your_server_is_waiting_for_authorization)
+                   else stringResource(R.string.your_server_is_waiting_for_your)
     val bodyCopy = if (isEntitlement)
-        "Authorize this server to serve your account so it can come online. Your phone will ask you to unlock once to approve."
+        stringResource(R.string.authorize_this_server_to_serve_your)
     else
-        "If you just powered it on, release its disk key to bring it online. Your phone will ask you to unlock once to approve."
-    val ctaLabel = if (isEntitlement) "Authorize" else "Approve unlock"
-    val approvedCopy = if (isEntitlement) "Authorized. Your server should come online shortly."
-                       else "Unlock approved. Your server should come online shortly."
+        stringResource(R.string.if_you_just_powered_it_on)
+    val ctaLabel = if (isEntitlement) stringResource(R.string.authorize) else stringResource(R.string.approve_unlock)
+    val approvedCopy = if (isEntitlement) stringResource(R.string.authorized_your_server_should_come_online)
+                       else stringResource(R.string.unlock_approved_your_server_should_come)
 
     val vm = remember(serverDomain, purpose) {
         BootUnlockApprovalViewModel(
@@ -605,7 +609,7 @@ private fun BootUnlockApprovalCard(
 
     when (val s = state) {
         is BootUnlockApprovalViewModel.State.Idle -> Unit
-        is BootUnlockApprovalViewModel.State.RequestPending -> SdSection("Server waiting") {
+        is BootUnlockApprovalViewModel.State.RequestPending -> SdSection(stringResource(R.string.server_waiting)) {
             FSCard(padding = PaddingValues(FS.space.s4)) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                     Row(
@@ -640,7 +644,7 @@ private fun BootUnlockApprovalCard(
                             .semantics { contentDescription = "sd-approve-unlock" },
                     )
                     FSSecondaryButton(
-                        label = "Deny",
+                        label = stringResource(R.string.deny),
                         onClick = { vm.deny() },
                         block = true,
                         modifier = Modifier.semantics { contentDescription = "sd-deny-unlock" },
@@ -648,18 +652,18 @@ private fun BootUnlockApprovalCard(
                 }
             }
         }
-        is BootUnlockApprovalViewModel.State.Approving -> SdSection("Boot unlock") {
+        is BootUnlockApprovalViewModel.State.Approving -> SdSection(stringResource(R.string.boot_unlock)) {
             FSCard(padding = PaddingValues(FS.space.s4)) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Text("Sending approval…", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
+                    Text(stringResource(R.string.sending_approval), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
                 }
             }
         }
-        is BootUnlockApprovalViewModel.State.Approved -> SdSection("Boot unlock") {
+        is BootUnlockApprovalViewModel.State.Approved -> SdSection(stringResource(R.string.boot_unlock)) {
             FSCard(padding = PaddingValues(FS.space.s4)) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
@@ -674,12 +678,12 @@ private fun BootUnlockApprovalCard(
                 }
             }
         }
-        is BootUnlockApprovalViewModel.State.Failed -> SdSection("Boot unlock") {
+        is BootUnlockApprovalViewModel.State.Failed -> SdSection(stringResource(R.string.boot_unlock)) {
             FSCard(padding = PaddingValues(FS.space.s4)) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                     Text(s.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                     FSSecondaryButton(
-                        label = "Retry",
+                        label = stringResource(R.string.retry),
                         onClick = { vm.retry() },
                         block = true,
                         modifier = Modifier.semantics { contentDescription = "sd-approve-unlock-retry" },
@@ -774,7 +778,7 @@ private fun ReconnectingApps(vm: com.flagshipserver.app.viewmodels.ServerAppsVie
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.testTag("server-apps-reconnecting")) {
         ServerCardSkeleton()
         Text(
-            "Reconnecting to this server…",
+            stringResource(R.string.reconnecting_to_this_server),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
         )
@@ -790,7 +794,7 @@ internal fun SheetTopBar(title: String, onClose: () -> Unit) {
         title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         navigationIcon = {
             androidx.compose.material3.IconButton(onClick = onClose, modifier = Modifier.testTag("sheet-close")) {
-                Icon(Icons.Outlined.Close, contentDescription = "Close")
+                Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.close))
             }
         },
         windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
@@ -829,7 +833,7 @@ private fun ServerInfoCard(detail: com.flagshipserver.app.api.ServerDetailRespon
     // headline numbers, and how long it has been up.
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            FSPill("Online", kind = FSPillKind.Online)
+            FSPill(stringResource(R.string.online), kind = FSPillKind.Online)
             Text(
                 detail.serverFqdn.replace(".", ".\u200B"),
                 color = MaterialTheme.colorScheme.onSurface,
@@ -839,15 +843,15 @@ private fun ServerInfoCard(detail: com.flagshipserver.app.api.ServerDetailRespon
                 horizontalArrangement = Arrangement.spacedBy(FS.space.s6),
                 verticalArrangement = Arrangement.spacedBy(FS.space.s2),
             ) {
-                OverviewStat("Apps", "${detail.serviceCount}")
-                OverviewStat("Devices", "${detail.pairedSessionCount}")
-                OverviewStat("Software", detail.daemonVersion)
+                OverviewStat(stringResource(R.string.apps_2), "${detail.serviceCount}")
+                OverviewStat(stringResource(R.string.devices), "${detail.pairedSessionCount}")
+                OverviewStat(stringResource(R.string.software), detail.daemonVersion)
                 // The box-reported running commit (short) — the version the
                 // update card orders away from. Hidden until the box reports.
-                shortCommit(detail.currentCommit)?.let { short -> OverviewStat("Version", short) }
+                shortCommit(detail.currentCommit)?.let { short -> OverviewStat(stringResource(R.string.version), short) }
             }
             Text(
-                "Up for ${uptimeLabel(detail.uptimeMs)}",
+                fsString(R.string.up_for, uptimeLabel(detail.uptimeMs)),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -906,18 +910,18 @@ private fun FrontPageCard(serverDomain: String) {
     val busy = phase is FrontPagePhase.Signing || phase is FrontPagePhase.Posting
 
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
-        FSSectionHeader("Front page")
+        FSSectionHeader(stringResource(R.string.front_page))
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                Text("What visitors see", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.what_visitors_see), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Point $serverDomain at one of your apps, or keep the default Flagship page.",
+                    fsString(R.string.point_at_one_of_your_apps, serverDomain),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 when (phase) {
                     is FrontPagePhase.Idle, is FrontPagePhase.Loading -> {
-                        Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                        Text(stringResource(R.string.loading), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                     }
                     is FrontPagePhase.Failed -> {
                         Text(
@@ -926,7 +930,7 @@ private fun FrontPageCard(serverDomain: String) {
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         FSSecondaryButton(
-                            label = "Retry",
+                            label = stringResource(R.string.retry),
                             onClick = {
                                 scope.launch {
                                     vm.load()
@@ -941,10 +945,10 @@ private fun FrontPageCard(serverDomain: String) {
                         // An assigned-but-uninstalled label still shows (marked)
                         // so the owner can see and clear a stale assignment.
                         val rows = buildList {
-                            add(Triple("", "Default Flagship page", null as String?))
+                            add(Triple("", stringResource(R.string.default_flagship_page), null as String?))
                             for (o in options) add(Triple(o.urlLabel, o.name ?: o.urlLabel, o.name?.let { o.urlLabel }))
                             current?.let { cur ->
-                                if (options.none { it.urlLabel == cur }) add(Triple(cur, cur, "No longer installed"))
+                                if (options.none { it.urlLabel == cur }) add(Triple(cur, cur, stringResource(R.string.no_longer_installed)))
                             }
                         }
                         for ((value, labelText, detailText) in rows) {
@@ -974,7 +978,7 @@ private fun FrontPageCard(serverDomain: String) {
                             }
                         }
                         FSPrimaryButton(
-                            label = if (busy) "Saving…" else "Save",
+                            label = if (busy) stringResource(R.string.saving) else stringResource(R.string.save),
                             onClick = {
                                 if (!busy && selection != (current ?: "")) {
                                     scope.launch {
@@ -985,8 +989,8 @@ private fun FrontPageCard(serverDomain: String) {
                                             selection = vm.current.value ?: ""
                                         } else {
                                             toasts.success(
-                                                if (selection.isEmpty()) "Front page reset to default"
-                                                else "Front page set to $selection",
+                                                if (selection.isEmpty()) FSStrings.get(R.string.front_page_reset_to_default)
+                                                else FSStrings.get(R.string.front_page_set_to, selection),
                                             )
                                         }
                                     }
@@ -1030,7 +1034,7 @@ private fun LeaderCard(serverDomain: String) {
     var working by remember(serverDomain) { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
-        FSSectionHeader("Server order")
+        FSSectionHeader(stringResource(R.string.server_order))
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Row(
@@ -1041,7 +1045,7 @@ private fun LeaderCard(serverDomain: String) {
                         Icon(Icons.Outlined.Flag, contentDescription = null, tint = FS.colors.accent, modifier = Modifier.size(20.dp))
                     }
                     Text(
-                        if (isLeader) "This server leads"
+                        if (isLeader) stringResource(R.string.this_server_leads)
                         else successionLine(orderable.take(index).map { it.name }),
                         color = MaterialTheme.colorScheme.onSurface,
                         style = MaterialTheme.typography.bodyLarge,
@@ -1050,7 +1054,7 @@ private fun LeaderCard(serverDomain: String) {
                 }
                 if (isLeader && !confirmed) {
                     Text(
-                        "Waiting for it to confirm the new order.",
+                        stringResource(R.string.waiting_for_it_to_confirm_the),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.testTag("sd-leader-pending"),
@@ -1066,7 +1070,7 @@ private fun LeaderCard(serverDomain: String) {
                     )
                 } else if (index != 0) {
                     FSPrimaryButton(
-                        label = if (working) "Saving…" else "Make leader",
+                        label = if (working) stringResource(R.string.saving) else stringResource(R.string.make_leader),
                         onClick = {
                             if (working) return@FSPrimaryButton
                             working = true
@@ -1075,8 +1079,8 @@ private fun LeaderCard(serverDomain: String) {
                                     is com.flagshipserver.app.core.ServerOrderSaver.Outcome.Failed ->
                                         toasts.warning(outcome.message)
                                     com.flagshipserver.app.core.ServerOrderSaver.Outcome.Superseded ->
-                                        toasts.info("Another device changed the order. Showing the newest one.")
-                                    else -> toasts.success("${pod.name} is now first in your server list.")
+                                        toasts.info(FSStrings.get(R.string.another_device_changed_the_order_showing))
+                                    else -> toasts.success(FSStrings.get(R.string.is_now_first_in_your_server, pod.name))
                                 }
                                 working = false
                             }
@@ -1121,12 +1125,12 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
     var pending by remember { mutableStateOf<PowerMode?>(null) }
     val busy = phase is PowerOffPhase.Signing || phase is PowerOffPhase.Posting
 
-    val prefix = if (isLuks) "Lock and " else ""
-    val offLabel = "${prefix}turn off".replaceFirstChar { it.uppercase() }
+    val prefix = if (isLuks) stringResource(R.string.lock_and) else ""
+    val offLabel = fsString(R.string.turn_off_2, prefix).replaceFirstChar { it.uppercase() }
     val restartLabel = "${prefix}restart".replaceFirstChar { it.uppercase() }
 
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
-        FSSectionHeader("Power")
+        FSSectionHeader(stringResource(R.string.power))
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 (phase as? PowerOffPhase.Failed)?.let { f ->
@@ -1135,18 +1139,18 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
                 (phase as? PowerOffPhase.Completed)?.let { c ->
                     IconLine(
                         if (c.mode == PowerMode.RESTART) Icons.Outlined.RestartAlt else Icons.Outlined.PowerSettingsNew,
-                        "This server is ${if (c.mode == PowerMode.RESTART) "restarting" else "powering off"} — it will go offline.",
+                        fsString(R.string.this_server_is_it_will_go, if (c.mode == PowerMode.RESTART) "restarting" else stringResource(R.string.powering_off)),
                     )
                 }
                 FSSecondaryButton(
-                    label = if (busy) "Working…" else offLabel,
+                    label = if (busy) stringResource(R.string.working) else offLabel,
                     onClick = { if (!busy) pending = PowerMode.OFF },
                     enabled = !busy && !LocalServerReadOnly.current,
                     block = true,
                     modifier = Modifier.semantics { contentDescription = "sd-power-off" },
                 )
                 FSSecondaryButton(
-                    label = if (busy) "Working…" else restartLabel,
+                    label = if (busy) stringResource(R.string.working) else restartLabel,
                     onClick = { if (!busy) pending = PowerMode.RESTART },
                     enabled = !busy && !LocalServerReadOnly.current,
                     block = true,
@@ -1161,7 +1165,7 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
         AlertDialog(
             onDismissRequest = { pending = null },
             title = { Text("$confirmLabel?") },
-            text = { Text("$serverDomain will go offline.") },
+            text = { Text(fsString(R.string.will_go_offline, serverDomain)) },
             confirmButton = {
                 TextButton(onClick = {
                     pending = null
@@ -1171,7 +1175,7 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
                         vm.run(mode)
                         when (val p = vm.phase.value) {
                             is PowerOffPhase.Completed ->
-                                toasts.success("Command sent to the server.")
+                                toasts.success(FSStrings.get(R.string.command_sent_to_the_server))
                             is PowerOffPhase.Failed ->
                                 toasts.error(p.message)
                             else -> {}
@@ -1180,7 +1184,7 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
                 }) { Text(confirmLabel, color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { pending = null }) { Text("Cancel") }
+                TextButton(onClick = { pending = null }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -1205,7 +1209,7 @@ private fun JournalCard(serverDomain: String) {
     val busy = phase is JournalPhase.Loading
 
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
-        FSSectionHeader("Diagnostics")
+        FSSectionHeader(stringResource(R.string.diagnostics))
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 // Unit picker — which systemd unit's journal to fetch (mirror of the
@@ -1230,7 +1234,7 @@ private fun JournalCard(serverDomain: String) {
                     Text(f.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                 }
                 FSSecondaryButton(
-                    label = if (busy) "Fetching…" else "View journal",
+                    label = if (busy) stringResource(R.string.fetching) else stringResource(R.string.view_journal),
                     onClick = {
                         if (!busy) scope.launch {
                             vm.load(unit, JournalUnits.DEFAULT_LINES)
@@ -1243,7 +1247,7 @@ private fun JournalCard(serverDomain: String) {
                 )
                 (phase as? JournalPhase.Loaded)?.let { loaded ->
                     val text = if (loaded.lines.isEmpty()) {
-                        "(${loaded.unit}: journal is empty)"
+                        fsString(R.string.journal_is_empty, loaded.unit)
                     } else {
                         loaded.lines.joinToString("\n")
                     }
@@ -1337,9 +1341,9 @@ private fun DeadManCard(serverDomain: String) {
                     leaseExpiry = null
                     store.setDeadManLeaseExpiry(serverDomain, null)
                     DeadManReminderScheduler.cancel(context, serverDomain)
-                    toasts.success("Lock-down off.")
+                    toasts.success(FSStrings.get(R.string.lock_down_off))
                 } else {
-                    toasts.success("Lock-down on. Affirm to keep ${serverDomain.substringBefore('.')} unlocked.")
+                    toasts.success(FSStrings.get(R.string.lock_down_on_affirm_to_keep, serverDomain.substringBefore('.')))
                 }
             } else {
                 (vm.phase.value as? DeadManPhase.Failed)?.let { toasts.error(it.message) }
@@ -1348,7 +1352,7 @@ private fun DeadManCard(serverDomain: String) {
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
-        FSSectionHeader("Lock-down")
+        FSSectionHeader(stringResource(R.string.lock_down))
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 Row(
@@ -1357,9 +1361,9 @@ private fun DeadManCard(serverDomain: String) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("Auto lock-down", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
+                        Text(stringResource(R.string.auto_lock_down), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
                         Text(
-                            "If you don't affirm in time, this server locks itself: it powers off (or restarts) and needs your phone to come back.",
+                            stringResource(R.string.if_you_dont_affirm_in_time),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -1374,7 +1378,7 @@ private fun DeadManCard(serverDomain: String) {
 
                 if (enabled) {
                     FSCardDivider()
-                    Text("Window", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
+                    Text(stringResource(R.string.window), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
                     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
                         for (w in DeadManWindow.entries) {
                             Row(
@@ -1390,9 +1394,9 @@ private fun DeadManCard(serverDomain: String) {
                         }
                     }
 
-                    Text("On lapse", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
+                    Text(stringResource(R.string.on_lapse), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s4)) {
-                        for (m in listOf(PowerMode.OFF to "Turn off", PowerMode.RESTART to "Restart")) {
+                        for (m in listOf(PowerMode.OFF to stringResource(R.string.turn_off), PowerMode.RESTART to stringResource(R.string.restart))) {
                             Row(
                                 Modifier
                                     .fsFocusRing(8.dp).selectable(selected = lockout == m.first, enabled = !busy && !LocalServerReadOnly.current, onClick = { applyPolicy(true, window, m.first) })
@@ -1410,20 +1414,20 @@ private fun DeadManCard(serverDomain: String) {
                     // "Locks in …" while time remains, "Window lapsed" once it does,
                     // and a "not affirmed yet" prompt when no lease exists.
                     FSCardDivider()
-                    Text("Stay unlocked", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
+                    Text(stringResource(R.string.stay_unlocked), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
                     val exp = leaseExpiry
                     if (exp != null) {
                         val remaining = exp - nowTick
                         Text(
-                            if (remaining > 0) "Locks in ${DeadManReminders.remainingLabel(exp, nowTick)}"
-                            else "Window lapsed — affirm now",
+                            if (remaining > 0) fsString(R.string.locks_in, DeadManReminders.remainingLabel(exp, nowTick))
+                            else stringResource(R.string.window_lapsed_affirm_now),
                             color = if (remaining > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.semantics { contentDescription = "sd-deadman-remaining" },
                         )
                     } else {
                         Text(
-                            "Not affirmed yet — affirm to start the window.",
+                            stringResource(R.string.not_affirmed_yet_affirm_to_start),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.semantics { contentDescription = "sd-deadman-remaining" },
@@ -1431,7 +1435,7 @@ private fun DeadManCard(serverDomain: String) {
                     }
 
                     FSDangerButton(
-                        label = "Tighten now (5 min)",
+                        label = stringResource(R.string.tighten_now_5_min),
                         onClick = { applyPolicy(true, DeadManWindow.TIGHTEN, lockout) },
                         enabled = !busy && !LocalServerReadOnly.current,
                         block = true,
@@ -1439,7 +1443,7 @@ private fun DeadManCard(serverDomain: String) {
                     FSPrimaryButton(
                         // "Keep <server> unlocked" mirrors iOS LockPowerViews +
                         // the webapp affirm CTA; busy reads "Affirming…".
-                        label = if (busy) "Affirming…" else "Keep ${serverDomain.substringBefore('.')} unlocked",
+                        label = if (busy) stringResource(R.string.affirming) else fsString(R.string.keep_unlocked_2, serverDomain.substringBefore('.')),
                         onClick = {
                             scope.launch {
                                 val exp = vm.affirm()
@@ -1447,7 +1451,7 @@ private fun DeadManCard(serverDomain: String) {
                                     leaseExpiry = exp
                                     store.setDeadManLeaseExpiry(serverDomain, exp)
                                     DeadManReminderScheduler.schedule(context, serverDomain, exp)
-                                    toasts.success("Stay confirmed.")
+                                    toasts.success(FSStrings.get(R.string.stay_confirmed))
                                 } else {
                                     (vm.phase.value as? DeadManPhase.Failed)?.let { toasts.error(it.message) }
                                 }
@@ -1537,13 +1541,13 @@ internal fun UpdateServerCard(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
-        FSSectionHeader("Software update")
+        FSSectionHeader(stringResource(R.string.software_update))
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 shortCommit(currentCommit)?.let { short ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "Running",
+                            stringResource(R.string.running_2),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
@@ -1563,7 +1567,7 @@ internal fun UpdateServerCard(
                         ) {
                             Icon(Icons.Outlined.Upgrade, contentDescription = null, tint = FS.colors.accent, modifier = Modifier.size(20.dp))
                             Text(
-                                "New release available: $tag",
+                                fsString(R.string.new_release_available, tag),
                                 color = FS.colors.accentText,
                                 style = MaterialTheme.typography.titleSmall,
                                 modifier = Modifier.semantics { contentDescription = "sd-update-available" },
@@ -1585,11 +1589,11 @@ internal fun UpdateServerCard(
                         pending = p,
                         nowMs = maxOf(now, p.orderedAt),
                         phase = phase,
-                        onSendAgain = { scope.launch { if (vm.sendAgain()) toasts.success("Update ordered") } },
+                        onSendAgain = { scope.launch { if (vm.sendAgain()) toasts.success(FSStrings.get(R.string.update_ordered)) } },
                         onForget = { vm.forget() },
                     )
                 } else {
-                    val updateLabel = if (latestTag == null) "Update this server" else "Update to latest"
+                    val updateLabel = if (latestTag == null) stringResource(R.string.update_this_server) else stringResource(R.string.update_to_latest)
                     val updateEnabled = reported && !LocalServerReadOnly.current
                     val updateMod = Modifier.semantics { contentDescription = "sd-update-server" }
                     if (latestTag == null) {
@@ -1611,7 +1615,7 @@ internal fun UpdateServerCard(
                     }
                     if (!reported) {
                         Text(
-                            "Waiting for this server to report its current version — it can't be updated in place until it does.",
+                            stringResource(R.string.waiting_for_this_server_to_report),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -1679,14 +1683,14 @@ private fun PendingUpdateNotice(
                 modifier = Modifier.semantics { contentDescription = "sd-update-pending-stale" },
             )
             FSPrimaryButton(
-                label = if (working) "Working…" else "Send again",
+                label = if (working) stringResource(R.string.working) else stringResource(R.string.send_again),
                 onClick = onSendAgain,
                 enabled = !working,
                 block = true,
                 modifier = Modifier.semantics { contentDescription = "sd-update-send-again" },
             )
             FSSecondaryButton(
-                label = "Forget it",
+                label = stringResource(R.string.forget_it),
                 onClick = onForget,
                 enabled = !working,
                 block = true,
@@ -1699,17 +1703,17 @@ private fun PendingUpdateNotice(
     }
 }
 
-private const val DOWNGRADE_WARNING =
-    "Older releases don't have the fixes made since, and may not understand changes made to this server after them, such as a rotated admin key. In the worst case the server stops accepting updates and has to be reinstalled. Only go back if a newer release broke something."
+private val DOWNGRADE_WARNING get() =
+    FSStrings.get(R.string.older_releases_dont_have_the_fixes)
 
 /** Plain copy for a failed release-list call; a bare status code never reaches the UI. */
 private fun releaseCheckProblem(t: Throwable): String = when ((t as? ScreensError.Http)?.status ?: (t as? HttpException)?.status) {
     null -> t.userFacing()
-    401, 403 -> "You're not signed in for that. Try signing in again."
-    404 -> "We couldn't find that. It may have moved or been removed."
-    408, 429 -> "The server is busy right now. Give it a moment and try again."
-    in 500..599 -> "Service temporarily unavailable. Try again in a few minutes."
-    else -> "That didn't work. Check your connection and try again."
+    401, 403 -> FSStrings.get(R.string.youre_not_signed_in_for_that)
+    404 -> FSStrings.get(R.string.we_couldnt_find_that_it_may)
+    408, 429 -> FSStrings.get(R.string.the_server_is_busy_right_now)
+    in 500..599 -> FSStrings.get(R.string.service_temporarily_unavailable_try_again_in)
+    else -> FSStrings.get(R.string.that_didnt_work_check_your_connection)
 }
 
 // The box lists the releases it verified for itself; the main action is
@@ -1759,7 +1763,7 @@ internal fun UpdateServerSheet(
             (listOfNotNull(c.latest) + c.releases).firstOrNull { it.commit.equals(commit, ignoreCase = true) }?.tag
         }
         scope.launch {
-            if (vm.update(commit, known)) toasts.success("Update ordered")
+            if (vm.update(commit, known)) toasts.success(FSStrings.get(R.string.update_ordered))
         }
     }
 
@@ -1784,7 +1788,7 @@ internal fun UpdateServerSheet(
     }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        SheetTopBar(title = "Software update", onClose = onDone)
+        SheetTopBar(title = stringResource(R.string.software_update), onClose = onDone)
         Column(
             Modifier
                 .fillMaxWidth()
@@ -1793,13 +1797,13 @@ internal fun UpdateServerSheet(
             verticalArrangement = Arrangement.spacedBy(FS.space.s4),
         ) {
             Text(
-                "Update $serverDomain",
+                fsString(R.string.update, serverDomain),
                 color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.titleLarge,
             )
             vm.runningShort?.let { short ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Running", color = MaterialTheme.colorScheme.onSurfaceVariant, style = muted, modifier = Modifier.weight(1f))
+                    Text(stringResource(R.string.running_2), color = MaterialTheme.colorScheme.onSurfaceVariant, style = muted, modifier = Modifier.weight(1f))
                     Text(catalog?.currentTag ?: short, color = MaterialTheme.colorScheme.onSurface, style = mono)
                 }
             }
@@ -1809,12 +1813,12 @@ internal fun UpdateServerSheet(
                     pending = sent,
                     nowMs = maxOf(nowMs, sent.orderedAt),
                     phase = phase,
-                    onSendAgain = { scope.launch { if (vm.sendAgain()) toasts.success("Update ordered") } },
+                    onSendAgain = { scope.launch { if (vm.sendAgain()) toasts.success(FSStrings.get(R.string.update_ordered)) } },
                     onForget = { vm.forget() },
                 )
             } else if (phase is UpdateServerViewModel.Phase.Done) {
                 Text(
-                    "Update sent. The server picks it up within about five minutes, checks the maintainers' signature, restarts into the new version, and goes back by itself if that version doesn't start.",
+                    stringResource(R.string.update_sent_the_server_picks_it),
                     color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -1823,17 +1827,17 @@ internal fun UpdateServerSheet(
                 when {
                     latest != null -> FSCard(padding = PaddingValues(FS.space.s4)) {
                         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                            Text("Latest release", color = MaterialTheme.colorScheme.onSurfaceVariant, style = muted)
+                            Text(stringResource(R.string.latest_release), color = MaterialTheme.colorScheme.onSurfaceVariant, style = muted)
                             Text(latest.tag, color = MaterialTheme.colorScheme.onSurface, style = mono)
                             FSPrimaryButton(
-                                label = if (working) "Working…" else "Update to latest",
+                                label = if (working) stringResource(R.string.working) else stringResource(R.string.update_to_latest),
                                 onClick = { order(latest.commit, latest.tag) },
                                 block = true,
                                 enabled = vm.canUpdate && !working,
                                 modifier = Modifier.semantics { contentDescription = "update-latest-btn" },
                             )
                             Text(
-                                "Approve with biometrics. The server rolls back by itself if the new version doesn't start.",
+                                stringResource(R.string.approve_with_biometrics_the_server_rolls),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = muted,
                             )
@@ -1844,7 +1848,7 @@ internal fun UpdateServerSheet(
                         horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
                     ) {
                         CircularProgressIndicator(modifier = Modifier.height(16.dp).width(16.dp), strokeWidth = 2.dp)
-                        Text("Checking for new releases…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = muted)
+                        Text(stringResource(R.string.checking_for_new_releases), color = MaterialTheme.colorScheme.onSurfaceVariant, style = muted)
                     }
                     catalog != null -> Row(
                         Modifier.fillMaxWidth(),
@@ -1853,26 +1857,26 @@ internal fun UpdateServerSheet(
                     ) {
                         Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = FS.colors.success, modifier = Modifier.size(20.dp))
                         Text(
-                            "This server is on the latest release.",
+                            stringResource(R.string.this_server_is_on_the_latest),
                             color = MaterialTheme.colorScheme.onSurface,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
                         )
                         FSGhostButton(
-                            label = "Check again",
+                            label = stringResource(R.string.check_again),
                             onClick = { scope.launch { loadCatalog(refresh = true) } },
                             enabled = !loadingCatalog,
                         )
                     }
                     catalogError != null -> Text(
-                        "Couldn't check for releases: $catalogError You can still enter a release under Advanced.",
+                        fsString(R.string.couldnt_check_for_releases_you_can, catalogError),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = muted,
                     )
                 }
                 if (catalog?.stale == true) {
                     Text(
-                        "The server couldn't reach GitHub, so this list may be out of date.",
+                        stringResource(R.string.the_server_couldnt_reach_github_so),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = muted,
                     )
@@ -1881,8 +1885,8 @@ internal fun UpdateServerSheet(
                 val others = catalog?.otherNewer.orEmpty()
                 if (others.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-                        Text("Other new releases", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
-                        others.forEach { r -> releaseRow(r, "Update") { order(r.commit, r.tag) } }
+                        Text(stringResource(R.string.other_new_releases), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
+                        others.forEach { r -> releaseRow(r, stringResource(R.string.update_2)) { order(r.commit, r.tag) } }
                     }
                 }
 
@@ -1895,7 +1899,7 @@ internal fun UpdateServerSheet(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "Advanced",
+                        stringResource(R.string.advanced),
                         color = MaterialTheme.colorScheme.onSurface,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.weight(1f),
@@ -1909,20 +1913,20 @@ internal fun UpdateServerSheet(
                 if (showAdvanced) {
                     Text(DOWNGRADE_WARNING, color = FS.colors.warning, style = muted)
                     catalog?.older.orEmpty().forEach { r ->
-                        releaseRow(r, "Go back") { order(r.commit, r.tag) }
+                        releaseRow(r, stringResource(R.string.go_back)) { order(r.commit, r.tag) }
                     }
                     FSField(
                         value = target,
                         onValueChange = { target = it },
-                        label = "Or enter any release (full commit)",
-                        placeholder = "40-character commit hash",
+                        label = stringResource(R.string.or_enter_any_release_full_commit),
+                        placeholder = stringResource(R.string.n_40_character_commit_hash),
                         fieldTag = "update-target-field",
                     )
                     vm.targetProblem(target)?.let { problem ->
                         Text(problem, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                     }
                     FSDangerButton(
-                        label = if (working) "Working…" else "Order update",
+                        label = if (working) stringResource(R.string.working) else stringResource(R.string.order_update),
                         onClick = onClick@{
                             if (!vm.canOrder(target) || working) return@onClick
                             order(target.trim().lowercase())
@@ -1955,7 +1959,7 @@ private fun TransferButton(serverDomain: String) {
     var showSheet by remember { mutableStateOf(false) }
 
     FSDangerButton(
-        label = "Transfer to another account",
+        label = stringResource(R.string.transfer_to_another_account),
         onClick = { showSheet = true },
         block = true,
         enabled = !LocalServerReadOnly.current,
@@ -1976,7 +1980,7 @@ private fun TransferButton(serverDomain: String) {
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
             Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                SheetTopBar(title = "Transfer server", onClose = { showSheet = false })
+                SheetTopBar(title = stringResource(R.string.transfer_server), onClose = { showSheet = false })
                 TransferGiverScreen(vm = vm, serverDomain = serverDomain)
             }
         }
@@ -1988,7 +1992,7 @@ private fun TransferButton(serverDomain: String) {
 @Composable
 private fun BackupMigrateCard(serverDomain: String) {
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
-        FSSectionHeader("Backup / migrate")
+        FSSectionHeader(stringResource(R.string.backup_migrate))
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 ServerBackupButton(serverDomain = serverDomain)
@@ -2015,7 +2019,7 @@ private fun MigrateServerButton(serverDomain: String) {
     var showSheet by remember { mutableStateOf(false) }
 
     com.flagshipserver.app.ui.components.FSSecondaryButton(
-        label = "Migrate to a new server",
+        label = stringResource(R.string.migrate_to_a_new_server),
         onClick = { showSheet = true },
         block = true,
         enabled = !LocalServerReadOnly.current,
@@ -2037,7 +2041,7 @@ private fun MigrateServerButton(serverDomain: String) {
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
             Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                SheetTopBar(title = "Migrate server", onClose = { showSheet = false })
+                SheetTopBar(title = stringResource(R.string.migrate_server), onClose = { showSheet = false })
                 MigrateServerScreen(vm = vm)
             }
         }
@@ -2069,13 +2073,13 @@ private fun DangerZoneCard(pod: com.flagshipserver.app.core.PodInfo, canTransfer
     val readOnly = LocalServerReadOnly.current
 
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
-        FSSectionHeader("Danger zone")
+        FSSectionHeader(stringResource(R.string.danger_zone))
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 if (canTransfer) TransferButton(serverDomain = pod.fqdn)
                 if (!pod.isRevoked) {
                     FSDangerButton(
-                        label = "Revoke server (reversible)",
+                        label = stringResource(R.string.revoke_server_reversible),
                         onClick = { showSheet = true },
                         block = true,
                         enabled = !deleting && !readOnly,
@@ -2083,7 +2087,7 @@ private fun DangerZoneCard(pod: com.flagshipserver.app.core.PodInfo, canTransfer
                     )
                 }
                 FSDangerButton(
-                    label = if (deleting) "Deleting…" else "Delete and wipe this server",
+                    label = if (deleting) stringResource(R.string.deleting) else stringResource(R.string.delete_and_wipe_this_server),
                     onClick = { confirmingDelete = true },
                     block = true,
                     enabled = !deleting && !readOnly,
@@ -2124,11 +2128,11 @@ private fun DangerZoneCard(pod: com.flagshipserver.app.core.PodInfo, canTransfer
                 server = server,
                 onCompleted = { reason ->
                     app.setPodRevocation(pod.podId, System.currentTimeMillis(), reason.wire)
-                    toasts.success("Server revoked. It can't connect or unlock until you un-revoke it.")
+                    toasts.success(FSStrings.get(R.string.server_revoked_it_cant_connect_or))
                     showSheet = false
                 },
                 onFailed = { msg ->
-                    toasts.error("Revoke failed: $msg")
+                    toasts.error(FSStrings.get(R.string.revoke_failed, msg))
                 },
                 onCancel = { showSheet = false },
             )
@@ -2136,9 +2140,8 @@ private fun DangerZoneCard(pod: com.flagshipserver.app.core.PodInfo, canTransfer
     }
 }
 
-private const val REVOKE_EXPLAINER =
-    "Locks this server out right away: it can't connect or unlock until you un-revoke it. " +
-        "Its name stays reserved. Use this if the server is lost or stolen."
+private val REVOKE_EXPLAINER get() =
+    FSStrings.get(R.string.locks_this_server_out_right_away)
 
 // Shown at the top of a revoked server's page. Un-revoking signs with the
 // sensitive-order key (UnrevokeServerViewModel) and needs nothing from the box.
@@ -2162,8 +2165,8 @@ private fun RevokedServerCard(pod: com.flagshipserver.app.core.PodInfo) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
             ) {
-                FSPill("Revoked", kind = FSPillKind.Offline)
-                listOfNotNull(reason?.let { "Marked $it" }, whenRevoked).takeIf { it.isNotEmpty() }?.let {
+                FSPill(stringResource(R.string.revoked), kind = FSPillKind.Offline)
+                listOfNotNull(reason?.let { fsString(R.string.marked, it) }, whenRevoked).takeIf { it.isNotEmpty() }?.let {
                     Text(
                         it.joinToString(" · "),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2172,7 +2175,7 @@ private fun RevokedServerCard(pod: com.flagshipserver.app.core.PodInfo) {
                 }
             }
             Text(
-                "${pod.name} can't connect or unlock until you un-revoke it. Its name stays reserved.",
+                fsString(R.string.cant_connect_or_unlock_until_you, pod.name),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -2180,7 +2183,7 @@ private fun RevokedServerCard(pod: com.flagshipserver.app.core.PodInfo) {
                 Text(f.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
             }
             FSPrimaryButton(
-                label = if (busy) "Restoring…" else "Un-revoke server",
+                label = if (busy) stringResource(R.string.restoring) else stringResource(R.string.un_revoke_server),
                 onClick = {
                     scope.launch {
                         vm.run()
@@ -2224,18 +2227,18 @@ private fun RevokeServerSheetBody(
         verticalArrangement = Arrangement.spacedBy(FS.space.s3),
     ) {
         Text(
-            "Revoke this server?",
+            stringResource(R.string.revoke_this_server),
             color = MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.titleLarge,
         )
         Text(
-            "$REVOKE_EXPLAINER Other servers on your account stay running.",
+            fsString(R.string.other_servers_on_your_account_stay, REVOKE_EXPLAINER),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium,
         )
 
         Text(
-            "Reason",
+            stringResource(R.string.reason_2),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelLarge,
         )
@@ -2322,7 +2325,7 @@ private fun RevokeServerSheetBody(
             )
         }
 
-        FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+        FSGhostButton(label = stringResource(R.string.cancel), onClick = onCancel, block = true)
         Spacer(Modifier.height(FS.space.s2))
     }
 }
@@ -2337,14 +2340,14 @@ private fun isBusy(p: RevokeServerPhase): Boolean = when (p) {
 }
 
 private fun buttonLabel(p: RevokeServerPhase, holding: Boolean): String = when {
-    p is RevokeServerPhase.Signing || p is RevokeServerPhase.Posting -> "Revoking…"
-    holding -> "Hold to confirm…"
-    else -> "Hold to revoke"
+    p is RevokeServerPhase.Signing || p is RevokeServerPhase.Posting -> FSStrings.get(R.string.revoking)
+    holding -> FSStrings.get(R.string.hold_to_confirm)
+    else -> FSStrings.get(R.string.hold_to_revoke)
 }
 
 /** The whole banner for an offline server (the iPhone's words). The page's
  *  pull-to-refresh re-checks it; there is no button. */
-internal const val SERVER_OFFLINE_BANNER = "This server has gone offline. Pull down to re-check"
+internal val SERVER_OFFLINE_BANNER get() = FSStrings.get(R.string.this_server_has_gone_offline_pull)
 
 /** What a server page shows while the box's own detail isn't loaded. Mirror of
  *  the iOS ServerDetailScreen state switch. */
@@ -2389,24 +2392,24 @@ private fun ServerDetailPlaceholder(
     }
     val (title, body, tag) = when (kind) {
         ServerDetailPlaceholderKind.NOT_PAIRED -> Triple(
-            "This server isn't paired with this device yet",
-            "Pair it to manage this server here. Your phone will ask you to unlock once to approve.",
+            stringResource(R.string.this_server_isnt_paired_with_this),
+            stringResource(R.string.pair_it_to_manage_this_server),
             "server-detail-not-paired",
         )
         ServerDetailPlaceholderKind.NEVER_ONLINE -> Triple(
-            "This server never came online",
-            "The install reserved this name and registered the server, but its software never checked in. If the install failed, you can delete it below — that frees the name so you can try again.",
+            stringResource(R.string.this_server_never_came_online),
+            stringResource(R.string.the_install_reserved_this_name_and),
             "server-detail-never-online",
         )
         ServerDetailPlaceholderKind.OFFLINE -> Triple(SERVER_OFFLINE_BANNER, "", "server-detail-offline")
         ServerDetailPlaceholderKind.COMING_UP -> Triple(
-            "Still coming up…",
-            "This server is registered and powering on, but hasn't checked in for the first time yet. This can take a few minutes after a fresh install.",
+            stringResource(R.string.still_coming_up),
+            stringResource(R.string.this_server_is_registered_and_powering),
             "server-detail-coming-up",
         )
         else -> Triple(
-            "Connecting to your server…",
-            "Your server is online. We're fetching its details, which can take a moment right after it comes up.",
+            stringResource(R.string.connecting_to_your_server),
+            stringResource(R.string.your_server_is_online_were_fetching),
             "server-detail-connecting",
         )
     }
@@ -2442,7 +2445,7 @@ private fun ServerDetailPlaceholder(
             }
             when {
                 kind == ServerDetailPlaceholderKind.NOT_PAIRED -> FSPrimaryButton(
-                    label = if (pairing) "Pairing…" else "Pair this server",
+                    label = if (pairing) stringResource(R.string.pairing) else stringResource(R.string.pair_this_server),
                     onClick = onPair,
                     enabled = !pairing,
                     block = true,
@@ -2450,7 +2453,7 @@ private fun ServerDetailPlaceholder(
                     modifier = Modifier.testTag("sd-pair-server"),
                 )
                 kind != ServerDetailPlaceholderKind.NEVER_ONLINE && kind != ServerDetailPlaceholderKind.OFFLINE && onRetry != null ->
-                    FSSecondaryButton(label = "Check again", onClick = onRetry)
+                    FSSecondaryButton(label = stringResource(R.string.check_again), onClick = onRetry)
                 else -> Unit
             }
         }

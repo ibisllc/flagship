@@ -6,6 +6,8 @@
 
 package com.flagshipserver.app.push
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import android.app.AlarmManager
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -24,7 +26,7 @@ import kotlin.math.abs
 class DeadManReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val serverDomain = intent.getStringExtra(EXTRA_SERVER) ?: return
-        val label = intent.getStringExtra(EXTRA_LABEL) ?: "Affirm soon"
+        val label = intent.getStringExtra(EXTRA_LABEL) ?: FSStrings.get(R.string.affirm_soon)
         FlagshipFcmService.ensureChannel(context)
 
         val launch = Intent(context, MainActivity::class.java).apply {
@@ -39,8 +41,8 @@ class DeadManReminderReceiver : BroadcastReceiver() {
         )
         val notif = NotificationCompat.Builder(context, NotificationChannels.REMINDERS.id)
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
-            .setContentTitle("Keep $serverDomain unlocked?")
-            .setContentText("$label — tap to affirm.")
+            .setContentTitle(FSStrings.get(R.string.keep_unlocked, serverDomain))
+            .setContentText(FSStrings.get(R.string.tap_to_affirm, label))
             .setAutoCancel(true)
             .setContentIntent(pending)
             .build()

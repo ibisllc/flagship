@@ -18,6 +18,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
@@ -80,7 +82,7 @@ class OpenAccountViewModel(
      *  Android Settings, else the model (DeviceDisplayName, passed in by the
      *  host since a pure VM can't read them); else "<username>'s phone". */
     fun defaultDeviceName(deviceModel: String?): String =
-        deviceModel?.takeIf { it.isNotBlank() } ?: "$username's phone"
+        deviceModel?.takeIf { it.isNotBlank() } ?: FSStrings.get(R.string.s_phone, username)
 
     fun defaultAccountName(): String = username.split("-").joinToString(" ") {
         it.replaceFirstChar(Char::uppercase)
@@ -126,7 +128,7 @@ class OpenAccountViewModel(
             //    half from the just-derived versioned seed (the canonical
             //    source under the active IRK version).
             val issuedAt = now()
-            val irk = Keystore.deriveIRK("Open your Flagship account")
+            val irk = Keystore.deriveIRK(FSStrings.get(R.string.open_your_flagship_account))
             val version = Keystore.currentIrkVersion()
             val irkSeed = Keystore.requireIrkSeedForVersion(version)
             val irkPubHex = HexUtil.encode(
@@ -149,7 +151,7 @@ class OpenAccountViewModel(
             val deviceId = identity.first
             val deviceKey = AccountMetadata.deriveAccountDeviceKey(umk, username, deviceId)
             val devicePubHex = HexUtil.encode(AccountMetadata.deriveAccountDevicePub(umk, username, deviceId))
-            val adminRoot = Keystore.adminRootKey("Authorize your private account name")
+            val adminRoot = Keystore.adminRootKey(FSStrings.get(R.string.authorize_your_private_account_name))
             val accountCiphertext = AccountMetadata.encrypt(
                 normalizedAccountName,
                 AccountMetadata.deriveAccountProfileKey(umk),
@@ -220,7 +222,7 @@ class OpenAccountViewModel(
 
             _phase.value = OpenAccountPhase.Opened
         } catch (t: Throwable) {
-            _phase.value = OpenAccountPhase.Failed(UserErrorText.of(t, "Couldn't open your account. Try again."))
+            _phase.value = OpenAccountPhase.Failed(UserErrorText.of(t, FSStrings.get(R.string.couldnt_open_your_account_try_again)))
         }
     }
 }

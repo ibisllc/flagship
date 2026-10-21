@@ -1,5 +1,7 @@
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -49,12 +51,12 @@ fun BiometricSetupScreen(username: String, onContinue: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(FS.space.s6),
     ) {
         Text(
-            text = "Lock it to your device.",
+            text = stringResource(R.string.lock_it_to_your_device),
             color = FS.colors.text,
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
         )
         Text(
-            text = "Your master key lives in this phone's secure hardware. Approving a server unlock or installing a service will use your phone's biometrics or screen lock.",
+            text = stringResource(R.string.your_master_key_lives_in_this),
             color = FS.colors.textMuted,
             style = MaterialTheme.typography.bodyLarge,
         )
@@ -62,12 +64,12 @@ fun BiometricSetupScreen(username: String, onContinue: () -> Unit) {
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Text(
-                    text = "Cloud-recovery backup",
+                    text = stringResource(R.string.cloud_recovery_backup),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = FS.colors.text,
                 )
                 Text(
-                    text = "Wraps your master key with a Google Block Store key so a fresh phone can recover it. Without this, losing your phone means losing your data.",
+                    text = stringResource(R.string.wraps_your_master_key_with_a),
                     style = MaterialTheme.typography.bodyMedium,
                     color = FS.colors.textMuted,
                 )
@@ -78,7 +80,7 @@ fun BiometricSetupScreen(username: String, onContinue: () -> Unit) {
                     modifier = Modifier.padding(top = FS.space.s2),
                 ) {
                     Text(
-                        text = if (cloudRecovery) "Enabled" else "Disabled — risky",
+                        text = if (cloudRecovery) stringResource(R.string.enabled) else stringResource(R.string.disabled_risky),
                         color = if (cloudRecovery) FS.colors.success else FS.colors.warning,
                         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                     )
@@ -93,7 +95,7 @@ fun BiometricSetupScreen(username: String, onContinue: () -> Unit) {
         Spacer(Modifier.height(FS.space.s8))
 
         FSPrimaryButton(
-            label = "Generate keys & continue",
+            label = stringResource(R.string.generate_keys_continue),
             onClick = {
                 // Multi-profile keying (W3) — point the Keystore at THIS
                 // cloud's per-profile device-key slot BEFORE minting the

@@ -10,6 +10,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.ServerBackupKdf
 import com.flagshipserver.app.api.ServerBackupSlot
 import kotlinx.coroutines.currentCoroutineContext
@@ -47,17 +48,17 @@ object ServerBackupFormat {
     const val TAG_RESTORE = "flagship/server-restore/v1"
 
     private val dataMagicBytes = DATA_MAGIC.toByteArray(Charsets.UTF_8)
-    private val rng = SecureRandom()
+    private val rng get() = SecureRandom()
 
     class FormatException(val kind: Kind) : Exception(kind.message) {
         enum class Kind(val message: String) {
-            NOT_A_BACKUP("That isn't a Flagship backup file."),
-            NEWER_VERSION("This backup is from a newer version of Flagship. Update the app and try again."),
-            OLDER_VERSION("This backup is from an older version of Flagship and can't be restored."),
-            DAMAGED("This backup file is damaged."),
-            CHANGED("This backup file was changed or is damaged."),
-            WRONG_PASSCODE("That passcode doesn't open this backup."),
-            NO_PASSCODE("This backup has no passcode: open it on a device of the account that made it."),
+            NOT_A_BACKUP(FSStrings.get(R.string.that_isnt_a_flagship_backup_file)),
+            NEWER_VERSION(FSStrings.get(R.string.this_backup_is_from_a_newer)),
+            OLDER_VERSION(FSStrings.get(R.string.this_backup_is_from_an_older)),
+            DAMAGED(FSStrings.get(R.string.this_backup_file_is_damaged)),
+            CHANGED(FSStrings.get(R.string.this_backup_file_was_changed_or)),
+            WRONG_PASSCODE(FSStrings.get(R.string.that_passcode_doesnt_open_this_backup)),
+            NO_PASSCODE(FSStrings.get(R.string.this_backup_has_no_passcode_open)),
         }
     }
 
@@ -111,13 +112,13 @@ object ServerBackupFormat {
         val p = normalizePasscode(passcode)
         val len = p.codePointCount(0, p.length)
         if (len >= 20) return null
-        if (len < 12) return "Use at least 12 characters (or 20 if it's all one kind, like words)."
+        if (len < 12) return FSStrings.get(R.string.use_at_least_12_characters_or)
         var kinds = 0
         if (p.any { it in 'a'..'z' }) kinds++
         if (p.any { it in 'A'..'Z' }) kinds++
         if (p.any { it in '0'..'9' }) kinds++
         if (p.any { !(it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9') }) kinds++
-        return if (kinds >= 3) null else "Mix at least three of: lowercase, uppercase, digits, symbols (or use 20 characters)."
+        return if (kinds >= 3) null else FSStrings.get(R.string.mix_at_least_three_of_lowercase)
     }
 
     /** A suggested passcode: five groups of four, 100 bits. */
@@ -376,10 +377,10 @@ object ServerBackupFormat {
 
     class DataCheckException(val kind: Kind, expected: String = "") : Exception(
         when (kind) {
-            Kind.WRONG_SIZE -> "That data file isn't this backup's (it should be $expected)."
-            Kind.NOT_DATA -> "That isn't a Flagship backup's data file."
-            Kind.MISMATCH -> "The data file doesn't match the backup file: it was changed or is damaged."
-            Kind.UNREADABLE -> "The data file can't be read any more (was its drive removed?)."
+            Kind.WRONG_SIZE -> FSStrings.get(R.string.that_data_file_isnt_this_backups, expected)
+            Kind.NOT_DATA -> FSStrings.get(R.string.that_isnt_a_flagship_backups_data)
+            Kind.MISMATCH -> FSStrings.get(R.string.the_data_file_doesnt_match_the)
+            Kind.UNREADABLE -> FSStrings.get(R.string.the_data_file_cant_be_read)
         },
     ) {
         enum class Kind { WRONG_SIZE, NOT_DATA, MISMATCH, UNREADABLE }
@@ -449,7 +450,7 @@ object ServerBackupFormat {
     data class BundleLayout(val metaOffset: Long, val metaLength: Int, val dataOffset: Long, val dataLength: Long)
 
     fun bundleHeader(metaLength: Int): ByteArray {
-        if (metaLength < 1 || metaLength > BACKUP_FILE_MAX_BYTES) throw BundleException("The backup's metadata part has a bad length.")
+        if (metaLength < 1 || metaLength > BACKUP_FILE_MAX_BYTES) throw BundleException(FSStrings.get(R.string.the_backups_metadata_part_has_a))
         val out = ByteArray(BUNDLE_HEADER_BYTES)
         BUNDLE_MAGIC.toByteArray(Charsets.US_ASCII).copyInto(out)
         java.nio.ByteBuffer.wrap(out, 8, 8).putLong(metaLength.toLong())
@@ -459,15 +460,15 @@ object ServerBackupFormat {
     /** Read a `.flagship` file's header ([fileBytes]: the whole file's size).
      *  Throws a [BundleException] with the sentence the user sees. */
     fun parseBundleHeader(head: ByteArray, fileBytes: Long): BundleLayout {
-        if (head.size < BUNDLE_HEADER_BYTES) throw BundleException("This file is too short to be a Flagship backup.")
+        if (head.size < BUNDLE_HEADER_BYTES) throw BundleException(FSStrings.get(R.string.this_file_is_too_short_to))
         if (!head.copyOfRange(0, 8).contentEquals(BUNDLE_MAGIC.toByteArray(Charsets.US_ASCII))) {
-            throw BundleException("This file isn't a Flagship backup.")
+            throw BundleException(FSStrings.get(R.string.this_file_isnt_a_flagship_backup))
         }
         val len = java.nio.ByteBuffer.wrap(head, 8, 8).long
         // A u64 above Long.MAX_VALUE reads negative here: damaged either way.
-        if (len < 1 || len > BACKUP_FILE_MAX_BYTES) throw BundleException("This backup's header is damaged.")
+        if (len < 1 || len > BACKUP_FILE_MAX_BYTES) throw BundleException(FSStrings.get(R.string.this_backups_header_is_damaged))
         val dataOffset = BUNDLE_HEADER_BYTES + len
-        if (fileBytes <= dataOffset) throw BundleException("This backup is cut short: it ends before its data.")
+        if (fileBytes <= dataOffset) throw BundleException(FSStrings.get(R.string.this_backup_is_cut_short_it))
         return BundleLayout(BUNDLE_HEADER_BYTES.toLong(), len.toInt(), dataOffset, fileBytes - dataOffset)
     }
 

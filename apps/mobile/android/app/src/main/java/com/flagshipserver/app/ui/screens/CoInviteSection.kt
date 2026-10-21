@@ -5,6 +5,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import androidx.compose.material3.MaterialTheme
 import android.content.Context
 import android.content.Intent
@@ -59,7 +62,7 @@ fun CoInviteSection(vm: CoInviteViewModel) {
     var confirm by remember { mutableStateOf<ShareCoInvite?>(null) }
 
     Spacer(Modifier.height(FS.space.s6))
-    com.flagshipserver.app.ui.components.FSSectionHeader("Invite people")
+    com.flagshipserver.app.ui.components.FSSectionHeader(stringResource(R.string.invite_people))
     Spacer(Modifier.height(FS.space.s3))
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.fillMaxWidth().testTag("co-invite-section")) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
@@ -98,7 +101,7 @@ fun CoInviteSection(vm: CoInviteViewModel) {
                     Text(ShareCoInviteCopy.WITHDRAW, color = FS.colors.danger)
                 }
             },
-            dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirm = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }
@@ -162,7 +165,7 @@ private fun Panel(
             }
             Muted(ShareCoInviteCopy.RANK_LINE)
             FSPrimaryButton(
-                label = if (ui.busy) "Creating…" else ShareCoInviteCopy.CREATE,
+                label = if (ui.busy) stringResource(R.string.creating) else ShareCoInviteCopy.CREATE,
                 onClick = {
                     scope.launch {
                         if (vm.create(name, maxUses, days)) {
@@ -187,7 +190,7 @@ private fun Panel(
             }
             Muted(ShareCoInviteCopy.LINK_LINE)
             Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
-                FSPrimaryButton(label = "Share…", onClick = { shareInviteLink(ctx, link) }, modifier = Modifier.weight(1f))
+                FSPrimaryButton(label = stringResource(R.string.share_2), onClick = { shareInviteLink(ctx, link) }, modifier = Modifier.weight(1f))
                 FSSecondaryButton(
                     label = ShareCoInviteCopy.COPY_LINK,
                     onClick = {
@@ -246,5 +249,5 @@ private fun shareInviteLink(ctx: Context, text: String) {
         type = "text/plain"
         putExtra(Intent.EXTRA_TEXT, text)
     }
-    ctx.startActivity(Intent.createChooser(send, "Share invite link").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    ctx.startActivity(Intent.createChooser(send, FSStrings.get(R.string.share_invite_link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }

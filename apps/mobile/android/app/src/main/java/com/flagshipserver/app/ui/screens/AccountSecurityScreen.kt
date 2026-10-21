@@ -4,6 +4,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.selection.toggleable
 import android.app.Activity
 import android.graphics.BitmapFactory
@@ -101,9 +105,9 @@ fun AccountSecurityScreen(nav: NavController) {
 
     val multi = accountType == "multi"
     FSScreen(
-        title = "Account security",
+        title = stringResource(R.string.account_security),
         onBack = { nav.popBackStack() },
-        subtitle = "Manage recovery protection and account-level security.",
+        subtitle = stringResource(R.string.manage_recovery_protection_and_account_level),
     ) {
         FSCard {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
@@ -115,15 +119,15 @@ fun AccountSecurityScreen(nav: NavController) {
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        if (multi) "Code protection is on" else "Single-device account",
+                        if (multi) stringResource(R.string.code_protection_is_on) else stringResource(R.string.single_device_account),
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.semantics { contentDescription = "account-security-badge" },
                     )
                     Text(
                         if (multi)
-                            "Recovery needs your 6-digit code (or a recovery code) and a 24-hour wait."
+                            stringResource(R.string.recovery_needs_your_6_digit_code)
                         else
-                            "Recovery needs a recovery credential and then waits 3 days. Your other devices are alerted during the wait, but can't cancel it.",
+                            stringResource(R.string.recovery_needs_a_recovery_credential_and),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -132,16 +136,12 @@ fun AccountSecurityScreen(nav: NavController) {
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            FSSectionHeader(if (multi) "Currently enabled" else "Why enable this?")
+            FSSectionHeader(if (multi) stringResource(R.string.currently_enabled) else stringResource(R.string.why_enable_this))
             Text(
                 if (multi)
-                    "Your TOTP secret was generated on this device on ${formatDate(totpEnrolledAt)}. " +
-                        "Store your recovery codes somewhere safe — they're the only way back in if " +
-                        "your authenticator app is lost."
+                    fsString(R.string.your_totp_secret_was_generated_on, formatDate(totpEnrolledAt))
                 else
-                    "A second factor outside Google's account recovery. If your Google password " +
-                        "is ever compromised, the attacker still needs a live 6-digit code from " +
-                        "your authenticator app to take over your account.",
+                    stringResource(R.string.a_second_factor_outside_googles_account),
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(horizontal = FS.space.s4),
             )
@@ -150,14 +150,14 @@ fun AccountSecurityScreen(nav: NavController) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             if (multi) {
                 FSDangerButton(
-                    label = "Turn off code protection",
+                    label = stringResource(R.string.turn_off_code_protection),
                     onClick = { showDisableDialog = true },
                     block = true,
                     modifier = Modifier.semantics { contentDescription = "account-security-disable-btn" },
                 )
             } else {
                 FSPrimaryButton(
-                    label = "Turn on code protection",
+                    label = stringResource(R.string.turn_on_code_protection),
                     onClick = { showEnableSheet = true },
                     block = true,
                     large = true,
@@ -196,18 +196,16 @@ fun AccountSecurityScreen(nav: NavController) {
     if (showDisableDialog) {
         AlertDialog(
             onDismissRequest = { showDisableDialog = false },
-            title = { Text("Turn off code protection?") },
+            title = { Text(stringResource(R.string.turn_off_code_protection_2)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                     Text(
-                        "Drops your TOTP secret + recovery codes. The account goes back to " +
-                            "single-device + 3-day recovery grace. Refused while other " +
-                            "trusted devices exist.",
+                        stringResource(R.string.drops_your_totp_secret_recovery_codes),
                     )
                     OutlinedTextField(
                         value = disableCode,
                         onValueChange = { disableCode = it },
-                        label = { Text("6-digit code or recovery code") },
+                        label = { Text(stringResource(R.string.n_6_digit_code_or_recovery_code)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     )
                 }
@@ -219,14 +217,14 @@ fun AccountSecurityScreen(nav: NavController) {
                     showDisableDialog = false
                     scope.launch { vm.disableEnrollment(code) }
                 }) {
-                    Text("Disable", color = FS.colors.danger)
+                    Text(stringResource(R.string.disable), color = FS.colors.danger)
                 }
             },
             dismissButton = {
                 TextButton(onClick = {
                     disableCode = ""
                     showDisableDialog = false
-                }) { Text("Cancel") }
+                }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -260,8 +258,8 @@ private fun AdminRootRotateCard(
                     // the Activity-bound adapter.
                     reEscrow = { passphrase, newSeed ->
                         val act = activity
-                            ?: throw IllegalStateException("Open this screen from the foreground to use a passkey.")
-                        val irkMaterial = KeystoreIrkAccess().resolve("Update your recovery backup")
+                            ?: throw IllegalStateException(FSStrings.get(R.string.open_this_screen_from_the_foreground))
+                        val irkMaterial = KeystoreIrkAccess().resolve(FSStrings.get(R.string.update_your_recovery_backup))
                         withContext(Dispatchers.Default) {
                             CloudRecoveryEnrollment.reEscrowAdminRoot(
                                 server = server,
@@ -290,16 +288,13 @@ private fun AdminRootRotateCard(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 Icon(Icons.Outlined.Key, contentDescription = null, tint = FS.colors.danger, modifier = Modifier.size(24.dp))
                 Text(
-                    "Admin key",
+                    stringResource(R.string.admin_key),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.semantics { contentDescription = "admin-root-rotate-title" },
                 )
             }
             Text(
-                "Rotating your admin key mints a new one and cuts off every OTHER " +
-                    "admin device that held the old key. Use this if an admin device " +
-                    "was lost or you want to revoke another admin. Your other data and " +
-                    "devices stay signed in.",
+                stringResource(R.string.rotating_your_admin_key_mints_a),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -309,19 +304,18 @@ private fun AdminRootRotateCard(
                     horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Text("Rotating…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.rotating), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 is RotateAdminRootPhase.Done -> {
                     Text(
-                        "Admin key rotated. Your servers adopt the new key on their next check-in.",
+                        stringResource(R.string.admin_key_rotated_your_servers_adopt),
                         color = FS.colors.success,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.semantics { contentDescription = "admin-root-rotate-done" },
                     )
                     if (skippedRecoveryUpdate) {
                         Text(
-                            "Your recovery backup still holds your old admin key. " +
-                                "Re-run recovery setup to fix this.",
+                            stringResource(R.string.your_recovery_backup_still_holds_your),
                             color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.semantics { contentDescription = "admin-root-reescrow-skipped-warning" },
@@ -330,16 +324,14 @@ private fun AdminRootRotateCard(
                 }
                 is RotateAdminRootPhase.DoneNeedsRecoveryUpdate -> {
                     Text(
-                        "Your admin key changed. Enter your recovery passphrase to update " +
-                            "your recovery backup — otherwise recovery would restore the " +
-                            "OLD admin key.",
+                        stringResource(R.string.your_admin_key_changed_enter_your),
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.semantics { contentDescription = "admin-root-reescrow-explainer" },
                     )
                     OutlinedTextField(
                         value = reEscrowPassphrase,
                         onValueChange = { reEscrowPassphrase = it },
-                        label = { Text("Recovery passphrase") },
+                        label = { Text(stringResource(R.string.recovery_passphrase)) },
                         visualTransformation = PasswordVisualTransformation(),
                         enabled = !phase.updating,
                         modifier = Modifier
@@ -360,11 +352,11 @@ private fun AdminRootRotateCard(
                             horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
                         ) {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            Text("Updating recovery backup…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(stringResource(R.string.updating_recovery_backup), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     } else {
                         FSPrimaryButton(
-                            label = "Update recovery backup",
+                            label = stringResource(R.string.update_recovery_backup),
                             onClick = {
                                 val passphrase = reEscrowPassphrase
                                 scope.launch {
@@ -378,7 +370,7 @@ private fun AdminRootRotateCard(
                             modifier = Modifier.semantics { contentDescription = "admin-root-reescrow-btn" },
                         )
                         FSSecondaryButton(
-                            label = "Skip for now",
+                            label = stringResource(R.string.skip_for_now),
                             onClick = {
                                 reEscrowPassphrase = ""
                                 skippedRecoveryUpdate = true
@@ -398,7 +390,7 @@ private fun AdminRootRotateCard(
                 RotateAdminRootPhase.Idle -> Unit
             }
             FSDangerButton(
-                label = "Rotate admin key",
+                label = stringResource(R.string.rotate_admin_key),
                 onClick = { showConfirm = true },
                 block = true,
                 modifier = Modifier.semantics { contentDescription = "admin-root-rotate-btn" },
@@ -409,17 +401,16 @@ private fun AdminRootRotateCard(
     if (showConfirm) {
         AlertDialog(
             onDismissRequest = { showConfirm = false; confirmText = "" },
-            title = { Text("Rotate admin key?") },
+            title = { Text(stringResource(R.string.rotate_admin_key_2)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                     Text(
-                        "This cuts off every other admin device that held the old key. " +
-                            "It can't be undone. Type ROTATE to confirm.",
+                        stringResource(R.string.this_cuts_off_every_other_admin),
                     )
                     OutlinedTextField(
                         value = confirmText,
                         onValueChange = { confirmText = it },
-                        label = { Text("Type ROTATE") },
+                        label = { Text(stringResource(R.string.type_rotate)) },
                         modifier = Modifier.semantics { contentDescription = "admin-root-rotate-confirm-field" },
                     )
                 }
@@ -432,10 +423,10 @@ private fun AdminRootRotateCard(
                         confirmText = ""
                         scope.launch { vm.rotate() }
                     },
-                ) { Text("Rotate", color = FS.colors.danger) }
+                ) { Text(stringResource(R.string.rotate), color = FS.colors.danger) }
             },
             dismissButton = {
-                TextButton(onClick = { showConfirm = false; confirmText = "" }) { Text("Cancel") }
+                TextButton(onClick = { showConfirm = false; confirmText = "" }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -466,7 +457,7 @@ private fun AccountSecurityEnableSheet(
                 onDone()
             }
         },
-        title = { Text("Turn on code protection") },
+        title = { Text(stringResource(R.string.turn_on_code_protection)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 when (phase) {
@@ -494,21 +485,21 @@ private fun AccountSecurityEnableSheet(
                     onClick = { scope.launch { vm.beginEnrollment() } },
                     enabled = phase !is AccountSecurityPhase.Beginning,
                     modifier = Modifier.semantics { contentDescription = "account-security-step1-continue" },
-                ) { Text("Continue") }
+                ) { Text(stringResource(R.string.continue_label)) }
                 is AccountSecurityPhase.Staged -> TextButton(
                     onClick = { scope.launch { vm.confirmEnrollment(sampleCode) } },
                     enabled = sampleCode.trim().length == 6,
                     modifier = Modifier.semantics { contentDescription = "account-security-verify-btn" },
-                ) { Text("Verify code") }
+                ) { Text(stringResource(R.string.verify_code)) }
                 AccountSecurityPhase.Confirming -> Unit
                 is AccountSecurityPhase.Confirmed -> TextButton(
                     onClick = { vm.dismissEnrollment(); onDone() },
                     enabled = savedRecoveryCodes,
                     modifier = Modifier.semantics { contentDescription = "account-security-done-btn" },
-                ) { Text("Done") }
+                ) { Text(stringResource(R.string.done)) }
                 is AccountSecurityPhase.Failed -> TextButton(
                     onClick = { vm.dismissEnrollment(); sampleCode = "" },
-                ) { Text("Start over") }
+                ) { Text(stringResource(R.string.start_over)) }
                 AccountSecurityPhase.Disabling, AccountSecurityPhase.Disabled -> Unit
             }
         },
@@ -521,7 +512,7 @@ private fun AccountSecurityEnableSheet(
                     }
                 },
                 enabled = phase !is AccountSecurityPhase.Confirmed || savedRecoveryCodes,
-            ) { Text("Cancel") }
+            ) { Text(stringResource(R.string.cancel)) }
         },
     )
 }
@@ -529,16 +520,15 @@ private fun AccountSecurityEnableSheet(
 @Composable
 private fun Step1(beginning: Boolean) {
     Text(
-        "Step 1 of 4",
+        stringResource(R.string.step_1_of_4),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.labelLarge,
     )
     Text(
-        "You'll need an authenticator app like 1Password, Google Authenticator, or Authy. " +
-            "We'll show a QR code and a manual key — scan or paste either one.",
+        stringResource(R.string.youll_need_an_authenticator_app_like),
     )
     Text(
-        "With code protection on, recovery needs your 6-digit code (or a recovery code) and a 24-hour wait instead of the 3-day wait.",
+        stringResource(R.string.with_code_protection_on_recovery_needs),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.bodyMedium,
     )
@@ -554,7 +544,7 @@ private fun Step2(
     onSampleCodeChange: (String) -> Unit,
 ) {
     Text(
-        "Step 2 of 4 — scan or paste",
+        stringResource(R.string.step_2_of_4_scan_or),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.labelLarge,
     )
@@ -563,7 +553,7 @@ private fun Step2(
         if (image != null) {
             Image(
                 bitmap = image.asImageBitmap(),
-                contentDescription = "TOTP QR code",
+                contentDescription = stringResource(R.string.totp_qr_code),
                 modifier = Modifier
                     .size(200.dp)
                     .semantics { contentDescription = "account-security-qr" },
@@ -576,7 +566,7 @@ private fun Step2(
         }
     }
     Text(
-        "Or paste this manual key:",
+        stringResource(R.string.or_paste_this_manual_key),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.bodyMedium,
     )
@@ -588,7 +578,7 @@ private fun Step2(
     OutlinedTextField(
         value = sampleCode,
         onValueChange = onSampleCodeChange,
-        label = { Text("6-digit code") },
+        label = { Text(stringResource(R.string.n_6_digit_code)) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
         modifier = Modifier
             .fillMaxWidth()
@@ -600,7 +590,7 @@ private fun Step2(
 private fun Step3Pending() {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
         CircularProgressIndicator()
-        Text("Verifying your code…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.verifying_your_code), color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -611,12 +601,11 @@ private fun Step4(
     onSavedChange: (Boolean) -> Unit,
 ) {
     Text(
-        "Step 4 of 4 — save your recovery codes",
+        stringResource(R.string.step_4_of_4_save_your),
         style = MaterialTheme.typography.titleSmall,
     )
     Text(
-        "Print these or store them in a password manager. Each code works once if you " +
-            "lose your authenticator. They're the ONLY way back in.",
+        stringResource(R.string.print_these_or_store_them_in),
     )
     FSCard {
         Column(
@@ -639,14 +628,14 @@ private fun Step4(
             .semantics { contentDescription = "account-security-saved-toggle" },
     ) {
         Checkbox(checked = saved, onCheckedChange = null)
-        Text("I've saved these somewhere safe")
+        Text(stringResource(R.string.ive_saved_these_somewhere_safe))
     }
 }
 
 @Composable
 private fun FailedRow(message: String) {
     Text(
-        "Something went wrong",
+        stringResource(R.string.something_went_wrong),
         color = MaterialTheme.colorScheme.error,
         style = MaterialTheme.typography.titleSmall,
     )
@@ -681,7 +670,7 @@ private fun decodeBase64Png(base64: String): android.graphics.Bitmap? {
 }
 
 private fun formatDate(ms: Long?): String {
-    if (ms == null) return "an unknown date"
+    if (ms == null) return FSStrings.get(R.string.an_unknown_date)
     return FlagshipDateFormat.format(ms)
 }
 

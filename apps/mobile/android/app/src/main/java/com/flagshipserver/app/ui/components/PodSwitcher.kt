@@ -11,6 +11,8 @@
 
 package com.flagshipserver.app.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -175,7 +177,7 @@ fun PodSwitcher(
             }
             androidx.compose.material3.Icon(
                 androidx.compose.material.icons.Icons.Outlined.ArrowDropDown,
-                contentDescription = "Choose a server",
+                contentDescription = stringResource(R.string.choose_a_server),
                 tint = c.textMuted,
                 modifier = Modifier.size(20.dp),
             )

@@ -11,6 +11,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -99,17 +103,17 @@ fun CompanionRequestsScreen(nav: NavController) {
     }
 
     FSScreen(
-        title = "Companion requests",
+        title = stringResource(R.string.companion_requests),
         onBack = { nav.popBackStack() },
-        subtitle = "Review writes from remote browsers. Your phone signs approved requests; browsers never receive your account key.",
-        actions = { FSBarAction(Icons.Outlined.Refresh, "Refresh", onClick = { vm.load() }) },
+        subtitle = stringResource(R.string.review_writes_from_remote_browsers_your),
+        actions = { FSBarAction(Icons.Outlined.Refresh, stringResource(R.string.refresh), onClick = { vm.load() }) },
     ) {
         when (val s = state) {
             is LoadingState.Loaded -> {
                 if (s.value.isEmpty()) {
                     FSEmptyState(
-                        title = "No pending requests",
-                        message = "A remote browser can forward writes here once you've connected one.",
+                        title = stringResource(R.string.no_pending_requests),
+                        message = stringResource(R.string.a_remote_browser_can_forward_writes),
                         icon = Icons.Outlined.Inbox,
                     )
                 } else {
@@ -162,7 +166,7 @@ private fun RequestCard(
             )
             if (!supported) {
                 Text(
-                    "Unsupported request kind — open your browser to handle",
+                    stringResource(R.string.unsupported_request_kind_open_your_browser),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.semantics {
@@ -187,7 +191,7 @@ private fun RequestCard(
                 }
                 Box(modifier = Modifier.weight(1f)) {
                     FSDangerButton(
-                        label = if (pending) "Denying…" else "Deny",
+                        label = if (pending) stringResource(R.string.denying) else stringResource(R.string.deny),
                         onClick = { if (!pending) onDeny() },
                         enabled = !pending,
                         block = true,
@@ -201,18 +205,18 @@ private fun RequestCard(
 private fun title(row: CompanionPendingWrite): String {
     val who = row.companionTokenPrefix
     return when (row.kind) {
-        "release-server" -> "Release server name — from $who"
-        "revoke-server" -> "Revoke server — from $who"
-        else -> "Request from $who"
+        "release-server" -> FSStrings.get(R.string.release_server_name_from, who)
+        "revoke-server" -> FSStrings.get(R.string.revoke_server_from, who)
+        else -> FSStrings.get(R.string.request_from, who)
     }
 }
 
 private fun subtitle(row: CompanionPendingWrite): String = when (row.kind) {
-    "release-server" -> stringField(row.intent, "serverDomain") ?: "(missing serverDomain)"
+    "release-server" -> stringField(row.intent, "serverDomain") ?: FSStrings.get(R.string.missing_serverdomain)
     "revoke-server" -> {
-        val id = stringField(row.intent, "revokedServerId") ?: "(missing serverId)"
-        val reason = stringField(row.intent, "reason") ?: "(missing reason)"
-        "$id · reason: $reason"
+        val id = stringField(row.intent, "revokedServerId") ?: FSStrings.get(R.string.missing_serverid)
+        val reason = stringField(row.intent, "reason") ?: FSStrings.get(R.string.missing_reason)
+        FSStrings.get(R.string.reason, id, reason)
     }
     else -> row.kind
 }
@@ -223,8 +227,8 @@ private fun queuedLabel(row: CompanionPendingWrite): String {
     val remainingMs = row.expiresAt - System.currentTimeMillis()
     val tail = when {
         remainingMs <= 0 -> "expired"
-        remainingMs >= 60_000 -> "expires in ${remainingMs / 60_000}m"
-        else -> "expires in ${remainingMs / 1000}s"
+        remainingMs >= 60_000 -> FSStrings.get(R.string.expires_in_m, remainingMs / 60_000)
+        else -> FSStrings.get(R.string.expires_in_s, remainingMs / 1000)
     }
     return "queued $q · $tail"
 }
@@ -274,9 +278,9 @@ private fun HoldToApproveButton(
         contentAlignment = Alignment.Center,
     ) {
         val label = when {
-            pending -> "Approving…"
-            holding -> "Hold to confirm…"
-            else -> "Hold to approve"
+            pending -> stringResource(R.string.approving)
+            holding -> stringResource(R.string.hold_to_confirm)
+            else -> stringResource(R.string.hold_to_approve)
         }
         Box(
             modifier = Modifier

@@ -4,6 +4,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import com.flagshipserver.app.ui.components.fsFocusRing
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
@@ -58,9 +61,9 @@ internal fun BackupPolicyOptions(
                     onClick = { onReserveGb(maxOf(1, reserveGb - 1)) },
                     enabled = reserveGb > 1,
                     modifier = Modifier.testTag("$tagPrefix-reserve-down"),
-                ) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Remove, contentDescription = "Less") }
+                ) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Remove, contentDescription = stringResource(R.string.less)) }
                 Text(
-                    "$reserveGb GB",
+                    fsString(R.string.gb, reserveGb),
                     color = FS.colors.text,
                     style = MaterialTheme.typography.titleMedium,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -70,10 +73,10 @@ internal fun BackupPolicyOptions(
                     onClick = { onReserveGb(minOf(maxGb, reserveGb + 1)) },
                     enabled = reserveGb < maxGb,
                     modifier = Modifier.testTag("$tagPrefix-reserve-up"),
-                ) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Add, contentDescription = "More") }
+                ) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Add, contentDescription = stringResource(R.string.more)) }
             }
             Text(
-                "This phone has ${ServerArchive.formatBytes(phoneFreeBytes)} free",
+                fsString(R.string.this_phone_has_free, ServerArchive.formatBytes(phoneFreeBytes)),
                 color = FS.colors.textMuted,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(start = FS.space.s4),

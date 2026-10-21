@@ -12,6 +12,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.AccessRequest
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.ScreensError
@@ -180,7 +181,7 @@ class AccessRequestCenter(
             val base = alert.box.client.serviceAccess(alert.request.serviceId).list
             val list = AppAccessList.withRule(base, if (allow) AppAccessList.ALLOW else AppAccessList.DENY, host)
             val order = AppAccessOrder(alert.box.client, { alert.box.fqdn }, signer, now)
-            val reason = if (allow) "Allow ${alert.appName} to reach $host" else "Stop ${alert.appName} reaching $host"
+            val reason = if (allow) FSStrings.get(R.string.allow_to_reach, alert.appName, host) else FSStrings.get(R.string.stop_reaching, alert.appName, host)
             when (val r = order.send(alert.request.serviceId, list, reason)) {
                 is AppAccessOrder.Outcome.Applied -> {
                     mutex.withLock { answered += alert.key }
@@ -191,7 +192,7 @@ class AccessRequestCenter(
                     )
                 }
                 is AppAccessOrder.Outcome.Invalid -> Phase.Failed(
-                    "The app's list has an error on line ${r.errors.firstOrNull()?.line ?: "?"}. Open the list to fix it.",
+                    FSStrings.get(R.string.the_apps_list_has_an_error, r.errors.firstOrNull()?.line ?: "?"),
                 )
                 is AppAccessOrder.Outcome.Failed -> Phase.Failed(r.message)
             }
@@ -201,7 +202,7 @@ class AccessRequestCenter(
             Phase.Failed("\"$host\" can't go in an access list: ${e.message}")
         } catch (t: Throwable) {
             (AppAccessOrder.refusal(t) as? AppAccessOrder.Outcome.Failed)?.let { Phase.Failed(it.message) }
-                ?: Phase.Failed("Couldn't reach the server. Check your connection and try again.")
+                ?: Phase.Failed(FSStrings.get(R.string.couldnt_reach_the_server_check_your))
         }
         if (_shown.value?.alert?.key == alert.key) _shown.value = Shown(alert, phase)
     }

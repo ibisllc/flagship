@@ -6,6 +6,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import android.content.Intent
 import com.flagshipserver.app.api.BuildClient
 import com.flagshipserver.app.api.FlagshipServerClient
@@ -125,7 +126,7 @@ class DevicePairingRelays(
 )
 
 /** Shown where device pairing would start while no live relay exists. */
-const val DEVICE_PAIRING_UNAVAILABLE = "Adding a device from this phone isn't available yet. Use the web app."
+val DEVICE_PAIRING_UNAVAILABLE get() = FSStrings.get(R.string.adding_a_device_from_this_phone)
 
 /** The same, for the new phone's side. */
-const val DEVICE_JOIN_UNAVAILABLE = "Joining an account from this phone isn't available yet. Use the web app."
+val DEVICE_JOIN_UNAVAILABLE get() = FSStrings.get(R.string.joining_an_account_from_this_phone)

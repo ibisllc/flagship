@@ -26,6 +26,8 @@
 
 package com.flagshipserver.app.keystore
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import android.app.Activity
 
 class PlatformWebAuthnProvider(
@@ -47,7 +49,7 @@ class PlatformWebAuthnProvider(
 
     override suspend fun register(): String {
         val act = activity()
-            ?: throw IllegalStateException("Open this screen from the foreground to use a passkey.")
+            ?: throw IllegalStateException(FSStrings.get(R.string.open_this_screen_from_the_foreground))
         val created = manager.createPasskey(act, username() ?: "you")
         freshSecrets[created.credentialId] = created.prfSecret
         return created.credentialId
@@ -59,7 +61,7 @@ class PlatformWebAuthnProvider(
         // (login-takeover path against an existing cloud credential).
         freshSecrets.remove(credentialId)?.let { return it }
         val act = activity()
-            ?: throw IllegalStateException("Open this screen from the foreground to use a passkey.")
+            ?: throw IllegalStateException(FSStrings.get(R.string.open_this_screen_from_the_foreground))
         return manager.assertPrf(act, credentialId)
     }
 
@@ -68,7 +70,7 @@ class PlatformWebAuthnProvider(
         // credential with the passphrase-derived prfSalt as the PRF input.
         // (No fresh-secret reuse here — this path never mints the credential.)
         val act = activity()
-            ?: throw IllegalStateException("Open this screen from the foreground to use a passkey.")
+            ?: throw IllegalStateException(FSStrings.get(R.string.open_this_screen_from_the_foreground))
         return manager.assertPrf(act, credentialId, prfSalt)
     }
 }

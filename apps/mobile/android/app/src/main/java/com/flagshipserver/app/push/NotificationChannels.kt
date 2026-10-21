@@ -6,6 +6,8 @@
 
 package com.flagshipserver.app.push
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -13,39 +15,39 @@ import android.content.Context
 object NotificationChannels {
     data class Channel(val id: String, val name: String, val description: String, val importance: Int)
 
-    val APPROVALS = Channel(
-        "flagship.approvals", "Approval requests",
-        "A server waiting for you to unlock or authorize it.",
+    val APPROVALS get() = Channel(
+        "flagship.approvals", FSStrings.get(R.string.approval_requests),
+        FSStrings.get(R.string.a_server_waiting_for_you_to),
         NotificationManager.IMPORTANCE_HIGH,
     )
-    val SETUP = Channel(
-        "flagship.setup", "Server setup",
-        "Progress while a new server installs.",
+    val SETUP get() = Channel(
+        "flagship.setup", FSStrings.get(R.string.server_setup),
+        FSStrings.get(R.string.progress_while_a_new_server_installs),
         NotificationManager.IMPORTANCE_LOW,
     )
-    val SECURITY = Channel(
-        "flagship.security", "Account and server alerts",
-        "New servers, certificate warnings, device changes, sign-in alerts and invites from your other devices.",
+    val SECURITY get() = Channel(
+        "flagship.security", FSStrings.get(R.string.account_and_server_alerts),
+        FSStrings.get(R.string.new_servers_certificate_warnings_device),
         NotificationManager.IMPORTANCE_HIGH,
     )
-    val APPS = Channel(
-        "flagship.apps", "App requests",
-        "One of your apps asking to reach the internet, or running out of disk space.",
+    val APPS get() = Channel(
+        "flagship.apps", FSStrings.get(R.string.app_requests),
+        FSStrings.get(R.string.one_of_your_apps_asking_to),
         NotificationManager.IMPORTANCE_DEFAULT,
     )
-    val BUILDS = Channel(
-        "flagship.builds", "AI builds",
-        "An AI build waiting for your answer.",
+    val BUILDS get() = Channel(
+        "flagship.builds", FSStrings.get(R.string.ai_builds),
+        FSStrings.get(R.string.an_ai_build_waiting_for_your),
         NotificationManager.IMPORTANCE_DEFAULT,
     )
-    val REMINDERS = Channel(
-        "flagship.reminders", "Check-in reminders",
-        "Reminders to check in before a server's dead-man switch runs out.",
+    val REMINDERS get() = Channel(
+        "flagship.reminders", FSStrings.get(R.string.check_in_reminders),
+        FSStrings.get(R.string.reminders_to_check_in_before_a),
         NotificationManager.IMPORTANCE_HIGH,
     )
-    val GENERAL = Channel(
-        "flagship.alerts", "Other alerts",
-        "Everything else from Flagship.",
+    val GENERAL get() = Channel(
+        "flagship.alerts", FSStrings.get(R.string.other_alerts),
+        FSStrings.get(R.string.everything_else_from_flagship),
         NotificationManager.IMPORTANCE_DEFAULT,
     )
 

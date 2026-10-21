@@ -7,6 +7,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import android.app.Activity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -174,11 +178,11 @@ fun TrustedDevicesScreen(nav: NavController) {
     LaunchedEffect(Unit) { vm.load() }
 
     FSScreen(
-        title = "Trusted devices",
+        title = stringResource(R.string.trusted_devices),
         onBack = { nav.popBackStack() },
-        actions = { FSBarAction(Icons.Outlined.Refresh, "Refresh", onClick = { vm.load() }) },
+        actions = { FSBarAction(Icons.Outlined.Refresh, stringResource(R.string.refresh), onClick = { vm.load() }) },
     ) {
-        FSGroup(header = "Account") {
+        FSGroup(header = stringResource(R.string.account)) {
             FSRow(
                 title = accountDisplayName ?: "@${app.currentUser.value.orEmpty()}",
                 subtitle = "@${app.currentUser.value.orEmpty()}",
@@ -190,7 +194,7 @@ fun TrustedDevicesScreen(nav: NavController) {
                     nameLocked = false
                 }) else null,
                 trailing = if (canManageNames) ({
-                    Icon(Icons.Outlined.Edit, contentDescription = "Edit account name", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.edit_account_name), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }) else null,
             )
         }
@@ -202,9 +206,9 @@ fun TrustedDevicesScreen(nav: NavController) {
             onFinalize = { completesAt -> nav.navigate("replace-finalize/$completesAt") },
         )
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            FSSectionHeader("Trusted devices")
+            FSSectionHeader(stringResource(R.string.trusted_devices))
             Text(
-                "Phones and tablets that hold your account keys.",
+                stringResource(R.string.phones_and_tablets_that_hold_your),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(horizontal = FS.space.s1),
@@ -234,7 +238,7 @@ fun TrustedDevicesScreen(nav: NavController) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             FSGroup {
                 FSRow(
-                    title = "Add a device",
+                    title = stringResource(R.string.add_a_device),
                     icon = Icons.Outlined.QrCode2,
                     iconTint = if (canAddDevice) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     titleColor = if (canAddDevice) FS.colors.accentText else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -252,7 +256,7 @@ fun TrustedDevicesScreen(nav: NavController) {
                 )
             }
             Text(
-                "For your own phones and tablets. To give another person access, use Share this server on the server's page.",
+                stringResource(R.string.for_your_own_phones_and_tablets),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(horizontal = FS.space.s1),
@@ -280,14 +284,14 @@ fun TrustedDevicesScreen(nav: NavController) {
                 ) {
                     Text(target.displayName, style = MaterialTheme.typography.titleLarge)
                     Text(
-                        "${platformDisplay(target.platformClass)} · Device ${target.supportCode}",
+                        fsString(R.string.device, platformDisplay(target.platformClass), target.supportCode),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
                 if (target.isCurrent) {
                     FSRow(
-                        title = "Rename this device",
+                        title = stringResource(R.string.rename_this_device),
                         icon = Icons.Outlined.Edit,
                         onClick = {
                             nameEditMode = "self"
@@ -300,7 +304,7 @@ fun TrustedDevicesScreen(nav: NavController) {
                 }
                 if (canManageNames) {
                     FSRow(
-                        title = if (target.isManaged) "Edit managed name" else "Set managed name",
+                        title = if (target.isManaged) stringResource(R.string.edit_managed_name) else stringResource(R.string.set_managed_name),
                         icon = Icons.Outlined.Shield,
                         onClick = {
                             nameEditMode = "managed"
@@ -312,14 +316,14 @@ fun TrustedDevicesScreen(nav: NavController) {
                     )
                     if (target.isManaged) {
                         FSRow(
-                            title = "Remove managed name",
+                            title = stringResource(R.string.remove_managed_name),
                             icon = Icons.Outlined.LockOpen,
                             iconTint = MaterialTheme.colorScheme.error,
                             titleColor = MaterialTheme.colorScheme.error,
                             onClick = {
                                 sheetTarget = null
                                 scope.launch {
-                                    if (!vm.removeManagedName(target.deviceId)) snackbarMsg = "Couldn't remove the managed name."
+                                    if (!vm.removeManagedName(target.deviceId)) snackbarMsg = FSStrings.get(R.string.couldnt_remove_the_managed_name)
                                 }
                             },
                         )
@@ -327,7 +331,7 @@ fun TrustedDevicesScreen(nav: NavController) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
                 FSRow(
-                    title = "Revoke",
+                    title = stringResource(R.string.revoke_2),
                     icon = Icons.Outlined.PhonelinkErase,
                     iconTint = MaterialTheme.colorScheme.error,
                     titleColor = MaterialTheme.colorScheme.error,
@@ -341,7 +345,7 @@ fun TrustedDevicesScreen(nav: NavController) {
                 // C7 — Replace device. Tap opens the scare dialog;
                 // confirmation drives the ReplaceDeviceViewModel.
                 FSRow(
-                    title = "Replace device",
+                    title = stringResource(R.string.replace_device),
                     icon = Icons.Outlined.Sync,
                     iconTint = MaterialTheme.colorScheme.error,
                     titleColor = MaterialTheme.colorScheme.error,
@@ -354,7 +358,7 @@ fun TrustedDevicesScreen(nav: NavController) {
                 )
                 // E5 — Wipe & restart. Live ceremony.
                 FSRow(
-                    title = "Wipe & restart",
+                    title = stringResource(R.string.wipe_restart),
                     icon = Icons.Outlined.DeleteForever,
                     iconTint = MaterialTheme.colorScheme.error,
                     titleColor = MaterialTheme.colorScheme.error,
@@ -374,9 +378,9 @@ fun TrustedDevicesScreen(nav: NavController) {
             onDismissRequest = { nameEditMode = null },
             title = {
                 Text(when (mode) {
-                    "account" -> "Edit account name"
-                    "self" -> "Rename this device"
-                    else -> "Managed device name"
+                    "account" -> stringResource(R.string.edit_account_name)
+                    "self" -> stringResource(R.string.rename_this_device)
+                    else -> stringResource(R.string.managed_device_name)
                 })
             },
             text = {
@@ -384,17 +388,17 @@ fun TrustedDevicesScreen(nav: NavController) {
                     OutlinedTextField(
                         value = nameDraft,
                         onValueChange = { nameDraft = it },
-                        label = { Text("Display name") },
+                        label = { Text(stringResource(R.string.display_name)) },
                         singleLine = true,
                     )
                     if (mode == "managed") {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(checked = nameLocked, onCheckedChange = { nameLocked = it })
-                            Text("Lock managed name")
+                            Text(stringResource(R.string.lock_managed_name))
                         }
                     }
                     Text(
-                        "Names are encrypted and apply only inside this Flagship account.",
+                        stringResource(R.string.names_are_encrypted_and_apply_only),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -412,12 +416,12 @@ fun TrustedDevicesScreen(nav: NavController) {
                                 "self" -> vm.renameCurrentDevice(nameDraft)
                                 else -> target?.let { vm.setManagedName(it.deviceId, nameDraft, nameLocked) } ?: false
                             }
-                            if (!ok) snackbarMsg = "Couldn't save the encrypted name. Check the name and try again."
+                            if (!ok) snackbarMsg = FSStrings.get(R.string.couldnt_save_the_encrypted_name_check)
                         }
                     },
-                ) { Text("Save") }
+                ) { Text(stringResource(R.string.save)) }
             },
-            dismissButton = { TextButton(onClick = { nameEditMode = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { nameEditMode = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 
@@ -426,21 +430,21 @@ fun TrustedDevicesScreen(nav: NavController) {
     confirmDisconnect?.let { target ->
         AlertDialog(
             onDismissRequest = { confirmDisconnect = null },
-            title = { Text("Revoke ${target.displayName}?") },
-            text = { Text("This revokes the device's account access. Its presentation name is never stored by Flagship's control plane in plaintext.") },
+            title = { Text(fsString(R.string.revoke, target.displayName)) },
+            text = { Text(stringResource(R.string.this_revokes_the_devices_account_access)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDisconnect = null
                     scope.launch {
                         val ok = vm.disconnect(target)
-                        if (!ok) snackbarMsg = "Couldn't disconnect — check your connection and try again."
+                        if (!ok) snackbarMsg = FSStrings.get(R.string.couldnt_disconnect_check_your_connection_and)
                     }
                 }) {
-                    Text("Revoke", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.revoke_2), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmDisconnect = null }) { Text("Cancel") }
+                TextButton(onClick = { confirmDisconnect = null }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -449,14 +453,10 @@ fun TrustedDevicesScreen(nav: NavController) {
     if (confirmWipe) {
         AlertDialog(
             onDismissRequest = { confirmWipe = false },
-            title = { Text("Wipe and start over?") },
+            title = { Text(stringResource(R.string.wipe_and_start_over)) },
             text = {
                 Text(
-                    "Your account keeps the same username and your servers keep " +
-                        "their data. Every device currently on this account will " +
-                        "be disconnected — including this phone, which becomes " +
-                        "the new root of trust. You'll re-pair each one fresh.\n\n" +
-                        "This can't be undone from another device.",
+                    stringResource(R.string.your_account_keeps_the_same_username),
                 )
             },
             confirmButton = {
@@ -466,7 +466,7 @@ fun TrustedDevicesScreen(nav: NavController) {
                         wipeVm.run(currentEtag = vm.etag.value)
                         when (val phase = wipeVm.phase.value) {
                             com.flagshipserver.app.viewmodels.WipeRestartPhase.Completed -> {
-                                snackbarMsg = "Done. All other devices are now disconnected. Re-pair them on next open."
+                                snackbarMsg = FSStrings.get(R.string.done_all_other_devices_are_now)
                                 // Drop to Welcome — current session is stale.
                                 app.signOut()
                             }
@@ -476,11 +476,11 @@ fun TrustedDevicesScreen(nav: NavController) {
                         }
                     }
                 }) {
-                    Text("Wipe and start over", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.wipe_and_start_over_2), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmWipe = false }) { Text("Cancel") }
+                TextButton(onClick = { confirmWipe = false }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -489,14 +489,10 @@ fun TrustedDevicesScreen(nav: NavController) {
     if (confirmReplace) {
         AlertDialog(
             onDismissRequest = { confirmReplace = false },
-            title = { Text("Replace this device?") },
+            title = { Text(stringResource(R.string.replace_this_device)) },
             text = {
                 Text(
-                    "Rotates your account's identity key. Other devices on " +
-                        "this account will need to re-pair the next time they " +
-                        "open the app. Servers stay running, apps stay installed. " +
-                        "Takes effect after a 24-hour grace window. Your other " +
-                        "devices are notified, and only this device can cancel it.",
+                    stringResource(R.string.rotates_your_accounts_identity_key_other),
                 )
             },
             confirmButton = {
@@ -518,11 +514,11 @@ fun TrustedDevicesScreen(nav: NavController) {
                         }
                     }
                 }) {
-                    Text("Replace device", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.replace_device), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmReplace = false }) { Text("Cancel") }
+                TextButton(onClick = { confirmReplace = false }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -533,7 +529,7 @@ private fun LoadingRow() {
     FSCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-            Text("Loading devices…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.loading_devices), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -543,7 +539,7 @@ private fun ErrorRow(message: String, onRetry: () -> Unit) {
     FSCard(modifier = Modifier.testTag("trusted-devices-error")) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-            com.flagshipserver.app.ui.components.FSSecondaryButton(label = "Try again", onClick = onRetry, modifier = Modifier.testTag("trusted-devices-retry"))
+            com.flagshipserver.app.ui.components.FSSecondaryButton(label = stringResource(R.string.try_again), onClick = onRetry, modifier = Modifier.testTag("trusted-devices-retry"))
         }
     }
 }
@@ -552,8 +548,8 @@ private fun ErrorRow(message: String, onRetry: () -> Unit) {
 private fun EmptyRow() {
     FSGroup {
         FSRow(
-            title = "Just this device",
-            subtitle = "Sign in on another phone or tablet to add a trusted device.",
+            title = stringResource(R.string.just_this_device),
+            subtitle = stringResource(R.string.sign_in_on_another_phone_or),
             icon = Icons.Outlined.PhoneAndroid,
         )
     }
@@ -585,24 +581,23 @@ private fun PendingRePairBanner(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Icon(Icons.Outlined.Sync, contentDescription = null, tint = FS.colors.accent)
                 Text(
-                    "Replace pending",
+                    stringResource(R.string.replace_pending),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.semantics { contentDescription = "pending-re-pair-banner" },
                 )
             }
             Text(
                 if (elapsed) {
-                    "The grace window has elapsed — finalize the device replacement now."
+                    stringResource(R.string.the_grace_window_has_elapsed_finalize)
                 } else {
-                    "Replace pending — finalize when the 3-day grace elapses " +
-                        "(${formatCompletesAt(pending.completesAt)})."
+                    fsString(R.string.replace_pending_finalize_when_the_3, formatCompletesAt(pending.completesAt))
                 },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.semantics { contentDescription = "pending-re-pair-banner-body" },
             )
             FSPrimaryButton(
-                label = "Finalize now",
+                label = stringResource(R.string.finalize_now),
                 onClick = { onFinalize(pending.completesAt) },
                 enabled = elapsed,
                 block = true,
@@ -621,11 +616,11 @@ internal fun formatCompletesAt(ms: Long): String =
 @Composable
 private fun TrustedDeviceRow(device: TrustedDevicesViewModel.DirectoryDevice, onMenu: () -> Unit) {
     val lines = buildList {
-        add("${platformDisplay(device.platformClass)} · Device ${device.supportCode}")
+        add(fsString(R.string.device, platformDisplay(device.platformClass), device.supportCode))
         if (device.isManaged) {
-            add(if (device.isLocked) "Administrator-managed · locked" else "Administrator-managed")
+            add(if (device.isLocked) stringResource(R.string.administrator_managed_locked) else stringResource(R.string.administrator_managed))
         } else if (device.lastSeenAt > device.createdAt) {
-            add("last seen ${relative(device.lastSeenAt)}")
+            add(fsString(R.string.last_seen, relative(device.lastSeenAt)))
         }
     }
     FSRow(
@@ -636,7 +631,7 @@ private fun TrustedDeviceRow(device: TrustedDevicesViewModel.DirectoryDevice, on
         onClick = onMenu,
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-                if (device.isCurrent) FSPill("This device", FSPillKind.Online)
+                if (device.isCurrent) FSPill(stringResource(R.string.this_device), FSPillKind.Online)
                 IconButton(
                     onClick = onMenu,
                     modifier = Modifier.semantics {
@@ -661,9 +656,9 @@ private fun platformIcon(raw: String?): ImageVector = when (raw) {
 private fun platformDisplay(raw: String?): String = when (raw) {
     "ios" -> "iPhone / iPad"
     "android" -> "Android"
-    "web" -> "Web"
-    "macos" -> "Mac"
-    else -> "Device"
+    "web" -> FSStrings.get(R.string.web)
+    "macos" -> FSStrings.get(R.string.mac)
+    else -> FSStrings.get(R.string.device_2)
 }
 
 private fun relative(ms: Long): String = FlagshipDateFormat.format(ms)

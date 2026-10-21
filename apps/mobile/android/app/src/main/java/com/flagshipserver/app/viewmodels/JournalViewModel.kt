@@ -5,6 +5,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.JournalInner
@@ -42,9 +44,9 @@ class JournalViewModel(
         _phase.value = JournalPhase.Loading
         val irk: Ed25519Sign
         try {
-            irk = signer("Read the journal on $serverDomain")
+            irk = signer(FSStrings.get(R.string.read_the_journal_on, serverDomain))
         } catch (e: Throwable) {
-            _phase.value = JournalPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
+            _phase.value = JournalPhase.Failed(FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(e)))
             return
         }
         val clamped = lines.coerceIn(1L, JournalUnits.MAX_LINES)
@@ -53,7 +55,7 @@ class JournalViewModel(
         try {
             signature = irk.sign(JournalRequest.canonicalBytes(serverDomain, unit, clamped, issuedAt))
         } catch (e: Throwable) {
-            _phase.value = JournalPhase.Failed("Couldn't sign: ${UserErrorText.reason(e)}")
+            _phase.value = JournalPhase.Failed(FSStrings.get(R.string.couldnt_sign, UserErrorText.reason(e)))
             return
         }
 
@@ -73,9 +75,9 @@ class JournalViewModel(
             _phase.value = JournalPhase.Loaded(ack.unit.ifEmpty { unit }, ack.lines)
         } catch (e: HttpException) {
             val friendly = when (e.status) {
-                403 -> "The server rejected the request. Sign in again and retry."
-                404, 502, 503 -> "The server isn't reachable right now."
-                else -> "Server error (${e.status}): ${e.body}"
+                403 -> FSStrings.get(R.string.the_server_rejected_the_request_sign)
+                404, 502, 503 -> FSStrings.get(R.string.the_server_isnt_reachable_right_now)
+                else -> FSStrings.get(R.string.server_error, e.status, e.body)
             }
             _phase.value = JournalPhase.Failed(friendly)
         } catch (e: Throwable) {
