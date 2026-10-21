@@ -1,0 +1,918 @@
+{
+  "unknownModel": {
+    "en": "(unknown model)",
+    "ctx": "DiskEnumerator.cs:34 (prose)"
+  },
+  "osMarksAsInternalMedia": {
+    "en": "OS marks {0} as internal media",
+    "ctx": "DiskEnumerator.cs:171 (prose)"
+  },
+  "diskWithoutRemovableBitLikelyInternal": {
+    "en": "{0} disk without removable bit — likely internal",
+    "ctx": "DiskEnumerator.cs:178 (prose)"
+  },
+  "imageTooSmallBytesRefusingTo": {
+    "en": "Image too small ({0} bytes); refusing to write.",
+    "ctx": "DiskWrite.cs:47 (prose)"
+  },
+  "couldNotParseADriveNumber": {
+    "en": "Could not parse a drive number from {0}.",
+    "ctx": "DiskWrite.cs:53 (prose)"
+  },
+  "couldntLockCloseAnyExplorerWindows": {
+    "en": "Couldn't lock {0}: — close any Explorer windows / programs using the drive and retry. ",
+    "ctx": "DiskWrite.cs:146 (prose)"
+  },
+  "win32": {
+    "en": "(Win32 {0})",
+    "ctx": "DiskWrite.cs:147 (prose)"
+  },
+  "writeToDeviceReturned0Bytes": {
+    "en": "Write to device returned 0 bytes (out of space or removed?).",
+    "ctx": "DiskWrite.cs:252 (prose)"
+  },
+  "theServerReportedNoBaseImage": {
+    "en": "The server reported no base image is needed, but none is cached. Try again.",
+    "ctx": "IsoBaseCache.cs:178 (prose)"
+  },
+  "couldntDownloadTheBaseImageCheck": {
+    "en": "Couldn't download the base image — check your internet connection. ({0})",
+    "ctx": "IsoBaseCache.cs:217 (prose)"
+  },
+  "baseImageDownloadFailedHttp": {
+    "en": "Base-image download failed (HTTP {0}).",
+    "ctx": "IsoBaseCache.cs:227 (prose)"
+  },
+  "baseImageFailedItsIntegrityCheck": {
+    "en": "Base image failed its integrity check (expected {0}…, got {1}…). The download was discarded — try again.",
+    "ctx": "IsoBaseCache.cs:271 (prose)"
+  },
+  "couldntReachTheImageServerCheck": {
+    "en": "Couldn't reach the image server — check your internet connection. ({0})",
+    "ctx": "IsoManifestClient.cs:98 (prose)"
+  },
+  "imageManifestRequestFailedHttp": {
+    "en": "Image-manifest request failed (HTTP {0}).",
+    "ctx": "IsoManifestClient.cs:109 (prose)"
+  },
+  "imageManifestTopLevelIsNot": {
+    "en": "Image manifest top-level is not an object.",
+    "ctx": "IsoManifestClient.cs:156 (prose)"
+  },
+  "imageManifestMissingDownload": {
+    "en": "Image manifest missing \"download\".",
+    "ctx": "IsoManifestClient.cs:158 (prose)"
+  },
+  "imageManifestDownloadIsNeitherAn": {
+    "en": "Image-manifest \"download\" is neither an object nor null.",
+    "ctx": "IsoManifestClient.cs:162 (prose)"
+  },
+  "imageManifestDownloadUrlIsNot": {
+    "en": "Image-manifest download URL is not https.",
+    "ctx": "IsoManifestClient.cs:171 (prose)"
+  },
+  "imageManifestSha256IsNotA": {
+    "en": "Image-manifest sha256 is not a 64-char hex digest.",
+    "ctx": "IsoManifestClient.cs:173 (prose)"
+  },
+  "imageManifestMissingInvalidField": {
+    "en": "Image manifest missing/invalid field \"{0}\".",
+    "ctx": "IsoManifestClient.cs:182 (prose)"
+  },
+  "servers": {
+    "en": "{0} servers",
+    "ctx": "MainWindow.xaml.cs:107 (prose)"
+  },
+  "restartingAsAdministratorFirstShutsDown": {
+    "en": "Restarting as administrator first shuts down the {0} running on this PC. ",
+    "ctx": "MainWindow.xaml.cs:107 (prose)"
+  },
+  "eachPowersOffGracefullyWhichCan": {
+    "en": "Each powers off gracefully, which can take up to a minute; an installation in progress starts over later. ",
+    "ctx": "MainWindow.xaml.cs:108 (prose)"
+  },
+  "startThemAgainAfterTheRestart": {
+    "en": "Start them again after the restart.",
+    "ctx": "MainWindow.xaml.cs:109 (prose)"
+  },
+  "restartAsAdministrator": {
+    "en": "Restart as administrator?",
+    "ctx": "MainWindow.xaml.cs:110 (prose)"
+  },
+  "couldNotRestartAsAdministrator": {
+    "en": "Could not restart as administrator",
+    "ctx": "MainWindow.xaml.cs:134 (prose)"
+  },
+  "flagshipStudioExperimental": {
+    "en": "Flagship Studio (Experimental)",
+    "ctx": "MainWindow.xaml.cs:142 (prose)"
+  },
+  "shuttingDownYourServers": {
+    "en": "Shutting down your servers…",
+    "ctx": "MainWindow.xaml.cs:150 (prose)"
+  },
+  "flagshipStudio": {
+    "en": "Flagship Studio — {0}",
+    "ctx": "MainWindow.xaml.cs:152 (prose)"
+  },
+  "flagshipStudioBuildAndHostYour": {
+    "en": "Flagship Studio {0}\n\nBuild and host your own Flagship server.\nhttps://flagshipserver.com",
+    "ctx": "MainWindow.xaml.cs:166 (prose)"
+  },
+  "aboutFlagshipStudio": {
+    "en": "About Flagship Studio",
+    "ctx": "MainWindow.xaml.cs:167 (prose)"
+  },
+  "pickRecipeJson": {
+    "en": "Pick recipe (.json)",
+    "ctx": "MainWindow.xaml.cs:207 (prose)"
+  },
+  "pickADebianInstallerIso": {
+    "en": "Pick a Debian installer ISO",
+    "ctx": "MainWindow.xaml.cs:230 (prose)"
+  },
+  "deleteTheVmAndItsEncrypted": {
+    "en": "Delete {0}?\n\nThe VM and its encrypted disk image are removed from this PC. ",
+    "ctx": "MainWindow.xaml.cs:333 (prose)"
+  },
+  "theServersIdentityStaysWithYour": {
+    "en": "The server's identity stays with your account. Backups stored on this server are deleted with it; ",
+    "ctx": "MainWindow.xaml.cs:334 (prose)"
+  },
+  "deleteThisServer": {
+    "en": "Delete this server",
+    "ctx": "MainWindow.xaml.cs:336 (prose)"
+  },
+  "sshIsAvailableOnceTheServer": {
+    "en": "SSH is available once the server is running (a debug-enabled VM forwards a local port to the guest).",
+    "ctx": "MainWindow.xaml.cs:511 (prose)"
+  },
+  "openInSsh": {
+    "en": "Open in SSH",
+    "ctx": "MainWindow.xaml.cs:512 (prose)"
+  },
+  "couldntLaunchSsh": {
+    "en": "Couldn't launch SSH: {0}",
+    "ctx": "MainWindow.xaml.cs:526 (prose)"
+  },
+  "advanced": {
+    "en": "Advanced…",
+    "ctx": "MainWindow.xaml.cs:678 (prose)"
+  },
+  "simple": {
+    "en": "Simple…",
+    "ctx": "MainWindow.xaml.cs:678 (prose)"
+  },
+  "thisIsNotADebianInstaller": {
+    "en": "This is not a Debian installer image. Flagship installs from a Debian netinst ISO.",
+    "ctx": "NativeIsoRemaster.cs:7 (prose)"
+  },
+  "phonePublicKeyMustBe32": {
+    "en": "Phone public key must be 32 bytes.",
+    "ctx": "NativePairingCrypto.cs:64 (prose)"
+  },
+  "x25519KeyAgreementFailed": {
+    "en": "X25519 key agreement failed.",
+    "ctx": "NativePairingCrypto.cs:67 (prose)"
+  },
+  "flagshipPair": {
+    "en": "FLAGSHIP_PAIR ",
+    "ctx": "PairSession.cs:44 (prose)"
+  },
+  "recipeArrivedBeforeKeyAgreement": {
+    "en": "Recipe arrived before key agreement.",
+    "ctx": "PairSession.cs:250 (prose)"
+  },
+  "unsupportedRecipeVersionExpected2": {
+    "en": "Unsupported recipe version {0} (expected 2).",
+    "ctx": "Recipe.cs:92 (prose)"
+  },
+  "thisRecipeExpired": {
+    "en": "This recipe expired {0:g}.",
+    "ctx": "Recipe.cs:96 (prose)"
+  },
+  "theRecipesSignatureDoesntVerifyIt": {
+    "en": "The recipe's signature doesn't verify — it may be tampered or corrupt.",
+    "ctx": "Recipe.cs:98 (prose)"
+  },
+  "notAValidRecipeTopLevel": {
+    "en": "Not a valid recipe: top-level is not an object.",
+    "ctx": "Recipe.cs:186 (prose)"
+  },
+  "notAValidRecipeMissingField": {
+    "en": "Not a valid recipe: missing field \"{0}\".",
+    "ctx": "Recipe.cs:231 (prose)"
+  },
+  "notAValidRecipeMissingInvalid": {
+    "en": "Not a valid recipe: missing/invalid field \"{0}\".",
+    "ctx": "Recipe.cs:241 (prose)"
+  },
+  "flashToUsb": {
+    "en": "Flash to USB",
+    "ctx": "Recipe.cs:311 (prose)"
+  },
+  "assembleAndFlash": {
+    "en": "Assemble and flash",
+    "ctx": "Recipe.cs:311 (prose)"
+  },
+  "beta": {
+    "en": "Beta",
+    "ctx": "StudioVersion.cs:12 (label)"
+  },
+  "openFlagshipStudio": {
+    "en": "Open Flagship Studio",
+    "ctx": "TrayIcon.cs:55 (prose)"
+  },
+  "noServersHostedYet": {
+    "en": "No servers hosted yet",
+    "ctx": "TrayIcon.cs:84 (prose)"
+  },
+  "stopAllRunningServers": {
+    "en": "Stop all running servers",
+    "ctx": "TrayIcon.cs:88 (prose)"
+  },
+  "quitFlagshipStudio": {
+    "en": "Quit Flagship Studio",
+    "ctx": "TrayIcon.cs:93 (prose)"
+  },
+  "flagshipStudio2": {
+    "en": "Flagship Studio: {0}",
+    "ctx": "TrayIcon.cs:142 (prose)"
+  },
+  "thePrebuiltServerImagesManifestIs": {
+    "en": "The prebuilt server image's manifest is malformed.",
+    "ctx": "VM/ApplianceCache.cs:131 (prose)"
+  },
+  "couldntDownloadThePrebuiltServerImage": {
+    "en": "Couldn't download the prebuilt server image: {0}",
+    "ctx": "VM/ApplianceCache.cs:155 (prose)"
+  },
+  "noPrebuiltServerImageIsPublished": {
+    "en": "No prebuilt {0} server image is published yet.",
+    "ctx": "VM/ApplianceCache.cs:158 (prose)"
+  },
+  "thePrebuiltServerImageIsFor": {
+    "en": "The prebuilt server image is for {0}, but this recipe installs {1}.",
+    "ctx": "VM/ApplianceCache.cs:164 (prose)"
+  },
+  "notEnoughFreeDiskSpaceFor": {
+    "en": "Not enough free disk space for the server image: needs {0:0.0} GB, {1:0.0} GB free.",
+    "ctx": "VM/ApplianceCache.cs:182 (prose)"
+  },
+  "theServerReturnedHttpForThe": {
+    "en": "The server returned HTTP {0} for the prebuilt server image.",
+    "ctx": "VM/ApplianceCache.cs:246 (prose)"
+  },
+  "thePrebuiltServerImageFailedIts": {
+    "en": "The prebuilt server image failed its integrity check ({0}).",
+    "ctx": "VM/ApplianceCache.cs:249 (prose)"
+  },
+  "usingTheDebianInstallerInstead": {
+    "en": "{0} Using the Debian installer instead.",
+    "ctx": "VM/ApplianceHosting.cs:34 (prose)"
+  },
+  "notEnoughFreeMemoryThisServer": {
+    "en": "Not enough free memory: this server needs {0} GiB. Close other apps and try again.",
+    "ctx": "VM/QemuFailure.cs:34 (prose)"
+  },
+  "qemuStoppedUnexpectedlyExit": {
+    "en": "QEMU stopped unexpectedly (exit {0}).",
+    "ctx": "VM/QemuFailure.cs:58 (prose)"
+  },
+  "qemuStoppedExit": {
+    "en": "QEMU stopped (exit {0}): {1}",
+    "ctx": "VM/QemuFailure.cs:59 (prose)"
+  },
+  "foundQemuAtButQemuImg": {
+    "en": "Found QEMU at {0} but qemu-img.exe is missing — reinstall QEMU.",
+    "ctx": "VM/QemuLocator.cs:53 (prose)"
+  },
+  "orSetToYourQemuFolder": {
+    "en": "(or set {0} to your QEMU folder).",
+    "ctx": "VM/QemuLocator.cs:62 (prose)"
+  },
+  "applianceHardware": {
+    "en": "Appliance (hardware)",
+    "ctx": "VM/ServerTier.cs:32 (prose)"
+  },
+  "applianceHostedVm": {
+    "en": "Appliance (hosted VM)",
+    "ctx": "VM/ServerTier.cs:33 (prose)"
+  },
+  "unknownServerTier": {
+    "en": "Unknown server tier '{0}'.",
+    "ctx": "VM/ServerTier.cs:53 (prose)"
+  },
+  "unknownProvisioningMode": {
+    "en": "Unknown provisioning mode '{0}'.",
+    "ctx": "VM/VMConfig.cs:107 (prose)"
+  },
+  "unknownNetworkMode": {
+    "en": "Unknown network mode '{0}'.",
+    "ctx": "VM/VMConfig.cs:122 (prose)"
+  },
+  "unlocking": {
+    "en": "Unlocking…",
+    "ctx": "VM/VMInventoryStore.cs:36 (prose)"
+  },
+  "aHostedServerNamedAlreadyExists": {
+    "en": "A hosted server named '{0}' already exists.",
+    "ctx": "VM/VMInventoryStore.cs:85 (prose)"
+  },
+  "noHostedServerNamed": {
+    "en": "No hosted server named '{0}'.",
+    "ctx": "VM/VMInventoryStore.cs:86 (prose)"
+  },
+  "unknownVmState": {
+    "en": "Unknown VM state '{0}'.",
+    "ctx": "VM/VMInventoryStore.cs:236 (prose)"
+  },
+  "unknownVmFailurePhase": {
+    "en": "Unknown VM failure phase '{0}'.",
+    "ctx": "VM/VMInventoryStore.cs:247 (prose)"
+  },
+  "unknownVmStateKind": {
+    "en": "Unknown VM state kind {0}.",
+    "ctx": "VM/VMInventoryStore.cs:264 (prose)"
+  },
+  "installing": {
+    "en": "Installing…",
+    "ctx": "VM/VMLifecycle.cs:55 (prose)"
+  },
+  "waitingForYouToUnlock": {
+    "en": "Waiting for you to unlock",
+    "ctx": "VM/VMLifecycle.cs:57 (prose)"
+  },
+  "installFailed": {
+    "en": "Install failed",
+    "ctx": "VM/VMLifecycle.cs:60 (prose)"
+  },
+  "stoppedUnexpectedly": {
+    "en": "Stopped unexpectedly",
+    "ctx": "VM/VMLifecycle.cs:60 (prose)"
+  },
+  "invalidVmTransitionOn": {
+    "en": "Invalid VM transition: {0} on {1}.",
+    "ctx": "VM/VMLifecycle.cs:111 (prose)"
+  },
+  "theInstallerStoppedAfterOnlyS": {
+    "en": "The installer stopped after only {0}s — too fast to have completed. ",
+    "ctx": "VM/VMLifecycle.cs:163 (prose)"
+  },
+  "theGuestLikelyFailedToBoot": {
+    "en": "The guest likely failed to boot the installer ISO. Retry the install; ",
+    "ctx": "VM/VMLifecycle.cs:164 (prose)"
+  },
+  "theApplianceStoppedAfterOnlyS": {
+    "en": "The appliance stopped after only {0}s — too fast to have specialized. ",
+    "ctx": "VM/VMLifecycle.cs:177 (prose)"
+  },
+  "theImageMayBeTheWrong": {
+    "en": "The image may be the wrong architecture or otherwise not bootable.",
+    "ctx": "VM/VMLifecycle.cs:178 (prose)"
+  },
+  "bootingTheInstaller": {
+    "en": "Booting the installer",
+    "ctx": "VM/VMManager.cs:19 (prose)"
+  },
+  "preparingTheEncryptedDisk": {
+    "en": "Preparing the encrypted disk",
+    "ctx": "VM/VMManager.cs:20 (prose)"
+  },
+  "installingDebian": {
+    "en": "Installing Debian",
+    "ctx": "VM/VMManager.cs:21 (prose)"
+  },
+  "downloadingFlagshipSoftware": {
+    "en": "Downloading Flagship software",
+    "ctx": "VM/VMManager.cs:22 (prose)"
+  },
+  "registeringTheServer": {
+    "en": "Registering the server",
+    "ctx": "VM/VMManager.cs:23 (prose)"
+  },
+  "sealingTheDiskKey": {
+    "en": "Sealing the disk key",
+    "ctx": "VM/VMManager.cs:24 (prose)"
+  },
+  "installationComplete": {
+    "en": "Installation complete",
+    "ctx": "VM/VMManager.cs:25 (prose)"
+  },
+  "pairingWithYourPhone": {
+    "en": "Pairing with your phone",
+    "ctx": "VM/VMManager.cs:26 (prose)"
+  },
+  "serverIsLive": {
+    "en": "Server is live",
+    "ctx": "VM/VMManager.cs:27 (prose)"
+  },
+  "installationReportedAnError": {
+    "en": "Installation reported an error",
+    "ctx": "VM/VMManager.cs:28 (prose)"
+  },
+  "waitingForAnInstallerCheckpoint": {
+    "en": "Waiting for an installer checkpoint",
+    "ctx": "VM/VMManager.cs:29 (prose)"
+  },
+  "serverHealth": {
+    "en": "Server health",
+    "ctx": "VM/VMManager.cs:76 (prose)"
+  },
+  "lastConnected": {
+    "en": "Last connected ",
+    "ctx": "VM/VMManager.cs:80 (prose)"
+  },
+  "notConnectedYet": {
+    "en": "Not connected yet",
+    "ctx": "VM/VMManager.cs:81 (prose)"
+  },
+  "noGuestProgressForM": {
+    "en": "No guest progress for {0}m · {1}",
+    "ctx": "VM/VMManager.cs:85 (prose)"
+  },
+  "takingLongerThanExpectedTheBox": {
+    "en": "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry.",
+    "ctx": "VM/VMManager.cs:94 (prose)"
+  },
+  "unlockingItsDiskWithTheKey": {
+    "en": "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there.",
+    "ctx": "VM/VMManager.cs:96 (prose)"
+  },
+  "theDiskIsSealedApproveThe": {
+    "en": "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.",
+    "ctx": "VM/VMManager.cs:98 (prose)"
+  },
+  "theDiskIsSealedApproveThe2": {
+    "en": "The disk is sealed — approve the unlock on your phone.",
+    "ctx": "VM/VMManager.cs:100 (prose)"
+  },
+  "waitingForTheFirstGuestCheckpoint": {
+    "en": "Waiting for the first guest checkpoint.",
+    "ctx": "VM/VMManager.cs:116 (prose)"
+  },
+  "noNewGuestCheckpointForMinutes": {
+    "en": "No new guest checkpoint for {0} minutes. Last reported: {1}. The VM may be stalled.",
+    "ctx": "VM/VMManager.cs:118 (prose)"
+  },
+  "guestCheckpointIsCurrent": {
+    "en": "{0}. Guest checkpoint is current.",
+    "ctx": "VM/VMManager.cs:119 (prose)"
+  },
+  "servingAtHttps": {
+    "en": "Serving at https://{0}/",
+    "ctx": "VM/VMManager.cs:120 (prose)"
+  },
+  "startTheServerToBringIt": {
+    "en": "Start the server to bring it online.",
+    "ctx": "VM/VMManager.cs:122 (prose)"
+  },
+  "preparingTheInstaller": {
+    "en": "Preparing the installer…",
+    "ctx": "VM/VMManager.cs:123 (prose)"
+  },
+  "encryptedLuks": {
+    "en": "Encrypted (LUKS)",
+    "ctx": "VM/VMManager.cs:151 (prose)"
+  },
+  "vcpuGibRamGibDisk": {
+    "en": "{0} vCPU · {1} GiB RAM · {2} GiB disk · {3}",
+    "ctx": "VM/VMManager.cs:152 (prose)"
+  },
+  "theAppQuitWhileTheInstall": {
+    "en": "The app quit while the install was running.",
+    "ctx": "VM/VMManager.cs:251 (prose)"
+  },
+  "keepingThisPcAwakeWhileIt": {
+    "en": "Keeping this PC awake while it hosts servers",
+    "ctx": "VM/VMManager.cs:360 (prose)"
+  },
+  "noServerRunningThisPcMay": {
+    "en": "No server running: this PC may sleep again",
+    "ctx": "VM/VMManager.cs:360 (prose)"
+  },
+  "installationStoppedByYou": {
+    "en": "Installation stopped by you.",
+    "ctx": "VM/VMManager.cs:368 (prose)"
+  },
+  "qemuIsNotInstalled": {
+    "en": "QEMU is not installed.",
+    "ctx": "VM/VMManager.cs:540 (prose)"
+  },
+  "vmHealthBackToNormal": {
+    "en": "VM {0}: health back to normal",
+    "ctx": "VM/VMManager.cs:786 (prose)"
+  },
+  "vmHealth": {
+    "en": "VM {0}: health — {1}",
+    "ctx": "VM/VMManager.cs:786 (prose)"
+  },
+  "noHealthReportForMinThe": {
+    "en": "No health report for {0} min. The server itself may be off or frozen.",
+    "ctx": "VM/VMServerHealth.cs:101 (prose)"
+  },
+  "healthyMbFreeOfMbDisk": {
+    "en": "Healthy · {0} MB free of {1} MB · disk {2}% · up {3}",
+    "ctx": "VM/VMServerHealth.cs:114 (prose)"
+  },
+  "whpxIsAvailable": {
+    "en": "WHPX is available.",
+    "ctx": "VM/WhpxProbe.cs:40 (prose)"
+  },
+  "cpuVirtualizationIntelVtXAmd": {
+    "en": "CPU virtualization (Intel VT-x / AMD-V) is disabled in your PC's firmware. ",
+    "ctx": "VM/WhpxProbe.cs:50 (prose)"
+  },
+  "enableItInBiosUefiSettings": {
+    "en": "Enable it in BIOS/UEFI settings, then try again.",
+    "ctx": "VM/WhpxProbe.cs:51 (prose)"
+  },
+  "theWindowsHypervisorPlatformFeatureIs": {
+    "en": "The Windows Hypervisor Platform feature is turned off. Enable it under ",
+    "ctx": "VM/WhpxProbe.cs:53 (prose)"
+  },
+  "turnWindowsFeaturesOnOrOff": {
+    "en": "\"Turn Windows features on or off\" → \"Windows Hypervisor Platform\", reboot, and try again.",
+    "ctx": "VM/WhpxProbe.cs:54 (prose)"
+  },
+  "qemuIsInstalledButItsFirmware": {
+    "en": "QEMU is installed but its firmware files are missing or unreadable — reinstall QEMU.",
+    "ctx": "VM/WhpxProbe.cs:58 (prose)"
+  },
+  "couldNotStartTheVirtualMachine": {
+    "en": "Could not start the virtual machine engine: {0}",
+    "ctx": "VM/WhpxProbe.cs:60 (prose)"
+  },
+  "couldNotLaunchQemu": {
+    "en": "Could not launch QEMU: {0}",
+    "ctx": "VM/WhpxProbe.cs:81 (prose)"
+  },
+  "flagshipStudioWiFi": {
+    "en": "Flagship Studio Wi-Fi",
+    "ctx": "WifiCredentialStore.cs:105 (prose)"
+  },
+  "waitingForAnInternetConnection": {
+    "en": "Waiting for an internet connection…",
+    "ctx": "Wizard.cs:117 (prose)"
+  },
+  "starting": {
+    "en": "Starting…",
+    "ctx": "Wizard.cs:198 (prose)"
+  },
+  "waitingForYourPhone": {
+    "en": "Waiting for your phone…",
+    "ctx": "Wizard.cs:208 (prose)"
+  },
+  "pairingCouldntStartCheckYourNetwork": {
+    "en": "Pairing couldn't start — check your network connection.",
+    "ctx": "Wizard.cs:220 (prose)"
+  },
+  "scanTheQrWithTheFlagship": {
+    "en": "Scan the QR with the Flagship app, or type the code.",
+    "ctx": "Wizard.cs:253 (prose)"
+  },
+  "phoneConnectedCheckTheSecurityCode": {
+    "en": "Phone connected — check the security code matches, then approve on your phone.",
+    "ctx": "Wizard.cs:258 (prose)"
+  },
+  "pairedWaitingForYourPhoneTo": {
+    "en": "Paired. Waiting for your phone to send the approved recipe…",
+    "ctx": "Wizard.cs:262 (prose)"
+  },
+  "yourPhoneDisconnectedBeforeSendingThe": {
+    "en": "Your phone disconnected before sending the recipe. Reopen it to retry, or cancel pairing.",
+    "ctx": "Wizard.cs:266 (prose)"
+  },
+  "recipeReceivedFor": {
+    "en": "Recipe received for {0}.",
+    "ctx": "Wizard.cs:269 (prose)"
+  },
+  "pairingFailed": {
+    "en": "Pairing failed.",
+    "ctx": "Wizard.cs:295 (prose)"
+  },
+  "thisPcDoesntHaveEnoughFree": {
+    "en": "This PC doesn't have enough free memory to host a server (each server needs ~{0} GiB).",
+    "ctx": "Wizard.cs:390 (prose)"
+  },
+  "thisPcIsAtItsHosting": {
+    "en": "This PC is at its hosting limit ({0}). Remove one first, or burn to USB.",
+    "ctx": "Wizard.cs:392 (prose)"
+  },
+  "willRunAsAManagedVm": {
+    "en": "Will run as a managed VM on this PC — {0} vCPU, ",
+    "ctx": "Wizard.cs:406 (prose)"
+  },
+  "gibRam": {
+    "en": "{0} GiB RAM, ",
+    "ctx": "Wizard.cs:407 (prose)"
+  },
+  "gibDisk": {
+    "en": "{0} GiB disk.",
+    "ctx": "Wizard.cs:408 (prose)"
+  },
+  "cannotReadTheRecipe": {
+    "en": "Cannot read the recipe: {0}",
+    "ctx": "Wizard.cs:451 (prose)"
+  },
+  "couldntRememberTheWiFiDetails": {
+    "en": "Couldn't remember the Wi-Fi details: {0}",
+    "ctx": "Wizard.cs:695 (prose)"
+  },
+  "working": {
+    "en": "Working...",
+    "ctx": "Wizard.cs:768 (prose)"
+  },
+  "writesToErasesWhatsThere": {
+    "en": "Writes to {0} · erases what's there",
+    "ctx": "Wizard.cs:770 (prose)"
+  },
+  "workingClickToCancel": {
+    "en": "Working — click to cancel",
+    "ctx": "Wizard.cs:776 (prose)"
+  },
+  "downloadingBaseImage": {
+    "en": "Downloading base image…",
+    "ctx": "Wizard.cs:796 (prose)"
+  },
+  "downloadingTheServerImage": {
+    "en": "Downloading the server image…",
+    "ctx": "Wizard.cs:797 (prose)"
+  },
+  "verifyingTheServerImage": {
+    "en": "Verifying the server image…",
+    "ctx": "Wizard.cs:798 (prose)"
+  },
+  "preparingTheServersDisk": {
+    "en": "Preparing the server's disk…",
+    "ctx": "Wizard.cs:799 (prose)"
+  },
+  "securingThisServer": {
+    "en": "Securing this server…",
+    "ctx": "Wizard.cs:800 (prose)"
+  },
+  "buildingImage": {
+    "en": "Building image…",
+    "ctx": "Wizard.cs:801 (prose)"
+  },
+  "writingToUsb": {
+    "en": "Writing to USB…",
+    "ctx": "Wizard.cs:802 (prose)"
+  },
+  "serverHandedOffReturningHomeIn": {
+    "en": "Server handed off · returning home in {0}…",
+    "ctx": "Wizard.cs:804 (prose)"
+  },
+  "preparingANewServer": {
+    "en": "Preparing a new server…",
+    "ctx": "Wizard.cs:805 (prose)"
+  },
+  "working2": {
+    "en": "Working…",
+    "ctx": "Wizard.cs:813 (prose)"
+  },
+  "expires": {
+    "en": "Expires {0}",
+    "ctx": "Wizard.cs:848 (prose)"
+  },
+  "dropAJsonFileFromThe": {
+    "en": "Drop a .json file (from the Download Recipe button)",
+    "ctx": "Wizard.cs:849 (prose)"
+  },
+  "clipboardDoesNotContainARecipe": {
+    "en": "Clipboard does not contain a recipe.",
+    "ctx": "Wizard.cs:896 (prose)"
+  },
+  "cancelled": {
+    "en": "Cancelled.",
+    "ctx": "Wizard.cs:1020 (prose)"
+  },
+  "pairYourPhoneToBegin": {
+    "en": "Pair your phone to begin",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "inTheFlagshipAppScanThe": {
+    "en": "In the Flagship app, scan the QR or type the code to pair",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "orProvideAServerRecipe": {
+    "en": "Or provide a server recipe",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "loadFromFile": {
+    "en": "Load from file",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "pasteFromClipboard": {
+    "en": "Paste from clipboard",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "confirmTheSecurityCode": {
+    "en": "Confirm the security code",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "checkThatThisCodeMatchesThe": {
+    "en": "Check that this code matches the Flagship app, then confirm on your phone.",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "waitingForYouToConfirmOn": {
+    "en": "Waiting for you to confirm on your phone…",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "awaitingAuthorization": {
+    "en": "Awaiting authorization",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "recipe": {
+    "en": "Recipe",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "debianIso": {
+    "en": "Debian ISO",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "dropAStockInstallerIsoTo": {
+    "en": "Drop a stock installer ISO to remaster",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "usbDrive": {
+    "en": "USB Drive",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "noRemovableDrivesDetectedPlugOne": {
+    "en": "No removable drives detected. Plug one in and click Refresh.",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "optionalWiFiForAServer": {
+    "en": "Optional Wi-Fi for a server without Ethernet. Baked into this single-use installer, and remembered on this PC for your account only.",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "readyToBoot": {
+    "en": "Ready to boot",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "recipeVerifiedChooseWhereThisServer": {
+    "en": "Recipe verified — choose where this server should live.",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "burnToUsb": {
+    "en": "Burn to USB",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "buildADedicatedHardwareApplianceThe": {
+    "en": "Build a dedicated hardware appliance — the gold standard. Boot any spare box from the USB stick.",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "hostOnThisPc": {
+    "en": "Host on this PC",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "runTheSameEncryptedPhoneGated": {
+    "en": "Run the same encrypted, phone-gated appliance as a managed VM inside this app. Same recipe, same unlock — your phone still holds the keys.",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "theVmInstallsUnattendedFromThe": {
+    "en": "The VM installs unattended from the same image a USB burn uses, then boots encrypted and waits for your phone to unlock it. This app never sees the disk key.",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "encryptedDiskUnlockedByYourPhone": {
+    "en": "Encrypted disk · unlocked by your phone",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "openCliConsole": {
+    "en": "Open CLI/console",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "consoleSshAvailableWhileTheServer": {
+    "en": "Console + SSH available while the server is running.",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "log": {
+    "en": "Log",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "serversOnThisPc": {
+    "en": "Servers on this PC",
+    "ctx": "MainWindow.xaml Text"
+  },
+  "home": {
+    "en": "⌂  Home",
+    "ctx": "MainWindow.xaml Content"
+  },
+  "cancelPairing": {
+    "en": "Cancel pairing",
+    "ctx": "MainWindow.xaml Content"
+  },
+  "pairAPhoneInstead": {
+    "en": "‹ Pair a phone instead",
+    "ctx": "MainWindow.xaml Content"
+  },
+  "simple2": {
+    "en": "Simple",
+    "ctx": "MainWindow.xaml Content"
+  },
+  "advanced2": {
+    "en": "Advanced",
+    "ctx": "MainWindow.xaml Content"
+  },
+  "chooseDestination": {
+    "en": "‹ Choose destination",
+    "ctx": "MainWindow.xaml Content"
+  },
+  "pasteRecipeFromClipboard": {
+    "en": "Paste recipe from clipboard",
+    "ctx": "MainWindow.xaml Content"
+  },
+  "useSystemProvidedIso": {
+    "en": "Use system-provided ISO",
+    "ctx": "MainWindow.xaml Content"
+  },
+  "refresh": {
+    "en": "Refresh",
+    "ctx": "MainWindow.xaml Content"
+  },
+  "cancel": {
+    "en": "Cancel",
+    "ctx": "MainWindow.xaml Content"
+  },
+  "createServerOnThisPc": {
+    "en": "Create server on this PC",
+    "ctx": "MainWindow.xaml Content"
+  },
+  "start": {
+    "en": "Start",
+    "ctx": "MainWindow.xaml Content"
+  },
+  "stop": {
+    "en": "Stop",
+    "ctx": "MainWindow.xaml Content"
+  },
+  "retryInstall": {
+    "en": "Retry install",
+    "ctx": "MainWindow.xaml Content"
+  },
+  "stopInstallation": {
+    "en": "Stop installation",
+    "ctx": "MainWindow.xaml Content"
+  },
+  "clear": {
+    "en": "Clear",
+    "ctx": "MainWindow.xaml Content"
+  },
+  "pairANewServer": {
+    "en": "⊕  Pair a new server",
+    "ctx": "MainWindow.xaml Content"
+  },
+  "file": {
+    "en": "_File",
+    "ctx": "MainWindow.xaml Header"
+  },
+  "newServer": {
+    "en": "New Server",
+    "ctx": "MainWindow.xaml Header"
+  },
+  "restartAsAdministrator2": {
+    "en": "Restart as administrator…",
+    "ctx": "MainWindow.xaml Header"
+  },
+  "exit": {
+    "en": "Exit",
+    "ctx": "MainWindow.xaml Header"
+  },
+  "help": {
+    "en": "_Help",
+    "ctx": "MainWindow.xaml Header"
+  },
+  "documentation": {
+    "en": "Documentation",
+    "ctx": "MainWindow.xaml Header"
+  },
+  "reportAnIssue": {
+    "en": "Report an Issue",
+    "ctx": "MainWindow.xaml Header"
+  },
+  "openConsole": {
+    "en": "Open console",
+    "ctx": "MainWindow.xaml Header"
+  },
+  "delete": {
+    "en": "Delete…",
+    "ctx": "MainWindow.xaml Header"
+  },
+  "returnToPairingHome": {
+    "en": "Return to pairing home",
+    "ctx": "MainWindow.xaml ToolTip"
+  },
+  "wiFiNetworkNameOptional": {
+    "en": "Wi-Fi network name (optional)",
+    "ctx": "MainWindow.xaml ToolTip"
+  },
+  "wiFiPasswordOptional": {
+    "en": "Wi-Fi password (optional)",
+    "ctx": "MainWindow.xaml ToolTip"
+  },
+  "actions": {
+    "en": "Actions",
+    "ctx": "MainWindow.xaml ToolTip"
+  }
+}

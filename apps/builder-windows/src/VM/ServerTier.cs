@@ -29,8 +29,8 @@ public static class ServerTierExtensions
 {
     public static string BadgeLabel(this ServerTier tier) => tier switch
     {
-        ServerTier.Hardware => "Appliance (hardware)",
-        ServerTier.HostedVM => "Appliance (hosted VM)",
+        ServerTier.Hardware => Strings.T("applianceHardware"),
+        ServerTier.HostedVM => Strings.T("applianceHostedVm"),
         _ => throw new ArgumentOutOfRangeException(nameof(tier)),
     };
 
@@ -50,7 +50,7 @@ public sealed class ServerTierJsonConverter : JsonConverter<ServerTier>
         {
             "hardware" => ServerTier.Hardware,
             "hosted-vm" => ServerTier.HostedVM,
-            var s => throw new JsonException($"Unknown server tier '{s}'."),
+            var s => throw new JsonException(Strings.F("unknownServerTier", s)),
         };
 
     public override void Write(Utf8JsonWriter writer, ServerTier value, JsonSerializerOptions options)

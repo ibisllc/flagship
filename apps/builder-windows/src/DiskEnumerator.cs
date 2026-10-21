@@ -31,7 +31,7 @@ public sealed record DiskInfo
     public string HumanSize => DiskEnumerator.FmtSize(SizeBytes);
 
     public string DisplayName =>
-        $"{(string.IsNullOrEmpty(Model) ? "(unknown model)" : Model)} ({HumanSize}, {Bus})";
+        $"{(string.IsNullOrEmpty(Model) ? Strings.T("unknownModel") : Model)} ({HumanSize}, {Bus})";
 
     public bool IsSafe => Verdict == SafetyVerdict.RemovableUsb;
 }
@@ -110,7 +110,7 @@ public static class DiskEnumerator
             {
                 DevicePath = devicePath,
                 SizeBytes = r.SizeBytes,
-                Model = string.IsNullOrEmpty(r.Model) ? "(unknown model)" : r.Model.Trim(),
+                Model = string.IsNullOrEmpty(r.Model) ? Strings.T("unknownModel") : r.Model.Trim(),
                 Bus = string.IsNullOrEmpty(r.Bus) ? "UNKNOWN" : r.Bus,
                 Removable = r.Removable,
                 Internal = r.Internal,
@@ -135,7 +135,7 @@ public static class DiskEnumerator
             {
                 DevicePath = devicePath,
                 SizeBytes = r.SizeBytes,
-                Model = string.IsNullOrEmpty(r.Model) ? "(unknown model)" : r.Model.Trim(),
+                Model = string.IsNullOrEmpty(r.Model) ? Strings.T("unknownModel") : r.Model.Trim(),
                 Bus = string.IsNullOrEmpty(r.Bus) ? "UNKNOWN" : r.Bus,
                 Removable = r.Removable,
                 Internal = r.Internal,
@@ -168,14 +168,14 @@ public static class DiskEnumerator
         }
         if (isInternal)
         {
-            return (SafetyVerdict.Internal, $"OS marks {devicePath} as internal media");
+            return (SafetyVerdict.Internal, Strings.F("osMarksAsInternalMedia", devicePath));
         }
         // NVMe/SATA with no Removable bit → internal. Same rule as the
         // Linux classifier: a fixed NVMe is the laptop SSD.
         var b = (bus ?? "").Trim().ToUpperInvariant();
         if ((b == "NVMe".ToUpperInvariant() || b == "SATA" || b == "ATA") && !removable)
         {
-            return (SafetyVerdict.Internal, $"{b} disk without removable bit — likely internal");
+            return (SafetyVerdict.Internal, Strings.F("diskWithoutRemovableBitLikelyInternal", b));
         }
         if (removable || b == "USB")
         {

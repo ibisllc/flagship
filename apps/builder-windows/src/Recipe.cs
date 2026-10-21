@@ -89,13 +89,13 @@ public static class RecipeLoader
         var at = now ?? DateTimeOffset.UtcNow;
         var recipe = Parse(data);
         if (recipe.Version != 2)
-            throw new RecipeException($"Unsupported recipe version {recipe.Version} (expected 2).");
+            throw new RecipeException(Strings.F("unsupportedRecipeVersionExpected2", recipe.Version));
         // v2: the auth-code expiry is the recipe expiry. Refuse before any work.
         long nowMs = at.ToUnixTimeMilliseconds();
         if (nowMs > recipe.AuthCode.ExpiresAt)
-            throw new RecipeException($"This recipe expired {recipe.ExpiresAtDate.LocalDateTime:g}.");
+            throw new RecipeException(Strings.F("thisRecipeExpired", recipe.ExpiresAtDate.LocalDateTime));
         if (!VerifySignature(recipe))
-            throw new RecipeException("The recipe's signature doesn't verify — it may be tampered or corrupt.");
+            throw new RecipeException(Strings.T("theRecipesSignatureDoesntVerifyIt"));
         return recipe;
     }
 
@@ -183,7 +183,7 @@ public static class RecipeLoader
         {
             var root = doc.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
-                throw new RecipeException("Not a valid recipe: top-level is not an object.");
+                throw new RecipeException(Strings.T("notAValidRecipeTopLevel"));
 
             string topUsername = ReqStr(root, "username");
             string topServerName = ReqStr(root, "serverName");
@@ -228,7 +228,7 @@ public static class RecipeLoader
     private static string ReqStr(JsonElement el, string name)
     {
         if (!el.TryGetProperty(name, out var v) || v.ValueKind != JsonValueKind.String)
-            throw new RecipeException($"Not a valid recipe: missing field \"{name}\".");
+            throw new RecipeException(Strings.F("notAValidRecipeMissingField", name));
         return v.GetString() ?? "";
     }
 
@@ -238,7 +238,7 @@ public static class RecipeLoader
     private static int ReqInt(JsonElement el, string name)
     {
         if (!el.TryGetProperty(name, out var v) || v.ValueKind != JsonValueKind.Number || !v.TryGetInt32(out var n))
-            throw new RecipeException($"Not a valid recipe: missing/invalid field \"{name}\".");
+            throw new RecipeException(Strings.F("notAValidRecipeMissingInvalid", name));
         return n;
     }
 
@@ -248,7 +248,7 @@ public static class RecipeLoader
     private static long ReqLong(JsonElement el, string name)
     {
         if (!el.TryGetProperty(name, out var v) || v.ValueKind != JsonValueKind.Number || !v.TryGetInt64(out var n))
-            throw new RecipeException($"Not a valid recipe: missing/invalid field \"{name}\".");
+            throw new RecipeException(Strings.F("notAValidRecipeMissingInvalid", name));
         return n;
     }
 }
@@ -308,7 +308,7 @@ public static class BuilderModeExtensions
     public static bool RequiresUserISO(this BuilderMode m) => m == BuilderMode.Advanced;
 
     public static string BakeCtaLabel(this BuilderMode m) =>
-        m == BuilderMode.Simple ? "Flash to USB" : "Assemble and flash";
+        m == BuilderMode.Simple ? Strings.T("flashToUsb") : Strings.T("assembleAndFlash");
 
     public static string MenuLabel(this BuilderMode m) =>
         m == BuilderMode.Simple ? "Simple" : "Advanced";

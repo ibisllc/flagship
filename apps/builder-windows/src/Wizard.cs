@@ -114,7 +114,7 @@ public sealed class Wizard : INotifyPropertyChanged
         PairQr = null;
         PairCode = null;
         PairSas = null;
-        PairStatus = "Waiting for an internet connection…";
+        PairStatus = Strings.T("waitingForAnInternetConnection");
     }
 
     private static Action ScheduleOnUi(TimeSpan delay, Action action)
@@ -195,7 +195,7 @@ public sealed class Wizard : INotifyPropertyChanged
         PairQr = null;
         PairCode = null;
         PairSas = null;
-        PairStatus = "Starting…";
+        PairStatus = Strings.T("starting");
         PairingStage = PairingStage.Qr;
         ManualRecipeMode = false;
         IsPairing = true;
@@ -205,7 +205,7 @@ public sealed class Wizard : INotifyPropertyChanged
         // Match macOS: publish the locally generated QR before network work starts.
         PairQr = session.QrPayload;
         PairCode = session.HumanCodeDisplay;
-        PairStatus = "Waiting for your phone…";
+        PairStatus = Strings.T("waitingForYourPhone");
         session.OnEvent += ev => OnUi(() => HandlePairEvent(ev));
         session.OnLog += line => OnUi(() => AppendLog(line.Stream, line.Text));
         _ = Task.Run(async () =>
@@ -217,7 +217,7 @@ public sealed class Wizard : INotifyPropertyChanged
                 {
                     AppendLog(LogStream.Stderr, $"pair failed: {e.Message}");
                     if (ReferenceEquals(_pair, session))
-                        EndPairing("Pairing couldn't start — check your network connection.", failed: true);
+                        EndPairing(Strings.T("pairingCouldntStartCheckYourNetwork"), failed: true);
                 });
             }
         });
@@ -250,23 +250,23 @@ public sealed class Wizard : INotifyPropertyChanged
                 PairingStage = PairingStage.Qr;
                 PairQr = ev.Payload;
                 PairCode = ev.HumanCode is { } human ? NativePairingCrypto.FormatHumanCode(human) : null;
-                PairStatus = "Scan the QR with the Flagship app, or type the code.";
+                PairStatus = Strings.T("scanTheQrWithTheFlagship");
                 break;
             case "phone-connected":
                 PairingStage = PairingStage.Confirm;
                 PairSas = ev.Sas;
-                PairStatus = "Phone connected — check the security code matches, then approve on your phone.";
+                PairStatus = Strings.T("phoneConnectedCheckTheSecurityCode");
                 break;
             case "paired":
                 PairingStage = PairingStage.AwaitingAuthorization;
-                PairStatus = "Paired. Waiting for your phone to send the approved recipe…";
+                PairStatus = Strings.T("pairedWaitingForYourPhoneTo");
                 break;
             case "reconnecting":
                 PairingStage = PairingStage.AwaitingAuthorization;
-                PairStatus = "Your phone disconnected before sending the recipe. Reopen it to retry, or cancel pairing.";
+                PairStatus = Strings.T("yourPhoneDisconnectedBeforeSendingThe");
                 break;
             case "delivered":
-                PairStatus = $"Recipe received for {ev.ServerDomain}.";
+                PairStatus = Strings.F("recipeReceivedFor", ev.ServerDomain);
                 break;
             case "debug-result":
                 AppendLog(LogStream.Stdout, ev.DebugGranted
@@ -292,7 +292,7 @@ public sealed class Wizard : INotifyPropertyChanged
                 FireBag();
                 break;
             case "error":
-                EndPairing(ev.Message ?? "Pairing failed.", failed: true);
+                EndPairing(ev.Message ?? Strings.T("pairingFailed"), failed: true);
                 break;
         }
     }
@@ -387,9 +387,9 @@ public sealed class Wizard : INotifyPropertyChanged
             if (_whpx is { IsAvailable: false } v) return v.Message;
             var cap = Vm.MaxVMCount;
             if (cap == 0)
-                return $"This PC doesn't have enough free memory to host a server (each server needs ~{VMResourcePlan.MinimumVMMemoryBytes / VMResourcePlan.GiB} GiB).";
+                return Strings.F("thisPcDoesntHaveEnoughFree", VMResourcePlan.MinimumVMMemoryBytes / VMResourcePlan.GiB);
             if (Vm.Servers.Count >= cap)
-                return $"This PC is at its hosting limit ({cap}). Remove one first, or burn to USB.";
+                return Strings.F("thisPcIsAtItsHosting", cap);
             return null;
         }
     }
@@ -403,9 +403,9 @@ public sealed class Wizard : INotifyPropertyChanged
         get
         {
             var host = VM.HostResources.Current();
-            return $"Will run as a managed VM on this PC — {VMResourcePlan.VmCpuCount(host)} vCPU, " +
-                   $"{VMResourcePlan.VmMemoryBytes(host) / VMResourcePlan.GiB} GiB RAM, " +
-                   $"{VMResourcePlan.DefaultMainDiskSizeBytes / VMResourcePlan.GiB} GiB disk.";
+            return Strings.F("willRunAsAManagedVm", VMResourcePlan.VmCpuCount(host)) +
+                   Strings.F("gibRam", VMResourcePlan.VmMemoryBytes(host) / VMResourcePlan.GiB) +
+                   Strings.F("gibDisk", VMResourcePlan.DefaultMainDiskSizeBytes / VMResourcePlan.GiB);
         }
     }
 
@@ -448,7 +448,7 @@ public sealed class Wizard : INotifyPropertyChanged
         try { rawRecipe = File.ReadAllBytes(_recipePath); }
         catch (Exception e)
         {
-            AppendLog(LogStream.Stderr, $"Cannot read the recipe: {e.Message}");
+            AppendLog(LogStream.Stderr, Strings.F("cannotReadTheRecipe", e.Message));
             return;
         }
         var parsed = _parsedRecipe;
@@ -692,7 +692,7 @@ public sealed class Wizard : INotifyPropertyChanged
     private void SaveWifi()
     {
         try { _wifiStore.Save(_wifiSsid, _wifiPassword); }
-        catch (Exception e) { AppendLog(LogStream.Stderr, $"Couldn't remember the Wi-Fi details: {e.Message}"); }
+        catch (Exception e) { AppendLog(LogStream.Stderr, Strings.F("couldntRememberTheWiFiDetails", e.Message)); }
     }
     public bool IsSimpleMode => Mode == BuilderMode.Simple;
     public bool IsAdvancedMode => Mode == BuilderMode.Advanced;
@@ -765,15 +765,15 @@ public sealed class Wizard : INotifyPropertyChanged
             if (SelectedDisk == null) missing.Add("USB drive");
             if (missing.Count == 0)
             {
-                if (IsRunning) return "Working...";
+                if (IsRunning) return Strings.T("working");
                 var dev = SelectedDisk?.DevicePath ?? "—";
-                return $"Writes to {dev} · erases what's there";
+                return Strings.F("writesToErasesWhatsThere", dev);
             }
             return $"Need: {string.Join(", ", missing)}.";
         }
     }
 
-    public string BakeButtonLabel => IsRunning ? "Working — click to cancel" : Mode.BakeCtaLabel();
+    public string BakeButtonLabel => IsRunning ? Strings.T("workingClickToCancel") : Mode.BakeCtaLabel();
 
     // ---- flow visibility ----
 
@@ -793,16 +793,16 @@ public sealed class Wizard : INotifyPropertyChanged
     /// <summary>Human label for the current phase, mirroring WizardModel.phaseLabel.</summary>
     public string? PhaseLabel => Phase switch
     {
-        "download" => "Downloading base image…",
-        "appliance" => "Downloading the server image…",
-        "verify" => "Verifying the server image…",
-        "clone appliance" => "Preparing the server's disk…",
-        "specialize" => "Securing this server…",
-        "remaster" => "Building image…",
-        "write" => "Writing to USB…",
+        "download" => Strings.T("downloadingBaseImage"),
+        "appliance" => Strings.T("downloadingTheServerImage"),
+        "verify" => Strings.T("verifyingTheServerImage"),
+        "clone appliance" => Strings.T("preparingTheServersDisk"),
+        "specialize" => Strings.T("securingThisServer"),
+        "remaster" => Strings.T("buildingImage"),
+        "write" => Strings.T("writingToUsb"),
         "handoff" => HandoffCountdown is int n
-            ? $"Server handed off · returning home in {n}…"
-            : "Preparing a new server…",
+            ? Strings.F("serverHandedOffReturningHomeIn", n)
+            : Strings.T("preparingANewServer"),
         _ => null,
     };
 
@@ -810,7 +810,7 @@ public sealed class Wizard : INotifyPropertyChanged
     {
         get
         {
-            var label = PhaseLabel ?? "Working…";
+            var label = PhaseLabel ?? Strings.T("working2");
             if (Progress is double p) return $"{label}  {(int)Math.Round(p * 100)}%";
             return label;
         }
@@ -845,8 +845,8 @@ public sealed class Wizard : INotifyPropertyChanged
             return null;
         }
     }
-    public string? RecipeSecondary => Verified?.ExpiresAt is string s ? $"Expires {s}" : null;
-    public string RecipeHint => "Drop a .json file (from the Download Recipe button)";
+    public string? RecipeSecondary => Verified?.ExpiresAt is string s ? Strings.F("expires", s) : null;
+    public string RecipeHint => Strings.T("dropAJsonFileFromThe");
     public string RecipeStatusGlyph
     {
         get
@@ -893,7 +893,7 @@ public sealed class Wizard : INotifyPropertyChanged
 
     public void AcceptRecipeText(string json)
     {
-        if (string.IsNullOrWhiteSpace(json)) { RecipeError = "Clipboard does not contain a recipe."; return; }
+        if (string.IsNullOrWhiteSpace(json)) { RecipeError = Strings.T("clipboardDoesNotContainARecipe"); return; }
         var path = Path.Combine(Path.GetTempPath(), $"flagship-recipe-{Guid.NewGuid():N}.json");
         File.WriteAllText(path, json);
         AcceptRecipeFile(path);
@@ -1017,7 +1017,7 @@ public sealed class Wizard : INotifyPropertyChanged
         var disk = SelectedDisk!;
         DidRemasterForTest = true; Phase = "remaster"; IsRunning = true; _cts = new CancellationTokenSource();
         try { await _nativeBuild.WriteAsync(recipe, iso, disk.DevicePath, WifiSsid, WifiPassword, SetProgress, _cts.Token); IsFinished = true; }
-        catch (OperationCanceledException) { AppendLog(LogStream.Stderr, "Cancelled."); }
+        catch (OperationCanceledException) { AppendLog(LogStream.Stderr, Strings.T("cancelled")); }
         catch (Exception e) { AppendLog(LogStream.Stderr, e.Message); }
         finally { IsRunning = false; Phase = null; Progress = null; _cts.Dispose(); _cts = null; FireBag(); }
     }
@@ -1070,7 +1070,7 @@ public sealed class Wizard : INotifyPropertyChanged
         FireBag();
         var recipe = _recipePath!;
         try { await _nativeBuild.WriteAsync(recipe, baseIso, disk.DevicePath, WifiSsid, WifiPassword, SetProgress, _cts.Token); IsFinished = true; }
-        catch (OperationCanceledException) { AppendLog(LogStream.Stderr, "Cancelled."); }
+        catch (OperationCanceledException) { AppendLog(LogStream.Stderr, Strings.T("cancelled")); }
         catch (Exception e) { AppendLog(LogStream.Stderr, e.Message); }
         FinishSimple();
     }
@@ -1107,7 +1107,7 @@ public sealed class Wizard : INotifyPropertyChanged
         FireBag();
         if (IsRunning) return; IsRunning = true; _cts = new CancellationTokenSource();
         try { await _nativeBuild.PrepareAsync(recipe, iso, outIso, WifiSsid, WifiPassword, _cts.Token); IsFinished = true; }
-        catch (OperationCanceledException) { AppendLog(LogStream.Stderr, "Cancelled."); }
+        catch (OperationCanceledException) { AppendLog(LogStream.Stderr, Strings.T("cancelled")); }
         catch (Exception e) { AppendLog(LogStream.Stderr, e.Message); }
         finally { IsRunning = false; _cts.Dispose(); _cts = null; FireBag(); }
     }

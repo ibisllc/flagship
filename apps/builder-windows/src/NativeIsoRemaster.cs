@@ -4,7 +4,7 @@ namespace Flagship.Builder;
 public enum IsoFamily { Other, Debian }
 public static partial class NativeIsoRemaster
 {
- public const string NotDebianIsoMessage="This is not a Debian installer image. Flagship installs from a Debian netinst ISO.";
+ public static string NotDebianIsoMessage => Strings.T("thisIsNotADebianInstaller");
  public const string DebianPreseedCommandLine="auto=true priority=critical preseed/file=/cdrom/preseed.cfg";
  public static string ToXorrisoDiskPath(string p,bool windows=true){if(!windows)return p;var m=Drive().Match(p);return m.Success?$"/{char.ToLowerInvariant(m.Groups[1].Value[0])}/{m.Groups[2].Value.Replace('\\','/')}":p.Replace('\\','/');}
  public static IsoFamily ClassifyIsoText(string text){var t=text.ToLowerInvariant();if(Debian().IsMatch(t)){if(Casper().IsMatch(t)&&!StrongDebian().IsMatch(t))return IsoFamily.Other;return IsoFamily.Debian;}return IsoFamily.Other;}
