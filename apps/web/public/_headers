@@ -45,6 +45,13 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Strict-Transport-Security: max-age=31536000
 
+/i18n.js
+  Content-Security-Policy: frame-ancestors 'none'
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=31536000
+
 /motion.js
   Content-Security-Policy: frame-ancestors 'none'
   X-Frame-Options: DENY
