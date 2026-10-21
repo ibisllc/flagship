@@ -2415,7 +2415,6 @@
   "{0} of {1} pieces safe": "{0} morceaux sur {1} en sécurité",
   "Last placed: {0}": "Dernier placement : {0}",
   "Holds {0} for other servers": "Stocke {0} pour d’autres serveurs",
-  "Beta": "Bêta",
   "A remote browser can't sign — open your owner app to approve this": "Un navigateur à distance ne peut pas signer — ouvrez votre app de propriétaire pour approuver",
   "just now": "à l’instant",
   "Anyone with both this file and its passphrase can take over your account and lock you out.": "Quiconque détient ce fichier et sa phrase secrète peut prendre le contrôle de votre compte et vous en exclure.",

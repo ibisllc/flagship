@@ -9,7 +9,7 @@ internal static class StudioVersion
 {
     /// <summary>The maturity word beside the product version
     /// (release/version.json; scripts/check-versions.mjs --write keeps it in step).</summary>
-    public static string Label => Strings.T("beta");
+    public const string Label = "Beta";
 
     public static readonly string Current =
         (typeof(StudioVersion).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
