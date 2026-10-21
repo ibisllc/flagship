@@ -9,28 +9,28 @@ import FlagshipCore
 /// rows and SQL. Owner only: hidden on a restricted profile and whenever the
 /// box refuses (403, a companion) or doesn't have it (404, an older box).
 public enum AppDbCopy {
-    public static let sectionTitle = "Database"
-    public static let rowTitle = "Database"
-    public static let rowSubtitle = "Browse tables and run SQL on the live data"
-    public static let screenTitle = "Database"
-    public static let intro = "Your app's live data. Reading is safe; anything that changes data asks for Face ID first."
-    public static let noTables = "No tables yet."
-    public static let runSql = "Run SQL"
-    public static let run = "Run"
-    public static let exportCsv = "Export CSV"
-    public static let confirmWrite = "This changes data. Confirm with Face ID to run it."
-    public static let confirmButton = "Confirm and run"
-    public static let truncated = "Showing the first rows only: more matched than the server returns."
-    public static let sqlPlaceholder = "SELECT * FROM …"
+    public static let sectionTitle = String(localized: "Database")
+    public static let rowTitle = String(localized: "Database")
+    public static let rowSubtitle = String(localized: "Browse tables and run SQL on the live data")
+    public static let screenTitle = String(localized: "Database")
+    public static let intro = String(localized: "Your app's live data. Reading is safe; anything that changes data asks for Face ID first.")
+    public static let noTables = String(localized: "No tables yet.")
+    public static let runSql = String(localized: "Run SQL")
+    public static let run = String(localized: "Run")
+    public static let exportCsv = String(localized: "Export CSV")
+    public static let confirmWrite = String(localized: "This changes data. Confirm with Face ID to run it.")
+    public static let confirmButton = String(localized: "Confirm and run")
+    public static let truncated = String(localized: "Showing the first rows only: more matched than the server returns.")
+    public static let sqlPlaceholder = String(localized: "SELECT * FROM …")
 
-    public static func storeTitle(_ store: String) -> String { store == "default" ? "Tables" : "Store \(store)" }
+    public static func storeTitle(_ store: String) -> String { store == "default" ? String(localized: "Tables") : String(localized: "Store \(store)") }
 
-    public static func tableCount(_ n: Int) -> String { n == 1 ? "1 table" : "\(n) tables" }
+    public static func tableCount(_ n: Int) -> String { n == 1 ? "1 table" : String(localized: "\(n) tables") }
 
     /// "~1,234 rows · 48 KB", "view", or "size unknown".
     public static func tableDetail(_ t: AppDbTable) -> String {
         var parts: [String] = []
-        if t.isView { parts.append("View") }
+        if t.isView { parts.append(String(localized: "View")) }
         if let rows = t.rows { parts.append("~\(number(rows)) \(rows == 1 ? "row" : "rows")") }
         if !t.isView || t.bytes > 0 { parts.append(bytes(t.bytes)) }
         return parts.joined(separator: " · ")
@@ -38,14 +38,14 @@ public enum AppDbCopy {
 
     /// "Rows 101–200 of 1,234".
     public static func pageLabel(offset: Int, count: Int, total: Int64) -> String {
-        guard count > 0 else { return total == 0 ? "No rows" : "No rows here (\(number(total)) in all)" }
-        return "Rows \(number(Int64(offset + 1)))–\(number(Int64(offset + count))) of \(number(total))"
+        guard count > 0 else { return total == 0 ? String(localized: "No rows") : String(localized: "No rows here (\(number(total)) in all)") }
+        return String(localized: "Rows \(number(Int64(offset + 1)))–\(number(Int64(offset + count))) of \(number(total))")
     }
 
     /// "UPDATE · 3 rows".
     public static func resultSummary(_ r: AppDbQueryResult) -> String {
-        var parts = [r.command.isEmpty ? "Done" : r.command]
-        if let n = r.rowCount { parts.append(n == 1 ? "1 row" : "\(number(n)) rows") }
+        var parts = [r.command.isEmpty ? String(localized: "Done") : r.command]
+        if let n = r.rowCount { parts.append(n == 1 ? "1 row" : String(localized: "\(number(n)) rows")) }
         return parts.joined(separator: " · ")
     }
 
@@ -69,18 +69,18 @@ public enum AppDbCopy {
         }
         let reason = AppDbRefusal.decode(body)?.error ?? ScreensClientError.boxReason(error)
         switch status {
-        case 400: return reason ?? "The server couldn't run that."
+        case 400: return reason ?? String(localized: "The server couldn't run that.")
         case 403:
             let r = reason?.lowercased() ?? ""
-            if r.contains("stale") { return "Your phone's clock is more than 10 minutes off. Check the date and time, then try again." }
-            if r.contains("different server") { return "This was signed for a different server. Reload and try again." }
-            if r.contains("not the one that was signed") { return "The statement changed after you confirmed it. Run it again." }
-            if r.contains("signature") { return "Your server didn't accept your signature. Only the account owner's phone can change data." }
-            return "Only the account owner can open this app's database."
-        case 404: return reason.map { "Not found: \($0)." } ?? "This app or table isn't on the server any more."
-        case 409: return "That confirmation was already used. Run it again to confirm once more."
-        case 413: return reason ?? "That's too large for the server to send."
-        case 503: return "The app's database isn't reachable right now. Try again in a moment."
+            if r.contains("stale") { return String(localized: "Your phone's clock is more than 10 minutes off. Check the date and time, then try again.") }
+            if r.contains("different server") { return String(localized: "This was signed for a different server. Reload and try again.") }
+            if r.contains("not the one that was signed") { return String(localized: "The statement changed after you confirmed it. Run it again.") }
+            if r.contains("signature") { return String(localized: "Your server didn't accept your signature. Only the account owner's phone can change data.") }
+            return String(localized: "Only the account owner can open this app's database.")
+        case 404: return reason.map { String(localized: "Not found: \($0).") } ?? String(localized: "This app or table isn't on the server any more.")
+        case 409: return String(localized: "That confirmation was already used. Run it again to confirm once more.")
+        case 413: return reason ?? String(localized: "That's too large for the server to send.")
+        case 503: return String(localized: "The app's database isn't reachable right now. Try again in a moment.")
         default: return ScreensClientError.plainLanguage(forStatus: status)
         }
     }
@@ -111,7 +111,7 @@ public enum AppDbOrder {
     public static func domain(client: any ScreensClient, fallbackServerDomain: String?) async throws -> String {
         let boxDomain = await client.boxDomain()
         guard let domain = boxDomain ?? fallbackServerDomain, !domain.isEmpty else {
-            throw Failure(message: "No server to send this to.")
+            throw Failure(message: String(localized: "No server to send this to."))
         }
         return domain
     }
@@ -360,7 +360,7 @@ public final class AppDbQueryController {
             let domain = try await AppDbOrder.domain(client: client, fallbackServerDomain: fallbackServerDomain)
             let key: Curve25519.Signing.PrivateKey
             do {
-                key = try await signer("Change \(appName)'s data")
+                key = try await signer(String(localized: "Change \(appName)'s data"))
             } catch {
                 throw AppDbOrder.Failure(message: "Couldn't access your account key: \(UserErrorText.of(error))")
             }

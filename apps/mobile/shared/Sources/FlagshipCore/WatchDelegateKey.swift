@@ -192,7 +192,7 @@ public struct DeviceCapabilityGrantEnvelope: Equatable, Sendable {
     /// Adding a device is for admin devices only (owner rule 2026-10-16); this
     /// is the sentence a device without the admin root shows in place of the
     /// button (test-vectors/device-pairing `adminOnlyLine`).
-    public static let addDeviceAdminOnlyLine = "Only an admin device of this account can add devices."
+    public static let addDeviceAdminOnlyLine = String(localized: "Only an admin device of this account can add devices.")
 
     public let grantId: String
     public let username: String

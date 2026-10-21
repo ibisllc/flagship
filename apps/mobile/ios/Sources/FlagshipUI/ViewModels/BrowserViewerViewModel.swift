@@ -164,21 +164,21 @@ public final class BrowserViewerViewModel {
     private static func domCode(forChar ch: Character) -> String {
         if ch.isLetter, let scalar = ch.lowercased().unicodeScalars.first,
            scalar.value >= 0x61, scalar.value <= 0x7a {
-            return "Key\(String(scalar).uppercased())"
+            return String(localized: "Key\(String(scalar).uppercased())")
         }
         if ch.isNumber, let scalar = ch.unicodeScalars.first,
            scalar.value >= 0x30, scalar.value <= 0x39 {
-            return "Digit\(String(scalar))"
+            return String(localized: "Digit\(String(scalar))")
         }
         switch ch {
-        case " ": return "Space"
-        case "\n", "\r": return "Enter"
-        case "\t": return "Tab"
-        case ".": return "Period"
-        case ",": return "Comma"
-        case "/": return "Slash"
-        case "-": return "Minus"
-        case "=": return "Equal"
+        case " ": return String(localized: "Space")
+        case "\n", "\r": return String(localized: "Enter")
+        case "\t": return String(localized: "Tab")
+        case ".": return String(localized: "Period")
+        case ",": return String(localized: "Comma")
+        case "/": return String(localized: "Slash")
+        case "-": return String(localized: "Minus")
+        case "=": return String(localized: "Equal")
         default: return ""
         }
     }

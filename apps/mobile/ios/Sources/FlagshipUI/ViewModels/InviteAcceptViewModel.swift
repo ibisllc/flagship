@@ -75,16 +75,16 @@ public final class InviteAcceptViewModel {
             if result.bound {
                 phase = .done(serviceRef: result.serviceRef.isEmpty ? serviceRef : result.serviceRef)
             } else {
-                phase = .failed("The server didn't confirm the approval. Try again in a moment.")
+                phase = .failed(String(localized: "The server didn't confirm the approval. Try again in a moment."))
             }
         } catch ServiceAccessError.acceptRejected {
-            phase = .failed("Couldn't verify this approval. Ask them to open the invite again and resend.")
+            phase = .failed(String(localized: "Couldn't verify this approval. Ask them to open the invite again and resend."))
         } catch ServiceAccessError.acceptNotForThisBox {
-            phase = .failed("This invite is for a service that isn't on this server anymore.")
+            phase = .failed(String(localized: "This invite is for a service that isn't on this server anymore."))
         } catch let e as ScreensClientError {
-            phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
+            phase = .failed(e.errorDescription ?? String(localized: "That didn't work. Try again in a moment."))
         } catch {
-            phase = .failed("Couldn't reach the server. Check your connection and try again.")
+            phase = .failed(String(localized: "Couldn't reach the server. Check your connection and try again."))
         }
     }
 }

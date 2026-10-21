@@ -87,13 +87,13 @@ public struct AppStatusPill: Equatable, Sendable {
     public static func combined(_ answers: [AppServerState?]) -> AppStatusPill {
         let states = answers.compactMap { $0 }
         if states.contains(where: { $0 == .deploying || $0 == .copying }) {
-            return AppStatusPill(label: "Deploying", kind: .busy)
+            return AppStatusPill(label: String(localized: "Deploying"), kind: .busy)
         }
-        if states.contains(.editing) { return AppStatusPill(label: "Editing", kind: .busy) }
+        if states.contains(.editing) { return AppStatusPill(label: String(localized: "Editing"), kind: .busy) }
         let live = states.filter(\.isLive).count
         let on = live > 0 ? live : states.filter { $0 == .unknown }.count
-        if on > 0 { return AppStatusPill(label: on == 1 ? "On 1 server" : "On \(on) servers", kind: .online, serverCount: on) }
-        if !states.isEmpty { return AppStatusPill(label: "Stopped", kind: .idle) }
-        return AppStatusPill(label: "Can't reach", kind: .warning)
+        if on > 0 { return AppStatusPill(label: on == 1 ? String(localized: "On 1 server") : String(localized: "On \(on) servers"), kind: .online, serverCount: on) }
+        if !states.isEmpty { return AppStatusPill(label: String(localized: "Stopped"), kind: .idle) }
+        return AppStatusPill(label: String(localized: "Can't reach"), kind: .warning)
     }
 }

@@ -70,7 +70,7 @@ public struct BuildKeyScreen: View {
                             showSaveToggle: false,
                             saveOnDevice: $vm.saveOnDevice,
                             errorMessage: vm.errorMessage,
-                            primaryLabel: "Add key",
+                            primaryLabel: String(localized: "Add key"),
                             primaryId: "build-key-add-save",
                             onPrimary: { vm.addFromForm() },
                             onCancel: {
@@ -137,12 +137,12 @@ public struct BuildKeyScreen: View {
     private func delete(_ e: SavedKeyStore.Entry) async {
         deleteError = nil
         do {
-            try await BiometricGate().evaluate(reason: "Delete the AI key \(e.label)")
+            try await BiometricGate().evaluate(reason: String(localized: "Delete the AI key \(e.label)"))
             vm.delete(e)
         } catch BiometricGate.GateError.notAvailable {
             vm.delete(e)
         } catch {
-            deleteError = "The key wasn't deleted."
+            deleteError = String(localized: "The key wasn't deleted.")
         }
     }
 
@@ -165,7 +165,7 @@ public struct BuildKeyScreen: View {
                     if vm.freeAiBusy {
                         ProgressView()
                     } else {
-                        FSPrimaryButton("Use this") { Task { await useFreeAi() } }
+                        FSPrimaryButton(String(localized: "Use this")) { Task { await useFreeAi() } }
                             .accessibilityIdentifier("build-key-use-free-ai")
                     }
                 }
@@ -209,7 +209,7 @@ public struct BuildKeyScreen: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel("Delete \(e.label)")
                         .accessibilityIdentifier("build-key-delete")
-                        FSPrimaryButton("Use this") { onChosen(vm.credential(for: e)) }
+                        FSPrimaryButton(String(localized: "Use this")) { onChosen(vm.credential(for: e)) }
                             .accessibilityIdentifier(e.id == vm.active?.id ? "build-key-confirm-active" : "build-key-use-saved")
                     }
                     AiKeyRelayRowToggle(
@@ -231,7 +231,7 @@ struct FlagshipInferenceLabel: View {
     @Environment(\.colorScheme) private var scheme
     let status: String?
     var lastUsed: Bool = false
-    var lastUsedText: String = "Last used"
+    var lastUsedText: String = String(localized: "Last used")
     var usable: Bool = true
 
     var body: some View {
@@ -282,12 +282,12 @@ public struct AiKeyFormBinding {
 /// The words for the per-key Flagship relay setting, shared by the add form
 /// and the key lists.
 public enum AiKeyRelayCopy {
-    public static let toggle = "Send through the Flagship relay"
-    public static let note = "Better for your anonymity: the AI provider sees Flagship's address, not yours."
-    public static let on = "Through the Flagship relay"
-    public static let off = "Direct"
-    public static let turnOff = "Turn the relay off for this key"
-    public static let turnedOff = "The relay is off for this key. Try again."
+    public static let toggle = String(localized: "Send through the Flagship relay")
+    public static let note = String(localized: "Better for your anonymity: the AI provider sees Flagship's address, not yours.")
+    public static let on = String(localized: "Through the Flagship relay")
+    public static let off = String(localized: "Direct")
+    public static let turnOff = String(localized: "Turn the relay off for this key")
+    public static let turnedOff = String(localized: "The relay is off for this key. Try again.")
     public static func caption(_ relay: Bool) -> String { relay ? on : off }
 }
 
@@ -337,13 +337,13 @@ struct AiKeyForm: View {
                 .pickerStyle(.menu)
                 .accessibilityIdentifier("ai-key-provider")
             }
-            FSField(value: vm.$apiKey, label: "API key",
-                    placeholder: "sk-…", secure: true)
+            FSField(value: vm.$apiKey, label: String(localized: "API key"),
+                    placeholder: String(localized: "sk-…"), secure: true)
                 .accessibilityIdentifier("ai-key-field")
-            FSField(value: vm.$baseUrl, label: "Base URL (optional)",
+            FSField(value: vm.$baseUrl, label: String(localized: "Base URL (optional)"),
                     placeholder: "https://…", keyboard: .URL)
-            FSField(value: vm.$label, label: "Label (optional)",
-                    placeholder: "e.g. Personal")
+            FSField(value: vm.$label, label: String(localized: "Label (optional)"),
+                    placeholder: String(localized: "e.g. Personal"))
             Toggle(isOn: vm.$relay) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(AiKeyRelayCopy.toggle).font(FS.font.body()).foregroundColor(c.text)
@@ -369,7 +369,7 @@ struct AiKeyForm: View {
                 Text(err).font(FS.font.bodySm()).foregroundColor(c.danger)
             }
             HStack(spacing: FS.space.s2) {
-                if showCancel { FSSecondaryButton("Cancel", block: true, action: onCancel) }
+                if showCancel { FSSecondaryButton(String(localized: "Cancel"), block: true, action: onCancel) }
                 FSPrimaryButton(primaryLabel, block: true, action: onPrimary)
                     .accessibilityIdentifier(primaryId)
             }

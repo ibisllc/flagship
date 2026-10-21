@@ -61,7 +61,7 @@ struct ShareServerCard: View {
             if let model { ShareServerSheet(model: model, startOnLink: ServerShareDemo.route == "sheet") }
         }
         .confirmationDialog(
-            removing.map { "Remove \($0.label)?" } ?? "",
+            removing.map { String(localized: "Remove \($0.label)?") } ?? "",
             isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
             titleVisibility: .visible,
             presenting: removing
@@ -82,7 +82,7 @@ struct ShareServerCard: View {
                                              serverDomain: fqdn,
                                              accountAdminPub: Data(repeating: 0, count: 32))
             if let household = GymSeams.accountRootSeed.flatMap({ ServiceInvite.deriveHouseholdKey(umkSeed: $0) }) {
-                try? world.seedOldAcceptance(householdKey: household, label: "Riley")
+                try? world.seedOldAcceptance(householdKey: household, label: String(localized: "Riley"))
             }
             model = ShareServerCardModel(
                 serverDomain: fqdn,
@@ -204,9 +204,9 @@ struct ShareServerCard: View {
                     .font(FS.font.caption()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
                 if canShare {
                     HStack(spacing: FS.space.s2) {
-                        FSPrimaryButton("Confirm with Face ID", enabled: model.busy == nil) { Task { await model.confirm(row) } }
+                        FSPrimaryButton(String(localized: "Confirm with Face ID"), enabled: model.busy == nil) { Task { await model.confirm(row) } }
                             .accessibilityIdentifier("share-confirm-\(row.shareId)")
-                        FSGhostButton("Cancel") { Task { await model.end(row) } }
+                        FSGhostButton(String(localized: "Cancel")) { Task { await model.end(row) } }
                             .disabled(model.busy != nil)
                     }
                 }
@@ -214,12 +214,12 @@ struct ShareServerCard: View {
                 Text(ServerShareCopy.offered(row.label)).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 Text("The link expires \(relative(expiresAt)).").font(FS.font.caption()).foregroundColor(c.textMuted)
                 HStack(spacing: FS.space.s2) {
-                    FSSecondaryButton("Copy link") {
+                    FSSecondaryButton(String(localized: "Copy link")) {
                         UIPasteboard.general.string = link
-                        toasts.success("Link copied.")
+                        toasts.success(String(localized: "Link copied."))
                     }
                     if canShare {
-                        FSGhostButton("Cancel") { Task { await model.end(row) } }
+                        FSGhostButton(String(localized: "Cancel")) { Task { await model.end(row) } }
                             .disabled(model.busy != nil)
                     }
                 }
@@ -227,7 +227,7 @@ struct ShareServerCard: View {
                 Text(ServerShareCopy.acceptanceInvalid).font(FS.font.bodySm()).foregroundColor(c.danger)
                     .fixedSize(horizontal: false, vertical: true)
                 if canShare {
-                    FSGhostButton("Cancel") { Task { await model.end(row) } }.disabled(model.busy != nil)
+                    FSGhostButton(String(localized: "Cancel")) { Task { await model.end(row) } }.disabled(model.busy != nil)
                 }
             }
         }
@@ -258,7 +258,7 @@ struct ShareServerCard: View {
             HStack(spacing: FS.space.s2) {
                 Text(ServerShareCopy.startupKeyMissing).font(FS.font.caption()).foregroundColor(c.warning)
                 Spacer()
-                FSGhostButton("Set up") { Task { await model.sendStartupKey(row) } }.disabled(model.busy != nil)
+                FSGhostButton(String(localized: "Set up")) { Task { await model.sendStartupKey(row) } }.disabled(model.busy != nil)
                     .accessibilityIdentifier("share-startup-setup-\(row.shareId)")
             }
         }
@@ -268,14 +268,14 @@ struct ShareServerCard: View {
         ), c: c)
         .disabled(model.busy != nil)
         .accessibilityIdentifier("share-data-\(row.shareId)")
-        FSGhostButton("Remove \(row.label)") { removing = row }
+        FSGhostButton(String(localized: "Remove \(row.label)")) { removing = row }
             .disabled(model.busy != nil)
             .accessibilityIdentifier("share-remove-\(row.shareId)")
     }
 
     private func activityCard(_ entries: [ShareActivityEntry], c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            sectionHeader("Activity", c: c)
+            sectionHeader(String(localized: "Activity"), c: c)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     ForEach(entries.prefix(12)) { e in
@@ -337,13 +337,13 @@ struct ShareServerSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(created == nil ? "Cancel" : "Done") { dismiss() }
+                    Button(created == nil ? String(localized: "Cancel") : "Done") { dismiss() }
                 }
             }
         }
         .task {
             if startOnLink, created == nil {
-                draft.label = "Alex"
+                draft.label = String(localized: "Alex")
                 created = await model.create(draft)
             }
         }
@@ -355,11 +355,11 @@ struct ShareServerSheet: View {
     private func form(_ c: FSColors) -> some View {
         Text("Give another person access to \(model.serverName). They use their own Flagship account; you can change or remove their access at any time.")
             .font(FS.font.bodySm()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
-        FSField(value: $draft.label, label: "Who is it for?", placeholder: "Sam",
-                helper: "Only you and this server see this name.")
+        FSField(value: $draft.label, label: String(localized: "Who is it for?"), placeholder: String(localized: "Sam"),
+                helper: String(localized: "Only you and this server see this name."))
             .accessibilityIdentifier("share-label")
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            sectionHeader("What they can do", c: c)
+            sectionHeader(String(localized: "What they can do"), c: c)
             ForEach(ServerShareLevel.allCases, id: \.self) { level in
                 Button { draft.level = level } label: {
                     HStack(alignment: .top, spacing: FS.space.s3) {
@@ -384,7 +384,7 @@ struct ShareServerSheet: View {
             }
         }
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            sectionHeader("Also let them", c: c)
+            sectionHeader(String(localized: "Also let them"), c: c)
             optIn(ServerShareCopy.unlockTitle, ServerShareCopy.unlockLine, warning: ServerShareCopy.unlockHouseKey,
                   isOn: $draft.unlockAtBoot, c: c)
                 .accessibilityIdentifier("share-draft-unlock")
@@ -394,7 +394,7 @@ struct ShareServerSheet: View {
         if let e = model.errorMessage {
             Text(e).font(FS.font.bodySm()).foregroundColor(c.danger).fixedSize(horizontal: false, vertical: true)
         }
-        FSPrimaryButton(model.busy == "create" ? "Creating…" : "Create link", enabled: labelOk && model.busy == nil,
+        FSPrimaryButton(model.busy == "create" ? String(localized: "Creating…") : String(localized: "Create link"), enabled: labelOk && model.busy == nil,
                         block: true, large: true) {
             Task { created = await model.create(draft) }
         }
@@ -429,7 +429,7 @@ struct ShareServerSheet: View {
             }
             Button {
                 UIPasteboard.general.string = created.link
-                toasts.success("Link copied.")
+                toasts.success(String(localized: "Link copied."))
             } label: { Label("Copy link", systemImage: "doc.on.doc") }
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("share-copy-link")
@@ -453,7 +453,7 @@ struct SharedWithMeSection: View {
         if !rows.isEmpty {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 HStack {
-                    sectionHeader("Shared with me", c: c)
+                    sectionHeader(String(localized: "Shared with me"), c: c)
                     Spacer()
                     Text("\(rows.count)").font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
                 }
@@ -461,10 +461,10 @@ struct SharedWithMeSection: View {
                     ForEach(rows) { row in
                         Button { onOpen(row.shareId) } label: {
                             FSListRow(leading: .icon("person.2.fill", color: c.primary), title: row.name,
-                                      subtitle: "Shared by \(row.owner)",
+                                      subtitle: String(localized: "Shared by \(row.owner)"),
                                       below: {
                                           if row.waitingForOwner {
-                                              FSPill("Waiting for the owner", kind: .pending)
+                                              FSPill(String(localized: "Waiting for the owner"), kind: .pending)
                                           } else if let level = row.level {
                                               FSPill(ServerShareCopy.levelName(level), kind: .online)
                                           }
@@ -565,14 +565,14 @@ struct ShareAcceptScreen: View {
             Text("Open a shared server").font(FS.font.h3()).foregroundColor(c.text)
             Text("Paste the link someone sent you, or scan the code on their phone.")
                 .font(FS.font.bodySm()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
-            FSField(value: $pasted, label: "Link", placeholder: "https://flagshipserver.com/share#…",
-                    error: badPaste ? "That isn't a share link." : nil)
+            FSField(value: $pasted, label: String(localized: "Link"), placeholder: "https://flagshipserver.com/share#…",
+                    error: badPaste ? String(localized: "That isn't a share link.") : nil)
                 .accessibilityIdentifier("share-accept-paste")
-            FSPrimaryButton("Open", enabled: !pasted.isEmpty, block: true) {
+            FSPrimaryButton(String(localized: "Open"), enabled: !pasted.isEmpty, block: true) {
                 Task { badPaste = !(await model.open(text: pasted)) }
             }
             .accessibilityIdentifier("share-accept-open")
-            FSSecondaryButton("Scan a code", block: true) { scanning = true }
+            FSSecondaryButton(String(localized: "Scan a code"), block: true) { scanning = true }
                 .accessibilityIdentifier("share-accept-scan")
         case .opening:
             ProgressView("Opening the link…").frame(maxWidth: .infinity)
@@ -588,7 +588,7 @@ struct ShareAcceptScreen: View {
                         .font(FS.font.h4()).foregroundColor(c.success)
                     Text("\(entry.ownerName) confirmed. \(entry.displayName) is now under Shared with me on Home.")
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
-                    FSPrimaryButton("Open \(entry.displayName)", block: true) { onOpenServer(entry.shareId) }
+                    FSPrimaryButton(String(localized: "Open \(entry.displayName)"), block: true) { onOpenServer(entry.shareId) }
                         .accessibilityIdentifier("share-accept-done-open")
                 }
             }
@@ -624,7 +624,7 @@ struct ShareAcceptScreen: View {
             Text("\(inv.ownerName) won't learn your account name. They see only the name they gave you.")
                 .font(FS.font.caption()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
             if model.canAccept {
-                FSPrimaryButton(accepting ? "Accepting…" : "Accept", enabled: !accepting, block: true, large: true) {
+                FSPrimaryButton(accepting ? String(localized: "Accepting…") : "Accept", enabled: !accepting, block: true, large: true) {
                     Task { await model.accept() }
                 }
                 .accessibilityIdentifier("share-accept")
@@ -687,7 +687,7 @@ struct SharedServerScreen: View {
             .containerRelativeFrame(.horizontal)
         }
         .background(c.bg.ignoresSafeArea())
-        .navigationTitle(model?.entry?.displayName ?? "Shared server")
+        .navigationTitle(model?.entry?.displayName ?? String(localized: "Shared server"))
         .navigationBarTitleDisplayMode(.inline)
         .refreshable {
             await model?.load()
@@ -718,7 +718,7 @@ struct SharedServerScreen: View {
         ) { release in
             Button("Update") { Task { await model?.update(to: release) } }
         } message: { _ in
-            Text(ServerShareCopy.updateConfirm(model?.entry?.displayName ?? "The server"))
+            Text(ServerShareCopy.updateConfirm(model?.entry?.displayName ?? String(localized: "The server")))
         }
     }
 
@@ -751,8 +751,8 @@ struct SharedServerScreen: View {
             if model.session?.unlockAtBoot == true { startupNotices(model, c: c) }
             whatYouCanDo(model, c: c)
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                sectionHeader("Leave", c: c)
-                FSDangerButton("Leave this server", block: true) { confirmLeave = true }
+                sectionHeader(String(localized: "Leave"), c: c)
+                FSDangerButton(String(localized: "Leave this server"), block: true) { confirmLeave = true }
                     .accessibilityIdentifier("shared-leave")
             }
         }
@@ -775,19 +775,19 @@ struct SharedServerScreen: View {
 
     private func startupCard(_ s: VerifiedShareStartup, entry: SharedServerEntry, model: SharedServerModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            sectionHeader("Start-up", c: c)
+            sectionHeader(String(localized: "Start-up"), c: c)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     Text("\(entry.displayName) is starting. Unlock it?")
                         .font(FS.font.scaled(17, weight: .semibold)).foregroundColor(c.text)
                     Text("It's waiting for its disk key. Unlock it only if you expected it to restart.")
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
-                    FSPrimaryButton(model.approving ? "Unlocking…" : "Unlock with Face ID", enabled: !model.approving,
+                    FSPrimaryButton(model.approving ? String(localized: "Unlocking…") : String(localized: "Unlock with Face ID"), enabled: !model.approving,
                                     block: true, large: true) {
                         Task { await model.approve(s) }
                     }
                     .accessibilityIdentifier("shared-approve-startup")
-                    FSGhostButton("Not now", block: true) { model.dismiss(s) }
+                    FSGhostButton(String(localized: "Not now"), block: true) { model.dismiss(s) }
                         .accessibilityIdentifier("shared-startup-not-now")
                 }
             }
@@ -796,11 +796,11 @@ struct SharedServerScreen: View {
 
     private func status(_ d: ServerDetailResponse, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            sectionHeader("Status", c: c)
+            sectionHeader(String(localized: "Status"), c: c)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     HStack {
-                        FSPill("Online", kind: .online)
+                        FSPill(String(localized: "Online"), kind: .online)
                         Spacer()
                         Text("Version \(d.daemonVersion)").font(FS.font.caption()).foregroundColor(c.textMuted)
                     }
@@ -816,7 +816,7 @@ struct SharedServerScreen: View {
 
     private func updateSection(_ d: ServerDetailResponse, model: SharedServerModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            sectionHeader("Update", c: c)
+            sectionHeader(String(localized: "Update"), c: c)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     Text("Version \(d.currentCommit.map { String($0.prefix(8)) } ?? "unknown")")
@@ -824,7 +824,7 @@ struct SharedServerScreen: View {
                     if let latest = model.latestRelease {
                         Label("New release available: \(latest.tag)", systemImage: "arrow.up.circle.fill")
                             .font(FS.font.bodySm()).foregroundColor(c.text)
-                        FSPrimaryButton(model.updating ? "Sending…" : ServerShareCopy.updateButton(latest),
+                        FSPrimaryButton(model.updating ? String(localized: "Sending…") : ServerShareCopy.updateButton(latest),
                                         enabled: !model.updating && d.currentCommit != nil && model.updateNotice == nil,
                                         block: true) {
                             confirmUpdate = latest
@@ -851,7 +851,7 @@ struct SharedServerScreen: View {
 
     private func startupNotices(_ model: SharedServerModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            sectionHeader("Start-up notices", c: c)
+            sectionHeader(String(localized: "Start-up notices"), c: c)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     optIn(ServerShareCopy.notifyTitle, ServerShareCopy.notifyNote, isOn: Binding(
@@ -871,7 +871,7 @@ struct SharedServerScreen: View {
     @ViewBuilder
     private func appsSection(_ model: SharedServerModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            sectionHeader("Apps", c: c)
+            sectionHeader(String(localized: "Apps"), c: c)
             switch model.apps {
             case .loaded(let apps) where apps.isEmpty:
                 Text("No apps on this server yet.").font(FS.font.bodySm()).foregroundColor(c.textMuted)
@@ -906,7 +906,7 @@ struct SharedServerScreen: View {
 
     private func whatYouCanDo(_ model: SharedServerModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            sectionHeader("What you can do", c: c)
+            sectionHeader(String(localized: "What you can do"), c: c)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     Text(ServerShareCopy.levelLine(model.level ?? .view)).font(FS.font.bodySm()).foregroundColor(c.text)
@@ -961,7 +961,7 @@ struct SharedAppScreen: View {
                             HStack {
                                 Text(appName).font(FS.font.scaled(20, weight: .semibold)).foregroundColor(c.text)
                                 Spacer()
-                                FSPill(app.status == "running" ? "Running" : app.status.capitalized,
+                                FSPill(app.status == "running" ? String(localized: "Running") : app.status.capitalized,
                                        kind: app.status == "running" ? .online : .idle)
                             }
                             if let s = app.summary { Text(s).font(FS.font.bodySm()).foregroundColor(c.textMuted) }
@@ -980,7 +980,7 @@ struct SharedAppScreen: View {
                     if let access { InternetAccessSection(controller: access) }
                     if let invites { CoInviteSection(controller: invites) }
                     if let database {
-                        FSSecondaryButton("Database", block: true) { showDatabase = true }
+                        FSSecondaryButton(String(localized: "Database"), block: true) { showDatabase = true }
                             .accessibilityIdentifier("shared-app-database")
                             .navigationDestination(isPresented: $showDatabase) {
                                 AppDatabaseScreen(controller: database, appName: appName,

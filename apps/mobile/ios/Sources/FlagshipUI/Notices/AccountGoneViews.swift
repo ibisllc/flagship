@@ -7,13 +7,13 @@ import FlagshipAPI
 /// The words of "This account was removed" (docs/account-gone.md); the
 /// webapp's `ACCOUNT_GONE_COPY` with the phone variants ("device").
 public enum AccountGoneCopy {
-    public static let title = "This account was removed"
-    public static let body = "This account no longer exists on Flagship. This can happen after a reset."
-    public static let restoreHint = "If you saved a backup of your servers, you can restore it into a new account."
-    public static let create = "Create a new account"
-    public static let remove = "Remove it from this device"
+    public static let title = String(localized: "This account was removed")
+    public static let body = String(localized: "This account no longer exists on Flagship. This can happen after a reset.")
+    public static let restoreHint = String(localized: "If you saved a backup of your servers, you can restore it into a new account.")
+    public static let create = String(localized: "Create a new account")
+    public static let remove = String(localized: "Remove it from this device")
     public static func account(_ name: String) -> String { "Account: \(name)" }
-    public static let failed = "Couldn't remove it yet. Close the app and try again."
+    public static let failed = String(localized: "Couldn't remove it yet. Close the app and try again.")
 }
 
 /// Where the removal warning and Settings ask "does this device hold a key

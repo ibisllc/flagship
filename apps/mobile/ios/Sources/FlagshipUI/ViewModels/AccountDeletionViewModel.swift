@@ -79,16 +79,16 @@ public final class AccountDeletionViewModel {
     /// bundled in; when false it is omitted entirely (no standalone order, §5).
     public func run(alsoDeleteServerContent: Bool) async {
         guard let user = username(), !user.isEmpty else {
-            phase = .failed("No active account on this device.")
+            phase = .failed(String(localized: "No active account on this device."))
             return
         }
 
         phase = .signing
         let irk: Curve25519.Signing.PrivateKey
         do {
-            irk = try await signer("Delete your account")
+            irk = try await signer(String(localized: "Delete your account"))
         } catch {
-            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't access your account key: \(UserErrorText.of(error))"))
             return
         }
 
@@ -98,7 +98,7 @@ public final class AccountDeletionViewModel {
         do {
             accountSig = try accountOrder.sign(with: irk)
         } catch {
-            phase = .failed("Couldn't sign: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't sign: \(UserErrorText.of(error))"))
             return
         }
 
@@ -109,7 +109,7 @@ public final class AccountDeletionViewModel {
             do {
                 serversSig = try serversOrder.sign(with: irk)
             } catch {
-                phase = .failed("Couldn't sign: \(UserErrorText.of(error))")
+                phase = .failed(String(localized: "Couldn't sign: \(UserErrorText.of(error))"))
                 return
             }
             serversBundle = .init(
@@ -137,19 +137,19 @@ public final class AccountDeletionViewModel {
             let lowered = message.lowercased()
             if lowered.contains("other-devices-remain") || lowered.contains("last device")
                 || lowered.contains("another device is still") {
-                phase = .failed("Another device is still on this account. Remove it in Settings, Trusted devices, then delete the account.")
+                phase = .failed(String(localized: "Another device is still on this account. Remove it in Settings, Trusted devices, then delete the account."))
             } else {
-                phase = .failed("The server rejected the request. Sign in again and retry.")
+                phase = .failed(String(localized: "The server rejected the request. Sign in again and retry."))
             }
             return
         } catch ScreensClientError.http(let status, _) where status == 404 {
             finishLocalRemoval()
             return
         } catch let error as ScreensClientError {
-            phase = .failed(error.errorDescription ?? "That didn't work. Try again in a moment.")
+            phase = .failed(error.errorDescription ?? String(localized: "That didn't work. Try again in a moment."))
             return
         } catch {
-            phase = .failed("Couldn't reach the server. Check your connection and try again.")
+            phase = .failed(String(localized: "Couldn't reach the server. Check your connection and try again."))
             return
         }
 

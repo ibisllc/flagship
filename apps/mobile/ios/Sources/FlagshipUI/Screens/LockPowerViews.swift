@@ -30,17 +30,17 @@ struct LockPowerCard: View {
 
     private func label(_ mode: PowerMode) -> String {
         switch (mode, isLuks) {
-        case (.off, true):      return "Lock and turn off"
-        case (.off, false):     return "Turn off"
-        case (.restart, true):  return "Lock and restart"
-        case (.restart, false): return "Restart"
+        case (.off, true):      return String(localized: "Lock and turn off")
+        case (.off, false):     return String(localized: "Turn off")
+        case (.restart, true):  return String(localized: "Lock and restart")
+        case (.restart, false): return String(localized: "Restart")
         }
     }
 
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            FSSectionLabel("Power")
+            FSSectionLabel(String(localized: "Power"))
             FSCard {
                 switch vm?.phase {
                 case .sent(let mode):
@@ -182,7 +182,7 @@ struct DeadManCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            FSSectionLabel("Lock-down")
+            FSSectionLabel(String(localized: "Lock-down"))
             Button { open = true } label: {
                 FSCard {
                     HStack {
@@ -192,7 +192,7 @@ struct DeadManCard: View {
                             Text("Auto lock-down")
                                 .font(FS.font.body())
                                 .foregroundColor(c.text)
-                            Text(enabled ? "On — affirm to keep unlocked" : "Off")
+                            Text(enabled ? String(localized: "On — affirm to keep unlocked") : "Off")
                                 .font(FS.font.caption())
                                 .foregroundColor(c.textMuted)
                         }
@@ -292,7 +292,7 @@ struct DeadManScreen: View {
     @ViewBuilder
     private func windowSection(vm: DeadManViewModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            FSSectionLabel("Window")
+            FSSectionLabel(String(localized: "Window"))
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     Picker("Window", selection: Binding(
@@ -307,7 +307,7 @@ struct DeadManScreen: View {
                     .disabled(isBusy)
                     .accessibilityIdentifier("deadman-window-picker")
 
-                    FSDangerButton("Tighten now (15 min)", block: true) {
+                    FSDangerButton(String(localized: "Tighten now (15 min)"), block: true) {
                         Task { await save(enabled: true, window: .min15, lockout: vm.lockoutMode) }
                     }
                     .disabled(isBusy)
@@ -320,7 +320,7 @@ struct DeadManScreen: View {
     @ViewBuilder
     private func lockoutSection(vm: DeadManViewModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            FSSectionLabel("On lapse")
+            FSSectionLabel(String(localized: "On lapse"))
             FSCard {
                 Picker("On lapse", selection: Binding(
                     get: { vm.lockoutMode },
@@ -339,14 +339,14 @@ struct DeadManScreen: View {
     @ViewBuilder
     private func leaseSection(vm: DeadManViewModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            FSSectionLabel("Stay unlocked")
+            FSSectionLabel(String(localized: "Stay unlocked"))
             FSCard {
                 // `nowTick` is read here so the countdown re-renders each
                 // second; the value itself is unused.
                 let _ = nowTick
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     if let remaining = vm.leaseRemainingMs() {
-                        Text(remaining > 0 ? "Locks in \(formatRemaining(remaining))" : "Window lapsed — affirm now")
+                        Text(remaining > 0 ? String(localized: "Locks in \(formatRemaining(remaining))") : "Window lapsed — affirm now")
                             .font(FS.font.scaled(17, weight: .semibold))
                             .foregroundColor(remaining > 0 ? c.text : c.danger)
                     } else {
@@ -355,7 +355,7 @@ struct DeadManScreen: View {
                             .foregroundColor(c.textMuted)
                     }
                     FSPrimaryButton(
-                        vm.phase == .affirming ? "Affirming…" : "Keep \(serverName) unlocked",
+                        vm.phase == .affirming ? String(localized: "Affirming…") : String(localized: "Keep \(serverName) unlocked"),
                         enabled: !isBusy,
                         block: true,
                         large: true
@@ -384,8 +384,8 @@ struct DeadManScreen: View {
         switch vm.phase {
         case .failed(let msg): toasts.error(msg)
         default:
-            if enabled { toasts.success("Lock-down on. Affirm to keep \(serverName) unlocked.") }
-            else { toasts.success("Lock-down off.") }
+            if enabled { toasts.success(String(localized: "Lock-down on. Affirm to keep \(serverName) unlocked.")) }
+            else { toasts.success(String(localized: "Lock-down off.")) }
         }
     }
 
@@ -395,7 +395,7 @@ struct DeadManScreen: View {
         await vm.affirm()
         switch vm.phase {
         case .failed(let msg): toasts.error(msg)
-        default: toasts.success("\(serverName) stays unlocked.")
+        default: toasts.success(String(localized: "\(serverName) stays unlocked."))
         }
     }
 }

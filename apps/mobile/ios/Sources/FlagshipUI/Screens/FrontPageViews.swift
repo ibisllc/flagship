@@ -25,7 +25,7 @@ struct FrontPageCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            FSSectionLabel("Front page")
+            FSSectionLabel(String(localized: "Front page"))
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     Text("What visitors see at \(serverDomain). Point it at one of your services, or keep the default Flagship page.")
@@ -40,7 +40,7 @@ struct FrontPageCard: View {
                         Text(msg)
                             .font(FS.font.caption())
                             .foregroundColor(c.textMuted)
-                        FSSecondaryButton("Retry", block: true) { Task { await reload() } }
+                        FSSecondaryButton(String(localized: "Retry"), block: true) { Task { await reload() } }
                     default:
                         picker(c: c)
                     }
@@ -69,7 +69,7 @@ struct FrontPageCard: View {
             .disabled(isBusy || !AdminOrderGate.allows(app))
 
             if AdminOrderGate.allows(app) {
-                FSSecondaryButton(isBusy ? "Saving…" : "Save", block: true) {
+                FSSecondaryButton(isBusy ? String(localized: "Saving…") : String(localized: "Save"), block: true) {
                     Task { await save() }
                 }
                 .accessibilityIdentifier("sd-front-page-save")
@@ -103,8 +103,8 @@ struct FrontPageCard: View {
         } else {
             toasts.success(
                 selection.isEmpty
-                    ? "Front page reset to default"
-                    : "Front page set to \(selection)"
+                    ? String(localized: "Front page reset to default")
+                    : String(localized: "Front page set to \(selection)")
             )
         }
     }

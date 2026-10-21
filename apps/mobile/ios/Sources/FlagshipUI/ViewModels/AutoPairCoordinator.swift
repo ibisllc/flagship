@@ -74,7 +74,7 @@ public final class AutoPairCoordinator {
         // (so `deriveIRK`/Face ID fires exactly once).
         let key: Curve25519.Signing.PrivateKey
         do {
-            key = try await signer("Set up this device on your servers")
+            key = try await signer(String(localized: "Set up this device on your servers"))
         } catch {
             // User cancelled / biometric unavailable — stay silent and retry on
             // the next unlock (don't consume the guard).
