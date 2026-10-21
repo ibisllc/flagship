@@ -169,7 +169,21 @@ fun BiometricLockScreen() {
                 },
                 secondary = stringResource(R.string.sign_out_2),
                 secondaryTag = "lock-sign-out-btn",
-                onSecondary = { showSignOut = true },
+                onSecondary = {
+                    // Biometric or device PIN before the dialog opens, as on
+                    // iOS, so both platforms ask alike.
+                    if (activity == null) {
+                        status = Status.Failed(FSStrings.get(R.string.lost_activity_context_restart_the_app))
+                    } else {
+                        scope.launch {
+                            when (val r = authenticateForSignOut(activity)) {
+                                SignOutAuth.Ok -> showSignOut = true
+                                SignOutAuth.Cancelled -> {}
+                                is SignOutAuth.Failed -> status = Status.Failed(r.message)
+                            }
+                        }
+                    }
+                },
                 secondaryDescription = stringResource(R.string.sign_out_erases_this_devices_account),
             )
         }
@@ -184,17 +198,10 @@ fun BiometricLockScreen() {
                     // Keystore profiles (the locked user can't choose one)
                     // — the UMK / IRK that survive an app reinstall — then
                     // drop to Welcome. No server-side revoke; the same key
-                    // returns via passkey recovery. Biometric or device
-                    // PIN first, as on iOS, so both platforms ask alike.
-                    scope.launch {
-                        if (activity == null) {
-                            status = Status.Failed("Lost activity context. Restart the app to try again.")
-                            return@launch
-                        }
-                        if (!confirmSignOut(activity)) return@launch
-                        Keystore.wipeAllProfiles()
-                        app.signOut()
-                    }
+                    // returns via passkey recovery. Already authenticated
+                    // before this dialog opened.
+                    Keystore.wipeAllProfiles()
+                    app.signOut()
                 }) {
                     Text(
                         if (hasRecovery) stringResource(R.string.sign_out_2) else stringResource(R.string.sign_out_anyway),
@@ -242,20 +249,27 @@ private sealed class Status {
     data class Failed(val message: String) : Status()
 }
 
-/** True when the sign-out may go ahead: the person authenticated, or the
- *  device has nothing to authenticate with (no screen lock), where the
- *  sign-out is the only way out of this screen. */
-private suspend fun confirmSignOut(activity: FragmentActivity): Boolean = try {
+private sealed class SignOutAuth {
+    data object Ok : SignOutAuth()
+    data object Cancelled : SignOutAuth()
+    data class Failed(val message: String) : SignOutAuth()
+}
+
+/** Ok also when the device has nothing to authenticate with (no screen
+ *  lock), where the sign-out is the only way out of this screen. */
+private suspend fun authenticateForSignOut(activity: FragmentActivity): SignOutAuth = try {
     BiometricGate.evaluate(activity, title = "Sign out of Flagship", subtitle = "Confirm it's you")
-    true
+    SignOutAuth.Ok
 } catch (e: BiometricFailed) {
-    e.code in setOf(
-        androidx.biometric.BiometricPrompt.ERROR_NO_DEVICE_CREDENTIAL,
-        androidx.biometric.BiometricPrompt.ERROR_NO_BIOMETRICS,
-        androidx.biometric.BiometricPrompt.ERROR_HW_NOT_PRESENT,
-    )
+    if (e.code in setOf(
+            androidx.biometric.BiometricPrompt.ERROR_NO_DEVICE_CREDENTIAL,
+            androidx.biometric.BiometricPrompt.ERROR_NO_BIOMETRICS,
+            androidx.biometric.BiometricPrompt.ERROR_HW_NOT_PRESENT,
+        )
+    ) SignOutAuth.Ok
+    else SignOutAuth.Failed(NetworkErrorHumanizer.humanize(e, "app-lock"))
 } catch (_: BiometricCancelled) {
-    false
+    SignOutAuth.Cancelled
 }
 
 private suspend fun tryUnlock(
