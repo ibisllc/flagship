@@ -60,7 +60,7 @@ public struct RecoveryScreen: View {
 
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
-                        FSSectionLabel("Cloud recovery")
+                        FSSectionLabel(String(localized: "Cloud recovery"))
                         switch vm.phase {
                         case .idle:
                             Text("Recovery isn't set up yet.").foregroundColor(c.text)
@@ -81,7 +81,7 @@ public struct RecoveryScreen: View {
                             if let localError {
                                 Text(localError).font(FS.font.caption()).foregroundColor(c.danger)
                             }
-                            FSPrimaryButton("Set up recovery", block: true) {
+                            FSPrimaryButton(String(localized: "Set up recovery"), block: true) {
                                 guard validateEnroll() else { return }
                                 let pp = enrollPassphrase
                                 Task { await onRunSetup(pp) }
@@ -105,7 +105,7 @@ public struct RecoveryScreen: View {
                             }
                         case .failed(let msg):
                             ErrorCard(message: msg)
-                            FSGhostButton("Try again", block: true) { vm.phase = .idle }
+                            FSGhostButton(String(localized: "Try again"), block: true) { vm.phase = .idle }
                         }
                     }
                 }
@@ -133,11 +133,11 @@ public struct RecoveryScreen: View {
     /// must match. Surfaces the error inline without leaving `.idle`.
     private func validateEnroll() -> Bool {
         if enrollPassphrase.count < 8 {
-            localError = "Passphrase must be 8+ characters."
+            localError = String(localized: "Passphrase must be 8+ characters.")
             return false
         }
         if enrollPassphrase != enrollPassphrase2 {
-            localError = "Passphrases do not match."
+            localError = String(localized: "Passphrases do not match.")
             return false
         }
         localError = nil

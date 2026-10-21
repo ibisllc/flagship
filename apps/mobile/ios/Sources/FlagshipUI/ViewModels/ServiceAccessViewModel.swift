@@ -97,11 +97,11 @@ public final class ServiceAccessViewModel {
     public struct NoDeviceKey: Error {}
 
     /// Why a non-admin device's rank picker is locked to Member.
-    public static let memberOnlyReason = "Only an admin device can give a higher rank"
+    public static let memberOnlyReason = String(localized: "Only an admin device can give a higher rank")
     /// Why a device below Manager in the app gets no "+ Add".
-    public static let cantInviteReason = "Only an admin can let you invite people to this app."
+    public static let cantInviteReason = String(localized: "Only an admin can let you invite people to this app.")
     /// Why the mode toggle is read-only on a non-admin device.
-    public static let modeAdminOnly = "Only an admin device can change who may open it."
+    public static let modeAdminOnly = String(localized: "Only an admin device can change who may open it.")
 
     public private(set) var phase: Phase = .idle
     public private(set) var restricted = false
@@ -208,7 +208,7 @@ public final class ServiceAccessViewModel {
             noteOwnDeviceKey(ownDeviceKey())
             await loadNamesIfNeeded()
         } catch {
-            phase = .failed("Couldn't reach the server to load access settings.")
+            phase = .failed(String(localized: "Couldn't reach the server to load access settings."))
         }
     }
 
@@ -271,16 +271,16 @@ public final class ServiceAccessViewModel {
         if a.isDevice {
             if let id = a.deviceId?.lowercased(), let name = deviceNames?[id], !name.isEmpty { return name }
             let short = (a.deviceId ?? a.devicePub ?? "").prefix(6).uppercased()
-            return short.isEmpty ? "Device" : "Device \(short)"
+            return short.isEmpty ? String(localized: "Device") : String(localized: "Device \(short)")
         }
         if let label = a.label?.trimmingCharacters(in: .whitespacesAndNewlines), !label.isEmpty { return label }
-        return "Shared account"
+        return String(localized: "Shared account")
     }
 
     public func accountDetail(_ a: AppAccountMember) -> String {
-        guard a.isDevice else { return "Co-manages this server" }
-        let kind = a.isAdminDevice ? "Admin device" : "Device"
-        return isThisDevice(a) ? "\(kind) · This device" : kind
+        guard a.isDevice else { return String(localized: "Co-manages this server") }
+        let kind = a.isAdminDevice ? String(localized: "Admin device") : String(localized: "Device")
+        return isThisDevice(a) ? String(localized: "\(kind) · This device") : kind
     }
 
     /// "Invited by <device>" for one row, or nil for rows from before
@@ -293,20 +293,20 @@ public final class ServiceAccessViewModel {
     }
 
     /// A co-manager's invitee is named under their key, which this account can't open.
-    public static let coManagersInvitee = "Someone they invited"
+    public static let coManagersInvitee = String(localized: "Someone they invited")
 
     public static func invitedByText(creatorTier: String?, creatorDeviceId: String?,
                                      ownDeviceId: String?, names: [String: String]?,
                                      creatorLabel: String? = nil) -> String? {
         if creatorTier == AppInviteTier.coManager.rawValue {
-            if let label = creatorLabel, !label.isEmpty { return "Invited by \(label) (co-manager)" }
-            return "Invited by a co-manager"
+            if let label = creatorLabel, !label.isEmpty { return String(localized: "Invited by \(label) (co-manager)") }
+            return String(localized: "Invited by a co-manager")
         }
         guard creatorTier != nil || creatorDeviceId != nil else { return nil }
-        guard let id = creatorDeviceId?.lowercased(), !id.isEmpty else { return "Invited by another device" }
-        if let own = ownDeviceId?.lowercased(), id == own { return "Invited by this device" }
-        if let name = names?[id], !name.isEmpty { return "Invited by \(name)" }
-        return "Invited by another device"
+        guard let id = creatorDeviceId?.lowercased(), !id.isEmpty else { return String(localized: "Invited by another device") }
+        if let own = ownDeviceId?.lowercased(), id == own { return String(localized: "Invited by this device") }
+        if let name = names?[id], !name.isEmpty { return String(localized: "Invited by \(name)") }
+        return String(localized: "Invited by another device")
     }
 
     /// The rank one invited row shows (nil until the box has answered).
@@ -337,11 +337,11 @@ public final class ServiceAccessViewModel {
         defer { busyRoles.remove(p.inviteId) }
         let target = members.roleTarget(inviteId: p.inviteId, boundAID: p.isGroup ? nil : p.boundAID)
         do {
-            try await sendRank(target: target, rank: AppRankValue(role), reason: "Change \(p.name)'s rank")
+            try await sendRank(target: target, rank: AppRankValue(role), reason: String(localized: "Change \(p.name)'s rank"))
             await refreshMembers()
             return true
         } catch {
-            phase = .failed("Couldn't change \(p.name)'s rank. Try again in a moment.")
+            phase = .failed(String(localized: "Couldn't change \(p.name)'s rank. Try again in a moment."))
             return false
         }
     }
@@ -356,13 +356,13 @@ public final class ServiceAccessViewModel {
         let name = accountName(a)
         do {
             try await sendRank(target: target, rank: rank,
-                               reason: rank == .refused ? "Refuse \(name) in \(serviceRef)" : "Change \(name)'s rank")
+                               reason: rank == .refused ? String(localized: "Refuse \(name) in \(serviceRef)") : String(localized: "Change \(name)'s rank"))
             await refreshMembers()
             return true
         } catch {
             phase = .failed(rank == .refused
-                ? "Couldn't refuse \(name). Try again in a moment."
-                : "Couldn't change \(name)'s rank. Try again in a moment.")
+                ? String(localized: "Couldn't refuse \(name). Try again in a moment.")
+                : String(localized: "Couldn't change \(name)'s rank. Try again in a moment."))
             return false
         }
     }
@@ -394,7 +394,7 @@ public final class ServiceAccessViewModel {
         busyMode = true
         defer { busyMode = false }
         do {
-            let key = try await adminSigner(want ? "Make \(serviceRef) members only" : "Open \(serviceRef) to all")
+            let key = try await adminSigner(want ? String(localized: "Make \(serviceRef) members only") : String(localized: "Open \(serviceRef) to all"))
             let order = ServiceAccessModeOrder(serviceRef: serviceRef, restricted: want, issuedAt: now())
             let sig = try key.signature(for: try order.canonicalBytes())
             _ = try await client.setAccessMode(serverDomain: serverDomain, request: order.request,
@@ -403,7 +403,7 @@ public final class ServiceAccessViewModel {
             restricted = want
             phase = .ready
         } catch {
-            phase = .failed("Couldn't change access. Try again in a moment.")
+            phase = .failed(String(localized: "Couldn't change access. Try again in a moment."))
         }
     }
 
@@ -425,7 +425,7 @@ public final class ServiceAccessViewModel {
         busyAdd = true
         defer { busyAdd = false }
         do {
-            let keys = try await inviteKeys("Create an invite for \(serviceRef)")
+            let keys = try await inviteKeys(String(localized: "Create an invite for \(serviceRef)"))
             let aidPub = keys.aid.publicKey.rawRepresentation
             let bundle = ServiceInvite.Bundle(name: trimmed, photo: photo)
             let secret = randomSecret()
@@ -475,9 +475,9 @@ public final class ServiceAccessViewModel {
             if isAdminDevice, let role, screens != nil, role.rawValue != members?.defaultRole {
                 do {
                     try await sendRank(target: AppRankOrder.inviteTarget(inviteId), rank: AppRankValue(role),
-                                       reason: "Give \(trimmed) a rank")
+                                       reason: String(localized: "Give \(trimmed) a rank"))
                 } catch {
-                    roleNotice = "Created, but couldn't set the rank. Change it in the list."
+                    roleNotice = String(localized: "Created, but couldn't set the rank. Change it in the list.")
                 }
             }
             async let people: Void = refreshPeople()
@@ -485,7 +485,7 @@ public final class ServiceAccessViewModel {
             _ = await (people, roles)
             return link
         } catch {
-            phase = .failed("Couldn't create the invite. Try again in a moment.")
+            phase = .failed(String(localized: "Couldn't create the invite. Try again in a moment."))
             return nil
         }
     }
@@ -506,12 +506,12 @@ public final class ServiceAccessViewModel {
             return !m.grants.contains { $0.inviteId == inviteId }
         } : []
 
-        let reason = "Remove this person from \(serviceRef)"
+        let reason = String(localized: "Remove this person from \(serviceRef)")
         let key: Curve25519.Signing.PrivateKey
         do {
             key = isAdminDevice ? try await adminSigner(reason) : try await deviceSigner(reason)
         } catch {
-            phase = .failed("Couldn't remove them. Try again in a moment.")
+            phase = .failed(String(localized: "Couldn't remove them. Try again in a moment."))
             return
         }
         if !isAdminDevice { noteOwnDeviceKey(key) }
@@ -548,9 +548,9 @@ public final class ServiceAccessViewModel {
         async let roles: Void = refreshMembers()
         _ = await (refreshed, roles)
         if boxFailed {
-            phase = .failed("Removed from the directory, but couldn't reach the server to revoke access. Try again so they're fully removed.")
+            phase = .failed(String(localized: "Removed from the directory, but couldn't reach the server to revoke access. Try again so they're fully removed."))
         } else if revokeFailed {
-            phase = .failed("Couldn't remove them. Try again in a moment.")
+            phase = .failed(String(localized: "Couldn't remove them. Try again in a moment."))
         }
     }
 
@@ -560,7 +560,7 @@ public final class ServiceAccessViewModel {
     /// bound set + cap.
     public func refreshPeople() async {
         do {
-            let keys = try await authorAidKeys("Show the members of \(serviceRef)")
+            let keys = try await authorAidKeys(String(localized: "Show the members of \(serviceRef)"))
             let aidPubHex = HexUtil.encode(keys.aid.publicKey.rawRepresentation)
             let ts = now()
             let qBytes = try ServiceInvite.canonicalListQuery(

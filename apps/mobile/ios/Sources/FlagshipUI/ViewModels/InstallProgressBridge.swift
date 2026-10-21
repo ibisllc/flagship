@@ -43,7 +43,7 @@ public final class InstallProgressBridge {
     /// names the server). The App points it at the pending pods it holds.
     public var nameForKey: ((_ key: String) -> String?)?
 
-    public static let defaultFailure = "Setup hit a problem"
+    public static let defaultFailure = String(localized: "Setup hit a problem")
 
     private var lastPhase: [String: ProvisionStatusPhase] = [:]
     private var names: [String: String] = [:]

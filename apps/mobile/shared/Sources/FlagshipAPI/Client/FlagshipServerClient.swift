@@ -333,20 +333,20 @@ public extension FlagshipServerClient {
 
 public extension FlagshipServerClient {
     func bootstrapAccount(_ req: AccountBootstrapRequest) async throws -> AccountBootstrapResponse {
-        throw ScreensClientError.http(status: 501, message: "account bootstrap unavailable")
+        throw ScreensClientError.http(status: 501, message: String(localized: "account bootstrap unavailable"))
     }
 
     func accountDirectory(
         accountId: String,
         authorization: AccountDirectoryAuthorization
     ) async throws -> AccountDirectoryResponse {
-        throw ScreensClientError.http(status: 501, message: "account directory unavailable")
+        throw ScreensClientError.http(status: 501, message: String(localized: "account directory unavailable"))
     }
-    func putAccountProfile(accountId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest) async throws { throw ScreensClientError.http(status: 501, message: "account directory unavailable") }
-    func putDeviceSelfProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest) async throws { throw ScreensClientError.http(status: 501, message: "account directory unavailable") }
-    func putDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryManagedProfileWriteRequest) async throws { throw ScreensClientError.http(status: 501, message: "account directory unavailable") }
-    func deleteDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, expectedRevision: Int64) async throws { throw ScreensClientError.http(status: 501, message: "account directory unavailable") }
-    func revokeAccountDevice(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization) async throws { throw ScreensClientError.http(status: 501, message: "account directory unavailable") }
+    func putAccountProfile(accountId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest) async throws { throw ScreensClientError.http(status: 501, message: String(localized: "account directory unavailable")) }
+    func putDeviceSelfProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest) async throws { throw ScreensClientError.http(status: 501, message: String(localized: "account directory unavailable")) }
+    func putDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryManagedProfileWriteRequest) async throws { throw ScreensClientError.http(status: 501, message: String(localized: "account directory unavailable")) }
+    func deleteDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, expectedRevision: Int64) async throws { throw ScreensClientError.http(status: 501, message: String(localized: "account directory unavailable")) }
+    func revokeAccountDevice(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization) async throws { throw ScreensClientError.http(status: 501, message: String(localized: "account directory unavailable")) }
 }
 
 /// Slice D §5 — the `POST /api/users/:username/admin-root-rotation` body:
@@ -2361,7 +2361,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             try? await Task.sleep(nanoseconds: UInt64(simulatedLatency * 1_000_000_000))
         }
         if shouldFail {
-            throw ScreensClientError.http(status: 503, message: "simulated failure")
+            throw ScreensClientError.http(status: 503, message: String(localized: "simulated failure"))
         }
     }
 
@@ -2374,7 +2374,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         try await tick()
         let u = req.request.username.lowercased()
         if let prior = claimedUsernames[u], prior != req.request.irkPub {
-            throw ScreensClientError.http(status: 409, message: "username taken")
+            throw ScreensClientError.http(status: 409, message: String(localized: "username taken"))
         }
         claimedUsernames[u] = req.request.irkPub
     }
@@ -2388,7 +2388,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         if let prior = bootstrappedAccounts[username] {
             guard prior.claim.request.irkPub.lowercased() == req.claim.request.irkPub.lowercased(),
                   prior.adminRootPub.lowercased() == req.adminRootPub.lowercased() else {
-                throw ScreensClientError.http(status: 409, message: "username unavailable")
+                throw ScreensClientError.http(status: 409, message: String(localized: "username unavailable"))
             }
             bootstrapDeviceIds[username, default: []].append(req.device.deviceId)
             return .init(ok: true, username: username, accountId: username, deviceId: req.device.deviceId, created: false)
@@ -2419,7 +2419,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         if let pinned = registeredRcks[req.request.subdomain], pinned != req.request.rckPubKey {
             throw ScreensClientError.http(
                 status: 409,
-                message: #"{"error":"subdomain already controlled by a different RCK"}"#
+                message: String(localized: #"{"error":"subdomain already controlled by a different RCK"}"#)
             )
         }
         registeredRcks[req.request.subdomain] = req.request.rckPubKey
@@ -2456,7 +2456,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         try MockOrderSigners.shared.require(.sensitive, kind: "server-unrevoke", signatureHex: req.signature, payload: req)
         let domain = req.request.serverDomain.lowercased()
         if nonRestorableRevokes.contains(domain) {
-            throw ScreensClientError.http(status: 409, message: "this server was deleted, transferred or retired and can't be restored")
+            throw ScreensClientError.http(status: 409, message: String(localized: "this server was deleted, transferred or retired and can't be restored"))
         }
         unrevokedServers.append(req)
         guard revokedDomains.remove(domain) != nil else {
@@ -2490,7 +2490,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             return .init(
                 username: lower,
                 available: false,
-                reason: "test account",
+                reason: String(localized: "test account"),
                 testAccount: meta,
                 demoServer: demoBlock
             )
@@ -2506,7 +2506,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             return .init(
                 username: lower,
                 available: false,
-                reason: "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)",
+                reason: String(localized: "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)"),
                 demoServer: demoBlock
             )
         }
@@ -2514,7 +2514,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             return .init(
                 username: lower,
                 available: false,
-                reason: "username \"\(lower)\" is reserved",
+                reason: String(localized: "username \"\(lower)\" is reserved"),
                 demoServer: demoBlock
             )
         }
@@ -2522,7 +2522,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             return .init(
                 username: lower,
                 available: false,
-                reason: "already claimed",
+                reason: String(localized: "already claimed"),
                 demoServer: demoBlock
             )
         }
@@ -2587,13 +2587,13 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         try await tick()
         let u = username.lowercased()
         guard token.range(of: "^[0-9a-fA-F]{64}$", options: .regularExpression) != nil else {
-            throw ScreensClientError.http(status: 400, message: "invalid paired-session token")
+            throw ScreensClientError.http(status: 400, message: String(localized: "invalid paired-session token"))
         }
         guard let demo = demoServers[u] else {
-            throw ScreensClientError.http(status: 404, message: "demo user not found")
+            throw ScreensClientError.http(status: 404, message: String(localized: "demo user not found"))
         }
         guard demo.lifecycle == .up else {
-            throw ScreensClientError.http(status: 409, message: "demo server is not ready")
+            throw ScreensClientError.http(status: 409, message: String(localized: "demo server is not ready"))
         }
         return DemoPairSessionResponse(ok: true, fqdn: demo.fqdn)
     }
@@ -2685,25 +2685,25 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope {
         try await tick()
         if let env = recoveryStore[credentialId] { return env }
-        throw ScreensClientError.http(status: 404, message: "no envelope")
+        throw ScreensClientError.http(status: 404, message: String(localized: "no envelope"))
     }
 
     public func fetchWrappedUmk(username: String, fetchTokenHex: String) async throws -> RecoveryFetchResponse {
         try await tick()
         guard let row = recoveryRowsByUser[username.lowercased()] else {
-            throw ScreensClientError.http(status: 404, message: "no recovery record")
+            throw ScreensClientError.http(status: 404, message: String(localized: "no recovery record"))
         }
         // Legacy row with no gate → 409, same as the Worker.
         guard let storedHash = row.fetchTokenHash else {
-            throw ScreensClientError.http(status: 409, message: "record predates passphrase gate")
+            throw ScreensClientError.http(status: 409, message: String(localized: "record predates passphrase gate"))
         }
         // The Worker hashes the PRESENTED fetchToken bytes and compares.
         guard let tokenBytes = Self.hexToBytes(fetchTokenHex.lowercased()) else {
-            throw ScreensClientError.http(status: 400, message: "fetchToken must be hex")
+            throw ScreensClientError.http(status: 400, message: String(localized: "fetchToken must be hex"))
         }
         let presented = SHA256.hash(data: tokenBytes).map { String(format: "%02x", $0) }.joined()
         guard presented == storedHash.lowercased() else {
-            throw ScreensClientError.http(status: 403, message: "invalid fetch token")
+            throw ScreensClientError.http(status: 403, message: String(localized: "invalid fetch token"))
         }
         return RecoveryFetchResponse(
             username: username.lowercased(),
@@ -2828,10 +2828,10 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         // Worker gate: admit username must match the path + the register
         // body's username.
         if body.admit.username.lowercased() != acct {
-            throw ScreensClientError.http(status: 403, message: "admit username / url mismatch")
+            throw ScreensClientError.http(status: 403, message: String(localized: "admit username / url mismatch"))
         }
         if body.request.username.lowercased() != body.admit.username.lowercased() {
-            throw ScreensClientError.http(status: 403, message: "register username does not match admit")
+            throw ScreensClientError.http(status: 403, message: String(localized: "register username does not match admit"))
         }
         admittedDevices[acct, default: []].append(body)
         let id = String(format: "tok_%06d", nextPushTokenId); nextPushTokenId += 1
@@ -2852,10 +2852,10 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         // (FlagshipCore's WatchDelegateKeyEnvelope.bootApprovalScope; inlined
         // here so the API module needn't depend on FlagshipCore).
         guard body.grant.scopes == ["boot-approval"] else {
-            throw ScreensClientError.http(status: 400, message: "invalid scopes")
+            throw ScreensClientError.http(status: 400, message: String(localized: "invalid scopes"))
         }
         guard body.grant.expiresAt > nowProvider() else {
-            throw ScreensClientError.http(status: 400, message: "delegate already expired")
+            throw ScreensClientError.http(status: 400, message: String(localized: "delegate already expired"))
         }
         try MockOrderSigners.shared.require(.sensitive, kind: "watch-delegate", signatureHex: body.signature, payload: body)
         // One active per user — replace the prior (matches the Worker, which
@@ -3020,31 +3020,31 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             if isMulti {
                 throw ScreensClientError.http(
                     status: 401,
-                    message: "totpProof required for multi-device re-pair"
+                    message: String(localized: "totpProof required for multi-device re-pair")
                 )
             }
             if codeEnrolled {
                 throw ScreensClientError.http(
                     status: 401,
-                    message: "totpProof required for single-device recovery (a second factor is enrolled)"
+                    message: String(localized: "totpProof required for single-device recovery (a second factor is enrolled)")
                 )
             }
             if cloudEnrolled {
                 throw ScreensClientError.http(
                     status: 401,
-                    message: "recoveryProof required: complete the cloud-recovery passphrase step, then retry"
+                    message: String(localized: "recoveryProof required: complete the cloud-recovery passphrase step, then retry")
                 )
             }
             throw ScreensClientError.http(
                 status: 409,
-                message: "this account has no recovery credential enrolled; recovery is credential-only"
+                message: String(localized: "this account has no recovery credential enrolled; recovery is credential-only")
             )
         }
         switch rePairBehavior {
         case .staleEtag(let etag):
-            throw ScreensClientError.http(status: 412, message: "{\"error\":\"stale\",\"currentEtag\":\"\(etag)\"}")
+            throw ScreensClientError.http(status: 412, message: String(localized: "{\"error\":\"stale\",\"currentEtag\":\"\(etag)\"}"))
         case .alreadyPending:
-            throw ScreensClientError.http(status: 409, message: "already pending")
+            throw ScreensClientError.http(status: 409, message: String(localized: "already pending"))
         case .rateLimited(let body):
             throw ScreensClientError.http(status: 429, message: body)
         case .ok:
@@ -3065,7 +3065,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         guard !body.signature.isEmpty, !body.request.newIrkPub.isEmpty else {
             throw ScreensClientError.http(
                 status: 401,
-                message: "a RePairComplete envelope signed by the new IRK is required"
+                message: String(localized: "a RePairComplete envelope signed by the new IRK is required")
             )
         }
         return RePairCompleteResponse(
@@ -3133,11 +3133,11 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
                 etag: "W/\"post-wipe\""
             )
         case .rateLimited:
-            throw ScreensClientError.http(status: 429, message: "wipe-restart rate-limited")
+            throw ScreensClientError.http(status: 429, message: String(localized: "wipe-restart rate-limited"))
         case .staleEtag(let etag):
-            throw ScreensClientError.http(status: 412, message: "{\"currentEtag\":\"\(etag)\"}")
+            throw ScreensClientError.http(status: 412, message: String(localized: "{\"currentEtag\":\"\(etag)\"}"))
         case .concurrentRotation:
-            throw ScreensClientError.http(status: 409, message: "concurrent rotation won")
+            throw ScreensClientError.http(status: 409, message: String(localized: "concurrent rotation won"))
         }
     }
 
@@ -3168,9 +3168,9 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         GymProbe.note("renamed \(serviceId) to \(body.request.newDisplayLabel)")
         switch appRenameBehavior {
         case .collision:
-            throw ScreensClientError.http(status: 409, message: "label collision")
+            throw ScreensClientError.http(status: 409, message: String(localized: "label collision"))
         case .staleSignature:
-            throw ScreensClientError.http(status: 403, message: "bad signature")
+            throw ScreensClientError.http(status: 403, message: String(localized: "bad signature"))
         case .ok:
             let newLabel = body.request.newDisplayLabel
             let canonical = "https://\(Endpoints.serverFqdn(server: newLabel, user: username.lowercased()))"
@@ -3326,7 +3326,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         try await tick()
         let u = username.lowercased()
         guard claimedUsernames[u] != nil else {
-            throw ScreensClientError.http(status: 404, message: "not found")
+            throw ScreensClientError.http(status: 404, message: String(localized: "not found"))
         }
         return UsernameLookupResponse(
             username: u,
@@ -3370,10 +3370,10 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         try await tick()
         let u = username.lowercased()
         guard totpSecretByUser[u] != nil else {
-            throw ScreensClientError.http(status: 409, message: "no staged TOTP secret; call enroll-begin first")
+            throw ScreensClientError.http(status: 409, message: String(localized: "no staged TOTP secret; call enroll-begin first"))
         }
         guard body.code == totpExpectedConfirmCode else {
-            throw ScreensClientError.http(status: 401, message: "invalid TOTP code")
+            throw ScreensClientError.http(status: 401, message: String(localized: "invalid TOTP code"))
         }
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         accountTypeByUser[u] = "multi"
@@ -3394,7 +3394,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         try await tick()
         let u = username.lowercased()
         guard body.code == totpExpectedConfirmCode else {
-            throw ScreensClientError.http(status: 401, message: "invalid TOTP code")
+            throw ScreensClientError.http(status: 401, message: String(localized: "invalid TOTP code"))
         }
         accountTypeByUser[u] = "single"
         totpEnrolledAtByUser.removeValue(forKey: u)
@@ -3490,7 +3490,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         if others > 0 {
             throw ScreensClientError.http(
                 status: 403,
-                message: #"{"error":"Another device is still on this account. Remove it in Settings, Trusted devices, then delete the account.","code":"other-devices-remain","otherDevices":\#(others)}"#
+                message: String(localized: #"{"error":"Another device is still on this account. Remove it in Settings, Trusted devices, then delete the account.","code":"other-devices-remain","otherDevices":\#(others)}"#)
             )
         }
         selfDeleteBundles.append(req)
@@ -3746,16 +3746,16 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         case 200..<300:
             return try JSONDecoder().decode(RecoveryFetchResponse.self, from: data)
         case 403:
-            throw ScreensClientError.http(status: 403, message: "wrong passphrase")
+            throw ScreensClientError.http(status: 403, message: String(localized: "wrong passphrase"))
         case 404:
-            throw ScreensClientError.http(status: 404, message: "no cloud recovery for that username")
+            throw ScreensClientError.http(status: 404, message: String(localized: "no cloud recovery for that username"))
         case 409:
-            throw ScreensClientError.http(status: 409, message: "this record predates the passphrase gate — re-enrol cloud recovery first")
+            throw ScreensClientError.http(status: 409, message: String(localized: "this record predates the passphrase gate — re-enrol cloud recovery first"))
         case 429:
             if RateLimitedRefusal.from(status: status, body: data) != nil {
                 throw ScreensClientError.http(status: 429, message: String(data: data, encoding: .utf8) ?? "")
             }
-            throw ScreensClientError.http(status: 429, message: "too many attempts — wait 15 minutes before retrying")
+            throw ScreensClientError.http(status: 429, message: String(localized: "too many attempts — wait 15 minutes before retrying"))
         default:
             let text = String(data: data, encoding: .utf8) ?? ""
             throw ScreensClientError.http(status: status, message: text)

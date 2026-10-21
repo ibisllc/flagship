@@ -99,17 +99,17 @@ public final class QRScannerController: UIViewController {
                     if granted {
                         self.configureCapture()
                     } else {
-                        self.showUnavailablePlaceholder("Camera access is off. Enable it in Settings to scan the builder QR.")
-                        self.onError?("Camera access is off.")
+                        self.showUnavailablePlaceholder(String(localized: "Camera access is off. Enable it in Settings to scan the builder QR."))
+                        self.onError?(String(localized: "Camera access is off."))
                     }
                 }
             }
         case .denied, .restricted:
-            showUnavailablePlaceholder("Camera access is off. Enable it in Settings to scan the builder QR.")
-            onError?("Camera access is off.")
+            showUnavailablePlaceholder(String(localized: "Camera access is off. Enable it in Settings to scan the builder QR."))
+            onError?(String(localized: "Camera access is off."))
         @unknown default:
-            showUnavailablePlaceholder("The camera isn't available right now.")
-            onError?("No camera available.")
+            showUnavailablePlaceholder(String(localized: "The camera isn't available right now."))
+            onError?(String(localized: "No camera available."))
         }
     }
 
@@ -129,7 +129,7 @@ public final class QRScannerController: UIViewController {
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
               let input = try? AVCaptureDeviceInput(device: device),
               session.canAddInput(input) else {
-            reportCaptureFailure("No camera available.")
+            reportCaptureFailure(String(localized: "No camera available."))
             return
         }
         session.beginConfiguration()
@@ -138,7 +138,7 @@ public final class QRScannerController: UIViewController {
         let metadata = AVCaptureMetadataOutput()
         guard session.canAddOutput(metadata) else {
             session.commitConfiguration()
-            reportCaptureFailure("Couldn't attach metadata output.")
+            reportCaptureFailure(String(localized: "Couldn't attach metadata output."))
             return
         }
         session.addOutput(metadata)
@@ -199,7 +199,7 @@ public final class QRScannerController: UIViewController {
     }
 
     private func showSimulatorPlaceholder() {
-        showUnavailablePlaceholder("Camera isn't available in the simulator.\nUse the \"copy the QR link instead\" path below.")
+        showUnavailablePlaceholder(String(localized: "Camera isn't available in the simulator.\nUse the \"copy the QR link instead\" path below."))
     }
 
     private func showUnavailablePlaceholder(_ message: String) {
@@ -236,7 +236,7 @@ public final class QRScannerController: UIViewController {
             rejectionCooldownUntil = now.addingTimeInterval(1.5)
             errorHaptic.notificationOccurred(.error)
             flashReticleRed()
-            onError?("That QR doesn't look like a Flagship invite.")
+            onError?(String(localized: "That QR doesn't look like a Flagship invite."))
         }
     }
 

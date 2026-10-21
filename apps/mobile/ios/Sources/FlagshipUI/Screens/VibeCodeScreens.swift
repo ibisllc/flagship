@@ -42,7 +42,7 @@ public struct VibeCodeProviderPickScreen: View {
                             Text("Anthropic, OpenAI, or Google. No daily limits. Your key, your bill, your choice of model.")
                                 .font(FS.font.scaled(14)).foregroundColor(c.textMuted)
                         }
-                        FSSecondaryButton("Set up a key", block: true, action: onPickBYOK)
+                        FSSecondaryButton(String(localized: "Set up a key"), block: true, action: onPickBYOK)
                     }
                     Spacer().frame(height: FS.space.s8)
                 }
@@ -62,7 +62,7 @@ public struct VibeCodeDescribeScreen: View {
     public enum Visibility: String, CaseIterable, Sendable {
         case inviteOnly = "just-me"
         case anyoneWithLink = "link"
-        var label: String { self == .inviteOnly ? "Invite only" : "Anyone with the link" }
+        var label: String { self == .inviteOnly ? String(localized: "Invite only") : String(localized: "Anyone with the link") }
         var explanation: String {
             switch self {
             case .inviteOnly: return "Only you and the people you invite on Flagship can open it."
@@ -127,7 +127,7 @@ public struct VibeCodeDescribeScreen: View {
                     VStack(alignment: .leading, spacing: FS.space.s2) {
                         FSField(
                             value: $name,
-                            label: "Name",
+                            label: String(localized: "Name"),
                             placeholder: "plant-tracker"
                         )
                         .textInputAutocapitalization(.never)
@@ -178,7 +178,7 @@ public struct VibeCodeDescribeScreen: View {
                         ModelRow(menu: menu)
                     }
 
-                    FSPrimaryButton(starting ? "Starting…" : "Build it", enabled: canBuild, block: true, large: true) { build() }
+                    FSPrimaryButton(starting ? String(localized: "Starting…") : String(localized: "Build it"), enabled: canBuild, block: true, large: true) { build() }
                         .accessibilityIdentifier("describe-build")
                     FSColorReader { c in
                         Text("about 90 seconds")
@@ -234,24 +234,24 @@ public struct VibeCodeDescribeScreen: View {
         return scheme + label + rest
     }
 
-    private var conflictTitle: String { "That name is taken" }
+    private var conflictTitle: String { String(localized: "That name is taken") }
 
     static let examples: [(String, String)] = [
-        ("Habit tracker", "A habit tracker: I tick off my daily habits and see my streaks for the last month."),
-        ("Family wishlist", "A family wishlist: everyone keeps a list, and the others can quietly mark what they'll buy."),
-        ("Recipe jar", "A recipe jar: save recipes with a photo, ingredients and steps, and search them by ingredient."),
-        ("Sleep journal", "A sleep journal: log when I went to bed, when I woke up and how I slept, with a weekly chart."),
+        (String(localized: "Habit tracker"), String(localized: "A habit tracker: I tick off my daily habits and see my streaks for the last month.")),
+        (String(localized: "Family wishlist"), String(localized: "A family wishlist: everyone keeps a list, and the others can quietly mark what they'll buy.")),
+        (String(localized: "Recipe jar"), String(localized: "A recipe jar: save recipes with a photo, ingredients and steps, and search them by ingredient.")),
+        (String(localized: "Sleep journal"), String(localized: "A sleep journal: log when I went to bed, when I woke up and how I slept, with a weekly chart.")),
     ]
 
     static func conflictMessage(_ c: VibeCodeNameCheck, name: String) -> String {
         let n = c.name ?? name
         switch c.kind {
         case "session":
-            return "A build session already uses \"\(n)\". To use the name for a new build, open Build sessions and discard that one first."
+            return String(localized: "A build session already uses \"\(n)\". To use the name for a new build, open Build sessions and discard that one first.")
         case "app":
-            return "You already have a service called \"\(n)\". Pick another name."
+            return String(localized: "You already have a service called \"\(n)\". Pick another name.")
         default:
-            return c.message ?? "Pick another name."
+            return c.message ?? String(localized: "Pick another name.")
         }
     }
 
@@ -259,7 +259,7 @@ public struct VibeCodeDescribeScreen: View {
     private var nameStatus: some View {
         FSColorReader { c in
             if let ch = currentCheck, !ch.ok {
-                Label(ch.kind == "invalid" ? (ch.message ?? "That can't be a web address.") : Self.conflictMessage(ch, name: slug),
+                Label(ch.kind == "invalid" ? (ch.message ?? String(localized: "That can't be a web address.")) : Self.conflictMessage(ch, name: slug),
                       systemImage: "exclamationmark.triangle.fill")
                     .font(FS.font.bodySm()).foregroundColor(c.danger)
                     .fixedSize(horizontal: false, vertical: true)

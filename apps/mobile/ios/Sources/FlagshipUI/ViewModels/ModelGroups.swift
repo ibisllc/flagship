@@ -26,11 +26,11 @@ public enum ModelGroups {
     /// A saved key's group title.
     public static func keyTitle(_ e: SavedKeyStore.Entry) -> String { "\(e.provider) · \(e.label)" }
 
-    public static let chooseModel = "Choose a model"
-    public static let loadingModels = "Loading models…"
-    public static let catalogUnreadable = "The models couldn't be listed right now."
-    public static let noGroups = "Add an AI key in Settings to pick a model."
-    public static let keyGoneMessage = "That AI key isn't saved on this phone any more. Pick another model."
+    public static let chooseModel = String(localized: "Choose a model")
+    public static let loadingModels = String(localized: "Loading models…")
+    public static let catalogUnreadable = String(localized: "The models couldn't be listed right now.")
+    public static let noGroups = String(localized: "Add an AI key in Settings to pick a model.")
+    public static let keyGoneMessage = String(localized: "That AI key isn't saved on this phone any more. Pick another model.")
 
     /// The picked key was deleted from this device since the menu was built.
     public struct KeyGone: LocalizedError, Equatable {

@@ -14,45 +14,45 @@ import FlagshipCore
 // box-pinned session and the screens.
 
 public enum ServerShareCopy {
-    public static let sectionTitle = "Shared with"
-    public static let shareButton = "Share this server"
-    public static let nobodyYet = "Only you can use this server. Share it to let another person see it or help run it."
+    public static let sectionTitle = String(localized: "Shared with")
+    public static let shareButton = String(localized: "Share this server")
+    public static let nobodyYet = String(localized: "Only you can use this server. Share it to let another person see it or help run it.")
 
-    public static func levelName(_ l: ServerShareLevel) -> String { l == .view ? "Can view" : "Can manage" }
+    public static func levelName(_ l: ServerShareLevel) -> String { l == .view ? String(localized: "Can view") : String(localized: "Can manage") }
     public static func levelLine(_ l: ServerShareLevel) -> String {
         l == .view
-            ? "Sees the server's status, monitoring and apps."
-            : "Also builds apps with AI, accepts app updates, updates the server and changes apps' internet access."
+            ? String(localized: "Sees the server's status, monitoring and apps.")
+            : String(localized: "Also builds apps with AI, accepts app updates, updates the server and changes apps' internet access.")
     }
 
-    public static let unlockTitle = "Approve start-ups"
-    public static let unlockLine = "Their phone can unlock this server when it starts. That gives them a copy of its disk key."
-    public static let unlockHouseKey = "Only give this to someone you'd give a house key. Ending the share deletes their copy, but they could have kept one."
-    public static let dataTitle = "See app data"
-    public static let dataLine = "They can read your apps' databases, and change data if they can manage."
+    public static let unlockTitle = String(localized: "Approve start-ups")
+    public static let unlockLine = String(localized: "Their phone can unlock this server when it starts. That gives them a copy of its disk key.")
+    public static let unlockHouseKey = String(localized: "Only give this to someone you'd give a house key. Ending the share deletes their copy, but they could have kept one.")
+    public static let dataTitle = String(localized: "See app data")
+    public static let dataLine = String(localized: "They can read your apps' databases, and change data if they can manage.")
 
-    public static let notifyTitle = "Notify this device when it needs to start"
-    public static let notifyNote = "Turning this on lets Flagship's service know this device helps with this server, so it can wake you. The notice itself names no server."
+    public static let notifyTitle = String(localized: "Notify this device when it needs to start")
+    public static let notifyNote = String(localized: "Turning this on lets Flagship's service know this device helps with this server, so it can wake you. The notice itself names no server.")
     /// The box counts an active share as a co-manager, at Manager rank in
     /// every app (AGENTS.md "Three ranks"), so no invite is needed.
-    public static let membersOnlyHint = "Members only. As a co-manager you can open it."
+    public static let membersOnlyHint = String(localized: "Members only. As a co-manager you can open it.")
 
     public static func updateButton(_ r: ReleaseEntry) -> String {
-        "Update to \(r.tag.isEmpty ? String(r.commit.prefix(8)) : r.tag)"
+        String(localized: "Update to \(r.tag.isEmpty ? String(r.commit.prefix(8)) : r.tag)")
     }
     public static func updateConfirm(_ name: String) -> String {
-        "\(name) restarts on the new release. Only releases Flagship's maintainers endorsed will install."
+        String(localized: "\(name) restarts on the new release. Only releases Flagship's maintainers endorsed will install.")
     }
-    public static func updating(_ name: String) -> String { "Updating \(name). It restarts in a few minutes." }
+    public static func updating(_ name: String) -> String { String(localized: "Updating \(name). It restarts in a few minutes.") }
 
-    public static func awaitingConfirm(_ label: String) -> String { "\(label) accepted. Does their phone show this code?" }
-    public static func offered(_ label: String) -> String { "Waiting for \(label) to open the link" }
-    public static let acceptanceInvalid = "This invitation's answer doesn't check out. Cancel it and share again."
-    public static let startupKeyMissing = "Start-up approval isn't set up for them yet."
-    public static let showInvitations = "Show invitations waiting for an answer"
+    public static func awaitingConfirm(_ label: String) -> String { String(localized: "\(label) accepted. Does their phone show this code?") }
+    public static func offered(_ label: String) -> String { String(localized: "Waiting for \(label) to open the link") }
+    public static let acceptanceInvalid = String(localized: "This invitation's answer doesn't check out. Cancel it and share again.")
+    public static let startupKeyMissing = String(localized: "Start-up approval isn't set up for them yet.")
+    public static let showInvitations = String(localized: "Show invitations waiting for an answer")
 
     public static func activityLine(_ e: ShareActivityEntry) -> String {
-        let who = e.actor.kind == "share" ? (e.actor.label ?? "Someone") : "You"
+        let who = e.actor.kind == "share" ? (e.actor.label ?? String(localized: "Someone")) : String(localized: "You")
         let what: String
         switch e.action {
         case "share.signed-in": what = "opened the server"
@@ -74,25 +74,25 @@ public enum ServerShareCopy {
     }
 
     public static func message(for error: Error) -> String {
-        if let e = error as? ServerShareFlowError { return e.errorDescription ?? "Something went wrong." }
+        if let e = error as? ServerShareFlowError { return e.errorDescription ?? String(localized: "Something went wrong.") }
         if let e = error as? ShareUpdateRefusal { return e.message }
         if let e = error as? ShareInviteRefusal { return e.message }
         if let e = error as? ShareAcceptRefusal { return e.message }
         if let e = error as? ServerShareHTTPError, let sentence = e.acceptRefusal { return sentence }
         if let e = error as? ServerShareHTTPError {
             switch e.status {
-            case 0: return "Couldn't reach the server. Check your connection and try again."
-            case 401: return "Your connection to this server expired. Open the server's page again."
-            case 403 where e.error == "owner-only": return "Only the server's owner can do that."
-            case 403: return "The server didn't accept your signature."
-            case 404: return "That's gone. Pull to refresh."
-            case 409: return "Something newer is already on file. Pull to refresh and try again."
-            case 410: return "This share has ended."
+            case 0: return String(localized: "Couldn't reach the server. Check your connection and try again.")
+            case 401: return String(localized: "Your connection to this server expired. Open the server's page again.")
+            case 403 where e.error == "owner-only": return String(localized: "Only the server's owner can do that.")
+            case 403: return String(localized: "The server didn't accept your signature.")
+            case 404: return String(localized: "That's gone. Pull to refresh.")
+            case 409: return String(localized: "Something newer is already on file. Pull to refresh and try again.")
+            case 410: return String(localized: "This share has ended.")
             default: return ScreensClientError.plainLanguage(forStatus: e.status)
             }
         }
         if (error as NSError).domain == NSURLErrorDomain {
-            return "Couldn't reach the server. Check your connection and try again."
+            return String(localized: "Couldn't reach the server. Check your connection and try again.")
         }
         return ScreensClientError.userFacing(error)
     }
@@ -154,21 +154,21 @@ public enum ServerShareDemo {
 
     static func ownerRows(now: Int64 = ServerShareClock.nowMs()) -> [OwnerShareRow] {
         [
-            OwnerShareRow(shareId: String(repeating: "a1", count: 16), label: "Alex", level: .view,
+            OwnerShareRow(shareId: String(repeating: "a1", count: 16), label: String(localized: "Alex"), level: .view,
                           unlockAtBoot: false, seeAppData: false, status: .awaitingConfirm(sas: "482 913"),
                           memberPubHex: memberPub),
-            OwnerShareRow(shareId: String(repeating: "b2", count: 16), label: "Sam", level: .manage,
+            OwnerShareRow(shareId: String(repeating: "b2", count: 16), label: String(localized: "Sam"), level: .manage,
                           unlockAtBoot: true, seeAppData: false, status: .active, memberPubHex: memberPub,
                           grantIssuedAt: now - 86_400_000 * 3, lastSeenAt: now - 3_600_000 * 2, startupKeyOnFile: true),
         ]
     }
 
     static func activity(now: Int64 = ServerShareClock.nowMs()) -> [ShareActivityEntry] {
-        let sam = ShareActivityEntry.Actor(kind: "share", shareId: String(repeating: "b2", count: 16), label: "Sam")
+        let sam = ShareActivityEntry.Actor(kind: "share", shareId: String(repeating: "b2", count: 16), label: String(localized: "Sam"))
         return [
             ShareActivityEntry(ts: now - 3_600_000 * 2, actor: sam, action: "app.access.edit", target: "bright-maple--plants"),
             ShareActivityEntry(ts: now - 3_600_000 * 2 - 60_000, actor: sam, action: "share.signed-in"),
-            ShareActivityEntry(ts: now - 86_400_000 * 3, actor: .init(kind: "owner"), action: "share.granted", target: "Sam"),
+            ShareActivityEntry(ts: now - 86_400_000 * 3, actor: .init(kind: "owner"), action: "share.granted", target: String(localized: "Sam")),
         ]
     }
 
@@ -176,10 +176,10 @@ public enum ServerShareDemo {
         [
             SharedServerEntry(entryId: String(repeating: "c3", count: 16), shareId: String(repeating: "d4", count: 16),
                               secretHex: secretHex, serverDomain: "garage.jordan-reyes.flagship.services",
-                              serverName: "Garage", acceptedAt: 1),
+                              serverName: String(localized: "Garage"), acceptedAt: 1),
             SharedServerEntry(entryId: String(repeating: "e5", count: 16), shareId: String(repeating: "f6", count: 16),
                               secretHex: secretHex, serverDomain: "photos.mina-park.flagship.services",
-                              serverName: "Photos", acceptedAt: 0),
+                              serverName: String(localized: "Photos"), acceptedAt: 0),
         ]
     }
 
@@ -194,7 +194,7 @@ public enum ServerShareDemo {
 
     static let invitation = ShareInvitation(
         shareId: String(repeating: "ab", count: 16), secretHex: secretHex,
-        offer: ShareOfferPayload(serverDomain: "cabin.jordan-reyes.flagship.services", serverName: "Cabin",
+        offer: ShareOfferPayload(serverDomain: "cabin.jordan-reyes.flagship.services", serverName: String(localized: "Cabin"),
                                  stkPubHex: memberPub, level: .view, unlockAtBoot: false, seeAppData: false,
                                  expiresAt: 4_102_444_800_000),
         state: "offered")
@@ -235,10 +235,10 @@ public enum ServerShareServices {
     public static func ownerKeys() -> ShareOwnerKeys {
         ShareOwnerKeys(
             sensitive: { reason in try await Keystore.sensitiveOrderSigningKey(reason: reason) },
-            account: { try await Keystore.deriveIRK(reason: "Check who answered your invitations") },
-            household: { try await Keystore.deriveHouseholdKey(reason: "Check who answered your invitations") },
+            account: { try await Keystore.deriveIRK(reason: String(localized: "Check who answered your invitations")) },
+            household: { try await Keystore.deriveHouseholdKey(reason: String(localized: "Check who answered your invitations")) },
             diskKeySeeds: { domain in
-                let k = try await Keystore.deriveApprovalKeys(serverId: domain, reason: "Open the server's start-up key")
+                let k = try await Keystore.deriveApprovalKeys(serverId: domain, reason: String(localized: "Open the server's start-up key"))
                 return [k.bak.rawRepresentation, k.irk.rawRepresentation]
             }
         )
@@ -408,7 +408,7 @@ public final class ShareServerCardModel {
         await run(row) { flow, token in
             guard let token else { throw ServerShareHTTPError(status: 401, error: nil, code: nil) }
             if try await !flow.confirm(row, serverDomain: self.serverDomain, serverName: self.serverName, ownerToken: token) {
-                self.notice = "\(row.label) has access. Start-up approval couldn't be set up yet; try again below."
+                self.notice = String(localized: "\(row.label) has access. Start-up approval couldn't be set up yet; try again below.")
             }
         }
     }
@@ -419,7 +419,7 @@ public final class ShareServerCardModel {
             let ok = try await flow.change(row, level: level ?? row.level, unlockAtBoot: unlockAtBoot ?? row.unlockAtBoot,
                                            seeAppData: seeAppData ?? row.seeAppData, serverDomain: self.serverDomain,
                                            serverName: self.serverName, ownerToken: token)
-            if !ok { self.notice = "Saved. Start-up approval couldn't be updated yet; try again below." }
+            if !ok { self.notice = String(localized: "Saved. Start-up approval couldn't be updated yet; try again below.") }
         }
     }
 
@@ -935,7 +935,7 @@ public final class SharedServerModel {
         do {
             try await store.approveStartup(shareId, startup)
             startups.removeAll { $0.id == startup.id }
-            notice = "Unlocking. The server will be back in a minute or two."
+            notice = String(localized: "Unlocking. The server will be back in a minute or two.")
         } catch {
             errorMessage = ServerShareCopy.message(for: error)
         }
@@ -949,7 +949,7 @@ public final class SharedServerModel {
         defer { updating = false }
         do {
             try await store.orderUpdate(shareId, targetCommit: release.commit, fromCommit: from)
-            updateNotice = ServerShareCopy.updating(entry?.displayName ?? "The server")
+            updateNotice = ServerShareCopy.updating(entry?.displayName ?? String(localized: "The server"))
         } catch {
             updateError = ServerShareCopy.message(for: error)
         }

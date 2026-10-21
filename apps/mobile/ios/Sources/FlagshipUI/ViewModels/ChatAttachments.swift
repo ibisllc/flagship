@@ -22,7 +22,7 @@ public enum ChatAttachmentRules {
         }
 
         var limitText: String {
-            maxBytes >= 1024 * 1024 ? "\(maxBytes / (1024 * 1024)) MB" : "\(maxBytes / 1024) KB"
+            maxBytes >= 1024 * 1024 ? String(localized: "\(maxBytes / (1024 * 1024)) MB") : String(localized: "\(maxBytes / 1024) KB")
         }
 
         var noun: String {
@@ -79,15 +79,15 @@ public enum ChatAttachmentRules {
         public var message: String {
             switch self {
             case .tooMany:
-                return "You can attach up to \(maxPerMessage) files to a message."
+                return String(localized: "You can attach up to \(maxPerMessage) files to a message.")
             case .tooBig(let name, let kind):
-                return "\(name) is over the \(kind.limitText) limit for \(kind.noun)."
+                return String(localized: "\(name) is over the \(kind.limitText) limit for \(kind.noun).")
             case .unsupported(let name):
-                return "\(name) can't be attached. Attach an image, a text file, a CSV or JSON file, or a PDF."
+                return String(localized: "\(name) can't be attached. Attach an image, a text file, a CSV or JSON file, or a PDF.")
             case .notText(let name):
-                return "\(name) isn't plain text."
+                return String(localized: "\(name) isn't plain text.")
             case .unreadable(let name):
-                return "Couldn't read \(name)."
+                return String(localized: "Couldn't read \(name).")
             }
         }
     }
@@ -129,7 +129,7 @@ public enum ChatAttachmentRules {
     public static func photo(data: Data, index: Int) -> Result<VibeCodeAttachment, Refusal> {
         if let type = sniffImage(data), data.count <= Kind.image.maxBytes {
             let ext = type == "image/jpeg" ? "jpg" : String(type.dropFirst("image/".count))
-            return .success(.image(name: "photo-\(index).\(ext)", mediaType: type, data: data))
+            return .success(.image(name: String(localized: "photo-\(index).\(ext)"), mediaType: type, data: data))
         }
         let name = "photo-\(index).jpg"
         guard let img = UIImage(data: data) else { return .failure(.unreadable(name: name)) }
@@ -157,11 +157,11 @@ public enum ChatAttachmentRules {
 
 /// The notice by the attach control.
 public enum ChatAttachmentCopy {
-    public static let notice = "The AI will see what you attach."
-    public static let sampleData = "Sample data goes only to the private test copy."
-    public static let attach = "Attach"
-    public static let photo = "Photo"
-    public static let file = "File"
+    public static let notice = String(localized: "The AI will see what you attach.")
+    public static let sampleData = String(localized: "Sample data goes only to the private test copy.")
+    public static let attach = String(localized: "Attach")
+    public static let photo = String(localized: "Photo")
+    public static let file = String(localized: "File")
 }
 
 /// The files staged for the next message.

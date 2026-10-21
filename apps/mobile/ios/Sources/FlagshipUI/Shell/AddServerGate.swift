@@ -59,20 +59,20 @@ public enum AdminOrderGate {
     @MainActor
     public static func allows(_ app: AppState) -> Bool { AddServerGate.allows(app) }
 
-    public static let removeApp = "Only an admin device can remove an app."
-    public static let runsOn = "Only an admin device can change where this app runs."
-    public static let accessList = "Only an admin device can change this app's internet access."
-    public static let apiKeys = "Only an admin device can create or revoke API keys."
-    public static let dataWrite = "Only an admin device can change this app's data."
-    public static let watchQuickApprove = "Only an admin device can turn on quick approve from Apple Watch."
-    public static let deleteAccount = "Only an admin device can delete this account."
+    public static let removeApp = String(localized: "Only an admin device can remove an app.")
+    public static let runsOn = String(localized: "Only an admin device can change where this app runs.")
+    public static let accessList = String(localized: "Only an admin device can change this app's internet access.")
+    public static let apiKeys = String(localized: "Only an admin device can create or revoke API keys.")
+    public static let dataWrite = String(localized: "Only an admin device can change this app's data.")
+    public static let watchQuickApprove = String(localized: "Only an admin device can turn on quick approve from Apple Watch.")
+    public static let deleteAccount = String(localized: "Only an admin device can delete this account.")
     /// Sharing a server and changing who it is shared with (.com and the box
     /// take the grant, revoke and offer only under the admin root).
-    public static let share = "Only an admin device can share this server."
+    public static let share = String(localized: "Only an admin device can share this server.")
     /// Every order on the server page (power, lock-down, front page, update,
     /// backup, migrate, Make leader, transfer, revoke, un-revoke, delete):
     /// the page is read-only on any other device. Same line as the webapp.
-    public static let server = "Only an admin device can change this server. This device can see it."
+    public static let server = String(localized: "Only an admin device can change this server. This device can see it.")
 }
 
 /// A device without the admin root was asked to sign an admin-only order.

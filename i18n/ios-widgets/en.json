@@ -1,0 +1,59 @@
+{
+  "%lld%%": {
+    "en": "%lld%%",
+    "ctx": "apps/mobile/ios/App/WidgetExtension/InstallProgressLiveActivity.swift:33",
+    "translatable": false
+  },
+  "Provisioning %@…": {
+    "en": "Provisioning %@…",
+    "ctx": "apps/mobile/ios/App/WidgetExtension/InstallProgressLiveActivity.swift:80"
+  },
+  "PodStatusWidget": {
+    "en": "PodStatusWidget",
+    "ctx": "apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift:12"
+  },
+  "Servers": {
+    "en": "Servers",
+    "ctx": "apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift:19"
+  },
+  "Online/offline status for your Flagship servers.": {
+    "en": "Online/offline status for your Flagship servers.",
+    "ctx": "apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift:20"
+  },
+  "Home": {
+    "en": "Home",
+    "ctx": "apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift:35"
+  },
+  "Office": {
+    "en": "Office",
+    "ctx": "apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift:36"
+  },
+  "Online": {
+    "en": "Online",
+    "ctx": "apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift:144"
+  },
+  "Offline": {
+    "en": "Offline",
+    "ctx": "apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift:145"
+  },
+  "Pending": {
+    "en": "Pending",
+    "ctx": "apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift:146"
+  },
+  "Unknown": {
+    "en": "Unknown",
+    "ctx": "apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift:147"
+  },
+  "LEADER": {
+    "en": "LEADER",
+    "ctx": "apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift:112"
+  },
+  "No servers yet": {
+    "en": "No servers yet",
+    "ctx": "apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift:135"
+  },
+  "Pair a server to see status here.": {
+    "en": "Pair a server to see status here.",
+    "ctx": "apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift:136"
+  }
+}

@@ -82,7 +82,7 @@ public struct DemoInstallProgressScreen: View {
                 deviceInfo(c)
 
                 if onCancel != nil {
-                    FSDangerButton("Cancel this device", block: true, large: true) {
+                    FSDangerButton(String(localized: "Cancel this device"), block: true, large: true) {
                         confirming = true
                     }
                     .accessibilityIdentifier("install-cancel-device-button")
@@ -160,11 +160,11 @@ public struct DemoInstallProgressScreen: View {
         if let b = block, b.ip != nil || b.region != nil || b.image != nil || b.serverType != nil {
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
-                    FSSectionLabel("This device")
+                    FSSectionLabel(String(localized: "This device"))
                     if let ip = b.ip { infoRow("IP", ip, mono: true, c) }
-                    if let region = b.region { infoRow("Location", region, mono: false, c) }
+                    if let region = b.region { infoRow(String(localized: "Location"), region, mono: false, c) }
                     if let image = b.image { infoRow("OS", image, mono: false, c) }
-                    if let size = b.serverType { infoRow("Size", size, mono: false, c) }
+                    if let size = b.serverType { infoRow(String(localized: "Size"), size, mono: false, c) }
                 }
             }
             .accessibilityIdentifier("install-device-info")

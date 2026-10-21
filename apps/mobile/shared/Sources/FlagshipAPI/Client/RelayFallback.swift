@@ -293,7 +293,7 @@ public enum RelayConnectRequest {
         guard let head = String(data: data[..<end.lowerBound], encoding: .utf8),
               let line = head.split(separator: "\r\n", omittingEmptySubsequences: false).first else { return .refused }
         let parts = line.split(separator: " ")
-        guard parts.count == 3, parts[0] == "CONNECT", parts[2].hasPrefix("HTTP/1."),
+        guard parts.count == 3, parts[0] == "CONNECT", parts[2].hasPrefix(String(localized: "HTTP/1.")),
               let colon = parts[1].lastIndex(of: ":"),
               let port = Int(parts[1][parts[1].index(after: colon)...]), (1...65535).contains(port) else { return .refused }
         let host = String(parts[1][..<colon]).trimmingCharacters(in: CharacterSet(charactersIn: "[]")).lowercased()
@@ -441,10 +441,10 @@ public final class LoopbackAddressShim: @unchecked Sendable {
             case .incomplete:
                 readHead(client, buffer: all)
             case .refused:
-                reply(client, "HTTP/1.1 400 Bad Request\r\n\r\n")
+                reply(client, String(localized: "HTTP/1.1 400 Bad Request\r\n\r\n"))
             case let .target(host, port, rest):
                 headRead(client)
-                guard port == 443, host.hasSuffix(".\(apex)") else { return reply(client, "HTTP/1.1 403 Forbidden\r\n\r\n") }
+                guard port == 443, host.hasSuffix(".\(apex)") else { return reply(client, String(localized: "HTTP/1.1 403 Forbidden\r\n\r\n")) }
                 connectUpstream(client, port: upstreamPort, candidates: addresses(), rest: rest)
             }
         }
@@ -456,7 +456,7 @@ public final class LoopbackAddressShim: @unchecked Sendable {
 
     private func connectUpstream(_ client: NWConnection, port: Int, candidates: [String], rest: Data) {
         guard let address = candidates.first, let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
-            return reply(client, "HTTP/1.1 502 Bad Gateway\r\n\r\n")
+            return reply(client, String(localized: "HTTP/1.1 502 Bad Gateway\r\n\r\n"))
         }
         let upstream = NWConnection(host: NWEndpoint.Host(address), port: nwPort, using: .tcp)
         let once = PortOnce2()

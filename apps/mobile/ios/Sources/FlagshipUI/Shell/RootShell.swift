@@ -484,7 +484,7 @@ private struct Sidebar: View {
             .padding(.top, FS.space.s8)
             .padding(.bottom, FS.space.s6)
 
-            FSSectionLabel("Destinations")
+            FSSectionLabel(String(localized: "Destinations"))
                 .padding(.horizontal, FS.space.s6)
                 .padding(.bottom, FS.space.s2)
 

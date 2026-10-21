@@ -12,7 +12,7 @@ struct ServerBackupButton: View {
     @State private var showSheet = false
 
     var body: some View {
-        FSPrimaryButton("Back up now (with a passcode)…", block: true) { showSheet = true }
+        FSPrimaryButton(String(localized: "Back up now (with a passcode)…"), block: true) { showSheet = true }
             .accessibilityIdentifier("sd-backup-server")
             .sheet(isPresented: $showSheet) {
                 NavigationStack {
@@ -67,7 +67,7 @@ struct ServerBackupSheet: View {
                     Text("Left out (no source to rebuild them from): \(vm.leftOut.joined(separator: ", ")).")
                         .font(FS.font.caption()).foregroundColor(c.danger)
                 }
-                FSPrimaryButton("Download the backup", block: true) { Task { await vm.download() } }
+                FSPrimaryButton(String(localized: "Download the backup"), block: true) { Task { await vm.download() } }
                     .accessibilityIdentifier("backup-download")
             }
         case .downloading(let fraction):
@@ -88,7 +88,7 @@ struct ServerBackupSheet: View {
         case .failed(let message):
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 Text(message).foregroundColor(c.danger)
-                FSSecondaryButton("Try again", block: true) { vm.tryAgain() }
+                FSSecondaryButton(String(localized: "Try again"), block: true) { vm.tryAgain() }
             }
         }
     }
@@ -121,13 +121,13 @@ struct ServerBackupSheet: View {
             } else {
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s2) {
-                        FSSectionLabel("Suggested passcode")
+                        FSSectionLabel(String(localized: "Suggested passcode"))
                         Text(vm.suggestedPasscode)
                             .font(FS.font.scaled(20, weight: .semibold, design: .monospaced))
                             .foregroundColor(c.text)
                             .textSelection(.enabled)
                             .accessibilityIdentifier("backup-suggested-passcode")
-                        Button(copied ? "Copied" : "Copy") {
+                        Button(copied ? String(localized: "Copied") : "Copy") {
                             UIPasteboard.general.string = vm.suggestedPasscode
                             copied = true
                         }
@@ -141,7 +141,7 @@ struct ServerBackupSheet: View {
             Toggle("I've saved the passcode somewhere safe", isOn: $vm.passcodeSaved)
                 .font(FS.font.bodySm())
                 .accessibilityIdentifier("backup-passcode-saved")
-            FSPrimaryButton("Make the backup", block: true) { Task { await vm.start() } }
+            FSPrimaryButton(String(localized: "Make the backup"), block: true) { Task { await vm.start() } }
                 .disabled(!vm.canStart)
                 .accessibilityIdentifier("backup-start")
         }
@@ -277,7 +277,7 @@ struct ImportBackupScreen: View {
         switch vm.phase {
         case .peersPick, .peersFinding: return "Restore from other servers"
         case .waiting, .sending, .restoring, .done: return "Restore a backup"
-        default: return "Import a backup"
+        default: return String(localized: "Import a backup")
         }
     }
 
@@ -290,7 +290,7 @@ struct ImportBackupScreen: View {
         switch vm.phase {
         case .pick:
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                Text(vm.targetFqdn.map { "\(serverName($0)) is waiting for its backup. Pick the backup's .flagship file and this screen sends it." } ?? ServerArchive.importIntro)
+                Text(vm.targetFqdn.map { String(localized: "\(serverName($0)) is waiting for its backup. Pick the backup's .flagship file and this screen sends it.") } ?? ServerArchive.importIntro)
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
                 FSCard {
@@ -298,7 +298,7 @@ struct ImportBackupScreen: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("import-backup-files")
                 }
-                FSPrimaryButton(vm.fileName == nil ? "Choose the backup file" : "Choose another file", block: true) { picking = true }
+                FSPrimaryButton(vm.fileName == nil ? String(localized: "Choose the backup file") : String(localized: "Choose another file"), block: true) { picking = true }
                     .accessibilityIdentifier("import-backup-choose")
                 Text("It's read where it is; nothing is copied onto this phone.")
                     .font(FS.font.caption())
@@ -307,11 +307,11 @@ struct ImportBackupScreen: View {
         case .peersPick:
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 Text(ServerArchive.peersIntro).font(FS.font.body()).foregroundColor(c.textMuted)
-                FSField(value: $vm.lostServer, label: "The lost server", placeholder: "home.you.flagship.services", error: vm.peerError)
+                FSField(value: $vm.lostServer, label: String(localized: "The lost server"), placeholder: "home.you.flagship.services", error: vm.peerError)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .accessibilityIdentifier("restore-peers-lost")
-                FSPrimaryButton("Find its backup", block: true) { Task { await vm.findPeerBackup() } }
+                FSPrimaryButton(String(localized: "Find its backup"), block: true) { Task { await vm.findPeerBackup() } }
                     .disabled(vm.lostServer.trimmingCharacters(in: .whitespaces).isEmpty)
                     .accessibilityIdentifier("restore-peers-find")
             }
@@ -327,7 +327,7 @@ struct ImportBackupScreen: View {
                     .autocorrectionDisabled()
                     .fsInputBox()
                     .accessibilityIdentifier("import-backup-passcode")
-                FSPrimaryButton("Open the backup", block: true) { Task { await vm.unlock() } }
+                FSPrimaryButton(String(localized: "Open the backup"), block: true) { Task { await vm.unlock() } }
                     .disabled(vm.passcode.isEmpty)
                     .accessibilityIdentifier("import-backup-unlock")
             }
@@ -343,14 +343,14 @@ struct ImportBackupScreen: View {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 summary(c)
                 Text("\(serverName(fqdn)) is waiting for this backup.").foregroundColor(c.text)
-                FSPrimaryButton("Send it to \(serverName(fqdn))", block: true) { vm.send(to: fqdn) }
+                FSPrimaryButton(String(localized: "Send it to \(serverName(fqdn))"), block: true) { vm.send(to: fqdn) }
                     .accessibilityIdentifier("import-backup-send-existing")
-                FSSecondaryButton("Create a new server instead", block: true) { vm.showName() }
+                FSSecondaryButton(String(localized: "Create a new server instead"), block: true) { vm.showName() }
             }
         case .name:
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 summary(c)
-                FSField(value: $vm.name, label: "Name of the new server", placeholder: "home", error: vm.nameProblem)
+                FSField(value: $vm.name, label: String(localized: "Name of the new server"), placeholder: "home", error: vm.nameProblem)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .accessibilityIdentifier("import-backup-name")
@@ -360,7 +360,7 @@ struct ImportBackupScreen: View {
                 if let s = vm.settingsLine {
                     Text(s).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 }
-                FSPrimaryButton("Create the server", block: true) { vm.create() }
+                FSPrimaryButton(String(localized: "Create the server"), block: true) { vm.create() }
                     .disabled(!vm.canCreate)
                     .accessibilityIdentifier("import-backup-create")
                 Text("Next you choose how to set it up (Flagship Studio, a recipe file, a USB stick), like any new server.")
@@ -379,7 +379,7 @@ struct ImportBackupScreen: View {
             .accessibilityIdentifier("import-backup-waiting")
         case .sending(let fqdn, let fraction):
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text(vm.fromPeers ? "\(serverName(fqdn)) is getting the backup from other servers…" : "Sending the backup to \(serverName(fqdn))…").foregroundColor(c.text)
+                Text(vm.fromPeers ? String(localized: "\(serverName(fqdn)) is getting the backup from other servers…") : "Sending the backup to \(serverName(fqdn))…").foregroundColor(c.text)
                 ProgressView(value: fraction)
                 Text("Keep this screen open. If it stops, it picks up where it left off.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
@@ -400,7 +400,7 @@ struct ImportBackupScreen: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("import-backup-failed-app")
                 }
-                FSPrimaryButton("Done", block: true) { onClose() }
+                FSPrimaryButton(String(localized: "Done"), block: true) { onClose() }
                     .accessibilityIdentifier("import-backup-done")
             }
         case .failed(let message, let keepsWaiting):
@@ -411,7 +411,7 @@ struct ImportBackupScreen: View {
                         .font(FS.font.bodySm())
                         .foregroundColor(c.textMuted)
                 }
-                FSSecondaryButton("Close", block: true) { onClose() }
+                FSSecondaryButton(String(localized: "Close"), block: true) { onClose() }
             }
         }
     }
@@ -454,18 +454,18 @@ struct BackupDownloadApprovalScreen: View {
                     .foregroundColor(c.textMuted)
                 switch vm.phase {
                 case .idle, .working:
-                    FSPrimaryButton(vm.phase == .working ? "Approving…" : "Approve with Face ID", block: true) {
+                    FSPrimaryButton(vm.phase == .working ? String(localized: "Approving…") : String(localized: "Approve with Face ID"), block: true) {
                         Task { await vm.approve() }
                     }
                     .disabled(vm.phase == .working)
                     .accessibilityIdentifier("backup-approve")
-                    FSSecondaryButton("Don't approve", block: true) { onDone() }
+                    FSSecondaryButton(String(localized: "Don't approve"), block: true) { onDone() }
                 case .approved:
                     Text("Approved. The downloads start in that browser.").foregroundColor(c.success)
-                    FSPrimaryButton("Done", block: true) { onDone() }
+                    FSPrimaryButton(String(localized: "Done"), block: true) { onDone() }
                 case .failed(let message):
                     Text(message).foregroundColor(c.danger)
-                    FSSecondaryButton("Try again", block: true) { Task { await vm.approve() } }
+                    FSSecondaryButton(String(localized: "Try again"), block: true) { Task { await vm.approve() } }
                 }
             }
             .padding(FS.space.s4)

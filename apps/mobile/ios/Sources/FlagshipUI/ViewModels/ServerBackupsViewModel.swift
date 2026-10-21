@@ -68,7 +68,7 @@ public final class ServerBackupsViewModel {
 
     public static let adminOnly = AdminOrderGate.server
     public static let oneFileNote =
-        "Each backup is one .flagship file. Import a backup on Home restores it. It opens on your own devices without a passcode."
+        String(localized: "Each backup is one .flagship file. Import a backup on Home restores it. It opens on your own devices without a passcode.")
 
     public init(
         serverFqdn: String,
@@ -174,7 +174,7 @@ public final class ServerBackupsViewModel {
         actionError = nil
         do {
             let count = ArchiveKeys.count(wanted: s.keysWanted)
-            let (keys, signer) = try await mintKeys(count, "Approve backups for \(serverFqdn)")
+            let (keys, signer) = try await mintKeys(count, String(localized: "Approve backups for \(serverFqdn)"))
             let deposit = try ArchiveKeys.deposit(serverDomain: serverFqdn, keys: keys, issuedAt: now())
             let sig = try signer.signature(for: try deposit.canonicalBytes())
             let c = await clients.client(forFqdn: serverFqdn)
@@ -317,7 +317,7 @@ public final class ServerBackupsViewModel {
         policyError = nil
         do {
             let order = BackupPolicyOrder.make(serverDomain: serverFqdn, draft: draft, reserveBytes: reserveBytes, issuedAt: now())
-            let key = try await policySigner("Change the backup policy of \(serverFqdn)")
+            let key = try await policySigner(String(localized: "Change the backup policy of \(serverFqdn)"))
             let sig = try key.signature(for: try order.canonicalBytes())
             let c = await clients.client(forFqdn: serverFqdn)
             policy = try await c.setBackupPolicy(BackupPolicyRequest(order: order, signatureHex: HexUtil.encode(sig)))
@@ -340,28 +340,28 @@ public final class ServerBackupsViewModel {
 
     public static func policyName(_ p: String) -> String {
         switch p {
-        case "phone": return "On my phone"
-        case "peer": return "On other servers"
-        case "none": return "No backup"
-        default: return "Not chosen yet"
+        case "phone": return String(localized: "On my phone")
+        case "peer": return String(localized: "On other servers")
+        case "none": return String(localized: "No backup")
+        default: return String(localized: "Not chosen yet")
         }
     }
 
     /// "Backup policy: On my phone · up to 32 GB".
     public var policyLine: String {
-        guard let p = policy else { return "Backup policy: Not chosen yet" }
+        guard let p = policy else { return String(localized: "Backup policy: Not chosen yet") }
         let name = Self.policyName(p.policy.policy)
-        if let limit = p.cap.limitBytes { return "Backup policy: \(name) · up to \(ServerArchive.formatBytes(limit))" }
-        return "Backup policy: \(name)"
+        if let limit = p.cap.limitBytes { return String(localized: "Backup policy: \(name) · up to \(ServerArchive.formatBytes(limit))") }
+        return String(localized: "Backup policy: \(name)")
     }
 
     /// "Apps use 3.2 GB of 32 GB", or nil before the box has measured.
     public var usageLine: String? {
         guard let p = policy, let used = p.cap.usedBytes else { return nil }
         let u = ServerArchive.formatBytes(used)
-        guard let limit = p.cap.limitBytes else { return "Apps use \(u)" }
+        guard let limit = p.cap.limitBytes else { return String(localized: "Apps use \(u)") }
         let l = ServerArchive.formatBytes(limit)
-        return p.policy.policy == "peer" ? "Apps use \(u) of \(l) (a third of this server's disk)" : "Apps use \(u) of \(l)"
+        return p.policy.policy == "peer" ? String(localized: "Apps use \(u) of \(l) (a third of this server's disk)") : String(localized: "Apps use \(u) of \(l)")
     }
 
     public var usageFraction: Double? {
@@ -376,11 +376,11 @@ public final class ServerBackupsViewModel {
 
     public var peerLines: [String] {
         guard policyKind == "peer", let peer = policy?.peer else { return [] }
-        var out = ["Peer backups: \(Self.peerState(peer.state))" + (peer.reason.map { ". \(BoxSentence.display($0))" } ?? "")]
-        if let healthy = peer.healthyBricks, let total = peer.totalBricks { out.append("\(healthy) of \(total) pieces safe") }
-        if let n = peer.holders { out.append("Kept on \(n) other server\(n == 1 ? "" : "s")") }
-        if let at = peer.lastPlacedAt { out.append("Last placed \(when(at))") }
-        if let hosting = peer.hostingBytes { out.append("Holds \(ServerArchive.formatBytes(hosting)) for other servers") }
+        var out = [String(localized: "Peer backups: \(Self.peerState(peer.state))") + (peer.reason.map { ". \(BoxSentence.display($0))" } ?? "")]
+        if let healthy = peer.healthyBricks, let total = peer.totalBricks { out.append(String(localized: "\(healthy) of \(total) pieces safe")) }
+        if let n = peer.holders { out.append(String(localized: "Kept on \(n) other server\(n == 1 ? "" : "s")")) }
+        if let at = peer.lastPlacedAt { out.append(String(localized: "Last placed \(when(at))")) }
+        if let hosting = peer.hostingBytes { out.append(String(localized: "Holds \(ServerArchive.formatBytes(hosting)) for other servers")) }
         return out
     }
 
@@ -403,24 +403,24 @@ public final class ServerBackupsViewModel {
         guard let s = saved else { return "" }
         if let r = s.running {
             let p = r.progress
-            if p.total > 0 { return "Backing up… \(p.app.isEmpty ? "apps" : p.app) (\(p.done)/\(p.total))" }
-            return "Backing up…"
+            if p.total > 0 { return String(localized: "Backing up… \(p.app.isEmpty ? "apps" : p.app) (\(p.done)/\(p.total))") }
+            return String(localized: "Backing up…")
         }
-        if let b = s.backups.first { return "Last backup: \(when(b.createdAt)) · \(ServerArchive.formatBytes(b.fileBytes))" }
-        return "No backups yet."
+        if let b = s.backups.first { return String(localized: "Last backup: \(when(b.createdAt)) · \(ServerArchive.formatBytes(b.fileBytes))") }
+        return String(localized: "No backups yet.")
     }
 
     public var failedLine: String? {
         guard let r = saved?.lastRun, !r.ok, saved?.running == nil else { return nil }
         let why = (r.reason ?? "the backup couldn't be made").trimmingCharacters(in: CharacterSet(charactersIn: ". "))
-        return "The last backup failed: \(why)."
+        return String(localized: "The last backup failed: \(why).")
     }
 
     /// "Next backup: …", "Scheduled backups are off.", or the box's reason it can't run.
     public var nextLine: String? {
         guard let s = saved, scheduleShown else { return nil }
-        if s.schedule.frequency == "off" { return "Scheduled backups are off." }
-        if let at = s.nextRunAt { return "Next backup: \(when(at))" }
+        if s.schedule.frequency == "off" { return String(localized: "Scheduled backups are off.") }
+        if let at = s.nextRunAt { return String(localized: "Next backup: \(when(at))") }
         if s.keysLeft == 0, !isAdminDevice, let why = s.waitingReason { return BoxSentence.display(why) }
         return nil
     }
@@ -431,11 +431,11 @@ public final class ServerBackupsViewModel {
     }
 
     public func rowLine(_ b: SavedBackup) -> String {
-        "\(when(b.createdAt)) · \(ServerArchive.formatBytes(b.fileBytes)) · \(b.trigger == "now" ? "Back up now" : "Scheduled") · \(b.apps.count) app\(b.apps.count == 1 ? "" : "s")"
+        String(localized: "\(when(b.createdAt)) · \(ServerArchive.formatBytes(b.fileBytes)) · \(b.trigger == "now" ? String(localized: "Back up now") : String(localized: "Scheduled")) · \(b.apps.count) app\(b.apps.count == 1 ? "" : "s")")
     }
 
     public func leftLine(_ b: SavedBackup) -> String? {
-        b.left.isEmpty ? nil : "Left out: \(b.left.map(\.name).joined(separator: ", "))"
+        b.left.isEmpty ? nil : String(localized: "Left out: \(b.left.map(\.name).joined(separator: ", "))")
     }
 
     // MARK: This phone's copy
@@ -444,7 +444,7 @@ public final class ServerBackupsViewModel {
 
     public var phoneCopyLine: String? {
         guard let c = phoneCopy else { return phoneStore.skipSentence(serverFqdn) }
-        return "On this phone: \(when(c.createdAt)) · \(ServerArchive.formatBytes(c.bytes))"
+        return String(localized: "On this phone: \(when(c.createdAt)) · \(ServerArchive.formatBytes(c.bytes))")
     }
 
     private func rememberForPhone() {
@@ -462,8 +462,8 @@ public final class ServerBackupsViewModel {
     }
 
     private func message(_ error: Error) -> String {
-        if let e = error as? ArchiveDownloader.DownloadError { return e.errorDescription ?? "The download didn't finish." }
-        if let e = error as? ServerBackupBundle.BundleError { return e.errorDescription ?? "The backup file is damaged." }
+        if let e = error as? ArchiveDownloader.DownloadError { return e.errorDescription ?? String(localized: "The download didn't finish.") }
+        if let e = error as? ServerBackupBundle.BundleError { return e.errorDescription ?? String(localized: "The backup file is damaged.") }
         return BoxSentence.of(error)
     }
 }

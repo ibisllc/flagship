@@ -201,7 +201,7 @@ public final class LiveServerMigrationClient: ServerMigrationClient, @unchecked 
     private func urlFor(_ serverDomain: String, _ suffix: String) throws -> URL {
         let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
         guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/\(suffix)") else {
-            throw ScreensClientError.http(status: 0, message: "bad migration URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad migration URL"))
         }
         return url
     }

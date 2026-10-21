@@ -40,7 +40,7 @@ public struct TieredConfirmationSheet: View {
         title: String,
         message: String,
         confirmPhrase: String? = nil,
-        confirmFieldLabel: String = "Type to confirm",
+        confirmFieldLabel: String = String(localized: "Type to confirm"),
         actionTitle: String,
         busy: Bool = false,
         onConfirm: @escaping () -> Void
@@ -100,7 +100,7 @@ public struct TieredConfirmationSheet: View {
 
     @ViewBuilder
     private func confirmButton(accent: Color) -> some View {
-        let label = busy ? "Working…" : actionTitle
+        let label = busy ? String(localized: "Working…") : actionTitle
         Group {
             if severity == .severe {
                 FSDangerButton(label, block: true) {
