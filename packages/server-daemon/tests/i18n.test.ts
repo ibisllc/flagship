@@ -7,18 +7,21 @@ import { disambiguationResponse, defaultApexPage } from "../src/runtime.js";
 import { invitePage } from "../src/inviteHandler.js";
 import { renderDownloadPage } from "../src/serverArchive/downloadPage.js";
 
+const shipped = structuredClone(CATALOGS);
 afterEach(() => {
   for (const k of Object.keys(CATALOGS)) delete CATALOGS[k];
+  Object.assign(CATALOGS, structuredClone(shipped));
 });
 
 describe("box page language", () => {
-  it("ships no catalog until a language is ga, so every page is English", () => {
-    expect(Object.keys(CATALOGS)).toEqual([]);
+  it("renders English when no catalog is loaded for the visitor's language", () => {
+    for (const k of Object.keys(CATALOGS)) delete CATALOGS[k];
     expect(languageFor({ "accept-language": "es-ES,es;q=0.9" })).toBe("en");
     expect(t("es", "Sign in")).toBe("Sign in");
   });
 
   it("negotiates among the languages that have a catalog", () => {
+    for (const k of Object.keys(CATALOGS)) delete CATALOGS[k];
     CATALOGS.es = {};
     CATALOGS["pt-BR"] = {};
     CATALOGS["zh-Hans"] = {};

@@ -2415,7 +2415,6 @@
   "{0} of {1} pieces safe": "{1} 个分片中有 {0} 个安全",
   "Last placed: {0}": "上次放置：{0}",
   "Holds {0} for other servers": "为其他服务器保存 {0}",
-  "Beta": "测试版",
   "A remote browser can't sign — open your owner app to approve this": "远程浏览器无法签名 — 请打开你的所有者应用来批准",
   "just now": "刚刚",
   "Anyone with both this file and its passphrase can take over your account and lock you out.": "任何同时拥有此文件及其密码短语的人，都可以接管你的账户并将你锁在门外。",

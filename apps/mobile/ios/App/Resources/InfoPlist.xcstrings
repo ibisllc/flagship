@@ -2,13 +2,127 @@
   "sourceLanguage": "en",
   "strings": {
     "NSCameraUsageDescription": {
-      "extractionState": "manual"
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship usa la cámara para escanear un QR de vinculación que muestra tu servidor."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship utilise l’appareil photo pour scanner un QR d’association affiché par votre serveur."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship verwendet die Kamera, um einen von deinem Server angezeigten Kopplungs-QR-Code zu scannen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Flagship usa a câmera para escanear um QR de pareamento exibido pelo seu servidor."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship は、サーバーに表示されるペアリング用 QR コードをスキャンするためにカメラを使用します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship 使用相机扫描你的服务器显示的配对二维码。"
+          }
+        }
+      }
     },
     "NSFaceIDUsageDescription": {
-      "extractionState": "manual"
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship usa Face ID para confirmar acciones sensibles, como aprobar un desbloqueo o revocar un servidor."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship utilise Face ID pour confirmer des actions sensibles, comme approuver un déverrouillage ou révoquer un serveur."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship verwendet Face ID, um sensible Aktionen zu bestätigen, etwa eine Entsperrung zu genehmigen oder einen Server zu widerrufen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Flagship usa o Face ID para confirmar ações sensíveis, como aprovar um desbloqueio ou revogar um servidor."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship は、ロック解除の承認やサーバーの取り消しなど、重要な操作を確認するために Face ID を使用します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship 使用 Face ID 来确认敏感操作，例如批准解锁或撤销服务器。"
+          }
+        }
+      }
     },
     "NSLocalNetworkUsageDescription": {
-      "extractionState": "manual"
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship se comunica directamente con tu servidor cuando está en la misma red, lo que es más rápido que pasar por el relé."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship communique directement avec votre serveur lorsqu’il est sur le même réseau, ce qui est plus rapide que de passer par le relais."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship kommuniziert direkt mit deinem Server, wenn er sich im selben Netzwerk befindet, was schneller ist als der Weg über das Relay."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Flagship se comunica diretamente com o seu servidor quando ele está na mesma rede, o que é mais rápido do que passar pelo relay."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーが同じネットワーク上にある場合、Flagship はサーバーと直接通信します。リレーを経由するより高速です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当你的服务器在同一网络时，Flagship 会直接与其通信，比经由中继更快。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

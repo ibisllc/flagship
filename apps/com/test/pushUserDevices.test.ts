@@ -67,7 +67,7 @@ describe("buildPushUserDevices", () => {
     await buildPushUserDevices(tokens, forwarder)("alice", "secret-request", webpushPayload);
     const apns = JSON.parse(bodies.find((b) => b.url.includes("/3/device/"))!.body);
     expect(apns.aps.category).toBe("secret-request");
-    expect(apns.aps.alert).toEqual({ title: "Flagship", body: "A server is waiting for your approval." });
+    expect(apns.aps.alert).toEqual({ title: "Flagship", body: "A server is waiting for your approval.", "loc-key": "A server is waiting for your approval." });
     expect(apns.kind).toBe("secret-request");
     expect(apns.deepLink).toBe("https://flagshipserver.com/app/secret-requests");
     expect(JSON.stringify(apns)).not.toContain("alice");

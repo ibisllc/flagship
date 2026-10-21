@@ -53,7 +53,6 @@
   "notAValidRecipeMissingInvalid": "Kein gültiges Rezept: Feld „{0}“ fehlt oder ist ungültig.",
   "flashToUsb": "Auf USB schreiben",
   "assembleAndFlash": "Zusammenstellen und schreiben",
-  "beta": "Beta",
   "openFlagshipStudio": "Flagship Studio öffnen",
   "noServersHostedYet": "Noch keine Server gehostet",
   "stopAllRunningServers": "Alle laufenden Server stoppen",
