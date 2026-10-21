@@ -95,18 +95,18 @@ public sealed class IsoManifestClient
         }
         catch (HttpRequestException e)
         {
-            throw new ManifestException($"Couldn't reach the image server — check your internet connection. ({e.Message})");
+            throw new ManifestException(Strings.F("couldntReachTheImageServerCheck", e.Message));
         }
         catch (TaskCanceledException e) when (!cancellation.IsCancellationRequested)
         {
-            throw new ManifestException($"Couldn't reach the image server — check your internet connection. ({e.Message})");
+            throw new ManifestException(Strings.F("couldntReachTheImageServerCheck", e.Message));
         }
 
         using (resp)
         {
             string text = await resp.Content.ReadAsStringAsync(cancellation).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
-                throw new ManifestException($"Image-manifest request failed (HTTP {(int)resp.StatusCode}).");
+                throw new ManifestException(Strings.F("imageManifestRequestFailedHttp", (int)resp.StatusCode));
             return ParseResponse(text);
         }
     }
@@ -153,13 +153,13 @@ public sealed class IsoManifestClient
         {
             var root = doc.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
-                throw new ManifestException("Image manifest top-level is not an object.");
+                throw new ManifestException(Strings.T("imageManifestTopLevelIsNot"));
             if (!root.TryGetProperty("download", out var dl))
-                throw new ManifestException("Image manifest missing \"download\".");
+                throw new ManifestException(Strings.T("imageManifestMissingDownload"));
             if (dl.ValueKind == JsonValueKind.Null)
                 return new ManifestResponse(null);
             if (dl.ValueKind != JsonValueKind.Object)
-                throw new ManifestException("Image-manifest \"download\" is neither an object nor null.");
+                throw new ManifestException(Strings.T("imageManifestDownloadIsNeitherAn"));
 
             string url = ReqStr(dl, "url");
             string sha = ReqStr(dl, "sha256");
@@ -168,9 +168,9 @@ public sealed class IsoManifestClient
             string attestation = ReqStr(dl, "attestation");
 
             if (!url.StartsWith("https://", StringComparison.Ordinal))
-                throw new ManifestException("Image-manifest download URL is not https.");
+                throw new ManifestException(Strings.T("imageManifestDownloadUrlIsNot"));
             if (sha.Length != 64 || Hex.Decode(sha) is not { Length: 32 })
-                throw new ManifestException("Image-manifest sha256 is not a 64-char hex digest.");
+                throw new ManifestException(Strings.T("imageManifestSha256IsNotA"));
 
             return new ManifestResponse(new Download(url, sha.ToLowerInvariant(), version, size, attestation));
         }
@@ -179,14 +179,14 @@ public sealed class IsoManifestClient
     private static string ReqStr(JsonElement el, string name)
     {
         if (!el.TryGetProperty(name, out var v) || v.ValueKind != JsonValueKind.String)
-            throw new ManifestException($"Image manifest missing/invalid field \"{name}\".");
+            throw new ManifestException(Strings.F("imageManifestMissingInvalidField", name));
         return v.GetString() ?? "";
     }
 
     private static long ReqLong(JsonElement el, string name)
     {
         if (!el.TryGetProperty(name, out var v) || v.ValueKind != JsonValueKind.Number || !v.TryGetInt64(out var n))
-            throw new ManifestException($"Image manifest missing/invalid field \"{name}\".");
+            throw new ManifestException(Strings.F("imageManifestMissingInvalidField", name));
         return n;
     }
 }

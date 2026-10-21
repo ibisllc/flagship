@@ -52,7 +52,7 @@ internal sealed class TrayIcon : IDisposable
     private void RebuildMenu()
     {
         _menu.Items.Clear();
-        _menu.Items.Add(Item("Open Flagship Studio", OpenWindow));
+        _menu.Items.Add(Item(Strings.T("openFlagshipStudio"), OpenWindow));
         _menu.Items.Add(new Forms.ToolStripSeparator());
 
         // While quitting, nothing may start a server the quit would abandon.
@@ -81,16 +81,16 @@ internal sealed class TrayIcon : IDisposable
         }
 
         if (_vm.Servers.Count == 0)
-            _menu.Items.Add(new Forms.ToolStripMenuItem("No servers hosted yet") { Enabled = false });
+            _menu.Items.Add(new Forms.ToolStripMenuItem(Strings.T("noServersHostedYet")) { Enabled = false });
 
         var running = _vm.Servers.Where(s => s.CanStop).Select(s => s.Name).ToArray();
         _menu.Items.Add(new Forms.ToolStripSeparator());
-        var stopAll = Item("Stop all running servers", () =>
+        var stopAll = Item(Strings.T("stopAllRunningServers"), () =>
             RunAsync(() => Task.WhenAll(running.Select(_vm.PowerOffAsync))));
         stopAll.Enabled = running.Length > 0;
         _menu.Items.Add(stopAll);
         _menu.Items.Add(new Forms.ToolStripSeparator());
-        _menu.Items.Add(Item("Quit Flagship Studio", () => _window.Close()));
+        _menu.Items.Add(Item(Strings.T("quitFlagshipStudio"), () => _window.Close()));
     }
 
     private async Task RestartAsync(string name)
@@ -139,7 +139,7 @@ internal sealed class TrayIcon : IDisposable
     public void SetStatus(string? status)
     {
         _status = status;
-        _icon.Text = status is null ? "Flagship Studio" : $"Flagship Studio: {status}";
+        _icon.Text = status is null ? "Flagship Studio" : Strings.F("flagshipStudio2", status);
     }
 
     public void Dispose()
