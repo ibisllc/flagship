@@ -41,7 +41,7 @@ public sealed record PairEvent
 /// </summary>
 public static class PairEventParser
 {
-    public const string Prefix = "FLAGSHIP_PAIR ";
+    public static string Prefix => Strings.T("flagshipPair");
 
     public static PairEvent? TryParse(string line)
     {
@@ -247,7 +247,7 @@ public sealed class PairSession : IDisposable
                 return (null, false);
 
             case "deliver":
-                if (currentKey is null) throw new CryptographicException("Recipe arrived before key agreement.");
+                if (currentKey is null) throw new CryptographicException(Strings.T("recipeArrivedBeforeKeyAgreement"));
                 if (!frame.TryGetProperty("ciphertext", out var ct) || ct.ValueKind != JsonValueKind.String ||
                     !frame.TryGetProperty("nonce", out var nonce) || nonce.ValueKind != JsonValueKind.String)
                     throw new CryptographicException("Malformed recipe delivery.");

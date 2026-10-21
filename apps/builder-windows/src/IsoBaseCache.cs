@@ -175,7 +175,7 @@ public sealed class IsoBaseCache
         {
             string? cached = CachedIsoPath();
             if (cached == null)
-                throw new CacheException("The server reported no base image is needed, but none is cached. Try again.");
+                throw new CacheException(Strings.T("theServerReportedNoBaseImage"));
             log?.Invoke($"server: no download needed — keeping cached base {cached}");
             return new EnsureResult(cached, false);
         }
@@ -214,17 +214,17 @@ public sealed class IsoBaseCache
             }
             catch (HttpRequestException e)
             {
-                throw new CacheException($"Couldn't download the base image — check your internet connection. ({e.Message})");
+                throw new CacheException(Strings.F("couldntDownloadTheBaseImageCheck", e.Message));
             }
             catch (TaskCanceledException e) when (!cancellation.IsCancellationRequested)
             {
-                throw new CacheException($"Couldn't download the base image — check your internet connection. ({e.Message})");
+                throw new CacheException(Strings.F("couldntDownloadTheBaseImageCheck", e.Message));
             }
 
             using (response)
             {
                 if (!response.IsSuccessStatusCode)
-                    throw new CacheException($"Base-image download failed (HTTP {(int)response.StatusCode}).");
+                    throw new CacheException(Strings.F("baseImageDownloadFailedHttp", (int)response.StatusCode));
 
                 long expectedLen = response.Content.Headers.ContentLength ?? dl.SizeBytes;
                 using var sha = SHA256.Create();
@@ -254,12 +254,12 @@ public sealed class IsoBaseCache
                 catch (HttpRequestException e)
                 {
                     TryDelete(tmp);
-                    throw new CacheException($"Couldn't download the base image — check your internet connection. ({e.Message})");
+                    throw new CacheException(Strings.F("couldntDownloadTheBaseImageCheck", e.Message));
                 }
                 catch (IOException e)
                 {
                     TryDelete(tmp);
-                    throw new CacheException($"Couldn't download the base image — check your internet connection. ({e.Message})");
+                    throw new CacheException(Strings.F("couldntDownloadTheBaseImageCheck", e.Message));
                 }
 
                 // Stream-verify: mismatch ⇒ delete the partial + error.
@@ -268,7 +268,7 @@ public sealed class IsoBaseCache
                 {
                     TryDelete(tmp);
                     throw new CacheException(
-                        $"Base image failed its integrity check (expected {dl.Sha256[..12]}…, got {got[..12]}…). The download was discarded — try again.");
+                        Strings.F("baseImageFailedItsIntegrityCheck", dl.Sha256[..12], got[..12]));
                 }
             }
 

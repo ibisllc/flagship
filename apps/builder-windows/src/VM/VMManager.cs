@@ -16,17 +16,17 @@ public sealed record InstallObservation(string Phase, string? Detail, DateTimeOf
 {
     public string Summary => !string.IsNullOrWhiteSpace(Detail) ? Detail : Phase switch
     {
-        "booting" => "Booting the installer",
-        "partitioning" => "Preparing the encrypted disk",
-        "installing" => "Installing Debian",
-        "downloading" => "Downloading Flagship software",
-        "registering" => "Registering the server",
-        "sealing" => "Sealing the disk key",
-        "installed" => "Installation complete",
-        "pairing" => "Pairing with your phone",
-        "live" => "Server is live",
-        "error" => "Installation reported an error",
-        _ => "Waiting for an installer checkpoint",
+        "booting" => Strings.T("bootingTheInstaller"),
+        "partitioning" => Strings.T("preparingTheEncryptedDisk"),
+        "installing" => Strings.T("installingDebian"),
+        "downloading" => Strings.T("downloadingFlagshipSoftware"),
+        "registering" => Strings.T("registeringTheServer"),
+        "sealing" => Strings.T("sealingTheDiskKey"),
+        "installed" => Strings.T("installationComplete"),
+        "pairing" => Strings.T("pairingWithYourPhone"),
+        "live" => Strings.T("serverIsLive"),
+        "error" => Strings.T("installationReportedAnError"),
+        _ => Strings.T("waitingForAnInstallerCheckpoint"),
     };
 
     public bool IsStale(DateTimeOffset now) => now - UpdatedAt >= TimeSpan.FromMinutes(3);
@@ -73,16 +73,16 @@ public sealed class HostedServer : INotifyPropertyChanged
     public VMServerHealth? Health { get; internal set; }
     public HealthVerdict? HealthVerdict => StateKind == VMStateKind.Running ? Health?.Verdict(DateTimeOffset.UtcNow) : null;
     public bool HasHealth => HealthVerdict is not null;
-    public string HealthTitle => HealthVerdict is { Ok: false } ? "Server health" : "Health";
+    public string HealthTitle => HealthVerdict is { Ok: false } ? Strings.T("serverHealth") : "Health";
     public string HealthText => HealthVerdict is { } v ? string.Join("\n", v.Lines) : "";
 
     public string LastConnectedText => _record.LastConnectedAt is { } at
-        ? "Last connected " + at.ToLocalTime().ToString("d MMM yyyy HH:mm", System.Globalization.CultureInfo.CurrentCulture)
-        : "Not connected yet";
+        ? Strings.T("lastConnected") + at.ToLocalTime().ToString("d MMM yyyy HH:mm", System.Globalization.CultureInfo.CurrentCulture)
+        : Strings.T("notConnectedYet");
 
     public string SidebarStatus => StateKind == VMStateKind.Installing && InstallObservation is { } observation
         ? observation.IsStale(DateTimeOffset.UtcNow)
-            ? $"No guest progress for {observation.StaleMinutes(DateTimeOffset.UtcNow)}m · {observation.Summary}"
+            ? Strings.F("noGuestProgressForM", observation.StaleMinutes(DateTimeOffset.UtcNow), observation.Summary)
             : observation.Summary
         : HealthVerdict is { Ok: false } health ? health.Lines[0] : StateLabel;
 
@@ -90,14 +90,10 @@ public sealed class HostedServer : INotifyPropertyChanged
     // (vm-core-vectors.json "awaitingUnlockCopy"). The phone, not Studio,
     // decides whether a restart needs an approval, so no line promises nobody
     // has to act.
-    public const string AwaitingUnlockStalled =
-        "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry.";
-    public const string AwaitingUnlockOnItsOwn =
-        "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there.";
-    public const string AwaitingUnlockFirstBoot =
-        "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.";
-    public const string AwaitingUnlockApproveEveryBoot =
-        "The disk is sealed — approve the unlock on your phone.";
+    public static string AwaitingUnlockStalled => Strings.T("takingLongerThanExpectedTheBox");
+    public static string AwaitingUnlockOnItsOwn => Strings.T("unlockingItsDiskWithTheKey");
+    public static string AwaitingUnlockFirstBoot => Strings.T("theDiskIsSealedApproveThe");
+    public static string AwaitingUnlockApproveEveryBoot => Strings.T("theDiskIsSealedApproveThe2");
 
     public string StatusSubtitle
     {
@@ -113,14 +109,14 @@ public sealed class HostedServer : INotifyPropertyChanged
                         ? AwaitingUnlockApproveEveryBoot
                         : AwaitingUnlockFirstBoot,
                 VMStateKind.Installing => InstallObservation is null
-                    ? "Waiting for the first guest checkpoint."
+                    ? Strings.T("waitingForTheFirstGuestCheckpoint")
                     : InstallObservation.IsStale(DateTimeOffset.UtcNow)
-                        ? $"No new guest checkpoint for {InstallObservation.StaleMinutes(DateTimeOffset.UtcNow)} minutes. Last reported: {InstallObservation.Summary}. The VM may be stalled."
-                        : $"{InstallObservation.Summary}. Guest checkpoint is current.",
-                VMStateKind.Running => $"Serving at https://{_record.Config.ServerDomain}/",
+                        ? Strings.F("noNewGuestCheckpointForMinutes", InstallObservation.StaleMinutes(DateTimeOffset.UtcNow), InstallObservation.Summary)
+                        : Strings.F("guestCheckpointIsCurrent", InstallObservation.Summary),
+                VMStateKind.Running => Strings.F("servingAtHttps", _record.Config.ServerDomain),
                 VMStateKind.Failed => _record.State.Failure?.Reason ?? "",
-                VMStateKind.Installed or VMStateKind.Stopped => "Start the server to bring it online.",
-                _ => "Preparing the installer…",
+                VMStateKind.Installed or VMStateKind.Stopped => Strings.T("startTheServerToBringIt"),
+                _ => Strings.T("preparingTheInstaller"),
             };
         }
     }
@@ -148,8 +144,8 @@ public sealed class HostedServer : INotifyPropertyChanged
         get
         {
             var c = _record.Config;
-            var enc = c.DiskEncrypted ? "Encrypted (LUKS)" : "Unencrypted";
-            return $"{c.CpuCount} vCPU · {c.MemoryBytes / VMResourcePlan.GiB} GiB RAM · {c.MainDiskSizeBytes / VMResourcePlan.GiB} GiB disk · {enc}";
+            var enc = c.DiskEncrypted ? Strings.T("encryptedLuks") : "Unencrypted";
+            return Strings.F("vcpuGibRamGibDisk", c.CpuCount, c.MemoryBytes / VMResourcePlan.GiB, c.MainDiskSizeBytes / VMResourcePlan.GiB, enc);
         }
     }
 
@@ -248,7 +244,7 @@ public sealed class VMManager
     /// updated. Matches the Mac.</summary>
     public const int GracefulStopSeconds = 60;
 
-    public const string QuitDuringInstallReason = "The app quit while the install was running.";
+    public static string QuitDuringInstallReason => Strings.T("theAppQuitWhileTheInstall");
 
     public static VMManager CreateDefault()
     {
@@ -357,7 +353,7 @@ public sealed class VMManager
         var wanted = NeedsAwake;
         if (wanted == _wakeHeld) return;
         _wakeHeld = wanted;
-        Log(wanted ? "Keeping this PC awake while it hosts servers" : "No server running: this PC may sleep again");
+        Log(wanted ? Strings.T("keepingThisPcAwakeWhileIt") : Strings.T("noServerRunningThisPcMay"));
         WakeHoldChanged(wanted);
     }
 
@@ -365,7 +361,7 @@ public sealed class VMManager
 
     public Task BeginInstallAsync(string name) => ApplyAsync(VMEvent.StartInstall, name);
     public Task CancelInstallAsync(string name)
-        => ApplyAsync(VMEvent.InstallFailed("Installation stopped by you."), name);
+        => ApplyAsync(VMEvent.InstallFailed(Strings.T("installationStoppedByYou")), name);
     public Task PowerOnAsync(string name) => ApplyAsync(VMEvent.PowerOn, name);
     public Task PowerOffAsync(string name) => ApplyAsync(VMEvent.PowerOff, name);
 
@@ -537,7 +533,7 @@ public sealed class VMManager
         }
         if (_toolchain is null)
         {
-            var reason = ToolchainError ?? "QEMU is not installed.";
+            var reason = ToolchainError ?? Strings.T("qemuIsNotInstalled");
             Log($"VM {name}: cannot start — {reason}");
             await FailFromStateAsync(name, reason);
             return;
@@ -783,7 +779,7 @@ public sealed class VMManager
                         var v = health.Verdict(_clock());
                         var issues = v.Ok ? "" : string.Join(" ", v.Lines);
                         if (issues == lastIssues) return;
-                        Log(issues.Length == 0 ? $"VM {name}: health back to normal" : $"VM {name}: health — {issues}");
+                        Log(issues.Length == 0 ? Strings.F("vmHealthBackToNormal", name) : Strings.F("vmHealth", name, issues));
                         lastIssues = issues;
                     });
                 }
