@@ -187,7 +187,11 @@ fun BiometricLockScreen() {
                     // returns via passkey recovery. Biometric or device
                     // PIN first, as on iOS, so both platforms ask alike.
                     scope.launch {
-                        if (activity != null && !confirmSignOut(activity)) return@launch
+                        if (activity == null) {
+                            status = Status.Failed("Lost activity context. Restart the app to try again.")
+                            return@launch
+                        }
+                        if (!confirmSignOut(activity)) return@launch
                         Keystore.wipeAllProfiles()
                         app.signOut()
                     }
