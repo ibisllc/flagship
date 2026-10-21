@@ -136,7 +136,7 @@ public struct PostRecoveryScreen: View {
                 case .complete(let r):
                     HStack(spacing: FS.space.s2) {
                         Image(systemName: "checkmark.seal.fill").foregroundColor(c.success)
-                        Text("Re-anchored \(r.totalRewritten) membership rows across \(r.reattachedCount) app\(r.reattachedCount == 1 ? "" : "s").")
+                        Text("Membership rows re-anchored: \(r.totalRewritten). Apps affected: \(r.reattachedCount).")
                             .foregroundColor(c.text)
                     }
                 case .failed(let msg):
@@ -162,7 +162,7 @@ public struct PostRecoveryScreen: View {
                                     .font(FS.font.bodySm())
                                     .foregroundColor(c.danger)
                             } else {
-                                Text("\(app.rewrittenCount) row\(app.rewrittenCount == 1 ? "" : "s") re-anchored")
+                                Text(app.rewrittenCount == 1 ? String(localized: "\(app.rewrittenCount) row re-anchored") : String(localized: "\(app.rewrittenCount) rows re-anchored"))
                                     .font(FS.font.bodySm())
                                     .foregroundColor(c.textMuted)
                             }
