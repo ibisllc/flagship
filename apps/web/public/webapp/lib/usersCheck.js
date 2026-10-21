@@ -117,7 +117,7 @@ export function deviceCapabilityChipText(block) {
   const set = deviceCapabilityScopeSet(block);
   const summary = (set.size === 1 && set.has("browse"))
     ? "browse-only"
-    : `${block.scopes.length} scopes`;
+    : tr("{0} scopes", block.scopes.length);
   return tr("Restricted device · {0}", summary);
 }
 

@@ -15,7 +15,7 @@ export const TAG_APP_EGRESS = "flagship/app-egress/v1";
 export const EGRESS_TITLE = tr("This app wants to reach the internet");
 export const EGRESS_NOTE =
   tr("Until you allow them, the app can't reach any of these. Only allow hosts you expect this app to need.");
-export const EGRESS_ALLOW = "Allow";
+export const EGRESS_ALLOW = tr("Allow");
 export const EGRESS_APPROVED_TITLE = tr("Allowed to reach the internet");
 export const EGRESS_STOP = tr("Stop access");
 export const EGRESS_PENDING_BADGE = tr("Wants internet");

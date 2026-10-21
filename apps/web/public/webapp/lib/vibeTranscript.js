@@ -27,7 +27,7 @@ export function compactTranscript(text, { live = false } = {}) {
   let body = [];
   const closeFile = () => {
     if (file === null) return;
-    if (file !== "QUESTION") out.push(`  wrote ${file} (${body.length} line${body.length === 1 ? "" : "s"})`);
+    if (file !== "QUESTION") out.push("  " + trn(body.length, "wrote {1} ({0} line)", "wrote {1} ({0} lines)", file));
     else out.push(...body);
     file = null;
     body = [];
@@ -45,7 +45,7 @@ export function compactTranscript(text, { live = false } = {}) {
   }
   if (file !== null) {
     if (live && file !== "QUESTION") {
-      out.push(`  writing ${file}… (${body.length} lines)`);
+      out.push("  " + trn(body.length, "writing {1}… ({0} line)", "writing {1}… ({0} lines)", file));
       out.push(...body.slice(-LIVE_TAIL_LINES).map((l) => `    ${l}`));
     } else {
       closeFile();
