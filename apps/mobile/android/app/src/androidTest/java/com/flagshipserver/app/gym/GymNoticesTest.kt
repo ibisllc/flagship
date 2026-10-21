@@ -149,6 +149,30 @@ class GymNoticesTest : GymBase() {
         assertEquals(1, tagCount("update-lock-title"))
     }
 
+    /** The update-required screen sits above the app lock. With the app locked
+     *  its Sign out asks the owner first (every prompt dismissed here), so no
+     *  question opens and the lock stays. */
+    @Test
+    fun theUpdateLockSignOutDoesNothingWhileTheAppIsLockedAndTheOwnerIsNotThere() {
+        launch(tab = "home", adminRoot = true, realBiometrics = true, refuseBiometrics = true)
+        waitUntilExists("home-title", 20_000)
+        val ui = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+        ui.executeShellCommand("input keyevent KEYCODE_SLEEP").close()
+        Thread.sleep(2_000)
+        ui.executeShellCommand("input keyevent KEYCODE_WAKEUP").close()
+        ui.executeShellCommand("wm dismiss-keyguard").close()
+        waitUntilExists("biometric-lock-screen", 15_000)
+        trustThrowawayAuthority()
+        serve(lock())
+        waitUntilExists("update-lock", 15_000)
+
+        tap("update-lock-signout")
+        Thread.sleep(3_000)
+        gymShot("update-lock-sign-out-refused")
+        assertEquals("no question opened", 0, composeRule.onAllNodes(hasText("Sign out?")).fetchSemanticsNodes().size)
+        assertEquals("the lock stays", 1, tagCount("update-lock-title"))
+    }
+
     @Test
     fun theLockLiftsWhenTheNoticeEndsAndAnOlderNoticeCannotBringItBack() {
         launch(tab = "home")
