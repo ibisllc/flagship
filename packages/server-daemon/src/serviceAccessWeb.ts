@@ -35,6 +35,7 @@
  * daemon restart just makes a waiting browser re-knock.
  */
 
+import { languageFor, t, VARY_LANGUAGE } from "./i18n/index.js";
 import { randomBytes } from "node:crypto";
 import {
   verifyKnockAuthorization,
@@ -235,11 +236,12 @@ export function buildServiceAccessWeb(opts: ServiceAccessWebOptions): ServiceAcc
       status: 200,
       headers: {
         ...HTML_H,
+        ...VARY_LANGUAGE,
         "set-cookie": `${KNOCK_HOLDER_COOKIE}=${holderToken}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(
           knockTtlMs / 1000,
         )}`,
       },
-      body: renderKnockPage({ pageId, deeplink, next }),
+      body: renderKnockPage({ pageId, deeplink, next }, languageFor(req.headers)),
     };
   }
 
@@ -440,7 +442,7 @@ export function buildServiceAccessWeb(opts: ServiceAccessWebOptions): ServiceAcc
  * visitor to another origin — same rule as `defaultApexPage`), `noindex`, and
  * minimal disclosure (no owner / service name). The QR is baked server-side.
  */
-function renderKnockPage(args: { pageId: string; deeplink: string; next: string | null }): string {
+function renderKnockPage(args: { pageId: string; deeplink: string; next: string | null }, lang = "en"): string {
   const qr = renderQrSvg(args.deeplink, { size: 200, foreground: "#0f172a" });
   const pageJson = JSON.stringify(args.pageId);
   const deeplinkJson = JSON.stringify(args.deeplink);
@@ -448,12 +450,12 @@ function renderKnockPage(args: { pageId: string; deeplink: string; next: string 
   const nextJson = JSON.stringify(args.next).replace(/</g, "\\u003c");
   const signIn = args.next !== null;
   return `<!doctype html>
-<html lang="en">
+<html lang="${lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>${signIn ? "Sign in" : "Restricted"} — Flagship</title>
+<title>${signIn ? t(lang, "Sign in — Flagship") : t(lang, "Restricted — Flagship")}</title>
 <style>
   :root { color-scheme: light dark; }
   body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
@@ -477,15 +479,15 @@ function renderKnockPage(args: { pageId: string; deeplink: string; next: string 
 </head>
 <body>
   <main class="card">
-    <h1>${signIn ? "Sign in" : "Access is restricted"}</h1>
+    <h1>${signIn ? t(lang, "Sign in") : t(lang, "Access is restricted")}</h1>
     <p class="muted">${
       signIn
-        ? "This site is on a Flagship cloud. Sign in with your Flagship app."
-        : "This page is on a Flagship cloud. Authenticate with your Flagship app to view it."
+        ? t(lang, "This site is on a Flagship cloud. Sign in with your Flagship app.")
+        : t(lang, "This page is on a Flagship cloud. Authenticate with your Flagship app to view it.")
     }</p>
     <div class="qr">${qr}</div>
-    <a class="btn" id="access">Access site</a>
-    <p class="alt"><a id="getlink">Get link to paste in the app</a></p>
+    <a class="btn" id="access">${t(lang, "Access site")}</a>
+    <p class="alt"><a id="getlink">${t(lang, "Get link to paste in the app")}</a></p>
     <div class="code" id="codebox"></div>
   </main>
 <script>

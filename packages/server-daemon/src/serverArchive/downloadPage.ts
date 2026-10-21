@@ -10,6 +10,7 @@
  * a button to start it again.
  */
 import { renderQrSvg } from "../qrSvg.js";
+import { t, tj } from "../i18n/index.js";
 
 function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -23,17 +24,17 @@ export function renderDownloadPage(a: {
   statusUrl: string;
   fileUrl: string;
   expiresText: string;
-}): string {
+}, lang = "en"): string {
   const qr = renderQrSvg(a.appLink, { size: 220, foreground: "#0f172a" });
   const cfg = JSON.stringify({ statusUrl: a.statusUrl, fileUrl: a.fileUrl }).replace(/</g, "\\u003c");
   return `<!doctype html>
-<html lang="en">
+<html lang="${lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <meta name="referrer" content="no-referrer">
-<title>Download a server backup — Flagship</title>
+<title>${t(lang, "Download a server backup — Flagship")}</title>
 <style>
   :root { color-scheme: light dark; }
   body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
@@ -53,19 +54,19 @@ export function renderDownloadPage(a: {
 </head>
 <body>
 <main class="card">
-  <h1>Download a server backup</h1>
+  <h1>${t(lang, "Download a server backup")}</h1>
   <p class="muted">${esc(a.fileName)} (${esc(a.sizeText)})</p>
   <div id="ask">
-    <p class="muted">Scan this with the Flagship app on your phone and approve with Face ID. The app shows the same code:</p>
-    <div class="qr" aria-label="QR code for the Flagship app">${qr}</div>
-    <div class="code" aria-label="Approval code">${esc(a.code)}</div>
-    <p class="muted">Only approve if the code in the app matches this one.</p>
+    <p class="muted">${t(lang, "Scan this with the Flagship app on your phone and approve with Face ID. The app shows the same code:")}</p>
+    <div class="qr" aria-label="${t(lang, "QR code for the Flagship app")}">${qr}</div>
+    <div class="code" aria-label="${t(lang, "Approval code")}">${esc(a.code)}</div>
+    <p class="muted">${t(lang, "Only approve if the code in the app matches this one.")}</p>
   </div>
   <div id="go" class="hidden">
-    <p class="muted">Approved. The download should start now. If it stops, start it again here; it picks up where it left off.</p>
-    <a class="btn" id="dl" href="#">Download the backup</a>
+    <p class="muted">${t(lang, "Approved. The download should start now. If it stops, start it again here; it picks up where it left off.")}</p>
+    <a class="btn" id="dl" href="#">${t(lang, "Download the backup")}</a>
   </div>
-  <p class="muted">This link works until ${esc(a.expiresText)}. The backup opens with its passcode or on your own devices.</p>
+  <p class="muted">${t(lang, "This link works until {0}. The backup opens with its passcode or on your own devices.", esc(a.expiresText))}</p>
   <p class="err hidden" id="err"></p>
 </main>
 <script>
@@ -87,7 +88,7 @@ export function renderDownloadPage(a: {
   function fail(msg) { var e = document.getElementById("err"); e.textContent = msg; e.classList.remove("hidden"); }
   function poll() {
     fetch(cfg.statusUrl, { cache: "no-store" }).then(function (r) {
-      if (r.status === 404) { fail("This link has expired or was replaced by a newer backup."); return null; }
+      if (r.status === 404) { fail(${tj(lang, "This link has expired or was replaced by a newer backup.")}); return null; }
       return r.json();
     }).then(function (b) {
       if (!b) return;

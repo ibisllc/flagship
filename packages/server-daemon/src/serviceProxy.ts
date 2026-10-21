@@ -30,6 +30,7 @@
  * approved for THIS app (`appMemberSession.ts`). No resolver ⇒ anonymous.
  */
 
+import { languageFor, t, VARY_LANGUAGE } from "./i18n/index.js";
 import { request as httpRequest } from "node:http";
 import type { Bytes } from "@flagship/protocol";
 import type { BoxSigner } from "./keyCustodian.js";
@@ -107,12 +108,12 @@ export type VisitorKind = "member" | "api" | "anonymous";
  */
 export type AppAccessMode = "open" | "members-only";
 
-const REQUEST_ACCESS_TEMPLATE = (appName: string, urlLabel: string): string =>
+const REQUEST_ACCESS_TEMPLATE = (appName: string, urlLabel: string, lang = "en"): string =>
   `<!doctype html>
-<html lang="en">
+<html lang="${lang}">
   <head>
     <meta charset="utf-8">
-    <title>Request access · Flagship</title>
+    <title>${t(lang, "Request access · Flagship")}</title>
     <style>
       body { font-family: ui-sans-serif, system-ui, sans-serif; background: #0a0a0a; color: #eee; padding: 4rem 2rem; max-width: 560px; margin: 0 auto; line-height: 1.55; }
       h1 { color: #6ee7a8; margin-bottom: 0.5rem; }
@@ -121,9 +122,9 @@ const REQUEST_ACCESS_TEMPLATE = (appName: string, urlLabel: string): string =>
     </style>
   </head>
   <body>
-    <h1>${escapeHtml(appName)} is private</h1>
-    <p>This Flagship app is gated. Ask the host to invite you, then accept the invite in your Flagship app.</p>
-    <p style="color:#666; font-size:0.85rem; margin-top: 2rem;">URL: <code>${escapeHtml(urlLabel)}</code></p>
+    <h1>${t(lang, "{0} is private", escapeHtml(appName))}</h1>
+    <p>${t(lang, "This Flagship app is gated. Ask the host to invite you, then accept the invite in your Flagship app.")}</p>
+    <p style="color:#666; font-size:0.85rem; margin-top: 2rem;">${t(lang, "URL:")} <code>${escapeHtml(urlLabel)}</code></p>
   </body>
 </html>
 `;
@@ -178,8 +179,8 @@ export async function prepareAppRequest(
       kind: "respond",
       response: {
         status: 403,
-        headers: { "content-type": "text/html; charset=utf-8", ...NO_FRAME_HEADERS },
-        body: REQUEST_ACCESS_TEMPLATE(app.manifest.name, app.urlLabel),
+        headers: { "content-type": "text/html; charset=utf-8", ...VARY_LANGUAGE, ...NO_FRAME_HEADERS },
+        body: REQUEST_ACCESS_TEMPLATE(app.manifest.name, app.urlLabel, languageFor(req.headers)),
       },
     };
   }

@@ -1,3 +1,4 @@
+import { languageFor, t, VARY_LANGUAGE } from "./i18n/index.js";
 import { SealedInstalledServicesStore, type InstalledServicesStore } from "./installedServicesStore.js";
 import { connect as netConnect, type Socket } from "node:net";
 import { createServer as createTlsServer, type Server as TlsServer, type TLSSocket } from "node:tls";
@@ -677,8 +678,8 @@ function buildDefaultHandler(
     if (req.path === "/" || req.path === "") {
       return {
         status: 200,
-        headers: { "content-type": "text/html; charset=utf-8", ...NO_FRAME_HEADERS },
-        body: defaultApexPage(opts.serverFqdn),
+        headers: { "content-type": "text/html; charset=utf-8", ...VARY_LANGUAGE, ...NO_FRAME_HEADERS },
+        body: defaultApexPage(opts.serverFqdn, languageFor(req.headers)),
       };
     }
     return {
@@ -708,10 +709,10 @@ function escapeHtml(s: string): string {
  * outbound reference is the visible wordmark link. noindex keeps the
  * CT-log-discoverable hostname out of search engines.
  */
-export function defaultApexPage(serverFqdn: string): string {
+export function defaultApexPage(serverFqdn: string, lang = "en"): string {
   const fqdn = escapeHtml(serverFqdn);
   return `<!doctype html>
-<html lang="en">
+<html lang="${lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -843,14 +844,14 @@ export function defaultApexPage(serverFqdn: string): string {
     <circle cx="32" cy="32" r="18" fill="var(--lg-ring)"/>
     <circle class="core" cx="32" cy="32" r="16" fill="var(--lg-core)"/>
   </svg>
-  <h1 class="reveal"><span class="accent-bar" aria-hidden="true"></span>This is a Flagship server.</h1>
-  <p class="host reveal"><span class="dot" aria-hidden="true"></span>${fqdn} <span class="state">· online</span></p>
-  <p class="reveal">It runs on private hardware and answers to its owner's keys — not to a cloud.</p>
-  <p class="reveal">If you're the owner, you can choose what appears here from the <strong>Flagship app</strong>.</p>
+  <h1 class="reveal"><span class="accent-bar" aria-hidden="true"></span>${t(lang, "This is a Flagship server.")}</h1>
+  <p class="host reveal"><span class="dot" aria-hidden="true"></span>${fqdn} <span class="state">· ${t(lang, "online")}</span></p>
+  <p class="reveal">${t(lang, "It runs on private hardware and answers to its owner's keys — not to a cloud.")}</p>
+  <p class="reveal">${t(lang, "If you're the owner, you can choose what appears here from the <strong>Flagship app</strong>.")}</p>
   <div class="reveal">
     <hr>
-    <p class="colophon"><svg class="lock" aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> TLS terminates on this server. Flagship relays ciphertext it cannot read.</p>
-    <div class="wordmark">Get yours at <span class="gy">flagshipserver.com</span></div>
+    <p class="colophon"><svg class="lock" aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> ${t(lang, "TLS terminates on this server. Flagship relays ciphertext it cannot read.")}</p>
+    <div class="wordmark">${t(lang, "Get yours at")} <span class="gy">flagshipserver.com</span></div>
   </div>
 </main>
 </body>
@@ -989,7 +990,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       const ownFqdn = opts.serverFqdn.toLowerCase();
       const isOwnHost = sni === ownFqdn;
       const inBoxZone = sni.endsWith(`.${ownFqdn}`);
-      if (!isOwnHost && inBoxZone) return disambiguationResponse(sni);
+      if (!isOwnHost && inBoxZone) return disambiguationResponse(sni, languageFor(req.headers));
       // CORS for the daemon's own /api/* surface only (NOT the app-proxy
       // path above, which serves the user's own apps). The browser webapp
       // is a different origin (web.<control-apex>) and calls the box's API
@@ -2439,16 +2440,16 @@ function listLiveSiblings(
  * own wildcard cert (`*.<server>.<user>`) but no app has claimed it.
  * The .services fallback per N0f. Exported for test reachability.
  */
-export function disambiguationResponse(sni: string): HttpResponse {
+export function disambiguationResponse(sni: string, lang = "en"): HttpResponse {
   const safe = sni.replace(/[<>"&]/g, (c) =>
     ({ "<": "&lt;", ">": "&gt;", '"': "&quot;", "&": "&amp;" }[c] ?? c),
   );
   const html = `<!doctype html>
-<html lang="en">
+<html lang="${lang}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>No app here · Flagship</title>
+    <title>${t(lang, "No app here · Flagship")}</title>
     <meta name="robots" content="noindex">
     <style>
       :root { --bg:#0a0a0a; --fg:#eee; --muted:#888; --accent:#7ad; }
@@ -2461,14 +2462,14 @@ export function disambiguationResponse(sni: string): HttpResponse {
     </style>
   </head>
   <body>
-    <h1>No app here yet.</h1>
-    <p class="lede">The URL <code>${safe}</code> isn't pointing at an app right now. The owner of this username can decide which install — if any — claims it.</p>
-    <p class="help">The long form (<code>&lt;app&gt;.&lt;server&gt;.&lt;user&gt;.flagship.services</code>) is always reachable. <a href="https://flagshipserver.com/docs/multiplexing">More on multiplexing →</a></p>
+    <h1>${t(lang, "No app here yet.")}</h1>
+    <p class="lede">${t(lang, "The URL <code>{0}</code> isn't pointing at an app right now. The owner of this username can decide which install — if any — claims it.", safe)}</p>
+    <p class="help">${t(lang, "The long form (<code>&lt;app&gt;.&lt;server&gt;.&lt;user&gt;.flagship.services</code>) is always reachable.")} <a href="https://flagshipserver.com/docs/multiplexing">${t(lang, "More on multiplexing →")}</a></p>
   </body>
 </html>`;
   return {
     status: 404,
-    headers: { "content-type": "text/html; charset=utf-8", ...NO_FRAME_HEADERS },
+    headers: { "content-type": "text/html; charset=utf-8", ...VARY_LANGUAGE, ...NO_FRAME_HEADERS },
     body: html,
   };
 }

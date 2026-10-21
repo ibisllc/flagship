@@ -6,6 +6,7 @@
  * a 502. A marker on disk keeps the pause across a daemon restart; Resume
  * (an abort) or 24 hours without a freeze lifts it.
  */
+import { t, VARY_LANGUAGE } from "../i18n/index.js";
 import { readFile } from "node:fs/promises";
 import { removeDurable, writeFileDurable } from "../durableFile.js";
 import type { HttpResponse } from "../runtime.js";
@@ -31,17 +32,17 @@ export interface MigratePauseOptions {
   log?: (m: string) => void;
 }
 
-export function movingPage(): HttpResponse {
+export function movingPage(lang = "en"): HttpResponse {
   const body = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
-<title>Moving to a new server</title>
+<html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<title>${t(lang, "Moving to a new server")}</title>
 <style>:root{color-scheme:light dark}body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f8fafc;color:#0f172a}
 @media (prefers-color-scheme: dark){body{background:#0b1220;color:#e2e8f0}}main{max-width:420px;padding:24px;text-align:center}h1{font-size:20px;margin:0 0 8px}p{margin:0;color:#64748b}</style>
 <meta http-equiv="refresh" content="30"></head>
-<body><main><h1>This app is moving to a new server</h1><p>It will be back shortly. This page checks again on its own.</p></main></body></html>`;
+<body><main><h1>${t(lang, "This app is moving to a new server")}</h1><p>${t(lang, "It will be back shortly. This page checks again on its own.")}</p></main></body></html>`;
   return {
     status: 503,
-    headers: { "content-type": "text/html; charset=utf-8", "retry-after": "60", "cache-control": "no-store", "x-frame-options": "DENY" },
+    headers: { "content-type": "text/html; charset=utf-8", "retry-after": "60", "cache-control": "no-store", "x-frame-options": "DENY", ...VARY_LANGUAGE },
     body,
   };
 }

@@ -10,6 +10,7 @@
 
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 import { NO_FRAME_HEADERS } from "./pageHeaders.js";
+import { languageFor, t, tj, VARY_LANGUAGE } from "./i18n/index.js";
 
 export interface InvitePageOptions {
   /** The box fqdn; the page answers only on the box's own host, never an app's. */
@@ -22,7 +23,6 @@ export function buildInvitePage(opts: InvitePageOptions) {
   const control = new URL(opts.controlBaseUrl ?? "https://flagshipserver.com");
   const appLinkBase = `${control.origin}/invite`;
   const webappBase = `${control.protocol}//webapp.${control.host}/invite`;
-  const html = renderInvitePage(appLinkBase, webappBase);
 
   return async function handle(req: HttpRequest): Promise<HttpResponse | null> {
     const method = req.method.toUpperCase();
@@ -38,9 +38,10 @@ export function buildInvitePage(opts: InvitePageOptions) {
         "cache-control": "no-store",
         "referrer-policy": "no-referrer",
         "x-robots-tag": "noindex",
+        ...VARY_LANGUAGE,
         ...NO_FRAME_HEADERS,
       },
-      body: method === "HEAD" ? "" : html,
+      body: method === "HEAD" ? "" : renderInvitePage(appLinkBase, webappBase, languageFor(req.headers)),
     };
   };
 }
@@ -62,15 +63,15 @@ export function inviteAppLinkFragment(hash: string, server: string): string | nu
   return out.toString();
 }
 
-function renderInvitePage(appLinkBase: string, webappBase: string): string {
+function renderInvitePage(appLinkBase: string, webappBase: string, lang = "en"): string {
   const fragmentFn = inviteAppLinkFragment.toString();
   return `<!doctype html>
-<html lang="en">
+<html lang="${lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>You're invited — Flagship</title>
+<title>${t(lang, "You're invited — Flagship")}</title>
 <style>
   :root { color-scheme: light dark; }
   body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
@@ -91,10 +92,10 @@ function renderInvitePage(appLinkBase: string, webappBase: string): string {
 </head>
 <body>
   <main class="card">
-    <h1>You're invited</h1>
-    <p class="muted" id="lede">Someone invited you to an app on their Flagship server. Open the invite in the Flagship app to accept it.</p>
-    <a class="btn" id="open" href="${appLinkBase}">Open in the Flagship app</a>
-    <p class="alt" id="web">No app? <a id="web-link" href="${webappBase}">Accept in the web app</a></p>
+    <h1>${t(lang, "You're invited")}</h1>
+    <p class="muted" id="lede">${t(lang, "Someone invited you to an app on their Flagship server. Open the invite in the Flagship app to accept it.")}</p>
+    <a class="btn" id="open" href="${appLinkBase}">${t(lang, "Open in the Flagship app")}</a>
+    <p class="alt" id="web">${t(lang, "No app?")} <a id="web-link" href="${webappBase}">${t(lang, "Accept in the web app")}</a></p>
   </main>
 <script>
 (function(){
@@ -102,7 +103,7 @@ function renderInvitePage(appLinkBase: string, webappBase: string): string {
   var frag = inviteAppLinkFragment(location.hash, location.hostname);
   if (!frag) {
     document.getElementById("lede").className = "err";
-    document.getElementById("lede").textContent = "This invite link is incomplete. Ask for a new one.";
+    document.getElementById("lede").textContent = ${tj(lang, "This invite link is incomplete. Ask for a new one.")};
     document.getElementById("open").style.display = "none";
     document.getElementById("web").style.display = "none";
     return;

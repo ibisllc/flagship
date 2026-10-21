@@ -1,3 +1,4 @@
+import { languageFor } from "./i18n/index.js";
 import { existsSync } from "node:fs";
 import { setDockerRepairedHook } from "./dockerHealth.js";
 import { readFile, rename, rm, stat, statfs } from "node:fs/promises";
@@ -3139,7 +3140,7 @@ async function wireRuntimeSurfaces(deps: {
     // While a move has the apps paused, every app URL says so instead of a 502.
     const pause = deps.migratePause;
     if (pause) {
-      runtime.addAppGate(async () => (pause.paused() ? movingPage() : null));
+      runtime.addAppGate(async (req) => (pause.paused() ? movingPage(languageFor(req.headers)) : null));
       setInterval(() => void pause.sweep().catch(() => {}), 10 * 60_000).unref();
     }
     service.startSchedule(
