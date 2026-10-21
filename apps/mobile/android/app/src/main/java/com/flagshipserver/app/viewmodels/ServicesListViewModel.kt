@@ -15,6 +15,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.AppLinksResponse
 import com.flagshipserver.app.api.AppSummary
@@ -79,7 +81,7 @@ class ServicesListViewModel(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (t: Throwable) {
-            _state.value = LoadingState.Failed(UserErrorText.of(t, "Couldn't load your apps. Try again."))
+            _state.value = LoadingState.Failed(UserErrorText.of(t, FSStrings.get(R.string.couldnt_load_your_apps_try_again)))
             return
         }
         if (listed == null) {
@@ -154,7 +156,7 @@ class ServicesListViewModel(
     }
 
     companion object {
-        const val CANT_REACH = "Can't reach your servers right now."
+        val CANT_REACH get() = FSStrings.get(R.string.cant_reach_your_servers_right_now)
 
         /** Each app once, in the order the servers list them (the first
          *  server's copy describes it), with the pill over every server it is

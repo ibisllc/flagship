@@ -12,6 +12,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -161,7 +165,7 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
         serviceId = serviceId,
         serviceLabel = serviceLabel,
         onShare = { link -> shareViaSystemSheet(ctx, link) },
-        onCopy = { link -> copyToClipboard(ctx, link); toasts.success("Link copied.") },
+        onCopy = { link -> copyToClipboard(ctx, link); toasts.success(FSStrings.get(R.string.link_copied_2)) },
         pickPhoto = null,
         onBack = { nav.popBackStack() },
     )
@@ -213,7 +217,7 @@ internal fun ServiceAccessContent(
         if (uri != null) {
             val dataUri = readImageAsDataUri(ctx, uri)
             if (dataUri == null) {
-                toasts.error("Photo is too large (max 256 KB) or couldn't be read.")
+                toasts.error(FSStrings.get(R.string.photo_is_too_large_max_256))
             } else {
                 photoDataUri = dataUri
             }
@@ -230,13 +234,13 @@ internal fun ServiceAccessContent(
     fun applyMode(membersOnly: Boolean) {
         scope.launch {
             val ok = vm.setMode(membersOnly)
-            if (ok) toasts.success(if (membersOnly) "Now members only." else "Now open to all.")
-            else toasts.error("Couldn't change access. Try again in a moment.")
+            if (ok) toasts.success(if (membersOnly) FSStrings.get(R.string.now_members_only) else FSStrings.get(R.string.now_open_to_all))
+            else toasts.error(FSStrings.get(R.string.couldnt_change_access_try_again_in))
         }
     }
 
     FSScreen(
-        title = "Access control",
+        title = stringResource(R.string.access_control),
         onBack = onBack,
         largeTitle = false,
         titleTag = "service-access-title",
@@ -264,7 +268,7 @@ internal fun ServiceAccessContent(
                         colors = colors,
                         shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
                         modifier = Modifier.semantics { testTag = "service-access-mode-open" },
-                    ) { Text("Open to all") }
+                    ) { Text(stringResource(R.string.open_to_all)) }
                     SegmentedButton(
                         selected = restricted,
                         onClick = { if (!restricted) { view.fsTick(); confirmMembersOnly = true } },
@@ -272,18 +276,18 @@ internal fun ServiceAccessContent(
                         colors = colors,
                         shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
                         modifier = Modifier.semantics { testTag = "service-access-mode-members" },
-                    ) { Text("Members only") }
+                    ) { Text(stringResource(R.string.members_only)) }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                     if (busyMode) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp, color = FS.colors.primary)
                     val failed = phase as? ServiceAccessPhase.Failed
                     Text(
                         when {
-                            phase is ServiceAccessPhase.Loading -> "Loading…"
-                            busyMode -> "Saving…"
+                            phase is ServiceAccessPhase.Loading -> stringResource(R.string.loading)
+                            busyMode -> stringResource(R.string.saving)
                             failed != null -> failed.message
-                            restricted -> "Only members and you can open it. Anyone else is asked to sign in."
-                            else -> "Anyone can open it. Members who sign in get their rank."
+                            restricted -> stringResource(R.string.only_members_and_you_can_open)
+                            else -> stringResource(R.string.anyone_can_open_it_members_who)
                         },
                         color = if (failed != null && !busyMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
@@ -305,7 +309,7 @@ internal fun ServiceAccessContent(
         val accountMembers = members?.accountMembers.orEmpty()
         if (accountMembers.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             FSSectionHeader(
-                "Account members (${accountMembers.size})",
+                fsString(R.string.account_members, accountMembers.size),
                 modifier = Modifier.semantics { testTag = "service-access-account-members-title" },
             )
             FSCard(padding = PaddingValues(FS.space.s4)) {
@@ -322,7 +326,7 @@ internal fun ServiceAccessContent(
                             onRank = { r ->
                                 scope.launch {
                                     val name = vm.accountMemberName(m, deviceNames)
-                                    if (vm.setAccountRank(m, r)) toasts.success(if (r == null) "$name is refused." else "$name is now ${r.label}.")
+                                    if (vm.setAccountRank(m, r)) toasts.success(if (r == null) FSStrings.get(R.string.is_refused, name) else FSStrings.get(R.string.is_now, name, r.label))
                                     else (vm.phase.value as? ServiceAccessPhase.Failed)?.let { toasts.error(it.message) }
                                 }
                             },
@@ -334,7 +338,7 @@ internal fun ServiceAccessContent(
 
         // Members (n) — in both modes.
         FSSectionHeader(
-            "Members (${people.size})",
+            fsString(R.string.members, people.size),
             modifier = Modifier.semantics { testTag = "service-access-members-title" },
         )
         vm.inviteBlockedLine?.let { line ->
@@ -347,7 +351,7 @@ internal fun ServiceAccessContent(
         }
         if (vm.canInvite) Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             FSSecondaryButton(
-                label = "Add person",
+                label = stringResource(R.string.add_person),
                 onClick = {
                     adding = InviteTier.PERSONAL_AUTO; vm.clearLink(); name = ""; approveFirst = false; photoDataUri = null
                     newRole = AppMemberRole.fromWire(members?.defaultRole) ?: AppMemberRole.MEMBER
@@ -356,7 +360,7 @@ internal fun ServiceAccessContent(
                 block = true,
             )
             FSSecondaryButton(
-                label = "Add group",
+                label = stringResource(R.string.add_group),
                 onClick = {
                     adding = InviteTier.GROUP; vm.clearLink(); name = ""
                     newRole = AppMemberRole.fromWire(members?.defaultRole) ?: AppMemberRole.MEMBER
@@ -372,24 +376,24 @@ internal fun ServiceAccessContent(
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            if (isGroup) "Add a group" else "Add a person",
+                            if (isGroup) stringResource(R.string.add_a_group) else stringResource(R.string.add_a_person),
                             color = MaterialTheme.colorScheme.onSurface,
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.weight(1f),
                         )
                         androidx.compose.material3.IconButton(onClick = { adding = null; vm.clearLink() }) {
-                            Icon(Icons.Outlined.Close, contentDescription = "Close")
+                            Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.close))
                         }
                     }
                     Text(
-                        "Names & photos stay encrypted to your account — flagshipserver.com stores only ciphertext. Send the link over a private channel.",
+                        stringResource(R.string.names_photos_stay_encrypted_to_your),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        label = { Text(if (isGroup) "Group name (only you + your servers see it)" else "Name (only you + your servers see it)") },
+                        label = { Text(if (isGroup) stringResource(R.string.group_name_only_you_your_servers) else stringResource(R.string.name_only_you_your_servers_see)) },
                         singleLine = true,
                         shape = MaterialTheme.shapes.small,
                         modifier = Modifier
@@ -398,7 +402,7 @@ internal fun ServiceAccessContent(
                     )
                     val pickedRole = if (vm.isAdmin) newRole else AppMemberRole.MEMBER
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Rank", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        Text(stringResource(R.string.rank), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                         RolePicker(
                             selected = pickedRole,
                             tag = "service-access-new-role",
@@ -419,7 +423,7 @@ internal fun ServiceAccessContent(
                     }
                     if (isGroup) {
                         Text(
-                            "Everyone who joins through the link gets this rank.",
+                            stringResource(R.string.everyone_who_joins_through_the_link),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodySmall,
                         )
@@ -427,7 +431,7 @@ internal fun ServiceAccessContent(
                             OutlinedTextField(
                                 value = maxRedemptionsText,
                                 onValueChange = { maxRedemptionsText = it.filter { c -> c.isDigit() } },
-                                label = { Text("Limit (0 = unlimited)") },
+                                label = { Text(stringResource(R.string.limit_0_unlimited)) },
                                 singleLine = true,
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier
@@ -437,7 +441,7 @@ internal fun ServiceAccessContent(
                             OutlinedTextField(
                                 value = expiryDaysText,
                                 onValueChange = { expiryDaysText = it.filter { c -> c.isDigit() } },
-                                label = { Text("Expires in days") },
+                                label = { Text(stringResource(R.string.expires_in_days)) },
                                 singleLine = true,
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier
@@ -448,7 +452,7 @@ internal fun ServiceAccessContent(
                     } else {
                         Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3), verticalAlignment = Alignment.CenterVertically) {
                             FSSecondaryButton(
-                                label = if (photoDataUri == null) "Add photo (optional)" else "Change photo",
+                                label = if (photoDataUri == null) stringResource(R.string.add_photo_optional) else stringResource(R.string.change_photo),
                                 onClick = {
                                     pickPhoto?.invoke()
                                         ?: photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -457,7 +461,7 @@ internal fun ServiceAccessContent(
                             if (photoDataUri != null) TextButtonClear { photoDataUri = null }
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("I approve them before they get in", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                            Text(stringResource(R.string.i_approve_them_before_they_get), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                             Switch(
                                 checked = approveFirst,
                                 onCheckedChange = { approveFirst = it },
@@ -466,7 +470,7 @@ internal fun ServiceAccessContent(
                         }
                     }
                     FSPrimaryButton(
-                        label = if (busyAdd) "Creating…" else "Create invite link",
+                        label = if (busyAdd) stringResource(R.string.creating) else stringResource(R.string.create_invite_link),
                         enabled = !busyAdd && name.trim().isNotEmpty(),
                         block = true,
                         large = true,
@@ -478,11 +482,11 @@ internal fun ServiceAccessContent(
                                     ?.let { System.currentTimeMillis() + it * 86_400_000L }
                                 val link = vm.addPerson(name, if (isGroup) null else photoDataUri, tier, maxN, expiresAt, pickedRole)
                                 if (link != null) {
-                                    toasts.success(if (isGroup) "Group invite created." else "Invite for ${name.trim()} created.")
+                                    toasts.success(if (isGroup) FSStrings.get(R.string.group_invite_created) else FSStrings.get(R.string.invite_for_created, name.trim()))
                                     name = ""
                                     photoDataUri = null
                                 } else {
-                                    toasts.error("Couldn't create the invite. Try again in a moment.")
+                                    toasts.error(FSStrings.get(R.string.couldnt_create_the_invite_try_again_2))
                                 }
                             }
                         },
@@ -495,7 +499,7 @@ internal fun ServiceAccessContent(
         }
 
         if (people.isEmpty()) {
-            FSNote("No members yet. Add a person or a group.")
+            FSNote(stringResource(R.string.no_members_yet_add_a_person))
         } else {
             people.forEach { person ->
                 PersonRow(
@@ -510,7 +514,7 @@ internal fun ServiceAccessContent(
                     busyRemove = person.inviteId in removing,
                     onRole = { r ->
                         scope.launch {
-                            if (vm.setRole(r, person)) toasts.success("${person.name} is now ${r.label}.")
+                            if (vm.setRole(r, person)) toasts.success(FSStrings.get(R.string.is_now, person.name, r.label))
                             else (vm.phase.value as? ServiceAccessPhase.Failed)?.let { toasts.error(it.message) }
                         }
                     },
@@ -518,7 +522,7 @@ internal fun ServiceAccessContent(
                     onRemove = { confirmRemove = person },
                     onRemoveMember = { aid ->
                         scope.launch {
-                            if (vm.removeGroupMember(aid)) toasts.success("Member removed.")
+                            if (vm.removeGroupMember(aid)) toasts.success(FSStrings.get(R.string.member_removed))
                             else (vm.phase.value as? ServiceAccessPhase.Failed)?.let { toasts.error(it.message) }
                         }
                     },
@@ -529,16 +533,16 @@ internal fun ServiceAccessContent(
         // confirm a manual-approve reply (the author finalizes the loop)
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                Text("Confirm someone you approve", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.confirm_someone_you_approve), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "For a person you approve first: paste the confirmation they sent back to let them in.",
+                    stringResource(R.string.for_a_person_you_approve_first),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
                 OutlinedTextField(
                     value = replyText,
                     onValueChange = { replyText = it },
-                    label = { Text("Paste the confirmation reply") },
+                    label = { Text(stringResource(R.string.paste_the_confirmation_reply)) },
                     singleLine = false,
                     shape = MaterialTheme.shapes.small,
                     modifier = Modifier
@@ -546,14 +550,14 @@ internal fun ServiceAccessContent(
                         .semantics { testTag = "service-access-accept-reply-field" },
                 )
                 FSPrimaryButton(
-                    label = if (busyFinalize) "Confirming…" else "Confirm access",
+                    label = if (busyFinalize) stringResource(R.string.confirming) else stringResource(R.string.confirm_access),
                     enabled = !busyFinalize && replyText.trim().isNotEmpty(),
                     block = true,
                     onClick = {
                         scope.launch {
                             val ok = vm.finalizeAcceptance(replyText.trim())
-                            if (ok) { toasts.success("Access confirmed."); replyText = "" }
-                            else toasts.error("Couldn't confirm them. Check the reply and try again.")
+                            if (ok) { toasts.success(FSStrings.get(R.string.access_confirmed)); replyText = "" }
+                            else toasts.error(FSStrings.get(R.string.couldnt_confirm_them_check_the_reply))
                         }
                     },
                     modifier = Modifier.semantics { testTag = "service-access-accept-finalize" },
@@ -565,14 +569,14 @@ internal fun ServiceAccessContent(
     confirmRemove?.let { person ->
         com.flagshipserver.app.ui.components.AlertDialog(
             onDismissRequest = { confirmRemove = null },
-            title = { Text(if (person.isGroup) "Revoke the group \"${person.name}\"?" else "Remove ${person.name}?") },
+            title = { Text(if (person.isGroup) fsString(R.string.revoke_the_group, person.name) else fsString(R.string.remove_2, person.name)) },
             text = {
                 Text(
                     when {
-                        person.isGroup && restricted -> "Everyone who joined through this link loses access, unless they were also invited another way."
-                        person.isGroup -> "Everyone who joined through this link loses their rank and can still visit as anyone can."
-                        restricted -> "They're signed out and kept out. You can invite them again later."
-                        else -> "They lose their rank and can still visit as anyone can. You can invite them again later."
+                        person.isGroup && restricted -> stringResource(R.string.everyone_who_joined_through_this_link)
+                        person.isGroup -> stringResource(R.string.everyone_who_joined_through_this_link_2)
+                        restricted -> stringResource(R.string.theyre_signed_out_and_kept_out)
+                        else -> stringResource(R.string.they_lose_their_rank_and_can)
                     },
                 )
             },
@@ -585,15 +589,15 @@ internal fun ServiceAccessContent(
                         scope.launch {
                             val ok = vm.remove(p.inviteId)
                             removing = removing - p.inviteId
-                            if (ok) toasts.success(if (p.isGroup) "Group revoked." else "Removed.")
+                            if (ok) toasts.success(if (p.isGroup) FSStrings.get(R.string.group_revoked) else FSStrings.get(R.string.removed_2))
                             else (vm.phase.value as? ServiceAccessPhase.Failed)?.let { toasts.error(it.message) }
                         }
                     },
                     modifier = Modifier.semantics { testTag = "service-access-remove-confirm" },
-                ) { Text(if (person.isGroup) "Revoke" else "Remove") }
+                ) { Text(if (person.isGroup) stringResource(R.string.revoke_2) else stringResource(R.string.remove_3)) }
             },
             dismissButton = {
-                com.flagshipserver.app.ui.components.TextButton(onClick = { confirmRemove = null }) { Text("Cancel") }
+                com.flagshipserver.app.ui.components.TextButton(onClick = { confirmRemove = null }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -602,24 +606,24 @@ internal fun ServiceAccessContent(
         val n = vm.memberPeopleCount
         com.flagshipserver.app.ui.components.AlertDialog(
             onDismissRequest = { confirmMembersOnly = false },
-            title = { Text("Members only?") },
-            text = { Text(if (n == 1) "Only this 1 person will be able to open it." else "Only these $n people will be able to open it.") },
+            title = { Text(stringResource(R.string.members_only_2)) },
+            text = { Text(if (n == 1) stringResource(R.string.only_this_1_person_will_be) else fsString(R.string.only_these_people_will_be_able, n)) },
             confirmButton = {
                 com.flagshipserver.app.ui.components.TextButton(
                     onClick = { confirmMembersOnly = false; applyMode(true) },
                     modifier = Modifier.semantics { testTag = "service-access-members-only-confirm" },
-                ) { Text("Members only") }
+                ) { Text(stringResource(R.string.members_only)) }
             },
             dismissButton = {
-                com.flagshipserver.app.ui.components.TextButton(onClick = { confirmMembersOnly = false }) { Text("Cancel") }
+                com.flagshipserver.app.ui.components.TextButton(onClick = { confirmMembersOnly = false }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
 }
 
-internal const val RANK_LOCKED_LINE = "Only an admin device can give a higher rank"
-internal const val MODE_ADMIN_ONLY_LINE = "Only an admin device can change who may open this app."
-internal const val REFUSED_LABEL = "Refused"
+internal val RANK_LOCKED_LINE get() = FSStrings.get(R.string.only_an_admin_device_can_give)
+internal val MODE_ADMIN_ONLY_LINE get() = FSStrings.get(R.string.only_an_admin_device_can_change_6)
+internal val REFUSED_LABEL get() = FSStrings.get(R.string.refused)
 
 /** A rank menu; the display names come from [AppMemberRole.label] only, each
  *  item carries the app's one line for that rank, and Master its crown. Not
@@ -651,7 +655,7 @@ private fun RolePicker(
                 enabled -> { { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) } }
                 else -> null
             },
-            modifier = Modifier.semantics { testTag = tag; contentDescription = "Rank: $label" },
+            modifier = Modifier.semantics { testTag = tag; contentDescription = FSStrings.get(R.string.rank_2, label) },
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             AppMemberRole.entries.forEach { r ->
@@ -676,7 +680,7 @@ private fun RolePicker(
             if (onRefuse != null) {
                 androidx.compose.material3.HorizontalDivider()
                 DropdownMenuItem(
-                    text = { Text("Refuse", color = MaterialTheme.colorScheme.error) },
+                    text = { Text(stringResource(R.string.refuse), color = MaterialTheme.colorScheme.error) },
                     onClick = { open = false; if (selected != null) onRefuse() },
                     leadingIcon = if (selected == null) { { Icon(Icons.Filled.Check, contentDescription = null) } } else null,
                     modifier = Modifier.semantics { testTag = "$tag-refuse" },
@@ -768,8 +772,8 @@ private fun PersonRow(
                 Column(Modifier.weight(1f)) {
                     Text(person.name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
                     val sub = if (person.isGroup) {
-                        if (person.maxRedemptions == 0) "${person.redemptions} joined"
-                        else "${person.redemptions} of ${person.maxRedemptions} joined"
+                        if (person.maxRedemptions == 0) fsString(R.string.joined, person.redemptions)
+                        else fsString(R.string.of_joined, person.redemptions, person.maxRedemptions)
                     } else if (person.bound) "active" else "invite sent — not opened yet"
                     Text(
                         sub,
@@ -808,11 +812,11 @@ private fun PersonRow(
                             enabled = !busyRemove,
                             modifier = Modifier.semantics {
                                 testTag = "service-access-remove-${person.inviteId}"
-                                contentDescription = "Revoke ${person.name}"
+                                contentDescription = FSStrings.get(R.string.revoke_3, person.name)
                             },
                         ) {
                             if (busyRemove) CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.error)
-                            else Text("Revoke", color = MaterialTheme.colorScheme.error)
+                            else Text(stringResource(R.string.revoke_2), color = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
@@ -822,7 +826,7 @@ private fun PersonRow(
                     onClick = { expanded = !expanded },
                     modifier = Modifier.semantics { testTag = "service-access-group-members-toggle" },
                 ) {
-                    Text(if (expanded) "Hide members" else "Manage members (${person.memberAids.size})")
+                    Text(if (expanded) stringResource(R.string.hide_members) else fsString(R.string.manage_members, person.memberAids.size))
                     Icon(
                         if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
                         contentDescription = null,
@@ -833,12 +837,12 @@ private fun PersonRow(
                     person.memberAids.forEach { aid ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "member ${aid.take(8)}…",
+                                fsString(R.string.member, aid.take(8)),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                                 modifier = Modifier.weight(1f),
                             )
-                            com.flagshipserver.app.ui.components.TextButton(onClick = { onRemoveMember(aid) }) { Text("Remove") }
+                            com.flagshipserver.app.ui.components.TextButton(onClick = { onRemoveMember(aid) }) { Text(stringResource(R.string.remove_3)) }
                         }
                     }
                 }
@@ -849,18 +853,18 @@ private fun PersonRow(
 
 @Composable
 private fun TextButtonClear(onClick: () -> Unit) {
-    com.flagshipserver.app.ui.components.TextButton(onClick = onClick) { Text("Remove photo") }
+    com.flagshipserver.app.ui.components.TextButton(onClick = onClick) { Text(stringResource(R.string.remove_photo)) }
 }
 
 @Composable
 private fun ResultBlock(link: String, onShare: () -> Unit, onCopy: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-        Text("Shareable link", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.shareable_link), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall)
         // Inline QR (the rich-channel artifact; the link text below is the fallback).
         QrImage(
             payload = link,
             size = 180.dp,
-            contentDescription = "Invite QR",
+            contentDescription = stringResource(R.string.invite_qr),
             modifier = Modifier.semantics { testTag = "service-access-share-qr" },
         )
         Text(
@@ -873,12 +877,12 @@ private fun ResultBlock(link: String, onShare: () -> Unit, onCopy: () -> Unit) {
         )
         Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             FSPrimaryButton(
-                label = "Share",
+                label = stringResource(R.string.share_3),
                 onClick = onShare,
                 modifier = Modifier.weight(1f).semantics { testTag = "service-access-share-sheet" },
             )
             FSSecondaryButton(
-                label = "Copy link",
+                label = stringResource(R.string.copy_link),
                 onClick = onCopy,
                 modifier = Modifier.weight(1f).semantics { testTag = "service-access-copy-btn" },
             )
@@ -914,14 +918,14 @@ private fun shareViaSystemSheet(ctx: Context, url: String) {
         type = "text/plain"
         putExtra(Intent.EXTRA_TEXT, url)
     }
-    val chooser = Intent.createChooser(send, "Share invite")
+    val chooser = Intent.createChooser(send, FSStrings.get(R.string.share_invite))
     chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     ctx.startActivity(chooser)
 }
 
 private fun copyToClipboard(ctx: Context, url: String) {
     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    cm.setPrimaryClip(ClipData.newPlainText("Flagship invite", url))
+    cm.setPrimaryClip(ClipData.newPlainText(FSStrings.get(R.string.flagship_invite), url))
 }
 
 /** Read a picked image, cap at ~256 KB encoded, return a data: URI (or null). */

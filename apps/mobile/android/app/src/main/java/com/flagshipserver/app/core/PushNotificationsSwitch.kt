@@ -9,6 +9,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -107,9 +108,7 @@ class PushNotificationsSwitch(
     }
 
     companion object {
-        const val TITLE = "Push notifications"
-        const val SUBTEXT = "When this is off, nothing from Flagship is pushed to this device, so Apple " +
-            "and Google never see when your servers need you. You'll have to open Flagship to approve " +
-            "unlocks and see requests."
+        val TITLE get() = FSStrings.get(R.string.push_notifications)
+        val SUBTEXT get() = FSStrings.get(R.string.when_this_is_off_nothing_from)
     }
 }

@@ -3,6 +3,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -111,9 +113,9 @@ class ServerBackupViewModel(
     val ownPasscodeHint: String?
         get() {
             if (!useOwnPasscode) return null
-            if (ownPasscode.isEmpty()) return "At least 12 characters with three kinds (lowercase, uppercase, digits, symbols), or 20 of anything."
+            if (ownPasscode.isEmpty()) return FSStrings.get(R.string.at_least_12_characters_with_three)
             ServerBackupFormat.passcodeProblem(ownPasscode)?.let { return it }
-            if (ownPasscodeAgain.isNotEmpty() && ownPasscodeAgain != ownPasscode) return "The two don't match."
+            if (ownPasscodeAgain.isNotEmpty() && ownPasscodeAgain != ownPasscode) return FSStrings.get(R.string.the_two_dont_match)
             return null
         }
 
@@ -137,7 +139,7 @@ class ServerBackupViewModel(
     suspend fun start() {
         val passcode = chosenPasscode
         if (!canStart || passcode == null) return
-        _phase.value = Phase.Building("Protecting the backup with its passcode…", 0.0)
+        _phase.value = Phase.Building(FSStrings.get(R.string.protecting_the_backup_with_its_passcode), 0.0)
         val contentKey = ServerBackupFormat.randomBytes(32)
         try {
             val id = ServerArchive.newArchiveId()
@@ -148,7 +150,7 @@ class ServerBackupViewModel(
             _phase.value = Phase.Passcode
             throw e
         } catch (t: Throwable) {
-            _phase.value = Phase.Failed(message(t, "The backup failed."))
+            _phase.value = Phase.Failed(message(t, FSStrings.get(R.string.the_backup_failed)))
             return
         } finally {
             contentKey.fill(0)
@@ -159,8 +161,8 @@ class ServerBackupViewModel(
     private suspend fun follow() {
         try {
             while (true) {
-                val s = client.serverArchiveStatus() ?: throw IllegalStateException("The backup disappeared from the server.")
-                if (s.state == "failed") throw IllegalStateException("The backup failed: ${s.reason ?: "the backup couldn't be made"}.")
+                val s = client.serverArchiveStatus() ?: throw IllegalStateException(FSStrings.get(R.string.the_backup_disappeared_from_the_server))
+                if (s.state == "failed") throw IllegalStateException(FSStrings.get(R.string.the_backup_failed_2, s.reason ?: "the backup couldn't be made"))
                 if (s.state == "ready") {
                     status = s
                     _phase.value = Phase.Ready(s.bundleBytes ?: s.bytes ?: 0)
@@ -169,7 +171,7 @@ class ServerBackupViewModel(
                 val p = s.progress
                 val total = maxOf(p?.total ?: 0, 0)
                 _phase.value = Phase.Building(
-                    if (total > 0) "Backing up ${p?.app ?: "apps"} (${minOf((p?.done ?: 0) + 1, total)} of $total)…" else "Making the backup…",
+                    if (total > 0) FSStrings.get(R.string.backing_up_of, p?.app ?: "apps", minOf((p?.done ?: 0) + 1, total), total) else FSStrings.get(R.string.making_the_backup),
                     if (total > 0) (p?.done ?: 0).toDouble() / total else 0.0,
                 )
                 delay(pollMs)
@@ -178,7 +180,7 @@ class ServerBackupViewModel(
             _phase.value = Phase.Passcode
             throw e
         } catch (t: Throwable) {
-            _phase.value = Phase.Failed(message(t, "The backup failed."))
+            _phase.value = Phase.Failed(message(t, FSStrings.get(R.string.the_backup_failed)))
         }
     }
 
@@ -209,7 +211,7 @@ class ServerBackupViewModel(
             )
             withContext(Dispatchers.IO) {
                 bundle.delete()
-                check(part.renameTo(bundle)) { "The backup couldn't be saved on this device." }
+                check(part.renameTo(bundle)) { FSStrings.get(R.string.the_backup_couldnt_be_saved_on_2) }
                 state.delete()
             }
             runCatching { client.serverArchiveForget() }
@@ -219,7 +221,7 @@ class ServerBackupViewModel(
             _phase.value = Phase.Ready(total)
             throw e
         } catch (t: Throwable) {
-            _phase.value = Phase.Failed(message(t, "The download didn't finish."))
+            _phase.value = Phase.Failed(message(t, FSStrings.get(R.string.the_download_didnt_finish)))
         }
     }
 
@@ -256,7 +258,7 @@ class BackupDownloadApprovalViewModel(
         if (_phase.value == Phase.Working || _phase.value == Phase.Approved) return
         val c = client
         if (c == null) {
-            _phase.value = Phase.Failed("This phone has no session for ${serverFqdn}. Open it on Home first.")
+            _phase.value = Phase.Failed(FSStrings.get(R.string.this_phone_has_no_session_for, serverFqdn))
             return
         }
         _phase.value = Phase.Working
@@ -269,7 +271,7 @@ class BackupDownloadApprovalViewModel(
             _phase.value = Phase.Idle
             throw e
         } catch (t: Throwable) {
-            _phase.value = Phase.Failed(message(t, "Couldn't approve the download."))
+            _phase.value = Phase.Failed(message(t, FSStrings.get(R.string.couldnt_approve_the_download)))
         }
     }
 }
@@ -450,7 +452,7 @@ class ImportBackupViewModel(
                     val head = ServerBackupFormat.readUpTo(input, ServerBackupFormat.BUNDLE_HEADER_BYTES)
                     val layout = ServerBackupFormat.parseBundleHeader(head, f.size)
                     val meta = ServerBackupFormat.readUpTo(input, layout.metaLength)
-                    if (meta.size != layout.metaLength) throw ServerBackupFormat.BundleException("This backup is cut short: it ends before its data.")
+                    if (meta.size != layout.metaLength) throw ServerBackupFormat.BundleException(FSStrings.get(R.string.this_backup_is_cut_short_it))
                     layout to ServerBackupFormat.parse(meta)
                 }
             }
@@ -461,7 +463,7 @@ class ImportBackupViewModel(
             fileError = when (t) {
                 is ServerBackupFormat.BundleException -> t.message
                 is ServerBackupFormat.FormatException -> t.message
-                else -> "That backup couldn't be read."
+                else -> FSStrings.get(R.string.that_backup_couldnt_be_read)
             }
             return
         }
@@ -477,7 +479,7 @@ class ImportBackupViewModel(
 
     /** The line under the picker: what's picked. */
     val fileSummary: String
-        get() = fileName?.let { "$it (${ServerArchive.formatBytes(fileSize ?: 0)})" } ?: "No backup picked yet"
+        get() = fileName?.let { "$it (${ServerArchive.formatBytes(fileSize ?: 0)})" } ?: FSStrings.get(R.string.no_backup_picked_yet)
 
     /** Find the lost server's backup on other servers and open it with this
      *  account's key (peer restore). */
@@ -491,10 +493,10 @@ class ImportBackupViewModel(
             val root = source.describe(id)
             val f = ServerBackupFormat.parse(root.archive.backupFile.toByteArray(Charsets.UTF_8))
             val o = ServerBackupFormat.openWithAccountKey(f, accountKek(f.archiveId))
-                ?: throw PeerBackup.PeerBackupException("This backup can't be opened with this account's key.")
+                ?: throw PeerBackup.PeerBackupException(FSStrings.get(R.string.this_backup_cant_be_opened_with))
             val a = root.archive
             if (f.archiveId != a.archiveId || o.body.data.bytes != a.bytes || o.body.data.sha256 != a.sha256) {
-                throw PeerBackup.PeerBackupException("The backup record doesn't match its file. Nothing was restored.")
+                throw PeerBackup.PeerBackupException(FSStrings.get(R.string.the_backup_record_doesnt_match_its))
             }
             file = f
             opened = o
@@ -506,7 +508,7 @@ class ImportBackupViewModel(
             fileError = when (t) {
                 is PeerBackup.PeerBackupException -> t.message
                 is ServerBackupFormat.FormatException -> t.message
-                else -> message(t, "The backup couldn't be found.")
+                else -> message(t, FSStrings.get(R.string.the_backup_couldnt_be_found))
             }
             _phase.value = Phase.PickLost
             return
@@ -527,7 +529,7 @@ class ImportBackupViewModel(
             val whenText = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(body.createdAt))
             val apps = if (body.apps.isEmpty()) "no apps" else body.apps.joinToString(", ") { it.name }
             val left = if (body.left.isEmpty()) "" else " Not in this backup: ${body.left.joinToString(", ") { it.name }}."
-            return "From ${body.server.domain}, saved $whenText: $apps.$left"
+            return FSStrings.get(R.string.from_saved, body.server.domain, whenText, apps, left)
         }
 
     /** What the new server copies from the backup. */
@@ -536,7 +538,7 @@ class ImportBackupViewModel(
             val s = opened?.body?.server ?: return null
             val unlock = if (s.bootUnlockMode == "approve") "asks your phone at every start" else "unlocks on its own after the first start"
             val disk = if (s.diskEncryption == "none") "disk not encrypted" else "disk encrypted"
-            return "Copied from the backup: $unlock, $disk."
+            return FSStrings.get(R.string.copied_from_the_backup, unlock, disk)
         }
 
     private suspend fun advance() {
@@ -576,7 +578,7 @@ class ImportBackupViewModel(
             _phase.value = Phase.Passcode
             throw e
         } catch (t: Throwable) {
-            fileError = (t as? ServerBackupFormat.FormatException)?.message ?: "That passcode doesn't open this backup."
+            fileError = (t as? ServerBackupFormat.FormatException)?.message ?: FSStrings.get(R.string.that_passcode_doesnt_open_this_backup)
             _phase.value = Phase.Passcode
             return
         }
@@ -630,12 +632,12 @@ class ImportBackupViewModel(
             if (n.isEmpty()) {
                 val saved = opened?.body?.server?.name
                 if (saved != null && saved.lowercase() in takenNames) {
-                    return "You already have a server called \"$saved\": pick another name."
+                    return FSStrings.get(R.string.you_already_have_a_server_called, saved)
                 }
                 return null
             }
             ServerLabel.errorMessage(n)?.let { return it }
-            if (n in takenNames) return "You already have a server called \"$n\"."
+            if (n in takenNames) return FSStrings.get(R.string.you_already_have_a_server_called_2, n)
             return null
         }
 
@@ -855,31 +857,31 @@ class ImportBackupViewModel(
 
     class ImportException(val kind: Kind, why: String = "") : Exception(
         when (kind) {
-            Kind.UNREADABLE -> "The backup file can't be read any more (was its drive removed?)."
-            Kind.VANISHED -> "The restore disappeared from the server."
-            Kind.OTHER_BACKUP -> "That server is waiting for a different backup."
-            Kind.FAILED -> "The restore failed: $why."
+            Kind.UNREADABLE -> FSStrings.get(R.string.the_backup_file_cant_be_read)
+            Kind.VANISHED -> FSStrings.get(R.string.the_restore_disappeared_from_the_server)
+            Kind.OTHER_BACKUP -> FSStrings.get(R.string.that_server_is_waiting_for_a)
+            Kind.FAILED -> FSStrings.get(R.string.the_restore_failed, why)
         },
     ) {
         enum class Kind { UNREADABLE, VANISHED, OTHER_BACKUP, FAILED }
     }
 
     private fun importMessage(t: Throwable): String =
-        if (t is ImportException) UserErrorText.of(t, "The restore failed.") else message(t, "The restore failed.")
+        if (t is ImportException) UserErrorText.of(t, FSStrings.get(R.string.the_restore_failed_2)) else message(t, FSStrings.get(R.string.the_restore_failed_2))
 
     companion object {
         /** Why a picked file's data part failed its check, said of the one file. */
         fun checkMessage(t: Throwable): String = when ((t as? ServerBackupFormat.DataCheckException)?.kind) {
-            ServerBackupFormat.DataCheckException.Kind.UNREADABLE -> "The backup file can't be read any more (was its drive removed?)."
-            null -> "The backup couldn't be checked."
-            else -> "This backup was changed or is damaged."
+            ServerBackupFormat.DataCheckException.Kind.UNREADABLE -> FSStrings.get(R.string.the_backup_file_cant_be_read)
+            null -> FSStrings.get(R.string.the_backup_couldnt_be_checked)
+            else -> FSStrings.get(R.string.this_backup_was_changed_or_is)
         }
 
         /** The result's lines: "Restored N apps", then each app that failed, with the box's reason. */
         fun resultLines(apps: List<ServerRestoreApp>): List<String> {
             val ok = apps.count { it.state == "done" }
-            return listOf("Restored $ok app${if (ok == 1) "" else "s"}") +
-                apps.filter { it.state == "failed" }.map { "Couldn't restore: ${it.name}: ${(it.reason ?: "it couldn't be restored").trimEnd('.', ' ')}" }
+            return listOf(FSStrings.plural(R.plurals.restored_apps, ok, ok)) +
+                apps.filter { it.state == "failed" }.map { FSStrings.get(R.string.couldnt_restore, it.name, (it.reason ?: "it couldn't be restored").trimEnd('.', ' ')) }
         }
 
         /** The name the form starts with: the saved server's, unless the account uses it. */
@@ -889,11 +891,11 @@ class ImportBackupViewModel(
         }
 
         fun describe(a: ServerRestoreApp): String = when (a.state) {
-            "done" -> "${a.name}: restored"
-            "skipped" -> "${a.name}: skipped (${a.reason ?: "already here"})"
-            "failed" -> "${a.name}: couldn't be restored (${a.reason ?: "unknown reason"})"
-            "restoring" -> "${a.name}: restoring…"
-            else -> "${a.name}: waiting"
+            "done" -> FSStrings.get(R.string.restored, a.name)
+            "skipped" -> FSStrings.get(R.string.skipped, a.name, a.reason ?: "already here")
+            "failed" -> FSStrings.get(R.string.couldnt_be_restored, a.name, a.reason ?: "unknown reason")
+            "restoring" -> FSStrings.get(R.string.restoring_2, a.name)
+            else -> FSStrings.get(R.string.waiting, a.name)
         }
     }
 }

@@ -8,6 +8,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -16,7 +17,7 @@ import kotlin.math.ceil
 import kotlin.math.roundToLong
 
 object RateLimitCopy {
-    const val FALLBACK = "Too many tries. Try again later."
+    val FALLBACK get() = FSStrings.get(R.string.too_many_tries_try_again_later)
 
     fun who(limit: String?): String? = when (limit) {
         "ip" -> "from your network"
@@ -38,7 +39,7 @@ object RateLimitCopy {
     fun sentence(limit: String?, retryAfterSec: Long?): String? {
         val w = who(limit) ?: return null
         val sec = retryAfterSec ?: return null
-        return "Too many tries $w. Try again ${retryAfterPhrase(sec)}."
+        return FSStrings.get(R.string.too_many_tries_try_again, w, retryAfterPhrase(sec))
     }
 
     fun message(limit: String?, retryAfterSec: Long?, serverMessage: String?): String =

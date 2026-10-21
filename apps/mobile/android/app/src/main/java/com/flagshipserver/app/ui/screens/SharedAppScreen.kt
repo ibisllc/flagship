@@ -5,6 +5,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,7 +74,7 @@ fun SharedAppScreen(shareId: String, serviceId: String, onBack: () -> Unit) {
     val entry = shared.items.firstOrNull { it.entry.shareId == shareId }?.entry
     if (entry == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            if (shared.loaded) Line("This server isn't shared with you any more.") else CircularProgressIndicator()
+            if (shared.loaded) Line(stringResource(R.string.this_server_isnt_shared_with_you_3)) else CircularProgressIndicator()
         }
         return
     }
@@ -151,9 +154,9 @@ internal fun SharedAppContent(
         val detail = ui.detail
         when {
             detail != null && nav != null -> AppSections(appName, detail, ui, nav, invites)
-            ui.phase == SharedAppUi.Phase.Waiting -> FSNote("Waiting for the owner to confirm this share.")
-            ui.phase == SharedAppUi.Phase.Ended -> FSNote("The owner stopped sharing this server.")
-            ui.phase == SharedAppUi.Phase.Failed -> ErrorCard(ui.message ?: "Couldn't open this app.", onRetry = onRetry)
+            ui.phase == SharedAppUi.Phase.Waiting -> FSNote(stringResource(R.string.waiting_for_the_owner_to_confirm_2))
+            ui.phase == SharedAppUi.Phase.Ended -> FSNote(stringResource(R.string.the_owner_stopped_sharing_this_server))
+            ui.phase == SharedAppUi.Phase.Failed -> ErrorCard(ui.message ?: stringResource(R.string.couldnt_open_this_app), onRetry = onRetry)
             else -> ServerCardSkeleton()
         }
     }
@@ -168,7 +171,7 @@ private fun AppSections(appName: String, detail: AppDetailResponse, ui: SharedAp
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Text(appName, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-                FSPill(if (running) "Running" else app.status.replaceFirstChar { it.uppercase() }, kind = if (running) FSPillKind.Online else FSPillKind.Idle)
+                FSPill(if (running) stringResource(R.string.running_2) else app.status.replaceFirstChar { it.uppercase() }, kind = if (running) FSPillKind.Online else FSPillKind.Idle)
             }
             app.summary?.takeIf { it.isNotBlank() }?.let { Line(it, size = 14) }
             if (app.accessMode == "members-only") {
@@ -176,7 +179,7 @@ private fun AppSections(appName: String, detail: AppDetailResponse, ui: SharedAp
             }
             if (app.url.isNotEmpty()) {
                 FSPrimaryButton(
-                    label = "Open $appName",
+                    label = fsString(R.string.open, appName),
                     block = true,
                     modifier = Modifier.testTag("shared-app-open"),
                     onClick = { runCatching { uri.openUri(app.url) } },

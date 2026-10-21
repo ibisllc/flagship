@@ -8,6 +8,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -81,29 +85,29 @@ fun InviteRedeemScreen(
         when (val p = phase) {
             is InviteRedeemPhase.Done -> FSCard(padding = PaddingValues(FS.space.s4)) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                    Text("You're in", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
+                    Text(stringResource(R.string.youre_in), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
                     Text(
-                        "Your account now has access to ${p.serviceRef.ifEmpty { "the service" }}." +
+                        fsString(R.string.your_account_now_has_access_to, p.serviceRef.ifEmpty { stringResource(R.string.the_service) }) +
                             if (!p.firstBind) " (You already had access — this link is linked to your account.)" else "",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyLarge,
                     )
-                    FSPrimaryButton(label = "Open it", block = true, large = true, onClick = { onOpenService(serverDomain) }, modifier = Modifier.semantics { testTag = "invite-redeem-open" })
-                    FSSecondaryButton(label = "Go to Flagship", block = true, onClick = onDone)
+                    FSPrimaryButton(label = stringResource(R.string.open_it), block = true, large = true, onClick = { onOpenService(serverDomain) }, modifier = Modifier.semantics { testTag = "invite-redeem-open" })
+                    FSSecondaryButton(label = stringResource(R.string.go_to_flagship), block = true, onClick = onDone)
                 }
             }
             is InviteRedeemPhase.AwaitingApproval -> FSCard(padding = PaddingValues(FS.space.s4)) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                    Text("One more step", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
+                    Text(stringResource(R.string.one_more_step), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
                     Text(
-                        "This invite needs the owner's approval. Send this confirmation back to them through the same private channel — they'll confirm you, and then you're in. Your username is never shared.",
+                        stringResource(R.string.this_invite_needs_the_owners_approval),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyLarge,
                     )
                     QrImage(
                         payload = p.replyLink,
                         size = 180.dp,
-                        contentDescription = "Confirmation reply QR",
+                        contentDescription = stringResource(R.string.confirmation_reply_qr),
                         modifier = Modifier.semantics { testTag = "invite-redeem-reply-qr" },
                     )
                     Text(
@@ -116,30 +120,30 @@ fun InviteRedeemScreen(
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                         FSPrimaryButton(
-                            label = "Send back",
+                            label = stringResource(R.string.send_back),
                             onClick = { shareReply(ctx, p.replyLink) },
                             modifier = Modifier.weight(1f).semantics { testTag = "invite-redeem-reply-share" },
                         )
                         FSSecondaryButton(
-                            label = "Copy",
-                            onClick = { copyReply(ctx, p.replyLink); toasts.success("Confirmation copied.") },
+                            label = stringResource(R.string.copy),
+                            onClick = { copyReply(ctx, p.replyLink); toasts.success(FSStrings.get(R.string.confirmation_copied)) },
                             modifier = Modifier.weight(1f).semantics { testTag = "invite-redeem-reply-copy" },
                         )
                     }
-                    FSSecondaryButton(label = "Go to Flagship", block = true, onClick = onDone)
+                    FSSecondaryButton(label = stringResource(R.string.go_to_flagship), block = true, onClick = onDone)
                 }
             }
             else -> FSCard(padding = PaddingValues(FS.space.s4)) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                    Text("You've been invited", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
+                    Text(stringResource(R.string.youve_been_invited), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
                     Text(
-                        "This grants your account access to a restricted service on $serverDomain. Your account identity is recorded so the owner can manage access; nothing else about you is shared.",
+                        fsString(R.string.this_grants_your_account_access_to, serverDomain),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyLarge,
                     )
                     val redeeming = p is InviteRedeemPhase.Redeeming
                     FSPrimaryButton(
-                        label = if (redeeming) "Accepting…" else "Accept & get access",
+                        label = if (redeeming) stringResource(R.string.accepting) else "Accept & get access",
                         enabled = !redeeming,
                         block = true,
                         large = true,
@@ -160,12 +164,12 @@ private fun shareReply(ctx: Context, link: String) {
         type = "text/plain"
         putExtra(Intent.EXTRA_TEXT, link)
     }
-    val chooser = Intent.createChooser(send, "Send confirmation")
+    val chooser = Intent.createChooser(send, FSStrings.get(R.string.send_confirmation))
     chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     ctx.startActivity(chooser)
 }
 
 private fun copyReply(ctx: Context, link: String) {
     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    cm.setPrimaryClip(ClipData.newPlainText("Flagship invite confirmation", link))
+    cm.setPrimaryClip(ClipData.newPlainText(FSStrings.get(R.string.flagship_invite_confirmation), link))
 }

@@ -1,12 +1,14 @@
 package com.flagshipserver.app.keystore
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.ShareKeys
 import com.google.crypto.tink.subtle.Ed25519Sign
 
 /** The share flows' keys from this device's keystore, each behind the biometric gate. */
 class KeystoreShareKeys : ShareKeys {
     override suspend fun umk(reason: String): ByteArray {
-        BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = reason)
+        BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = reason)
         return Keystore.loadOrCreateUmkSeed()
     }
 

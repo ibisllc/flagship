@@ -6,6 +6,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import android.content.Context
 import android.content.SharedPreferences
 import com.flagshipserver.app.api.LastUpdate
@@ -42,13 +43,12 @@ data class PendingUpdate(
     fun isStale(nowMs: Long): Boolean = nowMs - orderedAt >= STALE_AFTER_MS
 
     fun sentLine(nowMs: Long): String =
-        "Update to $label sent ${FlagshipDateFormat.format(orderedAt, nowMs, includeTime = true)}. " +
-            "The server picks it up within about five minutes, restarts, and goes back on its own if the new version doesn't start."
+        FSStrings.get(R.string.update_to_sent_the_server_picks, label, FlagshipDateFormat.format(orderedAt, nowMs, includeTime = true))
 
     companion object {
         const val STALE_AFTER_MS = 30 * 60_000L
         const val REFRESH_EVERY_MS = 15_000L
-        const val STALE_COPY = "The server hasn't applied this update yet. It may be offline."
+        val STALE_COPY get() = FSStrings.get(R.string.the_server_hasnt_applied_this_update)
     }
 }
 

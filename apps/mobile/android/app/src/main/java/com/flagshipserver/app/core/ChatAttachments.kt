@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.VibeCodeAttachment
 import java.util.Base64
 
@@ -11,9 +12,9 @@ enum class AttachKind { IMAGE, TEXT, DATA, DOCUMENT }
 
 object ChatAttachments {
     const val MAX_PER_MESSAGE = 6
-    const val NOTICE = "The AI will see what you attach."
-    const val SAMPLE_DATA_NOTE = "Sample data goes only to the private test copy."
-    const val TOO_MANY = "You can attach up to $MAX_PER_MESSAGE files to a message."
+    val NOTICE get() = FSStrings.get(R.string.the_ai_will_see_what_you)
+    val SAMPLE_DATA_NOTE get() = FSStrings.get(R.string.sample_data_goes_only_to_the)
+    val TOO_MANY get() = FSStrings.get(R.string.you_can_attach_up_to_files, MAX_PER_MESSAGE)
 
     /** What the file picker offers. */
     val DOCUMENT_MIME_TYPES = arrayOf(
@@ -67,8 +68,8 @@ object ChatAttachments {
     /** Why [name] can't be staged, or null when it can. */
     fun problem(kind: AttachKind?, name: String, size: Long, staged: Int): String? = when {
         staged >= MAX_PER_MESSAGE -> TOO_MANY
-        kind == null -> "$name can't be attached. Try an image, a text or code file, CSV, JSON or PDF."
-        size > maxBytes(kind) -> "$name is over ${limitLabel(kind)}, so it wasn't attached."
+        kind == null -> FSStrings.get(R.string.cant_be_attached_try_an_image, name)
+        size > maxBytes(kind) -> FSStrings.get(R.string.is_over_so_it_wasnt_attached, name, limitLabel(kind))
         else -> null
     }
 

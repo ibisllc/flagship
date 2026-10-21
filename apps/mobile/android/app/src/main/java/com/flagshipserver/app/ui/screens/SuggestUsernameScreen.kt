@@ -1,5 +1,8 @@
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -60,12 +63,12 @@ fun SuggestUsernameScreen(onContinue: (String) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(FS.space.s6),
     ) {
         Text(
-            text = "Your handle",
+            text = stringResource(R.string.your_handle),
             color = FS.colors.text,
             style = MaterialTheme.typography.headlineMedium,
         )
         Text(
-            text = "Here's a free, random username. You can change it later.",
+            text = stringResource(R.string.heres_a_free_random_username_you),
             color = FS.colors.textMuted,
             style = MaterialTheme.typography.bodyLarge,
         )
@@ -80,7 +83,7 @@ fun SuggestUsernameScreen(onContinue: (String) -> Unit) {
         )
 
         FSSecondaryButton(
-            label = if (cooldown > 0) "Try again in ${cooldown}s" else "Try another",
+            label = if (cooldown > 0) fsString(R.string.try_again_in_s, cooldown) else stringResource(R.string.try_another),
             onClick = { scope.launch { vm.regenerate() } },
             block = true,
             enabled = vm.canRegenerate(),
@@ -93,7 +96,7 @@ fun SuggestUsernameScreen(onContinue: (String) -> Unit) {
         Spacer(Modifier.height(FS.space.s8))
 
         FSPrimaryButton(
-            label = "Continue",
+            label = stringResource(R.string.continue_label),
             onClick = { current?.let(onContinue) },
             block = true,
             large = true,

@@ -28,6 +28,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
@@ -65,25 +66,23 @@ object NetworkErrorHumanizer {
         return when {
             isCertPinMismatch(t) -> Classified(
                 Kind.CERT_PIN_MISMATCH,
-                "This server's certificate doesn't match — someone may be " +
-                    "intercepting the connection. Reinstall the server or contact " +
-                    "its admin.",
+                FSStrings.get(R.string.this_servers_certificate_doesnt_match),
             )
             rateLimit != null -> Classified(Kind.RATE_LIMITED, rateLimit.userMessage)
             t is AddServerRefused || AddServerGate.isServerRefusal(t) -> Classified(Kind.REQUEST_PROBLEM, AddServerGate.ADMIN_ONLY)
             passkeyError(t) != null -> Classified(Kind.PASSKEY, passkeySentence(passkeyError(t)!!))
             t is com.flagshipserver.app.keystore.BiometricCancelled ->
-                Classified(Kind.BIOMETRIC, "Cancelled. Try again when you're ready.")
+                Classified(Kind.BIOMETRIC, FSStrings.get(R.string.cancelled_try_again_when_youre_ready))
             t is com.flagshipserver.app.keystore.BiometricFailed -> Classified(Kind.BIOMETRIC, biometricSentence(t))
             t is HttpException -> classifyStatus(t.status)
             t is HasHttpStatus -> classifyStatus(t.httpStatus)
             isOffline(t) -> Classified(
                 Kind.OFFLINE,
-                "You're offline. Check your connection and try again.",
+                FSStrings.get(R.string.youre_offline_check_your_connection_and),
             )
             else -> Classified(
                 Kind.UNKNOWN,
-                "Something went wrong (code ${errorCode(t)}). Please try again.",
+                FSStrings.get(R.string.something_went_wrong_code_please_try, errorCode(t)),
             )
         }
     }
@@ -108,19 +107,19 @@ object NetworkErrorHumanizer {
     }
 
     private fun biometricSentence(e: com.flagshipserver.app.keystore.BiometricFailed): String = when {
-        e.isLockout -> "Too many tries. Unlock your phone with its PIN, pattern or password, then try again."
+        e.isLockout -> FSStrings.get(R.string.too_many_tries_unlock_your_phone)
         e.code == com.flagshipserver.app.keystore.BiometricFailed.NOT_STARTED ->
-            "Your phone didn't show the fingerprint check. Try again."
+            FSStrings.get(R.string.your_phone_didnt_show_the_fingerprint)
         e.code == com.flagshipserver.app.keystore.BiometricFailed.SCREEN_GONE ->
-            "The app closed before the check finished. Try again."
+            FSStrings.get(R.string.the_app_closed_before_the_check)
         e.code == androidx.biometric.BiometricPrompt.ERROR_NO_DEVICE_CREDENTIAL ||
             e.code == androidx.biometric.BiometricPrompt.ERROR_NO_BIOMETRICS ->
-            "Set a screen lock (PIN, pattern, password or fingerprint) on this phone, then try again."
-        else -> "Couldn't check your fingerprint or screen lock. Try again."
+            FSStrings.get(R.string.set_a_screen_lock_pin_pattern)
+        else -> FSStrings.get(R.string.couldnt_check_your_fingerprint_or_screen)
     }
 
-    const val PASSKEY_NO_KEY =
-        "Your passkey app didn't return the key Flagship needs. Try again, or pick Google Password Manager."
+    val PASSKEY_NO_KEY get() =
+        FSStrings.get(R.string.your_passkey_app_didnt_return_the)
 
     private fun passkeySentence(e: com.flagshipserver.app.keystore.PasskeyRecoveryManager.RecoveryError): String {
         return when (e) {
@@ -128,20 +127,20 @@ object NetworkErrorHumanizer {
             is com.flagshipserver.app.keystore.PasskeyRecoveryManager.RecoveryError.KeyNotReturned -> PASSKEY_NO_KEY
             is com.flagshipserver.app.keystore.PasskeyRecoveryManager.RecoveryError.CreateFailed -> when (e.cause0) {
                 is androidx.credentials.exceptions.CreateCredentialCancellationException ->
-                    "You cancelled saving the passkey. Try again when you're ready."
+                    FSStrings.get(R.string.you_cancelled_saving_the_passkey_try)
                 is androidx.credentials.exceptions.CreateCredentialNoCreateOptionException ->
-                    "No passkey app on this phone can save a passkey. Turn on Google Password Manager or another passkey app in Settings, then try again."
-                else -> "Your passkey app couldn't save a passkey. Try again, or pick Google Password Manager."
+                    FSStrings.get(R.string.no_passkey_app_on_this_phone)
+                else -> FSStrings.get(R.string.your_passkey_app_couldnt_save_a)
             }
             is com.flagshipserver.app.keystore.PasskeyRecoveryManager.RecoveryError.GetFailed -> when (e.cause0) {
                 is androidx.credentials.exceptions.GetCredentialCancellationException ->
-                    "You cancelled the passkey check. Try again when you're ready."
+                    FSStrings.get(R.string.you_cancelled_the_passkey_check_try)
                 is androidx.credentials.exceptions.NoCredentialException ->
-                    "Couldn't find your Flagship passkey on this phone. Check that the passkey app holding it is signed in, then try again."
-                else -> "Your passkey app couldn't check the passkey. Try again."
+                    FSStrings.get(R.string.couldnt_find_your_flagship_passkey_on)
+                else -> FSStrings.get(R.string.your_passkey_app_couldnt_check_the)
             }
             is com.flagshipserver.app.keystore.PasskeyRecoveryManager.RecoveryError.ProtocolError ->
-                "Your passkey app sent an answer Flagship couldn't read. Try again, or pick Google Password Manager."
+                FSStrings.get(R.string.your_passkey_app_sent_an_answer)
         }
     }
 
@@ -163,19 +162,19 @@ object NetworkErrorHumanizer {
     private fun classifyStatus(status: Int): Classified = when {
         status >= 500 -> Classified(
             Kind.SERVER_PROBLEM,
-            "The server had a temporary problem. Please try again in a moment.",
+            FSStrings.get(R.string.the_server_had_a_temporary_problem),
         )
         status == 408 -> Classified(
             Kind.OFFLINE,
-            "The request timed out. Check your connection and try again.",
+            FSStrings.get(R.string.the_request_timed_out_check_your),
         )
         status >= 400 -> Classified(
             Kind.REQUEST_PROBLEM,
-            "We couldn't complete that. Check your connection and try again.",
+            FSStrings.get(R.string.we_couldnt_complete_that_check_your),
         )
         else -> Classified(
             Kind.UNKNOWN,
-            "Something went wrong. Please try again.",
+            FSStrings.get(R.string.something_went_wrong_please_try_again),
         )
     }
 

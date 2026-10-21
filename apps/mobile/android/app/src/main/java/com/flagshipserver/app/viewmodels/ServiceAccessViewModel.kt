@@ -25,6 +25,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.AppAccountMember
@@ -116,7 +118,7 @@ class ServiceAccessViewModel(
         if (id == null || !Keystore.hasUmkSeed()) {
             null
         } else {
-            BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = r)
+            BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = r)
             Keystore.accountDeviceSigner(Keystore.currentUmkSeed(), username, id)
         }
     },
@@ -227,25 +229,25 @@ class ServiceAccessViewModel(
         if (p.creatorTier == CO_MANAGER_TIER || box?.tier == CO_MANAGER_TIER) return coManagerInvitedBy(box?.creatorLabel)
         val creator = (p.creatorDeviceId ?: _members.value?.invite(p.inviteId)?.creatorDeviceId)?.lowercase()
         if (p.creatorTier == null && creator == null) return null
-        if (createdHere(p)) return "Invited by this device"
+        if (createdHere(p)) return FSStrings.get(R.string.invited_by_this_device)
         val name = creator?.let { names?.get(it) }?.takeIf { it.isNotBlank() }
-        return if (name != null) "Invited by $name" else "Invited by another device"
+        return if (name != null) FSStrings.get(R.string.invited_by, name) else FSStrings.get(R.string.invited_by_another_device)
     }
 
     /** A device's name from the decrypted directory, else "Device" and a short id; a co-manager by the owner's label. */
     fun accountMemberName(m: AppAccountMember, names: Map<String, String>? = _deviceNames.value): String =
         if (m.isDevice) {
             m.deviceId?.lowercase()?.let { names?.get(it) }?.takeIf { it.isNotBlank() }
-                ?: "Device ${(m.deviceId ?: m.devicePub).orEmpty().take(8)}"
+                ?: FSStrings.get(R.string.device_3, (m.deviceId ?: m.devicePub).orEmpty().take(8))
         } else {
             m.label?.takeIf { it.isNotBlank() } ?: "Co-manager"
         }
 
     /** "This device · Admin", "Admin", "Co-manages this server", or "". */
     fun accountMemberDetail(m: AppAccountMember): String {
-        if (!m.isDevice) return "Co-manages this server"
+        if (!m.isDevice) return FSStrings.get(R.string.co_manages_this_server)
         val parts = mutableListOf<String>()
-        if (m.devicePub != null && m.devicePub.lowercase() == _selfPub.value?.lowercase()) parts += "This device"
+        if (m.devicePub != null && m.devicePub.lowercase() == _selfPub.value?.lowercase()) parts += FSStrings.get(R.string.this_device)
         if (m.tier == "admin") parts += "Admin"
         return parts.joinToString(" · ")
     }
@@ -297,15 +299,15 @@ class ServiceAccessViewModel(
     suspend fun setRole(role: AppMemberRole, p: AccessPerson): Boolean {
         val m = _members.value ?: return false
         val target = m.roleTarget(p.inviteId, if (p.isGroup) null else p.boundAidHex)
-        return changeRank(p.inviteId, target, role.wire, "Change ${p.name}'s rank", "Couldn't change ${p.name}'s rank. Try again in a moment.")
+        return changeRank(p.inviteId, target, role.wire, FSStrings.get(R.string.change_s_rank, p.name), FSStrings.get(R.string.couldnt_change_s_rank_try_again, p.name))
     }
 
     /** Give one of the account's devices or a co-manager a rank in this app; null refuses it. */
     suspend fun setAccountRank(member: AppAccountMember, rank: AppMemberRole?): Boolean {
         val target = member.rankTarget ?: return false
         val name = accountMemberName(member)
-        val reason = if (rank == null) "Refuse $name in $serviceRef" else "Make $name ${rank.label}"
-        return changeRank(member.rowKey, target, rank?.wire ?: AppAccessOrders.REFUSED, reason, "Couldn't change $name. Try again in a moment.")
+        val reason = if (rank == null) FSStrings.get(R.string.refuse_in, name, serviceRef) else FSStrings.get(R.string.make, name, rank.label)
+        return changeRank(member.rowKey, target, rank?.wire ?: AppAccessOrders.REFUSED, reason, FSStrings.get(R.string.couldnt_change_try_again_in_a, name))
     }
 
     private suspend fun changeRank(busyKey: String, target: String, rank: String, reason: String, failure: String): Boolean {
@@ -351,7 +353,7 @@ class ServiceAccessViewModel(
             refreshPeople()
             refreshMembers()
         } catch (e: Throwable) {
-            _phase.value = ServiceAccessPhase.Failed("Couldn't reach the server to load access settings.")
+            _phase.value = ServiceAccessPhase.Failed(FSStrings.get(R.string.couldnt_reach_the_server_to_load_2))
         }
     }
 
@@ -361,7 +363,7 @@ class ServiceAccessViewModel(
         _busyMode.value = true
         val mode = if (restricted) "restricted" else "open"
         return try {
-            val key = adminSigner(if (restricted) "Make $serviceRef members only" else "Open $serviceRef to all")
+            val key = adminSigner(if (restricted) FSStrings.get(R.string.make_members_only, serviceRef) else FSStrings.get(R.string.open_to_all_2, serviceRef))
             val order = AppAccessOrders.Mode(serviceRef, mode, now())
             val request: JsonObject = buildJsonObject {
                 put("serviceRef", JsonPrimitive(order.serviceRef))
@@ -373,7 +375,7 @@ class ServiceAccessViewModel(
             _phase.value = ServiceAccessPhase.Ready
             true
         } catch (e: Throwable) {
-            _phase.value = ServiceAccessPhase.Failed("Couldn't change access. Try again in a moment.")
+            _phase.value = ServiceAccessPhase.Failed(FSStrings.get(R.string.couldnt_change_access_try_again_in))
             false
         } finally {
             _busyMode.value = false
@@ -405,7 +407,7 @@ class ServiceAccessViewModel(
         }
         _busyAdd.value = true
         return try {
-            val reason = "Create an invite for $serviceRef"
+            val reason = FSStrings.get(R.string.create_an_invite_for, serviceRef)
             val admin = isAdmin
             val key = if (admin) adminSigner(reason) else deviceSigner(reason) ?: error("no account device key")
             val aid = HexUtil.decode(aidPubHex(reason))!!
@@ -444,16 +446,16 @@ class ServiceAccessViewModel(
             val s = screens
             if (admin && role != null && s != null && role.wire != _members.value?.defaultRole) {
                 try {
-                    sendRank(s, AppAccessOrders.inviteTarget(inviteId), role.wire, "Give $trimmed a rank")
+                    sendRank(s, AppAccessOrders.inviteTarget(inviteId), role.wire, FSStrings.get(R.string.give_a_rank, trimmed))
                 } catch (e: Throwable) {
-                    _roleNotice.value = "Created, but couldn't set the rank. Change it in the list."
+                    _roleNotice.value = FSStrings.get(R.string.created_but_couldnt_set_the_rank)
                 }
             }
             refreshPeople()
             refreshMembers()
             link
         } catch (e: Throwable) {
-            _phase.value = ServiceAccessPhase.Failed("Couldn't create the invite. Try again in a moment.")
+            _phase.value = ServiceAccessPhase.Failed(FSStrings.get(R.string.couldnt_create_the_invite_try_again_2))
             null
         } finally {
             _busyAdd.value = false
@@ -469,7 +471,7 @@ class ServiceAccessViewModel(
     suspend fun finalizeAcceptance(rawReply: String): Boolean {
         if (_busyFinalize.value) return false
         val parsed = InviteLink.decodeAcceptance(rawReply) ?: run {
-            _phase.value = ServiceAccessPhase.Failed("That acceptance reply is malformed. Ask your contact to send it again.")
+            _phase.value = ServiceAccessPhase.Failed(FSStrings.get(R.string.that_acceptance_reply_is_malformed_ask))
             return false
         }
         _busyFinalize.value = true
@@ -482,7 +484,7 @@ class ServiceAccessViewModel(
             refreshPeople()
             true
         } catch (e: Throwable) {
-            _phase.value = ServiceAccessPhase.Failed("Couldn't confirm them. Make sure the reply is from your invite and try again.")
+            _phase.value = ServiceAccessPhase.Failed(FSStrings.get(R.string.couldnt_confirm_them_make_sure_the))
             false
         } finally {
             _busyFinalize.value = false
@@ -501,7 +503,7 @@ class ServiceAccessViewModel(
         val person = _people.value.firstOrNull { it.inviteId == inviteId }
         if (if (person != null) !canRemove(person) else !isAdmin) return false
         val ts = now()
-        val reason = "Remove this person from $serviceRef"
+        val reason = FSStrings.get(R.string.remove_this_person_from, serviceRef)
         val revoke: JsonObject = buildJsonObject {
             put("inviteId", JsonPrimitive(inviteId))
             put("issuedAt", JsonPrimitive(ts))
@@ -510,21 +512,21 @@ class ServiceAccessViewModel(
             val key = if (isAdmin) adminSigner(reason) else deviceSigner(reason) ?: error("no account device key")
             HexUtil.encode(key.sign(ServiceInvite.canonicalRevoke(inviteId, ts)))
         } catch (e: Throwable) {
-            _phase.value = ServiceAccessPhase.Failed("Couldn't remove them. Try again in a moment.")
+            _phase.value = ServiceAccessPhase.Failed(FSStrings.get(R.string.couldnt_remove_them_try_again_in))
             return false
         }
         val comOk = try {
             client.revokeInvite(username, revoke, sigHex)
             true
         } catch (e: Throwable) {
-            _phase.value = ServiceAccessPhase.Failed("Couldn't remove them. Try again in a moment.")
+            _phase.value = ServiceAccessPhase.Failed(FSStrings.get(R.string.couldnt_remove_them_try_again_in))
             false
         }
         val boxOk = try {
             client.withdrawInvite(serverDomain, revoke, sigHex)
             true
         } catch (e: Throwable) {
-            if (comOk) _phase.value = ServiceAccessPhase.Failed("Removed them, but the server is still catching up. Try again in a moment.")
+            if (comOk) _phase.value = ServiceAccessPhase.Failed(FSStrings.get(R.string.removed_them_but_the_server_is))
             false
         }
         if (comOk) {
@@ -540,7 +542,7 @@ class ServiceAccessViewModel(
         val aid = aidHex.lowercase()
         if (!isAdmin || aid.isEmpty()) return false
         return try {
-            val key = adminSigner("Remove from $serviceRef")
+            val key = adminSigner(FSStrings.get(R.string.remove_from_3, serviceRef))
             val order = AppAccessOrders.Remove(serviceRef, aid, now())
             val request: JsonObject = buildJsonObject {
                 put("serviceRef", JsonPrimitive(order.serviceRef))
@@ -552,7 +554,7 @@ class ServiceAccessViewModel(
             refreshMembers()
             true
         } catch (e: Throwable) {
-            _phase.value = ServiceAccessPhase.Failed("Couldn't remove them. Try again in a moment.")
+            _phase.value = ServiceAccessPhase.Failed(FSStrings.get(R.string.couldnt_remove_them_try_again_in))
             false
         }
     }
@@ -562,7 +564,7 @@ class ServiceAccessViewModel(
      *  to ONE entry showing "k/N" + its bound members. */
     suspend fun refreshPeople() {
         try {
-            val reason = "Show the members of $serviceRef"
+            val reason = FSStrings.get(R.string.show_the_members_of, serviceRef)
             val aidPub = aidPubHex(reason)
             val hh = householdKey(reason)
             val ts = now()
@@ -616,16 +618,16 @@ class ServiceAccessViewModel(
     companion object {
         private val DEVICE_ID = Regex("^[0-9a-f]{32}$")
 
-        const val CANT_INVITE_LINE = "Only an admin can let you invite people to this app."
-        const val DEVICE_NOT_LISTED_LINE = "Your server doesn't list this device yet. Refresh in a minute."
-        const val RANKS_UNKNOWN_LINE = "Couldn't read your rank in this app from your server."
+        val CANT_INVITE_LINE get() = FSStrings.get(R.string.only_an_admin_can_let_you)
+        val DEVICE_NOT_LISTED_LINE get() = FSStrings.get(R.string.your_server_doesnt_list_this_device)
+        val RANKS_UNKNOWN_LINE get() = FSStrings.get(R.string.couldnt_read_your_rank_in_this)
 
         /** An invite made by someone the server is shared with (docs/service-access-gating.md "Co-manager invites"). */
         const val CO_MANAGER_TIER = "co-manager"
-        const val CO_MANAGERS_INVITEE = "Someone they invited"
+        val CO_MANAGERS_INVITEE get() = FSStrings.get(R.string.someone_they_invited)
 
         fun coManagerInvitedBy(label: String?): String =
-            if (!label.isNullOrBlank()) "Invited by $label (co-manager)" else "Invited by a co-manager"
+            if (!label.isNullOrBlank()) FSStrings.get(R.string.invited_by_co_manager, label) else FSStrings.get(R.string.invited_by_a_co_manager)
 
         fun create(
             context: Context,

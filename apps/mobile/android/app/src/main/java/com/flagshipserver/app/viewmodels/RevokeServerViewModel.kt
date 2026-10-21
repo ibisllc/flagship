@@ -4,6 +4,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
@@ -52,15 +54,15 @@ class RevokeServerViewModel(
     suspend fun run(reason: RevokeServerReason) {
         val user = username()
         if (user.isNullOrEmpty()) {
-            _phase.value = RevokeServerPhase.Failed("No active account on this device.")
+            _phase.value = RevokeServerPhase.Failed(FSStrings.get(R.string.no_active_account_on_this_device))
             return
         }
         _phase.value = RevokeServerPhase.Signing
         val irk: Ed25519Sign
         try {
-            irk = signer("Revoke server $serverDomain")
+            irk = signer(FSStrings.get(R.string.revoke_server, serverDomain))
         } catch (e: Throwable) {
-            _phase.value = RevokeServerPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
+            _phase.value = RevokeServerPhase.Failed(FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(e)))
             return
         }
         val issuedAt = now()
@@ -74,7 +76,7 @@ class RevokeServerViewModel(
         try {
             signature = irk.sign(canonical)
         } catch (e: Throwable) {
-            _phase.value = RevokeServerPhase.Failed("Couldn't sign: ${UserErrorText.reason(e)}")
+            _phase.value = RevokeServerPhase.Failed(FSStrings.get(R.string.couldnt_sign, UserErrorText.reason(e)))
             return
         }
 
@@ -93,9 +95,9 @@ class RevokeServerViewModel(
             )
         } catch (e: HttpException) {
             val friendly = when (e.status) {
-                403 -> "The server rejected the request. Sign in again and retry."
-                404 -> "That server is already gone — nothing to revoke."
-                else -> "Server error (${e.status}): ${e.body}"
+                403 -> FSStrings.get(R.string.the_server_rejected_the_request_sign)
+                404 -> FSStrings.get(R.string.that_server_is_already_gone_nothing)
+                else -> FSStrings.get(R.string.server_error, e.status, e.body)
             }
             _phase.value = RevokeServerPhase.Failed(friendly)
             return

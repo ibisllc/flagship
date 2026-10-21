@@ -6,6 +6,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.DemoServerBlock
 import com.flagshipserver.app.api.DeviceCapabilityBlock
 import com.flagshipserver.app.api.DeviceScope
@@ -957,13 +958,13 @@ data class PodInfo(
          *  the webapp `formatAge`). */
         fun humanizeAge(ms: Long): String {
             val sec = ms / 1000
-            if (sec < 60) return "just now"
+            if (sec < 60) return FSStrings.get(R.string.just_now)
             val min = sec / 60
-            if (min < 60) return "$min minute${if (min == 1L) "" else "s"} ago"
+            if (min < 60) return FSStrings.plural(R.plurals.minutes_ago, min.toInt(), min)
             val hr = min / 60
-            if (hr < 24) return "$hr hour${if (hr == 1L) "" else "s"} ago"
+            if (hr < 24) return FSStrings.plural(R.plurals.hours_ago, hr.toInt(), hr)
             val day = hr / 24
-            return "$day day${if (day == 1L) "" else "s"} ago"
+            return FSStrings.plural(R.plurals.days_ago, day.toInt(), day)
         }
 
         /** #56 — deterministic, fqdn-derived pod id. Pod identity is UNIFIED

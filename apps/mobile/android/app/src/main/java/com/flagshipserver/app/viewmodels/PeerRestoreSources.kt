@@ -6,6 +6,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.PeerRootRequest
 import com.flagshipserver.app.api.PeerRootSummary
 import com.flagshipserver.app.api.ScreensClient
@@ -69,12 +71,12 @@ class LivePeerRestoreSource(
             val (status, body) = try {
                 OkHttpClient().newCall(Request.Builder().url(url).get().build()).execute().use { it.code to (it.body?.string() ?: "") }
             } catch (e: java.io.IOException) {
-                throw PeerBackup.PeerBackupException("Couldn't reach the peer backup record. Try again in a moment.")
+                throw PeerBackup.PeerBackupException(FSStrings.get(R.string.couldnt_reach_the_peer_backup_record))
             }
             when {
-                status == 404 -> throw PeerBackup.PeerBackupException("No peer backup of that server was found.")
-                status == 503 -> throw PeerBackup.PeerBackupException("Peer backup between accounts isn't set up on this server yet.")
-                status !in 200..299 -> throw PeerBackup.PeerBackupException("Couldn't reach the peer backup record. Try again in a moment.")
+                status == 404 -> throw PeerBackup.PeerBackupException(FSStrings.get(R.string.no_peer_backup_of_that_server))
+                status == 503 -> throw PeerBackup.PeerBackupException(FSStrings.get(R.string.peer_backup_between_accounts_isnt_set))
+                status !in 200..299 -> throw PeerBackup.PeerBackupException(FSStrings.get(R.string.couldnt_reach_the_peer_backup_record))
             }
             val o = Json.parseToJsonElement(body).jsonObject
             PeerBackup.SealedRoot(o["nonceHex"]!!.jsonPrimitive.content, o["ciphertextHex"]!!.jsonPrimitive.content)

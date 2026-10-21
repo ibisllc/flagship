@@ -7,6 +7,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -97,14 +101,14 @@ fun InstallProgressScreen(
 
     val isLive = phase == "live"
     FSScreen(
-        title = "Provisioning",
+        title = stringResource(R.string.provisioning),
         onBack = { onFinish(resolvedFqdn, isLive) },
-        subtitle = "Watching the new server come online. Don't put your phone away, it's almost done.",
+        subtitle = stringResource(R.string.watching_the_new_server_come_online),
     ) {
         FSCard(padding = PaddingValues(vertical = FS.space.s2)) {
             if (!hadFirstReport) {
                 Text(
-                    "Waiting for the server to phone home…",
+                    stringResource(R.string.waiting_for_the_server_to_phone),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = FS.space.s4, vertical = FS.space.s2),
@@ -122,13 +126,13 @@ fun InstallProgressScreen(
 
         if (isLive) {
             FSPrimaryButton(
-                label = "Continue",
+                label = stringResource(R.string.continue_label),
                 onClick = { onFinish(resolvedFqdn, isLive) },
                 block = true,
             )
         } else {
             FSSecondaryButton(
-                label = "Run in background",
+                label = stringResource(R.string.run_in_background),
                 onClick = { onFinish(resolvedFqdn, isLive) },
                 block = true,
             )
@@ -155,11 +159,11 @@ internal fun InstallStepRow(
         Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
             when (step.state) {
                 ProvisionProgress.StepState.DONE ->
-                    Icon(Icons.Filled.CheckCircle, contentDescription = "Done", tint = FS.colors.success)
+                    Icon(Icons.Filled.CheckCircle, contentDescription = stringResource(R.string.done), tint = FS.colors.success)
                 ProvisionProgress.StepState.ACTIVE ->
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
                 ProvisionProgress.StepState.FAILED ->
-                    Icon(Icons.Filled.Error, contentDescription = "Failed", tint = MaterialTheme.colorScheme.error)
+                    Icon(Icons.Filled.Error, contentDescription = stringResource(R.string.failed), tint = MaterialTheme.colorScheme.error)
                 ProvisionProgress.StepState.PENDING ->
                     Icon(Icons.Outlined.RadioButtonUnchecked, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
             }
@@ -174,7 +178,7 @@ internal fun InstallStepRow(
             val d = step.detail
             if (d != null) {
                 if (step.state == ProvisionProgress.StepState.FAILED) {
-                    Text("Failed: $d", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                    Text(fsString(R.string.failed_2, d), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                 } else {
                     Text(d, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                 }
@@ -204,9 +208,9 @@ internal fun SetupStoppedCard(
     var error by remember { mutableStateOf<String?>(null) }
     FSCard(modifier = modifier.testTag("setup-stopped"), padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            Text("Setup stopped", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.setup_stopped), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
             Text(
-                "This server didn't finish installing" + (step?.takeIf { it.isNotBlank() }?.let { ". $it" } ?: "") + ". " +
+                stringResource(R.string.this_server_didnt_finish_installing) + (step?.takeIf { it.isNotBlank() }?.let { ". $it" } ?: "") + ". " +
                     "Cancel this order to free the name and create the server again, or contact us and we'll look at it.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
@@ -215,7 +219,7 @@ internal fun SetupStoppedCard(
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
             }
             FSPrimaryButton(
-                label = if (working) "Cancelling…" else if (error != null) "Try again" else "Cancel order and start again",
+                label = if (working) stringResource(R.string.cancelling) else if (error != null) stringResource(R.string.try_again) else stringResource(R.string.cancel_order_and_start_again),
                 enabled = !working,
                 onClick = {
                     val user = app.currentUser.value
@@ -228,7 +232,7 @@ internal fun SetupStoppedCard(
                             is com.flagshipserver.app.core.CancelPendingOrder.Outcome.Cancelled -> {
                                 com.flagshipserver.app.core.PendingRckStore.from(context).clear(pod.fqdn)
                                 app.removePod(pod.podId)
-                                toasts.success("Order cancelled. You can create the server again.")
+                                toasts.success(FSStrings.get(R.string.order_cancelled_you_can_create_the))
                                 onStartedOver()
                             }
                             is com.flagshipserver.app.core.CancelPendingOrder.Outcome.Failed -> error = out.message
@@ -240,11 +244,11 @@ internal fun SetupStoppedCard(
                 modifier = Modifier.testTag("setup-stopped-start-again"),
             )
             FSSecondaryButton(
-                label = "Contact us",
+                label = stringResource(R.string.contact_us),
                 onClick = {
-                    val body = "My server's setup stopped.\nOrder: $serial\nStep: ${step.orEmpty()}\n"
+                    val body = FSStrings.get(R.string.my_servers_setup_stopped_order_step, serial, step.orEmpty())
                     val uri = android.net.Uri.parse(
-                        "mailto:support@flagshipserver.com?subject=" + android.net.Uri.encode("Server setup stopped") +
+                        "mailto:support@flagshipserver.com?subject=" + android.net.Uri.encode(FSStrings.get(R.string.server_setup_stopped)) +
                             "&body=" + android.net.Uri.encode(body),
                     )
                     runCatching {

@@ -23,6 +23,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import okhttp3.Dns
 import okhttp3.Interceptor
 import okhttp3.Response
@@ -83,7 +84,7 @@ class RelayFallbackDns(
             }
             val addresses = resolved.ifEmpty { lastResort(base) }
             if (addresses.isEmpty()) throw e
-            log("$hostname didn't resolve; reaching it through the relay (${if (tested.isNotEmpty()) "addresses .com recommended, tested" else if (resolved.isEmpty()) "built-in addresses" else label})")
+            log(FSStrings.get(R.string.didnt_resolve_reaching_it_through_the, hostname, if (tested.isNotEmpty()) "addresses .com recommended, tested" else if (resolved.isEmpty()) "built-in addresses" else label))
             viaHint[name] = System.currentTimeMillis()
             return addresses
         }

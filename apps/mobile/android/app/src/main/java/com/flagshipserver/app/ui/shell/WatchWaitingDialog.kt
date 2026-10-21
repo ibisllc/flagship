@@ -6,6 +6,9 @@
 
 package com.flagshipserver.app.ui.shell
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import com.flagshipserver.app.ui.components.AlertDialog
 import androidx.compose.material3.Text
 import com.flagshipserver.app.ui.components.TextButton
@@ -50,18 +53,18 @@ fun WatchWaitingDialog(prompt: WatchApprovalPrompt = WatchApprovalPrompt.shared)
                     scope.launch {
                         runCatching {
                             BiometricAuthority.current()?.ensureFresh(
-                                "Let your watch approve",
-                                "Unlock Flagship once so Quick approve can sign",
+                                FSStrings.get(R.string.let_your_watch_approve),
+                                FSStrings.get(R.string.unlock_flagship_once_so_quick_approve),
                             )
                         }
                         if (SessionIrkAccess.isSessionUnlocked()) toasts.success(WatchApprovalPrompt.AFTER_UNLOCK)
                     }
                 },
                 modifier = Modifier.testTag("watch-waiting-unlock"),
-            ) { Text("Unlock") }
+            ) { Text(stringResource(R.string.unlock_2)) }
         },
         dismissButton = {
-            TextButton(onClick = { prompt.clear() }) { Text("Not now") }
+            TextButton(onClick = { prompt.clear() }) { Text(stringResource(R.string.not_now)) }
         },
         title = { Text(WatchApprovalPrompt.TITLE) },
         text = { Text(WatchApprovalPrompt.message(name)) },

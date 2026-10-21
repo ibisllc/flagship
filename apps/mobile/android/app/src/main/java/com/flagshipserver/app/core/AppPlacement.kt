@@ -3,6 +3,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.flagshipserver.app.api.AppSummary
@@ -90,7 +91,7 @@ val LocalPodScope = compositionLocalOf<PodScope?> { null }
 object CreationPlacement {
     data class Option(val pod: PodInfo, val available: Boolean)
 
-    const val UNAVAILABLE = "Not set up on this phone"
+    val UNAVAILABLE get() = FSStrings.get(R.string.not_set_up_on_this_phone)
 
     /** Every server that could run an app: registered, not revoked. */
     fun options(pods: List<PodInfo>, isAvailable: (PodInfo) -> Boolean): List<Option> =

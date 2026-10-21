@@ -5,6 +5,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import com.flagshipserver.app.ui.theme.softTint
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.background
@@ -123,12 +127,12 @@ fun ActivityScreen(
         }
     }
     FSScreen(
-        title = "Activity",
+        title = stringResource(R.string.activity),
         titleTag = "activity-title",
         spacing = 0.dp,
         maxContentWidth = if (wide) 1120.dp else com.flagshipserver.app.ui.theme.FSLayout.readingMaxWidth,
         actions = {
-            com.flagshipserver.app.ui.components.TextButton(onClick = { vm.load(); approvals.reload() }) { Text("Refresh") }
+            com.flagshipserver.app.ui.components.TextButton(onClick = { vm.load(); approvals.reload() }) { Text(stringResource(R.string.refresh)) }
         },
     ) {
         val list: @Composable () -> Unit = {
@@ -142,7 +146,7 @@ fun ActivityScreen(
                 currentPodId = effectiveServerFilter,
                 leaderPodId = leaderPodId,
                 onPick = { serverFilter = it.podId },
-                allLabel = "All servers",
+                allLabel = stringResource(R.string.all_servers),
                 onPickAll = { serverFilter = null },
             )
         }
@@ -157,8 +161,8 @@ fun ActivityScreen(
         // can't load, so gating it behind Loaded hid it precisely when needed.
         Accordion(
             section = ActivitySection.Approvals,
-            title = "Server approvals",
-            hint = "Servers waiting for you to start them",
+            title = stringResource(R.string.server_approvals),
+            hint = stringResource(R.string.servers_waiting_for_you_to_start),
             isOpen = open == ActivitySection.Approvals,
             onToggle = { toggle(ActivitySection.Approvals) },
             count = approvalsCount,
@@ -175,7 +179,7 @@ fun ActivityScreen(
                     Spacer(Modifier.height(FS.space.s3))
                     Accordion(
                         section = ActivitySection.Recovery,
-                        title = "Post-recovery",
+                        title = stringResource(R.string.post_recovery),
                         hint = recovery.title,
                         isOpen = open == ActivitySection.Recovery,
                         onToggle = { toggle(ActivitySection.Recovery) },
@@ -185,15 +189,15 @@ fun ActivityScreen(
                 Spacer(Modifier.height(FS.space.s3))
                 Accordion(
                     section = ActivitySection.Account,
-                    title = "Your account",
-                    hint = "Devices, recovery and servers, across all your servers",
+                    title = stringResource(R.string.your_account),
+                    hint = stringResource(R.string.devices_recovery_and_servers_across_all),
                     count = audit.size,
                     isOpen = open == ActivitySection.Account,
                     onToggle = { toggle(ActivitySection.Account) },
                 ) {
                     EventList(
                         rows = audit,
-                        empty = "Nothing has happened on your account yet.",
+                        empty = stringResource(R.string.nothing_has_happened_on_your_account),
                         more = s.value.moreAudit,
                         onMore = { vm.loadMoreAudit() },
                         moreTag = "activity-load-more-account",
@@ -204,14 +208,14 @@ fun ActivityScreen(
                 Accordion(
                     section = ActivitySection.Server,
                     title = serverTitle,
-                    hint = if (allServers) "Updates, backups, apps and shares across all servers" else "Updates, backups, apps and shares on this server",
+                    hint = if (allServers) stringResource(R.string.updates_backups_apps_and_shares_across) else stringResource(R.string.updates_backups_apps_and_shares_on),
                     count = box.size,
                     isOpen = open == ActivitySection.Server,
                     onToggle = { toggle(ActivitySection.Server) },
                 ) {
                     EventList(
                         rows = box,
-                        empty = if (allServers) "Nothing has happened on your servers yet." else "Nothing has happened on this server yet.",
+                        empty = if (allServers) stringResource(R.string.nothing_has_happened_on_your_servers) else stringResource(R.string.nothing_has_happened_on_this_server),
                         more = s.value.moreBox,
                         onMore = { vm.loadMoreBox() },
                         moreTag = "activity-load-more-server",
@@ -241,7 +245,7 @@ fun ActivityScreen(
                                 c()
                             }
                         } else {
-                            FSNote("Pick a section to read it here.")
+                            FSNote(stringResource(R.string.pick_a_section_to_read_it))
                         }
                     }
                 }
@@ -268,9 +272,9 @@ internal val LocalActivityPane = androidx.compose.runtime.compositionLocalOf<Act
  *  server's, so it says "All servers". */
 internal fun activityServerTitle(pods: List<com.flagshipserver.app.core.PodInfo>, pickedPodId: String?): String {
     val pod = pods.firstOrNull { it.podId == pickedPodId } ?: pods.singleOrNull()
-    if (pod == null && pods.size > 1) return "All servers"
-    val name = pod?.name?.takeIf { it.isNotEmpty() } ?: return "This server"
-    return "Server · $name"
+    if (pod == null && pods.size > 1) return FSStrings.get(R.string.all_servers)
+    val name = pod?.name?.takeIf { it.isNotEmpty() } ?: return FSStrings.get(R.string.this_server)
+    return FSStrings.get(R.string.server, name)
 }
 
 @Composable
@@ -295,7 +299,7 @@ private fun Accordion(
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .clickable(onClickLabel = if (isOpen) "Collapse" else "Expand", onClick = { view.fsTick(); onToggle() })
+                    .clickable(onClickLabel = if (isOpen) stringResource(R.string.collapse) else stringResource(R.string.expand), onClick = { view.fsTick(); onToggle() })
                     .padding(FS.space.s4)
                     .testTag(tag)
                     .semantics(mergeDescendants = true) {
@@ -377,12 +381,12 @@ private fun EventList(
         }
         if (more) {
             FSGhostButton(
-                label = if (loadingMore) "Loading…" else "Load more",
+                label = if (loadingMore) stringResource(R.string.loading) else stringResource(R.string.load_more),
                 onClick = { if (!loadingMore) { loadingMore = true; onMore() } },
                 modifier = Modifier.testTag(moreTag),
             )
         } else {
-            Text("That's everything.", color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("activity-everything"))
+            Text(stringResource(R.string.thats_everything), color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("activity-everything"))
         }
     }
 }
@@ -397,7 +401,7 @@ private fun EventRow(item: ActivityItem) {
                 if (item.warning) {
                     Icon(
                         Icons.Filled.Warning,
-                        contentDescription = "Warning",
+                        contentDescription = stringResource(R.string.warning),
                         tint = FS.colors.warning,
                         modifier = Modifier.size(18.dp).testTag("activity-row-warning"),
                     )
@@ -427,10 +431,10 @@ private fun EventRow(item: ActivityItem) {
 private fun PostRecoveryCard(nav: NavController) {
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
         Text(
-            "Membership re-attach snapshot from the most recent account key swap.",
+            stringResource(R.string.membership_re_attach_snapshot_from_the),
             color = FS.colors.textMuted,
             style = MaterialTheme.typography.bodySmall,
         )
-        FSGhostButton(label = "View report", onClick = { nav.navigate("post-recovery") })
+        FSGhostButton(label = stringResource(R.string.view_report), onClick = { nav.navigate("post-recovery") })
     }
 }

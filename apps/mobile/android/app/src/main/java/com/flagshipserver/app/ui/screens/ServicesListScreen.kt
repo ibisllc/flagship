@@ -1,5 +1,9 @@
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.heightIn
@@ -89,11 +93,11 @@ import com.flagshipserver.app.viewmodels.LoadingState
  * moved to the detail screen.
  */
 
-internal const val NO_SERVER_TITLE = "Add a server first"
-internal const val NO_SERVER_HINT = "Services run on your own server. Add one to start building."
+internal val NO_SERVER_TITLE get() = FSStrings.get(R.string.add_a_server_first)
+internal val NO_SERVER_HINT get() = FSStrings.get(R.string.services_run_on_your_own_server)
 
 /** Presentation-only creator filter (mirrors iOS AppsOwnerFilter). */
-private enum class OwnerFilter(val label: String) { ALL("All"), YOURS("Yours"), SHARED("Shared") }
+private enum class OwnerFilter(val label: String) { ALL(FSStrings.get(R.string.all)), YOURS(FSStrings.get(R.string.yours)), SHARED(FSStrings.get(R.string.shared)) }
 
 @Composable
 fun ServicesListScreen(nav: NavController) {
@@ -170,15 +174,15 @@ fun ServicesListScreen(nav: NavController) {
     // No server yet: apps run on the owner's own server, so there is nothing
     // to load (mirror of iOS ServicesTab.emptyOrList).
     val noServer = pods.isEmpty()
-    val subtitle = if (noServer) "Nothing installed yet." else when (val st = state) {
-        is LoadingState.Loading -> "Loading…"
+    val subtitle = if (noServer) stringResource(R.string.nothing_installed_yet) else when (val st = state) {
+        is LoadingState.Loading -> stringResource(R.string.loading)
         is LoadingState.Failed -> if (allApps.isEmpty()) null else st.message
-        else -> if (allApps.isEmpty()) "Nothing installed yet." else "${allApps.size} installed"
+        else -> if (allApps.isEmpty()) stringResource(R.string.nothing_installed_yet) else fsString(R.string.installed_2, allApps.size)
     }
 
     val refreshScope = androidx.compose.runtime.rememberCoroutineScope()
     FSScreen(
-        title = "Services",
+        title = stringResource(R.string.services),
         titleTag = "services-title",
         subtitle = subtitle,
         onRefresh = { refreshScope.launch { vm.refresh() } },
@@ -198,13 +202,13 @@ fun ServicesListScreen(nav: NavController) {
             )
         } else if (allApps.isEmpty() && state !is LoadingState.Loading) {
             FSEmptyState(
-                title = "Build your first service",
-                message = "Describe what you want in plain English. The AI writes it; your server runs it.",
+                title = stringResource(R.string.build_your_first_service),
+                message = stringResource(R.string.describe_what_you_want_in_plain),
                 icon = Icons.Outlined.AutoAwesome,
                 iconTint = FS.colors.accent,
                 action = {
                     FSPrimaryButton(
-                        label = "Build a service",
+                        label = stringResource(R.string.build_a_service),
                         onClick = { nav.navigate("build/source") },
                         block = true,
                         modifier = Modifier.testTag("services-build-cta"),
@@ -221,14 +225,14 @@ fun ServicesListScreen(nav: NavController) {
                     currentPodId = effectiveServerFilter,
                     leaderPodId = leaderPodId,
                     onPick = { serverFilter = it.podId },
-                    allLabel = "All servers",
+                    allLabel = stringResource(R.string.all_servers),
                     onPickAll = { serverFilter = null },
                 )
             }
             FSSearchField(
                 value = query,
                 onValueChange = { query = it },
-                placeholder = "Search services",
+                placeholder = stringResource(R.string.search_services),
             )
             // The owner chips only when there's a meaningful split (at least
             // one shared app), so a solo user isn't given a redundant toggle.
@@ -312,7 +316,7 @@ private fun BuildAnotherAppRow(onClick: () -> Unit) {
     ) {
         Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(FS.space.s2))
-        Text("Build another service", style = MaterialTheme.typography.labelLarge)
+        Text(stringResource(R.string.build_another_service), style = MaterialTheme.typography.labelLarge)
     }
 }
 

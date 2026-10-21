@@ -16,6 +16,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
@@ -253,12 +254,12 @@ object AiKeyStore {
  * action that turns the relay off for that key.
  */
 object AiRelay {
-    const val TOGGLE_LABEL = "Send through the Flagship relay"
-    const val TOGGLE_NOTE = "Better for your anonymity: the AI provider sees Flagship's address, not yours."
-    const val CAPTION_ON = "Through the Flagship relay"
+    val TOGGLE_LABEL get() = FSStrings.get(R.string.send_through_the_flagship_relay)
+    val TOGGLE_NOTE get() = FSStrings.get(R.string.better_for_your_anonymity_the_ai)
+    val CAPTION_ON get() = FSStrings.get(R.string.through_the_flagship_relay)
     const val CAPTION_OFF = "Direct"
-    const val TURN_OFF_ACTION = "Turn the relay off for this key"
-    const val TURNED_OFF = "The relay is off for this key. Try again."
+    val TURN_OFF_ACTION get() = FSStrings.get(R.string.turn_the_relay_off_for_this)
+    val TURNED_OFF get() = FSStrings.get(R.string.the_relay_is_off_for_this)
 
     private val MARKERS = listOf(
         "the flagship relay isn't reachable",

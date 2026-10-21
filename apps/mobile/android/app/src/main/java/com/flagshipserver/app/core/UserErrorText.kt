@@ -1,5 +1,6 @@
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
@@ -22,25 +23,25 @@ import kotlinx.serialization.json.JsonPrimitive
  */
 object UserErrorText {
 
-    const val OFFLINE = "Can't reach the server. Check your connection and try again."
-    const val DROPPED = "The connection dropped. Try again."
-    const val TIMEOUT = "That took too long. Check your connection and try again."
-    const val SERVER_PROBLEM = "The server had a temporary problem. Try again in a moment."
-    const val REFUSED = "We couldn't complete that. Try again."
-    const val GENERIC = "Something went wrong. Try again."
+    val OFFLINE get() = FSStrings.get(R.string.cant_reach_the_server_check_your)
+    val DROPPED get() = FSStrings.get(R.string.the_connection_dropped_try_again)
+    val TIMEOUT get() = FSStrings.get(R.string.that_took_too_long_check_your)
+    val SERVER_PROBLEM get() = FSStrings.get(R.string.the_server_had_a_temporary_problem_2)
+    val REFUSED get() = FSStrings.get(R.string.we_couldnt_complete_that_try_again)
+    val GENERIC get() = FSStrings.get(R.string.something_went_wrong_try_again)
 
     private val json = Json { ignoreUnknownKeys = true }
 
     /** `.com` reasons written for developers, and what to say instead. */
-    private val knownReasons: List<Pair<Regex, String>> = listOf(
+    private val knownReasons: List<Pair<Regex, String>> get() = listOf(
         Regex("subdomain already controlled by a different rck", RegexOption.IGNORE_CASE) to
-            "That name is still held by an earlier, unfinished order. Cancel that order from Home, or choose another name.",
+            FSStrings.get(R.string.that_name_is_still_held_by),
         Regex("^stale request", RegexOption.IGNORE_CASE) to
-            "This phone's clock looks off. Check the date and time, then try again.",
+            FSStrings.get(R.string.this_phones_clock_looks_off_check),
         Regex("^invalid signature", RegexOption.IGNORE_CASE) to
-            "Your account key didn't match. Try again, or sign in again.",
+            FSStrings.get(R.string.your_account_key_didnt_match_try),
         Regex("^not authorized", RegexOption.IGNORE_CASE) to
-            "This device isn't allowed to do that.",
+            FSStrings.get(R.string.this_device_isnt_allowed_to_do),
     )
 
     /** Text that is a runtime artefact rather than a sentence. */

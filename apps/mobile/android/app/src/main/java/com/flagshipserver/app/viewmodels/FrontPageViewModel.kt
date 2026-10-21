@@ -6,6 +6,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FrontPageClient
@@ -68,7 +70,7 @@ class FrontPageViewModel(
             }
             _phase.value = FrontPagePhase.Ready
         } catch (e: Throwable) {
-            _phase.value = FrontPagePhase.Failed("Couldn't reach the server to load front-page settings.")
+            _phase.value = FrontPagePhase.Failed(FSStrings.get(R.string.couldnt_reach_the_server_to_load))
         }
     }
 
@@ -78,13 +80,13 @@ class FrontPageViewModel(
         val irk: Ed25519Sign
         try {
             val reason = if (label.isEmpty()) {
-                "Reset the front page of $serverDomain"
+                FSStrings.get(R.string.reset_the_front_page_of, serverDomain)
             } else {
-                "Set the front page of $serverDomain to $label"
+                FSStrings.get(R.string.set_the_front_page_of_to, serverDomain, label)
             }
             irk = signer(reason)
         } catch (e: Throwable) {
-            _phase.value = FrontPagePhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
+            _phase.value = FrontPagePhase.Failed(FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(e)))
             return
         }
         val issuedAt = now()
@@ -92,7 +94,7 @@ class FrontPageViewModel(
         try {
             signature = irk.sign(SetFrontPageOrder.canonicalBytes(serverDomain, label, issuedAt))
         } catch (e: Throwable) {
-            _phase.value = FrontPagePhase.Failed("Couldn't sign: ${UserErrorText.reason(e)}")
+            _phase.value = FrontPagePhase.Failed(FSStrings.get(R.string.couldnt_sign, UserErrorText.reason(e)))
             return
         }
 
@@ -111,10 +113,10 @@ class FrontPageViewModel(
             )
         } catch (e: HttpException) {
             val friendly = when (e.status) {
-                403 -> "The server rejected the request. Sign in again and retry."
-                404, 502, 503 -> "The server isn't reachable right now."
-                422 -> "That app is no longer installed on the server."
-                else -> "Server error (${e.status}): ${e.body}"
+                403 -> FSStrings.get(R.string.the_server_rejected_the_request_sign)
+                404, 502, 503 -> FSStrings.get(R.string.the_server_isnt_reachable_right_now)
+                422 -> FSStrings.get(R.string.that_app_is_no_longer_installed)
+                else -> FSStrings.get(R.string.server_error, e.status, e.body)
             }
             _phase.value = FrontPagePhase.Failed(friendly)
             return

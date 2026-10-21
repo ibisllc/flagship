@@ -1,5 +1,7 @@
 package com.flagshipserver.app.keystore
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import android.content.Context
 import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
@@ -271,7 +273,7 @@ object Keystore {
      *  active version. See `deriveIRK(reason, version)` for the
      *  versioned variant used by Replace device (C7) and Wipe &
      *  restart (E4-E5). */
-    suspend fun deriveIRK(reason: String = "Sign Flagship request"): Ed25519Sign =
+    suspend fun deriveIRK(reason: String = FSStrings.get(R.string.sign_flagship_request)): Ed25519Sign =
         deriveIRK(reason, currentIrkVersion())
 
     /** Explicit-version IRK derivation. Used by the rotation
@@ -282,7 +284,7 @@ object Keystore {
     suspend fun deriveIRK(reason: String, version: Int): Ed25519Sign {
         require(version >= 1) { "IRK version must be >= 1" }
         BiometricAuthority.current()?.ensureFresh(
-            title = "Authorize Flagship",
+            title = FSStrings.get(R.string.authorize_flagship),
             subtitle = reason,
         )
         val p = requirePrefs()
@@ -366,14 +368,14 @@ object Keystore {
      *  `HKDF(umk, "flagship/account-id/v1")` (via ServerKeys), used by the
      *  friend to sign the redeem/visit. Biometric-gated. Distinct from the
      *  versioned IRK. */
-    suspend fun deriveAccountId(reason: String = "Authorize Flagship"): Ed25519Sign {
-        BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = reason)
+    suspend fun deriveAccountId(reason: String = FSStrings.get(R.string.authorize_flagship)): Ed25519Sign {
+        BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = reason)
         return ServerKeys.deriveAccountId(loadOrCreateUmkSeed())
     }
 
     /** The stable AID Ed25519 PUBLIC key (hex). Biometric-gated. */
-    suspend fun accountIdPubHex(reason: String = "Authorize Flagship"): String {
-        BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = reason)
+    suspend fun accountIdPubHex(reason: String = FSStrings.get(R.string.authorize_flagship)): String {
+        BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = reason)
         return HexUtil.encode(ServerKeys.deriveAccountIdPub(loadOrCreateUmkSeed()))
     }
 
@@ -381,30 +383,30 @@ object Keystore {
      *  docs/service-access-gating.md "Per-app identity"): the redeem / visit /
      *  knock / acceptance signer they present to that app, never the global
      *  AID. Biometric-gated. */
-    suspend fun deriveAppAccountId(appRef: String, reason: String = "Authorize Flagship"): Ed25519Sign {
-        BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = reason)
+    suspend fun deriveAppAccountId(appRef: String, reason: String = FSStrings.get(R.string.authorize_flagship)): Ed25519Sign {
+        BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = reason)
         return ServerKeys.deriveAppAccountId(loadOrCreateUmkSeed(), appRef)
     }
 
     /** The per-app id's PUBLIC key (hex). Biometric-gated. */
-    suspend fun appAccountIdPubHex(appRef: String, reason: String = "Authorize Flagship"): String {
-        BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = reason)
+    suspend fun appAccountIdPubHex(appRef: String, reason: String = FSStrings.get(R.string.authorize_flagship)): String {
+        BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = reason)
         return HexUtil.encode(ServerKeys.deriveAppAccountIdPub(loadOrCreateUmkSeed(), appRef))
     }
 
     /** The household AEAD key (32 bytes) that seals the {name, photo?} invite
      *  bundle — `HKDF(umk, "flagship/household-key/v1")` (via ServerKeys).
      *  Biometric-gated. */
-    suspend fun deriveHouseholdKey(reason: String = "Authorize Flagship"): ByteArray {
-        BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = reason)
+    suspend fun deriveHouseholdKey(reason: String = FSStrings.get(R.string.authorize_flagship)): ByteArray {
+        BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = reason)
         return ServerKeys.deriveHouseholdKey(loadOrCreateUmkSeed())
     }
 
     /** The key that seals one server archive (`ServerArchive.deriveKey`):
      *  server-id independent, so any device of the account can back up a server
      *  or import a backup onto a server with a different name. Biometric-gated. */
-    suspend fun deriveServerArchiveKey(archiveId: String, reason: String = "Authorize Flagship"): ByteArray {
-        BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = reason)
+    suspend fun deriveServerArchiveKey(archiveId: String, reason: String = FSStrings.get(R.string.authorize_flagship)): ByteArray {
+        BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = reason)
         return com.flagshipserver.app.core.ServerArchive.deriveKey(loadOrCreateUmkSeed(), archiveId)
             ?: throw IllegalStateException("server archive key")
     }
@@ -412,8 +414,8 @@ object Keystore {
     /** [count] fresh archive ids with their account-slot keys, for a box's
      *  scheduled backups (docs/server-backup-and-clone.md, "Scheduled backups").
      *  Biometric-gated (the same session as the deposit's signature). */
-    suspend fun mintServerArchiveKeys(count: Int, reason: String = "Authorize Flagship"): List<com.flagshipserver.app.core.ArchiveKey> {
-        BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = reason)
+    suspend fun mintServerArchiveKeys(count: Int, reason: String = FSStrings.get(R.string.authorize_flagship)): List<com.flagshipserver.app.core.ArchiveKey> {
+        BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = reason)
         return com.flagshipserver.app.core.ArchiveKeys.mint(loadOrCreateUmkSeed(), count)
     }
 
@@ -553,9 +555,9 @@ object Keystore {
 
     /** Biometric-gated admin-root SIGNER (like deriveIRK). Errors when absent —
      *  callers gate on [hasAdminRoot] first (or use [adminSigningKey]). */
-    suspend fun adminRootKey(reason: String = "Authorize a sensitive change"): Ed25519Sign {
+    suspend fun adminRootKey(reason: String = FSStrings.get(R.string.authorize_a_sensitive_change)): Ed25519Sign {
         BiometricAuthority.current()?.ensureFresh(
-            title = "Authorize Flagship",
+            title = FSStrings.get(R.string.authorize_flagship),
             subtitle = reason,
         )
         val seedHex = requirePrefs().getString(adminRootSeedKey(), null)
@@ -604,7 +606,7 @@ object Keystore {
      * legacy account's still verifies against the IRK. Biometric-gated either
      * way (one prompt, within the freshness window).
      */
-    suspend fun adminSigningKey(reason: String = "Authorize a sensitive change"): Ed25519Sign =
+    suspend fun adminSigningKey(reason: String = FSStrings.get(R.string.authorize_a_sensitive_change)): Ed25519Sign =
         if (hasAdminRoot()) adminRootKey(reason) else deriveIRK(reason)
 
     // ---- ACME account key (#28, per-user-cert) -------------------------

@@ -11,6 +11,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -61,8 +64,8 @@ fun PeerBackupScreen(nav: NavController) {
     LaunchedEffect(Unit) { vm.load() }
 
     FSScreen(
-        title = "Peer-backup",
-        subtitle = "How this server's backup is kept on other servers.",
+        title = stringResource(R.string.peer_backup),
+        subtitle = stringResource(R.string.how_this_servers_backup_is_kept),
         onBack = { nav.popBackStack() },
         onRefresh = { vm.load() },
         refreshing = state is LoadingState.Loading,
@@ -76,7 +79,7 @@ fun PeerBackupScreen(nav: NavController) {
                 ServerCardSkeleton()
             }
         }
-        FSGhostButton(label = "Refresh", onClick = { vm.load() })
+        FSGhostButton(label = stringResource(R.string.refresh), onClick = { vm.load() })
     }
 }
 
@@ -104,18 +107,18 @@ private fun Body(s: PeerBackupStatusResponse) {
                 Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
             val total = s.totalBricks ?: 0
-            if (total > 0) LabelValueRow("Pieces safe", "${s.healthyBricks ?: 0} of $total")
-            s.lastPlacedAt?.takeIf { it > 0 }?.let { LabelValueRow("Last placed", fmtDate(it)) }
+            if (total > 0) LabelValueRow(stringResource(R.string.pieces_safe), fsString(R.string.of, s.healthyBricks ?: 0, total))
+            s.lastPlacedAt?.takeIf { it > 0 }?.let { LabelValueRow(stringResource(R.string.last_placed_2), fmtDate(it)) }
             PeerBackup.restoreByLine(s.keepUntil).takeIf { it.isNotEmpty() }?.let {
                 Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.semantics { testTag = "peer-backup-restore-by" })
             }
         }
     }
 
-    FSSectionHeader("Servers holding your pieces")
+    FSSectionHeader(stringResource(R.string.servers_holding_your_pieces))
     val rows = PeerBackup.holderRows(s)
     if (rows.isEmpty()) {
-        PlaceholderCard("None yet. Pieces are placed once your newest backup is ready and enough other servers can hold it.")
+        PlaceholderCard(stringResource(R.string.none_yet_pieces_are_placed_once))
     } else {
         rows.forEach { r ->
             FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.semantics { testTag = "peer-backup-holder" }) {
@@ -129,12 +132,12 @@ private fun Body(s: PeerBackupStatusResponse) {
 
     val host = PeerBackup.hostingLines(s)
     if (host.isNotEmpty()) {
-        FSSectionHeader("Kept for other servers")
+        FSSectionHeader(stringResource(R.string.kept_for_other_servers))
         FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.semantics { testTag = "peer-backup-hosting" }) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
                 host.forEach { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                 s.hosting?.reliability?.let {
-                    Text("Reliability score: $it of 100", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    Text(fsString(R.string.reliability_score_of_100, it), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

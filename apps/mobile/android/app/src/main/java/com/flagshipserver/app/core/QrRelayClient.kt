@@ -17,6 +17,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.serialization.SerialName
@@ -41,9 +42,9 @@ interface QrRelayClient {
 
 sealed class QrRelayError(message: String) : RuntimeException(message) {
     data class ConnectionFailed(val why: String) : QrRelayError("Couldn't reach the relay: $why")
-    object RelayClosedBeforeAck : QrRelayError("The relay closed before the browser acknowledged.")
-    object PeerMissing : QrRelayError("The other pairing device isn't connected — reopen its pairing page and try again.")
-    object SessionExpired : QrRelayError("Pairing session expired — start a new one and try again.")
+    object RelayClosedBeforeAck : QrRelayError(FSStrings.get(R.string.the_relay_closed_before_the_browser))
+    object PeerMissing : QrRelayError(FSStrings.get(R.string.the_other_pairing_device_isnt_connected))
+    object SessionExpired : QrRelayError(FSStrings.get(R.string.pairing_session_expired_start_a_new))
     data class RelayErr(val msg: String) : QrRelayError("Relay: $msg")
     data class UnexpectedFrame(val raw: String) : QrRelayError("Unexpected frame from relay: $raw")
     data class NotImplementedFeature(val feature: String) : QrRelayError("Not implemented yet: $feature")

@@ -4,8 +4,10 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
+
 object SessionServerFinder {
-    const val NOT_FOUND = "That build isn't open on any of your servers any more."
+    val NOT_FOUND get() = FSStrings.get(R.string.that_build_isnt_open_on_any)
 
     /**
      * The first server holding [sessionId]: the [first] candidates in order (a

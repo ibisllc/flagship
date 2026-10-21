@@ -6,6 +6,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -84,7 +87,7 @@ fun DemoInstallProgressScreen(podId: String, onAfterCancel: () -> Unit) {
     FSScreen(
         title = pod.name,
         onBack = { backDispatcher?.onBackPressed() },
-        subtitle = "Your server is being installed",
+        subtitle = stringResource(R.string.your_server_is_being_installed),
     ) {
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
@@ -123,7 +126,7 @@ private fun StepList(block: DemoServerBlock?) {
                     if (detail != null) {
                         if (step.state == ProvisionProgress.StepState.FAILED) {
                             Text(
-                                "Retrying. Last error: $detail",
+                                fsString(R.string.retrying_last_error, detail),
                                 color = MaterialTheme.colorScheme.error,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
@@ -146,11 +149,11 @@ private fun StepIcon(state: ProvisionProgress.StepState) {
     Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
         when (state) {
             ProvisionProgress.StepState.DONE ->
-                Icon(Icons.Filled.CheckCircle, contentDescription = "Done", tint = FS.colors.success)
+                Icon(Icons.Filled.CheckCircle, contentDescription = stringResource(R.string.done), tint = FS.colors.success)
             ProvisionProgress.StepState.ACTIVE ->
                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
             ProvisionProgress.StepState.FAILED ->
-                Icon(Icons.Filled.Warning, contentDescription = "Failed", tint = MaterialTheme.colorScheme.error)
+                Icon(Icons.Filled.Warning, contentDescription = stringResource(R.string.failed), tint = MaterialTheme.colorScheme.error)
             ProvisionProgress.StepState.PENDING ->
                 Icon(Icons.Outlined.RadioButtonUnchecked, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
         }
@@ -161,12 +164,12 @@ private fun StepIcon(state: ProvisionProgress.StepState) {
 private fun DeviceInfo(block: DemoServerBlock?) {
     if (block == null) return
     if (block.ip == null && block.region == null && block.image == null && block.serverType == null) return
-    FSGroup(header = "This device", modifier = Modifier.testTag("install-device-info")) {
+    FSGroup(header = stringResource(R.string.this_device), modifier = Modifier.testTag("install-device-info")) {
         val rows = listOfNotNull(
             block.ip?.let { Triple("IP", it, true) },
-            block.region?.let { Triple("Location", it, false) },
+            block.region?.let { Triple(stringResource(R.string.location), it, false) },
             block.image?.let { Triple("OS", it, false) },
-            block.serverType?.let { Triple("Size", it, false) },
+            block.serverType?.let { Triple(stringResource(R.string.size), it, false) },
         )
         rows.forEachIndexed { i, (label, value, mono) ->
             if (i > 0) FSDivider(inset = FS.space.s4)

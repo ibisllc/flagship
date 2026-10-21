@@ -1,5 +1,6 @@
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.ReleaseServerNameRequest
 import com.flagshipserver.app.api.SecretMailboxClient
@@ -29,7 +30,7 @@ object DeleteServerFlow {
         typed.trim().equals(pod.serverLabel, ignoreCase = true) && pod.serverLabel.isNotEmpty()
 
     fun deletedMessage(name: String, erasureRequested: Boolean): String =
-        "Deleted $name." + if (erasureRequested) {
+        FSStrings.get(R.string.deleted, name) + if (erasureRequested) {
             " If it's online it will erase itself and power off."
         } else {
             " It couldn't be asked to erase itself."
@@ -47,13 +48,13 @@ object DeleteServerFlow {
         mailboxPubHex: suspend () -> String = { Keystore.irkPubHex() },
         now: () -> Long = { System.currentTimeMillis() },
     ): Outcome {
-        val reason = "Delete server ${pod.name}"
+        val reason = FSStrings.get(R.string.delete_server, pod.name)
         val key = try {
             orderKey(reason)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            return Outcome.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
+            return Outcome.Failed(FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(e)))
         }
 
         var erasureRequested = false
@@ -96,7 +97,7 @@ object DeleteServerFlow {
         } catch (e: Throwable) {
             val detail = (e as? HttpException)?.let { " (${it.status})" } ?: ""
             return Outcome.Failed(
-                "Couldn't delete ${pod.name}$detail. The name is still reserved. Check your connection and try again.",
+                FSStrings.get(R.string.couldnt_delete_the_name_is_still, pod.name, detail),
             )
         }
         return Outcome.Deleted(erasureRequested)
@@ -117,7 +118,7 @@ suspend fun deleteServer(
 ): Boolean {
     val username = app.currentUser.value
     if (username.isNullOrEmpty()) {
-        toasts.error("No active account on this device.")
+        toasts.error(FSStrings.get(R.string.no_active_account_on_this_device))
         return false
     }
     return when (val outcome = DeleteServerFlow.run(pod, username, server, mailbox)) {

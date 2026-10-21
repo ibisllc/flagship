@@ -4,6 +4,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -57,9 +60,9 @@ fun PostRecoveryScreen(nav: NavController) {
     }
 
     FSScreen(
-        title = "Re-attach progress",
+        title = stringResource(R.string.re_attach_progress),
         onBack = { nav.popBackStack() },
-        subtitle = "After a re-pair, your servers re-anchor every app's membership to your new identity. This screen shows what they've finished.",
+        subtitle = stringResource(R.string.after_a_re_pair_your_servers),
     ) {
         val snap = snapshot
         val report = snap?.lastReissue
@@ -67,14 +70,14 @@ fun PostRecoveryScreen(nav: NavController) {
             error != null -> ErrorCard(message = error!!, onRetry = { attempt++ })
             snap == null -> ServerCardSkeleton()
             report == null -> FSEmptyState(
-                title = "No recovery in progress.",
-                message = "No recovery has happened on this server since it started.",
+                title = stringResource(R.string.no_recovery_in_progress),
+                message = stringResource(R.string.no_recovery_has_happened_on_this),
                 icon = Icons.Outlined.CheckCircle,
                 iconTint = FS.colors.success,
             )
             else -> {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                    FSSectionHeader("Status")
+                    FSSectionHeader(stringResource(R.string.status))
                     FSCard {
                         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                             FSPill(
@@ -86,11 +89,11 @@ fun PostRecoveryScreen(nav: NavController) {
                                 },
                             )
                             Text(
-                                "Re-anchored ${plural(report.totalRewritten, "membership row")} across ${plural(report.reattachedCount, "app")}.",
+                                fsString(R.string.re_anchored_across, plural(report.totalRewritten, stringResource(R.string.membership_row)), plural(report.reattachedCount, "app")),
                                 style = MaterialTheme.typography.bodyLarge,
                             )
                             Text(
-                                "${report.oldIrkPrefix} → ${report.newIrkPrefix} · ${report.unchangedCount} unchanged",
+                                fsString(R.string.unchanged, report.oldIrkPrefix, report.newIrkPrefix, report.unchangedCount),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
@@ -99,13 +102,13 @@ fun PostRecoveryScreen(nav: NavController) {
                 }
 
                 if (report.apps.isNotEmpty()) {
-                    FSGroup(header = "Per-app results") {
+                    FSGroup(header = stringResource(R.string.per_app_results)) {
                         report.apps.forEachIndexed { idx, app ->
                             val failed = app.error != null
                             FSRow(
                                 title = app.slug,
                                 subtitle = app.error
-                                    ?: "${plural(app.rewrittenCount, "row")} re-anchored · ${app.unchangedCount} unchanged",
+                                    ?: fsString(R.string.re_anchored_unchanged, plural(app.rewrittenCount, "row"), app.unchangedCount),
                                 icon = if (failed) Icons.Outlined.WarningAmber else Icons.Outlined.CheckCircle,
                                 iconTint = if (failed) FS.colors.danger else FS.colors.success,
                             )
@@ -118,9 +121,9 @@ fun PostRecoveryScreen(nav: NavController) {
                     Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3), verticalAlignment = Alignment.Top) {
                         Icon(Icons.Outlined.Info, contentDescription = null, tint = FS.colors.accent, modifier = Modifier.size(24.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("Undo window", style = MaterialTheme.typography.titleSmall)
+                            Text(stringResource(R.string.undo_window), style = MaterialTheme.typography.titleSmall)
                             Text(
-                                "If anything looks wrong, you can undo this re-anchoring until ${FlagshipDateFormat.format(report.undoWindowExpiresAt, includeTime = true)}. After that the old identity stops being recoverable.",
+                                fsString(R.string.if_anything_looks_wrong_you_can, FlagshipDateFormat.format(report.undoWindowExpiresAt, includeTime = true)),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodyMedium,
                             )

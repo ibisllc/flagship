@@ -6,6 +6,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import java.nio.ByteBuffer
 import java.security.SecureRandom
 import javax.crypto.Mac
@@ -32,7 +33,7 @@ object QrRelay {
 
     sealed class RelayError(msg: String) : Throwable(msg) {
         data class MalformedQrUrl(val why: String) : RelayError("QR URL: $why")
-        object BadPublicKey : RelayError("Browser public key must be 32 raw X25519 bytes.")
+        object BadPublicKey : RelayError(FSStrings.get(R.string.browser_public_key_must_be_32))
         data class DerivationFailed(val why: String) : RelayError("Shared-secret derivation failed: $why")
     }
 

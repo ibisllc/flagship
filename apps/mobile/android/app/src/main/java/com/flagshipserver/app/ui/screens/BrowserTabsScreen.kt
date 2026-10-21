@@ -4,6 +4,8 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -68,10 +70,10 @@ fun BrowserTabsScreen(nav: NavController, serviceId: String) {
     LaunchedEffect(serviceId) { vm.load() }
 
     FSScreen(
-        title = "Open tabs",
+        title = stringResource(R.string.open_tabs),
         onBack = { nav.popBackStack() },
-        subtitle = "Pick a tab to stream. Your touches go to the browser running on your server.",
-        actions = { FSBarAction(Icons.Outlined.Refresh, "Refresh", onClick = { vm.load() }) },
+        subtitle = stringResource(R.string.pick_a_tab_to_stream_your),
+        actions = { FSBarAction(Icons.Outlined.Refresh, stringResource(R.string.refresh), onClick = { vm.load() }) },
     ) {
         when (val s = state) {
             is LoadingState.Loaded -> TabsBody(s.value) { tab ->
@@ -91,7 +93,7 @@ fun BrowserTabsScreen(nav: NavController, serviceId: String) {
 @Composable
 private fun TabsBody(tabs: List<BrowserTab>, onPick: (BrowserTab) -> Unit) {
     if (tabs.isEmpty()) {
-        FSNote("No tabs open for this app.")
+        FSNote(stringResource(R.string.no_tabs_open_for_this_app))
         return
     }
     FSGroup {
@@ -103,7 +105,7 @@ private fun TabsBody(tabs: List<BrowserTab>, onPick: (BrowserTab) -> Unit) {
                 icon = Icons.Outlined.Tab,
                 onClick = { onPick(tab) },
                 trailing = {
-                    Icon(Icons.Outlined.PlayCircle, contentDescription = "Stream", tint = FS.colors.accent)
+                    Icon(Icons.Outlined.PlayCircle, contentDescription = stringResource(R.string.stream), tint = FS.colors.accent)
                 },
             )
         }
@@ -120,7 +122,7 @@ private fun CertMismatchWarningCard(message: String, onRetry: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Icon(Icons.Outlined.GppMaybe, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                 Text(
-                    "Connection couldn't be verified",
+                    stringResource(R.string.connection_couldnt_be_verified),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.titleMedium,
                 )
@@ -130,7 +132,7 @@ private fun CertMismatchWarningCard(message: String, onRetry: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
-            FSSecondaryButton(label = "Try again", onClick = onRetry)
+            FSSecondaryButton(label = stringResource(R.string.try_again), onClick = onRetry)
         }
     }
 }

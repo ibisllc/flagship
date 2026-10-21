@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.AppSummary
 
 object AppStatus {
@@ -62,10 +63,10 @@ object AppStatus {
         return STOPPED
     }
 
-    fun onServers(n: Int): Pill = Pill(if (n == 1) "On 1 server" else "On $n servers", Tone.Online, serverCount = n)
+    fun onServers(n: Int): Pill = Pill(if (n == 1) FSStrings.get(R.string.on_1_server) else FSStrings.get(R.string.on_servers, n), Tone.Online, serverCount = n)
 
     val DEPLOYING = Pill("Deploying", Tone.Accent)
     val EDITING = Pill("Editing", Tone.Accent)
     val STOPPED = Pill("Stopped", Tone.Idle)
-    val CANT_REACH = Pill("Can't reach", Tone.Warning)
+    val CANT_REACH get() = Pill(FSStrings.get(R.string.cant_reach), Tone.Warning)
 }

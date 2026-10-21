@@ -12,6 +12,8 @@
 
 package com.flagshipserver.app.api
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.json.Json
@@ -177,17 +179,17 @@ interface ScreensClient {
     /** `GET /api/screens/services/:serviceId/api-keys` (docs/app-apis.md §3).
      *  A box without API keys answers 404. */
     suspend fun serviceApiKeys(serviceId: String): AppApiKeysResponse =
-        throw ScreensError.NotImplemented("API keys")
+        throw ScreensError.NotImplemented(FSStrings.get(R.string.api_keys))
 
     /** `POST /api/screens/services/:serviceId/api-keys`: the owner's signed
      *  grant; the reply carries the full key, once. */
     suspend fun serviceApiKeyCreate(serviceId: String, req: AppApiKeyCreateRequest): AppApiKeyCreateResponse =
-        throw ScreensError.NotImplemented("API keys")
+        throw ScreensError.NotImplemented(FSStrings.get(R.string.api_keys))
 
     /** `DELETE /api/screens/services/:serviceId/api-keys/:keyId` (unsigned:
      *  it only removes access). */
     suspend fun serviceApiKeyRevoke(serviceId: String, keyId: String): Unit =
-        throw ScreensError.NotImplemented("API keys")
+        throw ScreensError.NotImplemented(FSStrings.get(R.string.api_keys))
 
     /** `GET /api/screens/access-requests`: every app's pending requests. */
     suspend fun accessRequests(): AccessRequestsResponse =
@@ -354,8 +356,8 @@ interface ScreensClient {
 }
 
 sealed class ScreensError(message: String) : Throwable(message) {
-    object NotPaired : ScreensError("Not paired to a server yet.")
-    object NoSessionToken : ScreensError("No session token; re-pair.")
+    object NotPaired : ScreensError(FSStrings.get(R.string.not_paired_to_a_server_yet))
+    object NoSessionToken : ScreensError(FSStrings.get(R.string.no_session_token_re_pair))
     data class Http(val status: Int, val body: String) :
         ScreensError("HTTP $status: $body"),
         com.flagshipserver.app.core.HasHttpStatus {
@@ -376,11 +378,11 @@ fun Throwable.userFacing(): String = when (this) {
     is ScreensError.Http -> com.flagshipserver.app.core.UserErrorText.of(this, where = "box")
     is ScreensError.Decoding -> {
         com.flagshipserver.app.core.ErrorLog.caught("box", this, com.flagshipserver.app.core.NetworkErrorHumanizer.errorCode(this))
-        "The server's answer couldn't be read. Update the app or the server, then try again."
+        FSStrings.get(R.string.the_servers_answer_couldnt_be_read)
     }
-    is ScreensError -> message ?: "Something went wrong. Try again."
+    is ScreensError -> message ?: FSStrings.get(R.string.something_went_wrong_try_again)
     else -> com.flagshipserver.app.core.UserErrorText.of(
-        this, "Couldn't reach the server. Check your connection and try again.", where = "box",
+        this, FSStrings.get(R.string.couldnt_reach_the_server_check_your), where = "box",
     )
 }
 

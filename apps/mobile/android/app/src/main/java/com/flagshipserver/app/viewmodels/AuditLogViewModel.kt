@@ -10,6 +10,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.AuditEvent
 import com.flagshipserver.app.api.FlagshipServerClient
@@ -66,7 +68,7 @@ fun auditEventLabel(kind: String): String = when (kind) {
     "account-deleted"     -> "Deleted account"
     "username-reclaimed"  -> "Username reclaimed"
     else -> kind.replace(Regex("[._-]+"), " ").trim()
-        .ifEmpty { "Account event" }
+        .ifEmpty { FSStrings.get(R.string.account_event) }
         .replaceFirstChar { it.uppercaseChar() }
 }
 
@@ -140,7 +142,7 @@ class AuditLogViewModel(
                     _state.value = LoadingState.Loaded(AuditLogPage(events = events, canLoadMore = canLoadMore))
                 },
                 onFailure = { t ->
-                    _state.value = LoadingState.Failed(UserErrorText.of(t, "Couldn't load the activity log. Try again."))
+                    _state.value = LoadingState.Failed(UserErrorText.of(t, FSStrings.get(R.string.couldnt_load_the_activity_log_try)))
                 },
             )
     }

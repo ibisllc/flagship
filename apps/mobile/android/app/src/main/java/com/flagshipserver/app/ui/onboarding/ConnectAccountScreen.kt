@@ -18,6 +18,10 @@
 
 package com.flagshipserver.app.ui.onboarding
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -116,7 +120,7 @@ fun ConnectAccountScreen(
                                     )
                                 } catch (_: Throwable) {
                                     throw IllegalStateException(
-                                        "The demo server is online, but this device couldn't create a paired session. Try again.",
+                                        FSStrings.get(R.string.the_demo_server_is_online_but),
                                     )
                                 }
                             } else {
@@ -131,7 +135,7 @@ fun ConnectAccountScreen(
                     AccountResolution.AccountKind.Multi -> onRecover(resolution)
                 }
             } catch (t: Throwable) {
-                nameError = UserErrorText.of(t, "Couldn't reach Flagship. Try again.")
+                nameError = UserErrorText.of(t, FSStrings.get(R.string.couldnt_reach_flagship_try_again))
             } finally {
                 working = false
             }
@@ -211,7 +215,7 @@ fun ConnectAccountContent(
             verticalArrangement = Arrangement.spacedBy(FS.space.s6),
         ) {
             Text(
-                text = "Connect to an existing account",
+                text = stringResource(R.string.connect_to_an_existing_account),
                 color = FS.colors.text,
                 style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
                 modifier = Modifier.semantics { heading() },
@@ -219,26 +223,26 @@ fun ConnectAccountContent(
 
             // ── Sign in with your account name ──
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                SectionTitle("Sign in with your account name")
+                SectionTitle(stringResource(R.string.sign_in_with_your_account_name))
                 FSField(
                     value = username,
                     onValueChange = onUsernameChange,
-                    label = "Account name",
+                    label = stringResource(R.string.account_name),
                     placeholder = "account-name",
-                    helper = "The name you picked when you made the account.",
+                    helper = stringResource(R.string.the_name_you_picked_when_you),
                     error = nameError,
                     fieldTag = "connect-name-field",
                 )
                 if (unknownName != null) NoAccountCard(unknownName)
                 FSPrimaryButton(
-                    label = if (working) "Checking…" else "Continue",
+                    label = if (working) stringResource(R.string.checking) else stringResource(R.string.continue_label),
                     onClick = onSubmitName,
                     block = true,
                     large = true,
                     enabled = username.isNotBlank() && !working,
                     modifier = Modifier
                         .testTag("connect-name-continue")
-                        .semantics { contentDescription = "Continue, signs in with this account name" },
+                        .semantics { contentDescription = FSStrings.get(R.string.continue_signs_in_with_this_account) },
                 )
             }
 
@@ -246,42 +250,42 @@ fun ConnectAccountContent(
 
             // ── Join with a pairing code ──
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                SectionTitle("Join with a pairing code")
+                SectionTitle(stringResource(R.string.join_with_a_pairing_code))
                 Text(
-                    "On a device of that account, open Settings → Trusted devices → Add device.",
+                    stringResource(R.string.on_a_device_of_that_account),
                     color = FS.colors.textMuted,
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 FSSecondaryButton(
-                    label = "Scan a code",
+                    label = stringResource(R.string.scan_a_code),
                     onClick = onScan,
                     block = true,
                     large = true,
                     modifier = Modifier
                         .testTag("connect-scan")
-                        .semantics { contentDescription = "Scan a code with the camera" },
+                        .semantics { contentDescription = FSStrings.get(R.string.scan_a_code_with_the_camera) },
                 )
                 FSField(
                     value = code,
                     onValueChange = onCodeChange,
-                    label = "Code or link",
+                    label = stringResource(R.string.code_or_link),
                     placeholder = "https://flagshipserver.com/join?…",
                     error = codeError,
                     fieldTag = "connect-pair-field",
                 )
                 FSSecondaryButton(
-                    label = "Join",
+                    label = stringResource(R.string.join),
                     onClick = onSubmitCode,
                     block = true,
                     large = true,
                     modifier = Modifier
                         .testTag("connect-pair-continue")
-                        .semantics { contentDescription = "Join with this code or link" },
+                        .semantics { contentDescription = FSStrings.get(R.string.join_with_this_code_or_link) },
                 )
             }
 
             FSGhostButton(
-                label = "Back",
+                label = stringResource(R.string.back),
                 onClick = onBack,
                 block = true,
                 modifier = Modifier.testTag("connect-back"),
@@ -320,13 +324,13 @@ private fun OrDivider() {
 private fun NoAccountCard(name: String) {
     FSCard(modifier = Modifier.fillMaxWidth().testTag("join-unknown")) {
         Text(
-            "No Flagship account by that name",
+            stringResource(R.string.no_flagship_account_by_that_name),
             color = FS.colors.text,
             style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            "We couldn't find an account called “$name”. Check the spelling, or go back and create a new account.",
+            fsString(R.string.we_couldnt_find_an_account_called, name),
             color = FS.colors.textMuted,
             style = MaterialTheme.typography.bodySmall,
         )

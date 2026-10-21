@@ -6,6 +6,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -94,7 +96,7 @@ class ServerBackupsViewModel(
                     view = it
                     loadError = null
                 }
-                .onFailure { if (it is CancellationException) throw it else loadError = message(it, "The backups couldn't be loaded.") }
+                .onFailure { if (it is CancellationException) throw it else loadError = message(it, FSStrings.get(R.string.the_backups_couldnt_be_loaded)) }
         }
         maybeDeposit(auto = true)
         follow()
@@ -130,7 +132,7 @@ class ServerBackupsViewModel(
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {
-            actionError = message(t, "The backups couldn't be approved.")
+            actionError = message(t, FSStrings.get(R.string.the_backups_couldnt_be_approved))
             needsApproval = true
             return false
         } finally {
@@ -171,7 +173,7 @@ class ServerBackupsViewModel(
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {
-            actionError = message(t, "The backup couldn't start.")
+            actionError = message(t, FSStrings.get(R.string.the_backup_couldnt_start))
             return
         } finally {
             busy = false
@@ -188,7 +190,7 @@ class ServerBackupsViewModel(
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {
-            actionError = message(t, "The schedule couldn't be saved.")
+            actionError = message(t, FSStrings.get(R.string.the_schedule_couldnt_be_saved))
             false
         }
     }
@@ -201,7 +203,7 @@ class ServerBackupsViewModel(
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {
-            actionError = message(t, "The backup couldn't be deleted.")
+            actionError = message(t, FSStrings.get(R.string.the_backup_couldnt_be_deleted))
         }
     }
 
@@ -221,7 +223,7 @@ class ServerBackupsViewModel(
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {
-            policyError = message(t, "The backup policy couldn't be changed.")
+            policyError = message(t, FSStrings.get(R.string.the_backup_policy_couldnt_be_changed))
             false
         }
     }
@@ -249,13 +251,13 @@ class ServerBackupsViewModel(
             val bundle = File(dir, b.bundleFileName)
             withContext(Dispatchers.IO) {
                 bundle.delete()
-                check(part.renameTo(bundle)) { "The backup couldn't be saved on this device." }
+                check(part.renameTo(bundle)) { FSStrings.get(R.string.the_backup_couldnt_be_saved_on_2) }
             }
             return bundle
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {
-            actionError = message(t, "The download didn't finish.")
+            actionError = message(t, FSStrings.get(R.string.the_download_didnt_finish))
             return null
         } finally {
             downloading.remove(b.archiveId)

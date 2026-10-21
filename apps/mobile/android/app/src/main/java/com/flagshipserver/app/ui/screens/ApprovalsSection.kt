@@ -12,6 +12,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -54,7 +58,7 @@ import com.flagshipserver.app.viewmodels.ApprovalsModel
 import com.flagshipserver.app.viewmodels.LoadingState
 
 /** The words for an empty list. */
-internal const val APPROVALS_EMPTY = "Nothing waiting for you"
+internal val APPROVALS_EMPTY get() = FSStrings.get(R.string.nothing_waiting_for_you)
 
 /** The model for this phone's pending approvals; null until an account is signed in. */
 @Composable
@@ -85,7 +89,7 @@ internal fun rememberApprovals(): ApprovalsModel<SecretRequestCoordinator.Verifi
             scope = scope,
             idOf = { it.id },
             fetch = {
-                val coord = coordinator ?: error("Sign in to approve a server.")
+                val coord = coordinator ?: error(FSStrings.get(R.string.sign_in_to_approve_a_server))
                 // Opening the list is the next foreground: send again any lease the
                 // worker could not take earlier, so a restart self-unlocks.
                 runCatching { coord.retryPendingLeases().forEach { (server, id) -> store.setLeaseId(server, id) } }
@@ -95,16 +99,16 @@ internal fun rememberApprovals(): ApprovalsModel<SecretRequestCoordinator.Verifi
                 // "auto" servers (default; absent ⇒ auto) also get a box-sealed
                 // self-unlock lease. The returned id is the kill-switch handle.
                 val deposit = store.effectiveMode(req.serverDomain) == ServerSettingsStore.Mode.AUTO
-                val leaseId = (coordinator ?: error("Sign in to approve a server."))
+                val leaseId = (coordinator ?: error(FSStrings.get(R.string.sign_in_to_approve_a_server)))
                     .confirmAndRespond(req, depositAutoLease = deposit)
                 if (leaseId != null) store.setLeaseId(req.serverDomain, leaseId)
                 // Approved, but the worker did not take the lease: it will be sent again.
                 else if (deposit && req.purpose == SecretPurpose.UNLOCK_KEY) {
-                    toasts.warning("Approved. Automatic unlock couldn't be set up yet; it will try again.")
+                    toasts.warning(FSStrings.get(R.string.approved_automatic_unlock_couldnt_be_set))
                 }
             },
-            loadFailure = { UserErrorText.of(it, "Couldn't load requests") },
-            answerFailure = { req, t -> "Couldn't approve ${req.serverDomain}. ${UserErrorText.of(t)}" },
+            loadFailure = { UserErrorText.of(it, FSStrings.get(R.string.couldnt_load_requests)) },
+            answerFailure = { req, t -> FSStrings.get(R.string.couldnt_approve, req.serverDomain, UserErrorText.of(t)) },
         )
     }
 }
@@ -155,7 +159,7 @@ internal fun ApprovalsList(model: ApprovalsModel<SecretRequestCoordinator.Verifi
                                     model.approve(req) { out ->
                                         when (out) {
                                             ApprovalsModel.Outcome.Approved ->
-                                                toasts.success("Approved ${req.serverDomain}. Your server will pick it up.")
+                                                toasts.success(FSStrings.get(R.string.approved_your_server_will_pick_it, req.serverDomain))
                                             // Answered already: the card just goes.
                                             ApprovalsModel.Outcome.AlreadyAnswered -> Unit
                                             is ApprovalsModel.Outcome.Failed -> toasts.error(out.message)
@@ -184,10 +188,10 @@ private fun SecretRequestCard(
     // a disk unlock. (The deposit still fires on every approval; this is copy only.)
     val purposeLabel = when (req.purpose) {
         SecretPurpose.UNLOCK_KEY ->
-            if (isFirstBoot) "Unlock device and authorize it to join your cloud"
-            else "Unlock device"
-        SecretPurpose.ENTITLEMENT -> "Authorize device to join your cloud"
-        null -> "Boot secret"
+            if (isFirstBoot) stringResource(R.string.unlock_device_and_authorize_it_to)
+            else stringResource(R.string.unlock_device)
+        SecretPurpose.ENTITLEMENT -> stringResource(R.string.authorize_device_to_join_your_cloud)
+        null -> stringResource(R.string.boot_secret)
     }
     FSCard(modifier = Modifier.testTag("secret-request-card")) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
@@ -202,13 +206,13 @@ private fun SecretRequestCard(
             )
             req.deviceInfo?.let { info -> DeviceInfoRows(info) }
             Text(
-                "Is this the machine in front of you? Only approve if you recognise it.",
+                stringResource(R.string.is_this_the_machine_in_front),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.height(FS.space.s1))
             FSPrimaryButton(
-                label = if (inFlight) "Signing…" else "Yes, this is my server",
+                label = if (inFlight) stringResource(R.string.signing) else stringResource(R.string.yes_this_is_my_server),
                 onClick = onApprove,
                 enabled = !inFlight,
                 block = true,
@@ -223,7 +227,7 @@ private fun SecretRequestCard(
 private fun DeviceInfoRows(info: DeviceInfoHint) {
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1), modifier = Modifier.padding(top = FS.space.s1)) {
         info.ip?.let { InfoRow("IP", it) }
-        info.region?.let { InfoRow("Region", it) }
+        info.region?.let { InfoRow(stringResource(R.string.region), it) }
         info.os?.let { InfoRow("OS", it) }
         info.hostname?.let { InfoRow("Host", it) }
     }

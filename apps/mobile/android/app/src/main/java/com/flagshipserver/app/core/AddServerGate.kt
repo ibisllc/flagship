@@ -10,17 +10,18 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.keystore.Keystore
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 object AddServerGate {
-    const val ADMIN_ONLY = "Only an admin device of this account can add servers."
+    val ADMIN_ONLY get() = FSStrings.get(R.string.only_an_admin_device_of_this)
 
     /** Adding a device over the pairing relay is admin-only too (owner rule
      *  2026-10-16; packages/protocol/test-vectors/device-pairing `adminOnlyLine`). */
-    const val ADD_DEVICE_ADMIN_ONLY = "Only an admin device of this account can add devices."
+    val ADD_DEVICE_ADMIN_ONLY get() = FSStrings.get(R.string.only_an_admin_device_of_this_2)
 
     fun allowsAddDevice(app: AppState): Boolean = allows(app)
 

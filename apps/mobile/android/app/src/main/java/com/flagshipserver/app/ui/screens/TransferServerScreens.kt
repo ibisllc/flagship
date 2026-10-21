@@ -3,6 +3,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -103,24 +106,24 @@ fun TransferGiverScreen(vm: TransferGiverViewModel, serverDomain: String) {
         when (val p = phase) {
             is TransferGiverPhase.AwaitingClaim, is TransferGiverPhase.Resealing -> {
                 Text(
-                    "Have the new owner scan this",
+                    stringResource(R.string.have_the_new_owner_scan_this),
                     color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.titleLarge,
                 )
                 Text(
-                    "On their phone: Add a server → Take over a transferred server. Keep this screen open until it completes: your phone hands off the disk key after they claim it.",
+                    stringResource(R.string.on_their_phone_add_a_server),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 vm.qrText?.let {
                     FSCard(modifier = Modifier.fillMaxWidth()) {
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Image(qrImageBitmap(it), contentDescription = "Transfer QR", modifier = Modifier.size(240.dp))
+                            Image(qrImageBitmap(it), contentDescription = stringResource(R.string.transfer_qr), modifier = Modifier.size(240.dp))
                         }
                     }
                 }
                 if (p is TransferGiverPhase.Resealing) {
-                    TransferCallout("They claimed it. Handing off the disk key…", FS.colors.primary)
+                    TransferCallout(stringResource(R.string.they_claimed_it_handing_off_the), FS.colors.primary)
                 } else {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
@@ -128,7 +131,7 @@ fun TransferGiverScreen(vm: TransferGiverViewModel, serverDomain: String) {
                     ) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         Text(
-                            "Waiting for the new owner…",
+                            stringResource(R.string.waiting_for_the_new_owner),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -142,9 +145,9 @@ fun TransferGiverScreen(vm: TransferGiverViewModel, serverDomain: String) {
                 }
             }
             is TransferGiverPhase.Completed -> {
-                TransferCallout("Transfer complete. $serverDomain now belongs to the new owner${p.newServerDomain?.let { " (now $it)" } ?: ""}.", FS.colors.success)
+                TransferCallout(fsString(R.string.transfer_complete_now_belongs_to_the, serverDomain, p.newServerDomain?.let { " (now $it)" } ?: ""), FS.colors.success)
                 Text(
-                    "It's no longer in your fleet.",
+                    stringResource(R.string.its_no_longer_in_your_fleet),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyLarge,
                 )
@@ -152,19 +155,19 @@ fun TransferGiverScreen(vm: TransferGiverViewModel, serverDomain: String) {
             else -> {
                 if (p is TransferGiverPhase.Failed) TransferCallout(p.message, FS.colors.danger)
                 Text(
-                    "Transfer to another account",
+                    stringResource(R.string.transfer_to_another_account),
                     color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.titleLarge,
                 )
                 Text(
-                    "This hands $serverDomain and ALL its contents to another account. You will lose control of it. This cannot be undone.",
+                    fsString(R.string.this_hands_and_all_its_contents, serverDomain),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                FSField(value = typed, onValueChange = { typed = it }, label = "Type the server's address to confirm", placeholder = serverDomain, fieldTag = "transfer-confirm-field")
+                FSField(value = typed, onValueChange = { typed = it }, label = stringResource(R.string.type_the_servers_address_to_confirm), placeholder = serverDomain, fieldTag = "transfer-confirm-field")
                 val working = p is TransferGiverPhase.Signing || p is TransferGiverPhase.Posting
                 FSDangerButton(
-                    label = if (working) "Working…" else "Transfer this server",
+                    label = if (working) stringResource(R.string.working) else stringResource(R.string.transfer_this_server),
                     onClick = { if (confirmed && !working) scope.launch { vm.start() } },
                     enabled = confirmed && !working,
                     block = true,
@@ -204,18 +207,18 @@ fun TransferAcquirerScreen(
     }
 
     FSScreen(
-        title = "Take over a server",
+        title = stringResource(R.string.take_over_a_server),
         onBack = onBack ?: { backDispatcher?.onBackPressed(); Unit },
     ) {
         when (val p = phase) {
             is TransferAcquirerPhase.Idle -> {
                 Text(
-                    "Point your camera at the transfer code",
+                    stringResource(R.string.point_your_camera_at_the_transfer),
                     color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    "The current owner shows it from their server's page (Transfer to another account).",
+                    stringResource(R.string.the_current_owner_shows_it_from),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -230,11 +233,10 @@ fun TransferAcquirerScreen(
                 // the claim signs): what you see is what you sign.
                 TieredConfirm(
                     tier = ConfirmTier.SEVERE,
-                    title = "Take over this server?",
-                    body = "You'll become the owner of ${p.serverDomain} and all its contents. " +
-                        "The current owner loses control of it. This can't be undone.",
+                    title = stringResource(R.string.take_over_this_server),
+                    body = fsString(R.string.youll_become_the_owner_of_and, p.serverDomain),
                     confirmWord = p.serverDomain,
-                    confirmLabel = "Take ownership",
+                    confirmLabel = stringResource(R.string.take_ownership),
                     onConfirm = { scope.launch { vm.confirm() } },
                     fieldTag = "takeover-confirm-field",
                     buttonTag = "takeover-confirm-button",
@@ -247,18 +249,18 @@ fun TransferAcquirerScreen(
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     Text(
-                        "Claiming the server…",
+                        stringResource(R.string.claiming_the_server),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyLarge,
                     )
                 }
             }
             is TransferAcquirerPhase.Claimed -> {
-                TransferCallout("You now own ${p.newServerDomain ?: "this server"}. It will come online under your account shortly.", FS.colors.success)
+                TransferCallout(fsString(R.string.you_now_own_it_will_come, p.newServerDomain ?: stringResource(R.string.this_server_2)), FS.colors.success)
             }
             is TransferAcquirerPhase.Failed -> {
                 TransferCallout(p.message, FS.colors.danger)
-                FSSecondaryButton(label = "Scan again", onClick = { vm.resetForRescan(); scanning = true }, block = true)
+                FSSecondaryButton(label = stringResource(R.string.scan_again), onClick = { vm.resetForRescan(); scanning = true }, block = true)
             }
         }
     }

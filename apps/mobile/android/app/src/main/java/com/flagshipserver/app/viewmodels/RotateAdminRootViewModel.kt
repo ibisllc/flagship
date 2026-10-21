@@ -27,6 +27,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.AdminRootRotationRequest
@@ -68,7 +70,7 @@ class RotateAdminRootViewModel(
     /** True iff this device holds the admin master root. */
     private val hasAdminRoot: () -> Boolean = { Variant.forceAdminRoot || Keystore.hasAdminRoot() },
     /** Loads the OLD admin-root SIGNER (biometric-gated in production). */
-    private val loadOldSigner: suspend () -> Ed25519Sign = { Keystore.adminRootKey("Rotate your admin key") },
+    private val loadOldSigner: suspend () -> Ed25519Sign = { Keystore.adminRootKey(FSStrings.get(R.string.rotate_your_admin_key)) },
     /** The OLD admin-root pubkey hex held on this device. */
     private val oldPubHex: () -> String? = { Keystore.adminRootPubHex() },
     /** Re-store the NEW root device-local (replaces the old one). */
@@ -107,7 +109,7 @@ class RotateAdminRootViewModel(
     suspend fun rotate() {
         if (!hasAdminRoot()) {
             _phase.value = RotateAdminRootPhase.Failed(
-                "This device isn't an admin, so it can't rotate the admin key.",
+                FSStrings.get(R.string.this_device_isnt_an_admin_so),
             )
             return
         }
@@ -155,7 +157,7 @@ class RotateAdminRootViewModel(
             }
         } catch (t: Throwable) {
             _phase.value = RotateAdminRootPhase.Failed(
-                UserErrorText.of(t, "Couldn't rotate the admin key. Try again."),
+                UserErrorText.of(t, FSStrings.get(R.string.couldnt_rotate_the_admin_key_try)),
             )
         }
     }
@@ -180,7 +182,7 @@ class RotateAdminRootViewModel(
         } catch (t: Throwable) {
             _phase.value = current.copy(
                 updating = false,
-                errorMessage = UserErrorText.of(t, "Couldn't update the recovery backup. Try again."),
+                errorMessage = UserErrorText.of(t, FSStrings.get(R.string.couldnt_update_the_recovery_backup_try)),
             )
         }
     }

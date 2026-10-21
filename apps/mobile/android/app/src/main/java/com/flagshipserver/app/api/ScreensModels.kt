@@ -7,6 +7,8 @@
 
 package com.flagshipserver.app.api
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
@@ -541,13 +543,13 @@ data class AppSandbox(
                     danger = true,
                     text = if (firewall) {
                         val why = r.substring(FIREWALL_PREFIX.length).trimStart(':', ' ').ifEmpty { "it hasn't started" }
-                        "Apps can't start on this server: its internet firewall isn't running ($why). The server tries again every 30 seconds."
+                        FSStrings.get(R.string.apps_cant_start_on_this_server, why)
                     } else {
-                        "Apps can't start on this server: the sandbox they run in isn't working (${r.ifEmpty { "unknown reason" }}). The server tries again every 10 minutes."
+                        FSStrings.get(R.string.apps_cant_start_on_this_server_2, r.ifEmpty { "unknown reason" })
                     },
                 )
             }
-            "starting" -> Notice(danger = false, text = "Setting up the sandbox apps run in. They start once it's ready.")
+            "starting" -> Notice(danger = false, text = FSStrings.get(R.string.setting_up_the_sandbox_apps_run))
             else -> null
         }
 
@@ -574,22 +576,22 @@ data class LastUpdate(
             fun short(sha: String?): String? =
                 sha?.takeIf { it.length == 40 && it.all { c -> c in '0'..'9' || c in 'a'..'f' } }?.take(8)
             return when (outcome) {
-                "applied" -> short(targetCommit)?.let { "Last update: $it installed and running." }
-                    ?: "Last update installed and running."
+                "applied" -> short(targetCommit)?.let { FSStrings.get(R.string.last_update_installed_and_running, it) }
+                    ?: FSStrings.get(R.string.last_update_installed_and_running_2)
                 "rolled-back" -> {
                     val to = short(targetCommit)?.let { " to $it" } ?: ""
                     val back = short(previousCommit)?.let { " to $it" } ?: ""
-                    "The last update$to didn't start cleanly, so the server went back$back on its own."
+                    FSStrings.get(R.string.the_last_update_didnt_start_cleanly, to, back)
                 }
-                "refused" -> REFUSAL_COPY[reason]?.let { "The server refused the last update: $it" }
-                    ?: "The server refused the last update."
+                "refused" -> REFUSAL_COPY[reason]?.let { FSStrings.get(R.string.the_server_refused_the_last_update, it) }
+                    ?: FSStrings.get(R.string.the_server_refused_the_last_update_2)
                 else -> null
             }
         }
 
     private companion object {
-        val REFUSAL_COPY = mapOf(
-            "unendorsed" to "Flagship's maintainers haven't endorsed that release.",
+        val REFUSAL_COPY get() = mapOf(
+            "unendorsed" to FSStrings.get(R.string.flagships_maintainers_havent_endorsed_that),
             "from-commit-mismatch" to "the server was no longer on the version the update was made for. Send it again.",
             "apply-failed" to "it couldn't download or build the new version. Nothing changed.",
             "rejected" to "the request wasn't signed by this account's admin key.",
@@ -1109,8 +1111,8 @@ data class ServiceEnvChange(
 
         /** Why a variable name can't be used, or null. */
         fun nameError(name: String): String? = when {
-            !NAME_RE.matches(name) -> "Use letters, digits and _ only, not starting with a digit (like API_KEY)."
-            name.startsWith("FLAGSHIP_") -> "Names starting with FLAGSHIP_ are set by your server."
+            !NAME_RE.matches(name) -> FSStrings.get(R.string.use_letters_digits_and_only_not)
+            name.startsWith("FLAGSHIP_") -> FSStrings.get(R.string.names_starting_with_flagship_are_set)
             else -> null
         }
 

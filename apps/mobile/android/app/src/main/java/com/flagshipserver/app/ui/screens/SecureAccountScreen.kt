@@ -16,6 +16,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import com.flagshipserver.app.ui.components.fsFocusRing
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -181,7 +184,7 @@ fun SecureAccountScreen(
 
     fun configureCloudThenContinue() {
         if (activity == null) {
-            error = "Open this screen from the foreground to use a passkey."
+            error = FSStrings.get(R.string.open_this_screen_from_the_foreground)
             return
         }
         scope.launch {
@@ -191,7 +194,7 @@ fun SecureAccountScreen(
                 // Biometric IRK consent up front, then Argon2id + the wrap /
                 // sign / upload off the main thread (the shared ceremony
                 // mirrors recovery.js, incl. fetchTokenHash + prfSaltHash + #28).
-                val irkMaterial = KeystoreIrkAccess().resolve("Back up your recovery key")
+                val irkMaterial = KeystoreIrkAccess().resolve(FSStrings.get(R.string.back_up_your_recovery_key))
                 val umk = Keystore.loadOrCreateUmkSeed()
                 val acmeScalar = try {
                     Keystore.loadOrCreateAcmeAccountKeyScalar()
@@ -231,7 +234,7 @@ fun SecureAccountScreen(
                 app.setHasCloudRecovery(true)
                 RecoveryProviderStore.write(ctx, ceremony.lastProvider)
                 passphrase = ""; passphraseConfirm = ""
-                toasts.success("Cloud backup configured.")
+                toasts.success(FSStrings.get(R.string.cloud_backup_configured))
                 onDone()
             } catch (t: Throwable) {
                 // Never trap the user: surface the error and let them
@@ -277,18 +280,18 @@ fun SecureAccountScreen(
         // cloud option is selected so the file / skip flows stay one-tap.
         if (selected == SecureAccountOption.Cloud) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                FSSectionHeader("Recovery passphrase")
+                FSSectionHeader(stringResource(R.string.recovery_passphrase))
                 FSField(
                     value = passphrase,
                     onValueChange = { passphrase = it },
-                    label = "Recovery passphrase (8+ characters)",
+                    label = stringResource(R.string.recovery_passphrase_8_characters),
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.semantics { contentDescription = "secure-account-passphrase" },
                 )
                 FSField(
                     value = passphraseConfirm,
                     onValueChange = { passphraseConfirm = it },
-                    label = "Confirm passphrase",
+                    label = stringResource(R.string.confirm_passphrase),
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.semantics { contentDescription = "secure-account-passphrase-confirm" },
                 )
@@ -318,7 +321,7 @@ fun SecureAccountScreen(
             modifier = Modifier.padding(top = FS.space.s2),
         ) {
             FSPrimaryButton(
-                label = if (working) "Setting up…" else SecureAccountViewModel.CONTINUE,
+                label = if (working) stringResource(R.string.setting_up) else SecureAccountViewModel.CONTINUE,
                 onClick = {
                     when (selected) {
                         SecureAccountOption.Cloud -> configureCloudThenContinue()

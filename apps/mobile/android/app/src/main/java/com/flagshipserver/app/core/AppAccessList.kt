@@ -1,5 +1,6 @@
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.google.crypto.tink.subtle.Ed25519Sign
 import java.security.MessageDigest
 
@@ -172,7 +173,7 @@ object AppAccessList {
         if (t == ALL) return Target.Ok(ALL)
         if (SCHEME.containsMatchIn(t)) return Target.Bad("write the host only, without http:// or https://")
         if (t.contains('/')) return Target.Bad("write the host only, without a path")
-        if (isIpLiteral(t)) return Target.Bad("IP addresses can't be allowed or denied; use a host name")
+        if (isIpLiteral(t)) return Target.Bad(FSStrings.get(R.string.ip_addresses_cant_be_allowed_or))
         if (t.contains(':')) return Target.Bad("write the host only, without a port")
         if (t == "*") return Target.Bad("write \"all\" instead of \"*\"")
         val wildcard = t.startsWith("*.")

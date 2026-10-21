@@ -9,6 +9,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.core.SecretPurpose
@@ -115,7 +117,7 @@ class BootUnlockApprovalViewModel(
     suspend fun approve() {
         val source = makeSource()
         if (source == null) {
-            _state.value = State.Failed("Sign in to approve this server.")
+            _state.value = State.Failed(FSStrings.get(R.string.sign_in_to_approve_this_server))
             return
         }
         _state.value = State.Approving
@@ -126,7 +128,7 @@ class BootUnlockApprovalViewModel(
             }
             State.Approved
         } catch (t: Throwable) {
-            State.Failed(UserErrorText.of(t, "Approval failed. Try again."))
+            State.Failed(UserErrorText.of(t, FSStrings.get(R.string.approval_failed_try_again)))
         }
     }
 

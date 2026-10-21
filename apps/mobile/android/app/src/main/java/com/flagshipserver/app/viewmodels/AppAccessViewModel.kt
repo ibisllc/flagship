@@ -6,6 +6,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.AppAccessGrantBody
 import com.flagshipserver.app.api.AppAccessLineError
@@ -49,13 +51,13 @@ class AppAccessOrder(
         }
         return try {
             val domain = runCatching { client.boxFqdn() }.getOrNull() ?: fallbackServerDomain()
-            if (domain.isNullOrEmpty()) return Outcome.Failed("Couldn't tell which server this app is on.")
+            if (domain.isNullOrEmpty()) return Outcome.Failed(FSStrings.get(R.string.couldnt_tell_which_server_this_app))
             val key = try {
                 signer(reason)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                return Outcome.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
+                return Outcome.Failed(FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(e)))
             }
             val signed = AppAccessList.sign(key, domain, serviceId, normalized, now())
             val r = client.serviceAccessSet(
@@ -78,7 +80,7 @@ class AppAccessOrder(
     }
 
     companion object {
-        const val LIST_HAS_ERRORS = "Fix the lines marked below, then save."
+        val LIST_HAS_ERRORS get() = FSStrings.get(R.string.fix_the_lines_marked_below_then)
         private val LENIENT = Json { ignoreUnknownKeys = true }
 
         fun refusal(t: Throwable): Outcome {
@@ -88,14 +90,14 @@ class AppAccessOrder(
                 400 -> {
                     val errors = runCatching { LENIENT.decodeFromString(AppAccessRefusal.serializer(), t.body).errors }
                         .getOrNull().orEmpty()
-                    if (errors.isNotEmpty()) Outcome.Invalid(errors, "The server found errors in this list.")
-                    else Outcome.Failed("The server couldn't read this list${box?.let { ": $it" } ?: ""}.")
+                    if (errors.isNotEmpty()) Outcome.Invalid(errors, FSStrings.get(R.string.the_server_found_errors_in_this))
+                    else Outcome.Failed(FSStrings.get(R.string.the_server_couldnt_read_this_list, box?.let { ": $it" } ?: ""))
                 }
                 403 -> Outcome.Failed(
-                    "The server refused this change${box?.let { ": $it" } ?: ""}. Check this phone's clock and try again.",
+                    FSStrings.get(R.string.the_server_refused_this_change_check, box?.let { ": $it" } ?: ""),
                 )
-                404 -> Outcome.Failed("This app is no longer installed on the server.")
-                409 -> Outcome.Failed("The list changed since you opened it. Reload it and try again.")
+                404 -> Outcome.Failed(FSStrings.get(R.string.this_app_is_no_longer_installed))
+                409 -> Outcome.Failed(FSStrings.get(R.string.the_list_changed_since_you_opened))
                 else -> Outcome.Failed(box ?: t.userFacing())
             }
         }
@@ -148,7 +150,7 @@ class AppAccessViewModel(
             _error.value = "\"$host\" can't go in an access list: ${e.message}"
             return false
         }
-        return save(list, if (allow) "Allow $appName to reach $host" else "Stop $appName reaching $host")
+        return save(list, if (allow) FSStrings.get(R.string.allow_to_reach, appName, host) else FSStrings.get(R.string.stop_reaching, appName, host))
     }
 
     /** Ignore: forget the request without changing the list. */
@@ -190,9 +192,9 @@ class AppAccessViewModel(
     }
 
     /** The signing prompt when the editor saves a reviewed draft. */
-    val approveDraftReason: String get() = "Approve the hosts $appName suggests"
+    val approveDraftReason: String get() = FSStrings.get(R.string.approve_the_hosts_suggests, appName)
 
-    suspend fun save(list: String, reason: String = "Change which hosts $appName can reach"): Boolean {
+    suspend fun save(list: String, reason: String = FSStrings.get(R.string.change_which_hosts_can_reach, appName)): Boolean {
         if (_busy.value) return false
         _busy.value = true
         _error.value = null
@@ -219,43 +221,42 @@ class AppAccessViewModel(
     }
 
     companion object {
-        const val TITLE = "Internet access"
-        const val VIEW_LIST = "View access list"
+        val TITLE get() = FSStrings.get(R.string.internet_access)
+        val VIEW_LIST get() = FSStrings.get(R.string.view_access_list)
         const val ALLOW = "Allow"
         const val DENY = "Deny"
         const val IGNORE = "Ignore"
-        const val NOT_NOW = "Not now"
-        const val BADGE = "Wants internet"
-        const val READ_ONLY_NOTE = "This device can see the list but not change it."
-        const val DRAFT_TITLE = "This app suggests letting it reach these hosts"
+        val NOT_NOW get() = FSStrings.get(R.string.not_now)
+        val BADGE get() = FSStrings.get(R.string.wants_internet)
+        val READ_ONLY_NOTE get() = FSStrings.get(R.string.this_device_can_see_the_list)
+        val DRAFT_TITLE get() = FSStrings.get(R.string.this_app_suggests_letting_it_reach)
         const val REVIEW = "Review"
         const val DISMISS = "Dismiss"
-        const val DRAFT_NOTE = "Nothing opens until you review the list and save it."
-        const val DRAFT_EDITOR_NOTE = "This is the list the app suggests. Check it, change it if you like, then save to approve it."
+        val DRAFT_NOTE get() = FSStrings.get(R.string.nothing_opens_until_you_review_the)
+        val DRAFT_EDITOR_NOTE get() = FSStrings.get(R.string.this_is_the_list_the_app)
 
-        fun draftAsksText(app: String) = "$app suggests an access list"
+        fun draftAsksText(app: String) = FSStrings.get(R.string.suggests_an_access_list, app)
 
         /** One line per suggested host: "host: why", or just the host. */
         fun suggestionText(s: com.flagshipserver.app.api.AppAccessSuggestion): String =
             s.why?.takeIf { it.isNotBlank() }?.let { "${s.host}: $it" } ?: s.host
-        const val EDITOR_HELP =
-            "One rule per line, checked from the top: the first rule that matches decides, and a host no rule matches is denied. " +
-                "Write allow or deny, then a host, *.example.com for its subdomains, or all. # starts a comment."
+        val EDITOR_HELP get() =
+            FSStrings.get(R.string.one_rule_per_line_checked_from)
 
         fun ruleCountText(n: Int): String = when (n) {
-            0 -> "No rules yet, so the app can't reach the internet."
+            0 -> FSStrings.get(R.string.no_rules_yet_so_the_app)
             1 -> "1 rule"
-            else -> "$n rules"
+            else -> FSStrings.get(R.string.rules, n)
         }
 
         fun sourceText(source: String, attempts: Int): String = when (source) {
-            AppAccessPending.SOURCE_APP -> "Asked for this when it was installed."
-            else -> if (attempts > 1) "Tried to connect $attempts times." else "Tried to connect."
+            AppAccessPending.SOURCE_APP -> FSStrings.get(R.string.asked_for_this_when_it_was)
+            else -> if (attempts > 1) FSStrings.get(R.string.tried_to_connect_times, attempts) else FSStrings.get(R.string.tried_to_connect)
         }
 
-        fun asksText(app: String, host: String) = "$app wants to reach $host"
-        fun allowedText(app: String, host: String) = "$app can now reach $host"
-        fun deniedText(app: String, host: String) = "$app won't reach $host"
+        fun asksText(app: String, host: String) = FSStrings.get(R.string.wants_to_reach, app, host)
+        fun allowedText(app: String, host: String) = FSStrings.get(R.string.can_now_reach, app, host)
+        fun deniedText(app: String, host: String) = FSStrings.get(R.string.wont_reach, app, host)
 
         /** The app list badge: a host or a suggested list is waiting for an
          *  answer. A box from before access lists falls back to the v1 egress

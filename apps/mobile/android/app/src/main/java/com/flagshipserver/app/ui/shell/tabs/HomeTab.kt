@@ -5,6 +5,9 @@
 
 package com.flagshipserver.app.ui.shell.tabs
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -77,7 +80,7 @@ fun HomeTab() {
             when (val outcome = block()) {
                 is com.flagshipserver.app.core.ServerOrderSaver.Outcome.Failed -> toasts.warning(outcome.message)
                 com.flagshipserver.app.core.ServerOrderSaver.Outcome.Superseded ->
-                    toasts.info("Another device changed the order. Showing the newest one.")
+                    toasts.info(FSStrings.get(R.string.another_device_changed_the_order_showing))
                 else -> {}
             }
         }
@@ -372,7 +375,7 @@ fun HomeTab() {
                         // token then mints with it (docs/account-read-token.md).
                         val unlocked = runCatching {
                             com.flagshipserver.app.keystore.BiometricAuthority.current()
-                                ?.ensureFresh("Show your servers", "Confirm it's you to load your servers")
+                                ?.ensureFresh(FSStrings.get(R.string.show_your_servers), FSStrings.get(R.string.confirm_its_you_to_load_your))
                         }.isSuccess
                         if (!unlocked) return@launch
                         com.flagshipserver.app.core.AccountReadTokens.shared?.keysUnlocked()

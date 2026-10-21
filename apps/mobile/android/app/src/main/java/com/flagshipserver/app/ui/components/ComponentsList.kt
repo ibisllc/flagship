@@ -1,5 +1,7 @@
 package com.flagshipserver.app.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -154,7 +156,7 @@ fun FSSearchField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "Search",
+    placeholder: String = stringResource(R.string.search),
 ) {
     TextField(
         value = value,
@@ -165,7 +167,7 @@ fun FSSearchField(
         trailingIcon = if (value.isNotEmpty()) {
             {
                 IconButton(onClick = { onValueChange("") }) {
-                    Icon(Icons.Outlined.Close, contentDescription = "Clear search")
+                    Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.clear_search))
                 }
             }
         } else null,
@@ -224,7 +226,7 @@ fun FSProfileCard(
             FSMonogram(name = name)
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    text = name.ifEmpty { "Your account" },
+                    text = name.ifEmpty { stringResource(R.string.your_account) },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.titleLarge,
@@ -287,7 +289,7 @@ fun FSAnnouncementCard(
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.padding(FS.space.s4)) {
                 Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(24.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp), content = texts)
-                if (onDismiss != null) TextButton(onClick = onDismiss) { Text("Dismiss") }
+                if (onDismiss != null) TextButton(onClick = onDismiss) { Text(stringResource(R.string.dismiss)) }
             }
         } else {
             Row(
@@ -298,7 +300,7 @@ fun FSAnnouncementCard(
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp), content = texts)
                 if (onDismiss != null) {
                     IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Dismiss", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.dismiss), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

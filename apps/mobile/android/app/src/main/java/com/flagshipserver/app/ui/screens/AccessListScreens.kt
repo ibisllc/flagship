@@ -5,6 +5,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -344,7 +348,7 @@ fun AccessListScreen(nav: NavController, serviceId: String, fromDraft: Boolean =
     val unchanged = state?.let { AppAccessList.normalize(it.list) == AppAccessList.normalize(text) } ?: true
 
     FSScreen(
-        title = "Access list",
+        title = stringResource(R.string.access_list),
         onBack = { nav.popBackStack() },
         titleTag = "access-list-title",
         subtitle = "$appName · ${AppAccessViewModel.ruleCountText(parsed.rules.size)}",
@@ -365,14 +369,14 @@ fun AccessListScreen(nav: NavController, serviceId: String, fromDraft: Boolean =
         if (draft == null) {
             if (loadError != null) {
                 FSEmptyState(
-                    title = "Couldn't load the access list",
+                    title = stringResource(R.string.couldnt_load_the_access_list),
                     message = loadError,
                     icon = Icons.Outlined.ErrorOutline,
                     iconTint = MaterialTheme.colorScheme.error,
-                    action = { FSSecondaryButton("Try again", onClick = { scope.launch { vm.load() } }) },
+                    action = { FSSecondaryButton(stringResource(R.string.try_again), onClick = { scope.launch { vm.load() } }) },
                 )
             } else {
-                Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.loading), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             }
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
@@ -387,7 +391,7 @@ fun AccessListScreen(nav: NavController, serviceId: String, fromDraft: Boolean =
                 )
                 errors.forEach { e ->
                     Text(
-                        "Line ${e.line}: ${e.message}",
+                        fsString(R.string.line, e.line, e.message),
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.testTag("access-list-error"),
@@ -403,7 +407,7 @@ fun AccessListScreen(nav: NavController, serviceId: String, fromDraft: Boolean =
                 )
             } else {
                 FSPrimaryButton(
-                    label = if (busy) "Saving…" else "Save",
+                    label = if (busy) stringResource(R.string.saving) else stringResource(R.string.save),
                     enabled = !busy && parsed.ok && !unchanged,
                     block = true,
                     modifier = Modifier.testTag("access-list-save"),
@@ -414,7 +418,7 @@ fun AccessListScreen(nav: NavController, serviceId: String, fromDraft: Boolean =
                             val ok = if (reviewing) vm.save(toSave, vm.approveDraftReason) else vm.save(toSave)
                             if (ok) {
                                 draft = vm.state.value?.list ?: AppAccessList.normalize(toSave)
-                                toasts.success("Saved. $appName follows the new list now.")
+                                toasts.success(FSStrings.get(R.string.saved_follows_the_new_list_now, appName))
                             }
                         }
                     },
@@ -447,7 +451,7 @@ fun AccessRequestDialogHost(center: AccessRequestCenter, onViewList: (AccessAler
                     }
                     Spacer(Modifier.height(FS.space.s2))
                     Text(
-                        "On ${alert.box.fqdn}. ${AppAccessViewModel.DRAFT_NOTE}",
+                        fsString(R.string.on, alert.box.fqdn, AppAccessViewModel.DRAFT_NOTE),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -475,13 +479,13 @@ fun AccessRequestDialogHost(center: AccessRequestCenter, onViewList: (AccessAler
             title = { Text(phase.message) },
             text = {
                 Text(
-                    if (phase.allowed) "You can change this any time in the app's access list."
-                    else "The app's other hosts are unchanged. You can change this any time in its access list.",
+                    if (phase.allowed) stringResource(R.string.you_can_change_this_any_time_2)
+                    else stringResource(R.string.the_apps_other_hosts_are_unchanged),
                 )
             },
             confirmButton = {
                 TextButton(onClick = { scope.launch { center.close() } }, modifier = Modifier.testTag("access-alert-close")) {
-                    Text("Close")
+                    Text(stringResource(R.string.close))
                 }
             },
             dismissButton = {
@@ -501,7 +505,7 @@ fun AccessRequestDialogHost(center: AccessRequestCenter, onViewList: (AccessAler
                     Column {
                         Text(alert.detail)
                         Text(
-                            "On ${alert.box.fqdn}. Only allow hosts you expect this app to need.",
+                            fsString(R.string.on_only_allow_hosts_you_expect, alert.box.fqdn),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -517,12 +521,12 @@ fun AccessRequestDialogHost(center: AccessRequestCenter, onViewList: (AccessAler
                             enabled = sending == null,
                             onClick = { scope.launch { center.answer(allow = false) } },
                             modifier = Modifier.testTag("access-alert-deny"),
-                        ) { Text(if (sending?.allow == false) "Denying…" else AppAccessViewModel.DENY) }
+                        ) { Text(if (sending?.allow == false) stringResource(R.string.denying) else AppAccessViewModel.DENY) }
                         TextButton(
                             enabled = sending == null,
                             onClick = { scope.launch { center.answer(allow = true) } },
                             modifier = Modifier.testTag("access-alert-allow"),
-                        ) { Text(if (sending?.allow == true) "Allowing…" else AppAccessViewModel.ALLOW) }
+                        ) { Text(if (sending?.allow == true) stringResource(R.string.allowing) else AppAccessViewModel.ALLOW) }
                     }
                 },
                 dismissButton = {

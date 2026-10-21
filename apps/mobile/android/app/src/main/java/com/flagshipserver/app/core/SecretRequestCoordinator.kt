@@ -25,6 +25,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.BoxSealedLeaseWire
 import com.flagshipserver.app.api.LeaseRevokeWire
 import com.flagshipserver.app.api.MailboxAuthEnvelope
@@ -101,13 +102,13 @@ class SecretRequestCoordinator(
 
     sealed class CoordinatorException(message: String) : Exception(message) {
         object NoSealedLuksKey :
-            CoordinatorException("No sealed disk key is on file for this server yet.")
+            CoordinatorException(FSStrings.get(R.string.no_sealed_disk_key_is_on))
         object LuksUnsealFailed :
-            CoordinatorException("Couldn't unseal the disk key with this phone's keys.")
+            CoordinatorException(FSStrings.get(R.string.couldnt_unseal_the_disk_key_with))
         class DirectoryMissingServer(domain: String) :
             CoordinatorException("This server ($domain) isn't registered to your account.")
         class PurposeUnsupported(purpose: String) :
-            CoordinatorException("Unsupported secret request type: $purpose.")
+            CoordinatorException(FSStrings.get(R.string.unsupported_secret_request_type, purpose))
         class NoPendingRequest(domain: String) :
             CoordinatorException("This server ($domain) isn't waiting for an unlock right now.")
     }
@@ -139,7 +140,7 @@ class SecretRequestCoordinator(
      *  fails under that STK) is SILENTLY dropped — never offered for
      *  confirm. */
     suspend fun fetchVerifiedRequests(): List<VerifiedRequest> {
-        val material = irk.resolve("Check for servers waiting for approval")
+        val material = irk.resolve(FSStrings.get(R.string.check_for_servers_waiting_for_approval))
         val auth = buildMailboxAuth(material)
         val pendingResp = mailbox.fetchPendingRequests(auth)
         val directory = mailbox.fetchPods(username)
@@ -194,7 +195,7 @@ class SecretRequestCoordinator(
             ?.takeIf { it.size == 32 }
             ?: throw CoordinatorException.DirectoryMissingServer(verified.serverDomain)
 
-        val material = irk.resolve("Approve your server's boot secret")
+        val material = irk.resolve(FSStrings.get(R.string.approve_your_servers_boot_secret))
         val delegate: WatchDelegateSigner? =
             if (purpose == SecretPurpose.UNLOCK_KEY && !depositAutoLease) watchDelegate() else null
         // Slice D — resolve the admin master root ONCE for this ceremony (silent
@@ -203,7 +204,7 @@ class SecretRequestCoordinator(
         // it; null ⇒ this device is non-admin/legacy ⇒ they stay IRK-signed. A
         // watch-delegate approval mints neither, so it never asks for it.
         val orderKey: Ed25519Sign? =
-            if (delegate == null) adminSigner?.invoke("Authorize your server to serve") else null
+            if (delegate == null) adminSigner?.invoke(FSStrings.get(R.string.authorize_your_server_to_serve)) else null
 
         var unlockKey: ByteArray? = null
         val sealedHex = when (purpose) {
@@ -329,7 +330,7 @@ class SecretRequestCoordinator(
      *  longer self-unlock and falls back to phone-gated approval (downgrade,
      *  not brick). [leaseId] is the one returned by confirmAndRespond. */
     suspend fun revokeAutoUnlockLease(serverDomain: String, leaseId: String) {
-        val material = irk.resolve("Require approval to boot this server")
+        val material = irk.resolve(FSStrings.get(R.string.require_approval_to_boot_this_server))
         val issuedAt = now()
         // The boot worker's DELETE carries no body signature — it's
         // authorized by the owner-IRK Flagship-Boot-v1 header bound to the
@@ -444,7 +445,7 @@ class SecretRequestCoordinator(
         val store = pendingLeases ?: return emptyList()
         val waiting = store.all()
         if (waiting.isEmpty()) return emptyList()
-        val material = irk.resolve("Finish setting up automatic unlock")
+        val material = irk.resolve(FSStrings.get(R.string.finish_setting_up_automatic_unlock))
         val done = mutableListOf<Pair<String, String>>()
         for ((server, p) in waiting) {
             if (p.lease.expiresAt <= now()) {

@@ -7,6 +7,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,14 +44,14 @@ class WatchApprovalPrompt(private val now: () -> Long = { System.currentTimeMill
 
         val shared = WatchApprovalPrompt()
 
-        const val TITLE = "Your watch is waiting"
-        const val AFTER_UNLOCK = "Unlocked. Tap Approve on your watch again."
-        const val LOCK_SCREEN_NOTE =
-            "Your watch is waiting to approve a server's start-up. Unlock, then tap Approve on the watch again."
+        val TITLE get() = FSStrings.get(R.string.your_watch_is_waiting)
+        val AFTER_UNLOCK get() = FSStrings.get(R.string.unlocked_tap_approve_on_your_watch)
+        val LOCK_SCREEN_NOTE get() =
+            FSStrings.get(R.string.your_watch_is_waiting_to_approve)
 
         fun message(serverName: String?): String {
-            val what = serverName?.let { "$it's start-up" } ?: "a server's start-up"
-            return "Your watch asked to approve $what. Unlock Flagship once so it can, then tap Approve on the watch again."
+            val what = serverName?.let { FSStrings.get(R.string.s_start_up, it) } ?: "a server's start-up"
+            return FSStrings.get(R.string.your_watch_asked_to_approve_unlock, what)
         }
     }
 }

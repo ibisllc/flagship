@@ -10,6 +10,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -217,12 +221,12 @@ fun BuildSourceChooserScreen(nav: NavController) {
         activeSessions = sessions.count { it.isActive }
     }
     ScreenScaffold(
-        title = "Build a service",
+        title = stringResource(R.string.build_a_service),
         subtitle = null,
         onBack = { nav.popBackStack() },
         action = {
             IconButton(onClick = { showHelp = true }, modifier = Modifier.testTag("build-source-help")) {
-                Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = stringResource(R.string.help), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
     ) {
@@ -235,25 +239,25 @@ fun BuildSourceChooserScreen(nav: NavController) {
             nav.navigate("build/journal")
         }
         Spacer(Modifier.height(FS.space.s5))
-        Text("New build", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium))
+        Text(stringResource(R.string.new_build), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium))
         Spacer(Modifier.height(FS.space.s2))
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             SourceTile(
-                title = "Start from scratch with AI",
-                body = "Describe what you want. The AI writes it and the server runs it.",
+                title = stringResource(R.string.start_from_scratch_with_ai),
+                body = stringResource(R.string.describe_what_you_want_the_ai),
                 // The box's model drives this build, so confirm an AI key first.
                 onClick = { nav.navigate("vibe/key") },
                 testTag = "build-src-scratch",
             )
             SourceTile(
-                title = "Import from a Git repo",
-                body = "Paste a repo URL. If it's Flagship-ready we install it as-is; if not, the AI can adapt it.",
+                title = stringResource(R.string.import_from_a_git_repo),
+                body = stringResource(R.string.paste_a_repo_url_if_its),
                 onClick = { nav.navigate("build/git") },
                 testTag = "build-src-git",
             )
             SourceTile(
-                title = "Connect your IDE (Cursor/Cline)",
-                body = "Build from your editor using your own AI. No model key lives on the server.",
+                title = stringResource(R.string.connect_your_ide_cursor_cline),
+                body = stringResource(R.string.build_from_your_editor_using_your),
                 onClick = { nav.navigate("build/mcp") },
                 testTag = "build-src-mcp",
             )
@@ -279,7 +283,7 @@ private fun ResumeRow(activeSessions: Int, onClick: () -> Unit) {
     ) {
         Icon(Icons.Outlined.History, contentDescription = null, tint = FS.colors.accent)
         Text(
-            "Resume or view past builds",
+            stringResource(R.string.resume_or_view_past_builds),
             color = FS.colors.text,
             style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
             modifier = Modifier.weight(1f),
@@ -290,7 +294,7 @@ private fun ResumeRow(activeSessions: Int, onClick: () -> Unit) {
                     .clip(RoundedCornerShape(FS.radius.pill))
                     .background(FS.colors.success)
                     .padding(horizontal = 8.dp, vertical = 2.dp)
-                    .semantics { contentDescription = "$activeSessions active" },
+                    .semantics { contentDescription = FSStrings.get(R.string.active, activeSessions) },
             ) {
                 Text("$activeSessions", color = Color.White, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold))
             }
@@ -299,30 +303,30 @@ private fun ResumeRow(activeSessions: Int, onClick: () -> Unit) {
     }
 }
 
-private val BUILD_HELP_ITEMS = listOf(
+private val BUILD_HELP_ITEMS get() = listOf(
     "Resume or view past builds" to
-        "Builds still open on your server can be picked up where you left off: answer the AI, deploy, or retry a failed deploy. Older builds keep a timeline of what happened. A build stays open until your server restarts.",
+        FSStrings.get(R.string.builds_still_open_on_your_server),
     "Start from scratch with AI" to
-        "Describe the app you want in plain English. An AI model writes the code on your server, asks you questions when it needs to, and you deploy it with one tap. You need a key from an AI provider (OpenAI, Anthropic, OpenRouter…); it is sent only to your server.",
+        FSStrings.get(R.string.describe_the_app_you_want_in),
     "Import from a Git repo" to
-        "Paste the address of a code repository, for example on GitHub. If it is already set up for Flagship it installs as-is; otherwise the AI can adapt it for you.",
+        FSStrings.get(R.string.paste_the_address_of_a_code),
     "Connect your IDE" to
-        "For developers: work in your own IDE (Claude Code, Cursor, VS Code or Cline) with your own AI, connected to your server over MCP. No AI key is stored on the server.",
+        FSStrings.get(R.string.for_developers_work_in_your_own),
 )
 
 @Composable
 private fun BuildHelpDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
-        title = { Text("How building works") },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.done)) } },
+        title = { Text(stringResource(R.string.how_building_works)) },
         text = {
             Column(
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(FS.space.s4),
             ) {
                 Text(
-                    "Every option ends the same way: the app is installed and running on your own server, at its own web address.",
+                    stringResource(R.string.every_option_ends_the_same_way),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -414,16 +418,16 @@ private fun DetailAdaptCard(buildId: String, vm: BuildJournalViewModel, nav: Nav
                 )
             }
         }
-        is BuildJournalViewModel.DetailAdapt.Working -> InfoCard(s.text, "This can take several minutes. You can leave this screen.")
+        is BuildJournalViewModel.DetailAdapt.Working -> InfoCard(s.text, stringResource(R.string.this_can_take_several_minutes_you))
         is BuildJournalViewModel.DetailAdapt.Adapted -> FSCard(padding = PaddingValues(FS.space.s5)) {
-            StatusLine("Adapted", FS.colors.success, large = true)
+            StatusLine(stringResource(R.string.adapted), FS.colors.success, large = true)
             Spacer(Modifier.height(FS.space.s2))
-            Text("The AI rewrote this repo into a Flagship service (${s.fileCount} file(s)).", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            Text(fsString(R.string.the_ai_rewrote_this_repo_into, s.fileCount), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(FS.space.s4))
-            FSPrimaryButton("Install it", onClick = { vm.deployAgain(buildId) }, block = true, modifier = Modifier.testTag("build-journal-deploy"))
+            FSPrimaryButton(stringResource(R.string.install_it), onClick = { vm.deployAgain(buildId) }, block = true, modifier = Modifier.testTag("build-journal-deploy"))
         }
         is BuildJournalViewModel.DetailAdapt.Deployed -> FSCard(padding = PaddingValues(FS.space.s5)) {
-            StatusLine("Installed", FS.colors.success, large = true, modifier = Modifier.testTag("build-journal-deployed"))
+            StatusLine(stringResource(R.string.installed), FS.colors.success, large = true, modifier = Modifier.testTag("build-journal-deployed"))
             Spacer(Modifier.height(FS.space.s2))
             Text(s.url, color = FS.colors.accentText, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
         }
@@ -455,7 +459,7 @@ fun BuildGitScreen(nav: NavController) {
         BuildGitViewModel(
             client = client,
             operations = operations,
-            serviceLabel = "your repo",
+            serviceLabel = stringResource(R.string.your_repo),
             serverLabel = targetPod?.name,
         ).also {
             holder.vm = it
@@ -470,7 +474,7 @@ fun BuildGitScreen(nav: NavController) {
     // A 503 from adapt means the box has no model wired — bounce to scratch.
     LaunchedEffect(phase) {
         if (phase is BuildGitViewModel.GitPhase.AdaptUnavailable) {
-            toasts.info("AI adapt isn't available on this server yet — starting from scratch instead.")
+            toasts.info(FSStrings.get(R.string.ai_adapt_isnt_available_on_this))
             nav.navigate("vibe/key")
         }
     }
@@ -525,20 +529,20 @@ fun BuildGitScreen(nav: NavController) {
     }
 
     ScreenScaffold(
-        title = "Git import",
+        title = stringResource(R.string.git_import),
         subtitle = null,
         onBack = { nav.popBackStack() },
     ) {
         com.flagshipserver.app.ui.components.RunsOnRow(locked = phase !is BuildGitViewModel.GitPhase.Idle)
         Spacer(Modifier.height(FS.space.s4))
-        FieldLabel("Repository URL")
+        FieldLabel(stringResource(R.string.repository_url))
         MonoField(url, { url = it }, "https://github.com/you/app")
         Spacer(Modifier.height(FS.space.s4))
-        FieldLabel("Branch or tag (optional)")
+        FieldLabel(stringResource(R.string.branch_or_tag_optional))
         MonoField(ref, { ref = it }, "main")
         Spacer(Modifier.height(FS.space.s4))
-        FieldLabel("Name (optional)")
-        MonoField(name, { name = it }, "From the repo's name", testTag = "build-git-name")
+        FieldLabel(stringResource(R.string.name_optional))
+        MonoField(name, { name = it }, stringResource(R.string.from_the_repos_name), testTag = "build-git-name")
         Spacer(Modifier.height(FS.space.s2))
         Text(
             text = buildAnnotatedString {
@@ -558,7 +562,7 @@ fun BuildGitScreen(nav: NavController) {
             StatusLine(warning, MaterialTheme.colorScheme.error, ok = false, modifier = Modifier.testTag("build-git-name-taken"))
         } else if (currentCheck != null && currentCheck.ok && currentCheck.name != null) {
             Spacer(Modifier.height(FS.space.s2))
-            StatusLine("Available", FS.colors.success)
+            StatusLine(stringResource(R.string.available), FS.colors.success)
         } else if (slug.isEmpty()) {
             Spacer(Modifier.height(FS.space.s2))
             Text(
@@ -585,7 +589,7 @@ fun BuildGitScreen(nav: NavController) {
         }
         val checkRepo = {
             if (url.isBlank()) {
-                toasts.error("Paste a repo URL first.")
+                toasts.error(FSStrings.get(R.string.paste_a_repo_url_first))
             } else {
                 // Keep the server it builds on for the steps after this one.
                 podScope?.let { it.choose?.invoke(it.pod.podId) }
@@ -596,7 +600,7 @@ fun BuildGitScreen(nav: NavController) {
         if (BuildGitViewModel.showsCheckRepo(phase)) {
             val checking = phase is BuildGitViewModel.GitPhase.Checking
             FSPrimaryButton(
-                label = if (checking) "Cloning…" else "Check repo",
+                label = if (checking) stringResource(R.string.cloning) else stringResource(R.string.check_repo),
                 onClick = { checkRepo() },
                 enabled = !checking && !nameRefused,
                 block = true,
@@ -610,7 +614,7 @@ fun BuildGitScreen(nav: NavController) {
             is BuildGitViewModel.GitPhase.NotLive -> NotLiveCard(p.reason, nav, vm, recheckEnabled = !nameRefused) { checkRepo() }
             is BuildGitViewModel.GitPhase.Sealed -> SealedCard(p.message, nav, vm, recheckEnabled = !nameRefused) { checkRepo() }
             is BuildGitViewModel.GitPhase.Adapted -> AdaptedCard(p, vm, nav)
-            is BuildGitViewModel.GitPhase.Deploying -> InfoCard("Installing…", "Building and deploying to your server.")
+            is BuildGitViewModel.GitPhase.Deploying -> InfoCard(stringResource(R.string.installing), stringResource(R.string.building_and_deploying_to_your_server))
             is BuildGitViewModel.GitPhase.Deployed -> DeployedCard(p.url, vm)
             is BuildGitViewModel.GitPhase.Failed -> {
                 ErrorCardSimple(p.message)
@@ -633,14 +637,14 @@ fun BuildGitScreen(nav: NavController) {
                             nav.openBuildSessions()
                         },
                         modifier = Modifier.testTag("build-git-open-sessions"),
-                    ) { Text("Open build sessions") }
+                    ) { Text(stringResource(R.string.open_build_sessions)) }
                 } else {
-                    TextButton(onClick = { vm.dismissConflict() }) { Text("Pick another name") }
+                    TextButton(onClick = { vm.dismissConflict() }) { Text(stringResource(R.string.pick_another_name)) }
                 }
             },
             dismissButton = {
                 if (c.kind == "session") {
-                    TextButton(onClick = { vm.dismissConflict() }) { Text("Pick another name") }
+                    TextButton(onClick = { vm.dismissConflict() }) { Text(stringResource(R.string.pick_another_name)) }
                 }
             },
         )
@@ -674,12 +678,12 @@ private fun VerdictCard(
     FSCard(padding = PaddingValues(FS.space.s5)) {
         if (p.fit) {
             VerdictHead(recheckEnabled, onCheckAgain) {
-                StatusLine("Flagship-ready", FS.colors.success, large = true)
+                StatusLine(stringResource(R.string.flagship_ready), FS.colors.success, large = true)
             }
             Spacer(Modifier.height(FS.space.s2))
-            Text("${p.reason} — ${p.fileCount} file(s).", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            Text(fsString(R.string.file_s, p.reason, p.fileCount), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(FS.space.s4))
-            FSPrimaryButton("Install it", onClick = { vm.deploy() }, block = true)
+            FSPrimaryButton(stringResource(R.string.install_it), onClick = { vm.deploy() }, block = true)
         } else {
             val share by vm.share.collectAsState()
             VerdictHead(recheckEnabled, onCheckAgain) {
@@ -838,7 +842,7 @@ private fun AdaptingCard(progress: String?, phase: String?) {
         }
         Spacer(Modifier.height(FS.space.s2))
         Text(
-            "This can take several minutes. You can leave this screen; Build sessions shows how it went.",
+            stringResource(R.string.this_can_take_several_minutes_you_2),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
         )
@@ -848,11 +852,11 @@ private fun AdaptingCard(progress: String?, phase: String?) {
 @Composable
 private fun AdaptedCard(p: BuildGitViewModel.GitPhase.Adapted, vm: BuildGitViewModel, nav: NavController) {
     FSCard(padding = PaddingValues(FS.space.s5)) {
-        StatusLine("Adapted", FS.colors.success, large = true)
+        StatusLine(stringResource(R.string.adapted), FS.colors.success, large = true)
         Spacer(Modifier.height(FS.space.s2))
-        Text("The AI rewrote this repo into a Flagship service (${p.fileCount} file(s)).", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        Text(fsString(R.string.the_ai_rewrote_this_repo_into, p.fileCount), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(FS.space.s4))
-        FSPrimaryButton("Install it", onClick = { vm.deploy() }, block = true)
+        FSPrimaryButton(stringResource(R.string.install_it), onClick = { vm.deploy() }, block = true)
         Spacer(Modifier.height(FS.space.s2))
         AdapterExport(vm)
         Spacer(Modifier.height(FS.space.s2))
@@ -863,7 +867,7 @@ private fun AdaptedCard(p: BuildGitViewModel.GitPhase.Adapted, vm: BuildGitViewM
 @Composable
 private fun DeployedCard(url: String, vm: BuildGitViewModel) {
     FSCard(padding = PaddingValues(FS.space.s5)) {
-        StatusLine("Installed", FS.colors.success, large = true)
+        StatusLine(stringResource(R.string.installed), FS.colors.success, large = true)
         Spacer(Modifier.height(FS.space.s2))
         Text(url, color = FS.colors.accentText, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
         Spacer(Modifier.height(FS.space.s4))
@@ -879,7 +883,7 @@ private fun AdapterExport(vm: BuildGitViewModel) {
     val exporting by vm.exportingAdapter.collectAsState()
     val error by vm.exportError.collectAsState()
     FSSecondaryButton(
-        if (exporting) "Preparing…" else "Get flagship.app.json",
+        if (exporting) stringResource(R.string.preparing) else stringResource(R.string.get_flagship_app_json),
         onClick = { vm.exportAdapter(File(ctx.cacheDir, "adapters")) },
         enabled = !exporting,
         block = true,
@@ -887,7 +891,7 @@ private fun AdapterExport(vm: BuildGitViewModel) {
     )
     Spacer(Modifier.height(FS.space.s2))
     Text(
-        "Is this your repo? Commit this file at its root and every Flagship server will run it this way.",
+        stringResource(R.string.is_this_your_repo_commit_this),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.bodySmall,
     )
@@ -907,7 +911,7 @@ private fun shareAdapterFile(ctx: Context, file: File) {
         putExtra(Intent.EXTRA_SUBJECT, BuildGitViewModel.ADAPTER_FILE_NAME)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    val chooser = Intent.createChooser(send, "Share flagship.app.json")
+    val chooser = Intent.createChooser(send, FSStrings.get(R.string.share_flagship_app_json))
     chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     ctx.startActivity(chooser)
 }
@@ -915,7 +919,7 @@ private fun shareAdapterFile(ctx: Context, file: File) {
 @Composable
 private fun JournalLink(nav: NavController, buildId: String?) {
     if (buildId == null) return
-    FSGhostButton("View build journal", onClick = { nav.navigate("build/journal/$buildId") }, block = true)
+    FSGhostButton(stringResource(R.string.view_build_journal), onClick = { nav.navigate("build/journal/$buildId") }, block = true)
 }
 
 // ── mcp ─────────────────────────────────────────────────────────
@@ -935,9 +939,9 @@ fun BuildMcpScreen(nav: NavController, editServiceId: String? = null) {
     val deployStatus by vm.deployStatus.collectAsState()
 
     ScreenScaffold(
-        title = "Connect your IDE",
+        title = stringResource(R.string.connect_your_ide),
         subtitle = vm.editingName?.let { EditService.ideIntro(it) }
-            ?: "Build from your own IDE (Claude Code, Cursor, VS Code or Cline) using your own AI. The server runs an MCP server scoped to just this build — no model key on the server.",
+            ?: stringResource(R.string.build_from_your_own_ide_claude),
         onBack = { nav.popBackStack() },
     ) {
         val creating = phase is BuildMcpViewModel.McpPhase.Creating
@@ -946,7 +950,7 @@ fun BuildMcpScreen(nav: NavController, editServiceId: String? = null) {
         Spacer(Modifier.height(FS.space.s4))
         if (conn == null) {
             FSPrimaryButton(
-                label = if (creating) "Creating…" else "Create a connection",
+                label = if (creating) stringResource(R.string.creating) else stringResource(R.string.create_a_connection),
                 onClick = {
                     // Keep the server it builds on for the steps after this one.
                     podScope?.let { it.choose?.invoke(it.pod.podId) }
@@ -964,18 +968,18 @@ fun BuildMcpScreen(nav: NavController, editServiceId: String? = null) {
             ConnectionCard(
                 conn = conn,
                 onCopyConfig = { config ->
-                    copyToClipboard(ctx, "Flagship MCP config", config)
-                    toasts.success("Config copied.")
+                    copyToClipboard(ctx, FSStrings.get(R.string.flagship_mcp_config), config)
+                    toasts.success(FSStrings.get(R.string.config_copied))
                 },
                 onCopyCommand = { command ->
-                    copyToClipboard(ctx, "Flagship MCP command", command)
-                    toasts.success("Command copied.")
+                    copyToClipboard(ctx, FSStrings.get(R.string.flagship_mcp_command), command)
+                    toasts.success(FSStrings.get(R.string.command_copied))
                 },
                 onCopyKey = {
-                    copyToClipboard(ctx, "Flagship MCP key", conn.key)
-                    toasts.success("Key copied.")
+                    copyToClipboard(ctx, FSStrings.get(R.string.flagship_mcp_key), conn.key)
+                    toasts.success(FSStrings.get(R.string.key_copied))
                 },
-                onRotate = { vm.rotate(); toasts.info("Key regenerated — update your IDE.") },
+                onRotate = { vm.rotate(); toasts.info(FSStrings.get(R.string.key_regenerated_update_your_ide)) },
                 onJournal = { vm.buildId?.let { nav.navigate("build/journal/$it") } },
                 onDeploy = { vm.deploy() },
                 onRefreshEnv = { vm.refreshEnvRequests() },
@@ -1005,7 +1009,7 @@ private fun ConnectionCard(
     val config = ideConfigString(ide.config)
     FSCard(padding = PaddingValues(FS.space.s5)) {
         Text(
-            "Add this to your IDE's own settings, not a file in your project (the address names your server). The key works only for this build.",
+            stringResource(R.string.add_this_to_your_ides_own),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.testTag("build-mcp-user-settings"),
@@ -1013,7 +1017,7 @@ private fun ConnectionCard(
         Spacer(Modifier.height(FS.space.s3))
         KeyValueRow("URL", conn.url)
         Spacer(Modifier.height(FS.space.s2))
-        KeyValueRow("Key", conn.key)
+        KeyValueRow(stringResource(R.string.key), conn.key)
         Spacer(Modifier.height(FS.space.s3))
         if (choices.size > 1) {
             Spacer(Modifier.height(FS.space.s3))
@@ -1037,32 +1041,32 @@ private fun ConnectionCard(
         }
         Spacer(Modifier.height(FS.space.s3))
         Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            FSSecondaryButton("Copy key", onClick = onCopyKey)
-            FSSecondaryButton("Copy IDE config", onClick = { onCopyConfig(config) }, modifier = Modifier.testTag("build-mcp-copy-config"))
+            FSSecondaryButton(stringResource(R.string.copy_key), onClick = onCopyKey)
+            FSSecondaryButton(stringResource(R.string.copy_ide_config), onClick = { onCopyConfig(config) }, modifier = Modifier.testTag("build-mcp-copy-config"))
         }
         Spacer(Modifier.height(FS.space.s3))
         Box(Modifier.testTag("build-mcp-ide-config")) { CodeBlock(config) }
         ide.command?.let { command ->
             Spacer(Modifier.height(FS.space.s3))
-            Text("Or run:", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.or_run), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(FS.space.s2))
             Box(Modifier.testTag("build-mcp-ide-command")) { CodeBlock(command) }
             Spacer(Modifier.height(FS.space.s2))
-            FSSecondaryButton("Copy command", onClick = { onCopyCommand(command) }, block = true, modifier = Modifier.testTag("build-mcp-copy-command"))
+            FSSecondaryButton(stringResource(R.string.copy_command), onClick = { onCopyCommand(command) }, block = true, modifier = Modifier.testTag("build-mcp-copy-command"))
         }
         Spacer(Modifier.height(FS.space.s3))
         Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            FSSecondaryButton("Regenerate key", onClick = onRotate)
-            FSSecondaryButton("View journal", onClick = onJournal)
+            FSSecondaryButton(stringResource(R.string.regenerate_key), onClick = onRotate)
+            FSSecondaryButton(stringResource(R.string.view_journal), onClick = onJournal)
         }
         Spacer(Modifier.height(FS.space.s4))
         Text(
-            "Your editor's agent writes files, validates, requests any secrets (value-free), and deploys. You can also deploy here once it's done:",
+            stringResource(R.string.your_editors_agent_writes_files_validates),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
         )
         Spacer(Modifier.height(FS.space.s2))
-        FSPrimaryButton("Deploy now", onClick = onDeploy, block = true)
+        FSPrimaryButton(stringResource(R.string.deploy_now), onClick = onDeploy, block = true)
         deployStatus?.let {
             Spacer(Modifier.height(FS.space.s2))
             Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
@@ -1077,10 +1081,10 @@ private fun ConnectionCard(
 @Composable
 private fun EnvRequestsCard(requests: List<BuildEnvRequest>, onRefresh: () -> Unit) {
     FSCard(padding = PaddingValues(FS.space.s5)) {
-        Text("Your IDE asked for these secrets", color = FS.colors.text, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
+        Text(stringResource(R.string.your_ide_asked_for_these_secrets), color = FS.colors.text, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
         Spacer(Modifier.height(FS.space.s2))
         Text(
-            "The editor and its AI never see the value — you set it here on your server. Open Configure environment on the service after it's deployed and enter each value there; it never travels through your IDE.",
+            stringResource(R.string.the_editor_and_its_ai_never),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
         )
@@ -1094,7 +1098,7 @@ private fun EnvRequestsCard(requests: List<BuildEnvRequest>, onRefresh: () -> Un
                 if (q.currentlySet) {
                     StatusLine("set", FS.colors.success)
                 } else {
-                    Text("needs you", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.needs_you), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
             }
             q.why?.let {
@@ -1102,7 +1106,7 @@ private fun EnvRequestsCard(requests: List<BuildEnvRequest>, onRefresh: () -> Un
             }
         }
         Spacer(Modifier.height(FS.space.s3))
-        FSSecondaryButton("Refresh", onClick = onRefresh, block = true)
+        FSSecondaryButton(stringResource(R.string.refresh), onClick = onRefresh, block = true)
     }
 }
 
@@ -1160,8 +1164,8 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
     }
 
     ScreenScaffold(
-        title = "Build sessions",
-        subtitle = if (buildId != null) "How this service was built." else null,
+        title = stringResource(R.string.build_sessions),
+        subtitle = if (buildId != null) stringResource(R.string.how_this_service_was_built) else null,
         onBack = { nav.popBackStack() },
     ) {
         if (buildId != null) {
@@ -1169,7 +1173,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
             when (val d = detail) {
                 is LoadingState.Loaded -> TimelineCard(buildId, d.value)
                 is LoadingState.Failed -> ErrorCardSimple(d.message, onRetry = { buildId?.let { vm.loadDetail(it) } })
-                else -> InfoCard("Loading…", "Fetching the build timeline.")
+                else -> InfoCard(stringResource(R.string.loading), stringResource(R.string.fetching_the_build_timeline))
             }
         } else {
             when (val l = list) {
@@ -1179,11 +1183,11 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                     val open = BuildSessions.openBuilds(builds, liveSessions)
                     val anyOpen = liveSessions.isNotEmpty() || open.isNotEmpty()
                     if (builds.isEmpty() && liveSessions.isEmpty()) {
-                        InfoCard("No builds yet.", "Builds you start will show up here.")
+                        InfoCard(stringResource(R.string.no_builds_yet), stringResource(R.string.builds_you_start_will_show_up))
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                             if (anyOpen) {
-                                SectionCaption("Open on your server")
+                                SectionCaption(stringResource(R.string.open_on_your_server))
                                 open.forEach { b ->
                                     val on = vm.serverOfBuild(b.buildId)
                                     BuildTile(b, startedOnly = true, server = on?.name?.takeIf { multiServer }) {
@@ -1194,7 +1198,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                                             onClick = { confirmDiscardBuild = b },
                                             modifier = Modifier.testTag("build-discard-${b.buildId}"),
                                         ) {
-                                            Text("Discard…", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                                            Text(stringResource(R.string.discard), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                                         }
                                     }
                                 }
@@ -1209,7 +1213,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                                                 onClick = { confirmDiscard = session },
                                                 modifier = Modifier.testTag("build-session-discard-${session.sessionId}"),
                                             ) {
-                                                Text("Discard…", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                                                Text(stringResource(R.string.discard), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                                             }
                                         }
                                     }
@@ -1218,7 +1222,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                             }
                             if (ended.isNotEmpty()) {
                                 if (anyOpen) Spacer(Modifier.height(FS.space.s2))
-                                SectionCaption("Past builds")
+                                SectionCaption(stringResource(R.string.past_builds))
                                 ended.forEach { b ->
                                     val on = vm.serverOfBuild(b.buildId)
                                     BuildTile(b, server = on?.name?.takeIf { multiServer }) {
@@ -1238,7 +1242,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                     }
                 }
                 is LoadingState.Failed -> ErrorCardSimple(l.message, onRetry = { vm.loadList() })
-                else -> InfoCard("Loading…", "Fetching your builds.")
+                else -> InfoCard(stringResource(R.string.loading), stringResource(R.string.fetching_your_builds))
             }
         }
     }
@@ -1252,9 +1256,9 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                 TextButton(onClick = {
                     confirmDiscard = null
                     vm.discard(session)
-                }) { Text("Discard build", color = MaterialTheme.colorScheme.error) }
+                }) { Text(stringResource(R.string.discard_build), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { confirmDiscard = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmDiscard = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 
@@ -1267,9 +1271,9 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                 TextButton(onClick = {
                     confirmDiscardBuild = null
                     vm.discard(b)
-                }) { Text("Discard build", color = MaterialTheme.colorScheme.error) }
+                }) { Text(stringResource(R.string.discard_build), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { confirmDiscardBuild = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmDiscardBuild = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }
@@ -1299,7 +1303,7 @@ private fun SessionTile(session: VibeCodeSessionMeta, title: String, server: Str
             Text(title, color = FS.colors.text, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(FS.space.s1))
             Text(
-                listOfNotNull("Started ${fmtTimestamp(session.startedAt)}", server?.let { "on $it" }).joinToString(" "),
+                listOfNotNull(fsString(R.string.started, fmtTimestamp(session.startedAt)), server?.let { "on $it" }).joinToString(" "),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -1339,7 +1343,7 @@ private fun BuildTile(b: BuildSummary, startedOnly: Boolean = false, server: Str
         )
         Spacer(Modifier.height(FS.space.s1))
         Text(
-            (if (startedOnly) "Started ${fmtTimestamp(b.startedAt)}" else BuildSessions.pastBuildSubtitle(b, fmtTimestamp(b.startedAt))) +
+            (if (startedOnly) fsString(R.string.started, fmtTimestamp(b.startedAt)) else BuildSessions.pastBuildSubtitle(b, fmtTimestamp(b.startedAt))) +
                 (server?.let { " on $it" } ?: ""),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
@@ -1352,10 +1356,10 @@ private fun BuildTile(b: BuildSummary, startedOnly: Boolean = false, server: Str
 @Composable
 private fun TimelineCard(buildId: String, entries: List<BuildJournalEntry>) {
     FSCard(padding = PaddingValues(FS.space.s5)) {
-        Text("Build $buildId", color = FS.colors.text, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
+        Text(fsString(R.string.build, buildId), color = FS.colors.text, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
         Spacer(Modifier.height(FS.space.s3))
         if (entries.isEmpty()) {
-            Text("No steps recorded yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.no_steps_recorded_yet), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         } else {
             entries.forEach { e ->
                 Column(Modifier.fillMaxWidth().padding(vertical = FS.space.s2)) {
@@ -1406,12 +1410,12 @@ private fun InfoCard(title: String, body: String) {
 @Composable
 private fun ErrorCardSimple(message: String, onRetry: (() -> Unit)? = null) {
     FSCard(padding = PaddingValues(FS.space.s5)) {
-        Text("Something went wrong", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
+        Text(stringResource(R.string.something_went_wrong), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
         Spacer(Modifier.height(FS.space.s1))
         Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         if (onRetry != null) {
             Spacer(Modifier.height(FS.space.s3))
-            FSSecondaryButton(label = "Try again", onClick = onRetry, block = true)
+            FSSecondaryButton(label = stringResource(R.string.try_again), onClick = onRetry, block = true)
         }
     }
 }

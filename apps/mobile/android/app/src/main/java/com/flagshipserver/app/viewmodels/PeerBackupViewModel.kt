@@ -9,6 +9,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.PeerBackupStatusResponse
 import com.flagshipserver.app.api.ScreensClient
@@ -40,13 +42,13 @@ class PeerBackupViewModel(
     }
 
     companion object {
-        const val NOT_SET_UP = "Peer backup isn't set up on this server yet."
+        val NOT_SET_UP get() = FSStrings.get(R.string.peer_backup_isnt_set_up_on)
 
         fun failureMessage(t: Throwable): String = when {
             t is ScreensError.Http && t.status == 404 -> PeerBackup.OLDER_ENGINE
             t is ScreensError.Http && t.status == 503 -> NOT_SET_UP
             t is ScreensError.Http -> NetworkErrorHumanizer.humanize(t)
-            else -> UserErrorText.of(t, "Couldn't load the peer-backup status. Try again.")
+            else -> UserErrorText.of(t, FSStrings.get(R.string.couldnt_load_the_peer_backup_status))
         }
     }
 }

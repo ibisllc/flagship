@@ -7,6 +7,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -77,27 +81,27 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 object EditService {
-    const val ROW_TITLE = "Edit this service"
-    const val ROW_CAPTION = "Change it with AI, or in your own editor"
-    const val AI_TITLE = "Describe the change"
-    const val AI_SUBTITLE = "Tell the AI what to change. It starts from the current code."
-    const val IDE_TITLE = "Use your IDE"
-    const val IDE_SUBTITLE = "Connect Cursor, Cline or another editor and change it with your own AI."
-    const val REPLACE_NOTE =
-        "The new version replaces the one running now. Its address, data and the people who can open it stay the same."
-    const val PROMPT_LABEL = "What should change?"
-    const val PROMPT_HINT = "For example: \"Add a due date to each item and sort by it.\""
+    val ROW_TITLE get() = FSStrings.get(R.string.edit_this_service)
+    val ROW_CAPTION get() = FSStrings.get(R.string.change_it_with_ai_or_in)
+    val AI_TITLE get() = FSStrings.get(R.string.describe_the_change)
+    val AI_SUBTITLE get() = FSStrings.get(R.string.tell_the_ai_what_to_change)
+    val IDE_TITLE get() = FSStrings.get(R.string.use_your_ide)
+    val IDE_SUBTITLE get() = FSStrings.get(R.string.connect_cursor_cline_or_another_editor)
+    val REPLACE_NOTE get() =
+        FSStrings.get(R.string.the_new_version_replaces_the_one)
+    val PROMPT_LABEL get() = FSStrings.get(R.string.what_should_change)
+    val PROMPT_HINT get() = FSStrings.get(R.string.for_example_add_a_due_date)
 
     /** The slug half of a `<creator>--<slug>` service id. */
     fun slug(serviceId: String): String = serviceId.substringAfter("--")
 
-    fun title(name: String) = "Edit $name"
+    fun title(name: String) = FSStrings.get(R.string.edit, name)
 
     fun canStart(prompt: String, starting: Boolean) = !starting && prompt.isNotBlank()
 
     /** The "Connect your IDE" intro when the IDE changes an installed service. */
     fun ideIntro(name: String) =
-        "Your editor's agent changes $name on your server, starting from its current code, using your own AI subscription. Deploying from the IDE replaces the running version; its address and data stay the same."
+        FSStrings.get(R.string.your_editors_agent_changes_on_your, name)
 
     fun keyRoute(serviceId: String) = "edit/key/$serviceId"
     fun describeRoute(serviceId: String) = "edit/describe/$serviceId"
@@ -116,14 +120,14 @@ sealed interface EditStartRefusal {
 
     val title: String
         get() = when (this) {
-            SessionOpen -> "Already being changed"
-            is TooBig -> "Too big for the AI chat"
-            is Other -> "Couldn't start"
+            SessionOpen -> FSStrings.get(R.string.already_being_changed)
+            is TooBig -> FSStrings.get(R.string.too_big_for_the_ai_chat)
+            is Other -> FSStrings.get(R.string.couldnt_start)
         }
 
     fun message(name: String): String = when (this) {
         SessionOpen ->
-            "A build session is already changing $name. Open it from Build sessions, or discard it there to start over."
+            FSStrings.get(R.string.a_build_session_is_already_changing, name)
         is TooBig -> message
         is Other -> message
     }
@@ -134,7 +138,7 @@ sealed interface EditStartRefusal {
             if (VibeCodeNameCheck.conflict(error)?.kind == "session") return SessionOpen
             val msg = error.boxError()
             if (error is ScreensError.Http && error.status == 413) {
-                return TooBig(msg ?: "This service is too big to change in the AI chat. Use your IDE instead.")
+                return TooBig(msg ?: FSStrings.get(R.string.this_service_is_too_big_to))
             }
             return Other(msg ?: NetworkErrorHumanizer.humanize(error))
         }
@@ -208,7 +212,7 @@ fun EditDescribeScreen(nav: NavController, serviceId: String) {
                 .testTag("edit-describe-prompt"),
         )
         FSPrimaryButton(
-            label = if (starting) "Starting…" else "Start",
+            label = if (starting) stringResource(R.string.starting) else stringResource(R.string.start),
             modifier = Modifier.testTag("edit-describe-start"),
             enabled = EditService.canStart(prompt, starting),
             block = true,
@@ -265,14 +269,14 @@ fun EditDescribeScreen(nav: NavController, serviceId: String) {
                             nav.openBuildSessions()
                         },
                         modifier = Modifier.testTag("edit-describe-open-sessions"),
-                    ) { Text("Open build sessions") }
+                    ) { Text(stringResource(R.string.open_build_sessions)) }
                     is EditStartRefusal.TooBig -> TextButton(
                         onClick = {
                             refusal = null
                             nav.navigate(EditService.mcpRoute(serviceId))
                         },
                         modifier = Modifier.testTag("edit-describe-use-ide"),
-                    ) { Text("Use your IDE") }
+                    ) { Text(stringResource(R.string.use_your_ide)) }
                     is EditStartRefusal.Other -> TextButton(onClick = { refusal = null }) { Text("OK") }
                 }
             },
