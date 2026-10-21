@@ -2415,7 +2415,6 @@
   "{0} of {1} pieces safe": "{1} 個中 {0} 個のパーツが保護済み",
   "Last placed: {0}": "最後の配置：{0}",
   "Holds {0} for other servers": "他のサーバーのために {0} を保管",
-  "Beta": "ベータ",
   "A remote browser can't sign — open your owner app to approve this": "リモートブラウザーは署名できません。オーナーアプリを開いて承認してください",
   "just now": "たった今",
   "Anyone with both this file and its passphrase can take over your account and lock you out.": "このファイルとそのパスフレーズの両方を持つ人は、あなたのアカウントを乗っ取り、あなたを締め出すことができます。",

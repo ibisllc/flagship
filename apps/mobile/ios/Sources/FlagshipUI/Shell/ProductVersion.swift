@@ -6,7 +6,7 @@ import Foundation
 /// keeps these constants in step with the file.
 enum ProductVersion {
     static let product = "0.2"
-    static let label = String(localized: "Beta")
+    static let label = "Beta"
 
     static var display: String { "\(product) \(label)" }
 
