@@ -271,12 +271,20 @@
     "en": "No new guest checkpoint for %lld minutes. Last reported: %@. The VM may be stalled.",
     "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:460"
   },
-  "%@. Last guest checkpoint %@; %lld minute%@ total.": {
-    "en": "%@. Last guest checkpoint %@; %lld minute%@ total.",
+  "%@. Last guest checkpoint %@; %lld minute total.": {
+    "en": "%@. Last guest checkpoint %@; %lld minute total.",
     "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:462"
   },
-  "%@; %lld minute%@ so far. Progress appears here once the server checks in.": {
-    "en": "%@; %lld minute%@ so far. Progress appears here once the server checks in.",
+  "%@. Last guest checkpoint %@; %lld minutes total.": {
+    "en": "%@. Last guest checkpoint %@; %lld minutes total.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:462"
+  },
+  "%@; %lld minute so far. Progress appears here once the server checks in.": {
+    "en": "%@; %lld minute so far. Progress appears here once the server checks in.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:464"
+  },
+  "%@; %lld minutes so far. Progress appears here once the server checks in.": {
+    "en": "%@; %lld minutes so far. Progress appears here once the server checks in.",
     "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:464"
   },
   "Serving at https://%@/": {
@@ -295,8 +303,12 @@
     "en": "Server health",
     "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:422"
   },
-  "%lld minute%@ ago": {
-    "en": "%lld minute%@ ago",
+  "%lld minute ago": {
+    "en": "%lld minute ago",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:552"
+  },
+  "%lld minutes ago": {
+    "en": "%lld minutes ago",
     "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:552"
   },
   "%lld of %lld cores": {
@@ -497,7 +509,8 @@
   },
   "VM %@: ignored %@ in state %@": {
     "en": "VM %@: ignored %@ in state %@",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:161"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:161",
+    "translatable": false
   },
   "Installation stopped by you.": {
     "en": "Installation stopped by you.",
@@ -505,19 +518,23 @@
   },
   "VM %@: started (%lld vCPU, %llu GiB)": {
     "en": "VM %@: started (%lld vCPU, %llu GiB)",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:253"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:253",
+    "translatable": false
   },
   "VM %@: failed to start — %@": {
     "en": "VM %@: failed to start — %@",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:257"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:257",
+    "translatable": false
   },
   "VM %@: %@ — booting sealed disk": {
     "en": "VM %@: %@ — booting sealed disk",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:298"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:298",
+    "translatable": false
   },
   "VM %@: stopped after %llds, before %@ could run": {
     "en": "VM %@: stopped after %llds, before %@ could run",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:307"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:307",
+    "translatable": false
   },
   "The virtual machine stopped after %llds, before %@ could run. The base image may be the wrong architecture for this Mac (Apple silicon can only run an arm64 image) or otherwise not bootable.": {
     "en": "The virtual machine stopped after %llds, before %@ could run. The base image may be the wrong architecture for this Mac (Apple silicon can only run an arm64 image) or otherwise not bootable.",
@@ -525,19 +542,23 @@
   },
   "VM %@: health back to normal": {
     "en": "VM %@: health back to normal",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:399"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:399",
+    "translatable": false
   },
   "VM %@: health — %@": {
     "en": "VM %@: health — %@",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:400"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:400",
+    "translatable": false
   },
   "VM %@: installer checkpoint — %@": {
     "en": "VM %@: installer checkpoint — %@",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:451"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:451",
+    "translatable": false
   },
   "VM %@: no guest checkpoint for %lld minutes; last: %@": {
     "en": "VM %@: no guest checkpoint for %lld minutes; last: %@",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:461"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:461",
+    "translatable": false
   },
   "No health report for %@ min. The server itself may be off or frozen.": {
     "en": "No health report for %@ min. The server itself may be off or frozen.",
@@ -569,15 +590,18 @@
   },
   "VZVirtualMachine.start OK · attachISO=%@ · state=%@": {
     "en": "VZVirtualMachine.start OK · attachISO=%@ · state=%@",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMSmoke.swift:345"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMSmoke.swift:345",
+    "translatable": false
   },
   "VZ start FAILED: %@": {
     "en": "VZ start FAILED: %@",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMSmoke.swift:349"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMSmoke.swift:349",
+    "translatable": false
   },
   "VZ state → %@": {
     "en": "VZ state → %@",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMSmoke.swift:392"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMSmoke.swift:392",
+    "translatable": false
   },
   "Unsupported network mode for this VM.": {
     "en": "Unsupported network mode for this VM.",
@@ -629,23 +653,28 @@
   },
   "+ %@ Using the Debian installer instead.": {
     "en": "+ %@ Using the Debian installer instead.",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:554"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:554",
+    "translatable": false
   },
   "+ remaster %@ → %@": {
     "en": "+ remaster %@ → %@",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:606"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:606",
+    "translatable": false
   },
   "+ installer family: %@": {
     "en": "+ installer family: %@",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:611"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:611",
+    "translatable": false
   },
   "+ remaster %@ → prepared image": {
     "en": "+ remaster %@ → prepared image",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:676"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:676",
+    "translatable": false
   },
   "+ helper write-image → %@": {
     "en": "+ helper write-image → %@",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:723"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:723",
+    "translatable": false
   },
   "Full Disk Access": {
     "en": "Full Disk Access",
@@ -657,18 +686,25 @@
   },
   "+ verified appliance %@ sha256=%@": {
     "en": "+ verified appliance %@ sha256=%@",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:824"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:824",
+    "translatable": false
   },
   "+ cloned generalized disk and wrote one-use specialization seed": {
     "en": "+ cloned generalized disk and wrote one-use specialization seed",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:839"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:839",
+    "translatable": false
   },
   "+ remaster %@ → VM installer": {
     "en": "+ remaster %@ → VM installer",
-    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:887"
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:887",
+    "translatable": false
   },
-  "This Mac is at its hosting limit (%lld server%@). Remove one first, or burn to USB.": {
-    "en": "This Mac is at its hosting limit (%lld server%@). Remove one first, or burn to USB.",
+  "This Mac is at its hosting limit (%lld server). Remove one first, or burn to USB.": {
+    "en": "This Mac is at its hosting limit (%lld server). Remove one first, or burn to USB.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:790"
+  },
+  "This Mac is at its hosting limit (%lld servers). Remove one first, or burn to USB.": {
+    "en": "This Mac is at its hosting limit (%lld servers). Remove one first, or burn to USB.",
     "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:790"
   },
   "This Mac doesn't have enough free memory to host a server (each server needs ~%llu GiB).": {
