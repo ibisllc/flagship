@@ -454,6 +454,15 @@
     "That's everything.": {
       "extractionState": "manual"
     },
+    "Approve your server's boot secret": {
+      "extractionState": "manual"
+    },
+    "Unseal the disk key for %@": {
+      "extractionState": "manual"
+    },
+    "Authorize your server to serve": {
+      "extractionState": "manual"
+    },
     "Watching %@…": {
       "extractionState": "manual"
     },
@@ -694,6 +703,33 @@
     "This pairing code expired. Start again to add a device.": {
       "extractionState": "manual"
     },
+    "Only an admin device can remove an app.": {
+      "extractionState": "manual"
+    },
+    "Only an admin device can change where this app runs.": {
+      "extractionState": "manual"
+    },
+    "Only an admin device can change this app's internet access.": {
+      "extractionState": "manual"
+    },
+    "Only an admin device can create or revoke API keys.": {
+      "extractionState": "manual"
+    },
+    "Only an admin device can change this app's data.": {
+      "extractionState": "manual"
+    },
+    "Only an admin device can turn on quick approve from Apple Watch.": {
+      "extractionState": "manual"
+    },
+    "Only an admin device can delete this account.": {
+      "extractionState": "manual"
+    },
+    "Only an admin device can share this server.": {
+      "extractionState": "manual"
+    },
+    "Only an admin device can change this server. This device can see it.": {
+      "extractionState": "manual"
+    },
     "Admin devices only": {
       "extractionState": "manual"
     },
@@ -745,16 +781,34 @@
     "Change %@'s access list": {
       "extractionState": "manual"
     },
+    "Allow": {
+      "extractionState": "manual"
+    },
+    "Deny": {
+      "extractionState": "manual"
+    },
+    "Ignore": {
+      "extractionState": "manual"
+    },
     "Saved. The server now uses this list.": {
       "extractionState": "manual"
     },
     "Saving…": {
       "extractionState": "manual"
     },
-    "Save": {
+    "Opening…": {
+      "extractionState": "manual"
+    },
+    "Not now": {
       "extractionState": "manual"
     },
     "Only allow hosts you expect this app to need. Your answer goes into its access list.": {
+      "extractionState": "manual"
+    },
+    "Allowing…": {
+      "extractionState": "manual"
+    },
+    "Denying…": {
       "extractionState": "manual"
     },
     "Internet access": {
@@ -856,7 +910,10 @@
     "Revoking…": {
       "extractionState": "manual"
     },
-    "Revoke": {
+    "Copied": {
+      "extractionState": "manual"
+    },
+    "Copy": {
       "extractionState": "manual"
     },
     "Send it with each request:": {
@@ -871,7 +928,7 @@
     "Can only read: GET, HEAD and OPTIONS requests.": {
       "extractionState": "manual"
     },
-    "Can read and change anything the app allows.": {
+    "Creating…": {
       "extractionState": "manual"
     },
     "Api keys": {
@@ -950,6 +1007,21 @@
       "extractionState": "manual"
     },
     "Give the key a name, so you know what uses it.": {
+      "extractionState": "manual"
+    },
+    "This server doesn't offer this app's database.": {
+      "extractionState": "manual"
+    },
+    "Previous": {
+      "extractionState": "manual"
+    },
+    "Next": {
+      "extractionState": "manual"
+    },
+    "Running…": {
+      "extractionState": "manual"
+    },
+    "Confirming…": {
       "extractionState": "manual"
     },
     "Database": {
@@ -1144,9 +1216,6 @@
     "Can't remove it": {
       "extractionState": "manual"
     },
-    "Can't remove the last copy": {
-      "extractionState": "manual"
-    },
     "Remove from %@": {
       "extractionState": "manual"
     },
@@ -1154,9 +1223,6 @@
       "extractionState": "manual"
     },
     "Runs on %@": {
-      "extractionState": "manual"
-    },
-    "Not on %@": {
       "extractionState": "manual"
     },
     "Deploying": {
@@ -1315,25 +1381,31 @@
     "Sign out of this device?": {
       "extractionState": "manual"
     },
-    "Sign out without recovery?": {
-      "extractionState": "manual"
-    },
     "Flagship is locked": {
       "extractionState": "manual"
     },
     "Unlock to continue.": {
       "extractionState": "manual"
     },
+    "Authenticating…": {
+      "extractionState": "manual"
+    },
+    "Unlock": {
+      "extractionState": "manual"
+    },
     "Sign out": {
       "extractionState": "manual"
     },
-    "Sign out anyway": {
+    "Erases this device's account key and returns to the start.": {
+      "extractionState": "manual"
+    },
+    "Unlock Flagship": {
       "extractionState": "manual"
     },
     "This erases this device's account key from the Keychain and returns you to the start. Sign back in with your recovery passkey to restore it — your account and servers stay put.": {
       "extractionState": "manual"
     },
-    "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good.": {
+    "No device screen lock is set up. Set one, disable the lock from Settings on another paired device, or sign out and start fresh.": {
       "extractionState": "manual"
     },
     "Sign in to approve this server.": {
@@ -1435,6 +1507,9 @@
     "Delete this key?": {
       "extractionState": "manual"
     },
+    "Add key": {
+      "extractionState": "manual"
+    },
     "Add an API key": {
       "extractionState": "manual"
     },
@@ -1444,13 +1519,55 @@
     "The keys are stored safely in your mobile app and your own servers.": {
       "extractionState": "manual"
     },
+    "Delete the AI key %@": {
+      "extractionState": "manual"
+    },
+    "The key wasn't deleted.": {
+      "extractionState": "manual"
+    },
     "%@ will be removed from this phone. Builds that are already running keep working.": {
+      "extractionState": "manual"
+    },
+    "Use this": {
       "extractionState": "manual"
     },
     "Delete %@": {
       "extractionState": "manual"
     },
     "Last used": {
+      "extractionState": "manual"
+    },
+    "Send through the Flagship relay": {
+      "extractionState": "manual"
+    },
+    "Better for your anonymity: the AI provider sees Flagship's address, not yours.": {
+      "extractionState": "manual"
+    },
+    "Through the Flagship relay": {
+      "extractionState": "manual"
+    },
+    "Direct": {
+      "extractionState": "manual"
+    },
+    "Turn the relay off for this key": {
+      "extractionState": "manual"
+    },
+    "The relay is off for this key. Try again.": {
+      "extractionState": "manual"
+    },
+    "API key": {
+      "extractionState": "manual"
+    },
+    "sk-…": {
+      "extractionState": "manual"
+    },
+    "Base URL (optional)": {
+      "extractionState": "manual"
+    },
+    "Label (optional)": {
+      "extractionState": "manual"
+    },
+    "e.g. Personal": {
       "extractionState": "manual"
     },
     "Provider": {
@@ -1471,6 +1588,24 @@
     "New build": {
       "extractionState": "manual"
     },
+    "Start from scratch with AI": {
+      "extractionState": "manual"
+    },
+    "Describe it in plain English. The AI writes it and deploys it for you.": {
+      "extractionState": "manual"
+    },
+    "Import from a Git repo": {
+      "extractionState": "manual"
+    },
+    "Paste a repo URL. If it's Flagship-ready we install it as-is, otherwise the AI adapts it.": {
+      "extractionState": "manual"
+    },
+    "Connect your IDE": {
+      "extractionState": "manual"
+    },
+    "Build from your own IDE (Claude Code, Cursor, VS Code or Cline) using your own AI. No model key ever touches the server.": {
+      "extractionState": "manual"
+    },
     "Resume or view past builds": {
       "extractionState": "manual"
     },
@@ -1478,6 +1613,18 @@
       "extractionState": "manual"
     },
     "Help": {
+      "extractionState": "manual"
+    },
+    "Builds still open on your server can be picked up where you left off: answer the AI, deploy, or retry a failed deploy. Older builds keep a timeline of what happened. A build stays open until your server restarts.": {
+      "extractionState": "manual"
+    },
+    "Describe the app you want in plain English. An AI model writes the code on your server, asks you questions when it needs to, and you deploy it with one tap. You need a key from an AI provider (OpenAI, Anthropic, OpenRouter…); it is sent only to your server.": {
+      "extractionState": "manual"
+    },
+    "Paste the address of a code repository, for example on GitHub. If it is already set up for Flagship it installs as-is; otherwise the AI can adapt it for you.": {
+      "extractionState": "manual"
+    },
+    "For developers: work in your own IDE (Claude Code, Cursor, VS Code or Cline) with your own AI, connected to your server over MCP. No AI key is stored on the server.": {
       "extractionState": "manual"
     },
     "How building works": {
@@ -1492,6 +1639,18 @@
     "That name is taken": {
       "extractionState": "manual"
     },
+    "Repository URL": {
+      "extractionState": "manual"
+    },
+    "Branch or tag (optional)": {
+      "extractionState": "manual"
+    },
+    "Name (optional)": {
+      "extractionState": "manual"
+    },
+    "From the repo's name": {
+      "extractionState": "manual"
+    },
     "https://": {
       "extractionState": "manual"
     },
@@ -1501,13 +1660,46 @@
     "Available": {
       "extractionState": "manual"
     },
+    "Cloning…": {
+      "extractionState": "manual"
+    },
+    "Check repo": {
+      "extractionState": "manual"
+    },
     "Open build sessions": {
       "extractionState": "manual"
     },
     "Pick another name": {
       "extractionState": "manual"
     },
+    "That can't be a web address.": {
+      "extractionState": "manual"
+    },
+    "This repo is not yet adapted for Flagship.": {
+      "extractionState": "manual"
+    },
+    "Use AI to adapt and deploy": {
+      "extractionState": "manual"
+    },
+    "Run the AI again": {
+      "extractionState": "manual"
+    },
+    "Deploy it": {
+      "extractionState": "manual"
+    },
+    "Anonymously share your adaptation": {
+      "extractionState": "manual"
+    },
+    "Others can then install this repo without AI. Nothing about you or your server is included.": {
+      "extractionState": "manual"
+    },
+    "Check again": {
+      "extractionState": "manual"
+    },
     "%@ — %lld file%@.": {
+      "extractionState": "manual"
+    },
+    "Install it": {
       "extractionState": "manual"
     },
     "Flagship-ready": {
@@ -1522,6 +1714,12 @@
     "Adapted": {
       "extractionState": "manual"
     },
+    "Preparing…": {
+      "extractionState": "manual"
+    },
+    "Get flagship.app.json": {
+      "extractionState": "manual"
+    },
     "Is this your repo? Commit this file at its root and every Flagship server will run it this way.": {
       "extractionState": "manual"
     },
@@ -1534,31 +1732,76 @@
     "Connect IDE": {
       "extractionState": "manual"
     },
-    "Connect your IDE": {
-      "extractionState": "manual"
-    },
     "Your editor's agent builds against your server using your OWN AI subscription. No model key is stored on the server.": {
       "extractionState": "manual"
     },
     "Your editor's agent changes %@ on your server, starting from its current code, using your own AI subscription. Deploying from the IDE replaces the running version; its address and data stay the same.": {
       "extractionState": "manual"
     },
+    "Create a connection": {
+      "extractionState": "manual"
+    },
     "Add this to your IDE's own settings, not a file in your project (the address names your server). The key works only for this build.": {
+      "extractionState": "manual"
+    },
+    "Key": {
+      "extractionState": "manual"
+    },
+    "Copy IDE config": {
       "extractionState": "manual"
     },
     "Or run:": {
       "extractionState": "manual"
     },
+    "Copy command": {
+      "extractionState": "manual"
+    },
     "Your editor's agent writes files, validates, requests any secrets (value-free), and deploys. You can also deploy here once it's done:": {
       "extractionState": "manual"
     },
+    "Deploying…": {
+      "extractionState": "manual"
+    },
+    "Deploy now": {
+      "extractionState": "manual"
+    },
     "IDE": {
+      "extractionState": "manual"
+    },
+    "URL copied": {
+      "extractionState": "manual"
+    },
+    "Key copied": {
+      "extractionState": "manual"
+    },
+    "Config copied": {
+      "extractionState": "manual"
+    },
+    "Command copied": {
+      "extractionState": "manual"
+    },
+    "Regenerating…": {
+      "extractionState": "manual"
+    },
+    "Regenerate key": {
+      "extractionState": "manual"
+    },
+    "View journal": {
       "extractionState": "manual"
     },
     "Your IDE asked for these secrets": {
       "extractionState": "manual"
     },
     "The editor and its AI never see the value — you set it here on your server. Open Configure environment on the service after it's deployed and enter each value there.": {
+      "extractionState": "manual"
+    },
+    "Refresh": {
+      "extractionState": "manual"
+    },
+    "Set": {
+      "extractionState": "manual"
+    },
+    "Needs you": {
       "extractionState": "manual"
     },
     "Build sessions": {
@@ -1570,13 +1813,10 @@
     "Build timeline": {
       "extractionState": "manual"
     },
-    "Past builds": {
-      "extractionState": "manual"
-    },
     "Open on your servers": {
       "extractionState": "manual"
     },
-    "Open on your server": {
+    "Past builds": {
       "extractionState": "manual"
     },
     "All builds": {
@@ -1585,28 +1825,127 @@
     "Discard build": {
       "extractionState": "manual"
     },
+    "This stops the AI and deletes what it has written on your server.%@": {
+      "extractionState": "manual"
+    },
     "This deletes what was imported or written on your server. Its name, \"%@\", becomes free again.": {
+      "extractionState": "manual"
+    },
+    "%@ · on %@": {
+      "extractionState": "manual"
+    },
+    "Couldn't reach %@, so its builds aren't listed.": {
+      "extractionState": "manual"
+    },
+    "Couldn't reach %@, so their builds aren't listed.": {
+      "extractionState": "manual"
+    },
+    "Started %@": {
       "extractionState": "manual"
     },
     "Discard…": {
       "extractionState": "manual"
     },
+    "AI is working": {
+      "extractionState": "manual"
+    },
+    "Waiting for you": {
+      "extractionState": "manual"
+    },
+    "Ready to deploy": {
+      "extractionState": "manual"
+    },
+    "Deployed": {
+      "extractionState": "manual"
+    },
+    "Cancelled": {
+      "extractionState": "manual"
+    },
+    "Failed": {
+      "extractionState": "manual"
+    },
+    "Resume": {
+      "extractionState": "manual"
+    },
+    "Open": {
+      "extractionState": "manual"
+    },
     "No builds yet.": {
+      "extractionState": "manual"
+    },
+    "Started %@ · %lld step%@": {
+      "extractionState": "manual"
+    },
+    "Deploy it again": {
+      "extractionState": "manual"
+    },
+    "Run the AI again or deploy": {
       "extractionState": "manual"
     },
     "No steps recorded for this build.": {
       "extractionState": "manual"
     },
+    "Connecting": {
+      "extractionState": "manual"
+    },
+    "Opening the secure channel to the builder…": {
+      "extractionState": "manual"
+    },
+    "Sending": {
+      "extractionState": "manual"
+    },
+    "Minting your recipe and sending it to the builder…": {
+      "extractionState": "manual"
+    },
+    "Pair with the builder": {
+      "extractionState": "manual"
+    },
+    "On your computer, open the Flagship Studio — it shows a QR code and a short code. Point your camera at it.": {
+      "extractionState": "manual"
+    },
     "Enter the code instead": {
       "extractionState": "manual"
     },
+    "Enter the builder code": {
+      "extractionState": "manual"
+    },
+    "Type the short code shown under the QR on your computer (like ABCD-EFGH).": {
+      "extractionState": "manual"
+    },
+    "Connect": {
+      "extractionState": "manual"
+    },
     "Scan the QR instead": {
+      "extractionState": "manual"
+    },
+    "Builder code": {
+      "extractionState": "manual"
+    },
+    "ABCD-EFGH": {
       "extractionState": "manual"
     },
     "The Flagship Studio is a small desktop app that writes your server to a USB stick. On your computer, go to flagshipserver.com/studio, install it, and open it to see the code to scan here.": {
       "extractionState": "manual"
     },
     "Don't have the builder?": {
+      "extractionState": "manual"
+    },
+    "Confirm the security code": {
+      "extractionState": "manual"
+    },
+    "Check that this matches the code on your computer. Only confirm if they're the same.": {
+      "extractionState": "manual"
+    },
+    "They match — pair & send": {
+      "extractionState": "manual"
+    },
+    "Sent — you can close this screen": {
+      "extractionState": "manual"
+    },
+    "Your computer's builder has the recipe. Pick the USB drive and any Advanced options on the computer; nothing more is needed from your phone.": {
+      "extractionState": "manual"
+    },
+    "Pairing failed": {
       "extractionState": "manual"
     },
     "The computer's builder app disconnected.": {
@@ -1666,6 +2005,12 @@
     "File": {
       "extractionState": "manual"
     },
+    "Invite people": {
+      "extractionState": "manual"
+    },
+    "Invite link": {
+      "extractionState": "manual"
+    },
     "Remote": {
       "extractionState": "manual"
     },
@@ -1673,6 +2018,9 @@
       "extractionState": "manual"
     },
     "Disconnect %@?": {
+      "extractionState": "manual"
+    },
+    "Session %@": {
       "extractionState": "manual"
     },
     "Disconnect this browser?": {
@@ -1685,6 +2033,12 @@
       "extractionState": "manual"
     },
     "Connect a browser": {
+      "extractionState": "manual"
+    },
+    "Scan the computer's code": {
+      "extractionState": "manual"
+    },
+    "Use pasted link": {
       "extractionState": "manual"
     },
     "Or paste its link": {
@@ -1708,6 +2062,15 @@
     "It gets a keyless, read-only session for four hours. Protected actions still need this phone.": {
       "extractionState": "manual"
     },
+    "Approving…": {
+      "extractionState": "manual"
+    },
+    "Approve": {
+      "extractionState": "manual"
+    },
+    "Connected browsers": {
+      "extractionState": "manual"
+    },
     "Couldn't load connected browsers": {
       "extractionState": "manual"
     },
@@ -1720,7 +2083,7 @@
     "last seen %@": {
       "extractionState": "manual"
     },
-    "Scan the computer's code": {
+    "Revoke": {
       "extractionState": "manual"
     },
     "Paste link instead": {
@@ -1753,10 +2116,31 @@
     "Unsupported request kind — open your browser to handle": {
       "extractionState": "manual"
     },
-    "Denying…": {
+    "Release server name — from %@": {
       "extractionState": "manual"
     },
-    "Deny": {
+    "Revoke server — from %@": {
+      "extractionState": "manual"
+    },
+    "Request from %@": {
+      "extractionState": "manual"
+    },
+    "%@ · reason: %@": {
+      "extractionState": "manual"
+    },
+    "Hold to approve": {
+      "extractionState": "manual"
+    },
+    "(missing serverDomain)": {
+      "extractionState": "manual"
+    },
+    "(missing serverId)": {
+      "extractionState": "manual"
+    },
+    "(missing reason)": {
+      "extractionState": "manual"
+    },
+    "Hold to confirm…": {
       "extractionState": "manual"
     },
     "Approve release-server for %@": {
@@ -1780,13 +2164,25 @@
     "Sign in with your account name": {
       "extractionState": "manual"
     },
+    "Account name": {
+      "extractionState": "manual"
+    },
     "Signs in to the account with this name.": {
+      "extractionState": "manual"
+    },
+    "The name you picked when you made the account.": {
       "extractionState": "manual"
     },
     "Join with a pairing code": {
       "extractionState": "manual"
     },
     "On a device of that account, open Settings → Trusted devices → Add a device.": {
+      "extractionState": "manual"
+    },
+    "Code or link": {
+      "extractionState": "manual"
+    },
+    "Join": {
       "extractionState": "manual"
     },
     "Opens the camera to scan the other device's code.": {
@@ -1796,6 +2192,9 @@
       "extractionState": "manual"
     },
     "Scan a code": {
+      "extractionState": "manual"
+    },
+    "The demo server is online, but this device couldn't create a paired session. Try again.": {
       "extractionState": "manual"
     },
     "No Flagship account by that name": {
@@ -1819,7 +2218,52 @@
     "Paste the pairing link, or scan the code.": {
       "extractionState": "manual"
     },
+    "Opening the secure channel…": {
+      "extractionState": "manual"
+    },
+    "Almost there": {
+      "extractionState": "manual"
+    },
+    "Minting the install blob…": {
+      "extractionState": "manual"
+    },
+    "Delivering": {
+      "extractionState": "manual"
+    },
+    "Pushing your boot recipe to the desktop…": {
+      "extractionState": "manual"
+    },
     "Pair with builder": {
+      "extractionState": "manual"
+    },
+    "Name your server": {
+      "extractionState": "manual"
+    },
+    "Boot unlock": {
+      "extractionState": "manual"
+    },
+    "Backups": {
+      "extractionState": "manual"
+    },
+    "Pair with the builder app": {
+      "extractionState": "manual"
+    },
+    "Scan the builder's QR (or type its code) and the recipe is sent over a secure live link. Easiest if the builder is open in front of you.": {
+      "extractionState": "manual"
+    },
+    "Save / share recipe file": {
+      "extractionState": "manual"
+    },
+    "Save the recipe as a file or send it (AirDrop, Messages, Mail). Whoever builds the server opens it in the builder. No secrets in the file.": {
+      "extractionState": "manual"
+    },
+    "Copied!": {
+      "extractionState": "manual"
+    },
+    "Copy recipe to clipboard": {
+      "extractionState": "manual"
+    },
+    "Copy the recipe text, then paste it into the builder's “I have a recipe” box.": {
       "extractionState": "manual"
     },
     "Step %lld of %lld": {
@@ -1828,16 +2272,43 @@
     "Flagship Studio is waiting. Set up your server and the recipe goes straight to it.": {
       "extractionState": "manual"
     },
+    "Server name": {
+      "extractionState": "manual"
+    },
+    "Short description (optional)": {
+      "extractionState": "manual"
+    },
+    "Alice's private home server": {
+      "extractionState": "manual"
+    },
+    "Up to ~40 characters.": {
+      "extractionState": "manual"
+    },
+    "Back": {
+      "extractionState": "manual"
+    },
     "Recipe expires in": {
       "extractionState": "manual"
     },
-    "Boot unlock": {
+    "%lld min": {
+      "extractionState": "manual"
+    },
+    "%lld hour%@": {
+      "extractionState": "manual"
+    },
+    "Reboots on its own": {
+      "extractionState": "manual"
+    },
+    "Best for flaky power or connections. After you approve its first boot, the server self-unlocks on every reboot — no phone needed. Revocable any time.": {
+      "extractionState": "manual"
+    },
+    "Authorize each boot": {
+      "extractionState": "manual"
+    },
+    "Most theft-resistant. The server asks your phone to unlock on every reboot. Best for critical servers on stable infrastructure.": {
       "extractionState": "manual"
     },
     "Recommended. Your data disk is encrypted; the server unlocks it at boot.": {
-      "extractionState": "manual"
-    },
-    "Less safe — the disk is left unencrypted. Only for servers that can't keep network at boot (e.g. Wi-Fi-only), where the boot-time unlock can't run.": {
       "extractionState": "manual"
     },
     "Encrypt disk": {
@@ -1864,10 +2335,52 @@
     "Where should this server's backups go?": {
       "extractionState": "manual"
     },
+    "Scan the QR": {
+      "extractionState": "manual"
+    },
+    "Aim the viewfinder at a compatible Flagship pairing QR.": {
+      "extractionState": "manual"
+    },
     "Copy the QR link instead?": {
       "extractionState": "manual"
     },
+    "Paste the QR link": {
+      "extractionState": "manual"
+    },
+    "Right-click (or long-press) the QR on flagshipserver.com, copy the link, and paste it here.": {
+      "extractionState": "manual"
+    },
+    "Submit": {
+      "extractionState": "manual"
+    },
+    "Back to viewfinder": {
+      "extractionState": "manual"
+    },
+    "QR link": {
+      "extractionState": "manual"
+    },
+    "Confirm match code": {
+      "extractionState": "manual"
+    },
+    "These six digits must match what the desktop shows. If they don't, someone is in the middle — cancel.": {
+      "extractionState": "manual"
+    },
+    "Codes match — confirm": {
+      "extractionState": "manual"
+    },
+    "Reading…": {
+      "extractionState": "manual"
+    },
     "Open the recipe in Flagship Studio, write the boot USB, and boot the target machine. The new server will phone home and finish setup automatically.": {
+      "extractionState": "manual"
+    },
+    "Cancelling…": {
+      "extractionState": "manual"
+    },
+    "Cancel order": {
+      "extractionState": "manual"
+    },
+    "Serial": {
       "extractionState": "manual"
     },
     "Delivered": {
@@ -1918,6 +2431,9 @@
     "Turn off debug access?": {
       "extractionState": "manual"
     },
+    "Debug access": {
+      "extractionState": "manual"
+    },
     "Turn off": {
       "extractionState": "manual"
     },
@@ -1927,16 +2443,22 @@
     "Key %@": {
       "extractionState": "manual"
     },
-    "Off. Turn it on to let one SSH key into this server as the debug user for a while.": {
-      "extractionState": "manual"
-    },
     "Turned on with this account's key.": {
       "extractionState": "manual"
     },
-    "Turned on by an admin device.": {
+    "Off. Turn it on to let one SSH key into this server as the debug user for a while.": {
+      "extractionState": "manual"
+    },
+    "Renew": {
+      "extractionState": "manual"
+    },
+    "Turn on": {
       "extractionState": "manual"
     },
     "For": {
+      "extractionState": "manual"
+    },
+    "Signing…": {
       "extractionState": "manual"
     },
     "Anyone with this key can read everything on this server while it's on.": {
@@ -2074,6 +2596,9 @@
     "Retry": {
       "extractionState": "manual"
     },
+    "Save": {
+      "extractionState": "manual"
+    },
     "Default Flagship page": {
       "extractionState": "manual"
     },
@@ -2105,9 +2630,6 @@
       "extractionState": "manual"
     },
     "Continue anyway": {
-      "extractionState": "manual"
-    },
-    "Not now": {
       "extractionState": "manual"
     },
     "Continue anyway?": {
@@ -2236,9 +2758,6 @@
     "Send the backup": {
       "extractionState": "manual"
     },
-    "Open": {
-      "extractionState": "manual"
-    },
     "Cancel server": {
       "extractionState": "manual"
     },
@@ -2249,9 +2768,6 @@
       "extractionState": "manual"
     },
     "No recent activity.": {
-      "extractionState": "manual"
-    },
-    "Deployed": {
       "extractionState": "manual"
     },
     "Removed": {
@@ -2269,10 +2785,28 @@
     "Search servers": {
       "extractionState": "manual"
     },
-    "Paired devices": {
+    "Server \"%@\" cancelled — the name is free again.": {
       "extractionState": "manual"
     },
-    "Session %@": {
+    "Another device changed the order. Showing the latest one.": {
+      "extractionState": "manual"
+    },
+    "Show your servers": {
+      "extractionState": "manual"
+    },
+    "Couldn't load your servers. Pull down to try again.": {
+      "extractionState": "manual"
+    },
+    "Please add your first server.": {
+      "extractionState": "manual"
+    },
+    "Refresh your servers' status": {
+      "extractionState": "manual"
+    },
+    "Verify your servers": {
+      "extractionState": "manual"
+    },
+    "Paired devices": {
       "extractionState": "manual"
     },
     "token: %@…": {
@@ -2306,12 +2840,6 @@
       "extractionState": "manual"
     },
     "You sent an invite to %@ and they accepted. Approving binds their access. (You won't see their username — only the label you gave them.)": {
-      "extractionState": "manual"
-    },
-    "Approving…": {
-      "extractionState": "manual"
-    },
-    "Approve": {
       "extractionState": "manual"
     },
     "They now have access to %@.": {
@@ -2419,9 +2947,6 @@
     "Couldn't join": {
       "extractionState": "manual"
     },
-    "Cancelled": {
-      "extractionState": "manual"
-    },
     "We cancelled this for your security because a screenshot was taken. Scan the admin's code again to join.": {
       "extractionState": "manual"
     },
@@ -2510,9 +3035,6 @@
       "extractionState": "manual"
     },
     "Fetching…": {
-      "extractionState": "manual"
-    },
-    "View journal": {
       "extractionState": "manual"
     },
     "Unit": {
@@ -2768,9 +3290,6 @@
       "extractionState": "manual"
     },
     "The old server is retired and wiped only after the new one has restored the data and taken over the name: from then on it can't unlock or connect, and it wipes itself as soon as it is reachable. If anything fails first, the old server keeps serving with all its data.": {
-      "extractionState": "manual"
-    },
-    "Signing…": {
       "extractionState": "manual"
     },
     "Start migration": {
@@ -3031,9 +3550,6 @@
     "Advisory %@ · %@": {
       "extractionState": "manual"
     },
-    "Unlock Flagship": {
-      "extractionState": "manual"
-    },
     "This erases this device's account key and returns you to the start. Sign back in with your recovery passkey to restore it. Your account and servers stay put.": {
       "extractionState": "manual"
     },
@@ -3095,12 +3611,6 @@
       "extractionState": "manual"
     },
     "Reliability score: %@ of 100": {
-      "extractionState": "manual"
-    },
-    "Cancelling…": {
-      "extractionState": "manual"
-    },
-    "Cancel order": {
       "extractionState": "manual"
     },
     "The install hit a problem. You can cancel and try again.": {
@@ -3263,9 +3773,6 @@
       "extractionState": "manual"
     },
     "No cloud backup on this account": {
-      "extractionState": "manual"
-    },
-    "Back": {
       "extractionState": "manual"
     },
     "Welcome back": {
@@ -3700,9 +4207,6 @@
     "Stop": {
       "extractionState": "manual"
     },
-    "Refresh": {
-      "extractionState": "manual"
-    },
     "Back up now (with a passcode)…": {
       "extractionState": "manual"
     },
@@ -3749,9 +4253,6 @@
       "extractionState": "manual"
     },
     "Suggested passcode": {
-      "extractionState": "manual"
-    },
-    "Copied": {
       "extractionState": "manual"
     },
     "Import a backup": {
@@ -3956,9 +4457,6 @@
       "extractionState": "manual"
     },
     "Keep %lld GB on this phone": {
-      "extractionState": "manual"
-    },
-    "Backups": {
       "extractionState": "manual"
     },
     "Delete this backup from the server?": {
@@ -4192,12 +4690,6 @@
     "This server asks your phone for approval on every reboot — the most theft-resistant mode.": {
       "extractionState": "manual"
     },
-    "Reboots on its own": {
-      "extractionState": "manual"
-    },
-    "Authorize each boot": {
-      "extractionState": "manual"
-    },
     "Auto-unlock disabled. This server will ask your phone on its next reboot.": {
       "extractionState": "manual"
     },
@@ -4297,9 +4789,6 @@
     "This server is on the latest release.": {
       "extractionState": "manual"
     },
-    "Check again": {
-      "extractionState": "manual"
-    },
     "Or enter any release (full commit)": {
       "extractionState": "manual"
     },
@@ -4343,9 +4832,6 @@
       "extractionState": "manual"
     },
     "Reason": {
-      "extractionState": "manual"
-    },
-    "Hold to confirm…": {
       "extractionState": "manual"
     },
     "Hold to revoke": {
@@ -4648,9 +5134,6 @@
     "Everyone who joins through the link gets this rank.": {
       "extractionState": "manual"
     },
-    "Creating…": {
-      "extractionState": "manual"
-    },
     "Create invite link": {
       "extractionState": "manual"
     },
@@ -4856,9 +5339,6 @@
       "extractionState": "manual"
     },
     "It was set up from a shared adaptation of %@": {
-      "extractionState": "manual"
-    },
-    "Allow": {
       "extractionState": "manual"
     },
     "This app may reach:": {
@@ -5425,6 +5905,18 @@
     "Setup stopped": {
       "extractionState": "manual"
     },
+    "Contact us": {
+      "extractionState": "manual"
+    },
+    "This server didn't finish installing.": {
+      "extractionState": "manual"
+    },
+    "Cancel order and start again": {
+      "extractionState": "manual"
+    },
+    "Riley": {
+      "extractionState": "manual"
+    },
     "Remove %@?": {
       "extractionState": "manual"
     },
@@ -5443,6 +5935,12 @@
     "Last here %@": {
       "extractionState": "manual"
     },
+    "Confirm with Face ID": {
+      "extractionState": "manual"
+    },
+    "Set up": {
+      "extractionState": "manual"
+    },
     "Send this link to %@": {
       "extractionState": "manual"
     },
@@ -5455,6 +5953,30 @@
     "Give another person access to %@. They use their own Flagship account; you can change or remove their access at any time.": {
       "extractionState": "manual"
     },
+    "Who is it for?": {
+      "extractionState": "manual"
+    },
+    "Only you and this server see this name.": {
+      "extractionState": "manual"
+    },
+    "Create link": {
+      "extractionState": "manual"
+    },
+    "What they can do": {
+      "extractionState": "manual"
+    },
+    "Also let them": {
+      "extractionState": "manual"
+    },
+    "Shared with me": {
+      "extractionState": "manual"
+    },
+    "Shared by %@": {
+      "extractionState": "manual"
+    },
+    "Waiting for the owner": {
+      "extractionState": "manual"
+    },
     "Shared server": {
       "extractionState": "manual"
     },
@@ -5464,6 +5986,9 @@
     "Paste the link someone sent you, or scan the code on their phone.": {
       "extractionState": "manual"
     },
+    "That isn't a share link.": {
+      "extractionState": "manual"
+    },
     "Opening the link…": {
       "extractionState": "manual"
     },
@@ -5471,6 +5996,9 @@
       "extractionState": "manual"
     },
     "%@ confirmed. %@ is now under Shared with me on Home.": {
+      "extractionState": "manual"
+    },
+    "Open %@": {
       "extractionState": "manual"
     },
     "%@ shared a server with you": {
@@ -5503,7 +6031,10 @@
     "You lose access at once. The owner would have to share it with you again.": {
       "extractionState": "manual"
     },
-    "Shared by %@": {
+    "Leave this server": {
+      "extractionState": "manual"
+    },
+    "Start-up": {
       "extractionState": "manual"
     },
     "%@ is starting. Unlock it?": {
@@ -5512,10 +6043,19 @@
     "It's waiting for its disk key. Unlock it only if you expected it to restart.": {
       "extractionState": "manual"
     },
+    "Unlock with Face ID": {
+      "extractionState": "manual"
+    },
     "Running since %@": {
       "extractionState": "manual"
     },
     "Certificate renews before %@": {
+      "extractionState": "manual"
+    },
+    "Start-up notices": {
+      "extractionState": "manual"
+    },
+    "What you can do": {
       "extractionState": "manual"
     },
     "The owner can change this or remove you at any time.": {
@@ -5527,9 +6067,6 @@
     "You can approve this server's start-ups. Keep this page open when it restarts.": {
       "extractionState": "manual"
     },
-    "Open %@": {
-      "extractionState": "manual"
-    },
     "Couldn't load": {
       "extractionState": "manual"
     },
@@ -5539,6 +6076,12 @@
     "Here's a free, random username. You can change it later.": {
       "extractionState": "manual"
     },
+    "Try again in %lld min": {
+      "extractionState": "manual"
+    },
+    "Try again in %llds": {
+      "extractionState": "manual"
+    },
     "Couldn't get a handle. Try again.": {
       "extractionState": "manual"
     },
@@ -5546,6 +6089,9 @@
       "extractionState": "manual"
     },
     "Authorize %@ to join your cloud": {
+      "extractionState": "manual"
+    },
+    "Type to confirm": {
       "extractionState": "manual"
     },
     "Tap to dismiss": {
@@ -5593,19 +6139,34 @@
     "Type the server's address to confirm:": {
       "extractionState": "manual"
     },
+    "Transfer this server": {
+      "extractionState": "manual"
+    },
     "Have the new owner scan this": {
       "extractionState": "manual"
     },
     "On their phone: Add a server → Take over a transferred server. Keep this screen open until it completes — your phone hands off the disk key after they claim it.": {
       "extractionState": "manual"
     },
+    "They claimed it — handing off the disk key…": {
+      "extractionState": "manual"
+    },
     "Waiting for the new owner…": {
+      "extractionState": "manual"
+    },
+    "Transfer complete. %@ now belongs to the new owner%@.": {
       "extractionState": "manual"
     },
     "It's no longer in your fleet.": {
       "extractionState": "manual"
     },
     "Take over a server": {
+      "extractionState": "manual"
+    },
+    "You now own %@. It will come online under your account shortly.": {
+      "extractionState": "manual"
+    },
+    "Scan again": {
       "extractionState": "manual"
     },
     "Claiming the server…": {
@@ -5618,6 +6179,15 @@
       "extractionState": "manual"
     },
     "Take over this server?": {
+      "extractionState": "manual"
+    },
+    "You will become the owner of %@": {
+      "extractionState": "manual"
+    },
+    "You'll own %@ and everything on it. The current owner loses control of it. This cannot be undone.": {
+      "extractionState": "manual"
+    },
+    "Take ownership": {
       "extractionState": "manual"
     },
     "Continue with an unverified Flagship control server": {
@@ -5677,16 +6247,61 @@
     "Bring your own key": {
       "extractionState": "manual"
     },
+    "Set up a key": {
+      "extractionState": "manual"
+    },
     "Anthropic, OpenAI, or Google. No daily limits. Your key, your bill, your choice of model.": {
       "extractionState": "manual"
     },
+    "Invite only": {
+      "extractionState": "manual"
+    },
+    "Anyone with the link": {
+      "extractionState": "manual"
+    },
     "New Service": {
+      "extractionState": "manual"
+    },
+    "Build it": {
       "extractionState": "manual"
     },
     "What should it do?": {
       "extractionState": "manual"
     },
     "about 90 seconds": {
+      "extractionState": "manual"
+    },
+    "A build session already uses \"%@\". To use the name for a new build, open Build sessions and discard that one first.": {
+      "extractionState": "manual"
+    },
+    "You already have a service called \"%@\". Pick another name.": {
+      "extractionState": "manual"
+    },
+    "Habit tracker": {
+      "extractionState": "manual"
+    },
+    "A habit tracker: I tick off my daily habits and see my streaks for the last month.": {
+      "extractionState": "manual"
+    },
+    "Family wishlist": {
+      "extractionState": "manual"
+    },
+    "A family wishlist: everyone keeps a list, and the others can quietly mark what they'll buy.": {
+      "extractionState": "manual"
+    },
+    "Recipe jar": {
+      "extractionState": "manual"
+    },
+    "A recipe jar: save recipes with a photo, ingredients and steps, and search them by ingredient.": {
+      "extractionState": "manual"
+    },
+    "Sleep journal": {
+      "extractionState": "manual"
+    },
+    "A sleep journal: log when I went to bed, when I woke up and how I slept, with a weekly chart.": {
+      "extractionState": "manual"
+    },
+    "Pick another name.": {
       "extractionState": "manual"
     },
     "AI model": {
@@ -5704,6 +6319,9 @@
     "Jump to latest": {
       "extractionState": "manual"
     },
+    "Vibe code": {
+      "extractionState": "manual"
+    },
     "Starting the session…": {
       "extractionState": "manual"
     },
@@ -5719,22 +6337,46 @@
     "value": {
       "extractionState": "manual"
     },
+    "Send value": {
+      "extractionState": "manual"
+    },
     "Sent once to your server": {
       "extractionState": "manual"
     },
     "Decline": {
       "extractionState": "manual"
     },
+    "The app has no id yet. Wait for the AI to name it.": {
+      "extractionState": "manual"
+    },
     "This server couldn't make it invite only, so anyone with the link can open it. You can restrict it from the service's Access settings.": {
+      "extractionState": "manual"
+    },
+    "%lld min, ": {
       "extractionState": "manual"
     },
     "%@ %@this can take a few minutes": {
       "extractionState": "manual"
     },
+    "Deploy": {
+      "extractionState": "manual"
+    },
+    "Try deploying again": {
+      "extractionState": "manual"
+    },
+    "Session stopped.": {
+      "extractionState": "manual"
+    },
     "Building your app…": {
       "extractionState": "manual"
     },
-    "The AI is writing your app…": {
+    "Reply to the AI": {
+      "extractionState": "manual"
+    },
+    "Ask for a change…": {
+      "extractionState": "manual"
+    },
+    "Tell the AI what to try next…": {
       "extractionState": "manual"
     },
     "Created git repo.": {
@@ -5749,10 +6391,13 @@
     "Stop allowing your Watch to approve boots": {
       "extractionState": "manual"
     },
-    "Unlock": {
+    "Let your Apple Watch approve": {
       "extractionState": "manual"
     },
-    "Let your Apple Watch approve": {
+    "Create your account": {
+      "extractionState": "manual"
+    },
+    "Sign in with your account name, or join with a pairing code.": {
       "extractionState": "manual"
     },
     "Your stuff,\non your hardware.": {
@@ -5789,501 +6434,6 @@
       "extractionState": "manual"
     },
     "Server committed but local install failed: %@. Open the app fresh to recover.": {
-      "extractionState": "manual"
-    },
-    "Ignore": {
-      "extractionState": "manual"
-    },
-    "Opening…": {
-      "extractionState": "manual"
-    },
-    "Allowing…": {
-      "extractionState": "manual"
-    },
-    "Copy": {
-      "extractionState": "manual"
-    },
-    "This server doesn't offer this app's database.": {
-      "extractionState": "manual"
-    },
-    "Previous": {
-      "extractionState": "manual"
-    },
-    "Next": {
-      "extractionState": "manual"
-    },
-    "Running…": {
-      "extractionState": "manual"
-    },
-    "Confirming…": {
-      "extractionState": "manual"
-    },
-    "Add key": {
-      "extractionState": "manual"
-    },
-    "Delete the AI key %@": {
-      "extractionState": "manual"
-    },
-    "The key wasn't deleted.": {
-      "extractionState": "manual"
-    },
-    "Use this": {
-      "extractionState": "manual"
-    },
-    "Send through the Flagship relay": {
-      "extractionState": "manual"
-    },
-    "Better for your anonymity: the AI provider sees Flagship's address, not yours.": {
-      "extractionState": "manual"
-    },
-    "Through the Flagship relay": {
-      "extractionState": "manual"
-    },
-    "Direct": {
-      "extractionState": "manual"
-    },
-    "Turn the relay off for this key": {
-      "extractionState": "manual"
-    },
-    "The relay is off for this key. Try again.": {
-      "extractionState": "manual"
-    },
-    "API key": {
-      "extractionState": "manual"
-    },
-    "sk-…": {
-      "extractionState": "manual"
-    },
-    "Base URL (optional)": {
-      "extractionState": "manual"
-    },
-    "Label (optional)": {
-      "extractionState": "manual"
-    },
-    "e.g. Personal": {
-      "extractionState": "manual"
-    },
-    "Start from scratch with AI": {
-      "extractionState": "manual"
-    },
-    "Describe it in plain English. The AI writes it and deploys it for you.": {
-      "extractionState": "manual"
-    },
-    "Import from a Git repo": {
-      "extractionState": "manual"
-    },
-    "Paste a repo URL. If it's Flagship-ready we install it as-is, otherwise the AI adapts it.": {
-      "extractionState": "manual"
-    },
-    "Build from your own IDE (Claude Code, Cursor, VS Code or Cline) using your own AI. No model key ever touches the server.": {
-      "extractionState": "manual"
-    },
-    "Builds still open on your server can be picked up where you left off: answer the AI, deploy, or retry a failed deploy. Older builds keep a timeline of what happened. A build stays open until your server restarts.": {
-      "extractionState": "manual"
-    },
-    "Describe the app you want in plain English. An AI model writes the code on your server, asks you questions when it needs to, and you deploy it with one tap. You need a key from an AI provider (OpenAI, Anthropic, OpenRouter…); it is sent only to your server.": {
-      "extractionState": "manual"
-    },
-    "Paste the address of a code repository, for example on GitHub. If it is already set up for Flagship it installs as-is; otherwise the AI can adapt it for you.": {
-      "extractionState": "manual"
-    },
-    "For developers: work in your own IDE (Claude Code, Cursor, VS Code or Cline) with your own AI, connected to your server over MCP. No AI key is stored on the server.": {
-      "extractionState": "manual"
-    },
-    "Repository URL": {
-      "extractionState": "manual"
-    },
-    "Branch or tag (optional)": {
-      "extractionState": "manual"
-    },
-    "Name (optional)": {
-      "extractionState": "manual"
-    },
-    "From the repo's name": {
-      "extractionState": "manual"
-    },
-    "Cloning…": {
-      "extractionState": "manual"
-    },
-    "Check repo": {
-      "extractionState": "manual"
-    },
-    "That can't be a web address.": {
-      "extractionState": "manual"
-    },
-    "This repo is not yet adapted for Flagship.": {
-      "extractionState": "manual"
-    },
-    "Use AI to adapt and deploy": {
-      "extractionState": "manual"
-    },
-    "Run the AI again": {
-      "extractionState": "manual"
-    },
-    "Deploy it": {
-      "extractionState": "manual"
-    },
-    "Anonymously share your adaptation": {
-      "extractionState": "manual"
-    },
-    "Others can then install this repo without AI. Nothing about you or your server is included.": {
-      "extractionState": "manual"
-    },
-    "Install it": {
-      "extractionState": "manual"
-    },
-    "Preparing…": {
-      "extractionState": "manual"
-    },
-    "Get flagship.app.json": {
-      "extractionState": "manual"
-    },
-    "Create a connection": {
-      "extractionState": "manual"
-    },
-    "Key": {
-      "extractionState": "manual"
-    },
-    "Copy IDE config": {
-      "extractionState": "manual"
-    },
-    "Copy command": {
-      "extractionState": "manual"
-    },
-    "Deploying…": {
-      "extractionState": "manual"
-    },
-    "Deploy now": {
-      "extractionState": "manual"
-    },
-    "URL copied": {
-      "extractionState": "manual"
-    },
-    "Key copied": {
-      "extractionState": "manual"
-    },
-    "Config copied": {
-      "extractionState": "manual"
-    },
-    "Command copied": {
-      "extractionState": "manual"
-    },
-    "Regenerating…": {
-      "extractionState": "manual"
-    },
-    "Regenerate key": {
-      "extractionState": "manual"
-    },
-    "Set": {
-      "extractionState": "manual"
-    },
-    "Needs you": {
-      "extractionState": "manual"
-    },
-    "This stops the AI and deletes what it has written on your server.%@": {
-      "extractionState": "manual"
-    },
-    "%@ · on %@": {
-      "extractionState": "manual"
-    },
-    "Couldn't reach %@, so its builds aren't listed.": {
-      "extractionState": "manual"
-    },
-    "Couldn't reach %@, so their builds aren't listed.": {
-      "extractionState": "manual"
-    },
-    "Started %@": {
-      "extractionState": "manual"
-    },
-    "AI is working": {
-      "extractionState": "manual"
-    },
-    "Waiting for you": {
-      "extractionState": "manual"
-    },
-    "Ready to deploy": {
-      "extractionState": "manual"
-    },
-    "Failed": {
-      "extractionState": "manual"
-    },
-    "Resume": {
-      "extractionState": "manual"
-    },
-    "Started %@ · %lld step%@": {
-      "extractionState": "manual"
-    },
-    "Deploy it again": {
-      "extractionState": "manual"
-    },
-    "Run the AI again or deploy": {
-      "extractionState": "manual"
-    },
-    "Connecting": {
-      "extractionState": "manual"
-    },
-    "Opening the secure channel to the builder…": {
-      "extractionState": "manual"
-    },
-    "Sending": {
-      "extractionState": "manual"
-    },
-    "Minting your recipe and sending it to the builder…": {
-      "extractionState": "manual"
-    },
-    "Pair with the builder": {
-      "extractionState": "manual"
-    },
-    "On your computer, open the Flagship Studio — it shows a QR code and a short code. Point your camera at it.": {
-      "extractionState": "manual"
-    },
-    "Enter the builder code": {
-      "extractionState": "manual"
-    },
-    "Type the short code shown under the QR on your computer (like ABCD-EFGH).": {
-      "extractionState": "manual"
-    },
-    "Connect": {
-      "extractionState": "manual"
-    },
-    "Builder code": {
-      "extractionState": "manual"
-    },
-    "ABCD-EFGH": {
-      "extractionState": "manual"
-    },
-    "Confirm the security code": {
-      "extractionState": "manual"
-    },
-    "Check that this matches the code on your computer. Only confirm if they're the same.": {
-      "extractionState": "manual"
-    },
-    "They match — pair & send": {
-      "extractionState": "manual"
-    },
-    "Sent — you can close this screen": {
-      "extractionState": "manual"
-    },
-    "Your computer's builder has the recipe. Pick the USB drive and any Advanced options on the computer; nothing more is needed from your phone.": {
-      "extractionState": "manual"
-    },
-    "Pairing failed": {
-      "extractionState": "manual"
-    },
-    "Invite people": {
-      "extractionState": "manual"
-    },
-    "Invite link": {
-      "extractionState": "manual"
-    },
-    "Use pasted link": {
-      "extractionState": "manual"
-    },
-    "Connected browsers": {
-      "extractionState": "manual"
-    },
-    "Release server name — from %@": {
-      "extractionState": "manual"
-    },
-    "Revoke server — from %@": {
-      "extractionState": "manual"
-    },
-    "Request from %@": {
-      "extractionState": "manual"
-    },
-    "%@ · reason: %@": {
-      "extractionState": "manual"
-    },
-    "Hold to approve": {
-      "extractionState": "manual"
-    },
-    "(missing serverDomain)": {
-      "extractionState": "manual"
-    },
-    "(missing serverId)": {
-      "extractionState": "manual"
-    },
-    "(missing reason)": {
-      "extractionState": "manual"
-    },
-    "Account name": {
-      "extractionState": "manual"
-    },
-    "The name you picked when you made the account.": {
-      "extractionState": "manual"
-    },
-    "Code or link": {
-      "extractionState": "manual"
-    },
-    "Join": {
-      "extractionState": "manual"
-    },
-    "The demo server is online, but this device couldn't create a paired session. Try again.": {
-      "extractionState": "manual"
-    },
-    "Opening the secure channel…": {
-      "extractionState": "manual"
-    },
-    "Almost there": {
-      "extractionState": "manual"
-    },
-    "Minting the install blob…": {
-      "extractionState": "manual"
-    },
-    "Delivering": {
-      "extractionState": "manual"
-    },
-    "Pushing your boot recipe to the desktop…": {
-      "extractionState": "manual"
-    },
-    "Name your server": {
-      "extractionState": "manual"
-    },
-    "Pair with the builder app": {
-      "extractionState": "manual"
-    },
-    "Scan the builder's QR (or type its code) and the recipe is sent over a secure live link. Easiest if the builder is open in front of you.": {
-      "extractionState": "manual"
-    },
-    "Save / share recipe file": {
-      "extractionState": "manual"
-    },
-    "Save the recipe as a file or send it (AirDrop, Messages, Mail). Whoever builds the server opens it in the builder. No secrets in the file.": {
-      "extractionState": "manual"
-    },
-    "Copied!": {
-      "extractionState": "manual"
-    },
-    "Copy recipe to clipboard": {
-      "extractionState": "manual"
-    },
-    "Copy the recipe text, then paste it into the builder's “I have a recipe” box.": {
-      "extractionState": "manual"
-    },
-    "Server name": {
-      "extractionState": "manual"
-    },
-    "Short description (optional)": {
-      "extractionState": "manual"
-    },
-    "Alice's private home server": {
-      "extractionState": "manual"
-    },
-    "Up to ~40 characters.": {
-      "extractionState": "manual"
-    },
-    "%lld min": {
-      "extractionState": "manual"
-    },
-    "%lld hour%@": {
-      "extractionState": "manual"
-    },
-    "Best for flaky power or connections. After you approve its first boot, the server self-unlocks on every reboot — no phone needed. Revocable any time.": {
-      "extractionState": "manual"
-    },
-    "Most theft-resistant. The server asks your phone to unlock on every reboot. Best for critical servers on stable infrastructure.": {
-      "extractionState": "manual"
-    },
-    "Scan the QR": {
-      "extractionState": "manual"
-    },
-    "Aim the viewfinder at a compatible Flagship pairing QR.": {
-      "extractionState": "manual"
-    },
-    "Paste the QR link": {
-      "extractionState": "manual"
-    },
-    "Right-click (or long-press) the QR on flagshipserver.com, copy the link, and paste it here.": {
-      "extractionState": "manual"
-    },
-    "Submit": {
-      "extractionState": "manual"
-    },
-    "Back to viewfinder": {
-      "extractionState": "manual"
-    },
-    "QR link": {
-      "extractionState": "manual"
-    },
-    "Confirm match code": {
-      "extractionState": "manual"
-    },
-    "These six digits must match what the desktop shows. If they don't, someone is in the middle — cancel.": {
-      "extractionState": "manual"
-    },
-    "Codes match — confirm": {
-      "extractionState": "manual"
-    },
-    "Reading…": {
-      "extractionState": "manual"
-    },
-    "Serial": {
-      "extractionState": "manual"
-    },
-    "Debug access": {
-      "extractionState": "manual"
-    },
-    "Renew": {
-      "extractionState": "manual"
-    },
-    "Turn on": {
-      "extractionState": "manual"
-    },
-    "Contact us": {
-      "extractionState": "manual"
-    },
-    "This server didn't finish installing.": {
-      "extractionState": "manual"
-    },
-    "Cancel order and start again": {
-      "extractionState": "manual"
-    },
-    "Riley": {
-      "extractionState": "manual"
-    },
-    "Confirm with Face ID": {
-      "extractionState": "manual"
-    },
-    "Set up": {
-      "extractionState": "manual"
-    },
-    "Who is it for?": {
-      "extractionState": "manual"
-    },
-    "Only you and this server see this name.": {
-      "extractionState": "manual"
-    },
-    "Create link": {
-      "extractionState": "manual"
-    },
-    "What they can do": {
-      "extractionState": "manual"
-    },
-    "Also let them": {
-      "extractionState": "manual"
-    },
-    "Shared with me": {
-      "extractionState": "manual"
-    },
-    "Waiting for the owner": {
-      "extractionState": "manual"
-    },
-    "That isn't a share link.": {
-      "extractionState": "manual"
-    },
-    "Leave this server": {
-      "extractionState": "manual"
-    },
-    "Start-up": {
-      "extractionState": "manual"
-    },
-    "Unlock with Face ID": {
-      "extractionState": "manual"
-    },
-    "Start-up notices": {
-      "extractionState": "manual"
-    },
-    "What you can do": {
       "extractionState": "manual"
     },
     "bad read-token URL": {
@@ -6349,25 +6499,25 @@
     "%@ is full: new data is refused until you free space or raise the limit.": {
       "extractionState": "manual"
     },
-    "No health report for %lld min. The server itself may be off or frozen.": {
+    "No health report for %@ min. The server itself may be off or frozen.": {
       "extractionState": "manual"
     },
-    "Ran out of memory %lld× since it started (%lld MB free of %lld MB now).": {
+    "Ran out of memory %@× since it started (%@ MB free of %@ MB now).": {
       "extractionState": "manual"
     },
-    "The server software isn't running (%@; restarted %lld×, last exit code %lld).": {
+    "The server software isn't running (%@; restarted %@×, last exit code %@).": {
       "extractionState": "manual"
     },
-    "The server software restarted %lld× since it started (last exit code %lld).": {
+    "The server software restarted %@× since it started (last exit code %@).": {
       "extractionState": "manual"
     },
     "Can't reach the Flagship relay.": {
       "extractionState": "manual"
     },
-    "Disk is %lld%% full.": {
+    "Disk is %@%% full.": {
       "extractionState": "manual"
     },
-    "Healthy · %lld MB free of %lld MB · disk %lld%% · up %@": {
+    "Healthy · %@ MB free of %@ MB · disk %@%% · up %@": {
       "extractionState": "manual"
     },
     "From Git": {
@@ -6937,9 +7087,6 @@
     "This device isn't allowed to do that.": {
       "extractionState": "manual"
     },
-    "(^HTTP\\s*\\d{3}|\\bexception\\b|nsurlerrordomain|nsposixerrordomain|kcferror|error domain=|\\buserinfo=|\\bcode=-?\\d+|\\bswift\\.|\\boptional\\(|\\bhandshake|\\berrno|\\beconn|\\bsocket\\b|unexpected end of stream|\\bEOF\\b|broken pipe|error code:? ?\\d+|^[\\[{<]|unexpected json|could not parse|stacktrace|\\bnil\\b|\\(null\\)|couldn.t be completed|\\bdecodingerror|\\bkeynotfound)": {
-      "extractionState": "manual"
-    },
     "Remove this account from this device?": {
       "extractionState": "manual"
     },
@@ -6953,6 +7100,9 @@
       "extractionState": "manual"
     },
     "Signing out removes this device's admin key. Save a backup of your account key first, or sign out anyway.": {
+      "extractionState": "manual"
+    },
+    "Sign out anyway": {
       "extractionState": "manual"
     },
     "Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe.": {
@@ -7370,18 +7520,6 @@
       "extractionState": "manual"
     },
     "I'm requesting the Flagship account name \"%@\" on the basis": {
-      "extractionState": "manual"
-    },
-    "Trademark holder / company: [your name or company]": {
-      "extractionState": "manual"
-    },
-    "Trademark registration number: [registration number]": {
-      "extractionState": "manual"
-    },
-    "Jurisdiction / registry: [e.g. USPTO, EUIPO]": {
-      "extractionState": "manual"
-    },
-    "Goods/services class(es): [class numbers]": {
       "extractionState": "manual"
     },
     "Link or attachment to the registration: [URL or note that it's attached]": {

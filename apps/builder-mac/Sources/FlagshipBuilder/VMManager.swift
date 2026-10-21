@@ -70,7 +70,7 @@ final class VMManager: ObservableObject {
             switch records[i].state {
             case .installing:
                 records[i].state = .failed(VMFailure(
-                    phase: .install, reason: "The app quit while the install was running."))
+                    phase: .install, reason: String(localized: "The app quit while the install was running.")))
                 records[i].stateChangedAt = Date()
                 try? store.save(records[i])
             case .awaitingPhoneUnlock, .running:
@@ -131,7 +131,7 @@ final class VMManager: ObservableObject {
 
     func beginInstall(named name: String) async { await apply(.startInstall, to: name) }
     func cancelInstall(named name: String) async {
-        await apply(.installFailed("Installation stopped by you."), to: name)
+        await apply(.installFailed(String(localized: "Installation stopped by you.")), to: name)
     }
     func powerOn(named name: String) async { await apply(.powerOn, to: name) }
     func powerOff(named name: String) async { await apply(.powerOff, to: name) }
@@ -158,7 +158,7 @@ final class VMManager: ObservableObject {
         do {
             effects = try lc.handle(event)
         } catch {
-            log("VM \(name): ignored \(event) in state \(server.record.state.label)")
+            log(String(localized: "VM \(name): ignored \(event) in state \(server.record.state.label)"))
             return
         }
         lifecycles[name] = lc
@@ -189,13 +189,13 @@ final class VMManager: ObservableObject {
         if needsAwake, wakeActivity == nil {
             wakeActivity = ProcessInfo.processInfo.beginActivity(
                 options: [.idleSystemSleepDisabled, .suddenTerminationDisabled],
-                reason: "Hosting Flagship servers for the internet")
-            log("Keeping this Mac awake while it hosts servers")
+                reason: String(localized: "Hosting Flagship servers for the internet"))
+            log(String(localized: "Keeping this Mac awake while it hosts servers"))
             objectWillChange.send()
         } else if !needsAwake, let activity = wakeActivity {
             ProcessInfo.processInfo.endActivity(activity)
             wakeActivity = nil
-            log("No servers running; this Mac may sleep again")
+            log(String(localized: "No servers running; this Mac may sleep again"))
             objectWillChange.send()
         }
     }
@@ -250,11 +250,11 @@ final class VMManager: ObservableObject {
             hosts[name] = host
             try await host.start(config: config, layout: store.layout,
                                  attachInstallerISO: attachISO[name] ?? false)
-            log("VM \(name): started (\(config.cpuCount) vCPU, \(config.memoryBytes / VMResourcePlan.gib) GiB)")
+            log(String(localized: "VM \(name): started (\(config.cpuCount) vCPU, \(config.memoryBytes / VMResourcePlan.gib) GiB)"))
         } catch {
             hosts[name] = nil
             let reason = (error as? LocalizedError)?.errorDescription ?? "\(error)"
-            log("VM \(name): failed to start — \(reason)")
+            log(String(localized: "VM \(name): failed to start — \(reason)"))
             switch currentState(name) {
             case .installing: await apply(.installFailed(reason), to: name)
             case .awaitingPhoneUnlock, .running: await apply(.runtimeFailed(reason), to: name)
@@ -262,7 +262,7 @@ final class VMManager: ObservableObject {
             }
         }
         #else
-        log("VM \(name): Virtualization.framework unavailable on this build")
+        log(String(localized: "VM \(name): Virtualization.framework unavailable on this build"))
         #endif
     }
 
@@ -295,7 +295,7 @@ final class VMManager: ObservableObject {
                     let verb = server(named: name)?.record.config.effectiveProvisioningMode == .prebuiltAppliance
                         ? "specialization finished"
                         : "install finished"
-                    log("VM \(name): \(verb) — booting sealed disk")
+                    log(String(localized: "VM \(name): \(verb) — booting sealed disk"))
                     await apply(.installSucceeded, to: name)
                     // First boot from disk follows immediately; an encrypted
                     // guest then sits sealed in awaiting-phone-unlock.
@@ -304,11 +304,9 @@ final class VMManager: ObservableObject {
                     let operation = server(named: name)?.record.config.effectiveProvisioningMode == .prebuiltAppliance
                         ? "specialization"
                         : "install"
-                    log("VM \(name): stopped after \(Int(elapsed))s, before \(operation) could run")
+                    log(String(localized: "VM \(name): stopped after \(Int(elapsed))s, before \(operation) could run"))
                     await apply(.installFailed(
-                        "The virtual machine stopped after \(Int(elapsed))s, before \(operation) could run. "
-                        + "The base image may be the wrong architecture for this Mac "
-                        + "(Apple silicon can only run an arm64 image) or otherwise not bootable."),
+                        String(localized: "The virtual machine stopped after \(Int(elapsed))s, before \(operation) could run. The base image may be the wrong architecture for this Mac (Apple silicon can only run an arm64 image) or otherwise not bootable.")),
                         to: name)
                 }
             }
@@ -398,8 +396,8 @@ final class VMManager: ObservableObject {
                     let issues = v.ok ? [] : v.lines
                     if issues != lastIssues {
                         self?.log(issues.isEmpty
-                            ? "VM \(name): health back to normal"
-                            : "VM \(name): health — \(issues.joined(separator: " "))")
+                            ? String(localized: "VM \(name): health back to normal")
+                            : String(localized: "VM \(name): health — \(issues.joined(separator: " "))"))
                         lastIssues = issues
                     }
                 }
@@ -450,7 +448,7 @@ final class VMManager: ObservableObject {
         let prior = installObservations[name]
         installObservations[name] = observation
         if prior != observation {
-            log("VM \(name): installer checkpoint — \(observation.summary)")
+            log(String(localized: "VM \(name): installer checkpoint — \(observation.summary)"))
         }
         if !observation.isStale(at: Date()) { installStallLogged.remove(name) }
     }
@@ -460,7 +458,7 @@ final class VMManager: ObservableObject {
               observation.isStale(at: Date()),
               !installStallLogged.contains(name) else { return }
         installStallLogged.insert(name)
-        log("VM \(name): no guest checkpoint for \(observation.staleMinutes(at: Date())) minutes; last: \(observation.summary)")
+        log(String(localized: "VM \(name): no guest checkpoint for \(observation.staleMinutes(at: Date())) minutes; last: \(observation.summary)"))
     }
 
     private func upsert(_ server: HostedServer) {

@@ -22,7 +22,7 @@ public enum ApplianceSeed {
         let body = try JSONEncoder().encode(payload)
         guard body.count <= sizeBytes - headerBytes else {
             throw EncodingError.invalidValue(body.count, .init(
-                codingPath: [], debugDescription: "Appliance seed payload is too large."))
+                codingPath: [], debugDescription: String(localized: "Appliance seed payload is too large.")))
         }
         let header = Data("\(magic)\(String(format: "%08x", body.count))\(sha256(body))".utf8)
         precondition(header.count == headerBytes)

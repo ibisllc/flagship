@@ -27,36 +27,6 @@
     },
     "Approval failed.": {
       "extractionState": "manual"
-    },
-    "Flagship": {
-      "extractionState": "manual"
-    },
-    "Approve": {
-      "extractionState": "manual"
-    },
-    "from %@": {
-      "extractionState": "manual"
-    },
-    "Approved": {
-      "extractionState": "manual"
-    },
-    "Security": {
-      "extractionState": "manual"
-    },
-    "Pending approvals": {
-      "extractionState": "manual"
-    },
-    "Servers": {
-      "extractionState": "manual"
-    },
-    "Recent activity": {
-      "extractionState": "manual"
-    },
-    "All quiet": {
-      "extractionState": "manual"
-    },
-    "Boot approvals and account changes show up here.": {
-      "extractionState": "manual"
     }
   },
   "version": "1.0"
