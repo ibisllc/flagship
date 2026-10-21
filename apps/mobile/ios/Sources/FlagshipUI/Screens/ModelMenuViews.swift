@@ -291,7 +291,7 @@ struct EffortMenuButton: View {
 
     var body: some View {
         let c = FSColors.scheme(scheme)
-        let label = selected.map(ModelMenuText.effort) ?? "Effort"
+        let label = selected.map(ModelMenuText.effort) ?? String(localized: "Effort")
         Menu {
             Picker("Effort", selection: Binding(get: { selected ?? "" }, set: { onPick($0.isEmpty ? nil : $0) })) {
                 ForEach(efforts, id: \.self) { e in Text(ModelMenuText.effort(e)).tag(e) }
@@ -391,7 +391,7 @@ struct AttachButton: View {
                     if let data = try? await item.loadTransferable(type: Data.self) {
                         stager.addPhoto(data)
                     } else {
-                        stager.fail("Couldn't read that photo.")
+                        stager.fail(String(localized: "Couldn't read that photo."))
                     }
                 }
                 photoItems = []

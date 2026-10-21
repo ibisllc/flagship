@@ -26,7 +26,7 @@ public struct PeerBackupScreen: View {
                     ErrorCard(message: msg)
                 case .loaded(let s):
                     if vm.isOlderBox {
-                        placeholderCard("This server runs an older peer backup. Update the server to see its new status here.", c: c)
+                        placeholderCard(String(localized: "This server runs an older peer backup. Update the server to see its new status here."), c: c)
                             .accessibilityIdentifier("peer-backup-older")
                     } else {
                         stateCard(s, c: c)
@@ -71,7 +71,7 @@ public struct PeerBackupScreen: View {
                     Text(r).font(FS.font.caption()).foregroundColor(c.textMuted)
                 }
                 if let total = s.totalBricks, total > 0 {
-                    row("pieces safe", "\(s.healthyBricks ?? 0) of \(total)", c: c)
+                    row("pieces safe", String(localized: "\(s.healthyBricks ?? 0) of \(total)"), c: c)
                 }
                 if let placed = s.lastPlacedAt, placed > 0 {
                     row("last placed", PeerBackupViewModel.formatTime(placed), c: c)
@@ -89,7 +89,7 @@ public struct PeerBackupScreen: View {
     private func holdersSection(c: FSColors) -> some View {
         Text("Servers holding your pieces").font(FS.font.h3()).foregroundColor(c.text)
         if vm.holderRows.isEmpty {
-            placeholderCard("None yet. Pieces are placed once your newest backup is ready and enough other servers can hold it.", c: c)
+            placeholderCard(String(localized: "None yet. Pieces are placed once your newest backup is ready and enough other servers can hold it."), c: c)
         } else {
             VStack(spacing: FS.space.s3) {
                 ForEach(Array(vm.holderRows.enumerated()), id: \.offset) { i, h in

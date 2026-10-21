@@ -129,7 +129,7 @@ public final class PushNotifications: NSObject {
     public func notifyAppStorageFull(serviceId: String, server: String? = nil) {
         let content = UNMutableNotificationContent()
         content.title = "Flagship"
-        content.body = "An app on this server is full"
+        content.body = String(localized: "An app on this server is full")
         content.sound = .default
         var info: [String: String] = ["kind": Self.appStorageFullKind, "serviceId": serviceId]
         if let server, !server.isEmpty { info["server"] = server }
@@ -146,8 +146,8 @@ public final class PushNotifications: NSObject {
         let content = UNMutableNotificationContent()
         content.title = "Flagship"
         content.body = isEnvVar
-            ? "The AI needs an environment variable to continue."
-            : "The AI is asking you a question."
+            ? String(localized: "The AI needs an environment variable to continue.")
+            : String(localized: "The AI is asking you a question.")
         content.sound = .default
         var info: [String: String] = ["kind": "vibecode-needs-you", "sessionId": sessionId]
         if let server, !server.isEmpty { info["server"] = server }

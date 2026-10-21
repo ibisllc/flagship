@@ -85,24 +85,24 @@ public struct BuildSourceChooserScreen: View {
 
                     BuildSourceTile(
                         icon: "sparkles",
-                        title: "Start from scratch with AI",
-                        subtitle: "Describe it in plain English. The AI writes it and deploys it for you.",
+                        title: String(localized: "Start from scratch with AI"),
+                        subtitle: String(localized: "Describe it in plain English. The AI writes it and deploys it for you."),
                         action: onScratch
                     )
                     .accessibilityIdentifier("build-src-scratch")
 
                     BuildSourceTile(
                         icon: "arrow.down.circle",
-                        title: "Import from a Git repo",
-                        subtitle: "Paste a repo URL. If it's Flagship-ready we install it as-is, otherwise the AI adapts it.",
+                        title: String(localized: "Import from a Git repo"),
+                        subtitle: String(localized: "Paste a repo URL. If it's Flagship-ready we install it as-is, otherwise the AI adapts it."),
                         action: onGit
                     )
                     .accessibilityIdentifier("build-src-git")
 
                     BuildSourceTile(
                         icon: "laptopcomputer",
-                        title: "Connect your IDE",
-                        subtitle: "Build from your own IDE (Claude Code, Cursor, VS Code or Cline) using your own AI. No model key ever touches the server.",
+                        title: String(localized: "Connect your IDE"),
+                        subtitle: String(localized: "Build from your own IDE (Claude Code, Cursor, VS Code or Cline) using your own AI. No model key ever touches the server."),
                         action: onMcp
                     )
                     .accessibilityIdentifier("build-src-mcp")
@@ -132,14 +132,14 @@ private struct BuildHelpSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     private let items: [(String, String, String)] = [
-        ("clock.arrow.circlepath", "Resume or view past builds",
-         "Builds still open on your server can be picked up where you left off: answer the AI, deploy, or retry a failed deploy. Older builds keep a timeline of what happened. A build stays open until your server restarts."),
-        ("sparkles", "Start from scratch with AI",
-         "Describe the app you want in plain English. An AI model writes the code on your server, asks you questions when it needs to, and you deploy it with one tap. You need a key from an AI provider (OpenAI, Anthropic, OpenRouter…); it is sent only to your server."),
-        ("arrow.down.circle", "Import from a Git repo",
-         "Paste the address of a code repository, for example on GitHub. If it is already set up for Flagship it installs as-is; otherwise the AI can adapt it for you."),
-        ("laptopcomputer", "Connect your IDE",
-         "For developers: work in your own IDE (Claude Code, Cursor, VS Code or Cline) with your own AI, connected to your server over MCP. No AI key is stored on the server."),
+        ("clock.arrow.circlepath", String(localized: "Resume or view past builds"),
+         String(localized: "Builds still open on your server can be picked up where you left off: answer the AI, deploy, or retry a failed deploy. Older builds keep a timeline of what happened. A build stays open until your server restarts.")),
+        ("sparkles", String(localized: "Start from scratch with AI"),
+         String(localized: "Describe the app you want in plain English. An AI model writes the code on your server, asks you questions when it needs to, and you deploy it with one tap. You need a key from an AI provider (OpenAI, Anthropic, OpenRouter…); it is sent only to your server.")),
+        ("arrow.down.circle", String(localized: "Import from a Git repo"),
+         String(localized: "Paste the address of a code repository, for example on GitHub. If it is already set up for Flagship it installs as-is; otherwise the AI can adapt it for you.")),
+        ("laptopcomputer", String(localized: "Connect your IDE"),
+         String(localized: "For developers: work in your own IDE (Claude Code, Cursor, VS Code or Cline) with your own AI, connected to your server over MCP. No AI key is stored on the server.")),
     ]
 
     var body: some View {
@@ -260,18 +260,18 @@ public struct BuildGitScreen: View {
 
                     RunsOnLine()
 
-                    FSField(value: $vm.gitUrl, label: "Repository URL",
+                    FSField(value: $vm.gitUrl, label: String(localized: "Repository URL"),
                             placeholder: "https://github.com/you/app", keyboard: .URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
-                    FSField(value: $vm.ref, label: "Branch or tag (optional)",
+                    FSField(value: $vm.ref, label: String(localized: "Branch or tag (optional)"),
                             placeholder: "main")
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
 
                     VStack(alignment: .leading, spacing: FS.space.s2) {
-                        FSField(value: $vm.name, label: "Name (optional)",
-                                placeholder: "From the repo's name")
+                        FSField(value: $vm.name, label: String(localized: "Name (optional)"),
+                                placeholder: String(localized: "From the repo's name"))
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled(true)
                             .accessibilityIdentifier("build-git-name")
@@ -345,7 +345,7 @@ public struct BuildGitScreen: View {
     @ViewBuilder
     private func nameStatus(c: FSColors) -> some View {
         if let ch = currentCheck, !ch.ok {
-            Label(ch.kind == "invalid" ? (ch.message ?? "That can't be a web address.")
+            Label(ch.kind == "invalid" ? (ch.message ?? String(localized: "That can't be a web address."))
                   : VibeCodeDescribeScreen.conflictMessage(ch, name: vm.slug),
                   systemImage: "exclamationmark.triangle.fill")
                 .font(FS.font.bodySm()).foregroundColor(c.danger)
@@ -365,13 +365,13 @@ public struct BuildGitScreen: View {
     static func notReadyText(_ r: BuildGitResponse) -> String {
         r.reason.hasPrefix("no flagship.app.json") ? notAdaptedText : r.reason
     }
-    static let notAdaptedText = "This repo is not yet adapted for Flagship."
-    static let adaptButton = "Use AI to adapt and deploy"
-    static let runAgainButton = "Run the AI again"
-    static let deployKeptButton = "Deploy it"
-    static let shareToggle = "Anonymously share your adaptation"
-    static let shareNote = "Others can then install this repo without AI. Nothing about you or your server is included."
-    static let checkAgain = "Check again"
+    static let notAdaptedText = String(localized: "This repo is not yet adapted for Flagship.")
+    static let adaptButton = String(localized: "Use AI to adapt and deploy")
+    static let runAgainButton = String(localized: "Run the AI again")
+    static let deployKeptButton = String(localized: "Deploy it")
+    static let shareToggle = String(localized: "Anonymously share your adaptation")
+    static let shareNote = String(localized: "Others can then install this repo without AI. Nothing about you or your server is included.")
+    static let checkAgain = String(localized: "Check again")
 
     /// The not-ready card shows an adapt failure inside itself.
     private var showsNotReadyCard: Bool {
@@ -383,7 +383,7 @@ public struct BuildGitScreen: View {
         if case .checking = vm.phase { return true }
         return false
     }
-    private var checkLabel: String { checking ? "Cloning…" : "Check repo" }
+    private var checkLabel: String { checking ? String(localized: "Cloning…") : String(localized: "Check repo") }
 
     @ViewBuilder
     private func verdict(c: FSColors) -> some View {
@@ -401,7 +401,7 @@ public struct BuildGitScreen: View {
                     }
                     Text("\(r.reason) — \(r.fileCount) file\(r.fileCount == 1 ? "" : "s").")
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                    FSPrimaryButton("Install it", block: true) { Task { await vm.deploy() } }
+                    FSPrimaryButton(String(localized: "Install it"), block: true) { Task { await vm.deploy() } }
                         .accessibilityIdentifier("build-git-deploy")
                     journalLink(c: c)
                 }
@@ -476,7 +476,7 @@ public struct BuildGitScreen: View {
                 }
                 Text("The AI rewrote this repo into a Flagship service\(n > 0 ? " (\(n) file\(n == 1 ? "" : "s"))" : "").")
                     .font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                FSPrimaryButton("Install it", block: true) { Task { await vm.deploy() } }
+                FSPrimaryButton(String(localized: "Install it"), block: true) { Task { await vm.deploy() } }
                     .accessibilityIdentifier("build-git-deploy")
                 adapterExport(c: c)
                 journalLink(c: c)
@@ -507,7 +507,7 @@ public struct BuildGitScreen: View {
     /// runs the repo this way.
     @ViewBuilder
     private func adapterExport(c: FSColors) -> some View {
-        FSSecondaryButton(vm.exportingAdapter ? "Preparing…" : "Get flagship.app.json", block: true) {
+        FSSecondaryButton(vm.exportingAdapter ? String(localized: "Preparing…") : String(localized: "Get flagship.app.json"), block: true) {
             Task { await vm.exportAdapter() }
         }
         .accessibilityIdentifier("build-git-export")
@@ -582,7 +582,7 @@ public struct BuildMcpScreen: View {
                     }
 
                     if vm.connection == nil {
-                        FSPrimaryButton(vm.isCreating ? "Creating…" : "Create a connection",
+                        FSPrimaryButton(vm.isCreating ? String(localized: "Creating…") : String(localized: "Create a connection"),
                                         enabled: !vm.isCreating, block: true) {
                             Task { await vm.createConnection() }
                         }
@@ -614,10 +614,10 @@ public struct BuildMcpScreen: View {
                     .accessibilityIdentifier("build-mcp-user-settings")
 
                 CopyableRow(label: "URL", value: conn.url, mono: true) {
-                    onCopy(conn.url, "URL copied")
+                    onCopy(conn.url, String(localized: "URL copied"))
                 }
-                CopyableRow(label: "Key", value: conn.key, mono: true) {
-                    onCopy(conn.key, "Key copied")
+                CopyableRow(label: String(localized: "Key"), value: conn.key, mono: true) {
+                    onCopy(conn.key, String(localized: "Key copied"))
                 }
 
                 if vm.ideChoices.count > 1 {
@@ -634,8 +634,8 @@ public struct BuildMcpScreen: View {
                         .accessibilityIdentifier("build-mcp-ide-where")
                 }
 
-                FSSecondaryButton("Copy IDE config", block: true) {
-                    onCopy(vm.ideConfigJson, "Config copied")
+                FSSecondaryButton(String(localized: "Copy IDE config"), block: true) {
+                    onCopy(vm.ideConfigJson, String(localized: "Config copied"))
                 }
                 .accessibilityIdentifier("build-mcp-copy-config")
 
@@ -662,18 +662,18 @@ public struct BuildMcpScreen: View {
                     }
                     .background(c.surfaceSunken)
                     .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm, style: .continuous))
-                    FSSecondaryButton("Copy command", block: true) {
-                        onCopy(command, "Command copied")
+                    FSSecondaryButton(String(localized: "Copy command"), block: true) {
+                        onCopy(command, String(localized: "Command copied"))
                     }
                     .accessibilityIdentifier("build-mcp-copy-command")
                 }
 
                 HStack(spacing: FS.space.s2) {
-                    FSSecondaryButton(vm.isRotating ? "Regenerating…" : "Regenerate key", block: true) {
+                    FSSecondaryButton(vm.isRotating ? String(localized: "Regenerating…") : String(localized: "Regenerate key"), block: true) {
                         Task { await vm.rotateKey() }
                     }
                     .accessibilityIdentifier("build-mcp-rotate")
-                    FSSecondaryButton("View journal", block: true) {
+                    FSSecondaryButton(String(localized: "View journal"), block: true) {
                         if let id = vm.buildId { onViewJournal(id) }
                     }
                 }
@@ -682,7 +682,7 @@ public struct BuildMcpScreen: View {
                     .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                FSPrimaryButton(vm.isDeploying ? "Deploying…" : "Deploy now",
+                FSPrimaryButton(vm.isDeploying ? String(localized: "Deploying…") : String(localized: "Deploy now"),
                                 enabled: !vm.isDeploying, block: true) {
                     Task { await vm.deploy() }
                 }
@@ -718,9 +718,9 @@ public struct BuildMcpScreen: View {
                         Text(req.name).font(FS.font.mono()).foregroundColor(c.text)
                         Spacer()
                         if req.currentlySet {
-                            FSPill("Set", kind: .online)
+                            FSPill(String(localized: "Set"), kind: .online)
                         } else {
-                            FSPill("Needs you", kind: .idle)
+                            FSPill(String(localized: "Needs you"), kind: .idle)
                         }
                     }
                     if let why = req.why, !why.isEmpty {
@@ -730,7 +730,7 @@ public struct BuildMcpScreen: View {
                 }
                 .padding(.vertical, 2)
             }
-            FSSecondaryButton("Refresh", block: true) {
+            FSSecondaryButton(String(localized: "Refresh"), block: true) {
                 Task { await vm.refreshEnvRequests() }
             }
         }
@@ -836,18 +836,18 @@ public struct BuildJournalScreen: View {
 
     /// "Started 2m ago · on Home" when the list spans servers.
     static func subtitle(_ base: String, on server: String?) -> String {
-        server.map { "\(base) · on \($0)" } ?? base
+        server.map { String(localized: "\(base) · on \($0)") } ?? base
     }
 
     static func unreachableNote(_ names: [String]) -> String {
         let list = names.joined(separator: ", ")
-        return names.count == 1 ? "Couldn't reach \(list), so its builds aren't listed."
-            : "Couldn't reach \(list), so their builds aren't listed."
+        return names.count == 1 ? String(localized: "Couldn't reach \(list), so its builds aren't listed.")
+            : String(localized: "Couldn't reach \(list), so their builds aren't listed.")
     }
 
     static func discardMessage(_ session: VibeCodeSessionMeta) -> String {
         let freed = session.name.map { " Its name, \"\($0)\", becomes free again." } ?? ""
-        return "This stops the AI and deletes what it has written on your server.\(freed)"
+        return String(localized: "This stops the AI and deletes what it has written on your server.\(freed)")
     }
 
     @ViewBuilder
@@ -866,14 +866,14 @@ public struct BuildJournalScreen: View {
                     .accessibilityIdentifier("build-sessions-unreachable")
             }
             if !vm.liveSessions.isEmpty || !open.isEmpty {
-                Text(vm.spansServers ? "Open on your servers" : "Open on your server")
+                Text(vm.spansServers ? String(localized: "Open on your servers") : "Open on your server")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
                 ForEach(open) { b in
                     Button(action: { Task { await vm.loadDetail(buildId: b.buildId) } }) {
                         FSListRow(
                             leading: .icon(modeIcon(b.mode), color: c.accent),
                             title: b.displayName,
-                            subtitle: Self.subtitle("Started \(Self.timeString(b.startedAt))", on: vm.serverName(forBuild: b.buildId)),
+                            subtitle: Self.subtitle(String(localized: "Started \(Self.timeString(b.startedAt))"), on: vm.serverName(forBuild: b.buildId)),
                             detail: nil,
                             below: { FSPill(b.methodLabel, kind: .idle) }
                         ) {
@@ -894,7 +894,7 @@ public struct BuildJournalScreen: View {
                         FSListRow(
                             leading: .icon("sparkles", color: session.isActive ? c.success : c.textMuted),
                             title: vm.name(for: session, builds: builds),
-                            subtitle: Self.subtitle("Started \(Self.timeString(session.startedAt))",
+                            subtitle: Self.subtitle(String(localized: "Started \(Self.timeString(session.startedAt))"),
                                                     on: vm.serverName(forSession: session.sessionId)),
                             detail: nil,
                             below: {
@@ -942,7 +942,7 @@ public struct BuildJournalScreen: View {
                         FSListRow(
                             leading: .icon(modeIcon(b.mode), color: c.accent),
                             title: b.displayName,
-                            subtitle: Self.subtitle("Started \(Self.timeString(b.startedAt)) · \(b.entryCount) step\(b.entryCount == 1 ? "" : "s")",
+                            subtitle: Self.subtitle(String(localized: "Started \(Self.timeString(b.startedAt)) · \(b.entryCount) step\(b.entryCount == 1 ? "" : "s")"),
                                                     on: vm.serverName(forBuild: b.buildId)),
                             detail: nil,
                             below: { FSPill(b.methodLabel, kind: .idle) }
@@ -966,7 +966,7 @@ public struct BuildJournalScreen: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("build-journal-failed-reason")
                 if vm.openedMode == "git" {
-                    FSPrimaryButton(vm.openedSealed ? "Deploy it again" : "Run the AI again or deploy", block: true) {
+                    FSPrimaryButton(vm.openedSealed ? String(localized: "Deploy it again") : String(localized: "Run the AI again or deploy"), block: true) {
                         onOpenGitBuild(id, vm.buildServer[id])
                     }
                     .accessibilityIdentifier("build-journal-open-git")
@@ -1015,23 +1015,23 @@ public struct BuildJournalScreen: View {
 
     static func sessionLabel(_ status: String) -> String {
         switch status {
-        case "streaming": return "AI is working"
-        case "awaiting-tool-response": return "Waiting for you"
-        case "ready-to-deploy": return "Ready to deploy"
-        case "deploying": return "Deploying"
-        case "deployed": return "Deployed"
-        case "cancelled": return "Cancelled"
-        case "failed": return "Failed"
-        default: return "Stopped"
+        case "streaming": return String(localized: "AI is working")
+        case "awaiting-tool-response": return String(localized: "Waiting for you")
+        case "ready-to-deploy": return String(localized: "Ready to deploy")
+        case "deploying": return String(localized: "Deploying")
+        case "deployed": return String(localized: "Deployed")
+        case "cancelled": return String(localized: "Cancelled")
+        case "failed": return String(localized: "Failed")
+        default: return String(localized: "Stopped")
         }
     }
 
     /// What opening the chat does: carry on with it, watch it run, or look.
     static func sessionAction(_ status: String) -> String {
         switch status {
-        case "awaiting-tool-response", "ready-to-deploy", "failed": return "Continue"
-        case "streaming", "deploying": return "Resume"
-        default: return "Open"
+        case "awaiting-tool-response", "ready-to-deploy", "failed": return String(localized: "Continue")
+        case "streaming", "deploying": return String(localized: "Resume")
+        default: return String(localized: "Open")
         }
     }
 

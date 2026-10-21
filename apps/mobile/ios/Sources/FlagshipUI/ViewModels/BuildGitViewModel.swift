@@ -71,9 +71,9 @@ public final class BuildGitViewModel {
     /// The progress line for a running adapt.
     public static func adaptingText(stage: String?) -> String {
         switch stage {
-        case "staging": return "The AI is adapting and testing the app on a private copy with sample data…"
-        case "going-live": return "Installing the tested app…"
-        default: return "The AI is adapting the repo…"
+        case "staging": return String(localized: "The AI is adapting and testing the app on a private copy with sample data…")
+        case "going-live": return String(localized: "Installing the tested app…")
+        default: return String(localized: "The AI is adapting the repo…")
         }
     }
 
@@ -220,7 +220,7 @@ public final class BuildGitViewModel {
                 return
             case "failed":
                 keptFiles = status?.reason != nil
-                failAdapt(status?.reason ?? "The AI couldn't adapt this repo.")
+                failAdapt(status?.reason ?? String(localized: "The AI couldn't adapt this repo."))
                 return
             default:
                 let stage = status?.phase
@@ -232,7 +232,7 @@ public final class BuildGitViewModel {
                 }
             }
         }
-        failAdapt("The AI is taking unusually long. Check Build sessions later to see how it went.")
+        failAdapt(String(localized: "The AI is taking unusually long. Check Build sessions later to see how it went."))
     }
 
     private func finishAdapt(fileCount: Int, deployedUrl: String?, reason: String? = nil) {
@@ -247,17 +247,17 @@ public final class BuildGitViewModel {
         phase = .adapted(fileCount: fileCount)
     }
 
-    static let closedText = "This build is closed to the AI. Check the repo again to start a new build."
+    static let closedText = String(localized: "This build is closed to the AI. Check the repo again to start a new build.")
 
     static func notLiveText(_ reason: String) -> String {
-        "The app didn't go live: \(reason)"
+        String(localized: "The app didn't go live: \(reason)")
     }
 
     /// The box's 409 for a build that was handed over to go live.
     static func closedToAI(_ error: ScreensClientError) -> Bool {
         guard case let .http(status, _) = error, status == 409,
               let reason = ScreensClientError.boxReason(error) else { return false }
-        return reason.hasPrefix("This build is closed to the AI")
+        return reason.hasPrefix(String(localized: "This build is closed to the AI"))
     }
 
     private func failAdapt(_ message: String) {
@@ -287,7 +287,7 @@ public final class BuildGitViewModel {
                                          fileCount: r.files.count, name: st.name)
                 lastVerdict = v
                 keptFiles = true
-                errorMessage = a.reason ?? "The AI couldn't adapt this repo."
+                errorMessage = a.reason ?? String(localized: "The AI couldn't adapt this repo.")
                 phase = .verdict(v)
                 return
             }

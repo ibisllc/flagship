@@ -21,15 +21,15 @@ import FlagshipCore
 ///   - `.accessoryRectangular` — two-line title + phase title for
 ///     larger faces (Modular Ultra, etc.).
 struct ProvisionPhaseComplication: Widget {
-    let kind = "ProvisionPhaseComplication"
+    let kind = String(localized: "ProvisionPhaseComplication")
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: ProvisionPhaseProvider()) { entry in
             ProvisionPhaseComplicationView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
-        .configurationDisplayName("Flagship servers")
-        .description("Shows a server's install while one is under way, else how your servers are doing.")
+        .configurationDisplayName(String(localized: "Flagship servers"))
+        .description(String(localized: "Shows a server's install while one is under way, else how your servers are doing."))
         .supportedFamilies([.accessoryInline, .accessoryCircular, .accessoryRectangular])
     }
 }
@@ -157,9 +157,9 @@ struct ProvisionPhaseComplicationView: View {
 
     private var rectangularTitle: String {
         if entry.shownInstall == nil, let s = entry.summary { return WatchProtocol.ServersProjection.line(s) }
-        guard let ctx = entry.shownInstall else { return "No install in flight" }
-        if ctx.phase == "error" { return "Install failed" }
-        if ctx.phase == "live"  { return "Server is live" }
+        guard let ctx = entry.shownInstall else { return String(localized: "No install in flight") }
+        if ctx.phase == "error" { return String(localized: "Install failed") }
+        if ctx.phase == "live"  { return String(localized: "Server is live") }
         let title = WatchProtocol.ProvisionTimelineLadder.phases
             .first(where: { $0.phase == ctx.phase })?.title
             ?? ctx.phase.capitalized
@@ -168,7 +168,7 @@ struct ProvisionPhaseComplicationView: View {
 
     private var rectangularDetail: String? {
         if entry.shownInstall == nil, let s = entry.summary {
-            return s.total == 1 ? "1 server" : "\(s.total) servers"
+            return s.total == 1 ? "1 server" : String(localized: "\(s.total) servers")
         }
         guard let ctx = entry.shownInstall else { return nil }
         if let d = ctx.detail, !d.isEmpty { return d }

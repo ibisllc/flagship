@@ -180,9 +180,9 @@ public struct FSSegmentedControl<Value: Hashable>: View {
 public struct FSSearchField: View {
     @Environment(\.colorScheme) private var scheme
     @Binding var text: String
-    var placeholder: String = "Search"
+    var placeholder: String = String(localized: "Search")
 
-    public init(text: Binding<String>, placeholder: String = "Search") {
+    public init(text: Binding<String>, placeholder: String = String(localized: "Search")) {
         self._text = text
         self.placeholder = placeholder
     }
@@ -266,7 +266,7 @@ public struct FSProfileCard: View {
             HStack(spacing: FS.space.s4) {
                 FSMonogram(name: name)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(name.isEmpty ? "Your account" : name)
+                    Text(name.isEmpty ? String(localized: "Your account") : name)
                         .font(FS.font.scaled(22, weight: .semibold))
                         .foregroundColor(c.text)
                         .lineLimit(1)

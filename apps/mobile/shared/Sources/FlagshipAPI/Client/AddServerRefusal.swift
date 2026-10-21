@@ -5,7 +5,7 @@ import Foundation
 /// `{"error": "<the sentence>", "code": "add-server-admin-only"}`. The apps
 /// show their own copy of the same sentence, never the server's text.
 public enum AddServerRefusal {
-    public static let message = "Only an admin device of this account can add servers."
+    public static let message = String(localized: "Only an admin device of this account can add servers.")
     public static let code = "add-server-admin-only"
 
     public static func matches(status: Int, body: String) -> Bool {

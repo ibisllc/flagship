@@ -110,16 +110,16 @@ public enum DebugAccess {
 
     /// Why this grant can't be signed, as a sentence, or nil when it's fine.
     public static func grantProblem(_ g: Grant) -> String? {
-        if g.serverDomain.isEmpty { return "The debug access grant doesn't name a server." }
+        if g.serverDomain.isEmpty { return String(localized: "The debug access grant doesn't name a server.") }
         if g.sshPublicKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "Debug access needs an SSH public key."
+            return String(localized: "Debug access needs an SSH public key.")
         }
         if normalizeSshPublicKey(g.sshPublicKey) != g.sshPublicKey {
-            return "That isn't an SSH public key this server can use."
+            return String(localized: "That isn't an SSH public key this server can use.")
         }
-        if g.issuedAt <= 0 { return "The debug access grant has no valid time." }
-        if g.expiresAt <= g.issuedAt { return "Debug access has to end after it starts." }
-        if g.expiresAt - g.issuedAt > maxMs { return "Debug access can be on for at most 7 days at a time." }
+        if g.issuedAt <= 0 { return String(localized: "The debug access grant has no valid time.") }
+        if g.expiresAt <= g.issuedAt { return String(localized: "Debug access has to end after it starts.") }
+        if g.expiresAt - g.issuedAt > maxMs { return String(localized: "Debug access can be on for at most 7 days at a time.") }
         return nil
     }
 
@@ -129,13 +129,13 @@ public enum DebugAccess {
 
     public static func canonicalBytes(_ g: Grant) throws -> Data {
         guard fieldOK(g.serverDomain), fieldOK(g.sshPublicKey) else {
-            throw Refusal.problem("That debug access grant can't be signed.")
+            throw Refusal.problem(String(localized: "That debug access grant can't be signed."))
         }
         return Data("flagship/debug-access/v2|\(g.serverDomain)|\(g.sshPublicKey)|\(g.issuedAt)|\(g.expiresAt)".utf8)
     }
 
     public static func canonicalBytes(_ r: Revoke) throws -> Data {
-        guard fieldOK(r.serverDomain) else { throw Refusal.problem("That request can't be signed.") }
+        guard fieldOK(r.serverDomain) else { throw Refusal.problem(String(localized: "That request can't be signed.")) }
         return Data("flagship/debug-access-revoke/v1|\(r.serverDomain)|\(r.issuedAt)".utf8)
     }
 
@@ -143,9 +143,9 @@ public enum DebugAccess {
     /// when the key or the times are wrong.
     public static func makeGrant(serverDomain: String, rawKey: String, issuedAt: Int64, duration: Int64) throws -> Grant {
         let trimmed = rawKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { throw Refusal.problem("Debug access needs an SSH public key.") }
+        if trimmed.isEmpty { throw Refusal.problem(String(localized: "Debug access needs an SSH public key.")) }
         guard let key = normalizeSshPublicKey(trimmed) else {
-            throw Refusal.problem("That isn't an SSH public key this server can use.")
+            throw Refusal.problem(String(localized: "That isn't an SSH public key this server can use."))
         }
         let g = Grant(serverDomain: serverDomain, sshPublicKey: key, issuedAt: issuedAt, expiresAt: issuedAt + duration)
         if let p = grantProblem(g) { throw Refusal.problem(p) }

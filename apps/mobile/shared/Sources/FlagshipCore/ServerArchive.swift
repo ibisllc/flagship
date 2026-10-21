@@ -9,18 +9,16 @@ public enum ServerArchive {
     public static let uploadChunkBytes = 4 * 1024 * 1024
 
     public static let excludesNote =
-        "Holds your apps' source, data and settings, never system images: the new server rebuilds each app, so any Flagship server can restore it. Not included: the server's keys and certificate, peer backups, and the Git host."
+        String(localized: "Holds your apps' source, data and settings, never system images: the new server rebuilds each app, so any Flagship server can restore it. Not included: the server's keys and certificate, peer backups, and the Git host.")
     /// Why Back up now always asks for a passcode (owner, 2026-10-16).
     public static let passcodeWhy =
-        "You'll need this passcode to import the backup into an account that isn't yours. Your own account opens it without the passcode."
+        String(localized: "You'll need this passcode to import the backup into an account that isn't yours. Your own account opens it without the passcode.")
     public static let passcodeNote =
-        "Anyone with the file and this passcode can restore the backup, on any account, so keep it somewhere safe and apart from the file. It can't be reset."
+        String(localized: "Anyone with the file and this passcode can restore the backup, on any account, so keep it somewhere safe and apart from the file. It can't be reset.")
     public static let peersIntro =
-        "Your lost server's latest backup is kept in pieces on other Flagship servers. Name the lost server, this phone gets the pieces back, and you name the new server."
+        String(localized: "Your lost server's latest backup is kept in pieces on other Flagship servers. Name the lost server, this phone gets the pieces back, and you name the new server.")
     public static let importIntro =
-        "Pick the backup's .flagship file from wherever you keep it. "
-        + "You choose a name; everything else comes from the backup. Then set up the new server as usual, "
-        + "and this screen sends it the backup as soon as it comes online."
+        String(localized: "Pick the backup's .flagship file from wherever you keep it. You choose a name; everything else comes from the backup. Then set up the new server as usual, and this screen sends it the backup as soon as it comes online.")
 
     /// `HKDF-SHA256(umkSeed, salt: empty, info: "flagship/server-archive/v1|<archiveId>")`:
     /// the key of a backup's account slot. Independent of any server id, so any
@@ -57,10 +55,10 @@ public enum ServerArchive {
 
     public static func formatBytes(_ n: Int64) -> String {
         if n < 0 { return "" }
-        if n < 1024 * 1024 { return "\(max(1, Int((Double(n) / 1024).rounded()))) KB" }
+        if n < 1024 * 1024 { return String(localized: "\(max(1, Int((Double(n) / 1024).rounded()))) KB") }
         if n < 1024 * 1024 * 1024 {
             let mb = Double(n) / (1024 * 1024)
-            return n < 10 * 1024 * 1024 ? String(format: "%.1f MB", mb) : "\(Int(mb.rounded())) MB"
+            return n < 10 * 1024 * 1024 ? String(format: "%.1f MB", mb) : String(localized: "\(Int(mb.rounded())) MB")
         }
         return String(format: "%.1f GB", Double(n) / (1024 * 1024 * 1024))
     }

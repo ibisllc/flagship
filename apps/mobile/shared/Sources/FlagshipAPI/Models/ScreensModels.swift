@@ -198,17 +198,17 @@ public struct AppSandbox: Codable, Equatable, Sendable {
                 detail = detail.trimmingCharacters(in: .whitespaces)
                 return Notice(
                     danger: true,
-                    text: "Apps can't start on this server: the internet firewall that keeps them to their allowed hosts isn't running"
+                    text: String(localized: "Apps can't start on this server: the internet firewall that keeps them to their allowed hosts isn't running")
                         + (detail.isEmpty ? "" : " (\(detail))")
                         + ". The server tries again every 30 seconds."
                 )
             }
             return Notice(
                 danger: true,
-                text: "Apps can't start on this server: the sandbox they run in isn't working (\(why.isEmpty ? "unknown reason" : why)). The server tries again every 10 minutes."
+                text: String(localized: "Apps can't start on this server: the sandbox they run in isn't working (\(why.isEmpty ? "unknown reason" : why)). The server tries again every 10 minutes.")
             )
         case "starting":
-            return Notice(danger: false, text: "Setting up the sandbox apps run in. They start once it's ready.")
+            return Notice(danger: false, text: String(localized: "Setting up the sandbox apps run in. They start once it's ready."))
         default:
             return nil
         }
@@ -277,21 +277,21 @@ public struct LastUpdate: Codable, Equatable, Sendable {
         }
         switch outcome {
         case "applied":
-            return short(targetCommit).map { "Last update: \($0) installed and running." } ?? "Last update installed and running."
+            return short(targetCommit).map { String(localized: "Last update: \($0) installed and running.") } ?? String(localized: "Last update installed and running.")
         case "rolled-back":
             let to = short(targetCommit).map { " to \($0)" } ?? ""
             let back = short(previousCommit).map { " to \($0)" } ?? ""
-            return "The last update\(to) didn't start cleanly, so the server went back\(back) on its own."
+            return String(localized: "The last update\(to) didn't start cleanly, so the server went back\(back) on its own.")
         case "refused":
-            guard let why = Self.refusalCopy[reason ?? ""] else { return "The server refused the last update." }
-            return "The server refused the last update: \(why)"
+            guard let why = Self.refusalCopy[reason ?? ""] else { return String(localized: "The server refused the last update.") }
+            return String(localized: "The server refused the last update: \(why)")
         default:
             return nil
         }
     }
 
     private static let refusalCopy: [String: String] = [
-        "unendorsed": "Flagship's maintainers haven't endorsed that release.",
+        "unendorsed": String(localized: "Flagship's maintainers haven't endorsed that release."),
         "from-commit-mismatch": "the server was no longer on the version the update was made for. Send it again.",
         "apply-failed": "it couldn't download or build the new version. Nothing changed.",
         "rejected": "the request wasn't signed by this account's admin key.",
@@ -1093,9 +1093,9 @@ public struct ServiceEnvChange: Codable, Equatable, Sendable {
     /// Why a variable name can't be used, or nil.
     public static func nameError(_ name: String) -> String? {
         if name.range(of: #"^[A-Za-z_][A-Za-z0-9_]{0,127}$"#, options: .regularExpression) == nil {
-            return "Use letters, digits and _ only, not starting with a digit (like API_KEY)."
+            return String(localized: "Use letters, digits and _ only, not starting with a digit (like API_KEY).")
         }
-        if name.hasPrefix("FLAGSHIP_") { return "Names starting with FLAGSHIP_ are set by your server." }
+        if name.hasPrefix("FLAGSHIP_") { return String(localized: "Names starting with FLAGSHIP_ are set by your server.") }
         return nil
     }
 

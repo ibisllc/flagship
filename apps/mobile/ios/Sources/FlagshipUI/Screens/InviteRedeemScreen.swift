@@ -80,7 +80,7 @@ public struct InviteRedeemScreen: View {
                 Text("This grants your account access to a restricted service on \(serverDomain). The owner sees only a private label they assign you — your username and domain are never shared.")
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
-                FSPrimaryButton(isRedeeming ? "Accepting…" : "Accept & get access", block: true, large: true) {
+                FSPrimaryButton(isRedeeming ? String(localized: "Accepting…") : "Accept & get access", block: true, large: true) {
                     Task { await accept() }
                 }
                 .disabled(isRedeeming)
@@ -105,11 +105,11 @@ public struct InviteRedeemScreen: View {
                 Text("Your account now has access to \(serviceRef.isEmpty ? "the service" : serviceRef).\(firstBind ? "" : " (You already had access — this link is linked to your account.)")")
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
-                FSPrimaryButton("Open it", block: true, large: true) {
+                FSPrimaryButton(String(localized: "Open it"), block: true, large: true) {
                     onOpenService(serverDomain)
                 }
                 .accessibilityIdentifier("invite-redeem-open")
-                FSSecondaryButton("Go to Flagship", block: true) { onDone() }
+                FSSecondaryButton(String(localized: "Go to Flagship"), block: true) { onDone() }
                     .accessibilityIdentifier("invite-redeem-home")
             }
         }
@@ -127,11 +127,11 @@ public struct InviteRedeemScreen: View {
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
                 InviteShareCard(
-                    title: "Your approval reply",
-                    subtitle: "Send it back to the person who invited you.",
+                    title: String(localized: "Your approval reply"),
+                    subtitle: String(localized: "Send it back to the person who invited you."),
                     link: replyLink,
                     idPrefix: "invite-redeem-reply")
-                FSSecondaryButton("Done", block: true) { onDone() }
+                FSSecondaryButton(String(localized: "Done"), block: true) { onDone() }
                     .accessibilityIdentifier("invite-redeem-pending-done")
             }
         }

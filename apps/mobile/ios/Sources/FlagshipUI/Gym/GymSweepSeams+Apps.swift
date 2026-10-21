@@ -29,7 +29,7 @@ extension GymSweepSeams {
         if args.contains("-smoke-access-draft") {
             screens.mockAccessDrafts["bright-maple--plants"] = AppAccessDraft(
                 list: "allow api.open-meteo.com\n" + AppAccessList.defaultList,
-                hosts: [AppAccessDraftHost(host: "api.open-meteo.com", why: "Weather for watering reminders")],
+                hosts: [AppAccessDraftHost(host: "api.open-meteo.com", why: String(localized: "Weather for watering reminders"))],
                 createdAt: 1_760_000_000_000)
         }
         // Office and Music run their own boxes without Plants, so "Runs on"
@@ -58,7 +58,7 @@ extension GymSweepSeams {
             screens.vibeCodeStartError = ScreensClientError.http(status: 409, message: body)
         case "toobig":
             screens.vibeCodeStartError = ScreensClientError.http(
-                status: 413, message: #"{"error":"Plants is too big to change in the AI chat. Use your IDE instead."}"#)
+                status: 413, message: String(localized: #"{"error":"Plants is too big to change in the AI chat. Use your IDE instead."}"#))
         default:
             break
         }
