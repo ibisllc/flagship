@@ -1,0 +1,12 @@
+{
+  "Provisioning %@…": "正在配置 %@…",
+  "Servers": "服务器",
+  "Online/offline status for your Flagship servers.": "你的 Flagship 服务器的在线/离线状态。",
+  "Online": "在线",
+  "Offline": "离线",
+  "Pending": "待处理",
+  "Unknown": "未知",
+  "LEADER": "领导者",
+  "No servers yet": "还没有服务器",
+  "Pair a server to see status here.": "配对一台服务器，即可在此查看其状态。"
+}

@@ -1,0 +1,5 @@
+{
+  "NSCameraUsageDescription": "Flagship 使用相机扫描你的服务器显示的配对二维码。",
+  "NSFaceIDUsageDescription": "Flagship 使用 Face ID 来确认敏感操作，例如批准解锁或撤销服务器。",
+  "NSLocalNetworkUsageDescription": "当你的服务器在同一网络时，Flagship 会直接与其通信，比经由中继更快。"
+}
