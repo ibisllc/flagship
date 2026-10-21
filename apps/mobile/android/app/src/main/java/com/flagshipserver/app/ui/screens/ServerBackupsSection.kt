@@ -6,6 +6,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.material3.MaterialTheme
 import android.content.Context
 import android.os.StatFs
@@ -73,8 +77,8 @@ internal fun ServerBackupsSection(serverDomain: String) {
             serverFqdn = serverDomain,
             client = pod?.let { podClients.screens(it) } ?: screens,
             isAdmin = isAdmin,
-            sign = { bytes -> Keystore.adminSigningKey("Approve backups for $serverDomain").sign(bytes) },
-            mintKeys = { n -> Keystore.mintServerArchiveKeys(n, "Approve backups for $serverDomain") },
+            sign = { bytes -> Keystore.adminSigningKey(FSStrings.get(R.string.approve_backups_for, serverDomain)).sign(bytes) },
+            mintKeys = { n -> Keystore.mintServerArchiveKeys(n, FSStrings.get(R.string.approve_backups_for, serverDomain)) },
             signingNeedsPrompt = { Keystore.sensitiveSigningNeedsPrompt() },
             downloadDir = { File(context.cacheDir, "saved-backups") },
         )
@@ -97,11 +101,11 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
     val saver = rememberSaveBackupLauncher(
         file = { saveTarget },
         onSaving = { saving = it },
-        onResult = { ok -> saveNote = if (ok) "Saved." else "Couldn't save the backup there. Pick another place." },
+        onResult = { ok -> saveNote = if (ok) FSStrings.get(R.string.saved) else FSStrings.get(R.string.couldnt_save_the_backup_there_pick) },
     )
 
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-    com.flagshipserver.app.ui.components.FSSectionHeader("Backups")
+    com.flagshipserver.app.ui.components.FSSectionHeader(stringResource(R.string.backups))
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("sd-backups")) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             // ── Policy ──
@@ -118,7 +122,7 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
                         onClick = { editPolicy = true },
                         enabled = vm.isAdmin,
                         modifier = Modifier.testTag("sd-backups-policy-change"),
-                    ) { Text(if (p.policy.policy == "unset") "Choose" else "Change") }
+                    ) { Text(if (p.policy.policy == "unset") stringResource(R.string.choose) else stringResource(R.string.change)) }
                 }
                 BackupsText.usageLine(p.policy.policy, p.cap)?.let { line ->
                     Text(line, color = FS.colors.textMuted, style = caption, modifier = Modifier.testTag("sd-backups-usage"))
@@ -176,12 +180,12 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
                             onClick = { editSchedule = true },
                             enabled = vm.isAdmin,
                             modifier = Modifier.testTag("sd-backups-schedule-change"),
-                        ) { Text("Change") }
+                        ) { Text(stringResource(R.string.change)) }
                     }
                 }
                 if (vm.isAdmin && (vm.needsApproval || (v.keysLeft == 0 && v.keysWanted > 0))) {
                     FSSecondaryButton(
-                        label = if (vm.busy) "Approving…" else BackupsText.APPROVE,
+                        label = if (vm.busy) stringResource(R.string.approving) else BackupsText.APPROVE,
                         onClick = { scope.launch { vm.deposit() } },
                         enabled = !vm.busy,
                         block = true,
@@ -192,7 +196,7 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
                 }
 
                 FSPrimaryButton(
-                    label = "Back up now",
+                    label = stringResource(R.string.back_up_now),
                     onClick = { scope.launch { vm.backUpNow() } },
                     enabled = vm.isAdmin && v.running == null && !vm.busy,
                     block = true,
@@ -220,7 +224,7 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
                                     },
                                     enabled = progress == null,
                                     modifier = Modifier.testTag("sd-backups-download-${b.archiveId}"),
-                                ) { Text(if (progress != null) "Downloading…" else "Download") }
+                                ) { Text(if (progress != null) stringResource(R.string.downloading) else stringResource(R.string.download)) }
                             } else {
                                 TextButton(
                                     onClick = {
@@ -230,16 +234,16 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
                                     },
                                     enabled = !saving,
                                     modifier = Modifier.testTag("sd-backups-save-${b.archiveId}"),
-                                ) { Text(if (saving) "Saving…" else "Save…") }
+                                ) { Text(if (saving) stringResource(R.string.saving) else stringResource(R.string.save_3)) }
                             }
                             TextButton(
                                 onClick = { confirmDelete = b },
                                 enabled = vm.isAdmin,
                                 colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                                 modifier = Modifier.testTag("sd-backups-delete-${b.archiveId}"),
-                            ) { Text("Delete") }
+                            ) { Text(stringResource(R.string.delete_2)) }
                         }
-                        if (file != null) Text("Downloaded ${file.name}.", color = FS.colors.success, style = caption, modifier = Modifier.testTag("sd-backups-downloaded-${b.archiveId}"))
+                        if (file != null) Text(fsString(R.string.downloaded, file.name), color = FS.colors.success, style = caption, modifier = Modifier.testTag("sd-backups-downloaded-${b.archiveId}"))
                     }
                 }
                 saveNote?.let { Text(it, color = FS.colors.textMuted, style = caption) }
@@ -267,7 +271,7 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
                     copies.copies(vm.serverFqdn).firstOrNull()?.let { c ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "On this phone: ${BackupsText.whenText(c.meta.createdAt)} · ${BackupsText.size(c.meta)}",
+                                fsString(R.string.on_this_phone, BackupsText.whenText(c.meta.createdAt), BackupsText.size(c.meta)),
                                 color = FS.colors.textMuted,
                                 style = caption,
                                 modifier = Modifier.weight(1f).testTag("sd-backups-phone-copy"),
@@ -279,7 +283,7 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
                                     saver.launch(c.file.name)
                                 },
                                 modifier = Modifier.testTag("sd-backups-phone-save"),
-                            ) { Text("Save…") }
+                            ) { Text(stringResource(R.string.save_3)) }
                         }
                     }
                 }
@@ -306,9 +310,9 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
                         scope.launch { vm.delete(b.archiveId) }
                     },
                     modifier = Modifier.testTag("sd-backups-delete-confirm"),
-                ) { Text("Delete", color = FS.colors.danger) }
+                ) { Text(stringResource(R.string.delete_2), color = FS.colors.danger) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }
@@ -325,11 +329,11 @@ private fun ScheduleEditor(vm: ServerBackupsViewModel, current: com.flagshipserv
     var saving by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = { if (!saving) onDismiss() },
-        title = { Text("Backup schedule") },
+        title = { Text(stringResource(R.string.backup_schedule)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-                    listOf("daily" to "Daily", "weekly" to "Weekly", "off" to "Off").forEach { (k, label) ->
+                    listOf("daily" to stringResource(R.string.daily), "weekly" to stringResource(R.string.weekly), "off" to stringResource(R.string.off)).forEach { (k, label) ->
                         val on = frequency == k
                         TextButton(onClick = { frequency = k }, modifier = Modifier.testTag("sd-backups-freq-$k")) {
                             Text(label, color = if (on) FS.colors.accentText else FS.colors.textMuted, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
@@ -351,10 +355,10 @@ private fun ScheduleEditor(vm: ServerBackupsViewModel, current: com.flagshipserv
                         TextButton(onClick = { minute = (minute + 15) % 1440 }, modifier = Modifier.testTag("sd-backups-minute-up")) { Text("+15") }
                         TextButton(onClick = { minute = (minute + 60) % 1440 }, modifier = Modifier.testTag("sd-backups-hour-up")) { Text("+1 h") }
                     }
-                    Text("In this phone's time zone.", color = FS.colors.textMuted, style = caption)
+                    Text(stringResource(R.string.in_this_phones_time_zone), color = FS.colors.textMuted, style = caption)
                 }
-                Stepper("Keep daily", keepDaily, 0..60, "sd-backups-keep-daily") { keepDaily = it }
-                Stepper("Keep weekly", keepWeekly, 0..52, "sd-backups-keep-weekly") { keepWeekly = it }
+                Stepper(stringResource(R.string.keep_daily), keepDaily, 0..60, "sd-backups-keep-daily") { keepDaily = it }
+                Stepper(stringResource(R.string.keep_weekly), keepWeekly, 0..52, "sd-backups-keep-weekly") { keepWeekly = it }
                 vm.actionError?.let { Text(it, color = FS.colors.danger, style = caption, modifier = Modifier.testTag("sd-backups-schedule-error")) }
             }
         },
@@ -373,9 +377,9 @@ private fun ScheduleEditor(vm: ServerBackupsViewModel, current: com.flagshipserv
                 },
                 enabled = !saving,
                 modifier = Modifier.testTag("sd-backups-schedule-save"),
-            ) { Text(if (saving) "Saving…" else "Save") }
+            ) { Text(if (saving) stringResource(R.string.saving) else stringResource(R.string.save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !saving) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !saving) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -402,7 +406,7 @@ private fun PolicyEditor(vm: ServerBackupsViewModel, current: com.flagshipserver
     var saving by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = { if (!saving) onDismiss() },
-        title = { Text("Backup policy") },
+        title = { Text(stringResource(R.string.backup_policy_2)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 BackupPolicyOptions(
@@ -428,8 +432,8 @@ private fun PolicyEditor(vm: ServerBackupsViewModel, current: com.flagshipserver
                 },
                 enabled = !saving,
                 modifier = Modifier.testTag("sd-backups-policy-save"),
-            ) { Text(if (saving) "Saving…" else "Save") }
+            ) { Text(if (saving) stringResource(R.string.saving) else stringResource(R.string.save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !saving) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !saving) { Text(stringResource(R.string.cancel)) } },
     )
 }

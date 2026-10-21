@@ -7,6 +7,8 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
+
 /** One group of the menu. Holds a key's name, never the key. */
 data class ModelGroup(
     val id: String,
@@ -32,8 +34,8 @@ object ModelGroups {
     const val FLAGSHIP = "flagship"
     /** A key this chat started with that isn't saved on this phone. */
     const val SESSION_KEY = "session-key"
-    const val UNSAVED_KEY = "Unsaved key"
-    const val CONTEXT_NOTICE = "Older messages will be summarised to fit this model."
+    val UNSAVED_KEY get() = FSStrings.get(R.string.unsaved_key)
+    val CONTEXT_NOTICE get() = FSStrings.get(R.string.older_messages_will_be_summarised_to)
 
     /** How a saved key is named in the menu, as the AI-keys list names it. */
     fun keyTitle(provider: String, label: String): String = "$provider · $label"

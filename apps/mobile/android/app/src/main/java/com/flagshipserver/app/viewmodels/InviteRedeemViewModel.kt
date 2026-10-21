@@ -15,6 +15,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.RedeemResult
 import com.flagshipserver.app.api.ServiceAccessClient
@@ -81,7 +83,7 @@ class InviteRedeemViewModel(
     suspend fun redeem() {
         if (_phase.value is InviteRedeemPhase.Redeeming) return
         if (!Regex("^[0-9a-f]{64}$").matches(secret)) {
-            _phase.value = InviteRedeemPhase.Failed("This invite link is missing or malformed.")
+            _phase.value = InviteRedeemPhase.Failed(FSStrings.get(R.string.this_invite_link_is_missing_or))
             return
         }
         val ref = appRef ?: run {
@@ -94,7 +96,7 @@ class InviteRedeemViewModel(
             val redeemPub = HexUtil.decode(appAidPubHex(ref, reason))!!
             val redeemSigner = appAidSigner(ref, reason)
             val secretBytes = HexUtil.decode(secret) ?: run {
-                _phase.value = InviteRedeemPhase.Failed("This invite link is malformed."); return
+                _phase.value = InviteRedeemPhase.Failed(FSStrings.get(R.string.this_invite_link_is_malformed)); return
             }
             val secretHash = ServiceInvite.secretHash(secretBytes)
             val ts = now()
@@ -112,14 +114,14 @@ class InviteRedeemViewModel(
         } catch (e: ServiceAccessError) {
             _phase.value = InviteRedeemPhase.Failed(
                 when (e) {
-                    is ServiceAccessError.InviteUnknown -> "This invite link is unknown or was withdrawn."
-                    is ServiceAccessError.InviteAlreadyBound -> "This invite is already linked to another account."
-                    is ServiceAccessError.InviteRevoked -> "This invite has been revoked."
-                    is ServiceAccessError.InviteExpiredOrFull -> "This invite has expired or is full."
+                    is ServiceAccessError.InviteUnknown -> FSStrings.get(R.string.this_invite_link_is_unknown_or)
+                    is ServiceAccessError.InviteAlreadyBound -> FSStrings.get(R.string.this_invite_is_already_linked_to)
+                    is ServiceAccessError.InviteRevoked -> FSStrings.get(R.string.this_invite_has_been_revoked)
+                    is ServiceAccessError.InviteExpiredOrFull -> FSStrings.get(R.string.this_invite_has_expired_or_is_2)
                 },
             )
         } catch (e: Throwable) {
-            _phase.value = InviteRedeemPhase.Failed("Couldn't reach the server. Check your connection and try again.")
+            _phase.value = InviteRedeemPhase.Failed(FSStrings.get(R.string.couldnt_reach_the_server_check_your))
         }
     }
 
@@ -139,7 +141,7 @@ class InviteRedeemViewModel(
         if (inviteId == null) {
             // The box accepted the redeem as pending but the inviteId is unknown —
             // can't form a verifiable acceptance. Surface a clear failure.
-            _phase.value = InviteRedeemPhase.Failed("This invite needs the owner's approval, but the server didn't return the details. Try again.")
+            _phase.value = InviteRedeemPhase.Failed(FSStrings.get(R.string.this_invite_needs_the_owners_approval_2))
             return
         }
         val ts = now()
@@ -156,6 +158,6 @@ class InviteRedeemViewModel(
 
     companion object {
         /** Shown for a link made before per-app ids (no `s=`). */
-        const val OLD_LINK = "This invite link is from an older version of Flagship. Ask the owner for a new link."
+        val OLD_LINK get() = FSStrings.get(R.string.this_invite_link_is_from_an)
     }
 }

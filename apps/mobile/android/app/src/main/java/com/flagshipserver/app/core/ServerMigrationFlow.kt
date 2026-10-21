@@ -6,6 +6,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.DecommissionDepositBody
 import com.flagshipserver.app.api.MigrationControlBody
 import com.flagshipserver.app.api.MigrationSession
@@ -169,14 +170,14 @@ object ServerMigrationTimeline {
     fun steps(s: MigrationSession): List<Step> {
         val aborted = s.abortedAt != null
         val rows = listOf(
-            Triple("initiate", "Migration authorized", s.initiatedAt),
-            Triple("provision", "New server online + attached", s.attachedAt),
-            Triple("pre-seed", "Data restored to the new server", s.preSeededAt),
-            Triple("ready", "Confirmed ready to take over", s.readyAt),
-            Triple("freeze", "Old server frozen — final backup", s.freezeAt),
-            Triple("final-delta", "Final backup flushed", s.finalDeltaAt),
-            Triple("take-over", "New server took over the name", s.takenOverAt),
-            Triple("close-out", "Old server closed out", s.oldClosedOutAt),
+            Triple("initiate", FSStrings.get(R.string.migration_authorized), s.initiatedAt),
+            Triple("provision", FSStrings.get(R.string.new_server_online_attached), s.attachedAt),
+            Triple("pre-seed", FSStrings.get(R.string.data_restored_to_the_new_server), s.preSeededAt),
+            Triple("ready", FSStrings.get(R.string.confirmed_ready_to_take_over), s.readyAt),
+            Triple("freeze", FSStrings.get(R.string.old_server_frozen_final_backup), s.freezeAt),
+            Triple("final-delta", FSStrings.get(R.string.final_backup_flushed), s.finalDeltaAt),
+            Triple("take-over", FSStrings.get(R.string.new_server_took_over_the_name), s.takenOverAt),
+            Triple("close-out", FSStrings.get(R.string.old_server_closed_out), s.oldClosedOutAt),
         )
         var activeSeen = false
         return rows.map { (key, label, at) ->
@@ -195,32 +196,32 @@ object ServerMigrationTimeline {
     /** Honest waiting copy for the CURRENT wait, plus the stuck-pre-seed hint. */
     fun waitCopy(s: MigrationSession, nowMs: Long): String {
         if (s.abortedAt != null) {
-            return "Migration aborted — your old server stays active with all its data."
+            return FSStrings.get(R.string.migration_aborted_your_old_server_stays)
         }
-        if (s.done) return "Migration complete — the server now runs on the new server."
+        if (s.done) return FSStrings.get(R.string.migration_complete_the_server_now_runs)
         return when (s.phase) {
             "initiated" ->
-                "Waiting for the new server to come online. Apply the recipe on the new machine / VM; it will attach itself here."
+                FSStrings.get(R.string.waiting_for_the_new_server_to)
             "provisioned" -> {
                 val attachedAt = s.attachedAt
                 if (attachedAt != null && nowMs - attachedAt > PRE_SEED_STUCK_MS) {
-                    "The new server attached but hasn't restored any data yet. If this server has no backup enabled, enable backup first — the migration restores from it."
+                    FSStrings.get(R.string.the_new_server_attached_but_hasnt)
                 } else {
-                    "New server attached — restoring this server's data from backup. The old server keeps serving meanwhile."
+                    FSStrings.get(R.string.new_server_attached_restoring_this_servers)
                 }
             }
             "pre-seeded" ->
-                "Data restored. Confirm the hand-off when you're ready — the old server will briefly freeze writes while the name moves."
+                FSStrings.get(R.string.data_restored_confirm_the_hand_off)
             "ready" ->
-                "Ready — freeze the old server to flush the final backup and hand the name over."
+                FSStrings.get(R.string.ready_freeze_the_old_server_to)
             "freezing" ->
                 if (s.finalDeltaAt == null) {
-                    "Old server is frozen and flushing its final backup…"
+                    FSStrings.get(R.string.old_server_is_frozen_and_flushing)
                 } else {
-                    "Final backup flushed — the new server is applying it and claiming the name…"
+                    FSStrings.get(R.string.final_backup_flushed_the_new_server)
                 }
             "taken-over" ->
-                "The new server is serving the name. Waiting for the old server to close out."
+                FSStrings.get(R.string.the_new_server_is_serving_the)
             else -> ""
         }
     }

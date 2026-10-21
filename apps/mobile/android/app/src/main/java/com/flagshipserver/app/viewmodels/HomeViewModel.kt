@@ -4,6 +4,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.ScreensError
@@ -46,7 +48,7 @@ class HomeViewModel(
         true
     } catch (t: Throwable) {
         _needsPairing.value = isNotPaired(t)
-        lastError = UserErrorText.of(t, "Couldn't load this server. Try again.")
+        lastError = UserErrorText.of(t, FSStrings.get(R.string.couldnt_load_this_server_try_again))
         _failures.value += 1
         false
     }
@@ -86,7 +88,7 @@ class HomeViewModel(
     }
 
     private fun failureMessage(): String =
-        if (_needsPairing.value) "This device isn't paired with this server yet." else lastError ?: "Couldn't load this server. Try again."
+        if (_needsPairing.value) FSStrings.get(R.string.this_device_isnt_paired_with_this) else lastError ?: FSStrings.get(R.string.couldnt_load_this_server_try_again)
 
     companion object {
         fun isNotPaired(t: Throwable): Boolean = when (t) {

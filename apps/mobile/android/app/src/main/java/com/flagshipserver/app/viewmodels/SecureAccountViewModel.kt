@@ -14,6 +14,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -58,27 +60,25 @@ class SecureAccountViewModel(
     companion object {
         /** Copy — kept here so tests can assert it and the other
          *  surfaces can mirror it verbatim. */
-        const val TITLE = "Secure your account"
-        const val BODY =
-            "Back up your account now so you can get back in if you lose " +
-                "this device. No one — not even us — can recover it for you."
+        val TITLE get() = FSStrings.get(R.string.secure_your_account)
+        val BODY get() =
+            FSStrings.get(R.string.back_up_your_account_now_so)
 
-        const val CLOUD_LABEL = "Back up with your passkey"
-        const val CLOUD_SUBLABEL =
-            "Recover with your Google passkey or password manager."
-        const val CLOUD_UNAVAILABLE_HINT =
-            "Passkeys aren't available on this device — use a backup file."
+        val CLOUD_LABEL get() = FSStrings.get(R.string.back_up_with_your_passkey)
+        val CLOUD_SUBLABEL get() =
+            FSStrings.get(R.string.recover_with_your_google_passkey_or)
+        val CLOUD_UNAVAILABLE_HINT get() =
+            FSStrings.get(R.string.passkeys_arent_available_on_this_device)
 
-        const val FILE_LABEL = "Save a backup file"
-        const val FILE_SUBLABEL = "An encrypted .flagshipkey you keep yourself."
+        val FILE_LABEL get() = FSStrings.get(R.string.save_a_backup_file)
+        val FILE_SUBLABEL get() = FSStrings.get(R.string.an_encrypted_flagshipkey_you_keep_yourself)
 
         const val CONTINUE = "Continue"
-        const val SKIP = "Skip for now"
+        val SKIP get() = FSStrings.get(R.string.skip_for_now)
 
-        const val SKIP_WARNING =
-            "Without a backup, losing this device means losing your " +
-                "account for good. You can set this up anytime in Settings."
-        const val SKIP_CONFIRM = "Skip anyway"
+        val SKIP_WARNING get() =
+            FSStrings.get(R.string.without_a_backup_losing_this_device)
+        val SKIP_CONFIRM get() = FSStrings.get(R.string.skip_anyway)
         const val SKIP_BACK = "Back"
     }
 }

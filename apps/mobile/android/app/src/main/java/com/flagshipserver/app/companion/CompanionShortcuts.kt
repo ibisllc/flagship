@@ -7,6 +7,7 @@
 
 package com.flagshipserver.app.companion
 
+import com.flagshipserver.app.core.FSStrings
 import android.content.Context
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
@@ -24,11 +25,11 @@ object CompanionShortcuts {
     fun specs(snapshot: PodStatusSnapshot, max: Int): List<Spec> {
         if (snapshot.pods.isEmpty() || max <= 0) return emptyList()
         val approvals = Spec(
-            APPROVALS_ID, "Approvals", "Approve a server's unlock",
+            APPROVALS_ID, "Approvals", FSStrings.get(R.string.approve_a_servers_unlock),
             snapshot.appRouteUrl("secret-requests"), isServer = false,
         )
         val servers = snapshot.pods.map { pod ->
-            Spec("server:${pod.podId}", pod.name.take(24), "Open ${pod.name}".take(48), snapshot.serverUrl(pod), isServer = true)
+            Spec("server:${pod.podId}", pod.name.take(24), FSStrings.get(R.string.open, pod.name).take(48), snapshot.serverUrl(pod), isServer = true)
         }
         return (listOf(approvals) + servers).take(max)
     }

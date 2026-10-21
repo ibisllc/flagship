@@ -5,22 +5,23 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.AppStorage
 import com.flagshipserver.app.api.ServerStorage
 import com.flagshipserver.app.api.StoreUsage
 
 object AppStorageText {
     const val FULL_SENTENCE = "Full: new data is refused until you free space or raise the limit."
-    const val STOPPED_SENTENCE = "Its database is closed until it is under its limit again."
-    const val ALERT = "An app on this server is full"
+    val STOPPED_SENTENCE get() = FSStrings.get(R.string.its_database_is_closed_until_it)
+    val ALERT get() = FSStrings.get(R.string.an_app_on_this_server_is)
 
     /** One line on the app's page: `Files  2.0 GB of 5.0 GB`, with the sentence when it is full. */
     data class Line(val label: String, val text: String, val full: Boolean, val note: String)
 
     private fun size(n: Long): String = when {
         n >= 1024L * 1024 * 1024 -> BackupsText.gb(n)
-        n >= 1024L * 1024 -> "${Math.round(n / (1024.0 * 1024))} MB"
-        else -> "${maxOf(0L, Math.round(n / 1024.0))} KB"
+        n >= 1024L * 1024 -> FSStrings.get(R.string.mb, Math.round(n / (1024.0 * 1024)))
+        else -> FSStrings.get(R.string.kb, maxOf(0L, Math.round(n / 1024.0)))
     }
 
     private fun line(label: String, s: StoreUsage?): Line? {
@@ -39,12 +40,12 @@ object AppStorageText {
         if (storage == null) return emptyList()
         val out = mutableListOf<String>()
         when (storage.brake) {
-            "hard" -> out += "The server's disk is full: apps' folders are read-only until there's room."
-            "on" -> out += "The server's disk is nearly full: apps can't save more until there's room."
+            "hard" -> out += FSStrings.get(R.string.the_servers_disk_is_full_apps)
+            "on" -> out += FSStrings.get(R.string.the_servers_disk_is_nearly_full)
         }
         for (a in storage.apps) {
             val full = a.files?.full == true || a.postgres?.let { it.full || it.writesBlocked } == true
-            if (full) out += "${nameOf(a.serviceId)} is full: new data is refused until you free space or raise the limit."
+            if (full) out += FSStrings.get(R.string.is_full_new_data_is_refused, nameOf(a.serviceId))
         }
         return out
     }

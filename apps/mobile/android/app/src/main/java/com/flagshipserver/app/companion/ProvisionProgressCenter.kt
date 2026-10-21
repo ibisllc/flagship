@@ -6,6 +6,8 @@
 
 package com.flagshipserver.app.companion
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import android.content.Context
 import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.ProvisionProgress
@@ -40,7 +42,7 @@ data class ProvisionNotice(
 object ProvisionNoticeModel {
     /** iOS ends its Live Activity five minutes after the last frame. */
     const val TERMINAL_TIMEOUT_MS = 5 * 60 * 1000L
-    const val DEFAULT_TITLE = "New server"
+    val DEFAULT_TITLE get() = FSStrings.get(R.string.new_server)
 
     private fun rank(phase: String): Int = ProvisionProgress.ladder.indexOf(phase)
 

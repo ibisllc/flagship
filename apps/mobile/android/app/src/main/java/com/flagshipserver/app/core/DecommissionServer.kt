@@ -1,5 +1,6 @@
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.FlagshipServerClient
 
 /**
@@ -29,8 +30,8 @@ suspend fun decommissionServer(
     when (val out = CancelPendingOrder.run(pod, username, server)) {
         is CancelPendingOrder.Outcome.Cancelled -> {
             toasts.success(
-                if (out.releasedName) "Server \"${pod.name}\" deleted — the name is free again."
-                else "Removed \"${pod.name}\" from your servers.",
+                if (out.releasedName) FSStrings.get(R.string.server_deleted_the_name_is_free, pod.name)
+                else FSStrings.get(R.string.removed_from_your_servers, pod.name),
             )
             app.removePod(pod.podId)
         }

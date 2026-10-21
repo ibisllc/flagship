@@ -6,6 +6,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -72,9 +76,9 @@ fun leaderConfirmed(draftShowing: Boolean, orderIssuedAt: Long, acks: Map<String
 
 /** Where a server that doesn't lead stands, by who is above it. */
 fun successionLine(above: List<String>): String = when (above.size) {
-    0 -> "First in line to lead"
-    1 -> "Takes over while ${above[0]} is down"
-    else -> "Takes over while ${above.dropLast(1).joinToString(", ")} and ${above.last()} are down"
+    0 -> FSStrings.get(R.string.first_in_line_to_lead)
+    1 -> FSStrings.get(R.string.takes_over_while_is_down, above[0])
+    else -> FSStrings.get(R.string.takes_over_while_and_are_down, above.dropLast(1).joinToString(", "), above.last())
 }
 
 /** [committed] in [draft]'s order: drafted pods first, then any the draft
@@ -250,10 +254,10 @@ fun ReorderableServerList(
                 }
                 val moveActions = if (!movable) emptyList() else listOfNotNull(
                     moveInOrder(ids, id, -1, ::canMove)?.let { up ->
-                        CustomAccessibilityAction("Move up") { onReorder(up); true }
+                        CustomAccessibilityAction(stringResource(R.string.move_up)) { onReorder(up); true }
                     },
                     moveInOrder(ids, id, +1, ::canMove)?.let { down ->
-                        CustomAccessibilityAction("Move down") { onReorder(down); true }
+                        CustomAccessibilityAction(stringResource(R.string.move_down)) { onReorder(down); true }
                     },
                 )
                 val handle: (@Composable () -> Unit)? = if (!enabled) null else {

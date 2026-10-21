@@ -9,6 +9,8 @@
 
 package com.flagshipserver.app.push
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.PushTokenRegisterRequest
 import com.flagshipserver.app.api.PushTokenRevokeRequest
@@ -65,7 +67,7 @@ class PushRegistrar(
         val username = appState.currentUser.value
         if (username.isNullOrEmpty()) return false  // pre-pairing
         return try {
-            val irk = Keystore.deriveIRK(reason = "Register push token with Flagship")
+            val irk = Keystore.deriveIRK(reason = FSStrings.get(R.string.register_push_token_with_flagship))
             val push = Keystore.loadOrCreatePushX25519()
             val pushPubHex = HexUtil.encode(push.publicKey)
             val issuedAt = System.currentTimeMillis()
@@ -123,7 +125,7 @@ class PushRegistrar(
             // Revoke is now IRK-signed (SEC): .com verifies the envelope
             // against the token owner's registered IRK before deleting the
             // tether. Sign behind the biometric, exactly like register.
-            val irk = Keystore.deriveIRK(reason = "Revoke push token from Flagship")
+            val irk = Keystore.deriveIRK(reason = FSStrings.get(R.string.revoke_push_token_from_flagship))
             val issuedAt = System.currentTimeMillis()
             val canonical = PushTokenRevoke.canonicalBytes(tokenId = tokenId, issuedAt = issuedAt)
             val signature = HexUtil.encode(irk.sign(canonical))

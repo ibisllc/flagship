@@ -14,6 +14,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.google.crypto.tink.subtle.Ed25519Sign
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -199,21 +200,21 @@ data class FlagshipInferenceEntry(
 /** Copy + number formatting, shared with the webapp and iOS. */
 object FreeAiCopy {
     /** The built-in provider entry, listed first in every key list. */
-    const val PROVIDER_TITLE = "Flagship Inference"
-    const val PROVIDER_SUBTITLE = "We use third-party providers and anonymize your requests."
-    const val BUILT_IN_A11Y = "Built-in provider. It can't be removed."
-    const val CHECKING = "Checking…"
-    const val TITLE = "Flagship Inference"
-    const val USE_BUTTON = "Use Flagship Inference →"
-    const val NOTE = "Used automatically when you build with AI and haven't added your own key."
-    const val USED_UP =
-        "You've used this week's Flagship Inference credits. More arrive on Monday, or add your own AI key to keep building."
-    const val UNAVAILABLE = "Flagship Inference isn't available right now. You can add your own AI key."
-    const val BUSY_TODAY = "Flagship Inference is busy today. Try again tomorrow, or use your own AI key."
-    const val NO_SERVER = "Flagship Inference starts once one of your servers is running."
-    const val ENDED = "The free building period has ended — use your own AI key."
-    const val TOO_LONG = "This build is too big for Flagship Inference. Try a smaller change, or use your own AI key."
-    const val ADD_OWN_KEY = "Add your own key"
+    val PROVIDER_TITLE get() = FSStrings.get(R.string.flagship_inference)
+    val PROVIDER_SUBTITLE get() = FSStrings.get(R.string.we_use_third_party_providers_and)
+    val BUILT_IN_A11Y get() = FSStrings.get(R.string.built_in_provider_it_cant_be)
+    val CHECKING get() = FSStrings.get(R.string.checking)
+    val TITLE get() = FSStrings.get(R.string.flagship_inference)
+    val USE_BUTTON get() = FSStrings.get(R.string.use_flagship_inference)
+    val NOTE get() = FSStrings.get(R.string.used_automatically_when_you_build_with)
+    val USED_UP get() =
+        FSStrings.get(R.string.youve_used_this_weeks_flagship_inference)
+    val UNAVAILABLE get() = FSStrings.get(R.string.flagship_inference_isnt_available_right_now)
+    val BUSY_TODAY get() = FSStrings.get(R.string.flagship_inference_is_busy_today_try)
+    val NO_SERVER get() = FSStrings.get(R.string.flagship_inference_starts_once_one_of)
+    val ENDED get() = FSStrings.get(R.string.the_free_building_period_has_ended)
+    val TOO_LONG get() = FSStrings.get(R.string.this_build_is_too_big_for)
+    val ADD_OWN_KEY get() = FSStrings.get(R.string.add_your_own_key)
     const val CODE_USED_UP = "free-ai-used-up"
     const val CODE_UNAVAILABLE = "free-ai-unavailable"
     const val CODE_BUSY_TODAY = "free-ai-busy-today"
@@ -235,7 +236,7 @@ object FreeAiCopy {
     }
 
     /** What the screen reader says for the Flagship Inference entry. */
-    const val A11Y_LABEL = "$PROVIDER_TITLE. $BUILT_IN_A11Y"
+    val A11Y_LABEL get() = "$PROVIDER_TITLE. $BUILT_IN_A11Y"
 
     /** Null before the first read. */
     fun view(state: FreeAiState): FreeAiView? = when (state) {
@@ -268,9 +269,9 @@ object FreeAiCopy {
      * says "free", so it can go when the promotion ends.
      */
     fun leftLine(c: FreeAiCreditsInfo, locale: java.util.Locale = java.util.Locale.getDefault()): String {
-        val left = "${credits(c.creditsLeft, locale)} free credits left"
+        val left = FSStrings.get(R.string.free_credits_left, credits(c.creditsLeft, locale))
         val weekly = c.creditsPerWeek ?: return left
-        return "$left · ${credits(weekly, locale)} added each week"
+        return FSStrings.get(R.string.added_each_week, left, credits(weekly, locale))
     }
 }
 
@@ -347,7 +348,7 @@ open class FreeAiClient(
 class FreeAiService(
     private val client: FreeAiClient = FreeAiClient(),
     private val signer: suspend () -> Ed25519Sign = {
-        com.flagshipserver.app.keystore.Keystore.deriveIRK(reason = "Use Flagship Inference")
+        com.flagshipserver.app.keystore.Keystore.deriveIRK(reason = FSStrings.get(R.string.use_flagship_inference_2))
     },
     private val username: () -> String? = { null },
     private val now: () -> Long = { System.currentTimeMillis() },

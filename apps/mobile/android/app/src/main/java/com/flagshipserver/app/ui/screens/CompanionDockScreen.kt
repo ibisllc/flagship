@@ -11,6 +11,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import com.flagshipserver.app.ui.components.fsFocusRing
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -133,17 +137,16 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
     }
 
     FSScreen(
-        title = "Remote",
+        title = stringResource(R.string.remote),
         onBack = { nav.popBackStack() },
-        subtitle = "Open ${Endpoints.remoteHost} on your computer and scan the code it shows. " +
-            "The browser gets four hours on the server you pick, without a key. Disconnect it anytime.",
+        subtitle = fsString(R.string.open_on_your_computer_and_scan, Endpoints.remoteHost),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            FSSectionHeader("Connect a browser")
+            FSSectionHeader(stringResource(R.string.connect_a_browser))
             FSCard {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                     FSPrimaryButton(
-                        label = if (scanning) "Close scanner" else "Scan the browser's code",
+                        label = if (scanning) stringResource(R.string.close_scanner) else stringResource(R.string.scan_the_browsers_code),
                         onClick = { scanning = !scanning },
                         block = true,
                     )
@@ -158,13 +161,13 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
                     OutlinedTextField(
                         value = pastedLink,
                         onValueChange = { pastedLink = it },
-                        label = { Text("Or paste its link") },
+                        label = { Text(stringResource(R.string.or_paste_its_link)) },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2,
                         maxLines = 4,
                     )
                     FSSecondaryButton(
-                        label = "Use pasted link",
+                        label = stringResource(R.string.use_pasted_link),
                         onClick = { vm.stageApproval(pastedLink) },
                         enabled = pastedLink.isNotBlank(),
                         block = true,
@@ -179,7 +182,7 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                         CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
                         Text(
-                            "Connecting to the browser…",
+                            stringResource(R.string.connecting_to_the_browser),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -192,10 +195,10 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
                 val approving = p is CompanionDockViewModel.Phase.Approving
                 FSCard {
                     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                        Text("Let this browser in?", style = MaterialTheme.typography.titleMedium)
+                        Text(stringResource(R.string.let_this_browser_in), style = MaterialTheme.typography.titleMedium)
                         if (code != null) {
                             Text(
-                                "Check the browser shows this code:",
+                                stringResource(R.string.check_the_browser_shows_this_code),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
@@ -207,7 +210,7 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
-                        Text("Server", style = MaterialTheme.typography.titleSmall)
+                        Text(stringResource(R.string.server_2), style = MaterialTheme.typography.titleSmall)
                         Column(Modifier.selectableGroup()) {
                             vm.servers.forEach { server ->
                                 val picked = server.pod.podId == selectedPodId
@@ -230,17 +233,17 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
                             }
                         }
                         Text(
-                            "It gets a keyless session for four hours. Protected actions still need this phone.",
+                            stringResource(R.string.it_gets_a_keyless_session_for),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         FSPrimaryButton(
-                            label = if (approving) "Approving…" else "Codes match: approve",
+                            label = if (approving) stringResource(R.string.approving) else stringResource(R.string.codes_match_approve),
                             onClick = { vm.approve() },
                             enabled = gateOpen && selectedPodId != null,
                             block = true,
                         )
-                        FSSecondaryButton(label = "Cancel", onClick = { vm.cancel() }, block = true)
+                        FSSecondaryButton(label = stringResource(R.string.cancel), onClick = { vm.cancel() }, block = true)
                     }
                 }
             }
@@ -248,7 +251,7 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
                 FSCard {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                         Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = FS.colors.success)
-                        Text("Browser connected to ${p.serverName}", style = MaterialTheme.typography.titleSmall)
+                        Text(fsString(R.string.browser_connected_to, p.serverName), style = MaterialTheme.typography.titleSmall)
                     }
                 }
             }
@@ -260,7 +263,7 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
 
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             FSSectionHeader(
-                "Connected browsers" +
+                stringResource(R.string.connected_browsers) +
                     (vm.servers.firstOrNull { it.pod.podId == selectedPodId }?.let { " on ${it.pod.name}" } ?: ""),
             )
             when (val s = state) {
@@ -289,11 +292,10 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
     pendingRevoke?.let { c ->
         AlertDialog(
             onDismissRequest = { pendingRevoke = null },
-            title = { Text("Disconnect this browser?") },
+            title = { Text(stringResource(R.string.disconnect_this_browser)) },
             text = {
                 Text(
-                    "Disconnect session ${c.tokenPrefix}. The browser session will stop immediately. " +
-                        "It can reconnect any time with a fresh QR from ${Endpoints.remoteHost}.",
+                    fsString(R.string.disconnect_session_the_browser_session_will, c.tokenPrefix, Endpoints.remoteHost),
                 )
             },
             confirmButton = {
@@ -301,13 +303,13 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
                     val target = c.tokenPrefix
                     pendingRevoke = null
                     vm.revoke(target)
-                    toasts.success("Browser disconnected.")
+                    toasts.success(FSStrings.get(R.string.browser_disconnected))
                 }) {
-                    Text("Disconnect", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.disconnect), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { pendingRevoke = null }) { Text("Cancel") }
+                TextButton(onClick = { pendingRevoke = null }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -331,12 +333,12 @@ private fun CompanionRow(
         companion.userAgent?.let { add(it) }
     }
     FSRow(
-        title = "Session ${companion.tokenPrefix}",
+        title = fsString(R.string.session, companion.tokenPrefix),
         subtitle = lines.joinToString("\n"),
         icon = Icons.Outlined.Laptop,
         trailing = {
             FSDangerButton(
-                label = if (revoking) "Disconnecting…" else "Disconnect",
+                label = if (revoking) stringResource(R.string.disconnecting) else stringResource(R.string.disconnect),
                 onClick = onRevokeRequest,
                 enabled = !revoking,
             )
@@ -347,8 +349,8 @@ private fun CompanionRow(
 @Composable
 private fun EmptyCompanionsCard() {
     FSEmptyState(
-        title = "No browsers connected",
-        message = "Open ${Endpoints.remoteHost} on a computer to add one.",
+        title = stringResource(R.string.no_browsers_connected),
+        message = fsString(R.string.open_on_a_computer_to_add, Endpoints.remoteHost),
         icon = Icons.Outlined.Laptop,
     )
 }
