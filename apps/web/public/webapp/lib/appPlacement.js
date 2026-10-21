@@ -27,7 +27,7 @@ import { escapeHtml } from "./util.js";
 import { accountReadFetch } from "./accountRead.js";
 import { serverIcon } from "./icons.js";
 
-import { tr } from "./i18n.js";
+import { tr, trn } from "./i18n.js";
 export const TAG_APP_COPY = "flagship/app-copy/v1";
 export const TAG_UNINSTALL_SERVICE = "flagship/uninstall-service/v1";
 
@@ -44,7 +44,7 @@ export const COPY_REFUSED = tr("This server refused the copy.");
 export const COPY_STARTED = tr("Copying the app. It appears on that server when it's ready.");
 export const REMOVE_CONFIRM_TITLE = tr("Remove from this server?");
 export const CREATE_APP_HERE = tr("Create app here");
-export const SERVER_APPS_TITLE = "Apps";
+export const SERVER_APPS_TITLE = tr("Apps");
 export const SERVER_NO_APPS = tr("No apps on this server yet.");
 
 const RECENT_REPORT_MS = 15 * 60_000;
@@ -349,11 +349,11 @@ export const REMOVE_APP_TITLE = tr("Remove this app?");
 
 /** The confirmation's words: what goes, where, and what stays. */
 export function removeAppMessage({ slug, server, otherCopies = 0 }) {
-  const where = server ? ` from ${server}` : "";
-  const rest = otherCopies > 0
-    ? tr(" Your {0}.", otherCopies === 1 ? "other server keeps its copy" : `other ${otherCopies} servers keep their copies`)
-    : "";
-  return tr("This uninstalls {0}{1} and deletes its data there. This can't be undone.{2}", slug, where, rest);
+  const base = server
+    ? tr("This uninstalls {0} from {1} and deletes its data there. This can't be undone.", slug, server)
+    : tr("This uninstalls {0} and deletes its data there. This can't be undone.", slug);
+  if (otherCopies <= 0) return base;
+  return `${base} ${trn(otherCopies, "Your other server keeps its copy.", "Your other {0} servers keep their copies.")}`;
 }
 
 /** The owner-facing words for a refused uninstall. */
@@ -440,7 +440,7 @@ export function runsOnHtml(model, { companion = false, adminOnly = false, error 
     .map((r) =>
       `<label class="inline-check runs-on-row${r.state === "unknown" ? " is-unknown" : ""}" data-runs-on-fqdn="${escapeHtml(r.fqdn)}">
         <input type="checkbox" data-runs-on-toggle="${escapeHtml(r.fqdn)}"${r.checked ? " checked" : ""}${r.disabled ? " disabled" : ""} />
-        <span><strong>${escapeHtml(r.name)}</strong>${r.state === "unknown" ? ' <span class="pill">unknown</span>' : ""}${r.state === "has" ? appStatePillHtml(r.appState) : ""}
+        <span><strong>${escapeHtml(r.name)}</strong>${r.state === "unknown" ? ` <span class="pill">${tr("unknown")}</span>` : ""}${r.state === "has" ? appStatePillHtml(r.appState) : ""}
         ${r.note ? `<span class="faint-sm runs-on-note">${escapeHtml(r.note)}</span>` : ""}</span>
       </label>`)
     .join("");
@@ -448,7 +448,7 @@ export function runsOnHtml(model, { companion = false, adminOnly = false, error 
       <h2 class="mt-4">${escapeHtml(RUNS_ON_TITLE)}</h2>
       <div class="card" id="sd-runs-on-card">
         <p class="note">${escapeHtml(companion ? RUNS_ON_COMPANION : adminOnly ? RUNS_ON_ADMIN_ONLY : RUNS_ON_NOTE)}</p>
-        ${rows || '<p class="faint-sm">Checking your servers…</p>'}
+        ${rows || `<p class="faint-sm">${tr("Checking your servers…")}</p>`}
         ${error ? `<p class="err-text mt-2" data-runs-on-error>${escapeHtml(error)}</p>` : ""}
       </div>`;
 }
@@ -540,7 +540,7 @@ export const anyCopying = (rows) => rows.some((r) => r.copying);
 
 export function serverAppsHtml(rows, { error = "", loading = false, canCreate = true } = {}) {
   const list = loading
-    ? '<p class="faint-sm">Loading…</p>'
+    ? `<p class="faint-sm">${tr("Loading…")}</p>`
     : error
       ? `<p class="err-text">${escapeHtml(error)}</p>`
       : rows.length === 0
@@ -622,16 +622,16 @@ export function watchWhileCopying({ load, onRows, active, intervalMs = 3000, doc
 // ---------------------------------------------------------------------------
 
 export const APP_STATE_LABELS = {
-  running: "Running",
-  starting: "Starting",
-  stopped: "Stopped",
-  deploying: "Deploying",
-  copying: "Copying",
-  editing: "Editing",
+  running: tr("Running"),
+  starting: tr("Starting"),
+  stopped: tr("Stopped"),
+  deploying: tr("Deploying"),
+  copying: tr("Copying"),
+  editing: tr("Editing"),
 };
-export const PILL_DEPLOYING = "Deploying";
-export const PILL_EDITING = "Editing";
-export const PILL_STOPPED = "Stopped";
+export const PILL_DEPLOYING = tr("Deploying");
+export const PILL_EDITING = tr("Editing");
+export const PILL_STOPPED = tr("Stopped");
 export const PILL_UNREACHABLE = tr("Can't reach");
 export const UNREACHABLE = "unreachable";
 
@@ -734,7 +734,7 @@ export function mergeAppsAcrossServers(lists, leader = "") {
 
 /** How the box starts its reason when the app's internet firewall (the egress
  *  gateway) is what keeps apps from starting (server-daemon appSandbox/state.ts). */
-export const EGRESS_FENCE_REASON = "its internet firewall isn't running";
+export const EGRESS_FENCE_REASON = tr("its internet firewall isn't running");
 
 /**
  * What the server page says about the sandbox apps run in (gVisor and the
@@ -742,7 +742,7 @@ export const EGRESS_FENCE_REASON = "its internet firewall isn't running";
  */
 export function appSandboxNotice(sandbox) {
   if (sandbox?.state === "unavailable") {
-    const reason = typeof sandbox.reason === "string" && sandbox.reason ? sandbox.reason : "unknown reason";
+    const reason = typeof sandbox.reason === "string" && sandbox.reason ? sandbox.reason : tr("unknown reason");
     // The egress gateway is part of the sandbox (the box's reason says so);
     // it is retried every 30 seconds, gVisor every 10 minutes.
     if (reason.startsWith(EGRESS_FENCE_REASON)) {

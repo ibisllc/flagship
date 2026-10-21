@@ -217,7 +217,7 @@ async function createAccount() {
     message: tr("Type it again."),
     placeholder: "passphrase",
     type: "password",
-    validate: (v) => (v !== pass ? "passphrases don't match" : null),
+    validate: (v) => (v !== pass ? tr("passphrases don't match") : null),
   });
   if (confirm == null) return;
 

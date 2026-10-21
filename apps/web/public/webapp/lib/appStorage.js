@@ -18,11 +18,11 @@ function size(n) {
 
 function storeLine(label, s) {
   if (!s) return null;
-  const of = s.limitBytes == null ? "" : ` of ${size(s.limitBytes)}`;
+  const text = s.limitBytes == null ? size(s.usedBytes) : tr("{0} of {1}", size(s.usedBytes), size(s.limitBytes));
   const full = !!(s.full || s.writesBlocked);
   return {
     label,
-    text: `${size(s.usedBytes)}${of}`,
+    text,
     full,
     note: s.stopped ? STOPPED_SENTENCE : full ? FULL_SENTENCE : "",
   };
@@ -42,7 +42,7 @@ export function serverStorageNotes(storage, nameOf = (id) => id) {
   else if (storage.brake === "on") out.push("The server's disk is nearly full: apps can't save more until there's room.");
   for (const a of storage.apps ?? []) {
     const full = (a.files && a.files.full) || (a.postgres && (a.postgres.full || a.postgres.writesBlocked));
-    if (full) out.push(`${nameOf(a.serviceId)} is full: new data is refused until you free space or raise the limit.`);
+    if (full) out.push(tr("{0} is full: new data is refused until you free space or raise the limit.", nameOf(a.serviceId)));
   }
   return out;
 }

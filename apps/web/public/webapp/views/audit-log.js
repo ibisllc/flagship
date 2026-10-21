@@ -113,7 +113,7 @@ function kindLabel(kind) {
 function actorLabel(entry) {
   const a = entry.actor;
   if (!a) return "—";
-  if (a.kind === "self") return "you (this device)";
+  if (a.kind === "self") return tr("you (this device)");
   if (a.kind === "sibling") return tr("Sibling server {0}", escapeHtml(a.podId ?? "?"));
   if (a.kind === "irk") return tr("Account key {0}…", escapeHtml((a.pubkeyHex ?? "").slice(0, 12)));
   return escapeHtml(String(a.kind));
@@ -182,7 +182,7 @@ export async function renderInlineActivityAuditLog() {
 export async function renderAuditLog() {
   const root = $("audit-log-content");
   if (!root) return;
-  root.innerHTML = '<div class="card placeholder">loading audit log…</div>';
+  root.innerHTML = `<div class="card placeholder">${tr("loading audit log…")}</div>`;
 
   // Filter chips.
   const chips = $("audit-log-filters");
@@ -230,7 +230,7 @@ export async function renderAuditLog() {
   if (!entries.length) {
     root.innerHTML = `
       <div class="card placeholder">
-        ${tr("no events yet{0} — signed actions you take (claiming a URL, granting an app, issuing an invite) will land here with the underlying envelope you can verify yourself.", activeKindFilter ? ` for filter "${escapeHtml(activeKindFilter)}"` : "")}
+        ${activeKindFilter ? tr("no events yet for filter \"{0}\" — signed actions you take (claiming a URL, granting an app, issuing an invite) will land here with the underlying envelope you can verify yourself.", escapeHtml(activeKindFilter)) : tr("no events yet — signed actions you take (claiming a URL, granting an app, issuing an invite) will land here with the underlying envelope you can verify yourself.")}
       </div>
     `;
     return;
@@ -267,7 +267,7 @@ export async function enterAuditEntry(eventId) {
   show("view-audit-entry");
   const root = $("audit-entry-content");
   if (!root) return;
-  root.innerHTML = '<div class="card placeholder">loading event…</div>';
+  root.innerHTML = `<div class="card placeholder">${tr("loading event…")}</div>`;
   try {
     const body = await screensFetch(`/api/screens/audit-log/${encodeURIComponent(eventId)}`);
     const entry = body.entry ?? body;

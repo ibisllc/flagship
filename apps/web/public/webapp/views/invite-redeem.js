@@ -207,7 +207,7 @@ function boxHost() {
 
 /** AUTO-approve success — the friend is bound and can open the service. */
 function renderGranted(r) {
-  const serviceRef = r.serviceRef ? escapeHtml(r.serviceRef) : "the service";
+  const serviceRef = r.serviceRef ? escapeHtml(r.serviceRef) : tr("the service");
   const root = $("invite-redeem-content");
   root.innerHTML = `
     <div class="card">
@@ -254,7 +254,7 @@ async function renderPendingAcceptance(serviceRef, contactAID, umk) {
     { inviteId: pendingInviteId, serviceRef, contactAID: bytesToHex(contactAID), acceptedAt },
     bytesToHex(sig),
   );
-  const svc = serviceRef ? escapeHtml(serviceRef) : "this service";
+  const svc = serviceRef ? escapeHtml(serviceRef) : tr("this service");
   root.innerHTML = `
     <div class="card">
       <div class="card-title">${tr("Send this back to the owner")}</div>

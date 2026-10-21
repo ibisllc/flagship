@@ -268,13 +268,13 @@ export async function waitForRestore({ client, onProgress, sleep = (ms) => new P
 export function restoreSummary(apps = []) {
   const ok = apps.filter((a) => a.state === "done").length;
   const failed = apps.filter((a) => a.state === "failed").length;
-  return trn(ok, "Restored {0} app.", "Restored {0} apps.") + (failed ? ` ${failed} couldn't be restored; the server works with the rest.` : "");
+  return trn(ok, "Restored {0} app.", "Restored {0} apps.") + (failed ? " " + tr("{0} couldn't be restored; the server works with the rest.", failed) : "");
 }
 
 export function describeRestoreApp(a) {
-  if (a.state === "done") return `${a.name}: restored`;
-  if (a.state === "skipped") return `${a.name}: skipped (${a.reason || "already here"})`;
-  if (a.state === "failed") return tr("Couldn't restore {0}: {1}.", a.name, trimStop(a.reason) || "it couldn't be restored");
-  if (a.state === "restoring") return `${a.name}: restoring…`;
-  return `${a.name}: waiting`;
+  if (a.state === "done") return tr("{0}: restored", a.name);
+  if (a.state === "skipped") return tr("{0}: skipped ({1})", a.name, a.reason || "already here");
+  if (a.state === "failed") return tr("Couldn't restore {0}: {1}.", a.name, trimStop(a.reason) || tr("it couldn't be restored"));
+  if (a.state === "restoring") return tr("{0}: restoring…", a.name);
+  return tr("{0}: waiting", a.name);
 }

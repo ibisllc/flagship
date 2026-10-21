@@ -28,10 +28,10 @@ export function estimateDowntimeSec({ archiveBytes, bytesPerSecond, apps }) {
 
 export function downtimeText(sec) {
   if (!Number.isFinite(sec)) return "";
-  if (sec < 90) return "about a minute";
+  if (sec < 90) return tr("about a minute");
   const min = Math.round(sec / 60);
-  if (min < 90) return `about ${min} minutes`;
-  return `about ${Math.round(min / 60)} hours`;
+  if (min < 90) return tr("about {0} minutes", min);
+  return tr("about {0} hours", Math.round(min / 60));
 }
 
 /** Size the move and time the link between the two servers. */

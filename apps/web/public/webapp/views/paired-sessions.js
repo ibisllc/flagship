@@ -30,19 +30,19 @@ export async function renderPairedSessions() {
     const body = await screensFetch("/api/screens/paired-sessions/list");
     const sessions = browserSessions(body.sessions);
     if (!sessions.length) {
-      root.innerHTML = '<div class="card placeholder">No browser sessions. Browsers you open through Remote show here.</div>';
+      root.innerHTML = `<div class="card placeholder">${tr("No browser sessions. Browsers you open through Remote show here.")}</div>`;
       return;
     }
     root.innerHTML = sessions.map((s) => `
       <div class="card">
         <div class="row row-top">
           <div>
-            <div class="weight-600">${tr("Session {0} {1}", escapeHtml(s.tokenPrefix), s.current ? '<span class="pill ok">this device</span>' : "")}</div>
+            <div class="weight-600">${tr("Session {0} {1}", escapeHtml(s.tokenPrefix), s.current ? `<span class="pill ok">${tr("this device")}</span>` : "")}</div>
             <div class="value text-xs">${escapeHtml(s.tokenPrefix)}…</div>
             <div class="faint-sm">${tr("added {0}", escapeHtml(formatWhen(s.addedAt)))}</div>
           </div>
           ${s.current
-            ? '<button class="secondary" disabled>can\'t revoke self</button>'
+            ? `<button class="secondary" disabled>${tr("can't revoke self")}</button>`
             : `<button class="secondary" data-action="revoke" data-prefix="${escapeHtml(s.tokenPrefix)}">${tr("revoke")}</button>`}
         </div>
       </div>

@@ -59,7 +59,7 @@ function rowMarkup(profile, active) {
           <div class="muted-sm" data-profile-handle hidden>@${escapeHtml(profile.cloudName)}</div>
         </div>
         ${isActive
-          ? '<span class="pill ok">ACTIVE</span>'
+          ? `<span class="pill ok">${tr("ACTIVE")}</span>`
           : `<button class="secondary" data-action="switch" data-cloud="${escapeHtml(profile.cloudName)}">${tr("Switch")}</button>`}
       </div>
     </div>

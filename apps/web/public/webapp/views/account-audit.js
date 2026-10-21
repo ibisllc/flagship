@@ -83,7 +83,7 @@ export async function renderAccountAudit() {
     await model.load();
   } catch (e) {
     root.innerHTML = `<div class="card placeholder err-text">${escapeHtml(
-      e?.message ?? "Couldn't load account history.",
+      e?.message ?? tr("Couldn't load account history."),
     )}</div>`;
     return;
   }
