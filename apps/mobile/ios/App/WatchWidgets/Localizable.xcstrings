@@ -1,16 +1,10 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "ProvisionPhaseComplication": {
-      "extractionState": "manual"
-    },
     "Flagship servers": {
       "extractionState": "manual"
     },
     "Shows a server's install while one is under way, else how your servers are doing.": {
-      "extractionState": "manual"
-    },
-    "Flagship": {
       "extractionState": "manual"
     },
     "Install failed": {

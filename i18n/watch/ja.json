@@ -1,0 +1,9 @@
+{
+  "Provisioning": "プロビジョニング中",
+  "Install complete": "インストール完了",
+  "Install failed": "インストール失敗",
+  "Done": "完了",
+  "Failed — %@": "失敗：%@",
+  "Couldn't reach iPhone: %@": "iPhone に接続できませんでした：%@",
+  "Approval failed.": "承認に失敗しました。"
+}

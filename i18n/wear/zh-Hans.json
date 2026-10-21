@@ -1,0 +1,16 @@
+{
+  "tile_label": "Flagship 服务器",
+  "phone_not_reachable_bring_it_nearby": "无法连接手机。请把它拿近后重试。",
+  "couldnt_read_your_phones_answer": "无法读取你手机的回复。",
+  "couldnt_reach_your_phone": "无法连接你的手机：%1$s",
+  "new_server": "新服务器",
+  "waiting_for_you": "等待你",
+  "waiting_to_unlock": "等待解锁",
+  "servers": "服务器",
+  "recent_activity": "最近活动",
+  "open_flagship_on_your_phone_to": "在手机上打开 Flagship，即可在此查看你的服务器。",
+  "approved": "已批准",
+  "approval_failed": "批准失败。",
+  "approve": "批准",
+  "this_server_isnt_waiting_any_more": "此服务器已不再等待。"
+}

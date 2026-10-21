@@ -1,0 +1,16 @@
+{
+  "tile_label": "Flagship-Server",
+  "phone_not_reachable_bring_it_nearby": "Telefon nicht erreichbar. Halte es in die Nähe und versuche es erneut.",
+  "couldnt_read_your_phones_answer": "Die Antwort deines Telefons konnte nicht gelesen werden.",
+  "couldnt_reach_your_phone": "Telefon nicht erreichbar: %1$s",
+  "new_server": "Neuer Server",
+  "waiting_for_you": "Wartet auf dich",
+  "waiting_to_unlock": "Wartet auf Entsperrung",
+  "servers": "Server",
+  "recent_activity": "Letzte Aktivität",
+  "open_flagship_on_your_phone_to": "Öffne Flagship auf deinem Telefon, um hier deine Server zu sehen.",
+  "approved": "Genehmigt",
+  "approval_failed": "Genehmigung fehlgeschlagen.",
+  "approve": "Genehmigen",
+  "this_server_isnt_waiting_any_more": "Dieser Server wartet nicht mehr."
+}

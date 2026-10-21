@@ -1,0 +1,16 @@
+{
+  "tile_label": "Flagship サーバー",
+  "phone_not_reachable_bring_it_nearby": "スマートフォンに接続できません。近くに置いて、もう一度お試しください。",
+  "couldnt_read_your_phones_answer": "スマートフォンの応答を読み取れませんでした。",
+  "couldnt_reach_your_phone": "スマートフォンに接続できませんでした：%1$s",
+  "new_server": "新しいサーバー",
+  "waiting_for_you": "対応待ち",
+  "waiting_to_unlock": "ロック解除待ち",
+  "servers": "サーバー",
+  "recent_activity": "最近のアクティビティ",
+  "open_flagship_on_your_phone_to": "スマートフォンで Flagship を開くと、ここにサーバーが表示されます。",
+  "approved": "承認済み",
+  "approval_failed": "承認に失敗しました。",
+  "approve": "承認",
+  "this_server_isnt_waiting_any_more": "このサーバーはもう待機していません。"
+}

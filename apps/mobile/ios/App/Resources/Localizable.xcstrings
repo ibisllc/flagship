@@ -427,16 +427,7 @@
     "Activity": {
       "extractionState": "manual"
     },
-    "%lld row%@ rewritten · %lld app%@": {
-      "extractionState": "manual"
-    },
     "View report": {
-      "extractionState": "manual"
-    },
-    "MMMdjmm": {
-      "extractionState": "manual"
-    },
-    "MMMdyjmm": {
       "extractionState": "manual"
     },
     "expanded": {
@@ -1651,9 +1642,6 @@
     "From the repo's name": {
       "extractionState": "manual"
     },
-    "https://": {
-      "extractionState": "manual"
-    },
     "Leave it blank to name it after the repo%@.": {
       "extractionState": "manual"
     },
@@ -1694,9 +1682,6 @@
       "extractionState": "manual"
     },
     "Check again": {
-      "extractionState": "manual"
-    },
-    "%@ — %lld file%@.": {
       "extractionState": "manual"
     },
     "Install it": {
@@ -1873,9 +1858,6 @@
     "No builds yet.": {
       "extractionState": "manual"
     },
-    "Started %@ · %lld step%@": {
-      "extractionState": "manual"
-    },
     "Deploy it again": {
       "extractionState": "manual"
     },
@@ -1919,9 +1901,6 @@
       "extractionState": "manual"
     },
     "Builder code": {
-      "extractionState": "manual"
-    },
-    "ABCD-EFGH": {
       "extractionState": "manual"
     },
     "The Flagship Studio is a small desktop app that writes your server to a USB stick. On your computer, go to flagshipserver.com/studio, install it, and open it to see the code to scan here.": {
@@ -1985,9 +1964,6 @@
       "extractionState": "manual"
     },
     "Couldn't read %@.": {
-      "extractionState": "manual"
-    },
-    "photo-%lld.%@": {
       "extractionState": "manual"
     },
     "The AI will see what you attach.": {
@@ -2291,9 +2267,6 @@
       "extractionState": "manual"
     },
     "%lld min": {
-      "extractionState": "manual"
-    },
-    "%lld hour%@": {
       "extractionState": "manual"
     },
     "Reboots on its own": {
@@ -2807,9 +2780,6 @@
       "extractionState": "manual"
     },
     "Paired devices": {
-      "extractionState": "manual"
-    },
-    "token: %@…": {
       "extractionState": "manual"
     },
     "You're offline. Check your connection and try again.": {
@@ -3670,13 +3640,7 @@
     "Grace window — this takes effect at %@.": {
       "extractionState": "manual"
     },
-    "Re-anchored %lld membership rows across %lld app%@.": {
-      "extractionState": "manual"
-    },
     "Per-app results": {
-      "extractionState": "manual"
-    },
-    "%lld row%@ re-anchored": {
       "extractionState": "manual"
     },
     "Undo window": {
@@ -3695,9 +3659,6 @@
       "extractionState": "manual"
     },
     "Link": {
-      "extractionState": "manual"
-    },
-    "https://%@/access#…": {
       "extractionState": "manual"
     },
     "We couldn't read that link. Copy the full link from the sign-in page and try again.": {
@@ -3788,9 +3749,6 @@
       "extractionState": "manual"
     },
     "Recovery code or authenticator code": {
-      "extractionState": "manual"
-    },
-    "123456 or ABCD-EFGH-IJ": {
       "extractionState": "manual"
     },
     "6-digit code from your authenticator app, or one of your recovery codes.": {
@@ -3940,9 +3898,6 @@
     "Back up your Flagship account": {
       "extractionState": "manual"
     },
-    "Local base64 round-trip failed": {
-      "extractionState": "manual"
-    },
     "Restore your admin key": {
       "extractionState": "manual"
     },
@@ -4036,9 +3991,6 @@
     "Lowercase letters, digits, and hyphens. 1–40 characters. No leading or trailing hyphen.": {
       "extractionState": "manual"
     },
-    "mynotes": {
-      "extractionState": "manual"
-    },
     "Replace": {
       "extractionState": "manual"
     },
@@ -4076,9 +4028,6 @@
       "extractionState": "manual"
     },
     "Destinations": {
-      "extractionState": "manual"
-    },
-    "Flagship": {
       "extractionState": "manual"
     },
     "Save your new admin key": {
@@ -4420,9 +4369,6 @@
     "%@: waiting": {
       "extractionState": "manual"
     },
-    "Restored %lld app%@": {
-      "extractionState": "manual"
-    },
     "Couldn't restore: %@: %@": {
       "extractionState": "manual"
     },
@@ -4576,9 +4522,6 @@
     "%lld of %lld pieces safe": {
       "extractionState": "manual"
     },
-    "Kept on %lld other server%@": {
-      "extractionState": "manual"
-    },
     "Last placed %@": {
       "extractionState": "manual"
     },
@@ -4604,9 +4547,6 @@
       "extractionState": "manual"
     },
     "Scheduled": {
-      "extractionState": "manual"
-    },
-    "%@ · %@ · %@ · %lld app%@": {
       "extractionState": "manual"
     },
     "Left out: %@": {
@@ -4984,19 +4924,7 @@
     "Something went wrong.": {
       "extractionState": "manual"
     },
-    "Garage": {
-      "extractionState": "manual"
-    },
-    "Photos": {
-      "extractionState": "manual"
-    },
-    "Alex": {
-      "extractionState": "manual"
-    },
     "Sam": {
-      "extractionState": "manual"
-    },
-    "Cabin": {
       "extractionState": "manual"
     },
     "Check who answered your invitations": {
@@ -5015,33 +4943,6 @@
       "extractionState": "manual"
     },
     "The server": {
-      "extractionState": "manual"
-    },
-    "Priya": {
-      "extractionState": "manual"
-    },
-    "Family": {
-      "extractionState": "manual"
-    },
-    "Jordan": {
-      "extractionState": "manual"
-    },
-    "Adds and edits their own plants": {
-      "extractionState": "manual"
-    },
-    "Also waters and edits anyone's plants": {
-      "extractionState": "manual"
-    },
-    "Also changes the garden's settings": {
-      "extractionState": "manual"
-    },
-    "Mum": {
-      "extractionState": "manual"
-    },
-    "Harry's iPad": {
-      "extractionState": "manual"
-    },
-    "Harry's iPhone": {
       "extractionState": "manual"
     },
     "Open to all": {
@@ -5330,9 +5231,6 @@
       "extractionState": "manual"
     },
     "Open browser viewer": {
-      "extractionState": "manual"
-    },
-    "%lld tab%@ running server-side": {
       "extractionState": "manual"
     },
     "Report a problem with this adaptation": {
@@ -5800,9 +5698,6 @@
     "Classic": {
       "extractionState": "manual"
     },
-    "AppIcon-Legacy": {
-      "extractionState": "manual"
-    },
     "Legacy": {
       "extractionState": "manual"
     },
@@ -5875,9 +5770,6 @@
     "License": {
       "extractionState": "manual"
     },
-    "BUSL-1.1 → Apache 2.0 (2030)": {
-      "extractionState": "manual"
-    },
     "Patents": {
       "extractionState": "manual"
     },
@@ -5912,9 +5804,6 @@
       "extractionState": "manual"
     },
     "Cancel order and start again": {
-      "extractionState": "manual"
-    },
-    "Riley": {
       "extractionState": "manual"
     },
     "Remove %@?": {
@@ -6310,16 +6199,10 @@
     "session %@": {
       "extractionState": "manual"
     },
-    "… %lld earlier message%@ not shown": {
-      "extractionState": "manual"
-    },
     "Live at %@": {
       "extractionState": "manual"
     },
     "Jump to latest": {
-      "extractionState": "manual"
-    },
-    "Vibe code": {
       "extractionState": "manual"
     },
     "Starting the session…": {
@@ -6436,9 +6319,6 @@
     "Server committed but local install failed: %@. Open the app fresh to recover.": {
       "extractionState": "manual"
     },
-    "bad read-token URL": {
-      "extractionState": "manual"
-    },
     "Only an admin device of this account can add servers.": {
       "extractionState": "manual"
     },
@@ -6467,12 +6347,6 @@
       "extractionState": "manual"
     },
     "The most capable. For hard builds.": {
-      "extractionState": "manual"
-    },
-    "GPT-5.4 Mini": {
-      "extractionState": "manual"
-    },
-    "Qwen3 Coder": {
       "extractionState": "manual"
     },
     "IP addresses can't be allowed or denied; use a host name": {
@@ -6529,129 +6403,6 @@
     "AI chat": {
       "extractionState": "manual"
     },
-    "Connection lost (%@ %lld): %@": {
-      "extractionState": "manual"
-    },
-    "no such demo user": {
-      "extractionState": "manual"
-    },
-    "account bootstrap unavailable": {
-      "extractionState": "manual"
-    },
-    "account directory unavailable": {
-      "extractionState": "manual"
-    },
-    "simulated failure": {
-      "extractionState": "manual"
-    },
-    "username taken": {
-      "extractionState": "manual"
-    },
-    "username unavailable": {
-      "extractionState": "manual"
-    },
-    "this server was deleted, transferred or retired and can't be restored": {
-      "extractionState": "manual"
-    },
-    "test account": {
-      "extractionState": "manual"
-    },
-    "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)": {
-      "extractionState": "manual"
-    },
-    "username \"%@\" is reserved": {
-      "extractionState": "manual"
-    },
-    "already claimed": {
-      "extractionState": "manual"
-    },
-    "demo server is not ready": {
-      "extractionState": "manual"
-    },
-    "demo user not found": {
-      "extractionState": "manual"
-    },
-    "invalid paired-session token": {
-      "extractionState": "manual"
-    },
-    "no envelope": {
-      "extractionState": "manual"
-    },
-    "invalid fetch token": {
-      "extractionState": "manual"
-    },
-    "fetchToken must be hex": {
-      "extractionState": "manual"
-    },
-    "record predates passphrase gate": {
-      "extractionState": "manual"
-    },
-    "no recovery record": {
-      "extractionState": "manual"
-    },
-    "admit username / url mismatch": {
-      "extractionState": "manual"
-    },
-    "register username does not match admit": {
-      "extractionState": "manual"
-    },
-    "delegate already expired": {
-      "extractionState": "manual"
-    },
-    "invalid scopes": {
-      "extractionState": "manual"
-    },
-    "totpProof required for multi-device re-pair": {
-      "extractionState": "manual"
-    },
-    "totpProof required for single-device recovery (a second factor is enrolled)": {
-      "extractionState": "manual"
-    },
-    "recoveryProof required: complete the cloud-recovery passphrase step, then retry": {
-      "extractionState": "manual"
-    },
-    "this account has no recovery credential enrolled; recovery is credential-only": {
-      "extractionState": "manual"
-    },
-    "already pending": {
-      "extractionState": "manual"
-    },
-    "a RePairComplete envelope signed by the new IRK is required": {
-      "extractionState": "manual"
-    },
-    "wipe-restart rate-limited": {
-      "extractionState": "manual"
-    },
-    "concurrent rotation won": {
-      "extractionState": "manual"
-    },
-    "label collision": {
-      "extractionState": "manual"
-    },
-    "bad signature": {
-      "extractionState": "manual"
-    },
-    "not found": {
-      "extractionState": "manual"
-    },
-    "invalid TOTP code": {
-      "extractionState": "manual"
-    },
-    "no staged TOTP secret; call enroll-begin first": {
-      "extractionState": "manual"
-    },
-    "wrong passphrase": {
-      "extractionState": "manual"
-    },
-    "no cloud recovery for that username": {
-      "extractionState": "manual"
-    },
-    "this record predates the passphrase gate — re-enrol cloud recovery first": {
-      "extractionState": "manual"
-    },
-    "too many attempts — wait 15 minutes before retrying": {
-      "extractionState": "manual"
-    },
     "We use third-party providers and anonymize your requests.": {
       "extractionState": "manual"
     },
@@ -6694,19 +6445,10 @@
     "%@ · %@ added each week": {
       "extractionState": "manual"
     },
-    "no response": {
-      "extractionState": "manual"
-    },
-    "bad URL": {
-      "extractionState": "manual"
-    },
     "%@ proved itself at %@; using the local network": {
       "extractionState": "manual"
     },
     "%@ isn't at %@ on this network; using the relay": {
-      "extractionState": "manual"
-    },
-    "unexpected backup path": {
       "extractionState": "manual"
     },
     "Couldn't reach the server to load this build.": {
@@ -6718,154 +6460,13 @@
     "Garden sensor": {
       "extractionState": "manual"
     },
-    "Dashboard": {
-      "extractionState": "manual"
-    },
-    "Wiki": {
-      "extractionState": "manual"
-    },
-    "via vibe-code": {
-      "extractionState": "manual"
-    },
-    "This debug access grant is from an older app. Update the app and turn debug access on again.": {
-      "extractionState": "manual"
-    },
     "Debug access needs an SSH public key.": {
       "extractionState": "manual"
     },
     "Debug access can be on for at most 7 days at a time.": {
       "extractionState": "manual"
     },
-    "That debug access grant is for another server.": {
-      "extractionState": "manual"
-    },
-    "This server takes debug access only from an admin device of this account.": {
-      "extractionState": "manual"
-    },
     "That isn't an SSH public key this server can use.": {
-      "extractionState": "manual"
-    },
-    "That debug access grant can't be read.": {
-      "extractionState": "manual"
-    },
-    "That request is for another server.": {
-      "extractionState": "manual"
-    },
-    "That request to turn off debug access can't be read.": {
-      "extractionState": "manual"
-    },
-    "Houseplant watering tracker": {
-      "extractionState": "manual"
-    },
-    "Personal notes + recipes": {
-      "extractionState": "manual"
-    },
-    "Markdown scratchpad": {
-      "extractionState": "manual"
-    },
-    "Plant %lld": {
-      "extractionState": "manual"
-    },
-    "no such app": {
-      "extractionState": "manual"
-    },
-    "Build a habit tracker.": {
-      "extractionState": "manual"
-    },
-    "Sketching schema for habits + check-ins…": {
-      "extractionState": "manual"
-    },
-    "Tab %@": {
-      "extractionState": "manual"
-    },
-    "Sketching ": {
-      "extractionState": "manual"
-    },
-    "Two tables: ": {
-      "extractionState": "manual"
-    },
-    "Building manifest…\n": {
-      "extractionState": "manual"
-    },
-    "Creating Docker image…\n": {
-      "extractionState": "manual"
-    },
-    "Deploying to ": {
-      "extractionState": "manual"
-    },
-    "Live. 🎉": {
-      "extractionState": "manual"
-    },
-    "FROM node:20-alpine": {
-      "extractionState": "manual"
-    },
-    "RUN apk add postgresql-client": {
-      "extractionState": "manual"
-    },
-    "COPY . /app": {
-      "extractionState": "manual"
-    },
-    "Build ok in 8.4s": {
-      "extractionState": "manual"
-    },
-    "Build me a plants tracker": {
-      "extractionState": "manual"
-    },
-    "Sure — I need a weather API key to send notifications when a plant has been thirsty too long.": {
-      "extractionState": "manual"
-    },
-    "OpenWeather API key": {
-      "extractionState": "manual"
-    },
-    "Plants": {
-      "extractionState": "manual"
-    },
-    "This server holds %@ of app data, over its backup limit of %@ (%@). Remove apps or data, or change the backup policy on the server page.": {
-      "extractionState": "manual"
-    },
-    "This server holds %@ of app data, more than the %@ your device would keep. Reserve at least %@ on that device, or remove apps or data first.": {
-      "extractionState": "manual"
-    },
-    "This server holds %@ of app data, more than a third of its disk (%@), which is all a server may use with peer backups. Remove apps or data first, or choose another policy.": {
-      "extractionState": "manual"
-    },
-    "Claude Code": {
-      "extractionState": "manual"
-    },
-    "Run the command in a terminal, or pass the JSON with --mcp-config": {
-      "extractionState": "manual"
-    },
-    "Cursor": {
-      "extractionState": "manual"
-    },
-    "VS Code": {
-      "extractionState": "manual"
-    },
-    "Your user mcp.json (Command Palette → MCP: Open User Configuration)": {
-      "extractionState": "manual"
-    },
-    "Cline": {
-      "extractionState": "manual"
-    },
-    "Cline → MCP Servers → Configure MCP Servers": {
-      "extractionState": "manual"
-    },
-    "Found flagship.app.json": {
-      "extractionState": "manual"
-    },
-    "no flagship.app.json — repo isn't a Flagship app yet; the AI can adapt it": {
-      "extractionState": "manual"
-    },
-    "AI adapt not configured": {
-      "extractionState": "manual"
-    },
-    "Build a houseplant watering tracker": {
-      "extractionState": "manual"
-    },
-    "wrote flagship.app.json": {
-      "extractionState": "manual"
-    },
-    "deployed to home pod": {
       "extractionState": "manual"
     },
     "Looking for servers to keep pieces": {
@@ -6907,13 +6508,7 @@
     "Not answering": {
       "extractionState": "manual"
     },
-    "%lld piece%@": {
-      "extractionState": "manual"
-    },
     "The pieces of this backup are no longer kept.": {
-      "extractionState": "manual"
-    },
-    "Restore by %@ (%lld day%@ left).": {
       "extractionState": "manual"
     },
     "Proven so far: %@.": {
@@ -6925,25 +6520,10 @@
     "Backup of %@, saved %@ (%@).": {
       "extractionState": "manual"
     },
-    "%lld server%@ hold its pieces; %lld bring it back.": {
-      "extractionState": "manual"
-    },
     "Too many tries. Try again later.": {
       "extractionState": "manual"
     },
     "Too many tries %@. Try again %@.": {
-      "extractionState": "manual"
-    },
-    "HTTP/1.": {
-      "extractionState": "manual"
-    },
-    "HTTP/1.1 400 Bad Request\r\n\r\n": {
-      "extractionState": "manual"
-    },
-    "HTTP/1.1 403 Forbidden\r\n\r\n": {
-      "extractionState": "manual"
-    },
-    "HTTP/1.1 502 Bad Gateway\r\n\r\n": {
       "extractionState": "manual"
     },
     "This device isn't connected to a server yet.": {
@@ -7012,51 +6592,6 @@
     "Names starting with FLAGSHIP_ are set by your server.": {
       "extractionState": "manual"
     },
-    "bad boot URL": {
-      "extractionState": "manual"
-    },
-    "bad stream URL": {
-      "extractionState": "manual"
-    },
-    "bad pairing-deposit URL": {
-      "extractionState": "manual"
-    },
-    "bad entitlement-deposit URL": {
-      "extractionState": "manual"
-    },
-    "bad swk-deposit URL": {
-      "extractionState": "manual"
-    },
-    "bad cgk-deposit URL": {
-      "extractionState": "manual"
-    },
-    "bad server-order URL": {
-      "extractionState": "manual"
-    },
-    "bad update URL": {
-      "extractionState": "manual"
-    },
-    "bad releases URL": {
-      "extractionState": "manual"
-    },
-    "bad decommission URL": {
-      "extractionState": "manual"
-    },
-    "no sealed key on file": {
-      "extractionState": "manual"
-    },
-    "bad migration URL": {
-      "extractionState": "manual"
-    },
-    "bad transfer URL": {
-      "extractionState": "manual"
-    },
-    "%@ on %@ by %@": {
-      "extractionState": "manual"
-    },
-    "Mozilla/5.0 (Macintosh)": {
-      "extractionState": "manual"
-    },
     "Update required. Flagship is paused on this device until you update.": {
       "extractionState": "manual"
     },
@@ -7111,15 +6646,6 @@
     "Unlock first to save your key.": {
       "extractionState": "manual"
     },
-    "%lld minute%@ ago": {
-      "extractionState": "manual"
-    },
-    "%lld hour%@ ago": {
-      "extractionState": "manual"
-    },
-    "%lld day%@ ago": {
-      "extractionState": "manual"
-    },
     "%lldm ago": {
       "extractionState": "manual"
     },
@@ -7150,49 +6676,10 @@
     "Live demo server": {
       "extractionState": "manual"
     },
-    "connect failed (HTTP %lld): %@": {
-      "extractionState": "manual"
-    },
-    "connect failed: %@": {
-      "extractionState": "manual"
-    },
     "Still booting (last status: %@). Try again in a minute.": {
       "extractionState": "manual"
     },
     "This demo was removed. Sign out and try a different username.": {
-      "extractionState": "manual"
-    },
-    "poll failed: %@": {
-      "extractionState": "manual"
-    },
-    "cancel failed: %@": {
-      "extractionState": "manual"
-    },
-    "Living-room mini-PC": {
-      "extractionState": "manual"
-    },
-    "Office": {
-      "extractionState": "manual"
-    },
-    "Office tower, work failover": {
-      "extractionState": "manual"
-    },
-    "Music": {
-      "extractionState": "manual"
-    },
-    "Garage rack, music studio": {
-      "extractionState": "manual"
-    },
-    "Remote box, waiting to unlock": {
-      "extractionState": "manual"
-    },
-    "Attic": {
-      "extractionState": "manual"
-    },
-    "Old box that never came online": {
-      "extractionState": "manual"
-    },
-    "Revoked after it went missing": {
       "extractionState": "manual"
     },
     "Adding a device from this phone isn't available yet. Use the web app.": {
@@ -7390,12 +6877,6 @@
     "Start %@": {
       "extractionState": "manual"
     },
-    "Only an admin device of their account can accept a co-manage invitation. Cancel this link and send a new one for them to open on an admin device.": {
-      "extractionState": "manual"
-    },
-    "Their acceptance isn't signed by their account's admin key, so this server can't trust it. Cancel this link and send a new one.": {
-      "extractionState": "manual"
-    },
     "People you invite join as Member. You can withdraw your own invites.": {
       "extractionState": "manual"
     },
@@ -7481,33 +6962,6 @@
       "extractionState": "manual"
     },
     "Withdraw an invite to %@": {
-      "extractionState": "manual"
-    },
-    "Jo": {
-      "extractionState": "manual"
-    },
-    "That app isn't on this server.": {
-      "extractionState": "manual"
-    },
-    "Co-managers can't make approve-first invites.": {
-      "extractionState": "manual"
-    },
-    "That invite already exists.": {
-      "extractionState": "manual"
-    },
-    "The invite must name the server's owner.": {
-      "extractionState": "manual"
-    },
-    "That request isn't complete.": {
-      "extractionState": "manual"
-    },
-    "That isn't one of your invites.": {
-      "extractionState": "manual"
-    },
-    "Not found.": {
-      "extractionState": "manual"
-    },
-    "Sign in again.": {
       "extractionState": "manual"
     },
     "Server setup stopped": {
