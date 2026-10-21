@@ -709,7 +709,7 @@ public final class ImportBackupViewModel {
     /// The result: "Restored N apps" (the restore tries every app, then ends).
     public static func restoredLine(_ apps: [ServerRestoreApp]) -> String {
         let n = apps.filter { $0.state == "done" }.count
-        return String(localized: "Restored \(n) app\(n == 1 ? "" : "s")")
+        return (n == 1 ? String(localized: "Restored \(n) app") : String(localized: "Restored \(n) apps"))
     }
 
     /// One line per app that couldn't be restored, with the server's reason.

@@ -378,7 +378,7 @@ public final class ServerBackupsViewModel {
         guard policyKind == "peer", let peer = policy?.peer else { return [] }
         var out = [String(localized: "Peer backups: \(Self.peerState(peer.state))") + (peer.reason.map { ". \(BoxSentence.display($0))" } ?? "")]
         if let healthy = peer.healthyBricks, let total = peer.totalBricks { out.append(String(localized: "\(healthy) of \(total) pieces safe")) }
-        if let n = peer.holders { out.append(String(localized: "Kept on \(n) other server\(n == 1 ? "" : "s")")) }
+        if let n = peer.holders { out.append((n == 1 ? String(localized: "Kept on \(n) other server") : String(localized: "Kept on \(n) other servers"))) }
         if let at = peer.lastPlacedAt { out.append(String(localized: "Last placed \(when(at))")) }
         if let hosting = peer.hostingBytes { out.append(String(localized: "Holds \(ServerArchive.formatBytes(hosting)) for other servers")) }
         return out

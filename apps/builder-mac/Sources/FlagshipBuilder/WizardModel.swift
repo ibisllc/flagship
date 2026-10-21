@@ -787,7 +787,7 @@ final class WizardModel: ObservableObject {
             return
         }
         guard vmManager.servers.count < cap else {
-            reportOperationFailure(String(localized: "This Mac is at its hosting limit (\(cap) server\(cap == 1 ? "" : "s")). Remove one first, or burn to USB."))
+            reportOperationFailure((cap == 1 ? String(localized: "This Mac is at its hosting limit (\(cap) server). Remove one first, or burn to USB.") : String(localized: "This Mac is at its hosting limit (\(cap) servers). Remove one first, or burn to USB.")))
             return
         }
 

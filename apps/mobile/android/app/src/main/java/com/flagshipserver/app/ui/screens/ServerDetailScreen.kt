@@ -873,9 +873,9 @@ private fun uptimeLabel(ms: Long): String {
     val hours = ((seconds % 86_400) / 3_600).toInt()
     val minutes = ((seconds % 3_600) / 60).toInt()
     return when {
-        days > 0 -> plural(days, "day")
-        hours > 0 -> plural(hours, "hour")
-        else -> plural(minutes, "minute")
+        days > 0 -> FSStrings.plural(R.plurals.days_count, days, days)
+        hours > 0 -> FSStrings.plural(R.plurals.hours_count, hours, hours)
+        else -> FSStrings.plural(R.plurals.minutes_count, minutes, minutes)
     }
 }
 

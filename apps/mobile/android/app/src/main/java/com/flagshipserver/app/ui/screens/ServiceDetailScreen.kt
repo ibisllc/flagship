@@ -322,7 +322,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                     FSGroup(header = stringResource(R.string.browser)) {
                         FSRow(
                             title = stringResource(R.string.open_browser_viewer),
-                            subtitle = fsString(R.string.running_on_your_server, plural(resp.browserTabs.size, "tab")),
+                            subtitle = FSStrings.plural(R.plurals.tabs_running_on_your_server, resp.browserTabs.size, resp.browserTabs.size),
                             icon = Icons.Outlined.Tab,
                             iconTint = FS.colors.accent,
                             onClick = { nav.navigate("browser-tabs/$serviceId") },

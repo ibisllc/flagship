@@ -369,7 +369,7 @@ public struct CreateServerStubScreen: View {
             return String(localized: "\(Int(round(hours * 60))) min")
         }
         if hours == floor(hours) {
-            return String(localized: "\(Int(hours)) hour\(hours == 1 ? "" : "s")")
+            return (hours == 1 ? String(localized: "\(Int(hours)) hour") : String(localized: "\(Int(hours)) hours"))
         }
         return String(format: "%.1f hours", hours)
     }

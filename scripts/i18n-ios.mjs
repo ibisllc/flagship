@@ -51,6 +51,8 @@ function surfacesOf(source) {
   return ["ios"];
 }
 
+const MANUAL = JSON.parse(fs.readFileSync(path.join(ROOT, "scripts/i18n-ios.manual.json"), "utf8"));
+
 const args = process.argv.slice(2);
 const cmd = args[0];
 const flag = (n) => args.includes(n);
@@ -327,6 +329,7 @@ function wrap() {
     for (const e of edits) out = out.slice(0, e.start) + e.text + out.slice(e.end);
     fs.writeFileSync(p.file, out);
   }
+  applyManualEdits();
 }
 
 /** src[a,b) with the insertions that fall inside applied (nested literals in an interpolation). */
@@ -335,6 +338,18 @@ function withInserts(src, inserts, a, b) {
   let out = "", i = a;
   for (const x of inside) { out += src.slice(i, x.pos) + x.text; i = x.pos; }
   return out + src.slice(i, b);
+}
+
+/** scripts/i18n-ios.manual.json: sentences built by appending an "s" become one plural key. */
+function applyManualEdits() {
+  let n = 0;
+  for (const e of MANUAL.edits) {
+    const f = path.join(ROOT, e.file);
+    if (!fs.existsSync(f)) continue;
+    const src = fs.readFileSync(f, "utf8");
+    if (src.includes(e.find)) { fs.writeFileSync(f, src.replace(e.find, e.replace)); n++; }
+  }
+  console.log(`${n} manual edits applied`);
 }
 
 const lineOf = (src, pos) => src.slice(0, pos).split("\n").length;
@@ -375,6 +390,7 @@ function harvest(dd) {
     const next = {};
     for (const k of Object.keys(keys)) next[k] = { ...(existing[k] ?? {}), ...keys[k] };
     for (const [k, v] of Object.entries(existing)) if (v.manual) next[k] = v; // hand-kept: text the server sends (scripts/i18n-server.mjs)
+    for (const [k, v] of Object.entries(MANUAL.plurals)) if (v.surfaces.includes(surface)) next[k] = { ...(next[k] ?? {}), en: { one: v.one, other: v.other }, ctx: next[k]?.ctx ?? "plural (scripts/i18n-ios.manual.json)", plural: true, manual: true };
     writeEn(surface, next);
     console.log(`${surface}: ${Object.keys(next).length} keys`);
   }
@@ -392,12 +408,16 @@ function emitCatalog(surface, withDrafts) {
     const entry = { extractionState: "manual" };
     if (v.comment) entry.comment = v.comment;
     const localizations = {};
+    const pluralOf = (forms, code) => {
+      const f = { ...forms };
+      if (["es", "fr", "pt-BR"].includes(code) && f.other && !f.many) f.many = f.other; // CLDR "many" (millions): same wording
+      return { variations: { plural: Object.fromEntries(Object.entries(f).map(([c, val]) => [c, { stringUnit: { state: code === "en" ? "new" : "translated", value: val } }])) } };
+    };
+    if (v.plural && typeof v.en === "object") localizations.en = pluralOf(v.en, "en");
     for (const l of langs) {
       const t = trs[l.code][k];
       if (t == null) continue;
-      localizations[l.appleId ?? l.code] = typeof t === "string"
-        ? { stringUnit: { state: "translated", value: t } }
-        : { variations: { plural: Object.fromEntries(Object.entries(t).map(([f, val]) => [f, { stringUnit: { state: "translated", value: val } }])) } };
+      localizations[l.appleId ?? l.code] = typeof t === "string" ? { stringUnit: { state: "translated", value: t } } : pluralOf(t, l.code);
     }
     if (Object.keys(localizations).length) entry.localizations = localizations;
     strings[k] = entry;

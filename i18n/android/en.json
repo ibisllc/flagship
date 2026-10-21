@@ -4281,11 +4281,6 @@
     "ctx": "ui/screens/CreateServerScreen.kt:824 (prose)",
     "args": 1
   },
-  "hour": {
-    "en": "%1$s hour%2$s",
-    "ctx": "ui/screens/CreateServerScreen.kt:825 (prose)",
-    "args": 2
-  },
   "reboots_on_its_own": {
     "en": "Reboots on its own",
     "ctx": "ui/screens/CreateServerScreen.kt:844 (title=)"
@@ -5415,15 +5410,6 @@
     "en": "Status",
     "ctx": "ui/screens/PostRecoveryScreen.kt:77 (arg of FSSectionHeader)"
   },
-  "membership_row": {
-    "en": "membership row",
-    "ctx": "ui/screens/PostRecoveryScreen.kt:89 (fragment)"
-  },
-  "re_anchored_across": {
-    "en": "Re-anchored %1$s across %2$s.",
-    "ctx": "ui/screens/PostRecoveryScreen.kt:89 (arg of Text)",
-    "args": 2
-  },
   "unchanged": {
     "en": "%1$s → %2$s · %3$s unchanged",
     "ctx": "ui/screens/PostRecoveryScreen.kt:93 (arg of Text)",
@@ -5432,11 +5418,6 @@
   "per_app_results": {
     "en": "Per-app results",
     "ctx": "ui/screens/PostRecoveryScreen.kt:102 (header=)"
-  },
-  "re_anchored_unchanged": {
-    "en": "%1$s re-anchored · %2$s unchanged",
-    "ctx": "ui/screens/PostRecoveryScreen.kt:108 (prose)",
-    "args": 2
   },
   "undo_window": {
     "en": "Undo window",
@@ -7007,11 +6988,6 @@
   "open_browser_viewer": {
     "en": "Open browser viewer",
     "ctx": "ui/screens/ServiceDetailScreen.kt:320 (title=)"
-  },
-  "running_on_your_server": {
-    "en": "%1$s running on your server",
-    "ctx": "ui/screens/ServiceDetailScreen.kt:321 (subtitle=)",
-    "args": 1
   },
   "open_to_all_or_members_only": {
     "en": "Open to all or members only, and each member's rank",
@@ -10569,6 +10545,50 @@
       "other": "Restored %1$s apps"
     },
     "ctx": "viewmodels/ServerArchiveViewModels.kt",
+    "plural": true
+  },
+  "membership_rows_reanchored": {
+    "en": "Membership rows re-anchored: %1$s. Apps affected: %2$s.",
+    "ctx": "ui/screens/PostRecoveryScreen.kt"
+  },
+  "hours_count": {
+    "en": {
+      "one": "%1$s hour",
+      "other": "%1$s hours"
+    },
+    "ctx": "ui/screens/CreateServerScreen.kt",
+    "plural": true
+  },
+  "days_count": {
+    "en": {
+      "one": "%1$s day",
+      "other": "%1$s days"
+    },
+    "ctx": "ui/screens/ServerDetailScreen.kt",
+    "plural": true
+  },
+  "minutes_count": {
+    "en": {
+      "one": "%1$s minute",
+      "other": "%1$s minutes"
+    },
+    "ctx": "ui/screens/ServerDetailScreen.kt",
+    "plural": true
+  },
+  "tabs_running_on_your_server": {
+    "en": {
+      "one": "%1$s tab running on your server",
+      "other": "%1$s tabs running on your server"
+    },
+    "ctx": "ui/screens/ServiceDetailScreen.kt",
+    "plural": true
+  },
+  "rows_reanchored_unchanged": {
+    "en": {
+      "one": "%1$s row re-anchored · %2$s unchanged",
+      "other": "%1$s rows re-anchored · %2$s unchanged"
+    },
+    "ctx": "ui/screens/PostRecoveryScreen.kt",
     "plural": true
   }
 }

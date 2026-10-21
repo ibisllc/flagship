@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
 import androidx.compose.ui.res.stringResource
 import com.flagshipserver.app.core.fsString
 import com.flagshipserver.app.R
@@ -89,7 +90,7 @@ fun PostRecoveryScreen(nav: NavController) {
                                 },
                             )
                             Text(
-                                fsString(R.string.re_anchored_across, plural(report.totalRewritten, stringResource(R.string.membership_row)), plural(report.reattachedCount, "app")),
+                                fsString(R.string.membership_rows_reanchored, report.totalRewritten, report.reattachedCount),
                                 style = MaterialTheme.typography.bodyLarge,
                             )
                             Text(
@@ -108,7 +109,7 @@ fun PostRecoveryScreen(nav: NavController) {
                             FSRow(
                                 title = app.slug,
                                 subtitle = app.error
-                                    ?: fsString(R.string.re_anchored_unchanged, plural(app.rewrittenCount, "row"), app.unchangedCount),
+                                    ?: FSStrings.plural(R.plurals.rows_reanchored_unchanged, app.rewrittenCount, app.rewrittenCount, app.unchangedCount),
                                 icon = if (failed) Icons.Outlined.WarningAmber else Icons.Outlined.CheckCircle,
                                 iconTint = if (failed) FS.colors.danger else FS.colors.success,
                             )

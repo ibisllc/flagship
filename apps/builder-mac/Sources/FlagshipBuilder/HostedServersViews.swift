@@ -459,9 +459,9 @@ struct VMDetailView: View {
                 if observation.isStale(at: now) {
                     return String(localized: "No new guest checkpoint for \(observation.staleMinutes(at: now)) minutes. Last reported: \(observation.summary). The VM may be stalled.")
                 }
-                return String(localized: "\(observation.summary). Last guest checkpoint \(relativeAge(observation.updatedAt, now: now)); \(elapsed) minute\(elapsed == 1 ? "" : "s") total.")
+                return elapsed == 1 ? String(localized: "\(observation.summary). Last guest checkpoint \(relativeAge(observation.updatedAt, now: now)); \(elapsed) minute total.") : String(localized: "\(observation.summary). Last guest checkpoint \(relativeAge(observation.updatedAt, now: now)); \(elapsed) minutes total.")
             }
-            return String(localized: "\(server.record.config.firstBootSummary); \(elapsed) minute\(elapsed == 1 ? "" : "s") so far. Progress appears here once the server checks in.")
+            return elapsed == 1 ? String(localized: "\(server.record.config.firstBootSummary); \(elapsed) minute so far. Progress appears here once the server checks in.") : String(localized: "\(server.record.config.firstBootSummary); \(elapsed) minutes so far. Progress appears here once the server checks in.")
         case .running:
             return String(localized: "Serving at https://\(server.record.config.serverDomain)/")
         case .failed(let f):
@@ -549,7 +549,7 @@ struct VMDetailView: View {
         let seconds = max(0, Int(now.timeIntervalSince(date)))
         if seconds < 60 { return "less than a minute ago" }
         let minutes = seconds / 60
-        return String(localized: "\(minutes) minute\(minutes == 1 ? "" : "s") ago")
+        return minutes == 1 ? String(localized: "\(minutes) minute ago") : String(localized: "\(minutes) minutes ago")
     }
 
     private func detailRow(_ label: String, _ value: String) -> some View {
