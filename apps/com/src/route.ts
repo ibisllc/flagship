@@ -24,6 +24,8 @@
  */
 
 import { RELEASES_PATH, handleReleases } from "./releaseCatalog.js";
+import { pickWebLocale } from "./localeRedirect.js";
+import { GA_WEB_LOCALES } from "./localeTable.generated.js";
 import { securityHeaders } from "./securityHeaders.js";
 import { tryControlPlane, tryBootHost, isAccountGoneResponse } from "./controlPlaneRoutes.js";
 import {
@@ -960,6 +962,18 @@ async function routeImpl(
   const sitePublic = env.SITE_PUBLIC === "1" || env.SITE_PUBLIC === "true";
   if (!sitePublic && !hasPreviewCookie(request) && !isComingSoonExempt(url.pathname)) {
     return serveComingSoon(env);
+  }
+
+  // First visit to the marketing root: send a browser that prefers a live translation to it once
+  // (apps/com/src/localeRedirect.ts). The fs-lang cookie, set by the footer switcher, always wins.
+  if (url.pathname === "/" && request.method === "GET" && GA_WEB_LOCALES.length > 0) {
+    const pick = pickWebLocale(request.headers.get("accept-language"), request.headers.get("cookie"));
+    const res = pick
+      ? new Response(null, { status: 302, headers: { location: `/${pick.webPath}/${url.search}` } })
+      : notFoundForMissingAsset(url.pathname, await env.ASSETS.fetch(request));
+    const out = new Response(res.body, res);
+    out.headers.append("vary", "Accept-Language, Cookie");
+    return out;
   }
 
   // Static asset path — let the assets binding handle it.

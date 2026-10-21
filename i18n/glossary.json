@@ -1,0 +1,71 @@
+{
+  "_about": "Fixed vocabulary for every surface and language. `keep` terms are product names and protocol words that are never translated or transliterated (scripts/i18n-check.mjs fails a translation that drops one that the English has). `terms` fix the one word a language uses for a recurring concept so the apps, the Studios and the websites agree. Translators and the review pass use this before anything else.",
+  "keep": [
+    "Flagship", "Flagship Studio", "Studio", "Flagship Inference", "Pro", "Let's Encrypt", "Cloudflare",
+    "Face ID", "Touch ID", "iPhone", "iPad", "Apple Watch", "Android", "Wear OS",
+    "TLS", "DNS", "SSH", "VM", "PostgreSQL", "YubiKey", "WebAuthn", "iCloud", "Google Play", "App Store",
+    ".flagshipkey", "flagshipserver.com", "flagship.services"
+  ],
+  "terms": {
+    "server": {
+      "meaning": "the user's own Flagship computer (a box at home or a hosted VM). Never 'cloud' and never 'host'.",
+      "es": "servidor", "fr": "serveur", "de": "Server", "pt-BR": "servidor", "ja": "サーバー", "zh-Hans": "服务器"
+    },
+    "phone": {
+      "meaning": "the user's mobile device that is the trust root. In the apps say 'phone' even on a tablet.",
+      "es": "teléfono", "fr": "téléphone", "de": "Telefon", "pt-BR": "celular", "ja": "スマートフォン", "zh-Hans": "手机"
+    },
+    "device": {
+      "meaning": "any phone, tablet, watch or computer paired to the account",
+      "es": "dispositivo", "fr": "appareil", "de": "Gerät", "pt-BR": "dispositivo", "ja": "デバイス", "zh-Hans": "设备"
+    },
+    "account": {
+      "meaning": "the Flagship account (a set of keys on the phone, not a username and password)",
+      "es": "cuenta", "fr": "compte", "de": "Konto", "pt-BR": "conta", "ja": "アカウント", "zh-Hans": "账户"
+    },
+    "backup": {
+      "meaning": "a copy of data kept so it can be restored",
+      "es": "copia de seguridad", "fr": "sauvegarde", "de": "Backup", "pt-BR": "backup", "ja": "バックアップ", "zh-Hans": "备份"
+    },
+    "recovery": {
+      "meaning": "getting back into an account after losing the phone",
+      "es": "recuperación", "fr": "récupération", "de": "Wiederherstellung", "pt-BR": "recuperação", "ja": "復旧", "zh-Hans": "恢复"
+    },
+    "pair": {
+      "meaning": "connect a new device to the account by scanning a code",
+      "es": "vincular", "fr": "associer", "de": "koppeln", "pt-BR": "parear", "ja": "ペアリング", "zh-Hans": "配对"
+    },
+    "unlock": {
+      "meaning": "approve a server's disk unlock at boot from the phone",
+      "es": "desbloquear", "fr": "déverrouiller", "de": "entsperren", "pt-BR": "desbloquear", "ja": "ロック解除", "zh-Hans": "解锁"
+    },
+    "passphrase": {
+      "meaning": "a long phrase the user types to protect a key file",
+      "es": "frase de contraseña", "fr": "phrase secrète", "de": "Passphrase", "pt-BR": "frase secreta", "ja": "パスフレーズ", "zh-Hans": "口令短语"
+    },
+    "admin": {
+      "meaning": "a device or person allowed to manage the server",
+      "es": "administrador", "fr": "administrateur", "de": "Administrator", "pt-BR": "administrador", "ja": "管理者", "zh-Hans": "管理员"
+    },
+    "approve": {
+      "meaning": "allow a request after reading what it does",
+      "es": "aprobar", "fr": "approuver", "de": "genehmigen", "pt-BR": "aprovar", "ja": "承認", "zh-Hans": "批准"
+    },
+    "revoke": {
+      "meaning": "take back access that was granted",
+      "es": "revocar", "fr": "révoquer", "de": "widerrufen", "pt-BR": "revogar", "ja": "取り消す", "zh-Hans": "撤销"
+    },
+    "app": {
+      "meaning": "a program the user builds or installs on their server (not the Flagship mobile app)",
+      "es": "app", "fr": "app", "de": "App", "pt-BR": "app", "ja": "アプリ", "zh-Hans": "应用"
+    },
+    "key file": {
+      "meaning": "the encrypted .flagshipkey file that backs up the account",
+      "es": "archivo de clave", "fr": "fichier de clé", "de": "Schlüsseldatei", "pt-BR": "arquivo de chave", "ja": "キーファイル", "zh-Hans": "密钥文件"
+    },
+    "share": {
+      "meaning": "give another person access to a server or an app",
+      "es": "compartir", "fr": "partager", "de": "teilen", "pt-BR": "compartilhar", "ja": "共有", "zh-Hans": "共享"
+    }
+  }
+}
