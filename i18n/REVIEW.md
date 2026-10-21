@@ -4,7 +4,7 @@ You are checking a machine translation of Flagship, a personal-cloud product who
 Wrong words in pairing, unlock, backup and recovery screens are a trust problem, not a style problem.
 
 **Files.** For each surface directory under `i18n/` (and `i18n/web/`), `en.json` holds the English and `<lang>.json` the
-translation, keyed identically. `ctx` says where a string appears (file:line, what it is attached to). Web segments are in
+translation, keyed identically. `ctx` says where a string appears (file:line, what it is attached to). The webapp (`i18n/webapp`) and the pages the box serves (`i18n/box`) are keyed by the English sentence itself; HTML in a key (`<strong>`, `<code>`, entities like `&lt;`) must be kept as it is. Web segments are in
 `i18n/web/segments.json` (`en`, `kind`, `pages`) with translations in `i18n/web/<lang>.json`.
 
 **Check, in this order**
@@ -16,6 +16,6 @@ translation, keyed identically. `ctx` says where a string appears (file:line, wh
 6. Plurals (`one`/`other`) read correctly; no sentence assembled by gluing words around a number.
 
 **How to change one.** Edit the value in `<lang>.json` (never the generated resource/catalog files), then run `npm run i18n`
-and `node scripts/i18n-<surface>.mjs build`. Mark a string you are unsure about by adding `"…": "…"` to a `review-notes.md` next to the file rather than guessing.
+and `node scripts/i18n-<surface>.mjs build` (`pwa`, `box`, `android`, `ios`, `web`). Mark a string you are unsure about by adding `"…": "…"` to a `review-notes.md` next to the file rather than guessing.
 
 **Do not** translate: brand and protocol names, code, file names, domains, keyboard shortcuts, the contents of `<1>…</1>` that wrap code.
