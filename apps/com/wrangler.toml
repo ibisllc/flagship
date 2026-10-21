@@ -129,6 +129,7 @@ run_worker_first = [
   "!/theme-ui.css",
   "!/tokens.css",
   "!/theme.js",
+  "!/i18n.js",
   "!/motion.js",
   "!/app-stores.js",
   "!/qrEncoder.js",
