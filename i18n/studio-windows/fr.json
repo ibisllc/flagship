@@ -53,7 +53,6 @@
   "notAValidRecipeMissingInvalid": "Recette non valide : le champ « {0} » est absent ou invalide.",
   "flashToUsb": "Flasher sur USB",
   "assembleAndFlash": "Assembler et flasher",
-  "beta": "Bêta",
   "openFlagshipStudio": "Ouvrir Flagship Studio",
   "noServersHostedYet": "Aucun serveur hébergé pour l’instant",
   "stopAllRunningServers": "Arrêter tous les serveurs en cours d’exécution",

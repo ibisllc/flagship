@@ -4977,10 +4977,6 @@
     "en": "We couldn't read that link. Copy the full link from the sign-in page and try again.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ProcessUrlScreen.swift:67"
   },
-  "Beta": {
-    "en": "Beta",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/ProductVersion.swift:9"
-  },
   "Flagship %@ (iOS %@, build %@)": {
     "en": "Flagship %@ (iOS %@, build %@)",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/ProductVersion.swift:17"
