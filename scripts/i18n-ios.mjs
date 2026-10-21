@@ -374,6 +374,7 @@ function harvest(dd) {
     // keep a hand-added entry; refresh everything the compiler reported; drop what it no longer reports
     const next = {};
     for (const k of Object.keys(keys)) next[k] = { ...(existing[k] ?? {}), ...keys[k] };
+    for (const [k, v] of Object.entries(existing)) if (v.manual) next[k] = v; // hand-kept: text the server sends (scripts/i18n-server.mjs)
     writeEn(surface, next);
     console.log(`${surface}: ${Object.keys(next).length} keys`);
   }
