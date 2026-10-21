@@ -53,7 +53,6 @@
   "notAValidRecipeMissingInvalid": "配方无效：缺少字段“{0}”或该字段无效。",
   "flashToUsb": "写入 U 盘",
   "assembleAndFlash": "组装并写入",
-  "beta": "测试版",
   "openFlagshipStudio": "打开 Flagship Studio",
   "noServersHostedYet": "尚未托管任何服务器",
   "stopAllRunningServers": "停止所有正在运行的服务器",

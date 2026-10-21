@@ -9958,10 +9958,6 @@
     "en": "Holds {0} for other servers",
     "ctx": "webapp/lib/backupPolicy.js:143"
   },
-  "Beta": {
-    "en": "Beta",
-    "ctx": "webapp/lib/buildInfo.js:19"
-  },
   "A remote browser can't sign — open your owner app to approve this": {
     "en": "A remote browser can't sign — open your owner app to approve this",
     "ctx": "webapp/lib/companionGuard.js:21"
