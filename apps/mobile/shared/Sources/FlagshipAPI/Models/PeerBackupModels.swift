@@ -80,12 +80,12 @@ public struct PeerHostingView: Codable, Equatable, Sendable {
 public enum PeerBackupText {
     public static func stateTitle(_ s: String?) -> String {
         switch s {
-        case "waiting-for-peers": return "Looking for servers to keep pieces"
-        case "filling": return "Getting ready"
-        case "placing": return "Sending pieces to other servers"
+        case "waiting-for-peers": return String(localized: "Looking for servers to keep pieces")
+        case "filling": return String(localized: "Getting ready")
+        case "placing": return String(localized: "Sending pieces to other servers")
         case "protected": return "Protected"
-        case "at-risk": return "At risk"
-        case "leaving": return "Leaving peer backups"
+        case "at-risk": return String(localized: "At risk")
+        case "leaving": return String(localized: "Leaving peer backups")
         case "off": return "Off"
         default: return s ?? ""
         }
@@ -93,13 +93,13 @@ public enum PeerBackupText {
 
     public static func stateNote(_ s: String?) -> String {
         switch s {
-        case "waiting-for-peers": return "Peer backup starts once enough other servers can hold it."
-        case "filling": return "This server is setting aside space for other servers' pieces first."
-        case "placing": return "Your newest backup is being spread over other servers."
-        case "protected": return "Enough of the servers holding your pieces answer to bring your backup back."
-        case "at-risk": return "Too few pieces are safe. Your server is moving them to other servers."
-        case "leaving": return "This server stops taking new pieces and frees its space in two weeks."
-        case "off": return "Choose Peer-distributed backups in this server's Backups to turn it on."
+        case "waiting-for-peers": return String(localized: "Peer backup starts once enough other servers can hold it.")
+        case "filling": return String(localized: "This server is setting aside space for other servers' pieces first.")
+        case "placing": return String(localized: "Your newest backup is being spread over other servers.")
+        case "protected": return String(localized: "Enough of the servers holding your pieces answer to bring your backup back.")
+        case "at-risk": return String(localized: "Too few pieces are safe. Your server is moving them to other servers.")
+        case "leaving": return String(localized: "This server stops taking new pieces and frees its space in two weeks.")
+        case "off": return String(localized: "Choose Peer-distributed backups in this server's Backups to turn it on.")
         default: return ""
         }
     }
@@ -108,7 +108,7 @@ public enum PeerBackupText {
         switch s {
         case "ok": return "Answering"
         case "checking": return "Checking"
-        case "failing": return "Not answering"
+        case "failing": return String(localized: "Not answering")
         case "offline": return "Offline"
         default: return s
         }
@@ -118,8 +118,8 @@ public enum PeerBackupText {
         if n < 0 { return "" }
         let gb: Int64 = 1 << 30
         if n >= gb { return String(format: n < 10 * gb ? "%.1f GB" : "%.0f GB", Double(n) / Double(gb)) }
-        if n >= 1 << 20 { return "\(Int((Double(n) / Double(1 << 20)).rounded())) MB" }
-        return "\(max(0, Int((Double(n) / 1024).rounded()))) KB"
+        if n >= 1 << 20 { return String(localized: "\(Int((Double(n) / Double(1 << 20)).rounded())) MB") }
+        return String(localized: "\(max(0, Int((Double(n) / 1024).rounded()))) KB")
     }
 
     /// "Server 1" and "Answering · last proof Oct 16, 2026 · 12 pieces".
@@ -127,16 +127,16 @@ public enum PeerBackupText {
         [
             holderState(h.state),
             (h.lastProofAt ?? 0) > 0 ? "last proof \(formatTime(h.lastProofAt!))" : "no proof yet",
-            "\(h.bricks) piece\(h.bricks == 1 ? "" : "s")",
+            String(localized: "\(h.bricks) piece\(h.bricks == 1 ? "" : "s")"),
         ].joined(separator: " · ")
     }
 
     /// The date by which a lost server's backup must be restored, or "".
     public static func restoreByLine(keepUntil: Int64?, now: Int64, formatTime: (Int64) -> String) -> String {
         guard let keepUntil, keepUntil > 0 else { return "" }
-        if keepUntil <= now { return "The pieces of this backup are no longer kept." }
+        if keepUntil <= now { return String(localized: "The pieces of this backup are no longer kept.") }
         let days = Int((Double(keepUntil - now) / 86_400_000).rounded(.up))
-        return "Restore by \(formatTime(keepUntil)) (\(days) day\(days == 1 ? "" : "s") left)."
+        return String(localized: "Restore by \(formatTime(keepUntil)) (\(days) day\(days == 1 ? "" : "s") left).")
     }
 
     /// What this server keeps for others.
@@ -144,16 +144,16 @@ public enum PeerBackupText {
         guard let h, h.poolBytes > 0 else { return [] }
         var out = [
             "Pool: \(formatSize(h.poolBytes)), of which \(formatSize(h.realBytes)) holds other servers' pieces and \(formatSize(h.fillerBytes)) is proof filler.",
-            "Proven so far: \(formatSize(h.provenBytes)).",
+            String(localized: "Proven so far: \(formatSize(h.provenBytes))."),
         ]
-        if h.leaving { out.append("This server is leaving peer backups.") }
+        if h.leaving { out.append(String(localized: "This server is leaving peer backups.")) }
         return out
     }
 
     /// The card a restore shows once a lost server's record is found.
     public static func rootLines(_ s: PeerRootSummary, now: Int64, formatTime: (Int64) -> String) -> [String] {
-        var out = ["Backup of \(s.serverId), saved \(formatTime(s.archive.createdAt)) (\(formatSize(s.archive.bytes)))."]
-        out.append("\(s.holders) server\(s.holders == 1 ? "" : "s") hold its pieces; \(s.needed) bring it back.")
+        var out = [String(localized: "Backup of \(s.serverId), saved \(formatTime(s.archive.createdAt)) (\(formatSize(s.archive.bytes))).")]
+        out.append(String(localized: "\(s.holders) server\(s.holders == 1 ? "" : "s") hold its pieces; \(s.needed) bring it back."))
         let by = restoreByLine(keepUntil: s.keepUntil, now: now, formatTime: formatTime)
         if !by.isEmpty { out.append(by) }
         return out

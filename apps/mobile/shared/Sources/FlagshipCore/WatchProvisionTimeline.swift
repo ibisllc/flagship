@@ -96,19 +96,19 @@ public extension WatchProtocol {
         /// final pre-poweroff checkpoint), matching the phone ladder exactly.
         public static let phases: [(phase: String, title: String)] = [
             ("booting",      "Booting"),
-            ("partitioning", "Preparing disk"),
+            ("partitioning", String(localized: "Preparing disk")),
             ("installing",   "Installing"),
-            ("downloading",  "Downloading system"),
-            ("registering",  "Registering with Flagship"),
-            ("sealing",      "Sealing your disk"),
-            ("installed",    "Install complete"),
+            ("downloading",  String(localized: "Downloading system")),
+            ("registering",  String(localized: "Registering with Flagship")),
+            ("sealing",      String(localized: "Sealing your disk")),
+            ("installed",    String(localized: "Install complete")),
             ("pairing",      "Pairing"),
-            ("live",         "Server is live"),
+            ("live",         String(localized: "Server is live")),
         ]
 
         /// Mirrors `FlagshipCore.ProvisionTimelineLadder.installedUnplugDetail`.
         public static let installedUnplugDetail =
-            "Install complete. If it ran from a USB stick, unplug it and power the server back on."
+            String(localized: "Install complete. If it ran from a USB stick, unplug it and power the server back on.")
 
         public static func rows(for ctx: ProvisionTimelineContext?) -> [TimelineRow] {
             let ladder = phases
@@ -139,7 +139,7 @@ public extension WatchProtocol {
                         phase: entry.phase,
                         title: entry.title,
                         state: i == 0 ? .current : .upcoming,
-                        detail: i == 0 ? "Waiting for the box to phone home…" : nil
+                        detail: i == 0 ? String(localized: "Waiting for the box to phone home…") : nil
                     )
                 }
             }

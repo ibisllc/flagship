@@ -145,9 +145,9 @@ public final class BuilderPairViewModel: Identifiable {
             // grant (if any) is baked into the recipe at mint time.
             break
         case .peerGone:
-            await fail("The computer's builder app disconnected.")
+            await fail(String(localized: "The computer's builder app disconnected."))
         case .expired:
-            await fail("The pairing session timed out.")
+            await fail(String(localized: "The pairing session timed out."))
         case .relayError(let m):
             await handleConnectionLoss(m)
         case .pong:
@@ -203,7 +203,7 @@ public final class BuilderPairViewModel: Identifiable {
                 try? await Task.sleep(nanoseconds: 20_000_000_000)
                 guard !Task.isCancelled, let self,
                       case .delivering = self.phase else { return }
-                await self.fail("The builder saved the recipe but didn't confirm receipt. Update or reopen the builder and try again.")
+                await self.fail(String(localized: "The builder saved the recipe but didn't confirm receipt. Update or reopen the builder and try again."))
             }
         } catch {
             await fail(UserErrorText.of(error))

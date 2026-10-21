@@ -13,8 +13,8 @@ import FlagshipCore
 @MainActor
 @Observable
 public final class DebugAccessViewModel {
-    public static let warning = "Anyone with this key can read everything on this server while it's on."
-    public static let adminOnly = "Only an admin device can turn debug access on or off."
+    public static let warning = String(localized: "Anyone with this key can read everything on this server while it's on.")
+    public static let adminOnly = String(localized: "Only an admin device can turn debug access on or off.")
 
     public typealias Signer = @MainActor (_ reason: String) async throws -> Curve25519.Signing.PrivateKey
 
@@ -89,7 +89,7 @@ public final class DebugAccessViewModel {
     }
 
     public static func banner(expiresAt: Int64) -> String {
-        "Debug access is on until \(time(expiresAt))."
+        String(localized: "Debug access is on until \(time(expiresAt)).")
     }
 
     static func time(_ ms: Int64) -> String {
@@ -112,13 +112,13 @@ public final class DebugAccessViewModel {
         busy = true
         defer { busy = false }
         do {
-            let key = try await grantSigner(isOn ? "Renew debug access" : "Turn on debug access")
+            let key = try await grantSigner(isOn ? String(localized: "Renew debug access") : String(localized: "Turn on debug access"))
             let body = DebugAccess.envelopeJSON(grant, signatureHex: try DebugAccess.sign(grant, key: key))
             let r = try await client.debugAccessGrant(body: body)
             view = r.debugAccess
             defaults.set(grant.sshPublicKey, forKey: Self.keyDefaultsKey(serverDomain))
             keyText = grant.sshPublicKey
-            notice = r.debugAccess.expiresAt.map(Self.banner) ?? "Debug access is on."
+            notice = r.debugAccess.expiresAt.map(Self.banner) ?? String(localized: "Debug access is on.")
             await onChanged()
         } catch {
             self.error = Self.message(for: error)
@@ -133,11 +133,11 @@ public final class DebugAccessViewModel {
         defer { busy = false }
         do {
             let revoke = DebugAccess.Revoke(serverDomain: serverDomain, issuedAt: now())
-            let key = try await revokeSigner("Turn off debug access")
+            let key = try await revokeSigner(String(localized: "Turn off debug access"))
             let body = DebugAccess.revokeJSON(revoke, signatureHex: try DebugAccess.sign(revoke, key: key))
             let r = try await client.debugAccessRevoke(body: body)
             view = r.debugAccess
-            notice = "Debug access is off."
+            notice = String(localized: "Debug access is off.")
             await onChanged()
         } catch {
             self.error = Self.message(for: error)
@@ -146,7 +146,7 @@ public final class DebugAccessViewModel {
 
     /// The box's own sentence when it sent one.
     static func message(for error: Error) -> String {
-        if BiometricGate.GateError.from(error) == .userCancelled { return "Debug access wasn't changed." }
+        if BiometricGate.GateError.from(error) == .userCancelled { return String(localized: "Debug access wasn't changed.") }
         if case ScreensClientError.http(_, let body) = error,
            let data = body.data(using: .utf8),
            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],

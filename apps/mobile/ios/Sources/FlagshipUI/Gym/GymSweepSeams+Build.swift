@@ -9,14 +9,14 @@ extension GymSweepSeams {
     /// its AI run off, so the box kept its files and says so.
     public static let interruptedBuildId = "bld-recipes03"
     public static let interruptedReason =
-        "The server restarted while the AI was working on this build. Its files are kept: run the AI again, or deploy."
+        String(localized: "The server restarted while the AI was working on this build. Its files are kept: run the AI again, or deploy.")
 
     /// The chats `-smoke-chat` seeds: one ready to deploy on Flagship
     /// Inference (Medium, text only; a long conversation), one failed on an
     /// own OpenAI key whose Flagship relay wasn't reachable.
     public static let readyChatId = "gym-ready"
     public static let failedChatId = "gym-failed"
-    public static let relayFailure = "The Flagship relay isn't reachable right now, so the AI couldn't be asked."
+    public static let relayFailure = String(localized: "The Flagship relay isn't reachable right now, so the AI couldn't be asked.")
     /// The OpenAI key `-smoke-chat` saves on this device (label "Work").
     public static let gymOpenAiKey = "sk-gym-openai-000000000000000000000000"
 
@@ -56,7 +56,7 @@ extension GymSweepSeams {
         if args.contains("-smoke-chat") { seedChats(mocks.screens) }
         if args.contains("-smoke-git-name-taken") {
             mocks.screens.buildGitError = ScreensClientError.http(
-                status: 409, message: #"{"ok":false,"name":"recipes","kind":"session","sessionId":"gym-ready"}"#)
+                status: 409, message: String(localized: #"{"ok":false,"name":"recipes","kind":"session","sessionId":"gym-ready"}"#))
         }
         if args.contains("-smoke-git-relay-fails") {
             mocks.screens.buildAdaptStatusFixture = BuildAdaptStatus(status: "failed", reason: relayFailure)
@@ -64,13 +64,13 @@ extension GymSweepSeams {
         if args.contains("-smoke-git-sealed") {
             mocks.screens.buildAdaptStartError = ScreensClientError.http(
                 status: 409,
-                message: #"{"error":"This build is closed to the AI. Check the repo again to start a new build."}"#)
+                message: String(localized: #"{"error":"This build is closed to the AI. Check the repo again to start a new build."}"#))
         }
     }
 
     /// One saved OpenAI key, no remembered model choices, and the two chats.
     private static func seedChats(_ screens: MockScreensClient) {
-        _ = try? SavedKeyStore().add(provider: "openai", label: "Work", apiKey: gymOpenAiKey)
+        _ = try? SavedKeyStore().add(provider: "openai", label: String(localized: "Work"), apiKey: gymOpenAiKey)
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         screens.vibeCodeSessionsFixture = [
             VibeCodeSessionMeta(sessionId: readyChatId, startedAt: now - 3_600_000, status: "ready-to-deploy",
@@ -82,7 +82,7 @@ extension GymSweepSeams {
         screens.vibeCodeSessionStateFixtures[readyChatId] = VibeCodeSessionPublicState(
             id: readyChatId, appId: nil, status: "ready-to-deploy",
             messages: [
-                VibeCodeSessionMessage(role: "user", text: "A recipe box with photos.", timestamp: now - 3_600_000),
+                VibeCodeSessionMessage(role: "user", text: String(localized: "A recipe box with photos."), timestamp: now - 3_600_000),
                 VibeCodeSessionMessage(role: "assistant", text: "Done: recipes, photos and a search. Ready to deploy.",
                                        timestamp: now - 60_000, credits: 2.5),
             ],
@@ -91,7 +91,7 @@ extension GymSweepSeams {
         screens.vibeCodeSessionStateFixtures[failedChatId] = VibeCodeSessionPublicState(
             id: failedChatId, appId: "bright-maple--plants", status: "failed",
             messages: [
-                VibeCodeSessionMessage(role: "user", text: "Add watering reminders.", timestamp: now - 7_200_000),
+                VibeCodeSessionMessage(role: "user", text: String(localized: "Add watering reminders."), timestamp: now - 7_200_000),
             ],
             pendingRequest: nil, failureReason: relayFailure, model: "qwen3-coder", canContinue: true,
             provider: "openai", conversationTokens: 4_000)

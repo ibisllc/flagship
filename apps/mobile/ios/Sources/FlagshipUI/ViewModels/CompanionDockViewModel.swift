@@ -89,7 +89,7 @@ public final class CompanionDockViewModel {
 
     public func load() async {
         guard let fqdn = selectedFqdn else {
-            state = .failed("No server to connect a browser to.")
+            state = .failed(String(localized: "No server to connect a browser to."))
             return
         }
         state = .loading
@@ -105,7 +105,7 @@ public final class CompanionDockViewModel {
     /// the match code.
     public func begin(link raw: String) async {
         guard let qr = RemoteApprovalLink.parse(raw) else {
-            phase = .failed("This isn't a Flagship remote code. Open \(Endpoints.remoteHost) on your computer and scan the code it shows.")
+            phase = .failed(String(localized: "This isn't a Flagship remote code. Open \(Endpoints.remoteHost) on your computer and scan the code it shows."))
             return
         }
         await relay.close()
@@ -136,7 +136,7 @@ public final class CompanionDockViewModel {
         let mine = session
         phase = .approving
         do {
-            try await authenticate("Let this browser into your Flagship server")
+            try await authenticate(String(localized: "Let this browser into your Flagship server"))
             let client = await clients.client(forFqdn: server.fqdn)
             let ticket = try await client.companionMintTicket(CompanionMintTicketRequest())
             let payload = RemoteTicketPayload(

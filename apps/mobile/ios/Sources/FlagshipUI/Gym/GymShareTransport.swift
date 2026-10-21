@@ -48,7 +48,7 @@ public final class GymShareTransport: ServerShareTransport, @unchecked Sendable 
         // Sam: active on the box; his start-up copy is not on `.com` yet.
         let samKey = Self.key(0xb2)
         box[Self.samShareId] = BoxShareSummary(
-            shareId: Self.samShareId, label: "Sam", level: .manage, unlockAtBoot: true, seeAppData: false,
+            shareId: Self.samShareId, label: String(localized: "Sam"), level: .manage, unlockAtBoot: true, seeAppData: false,
             memberPubHex: HexUtil.encode(samKey.publicKey.rawRepresentation),
             issuedAt: now - 86_400_000 * 3, sharedAt: now - 86_400_000 * 3, lastSeenAt: now - 3_600_000 * 2)
 
@@ -71,7 +71,7 @@ public final class GymShareTransport: ServerShareTransport, @unchecked Sendable 
                       plaintext: ShareAcceptancePayload(accept: accept, signature: HexUtil.encode(sig)).jsonData()),
                   let owner = try? ServerShare.seal(
                       key: household, aad: ownAad,
-                      plaintext: ShareOwnerRecord(secretHex: HexUtil.encode(alexSecret), label: "Alex", level: .view,
+                      plaintext: ShareOwnerRecord(secretHex: HexUtil.encode(alexSecret), label: String(localized: "Alex"), level: .view,
                                                   unlockAtBoot: false, seeAppData: false).jsonData())
             else { continue }
             com["\(Self.alexShareId)|\(domain)"] = ComRow(

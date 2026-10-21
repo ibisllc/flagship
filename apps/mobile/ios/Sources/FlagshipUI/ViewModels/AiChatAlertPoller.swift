@@ -149,7 +149,7 @@ public final class AiChatAlertPoller {
             // switched servers (the session lives on that box only).
             operations.upsertBuild(
                 id: sessionId,
-                subject: "AI build",
+                subject: String(localized: "AI build"),
                 onServer: nil,
                 target: server.map { .vibeCodeChatOnServer(sessionId: sessionId, serverFqdn: $0) }
                     ?? .vibeCodeChat(sessionId: sessionId)

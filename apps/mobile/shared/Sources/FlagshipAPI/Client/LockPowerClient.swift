@@ -118,7 +118,7 @@ public final class LiveLockPowerClient: LockPowerClient, @unchecked Sendable {
     ) async throws -> Data {
         let body: [String: Any] = ["request": request, "signature": signatureHex]
         guard let url = URL(string: Self.baseUrl(serverDomain) + path) else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -140,7 +140,7 @@ public final class LiveLockPowerClient: LockPowerClient, @unchecked Sendable {
             throw error
         }
         guard let http = resp as? HTTPURLResponse else {
-            throw ScreensClientError.http(status: 0, message: "no response")
+            throw ScreensClientError.http(status: 0, message: String(localized: "no response"))
         }
         if !(200..<300).contains(http.statusCode) {
             let text = String(data: data, encoding: .utf8) ?? ""

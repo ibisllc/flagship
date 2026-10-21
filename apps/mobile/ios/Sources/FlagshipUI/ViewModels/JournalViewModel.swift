@@ -46,9 +46,9 @@ public final class JournalViewModel {
         phase = .loading
         let key: Curve25519.Signing.PrivateKey
         do {
-            key = try await signer("Read the journal on \(serverDomain)")
+            key = try await signer(String(localized: "Read the journal on \(serverDomain)"))
         } catch {
-            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't access your account key: \(UserErrorText.of(error))"))
             return
         }
 
@@ -58,7 +58,7 @@ public final class JournalViewModel {
         do {
             signature = try request.sign(with: key)
         } catch {
-            phase = .failed("Couldn't sign: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't sign: \(UserErrorText.of(error))"))
             return
         }
 
@@ -71,9 +71,9 @@ public final class JournalViewModel {
             )
             phase = .loaded(unit: result.unit, lines: result.lines)
         } catch let e as ScreensClientError {
-            phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
+            phase = .failed(e.errorDescription ?? String(localized: "That didn't work. Try again in a moment."))
         } catch {
-            phase = .failed("Couldn't reach the server. Check your connection and try again.")
+            phase = .failed(String(localized: "Couldn't reach the server. Check your connection and try again."))
         }
     }
 }

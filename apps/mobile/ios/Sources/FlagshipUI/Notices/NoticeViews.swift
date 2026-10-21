@@ -15,21 +15,21 @@ public enum AppStoreListing {
 /// webapp's `noticeUi.js` (native: the update button is "Update" on the banner
 /// and "Update Flagship" on the lock; both open the store listing).
 public enum NoticeCopy {
-    public static let bannerDismiss = "Dismiss"
-    public static let bannerUpdate = "Update"
-    public static let lockKicker = "Security update"
-    public static let lockTitle = "Update required"
+    public static let bannerDismiss = String(localized: "Dismiss")
+    public static let bannerUpdate = String(localized: "Update")
+    public static let lockKicker = String(localized: "Security update")
+    public static let lockTitle = String(localized: "Update required")
     public static let lockReassure =
-        "Your accounts and servers are unchanged and nothing has been deleted. Flagship is paused on this device until you update."
-    public static let lockUpdate = "Update Flagship"
-    public static let backup = "Back up my account key"
-    public static let unlockFirst = "Unlock to back up my account key"
-    public static let signOut = "Sign out"
-    public static let signedBy = "Signed by the Flagship maintainers"
-    public static let updateFailed = "Couldn't update yet. Check your connection and try again."
+        String(localized: "Your accounts and servers are unchanged and nothing has been deleted. Flagship is paused on this device until you update.")
+    public static let lockUpdate = String(localized: "Update Flagship")
+    public static let backup = String(localized: "Back up my account key")
+    public static let unlockFirst = String(localized: "Unlock to back up my account key")
+    public static let signOut = String(localized: "Sign out")
+    public static let signedBy = String(localized: "Signed by the Flagship maintainers")
+    public static let updateFailed = String(localized: "Couldn't update yet. Check your connection and try again.")
 
     public static func why(_ reason: String) -> String { reason.isEmpty ? "" : "Why: \(reason)" }
-    public static func meta(advisoryId: String) -> String { "Advisory \(advisoryId) · \(signedBy)" }
+    public static func meta(advisoryId: String) -> String { String(localized: "Advisory \(advisoryId) · \(signedBy)") }
 }
 
 // MARK: - Banner
@@ -222,18 +222,18 @@ struct UpdateLockScreen: View {
             }
         }
         .confirmationDialog(
-            app.hasCloudRecovery ? "Sign out of this device?" : "Sign out without recovery?",
+            app.hasCloudRecovery ? String(localized: "Sign out of this device?") : "Sign out without recovery?",
             isPresented: $confirmSignOut,
             titleVisibility: .visible
         ) {
-            Button(app.hasCloudRecovery || app.isDemoAccount ? "Sign out" : "Sign out anyway", role: .destructive) {
+            Button(app.hasCloudRecovery || app.isDemoAccount ? String(localized: "Sign out") : "Sign out anyway", role: .destructive) {
                 Keystore.wipe()
                 app.signOut()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(app.hasCloudRecovery || app.isDemoAccount
-                ? "This erases this device's account key and returns you to the start. Sign back in with your recovery passkey to restore it. Your account and servers stay put."
+                ? String(localized: "This erases this device's account key and returns you to the start. Sign back in with your recovery passkey to restore it. Your account and servers stay put.")
                 : "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in. Back up your account key first.")
         }
     }
@@ -252,7 +252,7 @@ struct UpdateLockScreen: View {
         failure = nil
         if !accountUnlocked {
             do {
-                let context = try await BiometricGate().evaluateReturningContext(reason: "Unlock Flagship")
+                let context = try await BiometricGate().evaluateReturningContext(reason: String(localized: "Unlock Flagship"))
                 Keystore.cacheSessionUMK(authenticatedBy: context)
             } catch {
                 failure = BiometricLockScreen.message(for: error)

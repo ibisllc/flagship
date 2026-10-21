@@ -96,7 +96,7 @@ public final class RotateAdminRootViewModel {
     private let reEscrow: @MainActor (String) async throws -> Void
 
     private struct NoAccountError: LocalizedError {
-        var errorDescription: String? { "No active account on this device." }
+        var errorDescription: String? { String(localized: "No active account on this device.") }
     }
 
     public init(
@@ -107,7 +107,7 @@ public final class RotateAdminRootViewModel {
             try await Keystore.adminRootKey(reason: reason)
         },
         sealNewAdminRoot: @escaping @MainActor (Data) async throws -> Void = { seed in
-            _ = try await Keystore.importAdminRoot(seed: seed, reason: "Save your new admin key")
+            _ = try await Keystore.importAdminRoot(seed: seed, reason: String(localized: "Save your new admin key"))
         },
         recoveryEnrolled: (@MainActor () async throws -> Bool)? = nil,
         reEscrow: (@MainActor (String) async throws -> Void)? = nil
@@ -138,11 +138,11 @@ public final class RotateAdminRootViewModel {
     /// mutated until `.com` accepts).
     public func rotate() async {
         guard let user = username(), !user.isEmpty else {
-            phase = .failed("No active account on this device.")
+            phase = .failed(String(localized: "No active account on this device."))
             return
         }
         guard hasAdminRoot() else {
-            phase = .failed("This device isn't an admin, so it can't rotate the admin key.")
+            phase = .failed(String(localized: "This device isn't an admin, so it can't rotate the admin key."))
             return
         }
         phase = .rotating
@@ -150,9 +150,9 @@ public final class RotateAdminRootViewModel {
         // 1 — the OLD root (the box's pinned anchor + the rotation signer).
         let oldRoot: Curve25519.Signing.PrivateKey
         do {
-            oldRoot = try await loadOldAdminRoot("Rotate your admin key")
+            oldRoot = try await loadOldAdminRoot(String(localized: "Rotate your admin key"))
         } catch {
-            phase = .failed("Couldn't access your admin key: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't access your admin key: \(UserErrorText.of(error))"))
             return
         }
         let oldPubHex = HexUtil.encode(oldRoot.publicKey.rawRepresentation)
@@ -173,7 +173,7 @@ public final class RotateAdminRootViewModel {
         do {
             signatureHex = HexUtil.encode(try rotation.sign(withOldAdminRoot: oldRoot))
         } catch {
-            phase = .failed("Couldn't sign the rotation: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't sign the rotation: \(UserErrorText.of(error))"))
             return
         }
 
@@ -193,7 +193,7 @@ public final class RotateAdminRootViewModel {
                 )
             )
         } catch {
-            phase = .failed("Couldn't rotate your admin key: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't rotate your admin key: \(UserErrorText.of(error))"))
             return
         }
 
@@ -204,7 +204,7 @@ public final class RotateAdminRootViewModel {
         do {
             try await sealNewAdminRoot(newRoot.rawRepresentation)
         } catch {
-            phase = .failed("Your admin key was rotated, but saving it on this device failed. Recover on this device to finish. (\(UserErrorText.of(error)))")
+            phase = .failed(String(localized: "Your admin key was rotated, but saving it on this device failed. Recover on this device to finish. (\(UserErrorText.of(error)))"))
             return
         }
 

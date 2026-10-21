@@ -38,15 +38,15 @@ public final class SecretRequestCoordinator {
         public var errorDescription: String? {
             switch self {
             case .noSealedLuksKey:
-                return "No sealed disk key is on file for this box yet."
+                return String(localized: "No sealed disk key is on file for this box yet.")
             case .luksUnsealFailed:
-                return "Couldn't unseal the disk key with this phone's keys."
+                return String(localized: "Couldn't unseal the disk key with this phone's keys.")
             case .directoryMissingServer(let d):
-                return "This box (\(d)) isn't registered to your account."
+                return String(localized: "This box (\(d)) isn't registered to your account.")
             case .purposeUnsupported(let p):
-                return "Unsupported secret request type: \(p)."
+                return String(localized: "Unsupported secret request type: \(p).")
             case .noPendingRequest:
-                return "Your box stopped waiting. Power-cycle it (unplug, plug back in) and it'll ask again."
+                return String(localized: "Your box stopped waiting. Power-cycle it (unplug, plug back in) and it'll ask again.")
             }
         }
     }

@@ -1,0 +1,45 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Provisioning %@…": {
+      "extractionState": "manual"
+    },
+    "PodStatusWidget": {
+      "extractionState": "manual"
+    },
+    "Servers": {
+      "extractionState": "manual"
+    },
+    "Online/offline status for your Flagship servers.": {
+      "extractionState": "manual"
+    },
+    "Home": {
+      "extractionState": "manual"
+    },
+    "Office": {
+      "extractionState": "manual"
+    },
+    "Online": {
+      "extractionState": "manual"
+    },
+    "Offline": {
+      "extractionState": "manual"
+    },
+    "Pending": {
+      "extractionState": "manual"
+    },
+    "Unknown": {
+      "extractionState": "manual"
+    },
+    "LEADER": {
+      "extractionState": "manual"
+    },
+    "No servers yet": {
+      "extractionState": "manual"
+    },
+    "Pair a server to see status here.": {
+      "extractionState": "manual"
+    }
+  },
+  "version": "1.0"
+}
