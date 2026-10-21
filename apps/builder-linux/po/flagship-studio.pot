@@ -138,16 +138,6 @@ msgstr ""
 msgid "Pairing failed."
 msgstr ""
 
-#: wizard.py:1303 (prose)
-#, python-brace-format
-msgid "CLI locate failed: {0}"
-msgstr ""
-
-#: wizard.py:1325 (prose)
-#, python-brace-format
-msgid "CLI exited {0}"
-msgstr ""
-
 #: wizard.py:1348 (prose)
 msgid "Flagship Studio (Experimental)"
 msgstr ""
@@ -481,10 +471,6 @@ msgstr ""
 msgid "Activate"
 msgstr ""
 
-#: pair_session.py:27 (prose)
-msgid "FLAGSHIP_PAIR "
-msgstr ""
-
 #: disk_enumerator.py:116 (prose)
 msgid "(unknown model)"
 msgstr ""
@@ -492,10 +478,6 @@ msgstr ""
 #: disk_enumerator.py:176 (prose)
 #, python-brace-format
 msgid "OS marks {0} as internal media"
-msgstr ""
-
-#: wifi_store.py:56 (prose)
-msgid "Flagship Studio Wi-Fi"
 msgstr ""
 
 #: elevation.py:22 (prose)
@@ -650,58 +632,8 @@ msgstr ""
 msgid "Installation stopped by you."
 msgstr ""
 
-#: vm/manager.py:530 (prose)
-#, python-brace-format
-msgid "VM {0}: stopped because the app quit"
-msgstr ""
-
-#: vm/manager.py:541 (prose)
-#, python-brace-format
-msgid "VM {0}: {1}"
-msgstr ""
-
-#: vm/manager.py:554 (prose)
-#, python-brace-format
-msgid "VM {0}: ignored {1} in state {2}"
-msgstr ""
-
-#: vm/manager.py:644 (prose)
-#, python-brace-format
-msgid "VM {0}: waiting for the previous shutdown to finish"
-msgstr ""
-
 #: vm/manager.py:657 (prose)
 msgid "QEMU is not installed."
-msgstr ""
-
-#: vm/manager.py:658 (prose)
-#, python-brace-format
-msgid "VM {0}: cannot start — {1}"
-msgstr ""
-
-#: vm/manager.py:678 (prose)
-#, python-brace-format
-msgid "VM {0}: started ({1} vCPU, {2} GiB, {3})"
-msgstr ""
-
-#: vm/manager.py:683 (prose)
-#, python-brace-format
-msgid "VM {0}: failed to start — {1}"
-msgstr ""
-
-#: vm/manager.py:729 (prose)
-#, python-brace-format
-msgid "VM {0}: {1} finished — booting sealed disk"
-msgstr ""
-
-#: vm/manager.py:834 (prose)
-#, python-brace-format
-msgid "VM {0}: installer checkpoint — {1}"
-msgstr ""
-
-#: vm/manager.py:849 (prose)
-#, python-brace-format
-msgid "VM {0}: no guest checkpoint for {1} minutes; last: {2}"
 msgstr ""
 
 #: vm/manager.py:885 (prose)
@@ -710,16 +642,6 @@ msgstr ""
 
 #: vm/manager.py:887 (prose)
 msgid "No server running: this PC may sleep again"
-msgstr ""
-
-#: vm/manager.py:922 (prose)
-#, python-brace-format
-msgid "VM {0}: health back to normal"
-msgstr ""
-
-#: vm/manager.py:924 (prose)
-#, python-brace-format
-msgid "VM {0}: health — {1}"
 msgstr ""
 
 #: vm/lifecycle.py:89 (prose)
@@ -753,26 +675,12 @@ msgstr ""
 msgid "The appliance stopped after only {0}s — too fast to have specialized. The image may be the wrong architecture or otherwise not bootable."
 msgstr ""
 
-#: vm/lifecycle.py:230 (prose)
-#, python-brace-format
-msgid "Install verdict requested in state {0}."
-msgstr ""
-
 #: vm/server_tier.py:23 (prose)
 msgid "Appliance (hardware)"
 msgstr ""
 
 #: vm/server_tier.py:24 (prose)
 msgid "Appliance (hosted VM)"
-msgstr ""
-
-#: vm/recipe_info.py:66 (prose)
-msgid "Not a valid recipe: top-level is not an object."
-msgstr ""
-
-#: vm/recipe_info.py:72 (prose)
-#, python-brace-format
-msgid "Not a valid recipe: missing field \"{0}\"."
 msgstr ""
 
 #: vm/kvm_probe.py:45 (prose)
