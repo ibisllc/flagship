@@ -5,6 +5,8 @@ never silently equivalent. Mirrors apps/builder-windows/src/VM/ServerTier.cs.
 """
 from __future__ import annotations
 
+from i18n import tr
+
 import enum
 
 
@@ -20,8 +22,8 @@ class ServerTier(enum.Enum):
     @property
     def badge_label(self) -> str:
         return {
-            ServerTier.HARDWARE: "Appliance (hardware)",
-            ServerTier.HOSTED_VM: "Appliance (hosted VM)",
+            ServerTier.HARDWARE: tr("Appliance (hardware)"),
+            ServerTier.HOSTED_VM: tr("Appliance (hosted VM)"),
         }[self]
 
 

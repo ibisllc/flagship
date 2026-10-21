@@ -12,6 +12,8 @@ Mirrors:
 """
 from __future__ import annotations
 
+from i18n import tr
+
 import json
 from dataclasses import dataclass
 from typing import Optional
@@ -63,13 +65,13 @@ def read_recipe_fields(recipe_json: bytes) -> RecipeFields:
     except (json.JSONDecodeError, ValueError) as e:
         raise ValueError(f"Not a valid recipe: {e}") from e
     if not isinstance(root, dict):
-        raise ValueError("Not a valid recipe: top-level is not an object.")
+        raise ValueError(tr("Not a valid recipe: top-level is not an object."))
     fields = _normalize_envelope(root)
 
     def req_str(name: str) -> str:
         v = fields.get(name)
         if not isinstance(v, str):
-            raise ValueError(f'Not a valid recipe: missing field "{name}".')
+            raise ValueError(tr('Not a valid recipe: missing field "{0}".').format(name))
         return v
 
     def opt_str(name: str) -> Optional[str]:

@@ -49,22 +49,22 @@ public struct VMServerHealth: Codable, Sendable, Equatable {
     public func verdict(at now: Date) -> Verdict {
         let staleMin = (Int64(now.timeIntervalSince1970 * 1000) - receivedAt) / 60_000
         if staleMin >= 5 {
-            return Verdict(ok: false, lines: ["No health report for \(staleMin) min. The server itself may be off or frozen."])
+            return Verdict(ok: false, lines: [String(localized: "No health report for \(String(staleMin)) min. The server itself may be off or frozen.")])
         }
         var lines: [String] = []
         if oomKills > 0 {
-            lines.append("Ran out of memory \(oomKills)× since it started (\(memAvailMB) MB free of \(memTotalMB) MB now).")
+            lines.append(String(localized: "Ran out of memory \(String(oomKills))× since it started (\(String(memAvailMB)) MB free of \(String(memTotalMB)) MB now)."))
         }
         if daemon.state != "active" {
-            lines.append("The server software isn't running (\(daemon.state); restarted \(daemon.restarts)×, last exit code \(daemon.lastExit)).")
+            lines.append(String(localized: "The server software isn't running (\(String(daemon.state)); restarted \(String(daemon.restarts))×, last exit code \(String(daemon.lastExit)))."))
         } else if daemon.restarts >= 3 {
-            lines.append("The server software restarted \(daemon.restarts)× since it started (last exit code \(daemon.lastExit)).")
+            lines.append(String(localized: "The server software restarted \(String(daemon.restarts))× since it started (last exit code \(String(daemon.lastExit)))."))
         }
-        if !tunnel { lines.append("Can't reach the Flagship relay.") }
-        if diskUsedPct >= 90 { lines.append("Disk is \(diskUsedPct)% full.") }
+        if !tunnel { lines.append(String(localized: "Can't reach the Flagship relay.")) }
+        if diskUsedPct >= 90 { lines.append(String(localized: "Disk is \(String(diskUsedPct))% full.")) }
         if !lines.isEmpty { return Verdict(ok: false, lines: lines) }
         return Verdict(ok: true, lines: [
-            "Healthy · \(memAvailMB) MB free of \(memTotalMB) MB · disk \(diskUsedPct)% · up \(Self.uptime(uptimeS))"
+            String(localized: "Healthy · \(String(memAvailMB)) MB free of \(String(memTotalMB)) MB · disk \(String(diskUsedPct))% · up \(Self.uptime(uptimeS))")
         ])
     }
 

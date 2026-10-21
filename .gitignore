@@ -96,3 +96,6 @@ apps/web/e2e/live/.pairing-out/
 # private patent filing package - do not publish
 patent-filing/
 artifacts/
+
+# Compiled gettext catalogs (generated from apps/builder-linux/po by scripts/i18n-linux.mjs build)
+apps/builder-linux/locale/
