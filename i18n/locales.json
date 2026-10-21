@@ -1,0 +1,13 @@
+{
+  "_about": "The single list of languages Flagship ships. Every surface (iOS, Android, Wear, Watch, the three Studios, the websites, server messages) reads this file through scripts/i18n-*.mjs. `source` is the language the product is written in. `status` is `ga` (shown in the language pickers and served by default Accept-Language matching) or `draft` (generated but hidden until a native reviewer signs off). Add a language by adding one row here and a translations file per surface; scripts/i18n-check.mjs says what is missing.",
+  "source": "en",
+  "locales": [
+    { "code": "en",      "name": "English",              "native": "English",            "dir": "ltr", "status": "ga" },
+    { "code": "es",      "name": "Spanish",              "native": "Español",            "dir": "ltr", "status": "draft", "appleId": "es",      "androidId": "es",      "windowsId": "es",      "gettextId": "es",    "webPath": "es" },
+    { "code": "fr",      "name": "French",               "native": "Français",           "dir": "ltr", "status": "draft", "appleId": "fr",      "androidId": "fr",      "windowsId": "fr",      "gettextId": "fr",    "webPath": "fr" },
+    { "code": "de",      "name": "German",               "native": "Deutsch",            "dir": "ltr", "status": "draft", "appleId": "de",      "androidId": "de",      "windowsId": "de",      "gettextId": "de",    "webPath": "de" },
+    { "code": "pt-BR",   "name": "Portuguese (Brazil)",  "native": "Português (Brasil)", "dir": "ltr", "status": "draft", "appleId": "pt-BR",   "androidId": "pt-rBR",  "windowsId": "pt-BR",   "gettextId": "pt_BR", "webPath": "pt-br" },
+    { "code": "ja",      "name": "Japanese",             "native": "日本語",              "dir": "ltr", "status": "draft", "appleId": "ja",      "androidId": "ja",      "windowsId": "ja",      "gettextId": "ja",    "webPath": "ja" },
+    { "code": "zh-Hans", "name": "Chinese (Simplified)", "native": "简体中文",            "dir": "ltr", "status": "draft", "appleId": "zh-Hans", "androidId": "b+zh+Hans", "windowsId": "zh-Hans", "gettextId": "zh_CN", "webPath": "zh-hans" }
+  ]
+}
