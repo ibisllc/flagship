@@ -1007,7 +1007,7 @@ private fun SharedStatusCard(serverDomain: String, detail: ServerDetailResponse?
                 Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                     FSPill(stringResource(R.string.online), kind = FSPillKind.Online)
                     FSPill(fsString(R.string.server_3, detail.daemonVersion), kind = FSPillKind.Idle)
-                    FSPill(plural(detail.serviceCount, "app"), kind = FSPillKind.Idle)
+                    FSPill(FSStrings.plural(R.plurals.apps_count, detail.serviceCount, detail.serviceCount), kind = FSPillKind.Idle)
                 }
                 Muted(fsString(R.string.up_for, uptime(detail.uptimeMs)))
             }
