@@ -1,0 +1,9 @@
+{
+  "Provisioning": "Wird bereitgestellt",
+  "Install complete": "Installation abgeschlossen",
+  "Install failed": "Installation fehlgeschlagen",
+  "Done": "Fertig",
+  "Failed — %@": "Fehlgeschlagen: %@",
+  "Couldn't reach iPhone: %@": "iPhone nicht erreichbar: %@",
+  "Approval failed.": "Genehmigung fehlgeschlagen."
+}

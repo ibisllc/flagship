@@ -1,0 +1,5 @@
+{
+  "NSCameraUsageDescription": "Flagship は、サーバーに表示されるペアリング用 QR コードをスキャンするためにカメラを使用します。",
+  "NSFaceIDUsageDescription": "Flagship は、ロック解除の承認やサーバーの取り消しなど、重要な操作を確認するために Face ID を使用します。",
+  "NSLocalNetworkUsageDescription": "サーバーが同じネットワーク上にある場合、Flagship はサーバーと直接通信します。リレーを経由するより高速です。"
+}

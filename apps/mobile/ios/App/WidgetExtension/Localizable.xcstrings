@@ -4,19 +4,10 @@
     "Provisioning %@…": {
       "extractionState": "manual"
     },
-    "PodStatusWidget": {
-      "extractionState": "manual"
-    },
     "Servers": {
       "extractionState": "manual"
     },
     "Online/offline status for your Flagship servers.": {
-      "extractionState": "manual"
-    },
-    "Home": {
-      "extractionState": "manual"
-    },
-    "Office": {
       "extractionState": "manual"
     },
     "Online": {

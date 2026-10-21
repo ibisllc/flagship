@@ -1,7 +1,8 @@
 {
   "ProvisionPhaseComplication": {
     "en": "ProvisionPhaseComplication",
-    "ctx": "apps/mobile/ios/App/WatchWidgets/ProvisionPhaseComplication.swift:24"
+    "ctx": "apps/mobile/ios/App/WatchWidgets/ProvisionPhaseComplication.swift:24",
+    "translatable": false
   },
   "Flagship servers": {
     "en": "Flagship servers",
@@ -13,7 +14,8 @@
   },
   "Flagship": {
     "en": "Flagship",
-    "ctx": "apps/mobile/ios/App/WatchWidgets/ProvisionPhaseComplication.swift:125"
+    "ctx": "apps/mobile/ios/App/WatchWidgets/ProvisionPhaseComplication.swift:125",
+    "translatable": false
   },
   "Install failed": {
     "en": "Install failed",

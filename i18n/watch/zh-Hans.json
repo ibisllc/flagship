@@ -1,0 +1,9 @@
+{
+  "Provisioning": "正在配置",
+  "Install complete": "安装完成",
+  "Install failed": "安装失败",
+  "Done": "完成",
+  "Failed — %@": "失败：%@",
+  "Couldn't reach iPhone: %@": "无法连接 iPhone：%@",
+  "Approval failed.": "批准失败。"
+}
