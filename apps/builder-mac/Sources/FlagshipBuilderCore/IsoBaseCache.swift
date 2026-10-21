@@ -30,19 +30,19 @@ public struct IsoBaseCache {
         public var errorDescription: String? {
             switch self {
             case .offline(let why):
-                return "Couldn't download the base image — check your internet connection. (\(why))"
+                return String(localized: "Couldn't download the base image — check your internet connection. (\(why))")
             case .httpStatus(let code):
-                return "Base-image download failed (HTTP \(code))."
+                return String(localized: "Base-image download failed (HTTP \(code)).")
             case .checksumMismatch(let e, let g):
-                return "Base image failed its integrity check (expected \(e.prefix(12))…, got \(g.prefix(12))…). It was discarded — try again."
+                return String(localized: "Base image failed its integrity check (expected \(e.prefix(12))…, got \(g.prefix(12))…). It was discarded — try again.")
             case .noCacheDir:
-                return "Couldn't open the cache directory."
+                return String(localized: "Couldn't open the cache directory.")
             case .noBaseAvailable(let arch):
                 switch arch {
                 case .amd64:
-                    return "No base image is available yet — the server has nothing to download and nothing is cached."
+                    return String(localized: "No base image is available yet — the server has nothing to download and nothing is cached.")
                 case .arm64:
-                    return "The server doesn't offer an arm64 base image yet, so Simple mode can't host a server on this Apple-silicon Mac for now. Use Advanced mode with an arm64 Debian netinst ISO instead."
+                    return String(localized: "The server doesn't offer an arm64 base image yet, so Simple mode can't host a server on this Apple-silicon Mac for now. Use Advanced mode with an arm64 Debian netinst ISO instead.")
                 }
             }
         }

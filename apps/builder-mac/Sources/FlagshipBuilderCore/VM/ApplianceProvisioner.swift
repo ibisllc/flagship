@@ -38,21 +38,21 @@ public enum ApplianceProvisionError: LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .baseMissing(let path):
-            return "The prebuilt VM image is missing: \(path)"
+            return String(localized: "The prebuilt VM image is missing: \(path)")
         case .manifestMissing(let path):
-            return "The prebuilt VM image manifest is missing: \(path)"
+            return String(localized: "The prebuilt VM image manifest is missing: \(path)")
         case .invalidManifest(let reason):
-            return "The prebuilt VM image manifest is invalid: \(reason)"
+            return String(localized: "The prebuilt VM image manifest is invalid: \(reason)")
         case .architectureMismatch(let expected, let got):
-            return "The prebuilt VM image is for \(got.rawValue), but this Mac needs \(expected.rawValue)."
+            return String(localized: "The prebuilt VM image is for \(got.rawValue), but this Mac needs \(expected.rawValue).")
         case .gitRefMismatch(let expected, let got):
-            return "The prebuilt VM image contains installer ref \(got), but this recipe requires \(expected)."
+            return String(localized: "The prebuilt VM image contains installer ref \(got), but this recipe requires \(expected).")
         case .sizeMismatch(let expected, let got):
-            return "The prebuilt VM image has \(got) bytes, but its manifest declares \(expected)."
+            return String(localized: "The prebuilt VM image has \(got) bytes, but its manifest declares \(expected).")
         case .checksumMismatch(let expected, let got):
-            return "The prebuilt VM image failed its integrity check (expected \(expected.prefix(12))…, got \(got.prefix(12))…)."
+            return String(localized: "The prebuilt VM image failed its integrity check (expected \(expected.prefix(12))…, got \(got.prefix(12))…).")
         case .targetTooSmall(let required, let configured):
-            return "The hosted-server disk is too small for this image (needs \(required) bytes; configured for \(configured))."
+            return String(localized: "The hosted-server disk is too small for this image (needs \(required) bytes; configured for \(configured)).")
         }
     }
 }

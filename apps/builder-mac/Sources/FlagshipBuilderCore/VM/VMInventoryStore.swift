@@ -35,10 +35,10 @@ public struct VMRecord: Codable, Sendable, Equatable {
     /// Studio, decides whether a restart needs an approval, so no line promises
     /// nobody has to act.
     public enum AwaitingUnlockCopy {
-        public static let stalled = "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry."
-        public static let unlocksOnItsOwn = "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there."
-        public static let firstBoot = "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there."
-        public static let approveEveryBoot = "The disk is sealed — approve the unlock on your phone."
+        public static let stalled = String(localized: "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry.")
+        public static let unlocksOnItsOwn = String(localized: "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there.")
+        public static let firstBoot = String(localized: "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.")
+        public static let approveEveryBoot = String(localized: "The disk is sealed — approve the unlock on your phone.")
     }
 
     /// What the detail pane says while this server's disk is sealed.
@@ -76,7 +76,7 @@ public struct VMBundleLayout: Sendable, Equatable {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory,
                                                   in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/Application Support")
+                .appendingPathComponent(String(localized: "Library/Application Support"))
         return appSupport.appendingPathComponent("FlagshipBuilder/VMs", isDirectory: true)
     }
 
