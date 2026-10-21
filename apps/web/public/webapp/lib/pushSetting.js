@@ -21,10 +21,11 @@ import { listPodTokenIds, get as profileGet } from "./profilesStore.js";
 import { isCompanionProfile } from "./companionGuard.js";
 import { getSession } from "./state.js";
 
+import { tr } from "./i18n.js";
 export const PUSH_SETTING_KEY = "flagship.pushNotifications.v1";
-export const PUSH_SETTING_TITLE = "Push notifications";
+export const PUSH_SETTING_TITLE = tr("Push notifications");
 export const PUSH_SETTING_NOTE =
-  "When this is off, nothing from Flagship is pushed to this device, so Apple and Google never see when your servers need you. You'll have to open Flagship to approve unlocks and see requests.";
+  tr("When this is off, nothing from Flagship is pushed to this device, so Apple and Google never see when your servers need you. You'll have to open Flagship to approve unlocks and see requests.");
 export const ACCESS_ALERTS_PATH = "/api/screens/settings/access-alerts";
 /** Foreground resyncs run at most this often. */
 export const PUSH_RESYNC_MS = 60 * 1000;

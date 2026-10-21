@@ -7,7 +7,8 @@ import { inlinePrompt } from "./modal.js";
 import { unlockUmk } from "../keystore.js";
 import { getSession } from "./state.js";
 
-export const FRESH_UNLOCK_WRONG = "That passphrase doesn't unlock this device.";
+import { tr } from "./i18n.js";
+export const FRESH_UNLOCK_WRONG = tr("That passphrase doesn't unlock this device.");
 
 function sameBytes(a, b) {
   if (!(a instanceof Uint8Array) || !(b instanceof Uint8Array) || a.length !== b.length) return false;
@@ -27,8 +28,8 @@ export async function confirmFreshUnlock({ title, message, okLabel = "Confirm" }
   const session = deps.session ?? getSession();
   const passphrase = await prompt({
     title,
-    message: `${message} Enter this device's passphrase to sign it.`,
-    placeholder: "Passphrase",
+    message: tr("{0} Enter this device's passphrase to sign it.", message),
+    placeholder: tr("Passphrase"),
     type: "password",
     okLabel,
   });

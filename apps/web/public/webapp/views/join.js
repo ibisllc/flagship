@@ -54,6 +54,7 @@ import { set as profileSet } from "../lib/profilesStore.js";
 import { inlinePrompt } from "../lib/modal.js";
 import { askLocalPassphrase } from "../lib/localPassphrase.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-join");
 
 let pendingLink = null; // { sid, pk } parsed from the deep-link / paste
@@ -120,7 +121,7 @@ function makeRegisterPush(deviceSeed) {
 
 async function startJoin() {
   if (!pendingLink) {
-    setStatus("error", "no pairing link — open the QR link the admin showed you.");
+    setStatus("error", tr("no pairing link — open the QR link the admin showed you."));
     return;
   }
   const { sid, pk } = pendingLink;
@@ -129,16 +130,16 @@ async function startJoin() {
   // so the admin isn't kept waiting once the codes match.
   const localPassphrase = await askLocalPassphrase(inlinePrompt);
   if (!localPassphrase) {
-    setStatus("idle", "cancelled.");
+    setStatus("idle", tr("cancelled."));
     return;
   }
 
   // Mint this profile's fresh device key BEFORE we connect.
-  setStatus("active", "preparing this device…");
+  setStatus("active", tr("preparing this device…"));
   const device = await mintDeviceKey();
 
   const relay = makeIncomingRelay({
-    onConnecting: () => setStatus("active", "connecting to the admin's device…"),
+    onConnecting: () => setStatus("active", tr("connecting to the admin's device…")),
   });
   activeRelay = { abort: () => relay.close?.() };
 
@@ -158,15 +159,15 @@ async function startJoin() {
   // Show the SAS + require the user to confirm it matches the admin's
   // screen BEFORE we accept the bundle.
   $("join-sas").textContent = `${session.sas.slice(0, 3)} ${session.sas.slice(3)}`;
-  setStatus("active", "compare this code with the admin's screen, then confirm");
+  setStatus("active", tr("compare this code with the admin's screen, then confirm"));
   const confirmed = await waitForSasConfirm();
   if (!confirmed) {
     relay.close?.();
-    setStatus("idle", "cancelled.");
+    setStatus("idle", tr("cancelled."));
     return;
   }
 
-  setStatus("active", "receiving keys…");
+  setStatus("active", tr("receiving keys…"));
   let bundlePlaintext;
   try {
     bundlePlaintext = await session.awaitBundle();
@@ -187,7 +188,7 @@ async function startJoin() {
       persistAccountDeviceSeed,
       deviceSeed: device.seed,
       signWithDevice: (bytes) => signWithAdminRoot(device.seed, bytes),
-      deviceDisplayName: "This browser",
+      deviceDisplayName: tr("This browser"),
       unlockSession,
       verifyEd25519: verifyWithEd25519Pub,
       registerPush: makeRegisterPush(device.seed),
@@ -198,7 +199,7 @@ async function startJoin() {
     });
     relay.close?.();
     renderQuarantine(result);
-    toast(`Joined ${result.username} — device under review`, "ok");
+    toast(tr("Joined {0} — device under review", result.username), "ok");
   } catch (e) {
     setStatus("error", failureText(e, "couldn't join: "));
   } finally {
@@ -213,14 +214,14 @@ function renderQuarantine(result) {
     const t = result.quarantine ?? quarantineTimeline(result.admitResponse ?? {});
     el.innerHTML = `
       <div class="card warning">
-        <div class="weight-600"><span aria-hidden="true">⏱</span> Under review</div>
+        <div class="weight-600"><span aria-hidden="true">⏱</span> ${tr("Under review")}</div>
         <p class="note small">${escapeHtml(t.label)}</p>
       </div>
-      <button class="full-width mt-2" id="join-open">Open ${escapeHtml(result.username)}</button>
+      <button class="full-width mt-2" id="join-open">${tr("Open {0}", escapeHtml(result.username))}</button>
     `;
     $("join-open")?.addEventListener("click", () => { void dispatchInitialView(); });
   }
-  setStatus("done", "joined.");
+  setStatus("done", tr("joined."));
 }
 
 function waitForSasConfirm() {
@@ -253,19 +254,19 @@ function renderJoin() {
   if (!root) return;
   root.innerHTML = `
     <div class="card warning" data-section="risk">
-      <p class="note"><strong>Heads up.</strong> ${escapeHtml(INCOMING_RISK_WARNING)}</p>
+      <p class="note">${tr("<strong>Heads up.</strong> {0}", escapeHtml(INCOMING_RISK_WARNING))}</p>
     </div>
     <div class="card" data-section="sas">
-      <div class="row"><span class="label">Match code</span>
+      <div class="row"><span class="label">${tr("Match code")}</span>
         <span class="value mono" id="join-sas">— — —</span></div>
-      <p class="note small">This must match the 6-digit code on the admin's screen. If it doesn't, cancel — someone may be intercepting.</p>
+      <p class="note small">${tr("This must match the 6-digit code on the admin's screen. If it doesn't, cancel — someone may be intercepting.")}</p>
       <p class="note small err-text" data-section="no-screenshot">⚠️ ${escapeHtml(NO_SCREENSHOT_WARNING)}</p>
       <div class="row-2 mt-2">
-        <button class="secondary" id="join-cancel">Cancel</button>
-        <button id="join-confirm" disabled>Codes match — continue</button>
+        <button class="secondary" id="join-cancel">${tr("Cancel")}</button>
+        <button id="join-confirm" disabled>${tr("Codes match — continue")}</button>
       </div>
     </div>
-    <p class="note" id="join-status">idle</p>
+    <p class="note" id="join-status">${tr("idle")}</p>
     <div id="join-quarantine"></div>
   `;
   $("join-cancel")?.addEventListener("click", () => {
@@ -282,11 +283,11 @@ export function initJoinView() {
 // another of yours) while signed in, as iOS and Android do. The join makes a
 // new profile; the current one stays as it is.
 
-export const JOIN_ANOTHER_TITLE = "Scan a pairing code";
+export const JOIN_ANOTHER_TITLE = tr("Scan a pairing code");
 export const JOIN_ANOTHER_MESSAGE =
-  "Add this browser to another account. On a device of that account, open Settings → Trusted devices → Add device, then scan the code it shows or paste its link here.";
-export const JOIN_LINK_INVALID = "That isn't a pairing link. It looks like https://flagshipserver.com/join?sid=…";
-export const JOIN_SCAN_FAILED = "Couldn't scan. Paste the pairing link instead.";
+  tr("Add this browser to another account. On a device of that account, open Settings → Trusted devices → Add device, then scan the code it shows or paste its link here.");
+export const JOIN_LINK_INVALID = tr("That isn't a pairing link. It looks like https://flagshipserver.com/join?sid=…");
+export const JOIN_SCAN_FAILED = tr("Couldn't scan. Paste the pairing link instead.");
 
 /** The pairing link in what was pasted or scanned, or an error sentence. */
 export function readJoinInput(text) {
@@ -305,13 +306,13 @@ export async function openJoinAnotherAccount({ canScan = null } = {}) {
     <p class="modal-message">${escapeHtml(JOIN_ANOTHER_MESSAGE)}</p>
     <input class="full-width mt-2" data-join-input placeholder="https://flagshipserver.com/join?…" autocomplete="off" />
     ${scan
-      ? `<button class="secondary full-width mt-2" data-join-scan>Scan QR with camera</button>
+      ? `<button class="secondary full-width mt-2" data-join-scan>${tr("Scan QR with camera")}</button>
          <video class="full-width mt-2 hidden" data-join-video playsinline muted style="border-radius:8px;max-height:320px;background:#000"></video>`
       : ""}
     <p class="modal-error err-text hidden" data-join-error></p>
     <div class="row-2 mt-3">
-      <button class="secondary" data-join-cancel>Cancel</button>
-      <button data-join-continue>Continue</button>
+      <button class="secondary" data-join-cancel>${tr("Cancel")}</button>
+      <button data-join-continue>${tr("Continue")}</button>
     </div>`;
   document.body.appendChild(dlg);
   dlg.showModal();
@@ -350,7 +351,7 @@ export async function openJoinAnotherAccount({ canScan = null } = {}) {
   q("[data-join-scan]")?.addEventListener("click", async (ev) => {
     const btn = ev.currentTarget;
     btn.disabled = true;
-    btn.textContent = "Scanning…";
+    btn.textContent = tr("Scanning…");
     video?.classList.remove("hidden");
     try {
       go(String(await scanWithCamera(video, { timeoutMs: 30_000 })));
@@ -360,7 +361,7 @@ export async function openJoinAnotherAccount({ canScan = null } = {}) {
       stopScan();
       video?.classList.add("hidden");
       btn.disabled = false;
-      btn.textContent = "Scan QR with camera";
+      btn.textContent = tr("Scan QR with camera");
     }
   });
   input.focus();

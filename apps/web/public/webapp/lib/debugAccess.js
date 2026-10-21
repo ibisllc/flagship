@@ -14,6 +14,7 @@ import { bytesToHex } from "../keystore.js";
 import { sensitiveSigner } from "./adminRoot.js";
 import { getSession } from "./state.js";
 
+import { tr } from "./i18n.js";
 export const TAG_DEBUG_ACCESS = "flagship/debug-access/v2";
 export const TAG_DEBUG_ACCESS_REVOKE = "flagship/debug-access-revoke/v1";
 
@@ -29,8 +30,8 @@ export const DEBUG_DURATIONS = [
 ];
 export const DEBUG_DEFAULT_DURATION = "24h";
 
-export const DEBUG_WARNING = "Anyone with this key can read everything on this server while it's on.";
-export const DEBUG_ADMIN_ONLY = "Only an admin device can turn debug access on or off.";
+export const DEBUG_WARNING = tr("Anyone with this key can read everything on this server while it's on.");
+export const DEBUG_ADMIN_ONLY = tr("Only an admin device can turn debug access on or off.");
 
 export const SSH_KEY_TYPES = [
   "ssh-ed25519",
@@ -79,25 +80,25 @@ export function normalizeSshPublicKey(input) {
 export function sshKeyFingerprint(key) {
   const norm = normalizeSshPublicKey(key);
   if (!norm) return null;
-  return `SHA256:${b64encodeNoPad(sha256(b64decode(norm.split(" ")[1])))}`;
+  return tr("SHA256:{0}", b64encodeNoPad(sha256(b64decode(norm.split(" ")[1]))));
 }
 
 /** Why a grant can't be signed, as the sentence to show, or null. */
 export function debugAccessGrantProblem(g) {
   if (!g || typeof g.serverDomain !== "string" || g.serverDomain.length === 0) {
-    return "The debug access grant doesn't name a server.";
+    return tr("The debug access grant doesn't name a server.");
   }
   if (typeof g.sshPublicKey !== "string" || g.sshPublicKey.trim().length === 0) {
-    return "Debug access needs an SSH public key.";
+    return tr("Debug access needs an SSH public key.");
   }
   if (normalizeSshPublicKey(g.sshPublicKey) !== g.sshPublicKey) {
-    return "That isn't an SSH public key this server can use.";
+    return tr("That isn't an SSH public key this server can use.");
   }
   if (!Number.isSafeInteger(g.issuedAt) || !Number.isSafeInteger(g.expiresAt) || g.issuedAt <= 0) {
-    return "The debug access grant has no valid time.";
+    return tr("The debug access grant has no valid time.");
   }
-  if (g.expiresAt <= g.issuedAt) return "Debug access has to end after it starts.";
-  if (g.expiresAt - g.issuedAt > DEBUG_ACCESS_MAX_MS) return "Debug access can be on for at most 7 days at a time.";
+  if (g.expiresAt <= g.issuedAt) return tr("Debug access has to end after it starts.");
+  if (g.expiresAt - g.issuedAt > DEBUG_ACCESS_MAX_MS) return tr("Debug access can be on for at most 7 days at a time.");
   return null;
 }
 
@@ -124,7 +125,7 @@ export function canonicalDebugAccessRevoke(r) {
 
 function signerFor(deps) {
   const umk = deps.umk ?? getSession()?.umk;
-  if (!umk) throw new Error("Unlock the webapp first.");
+  if (!umk) throw new Error(tr("Unlock the webapp first."));
   return { umk, sign: deps.sign ?? sensitiveSigner() };
 }
 
@@ -136,7 +137,7 @@ export async function buildDebugAccessGrant({ serverDomain, sshPublicKey, durati
   const issuedAt = (deps.now ?? Date.now)();
   const key = normalizeSshPublicKey(sshPublicKey ?? "");
   if (!key && String(sshPublicKey ?? "").trim().length > 0) {
-    throw new Error("That isn't an SSH public key this server can use.");
+    throw new Error(tr("That isn't an SSH public key this server can use."));
   }
   const grant = { serverDomain, sshPublicKey: key ?? "", issuedAt, expiresAt: issuedAt + durationMs };
   const problem = debugAccessGrantProblem(grant);
@@ -171,5 +172,5 @@ export async function turnOffDebugAccess({ serverDomain, fetchJson }, deps = {})
 /** The banner line while it's on, or null. `fmt` formats the end time. */
 export function debugAccessBanner(view, fmt) {
   if (!view || view.on !== true || typeof view.expiresAt !== "number") return null;
-  return `Debug access is on until ${fmt(view.expiresAt)}.`;
+  return tr("Debug access is on until {0}.", fmt(view.expiresAt));
 }

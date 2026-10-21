@@ -67,6 +67,7 @@ import {
 } from "../lib/serverShares.js";
 import { describeLastUpdate, groupReleases, releaseCatalogPath } from "../lib/serverUpdate.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-shared-server", { tab: "home" });
 
 const STARTUP_POLL_MS = 10_000;
@@ -78,17 +79,17 @@ let homeSeq = 0;
 
 function homeRowHtml(row) {
   const e = row.entry;
-  const level = row.level ? LEVEL_TEXT[row.level] : "Shared with you";
+  const level = row.level ? LEVEL_TEXT[row.level] : tr("Shared with you");
   const pill =
     row.startups?.length > 0
-      ? `<span class="pill warn">Waiting to start</span>`
+      ? `<span class="pill warn">${tr("Waiting to start")}</span>`
       : row.status === "ready"
-        ? `<span class="pill ok">Online</span>`
+        ? `<span class="pill ok">${tr("Online")}</span>`
         : row.status === "waiting"
-          ? `<span class="pill warn">Waiting for the owner</span>`
-          : `<span class="pill">Can't reach</span>`;
+          ? `<span class="pill warn">${tr("Waiting for the owner")}</span>`
+          : `<span class="pill">${tr("Can't reach")}</span>`;
   const approve = row.startups?.length > 0
-    ? `<div class="row mt-2"><button class="full-width" data-shared-approve="${escapeHtml(e.shareId)}">Approve start-up</button></div>`
+    ? `<div class="row mt-2"><button class="full-width" data-shared-approve="${escapeHtml(e.shareId)}">${tr("Approve start-up")}</button></div>`
     : "";
   return `
       <div class="card server-card is-tappable" data-open-share="${escapeHtml(e.shareId)}">
@@ -107,7 +108,7 @@ function homeRowHtml(row) {
 export function sharedWithMeHtml(rows) {
   if (!rows.length) return "";
   return `
-      <h2 class="mt-4">Shared with me</h2>
+      <h2 class="mt-4">${tr("Shared with me")}</h2>
       ${rows.map(homeRowHtml).join("")}`;
 }
 
@@ -192,17 +193,17 @@ function startupCardHtml(name, startups) {
   if (!startups.length) return "";
   return `
       <div class="card warning" id="shared-startup-card">
-        <p class="weight-600">${escapeHtml(name)} is starting. Unlock it?</p>
-        <p class="note">Its disk stays locked until you or the owner approve.</p>
-        <button class="full-width mt-2" id="shared-startup-approve">Approve start-up</button>
+        <p class="weight-600">${tr("{0} is starting. Unlock it?", escapeHtml(name))}</p>
+        <p class="note">${tr("Its disk stays locked until you or the owner approve.")}</p>
+        <button class="full-width mt-2" id="shared-startup-approve">${tr("Approve start-up")}</button>
       </div>`;
 }
 
 function leaveHtml(name) {
   return `
-      <h2 class="mt-4">Leave</h2>
+      <h2 class="mt-4">${tr("Leave")}</h2>
       <div class="card" id="shared-leave-card">
-        <p class="note">Stop using ${escapeHtml(name)}. You lose access right away; the owner can share it with you again.</p>
+        <p class="note">${tr("Stop using {0}. You lose access right away; the owner can share it with you again.", escapeHtml(name))}</p>
         <button class="danger full-width mt-2" id="shared-leave-btn">${escapeHtml(LEAVE_LABEL)}</button>
       </div>`;
 }
@@ -220,10 +221,10 @@ function updateCardHtml(detail) {
   const current = typeof detail?.currentCommit === "string" ? detail.currentCommit.slice(0, 8) : "—";
   const last = describeLastUpdate(detail?.lastUpdate);
   return `
-      <h2 class="mt-4">Update</h2>
+      <h2 class="mt-4">${tr("Update")}</h2>
       <div class="card" id="shared-release-card">
-        <div class="row"><span class="label">Running</span><span class="value mono">${escapeHtml(current)}</span></div>
-        <div id="shared-release-offer"><p class="faint-sm mt-1">Checking for releases…</p></div>
+        <div class="row"><span class="label">${tr("Running")}</span><span class="value mono">${escapeHtml(current)}</span></div>
+        <div id="shared-release-offer"><p class="faint-sm mt-1">${tr("Checking for releases…")}</p></div>
         ${last ? `<p class="note small mt-1" data-shared-last-update>${escapeHtml(last)}</p>` : ""}
       </div>`;
 }
@@ -239,7 +240,7 @@ function appRowHtml(app, raw, canManage, seeAppData = false) {
             <span class="shared-app-name"><span class="weight-600">${escapeHtml(app.name)}</span>${appStatePillHtml(app.state)}${wants}</span>
             <span class="shared-app-actions">
               ${seeAppData ? `<button class="secondary btn-xs" data-db-open="${escapeHtml(app.serviceId)}">${escapeHtml(SHARED_DB_OPEN)}</button>` : ""}
-              ${canManage ? `<button class="secondary btn-xs" data-access-open="${escapeHtml(app.serviceId)}">Internet access</button>` : ""}
+              ${canManage ? `<button class="secondary btn-xs" data-access-open="${escapeHtml(app.serviceId)}">${tr("Internet access")}</button>` : ""}
               ${canManage ? `<button class="secondary btn-xs" data-invite-open="${escapeHtml(app.serviceId)}">${escapeHtml(CO_INVITE_OPEN)}</button>` : ""}
             </span>
           </div>
@@ -258,25 +259,25 @@ export function coInvitePanelHtml(state, nowMs = Date.now()) {
   const top = state.canInvite
     ? `<p class="note" data-co-invite-line>${escapeHtml(CO_INVITE_LINE)}</p>
       <div class="row-2 mt-1" data-co-invite-add>
-        <button class="secondary btn-xs" type="button" data-co-add="person">+ Add person</button>
-        <button class="secondary btn-xs" type="button" data-co-add="group">+ Add group</button>
+        <button class="secondary btn-xs" type="button" data-co-add="person">${tr("+ Add person")}</button>
+        <button class="secondary btn-xs" type="button" data-co-add="group">${tr("+ Add group")}</button>
       </div>
       <div class="hidden mt-2" data-co-form>
-        <label data-co-name-label>Name <span class="faint-sm">(${escapeHtml(CO_INVITE_NAME_HINT)})</span></label>
-        <input data-co-name type="text" autocomplete="off" maxlength="120" placeholder="Alex" />
+        <label data-co-name-label>${tr("Name")} <span class="faint-sm">(${escapeHtml(CO_INVITE_NAME_HINT)})</span></label>
+        <input data-co-name type="text" autocomplete="off" maxlength="120" placeholder="${tr("Alex")}" />
         <div class="hidden mt-1" data-co-group>
-          <label>Max uses <span class="faint-sm">(0 = unlimited)</span></label>
+          <label>${tr("Max uses")} <span class="faint-sm">${tr("(0 = unlimited)")}</span></label>
           <input data-co-maxn type="number" min="0" step="1" value="10" />
-          <label class="mt-1">Expires in days <span class="faint-sm">(optional)</span></label>
+          <label class="mt-1">${tr("Expires in days")} <span class="faint-sm">${tr("(optional)")}</span></label>
           <input data-co-days type="number" min="0" step="1" placeholder="30" />
         </div>
-        <p class="faint-sm mt-1">Rank: Member</p>
-        <button class="full-width mt-2" type="button" data-co-create>Create invite link</button>
+        <p class="faint-sm mt-1">${tr("Rank: Member")}</p>
+        <button class="full-width mt-2" type="button" data-co-create>${tr("Create invite link")}</button>
       </div>
       <div class="hidden mt-2" data-co-result>
-        <input type="text" readonly data-co-link aria-label="Invite link" />
+        <input type="text" readonly data-co-link aria-label="${tr("Invite link")}" />
         <p class="note mt-1">${escapeHtml(CO_INVITE_LINK_LINE)}</p>
-        <button class="secondary btn-xs mt-1" type="button" data-co-copy>Copy link</button>
+        <button class="secondary btn-xs mt-1" type="button" data-co-copy>${tr("Copy link")}</button>
       </div>`
     : `<p class="note" data-co-invite-why>${escapeHtml(state.whyText || CO_INVITE_WHY[state.why] || "")}</p>`;
   const rows = (state.invites ?? [])
@@ -311,26 +312,26 @@ export function sharedServerHtml({ entry, me, detail, apps, startups = [] }) {
       ${startupCardHtml(name, startups)}
       ${me.unlockAtBoot ? notifyHtml(entry) : ""}
       <div class="card">
-        <div class="row"><span class="label">Address</span><span class="value">${escapeHtml(entry.serverDomain)}</span></div>
-        <div class="row"><span class="label">Version</span><span class="value">${escapeHtml(
+        <div class="row"><span class="label">${tr("Address")}</span><span class="value">${escapeHtml(entry.serverDomain)}</span></div>
+        <div class="row"><span class="label">${tr("Version")}</span><span class="value">${escapeHtml(
           typeof detail?.currentCommit === "string" ? detail.currentCommit.slice(0, 8) : "—",
         )}</span></div>
-        <div class="row"><span class="label">Uptime</span><span class="value">${escapeHtml(fmtUptime(detail?.uptimeMs))}</span></div>
-        <div class="row"><span class="label">Apps</span><span class="value">${rows.length}</span></div>
-        <p class="faint-sm mt-1" data-shared-allowed>You: ${escapeHtml(allowed.join(" · "))}</p>
+        <div class="row"><span class="label">${tr("Uptime")}</span><span class="value">${escapeHtml(fmtUptime(detail?.uptimeMs))}</span></div>
+        <div class="row"><span class="label">${tr("Apps")}</span><span class="value">${rows.length}</span></div>
+        <p class="faint-sm mt-1" data-shared-allowed>${tr("You: {0}", escapeHtml(allowed.join(" · ")))}</p>
       </div>
-      <h2 class="mt-4">Live metrics</h2>
+      <h2 class="mt-4">${tr("Live metrics")}</h2>
       <div class="card" id="shared-metrics-card">
-        <div class="row"><span class="label">CPU</span><span class="value" id="sh-metrics-cpu">…</span></div>
-        <div class="row"><span class="label">Memory</span><span class="value" id="sh-metrics-mem">…</span></div>
-        <div class="row"><span class="label">Disk</span><span class="value" id="sh-metrics-disk">…</span></div>
-        <div class="row"><span class="label">Network</span><span class="value" id="sh-metrics-net">…</span></div>
-        <p class="note small" id="sh-metrics-at">Loading…</p>
+        <div class="row"><span class="label">${tr("CPU")}</span><span class="value" id="sh-metrics-cpu">…</span></div>
+        <div class="row"><span class="label">${tr("Memory")}</span><span class="value" id="sh-metrics-mem">…</span></div>
+        <div class="row"><span class="label">${tr("Disk")}</span><span class="value" id="sh-metrics-disk">…</span></div>
+        <div class="row"><span class="label">${tr("Network")}</span><span class="value" id="sh-metrics-net">…</span></div>
+        <p class="note small" id="sh-metrics-at">${tr("Loading…")}</p>
       </div>
-      <h2 class="mt-4">Apps</h2>
+      <h2 class="mt-4">${tr("Apps")}</h2>
       <div class="card" id="shared-apps-card">
         ${rows.length && !canManage ? `<p class="faint-sm" data-co-invite-view>${escapeHtml(CO_INVITE_WHY["view-only"])}</p>` : ""}
-        ${rows.length ? rows.map((a) => appRowHtml(a, raw.get(a.serviceId), canManage, !!me.seeAppData)).join("") : `<p class="faint-sm">No apps on this server yet.</p>`}
+        ${rows.length ? rows.map((a) => appRowHtml(a, raw.get(a.serviceId), canManage, !!me.seeAppData)).join("") : `<p class="faint-sm">${tr("No apps on this server yet.")}</p>`}
       </div>
       ${canManage && me.canUpdate === true ? updateCardHtml(detail) : ""}
       ${leaveHtml(name)}`;
@@ -341,7 +342,7 @@ function unreachableHtml(entry, message, startups) {
   return `
       ${startupCardHtml(name, startups)}
       <div class="card">
-        <div class="row"><span class="label">Address</span><span class="value">${escapeHtml(entry.serverDomain)}</span></div>
+        <div class="row"><span class="label">${tr("Address")}</span><span class="value">${escapeHtml(entry.serverDomain)}</span></div>
         <p class="note mt-2">${escapeHtml(message)}</p>
       </div>
       ${leaveHtml(name)}`;
@@ -364,7 +365,7 @@ async function renderSharedServer() {
   const title = $("shared-server-title");
   if (title) title.textContent = name;
   const sub = $("shared-server-sub");
-  if (sub) sub.textContent = "Shared with you";
+  if (sub) sub.textContent = tr("Shared with you");
   root.innerHTML = skeletonCards(2);
 
   const client = shareBoxClient(entry);
@@ -381,13 +382,13 @@ async function renderSharedServer() {
   } catch (e) {
     if (!onPage(my)) return;
     if (e?.code === "share-ended" || e?.body?.code === "share-ended") {
-      root.innerHTML = `<div class="card"><p class="note">${escapeHtml(name)} isn't shared with you anymore.</p></div>`;
+      root.innerHTML = `<div class="card"><p class="note">${tr("{0} isn't shared with you anymore.", escapeHtml(name))}</p></div>`;
       return;
     }
     const message =
       e?.code === "not-shared"
-        ? "The owner hasn't confirmed yet. Read them the code you were shown when you accepted."
-        : `Couldn't reach ${name}. It may be off or starting.`;
+        ? tr("The owner hasn't confirmed yet. Read them the code you were shown when you accepted.")
+        : tr("Couldn't reach {0}. It may be off or starting.", name);
     const startups = await fetchShareStartups(entry).catch(() => []);
     if (!onPage(my)) return;
     root.innerHTML = unreachableHtml(entry, message, startups);
@@ -396,7 +397,7 @@ async function renderSharedServer() {
     return;
   }
   if (!onPage(my)) return;
-  if (sub) sub.textContent = `Shared with you · ${LEVEL_TEXT[me.level] ?? me.level}`;
+  if (sub) sub.textContent = tr("Shared with you · {0}", LEVEL_TEXT[me.level] ?? me.level);
   const startups = me.unlockAtBoot ? await fetchShareStartups(entry).catch(() => []) : [];
   if (!onPage(my)) return;
   root.innerHTML = sharedServerHtml({ entry, me, detail, apps, startups });
@@ -413,7 +414,7 @@ function wirePage(entry, my, { canManage, startups, apps = [], me = null }) {
     const ok = await inlineConfirm({
       title: LEAVE_TITLE,
       message: LEAVE_MESSAGE,
-      okLabel: "Leave",
+      okLabel: tr("Leave"),
       danger: true,
     });
     if (!ok) return;
@@ -421,7 +422,7 @@ function wirePage(entry, my, { canManage, startups, apps = [], me = null }) {
     if (btn) btn.disabled = true;
     try {
       await leaveShare(entry);
-      toast(`You left ${name}`, "ok");
+      toast(tr("You left {0}", name), "ok");
       const { enterHome } = await import("./home.js");
       await enterHome();
     } catch (e) {
@@ -460,7 +461,7 @@ async function toggleInvitePanel(entry, serviceId, appName, { reopen = false } =
     return;
   }
   slot.classList.remove("hidden");
-  slot.innerHTML = `<p class="faint-sm">Loading…</p>`;
+  slot.innerHTML = `<p class="faint-sm">${tr("Loading…")}</p>`;
   let state;
   try {
     state = await fetchShareInvites(entry, serviceId);
@@ -482,10 +483,10 @@ function wireInvitePanel(entry, serviceId, appName, slot, state) {
       q("[data-co-result]")?.classList.add("hidden");
       q("[data-co-group]")?.classList.toggle("hidden", kind !== "group");
       const label = q("[data-co-name-label]");
-      if (label) label.firstChild.textContent = kind === "group" ? "Group name " : "Name ";
+      if (label) label.firstChild.textContent = kind === "group" ? tr("Group name ") : tr("Name ");
       const input = q("[data-co-name]");
       if (input) {
-        input.placeholder = kind === "group" ? "Chess club" : "Alex";
+        input.placeholder = kind === "group" ? tr("Chess club") : tr("Alex");
         input.focus();
       }
     });
@@ -518,13 +519,13 @@ function wireInvitePanel(entry, serviceId, appName, slot, state) {
         slot.querySelector("[data-co-copy]")?.addEventListener("click", async () => {
           try {
             await navigator.clipboard.writeText(made.link);
-            toast("Link copied", "ok");
+            toast(tr("Link copied"), "ok");
           } catch {
             link.select();
           }
         });
       }
-      toast("Invite created", "ok");
+      toast(tr("Invite created"), "ok");
     } catch (e) {
       toast(shareErrorText(e), "err");
       btn.disabled = false;
@@ -542,7 +543,7 @@ function wireInvitePanel(entry, serviceId, appName, slot, state) {
       btn.disabled = true;
       try {
         await withdrawShareInvite(entry, btn.getAttribute("data-co-withdraw"));
-        toast("Invite withdrawn", "ok");
+        toast(tr("Invite withdrawn"), "ok");
         await toggleInvitePanel(entry, serviceId, appName, { reopen: true });
       } catch (e) {
         toast(shareErrorText(e), "err");
@@ -560,7 +561,7 @@ function wireNotify(entry) {
     box.disabled = true;
     try {
       await setSharePush(entry, on);
-      toast(on ? "This device will be told when it needs to start" : "Notices turned off", "ok");
+      toast(on ? tr("This device will be told when it needs to start") : tr("Notices turned off"), "ok");
     } catch (e) {
       box.checked = !on;
       toast(shareErrorText(e), "err");
@@ -578,29 +579,29 @@ async function loadUpdateOffer(entry, client, detail, my) {
   try {
     latest = groupReleases(await client.fetch(releaseCatalogPath())).latest;
   } catch {
-    if (onPage(my)) slot.innerHTML = `<p class="faint-sm mt-1">Couldn't list releases right now.</p>`;
+    if (onPage(my)) slot.innerHTML = `<p class="faint-sm mt-1">${tr("Couldn't list releases right now.")}</p>`;
     return;
   }
   if (!onPage(my)) return;
   if (!latest || latest.commit === detail?.currentCommit) {
-    slot.innerHTML = `<p class="faint-sm mt-1">This server runs the newest release.</p>`;
+    slot.innerHTML = `<p class="faint-sm mt-1">${tr("This server runs the newest release.")}</p>`;
     return;
   }
   const name = entry.serverName || entry.serverDomain;
-  slot.innerHTML = `<button class="full-width mt-2" id="shared-release-btn">Update to ${escapeHtml(releaseName(latest))}</button>`;
+  slot.innerHTML = `<button class="full-width mt-2" id="shared-release-btn">${tr("Update to {0}", escapeHtml(releaseName(latest)))}</button>`;
   $("shared-release-btn")?.addEventListener("click", async (ev) => {
     const ok = await inlineConfirm({
-      title: `Update ${name}?`,
-      message: `${name} restarts on the new release. Only releases Flagship's maintainers endorsed will install.`,
-      okLabel: "Update",
+      title: tr("Update {0}?", name),
+      message: tr("{0} restarts on the new release. Only releases Flagship's maintainers endorsed will install.", name),
+      okLabel: tr("Update"),
     });
     if (!ok) return;
     const btn = ev.currentTarget;
     if (btn) btn.disabled = true;
     try {
       await orderShareUpdate(entry, { targetCommit: latest.commit, fromCommit: detail.currentCommit });
-      toast(`Updating ${name}. It restarts in a few minutes.`, "ok");
-      slot.innerHTML = `<p class="faint-sm mt-1">Updating to ${escapeHtml(releaseName(latest))}…</p>`;
+      toast(tr("Updating {0}. It restarts in a few minutes.", name), "ok");
+      slot.innerHTML = `<p class="faint-sm mt-1">${tr("Updating to {0}…", escapeHtml(releaseName(latest)))}</p>`;
     } catch (e) {
       toast(shareErrorText(e), "err");
       if (btn) btn.disabled = false;
@@ -613,7 +614,7 @@ function wireStartup(entry, my, startups) {
   if (!btn || !startups.length) return;
   btn.addEventListener("click", async () => {
     btn.disabled = true;
-    btn.textContent = "Approving…";
+    btn.textContent = tr("Approving…");
     try {
       for (const req of startups) await approveShareStartup(entry, req);
       toast(`${entry.serverName || entry.serverDomain} is unlocking`, "ok");
@@ -621,7 +622,7 @@ function wireStartup(entry, my, startups) {
     } catch (e) {
       toast(shareErrorText(e), "err");
       btn.disabled = false;
-      btn.textContent = "Approve start-up";
+      btn.textContent = tr("Approve start-up");
     }
   });
 }
@@ -655,7 +656,7 @@ function startMetrics(entry, client, my) {
       set("sh-metrics-at", `Collected ${formatWhen(m.collectedAt)}`);
     } catch {
       const at = $("sh-metrics-at");
-      if (at && onPage(my)) at.textContent = "Couldn't read metrics from this server.";
+      if (at && onPage(my)) at.textContent = tr("Couldn't read metrics from this server.");
     }
   };
   void tick();
@@ -684,7 +685,7 @@ async function toggleAccessEditor(entry, serviceId, appName) {
     return;
   }
   slot.classList.remove("hidden");
-  slot.innerHTML = `<p class="faint-sm">Loading…</p>`;
+  slot.innerHTML = `<p class="faint-sm">${tr("Loading…")}</p>`;
   const client = shareBoxClient(entry);
   let access;
   try {
@@ -694,7 +695,7 @@ async function toggleAccessEditor(entry, serviceId, appName) {
     return;
   }
   if (!access) {
-    slot.innerHTML = `<p class="err-text">This server doesn't support access lists yet.</p>`;
+    slot.innerHTML = `<p class="err-text">${tr("This server doesn't support access lists yet.")}</p>`;
     return;
   }
   let saved = access.list;
@@ -710,7 +711,7 @@ async function toggleAccessEditor(entry, serviceId, appName) {
   const paint = () => {
     const st = accessEditorState(ta.value, saved);
     slot.querySelector("[data-access-errors]").innerHTML = st.errors
-      .map((e) => `<p class="err-text text-sm"><span class="mono">Line ${e.line}</span>: ${escapeHtml(e.message)}</p>`)
+      .map((e) => `<p class="err-text text-sm"><span class="mono">${tr("Line {0}", e.line)}</span>: ${escapeHtml(e.message)}</p>`)
       .join("");
     slot.querySelector("[data-access-count]").textContent = st.errors.length ? "" : ruleCountText(st.rules);
     save.disabled = !st.canSave;
@@ -719,7 +720,7 @@ async function toggleAccessEditor(entry, serviceId, appName) {
   paint();
   save.addEventListener("click", async () => {
     save.disabled = true;
-    save.textContent = "Saving…";
+    save.textContent = tr("Saving…");
     try {
       const next = await sendAccessList({
         serverDomain: entry.serverDomain,
@@ -731,7 +732,7 @@ async function toggleAccessEditor(entry, serviceId, appName) {
       });
       saved = next.list;
       ta.value = next.list;
-      toast("Access list saved", "ok");
+      toast(tr("Access list saved"), "ok");
     } catch (e) {
       toast(accessErrorMessage(e), "err");
     } finally {

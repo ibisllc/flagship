@@ -22,6 +22,7 @@
 
 import { serverTrust } from "./serverTrust.js";
 
+import { tr } from "./i18n.js";
 /** First 8 hex of the cert-hash — the slug shown in the sliver line. */
 export function certSlug(certHash) {
   return String(certHash || "").slice(0, 8);
@@ -30,8 +31,8 @@ export function certSlug(certHash) {
 /** The line label for a failing cert (shared contract). */
 export function trustLineLabel(cert) {
   const slug = certSlug(cert.certHash);
-  if (cert.certClass === "relay") return `Relay certificate expired · ${slug}`;
-  return `Control server certificate expired · ${slug}`;
+  if (cert.certClass === "relay") return tr("Relay certificate expired · {0}", slug);
+  return tr("Control server certificate expired · {0}", slug);
 }
 
 /**
@@ -146,7 +147,7 @@ export function renderTrustSliver() {
               aria-label="${escapeText(l.label)}${l.overridden ? ` (${TRUST_OVERRIDE_LABEL})` : ""}">
         <span class="trust-bar-icon" aria-hidden="true">&#9888;</span>
         <span class="trust-bar-label">${escapeText(l.label)}</span>
-        ${l.serverCount > 1 ? `<span class="trust-bar-count">${l.serverCount} servers</span>` : ""}
+        ${l.serverCount > 1 ? `<span class="trust-bar-count">${tr("{0} servers", l.serverCount)}</span>` : ""}
         ${l.overridden ? `<span class="trust-bar-accepted">${TRUST_OVERRIDE_LABEL}</span>` : ""}
       </button>`,
     )

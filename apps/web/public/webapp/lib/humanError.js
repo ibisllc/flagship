@@ -22,15 +22,16 @@
 // where that is the real cause; otherwise 401/403 fall through to the
 // generic "that didn't work" so we don't mislabel an authorization denial
 // as an expiry.
+import { tr } from "./i18n.js";
 
 const COPY = {
-  server: "Our service is briefly unavailable — wait a moment and try again.",
-  network: "Network error — check your internet connection.",
-  auth: "Your session expired — sign in again.",
-  request: "That request didn't work — check your connection and try again.",
-  dropped: "The connection dropped — try again.",
-  timeout: "That took too long — check your connection and try again.",
-  generic: "That didn't work. Please try again.",
+  server: tr("Our service is briefly unavailable — wait a moment and try again."),
+  network: tr("Network error — check your internet connection."),
+  auth: tr("Your session expired — sign in again."),
+  request: tr("That request didn't work — check your connection and try again."),
+  dropped: tr("The connection dropped — try again."),
+  timeout: tr("That took too long — check your connection and try again."),
+  generic: tr("That didn't work. Please try again."),
 };
 
 /** Pull an HTTP-ish status off whatever was thrown / passed. */
@@ -148,10 +149,10 @@ export function userError(message, props = {}) {
 /** `.com` reasons written for developers, and what to say instead. */
 const KNOWN_REASONS = [
   [/subdomain already controlled by a different rck/i,
-    "That name is still held by an earlier, unfinished order. Cancel that order from Home, or choose another name."],
-  [/^stale request/i, "This device's clock looks off. Check the date and time, then try again."],
-  [/^invalid signature/i, "Your account key didn't match. Try again, or sign in again."],
-  [/^not authorized/i, "This device isn't allowed to do that."],
+    tr("That name is still held by an earlier, unfinished order. Cancel that order from Home, or choose another name.")],
+  [/^stale request/i, tr("This device's clock looks off. Check the date and time, then try again.")],
+  [/^invalid signature/i, tr("Your account key didn't match. Try again, or sign in again.")],
+  [/^not authorized/i, tr("This device isn't allowed to do that.")],
 ];
 
 /** The sentence for a `.com` reason we know, else null. */

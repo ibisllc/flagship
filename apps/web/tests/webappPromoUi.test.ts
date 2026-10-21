@@ -80,7 +80,7 @@ describe("webapp Flagship Inference", () => {
     }
     expect(f.UNAVAILABLE_MESSAGE).toBe("Flagship Inference isn't available right now. You can add your own AI key.");
     const buildKey = readFileSync(webapp("views", "build-key.js"), "utf8");
-    expect(buildKey).toContain('toast("Using Flagship Inference", "info")');
+    expect(buildKey).toContain('toast(tr("Using Flagship Inference"), "info")');
     expect(buildKey).not.toMatch(/free AI credits/i);
   });
 
