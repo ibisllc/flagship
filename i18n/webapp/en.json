@@ -1720,7 +1720,8 @@
   },
   "UMK seed must be 32 bytes": {
     "en": "UMK seed must be 32 bytes",
-    "ctx": "webapp/lib/keyfile.js:103"
+    "ctx": "webapp/lib/keyfile.js:103",
+    "translatable": false
   },
   "Back up your account key": {
     "en": "Back up your account key",
@@ -2032,15 +2033,18 @@
   },
   "4 MB": {
     "en": "4 MB",
-    "ctx": "webapp/lib/modelMenu.js:209"
+    "ctx": "webapp/lib/modelMenu.js:209",
+    "translatable": false
   },
   "256 KB": {
     "en": "256 KB",
-    "ctx": "webapp/lib/modelMenu.js:210"
+    "ctx": "webapp/lib/modelMenu.js:210",
+    "translatable": false
   },
   "2 MB": {
     "en": "2 MB",
-    "ctx": "webapp/lib/modelMenu.js:211"
+    "ctx": "webapp/lib/modelMenu.js:211",
+    "translatable": false
   },
   "CSV and JSON files": {
     "en": "CSV and JSON files",
@@ -2048,7 +2052,8 @@
   },
   "10 MB": {
     "en": "10 MB",
-    "ctx": "webapp/lib/modelMenu.js:212"
+    "ctx": "webapp/lib/modelMenu.js:212",
+    "translatable": false
   },
   "\"{0}\" can't be attached. Try an image, a text or code file, CSV, JSON or a PDF.": {
     "en": "\"{0}\" can't be attached. Try an image, a text or code file, CSV, JSON or a PDF.",
