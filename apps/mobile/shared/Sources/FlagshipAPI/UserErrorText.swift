@@ -39,7 +39,10 @@ public enum UserErrorText {
 
     /// Text that is a runtime artefact rather than a sentence.
     private static let rawMarkers =
-        String(localized: "(^HTTP\\s*\\d{3}|\\bexception\\b|nsurlerrordomain|nsposixerrordomain|kcferror|error domain=|\\buserinfo=|\\bcode=-?\\d+|\\bswift\\.|\\boptional\\(|\\bhandshake|\\berrno|\\beconn|\\bsocket\\b|unexpected end of stream|\\bEOF\\b|broken pipe|error code:? ?\\d+|^[\\[{<]|unexpected json|could not parse|stacktrace|\\bnil\\b|\\(null\\)|couldn.t be completed|\\bdecodingerror|\\bkeynotfound)")
+        "(^HTTP\\s*\\d{3}|\\bexception\\b|nsurlerrordomain|nsposixerrordomain|kcferror|error domain=|\\buserinfo=|" +
+        "\\bcode=-?\\d+|\\bswift\\.|\\boptional\\(|\\bhandshake|\\berrno|\\beconn|\\bsocket\\b|unexpected end of stream|" +
+        "\\bEOF\\b|broken pipe|error code:? ?\\d+|^[\\[{<]|unexpected json|could not parse|stacktrace|\\bnil\\b|" +
+        "\\(null\\)|couldn.t be completed|\\bdecodingerror|\\bkeynotfound)"
 
     // MARK: - Public
 

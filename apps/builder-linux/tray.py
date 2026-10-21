@@ -13,6 +13,8 @@ without a bus.
 """
 from __future__ import annotations
 
+from i18n import tr
+
 import os
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple
@@ -39,28 +41,28 @@ def tray_menu(
 ) -> List[MenuItem]:
     """Mirrors the Windows TrayIcon.RebuildMenu. While quitting, nothing may
     start a server the quit would abandon, so only the status shows."""
-    items = [MenuItem("Open Flagship Studio", open_window), MenuItem(separator=True)]
+    items = [MenuItem(tr("Open Flagship Studio"), open_window), MenuItem(separator=True)]
     if status is not None:
         items.append(MenuItem(status, enabled=False))
         return items
     for s in sorted(servers, key=lambda s: s.fqdn.lower()):
         sub: List[MenuItem] = []
         if s.can_start:
-            sub.append(MenuItem("Start", lambda n=s.name: start(n)))
+            sub.append(MenuItem(tr("Start"), lambda n=s.name: start(n)))
         if s.can_stop:
-            sub.append(MenuItem("Stop", lambda n=s.name: stop(n)))
-            sub.append(MenuItem("Restart", lambda n=s.name: restart(n)))
+            sub.append(MenuItem(tr("Stop"), lambda n=s.name: stop(n)))
+            sub.append(MenuItem(tr("Restart"), lambda n=s.name: restart(n)))
         if not sub:
             sub.append(MenuItem(s.state_label, enabled=False))
         items.append(MenuItem(s.fqdn, children=sub))
     if not servers:
-        items.append(MenuItem("No servers hosted yet", enabled=False))
+        items.append(MenuItem(tr("No servers hosted yet"), enabled=False))
     running = [s for s in servers if s.can_stop]
     items += [
         MenuItem(separator=True),
-        MenuItem("Stop all running servers", stop_all, enabled=bool(running)),
+        MenuItem(tr("Stop all running servers"), stop_all, enabled=bool(running)),
         MenuItem(separator=True),
-        MenuItem("Quit Flagship Studio", quit_app),
+        MenuItem(tr("Quit Flagship Studio"), quit_app),
     ]
     return items
 
@@ -231,7 +233,7 @@ class Tray:
             "Category": V("s", "ApplicationStatus"),
             "Id": V("s", "flagship-studio"),
             "Title": V("s", "Flagship Studio"),
-            "Status": V("s", "Active"),
+            "Status": V("s", tr("Active")),
             "IconName": V("s", "network-server"),
             "ToolTip": V("(sa(iiay)ss)", ("network-server", [], "Flagship Studio", "")),
             "ItemIsMenu": V("b", False),
@@ -240,7 +242,7 @@ class Tray:
         return values.get(name)
 
     def _item_call(self, _conn, _sender, _path, _iface, method, _params, invocation):
-        if method in ("Activate", "SecondaryActivate"):
+        if method in (tr("Activate"), "SecondaryActivate"):
             self._GLib.idle_add(lambda: self._on_activate() and False)
         invocation.return_value(None)
 

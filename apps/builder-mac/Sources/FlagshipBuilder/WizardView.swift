@@ -117,12 +117,12 @@ struct WizardView: View {
             Spacer()
             StatusCard(icon: "checkmark.circle.fill",
                        tint: FB.Colors.success,
-                       title: "Recipe handed off",
-                       subtitle: "The server operation is continuing in the background. You can follow it from Servers on this Mac.")
+                       title: String(localized: "Recipe handed off"),
+                       subtitle: String(localized: "The server operation is continuing in the background. You can follow it from Servers on this Mac."))
             HStack(spacing: FB.Spacing.s2) {
                 ProgressView().scaleEffect(0.7)
                 Text(countdown > 0
-                     ? "Returning home in \(countdown)…"
+                     ? String(localized: "Returning home in \(countdown)…")
                      : "Preparing a new pairing code…")
                     .font(FB.Font.caption())
                     .foregroundStyle(FB.Colors.textMuted)
@@ -163,15 +163,15 @@ struct WizardView: View {
             }
             destinationCard(
                 icon: "externaldrive.fill",
-                title: "Burn to USB",
-                subtitle: "Build a dedicated hardware appliance — the gold standard. Boot any spare box from the USB stick.",
+                title: String(localized: "Burn to USB"),
+                subtitle: String(localized: "Build a dedicated hardware appliance — the gold standard. Boot any spare box from the USB stick."),
                 badge: ServerTier.hardware.badgeLabel,
                 disabledReason: nil
             ) { model.destination = .burnToUSB }
             destinationCard(
                 icon: "desktopcomputer",
                 title: "Host on this Mac",
-                subtitle: "Run the same encrypted, phone-gated appliance as a managed VM inside this app. Same recipe, same unlock — your phone still holds the keys.",
+                subtitle: String(localized: "Run the same encrypted, phone-gated appliance as a managed VM inside this app. Same recipe, same unlock — your phone still holds the keys."),
                 badge: ServerTier.hostedVM.badgeLabel,
                 disabledReason: hostHereDisabledReason
             ) {
@@ -188,10 +188,10 @@ struct WizardView: View {
     private var hostHereDisabledReason: String? {
         let cap = model.vmManager.maxVMCount
         if cap == 0 {
-            return "This Mac doesn't have enough free memory to host a server."
+            return String(localized: "This Mac doesn't have enough free memory to host a server.")
         }
         if model.vmManager.servers.count >= cap {
-            return "This Mac is at its hosting limit (\(cap))."
+            return String(localized: "This Mac is at its hosting limit (\(cap)).")
         }
         return nil
     }
@@ -254,7 +254,7 @@ struct WizardView: View {
             if let v = model.verified {
                 workServerHeader(
                     domain: v.serverDomain,
-                    subtitle: "Will run as a managed VM on this Mac — \(VMResourcePlan.vmCPUCount(host: host)) vCPU, \(VMResourcePlan.vmMemoryBytes(host: host) / VMResourcePlan.gib) GiB RAM, \(VMResourcePlan.defaultMainDiskSizeBytes / VMResourcePlan.gib) GiB disk."
+                    subtitle: String(localized: "Will run as a managed VM on this Mac — \(VMResourcePlan.vmCPUCount(host: host)) vCPU, \(VMResourcePlan.vmMemoryBytes(host: host) / VMResourcePlan.gib) GiB RAM, \(VMResourcePlan.defaultMainDiskSizeBytes / VMResourcePlan.gib) GiB disk.")
                 )
             }
             Text("The server starts from Flagship's prebuilt image, seals its disk to your phone, then waits for you to approve the unlock there. This app never sees the disk key.")
@@ -267,7 +267,7 @@ struct WizardView: View {
             if let error = model.operationError {
                 StatusCard(icon: "exclamationmark.triangle.fill",
                            tint: FB.Colors.warning,
-                           title: "Couldn't create the server",
+                           title: String(localized: "Couldn't create the server"),
                            subtitle: error)
             }
             Spacer(minLength: FB.Spacing.s2)
@@ -303,7 +303,7 @@ struct WizardView: View {
                     Button {
                         Task { await model.runHostHere() }
                     } label: {
-                        Text(model.operationError != nil ? "Try again" : "Create server on this Mac")
+                        Text(model.operationError != nil ? String(localized: "Try again") : "Create server on this Mac")
                             .font(FB.Font.rowTitle())
                             .frame(minWidth: 200, minHeight: 28)
                     }
@@ -375,7 +375,7 @@ struct WizardView: View {
             Button {
                 model.startOver()
             } label: {
-                Label(model.builderStage == .recipeReady ? "Start over" : "Cancel pairing",
+                Label(model.builderStage == .recipeReady ? String(localized: "Start over") : "Cancel pairing",
                       systemImage: model.builderStage == .recipeReady ? "arrow.counterclockwise" : "xmark.circle")
                     .font(FB.Font.caption())
                     .foregroundStyle(model.builderStage == .recipeReady ? FB.Colors.textMuted : FB.Colors.danger)
@@ -409,18 +409,18 @@ struct WizardView: View {
             if let v = model.verified {
                 workServerHeader(
                     domain: v.serverDomain,
-                    subtitle: "Recipe received from your phone."
+                    subtitle: String(localized: "Recipe received from your phone.")
                 )
             } else if let err = model.recipeError {
                 StatusCard(icon: "exclamationmark.triangle.fill",
                            tint: FB.Colors.warning,
-                           title: "Couldn't read the recipe",
+                           title: String(localized: "Couldn't read the recipe"),
                            subtitle: err)
             } else {
                 StatusCard(icon: "iphone.gen3",
                            tint: FB.Colors.textMuted,
-                           title: "Waiting for your phone…",
-                           subtitle: "Send the server recipe from the Flagship app.")
+                           title: String(localized: "Waiting for your phone…"),
+                           subtitle: String(localized: "Send the server recipe from the Flagship app."))
             }
         }
         .padding(.bottom, FB.Spacing.s2)
@@ -543,7 +543,7 @@ struct WizardView: View {
                 .padding(.horizontal, FB.Spacing.s5)
             HStack(spacing: FB.Spacing.s2) {
                 ProgressView().scaleEffect(0.6)
-                Text(model.pairStatus == "Paired." ? "Waiting for your phone…" : model.pairStatus)
+                Text(model.pairStatus == "Paired." ? String(localized: "Waiting for your phone…") : model.pairStatus)
                     .font(FB.Font.caption())
                     .foregroundStyle(FB.Colors.textMuted)
             }
@@ -682,8 +682,8 @@ struct WizardView: View {
         VStack(alignment: .leading, spacing: FB.Spacing.s2) {
             DropRow(
                 icon: "doc.text.fill",
-                title: "Certificate",
-                description: "Drop or choose the JSON certificate — or paste it",
+                title: String(localized: "Certificate"),
+                description: String(localized: "Drop or choose the JSON certificate — or paste it"),
                 state: recipeRowState(),
                 isReady: model.verified != nil,
                 onDrop: { url in model.acceptRecipeFile(url: url) },
@@ -707,8 +707,8 @@ struct WizardView: View {
                 .buttonStyle(.link)
                 Spacer()
                 HelpIcon(
-                    title: "Where to get a recipe",
-                    blurb: "Pairing with the Flagship phone app is the easy path. This screen is for a recipe someone sent you out of band — paste it or drop the JSON file here.",
+                    title: String(localized: "Where to get a recipe"),
+                    blurb: String(localized: "Pairing with the Flagship phone app is the easy path. This screen is for a recipe someone sent you out of band — paste it or drop the JSON file here."),
                     url: FlagshipLinks.certificate
                 )
             }
@@ -740,8 +740,8 @@ struct WizardView: View {
             card: {
                 DropRow(
                     icon: "opticaldisc.fill",
-                    title: "Linux ISO",
-                    description: "Please use one of the approved distributions for best results",
+                    title: String(localized: "Linux ISO"),
+                    description: String(localized: "Please use one of the approved distributions for best results"),
                     state: isoRowState(),
                     isReady: model.iso != nil,
                     onDrop: { url in model.acceptISOFile(url: url) },
@@ -757,13 +757,13 @@ struct WizardView: View {
                 .disabled(model.useSystemISO)
             },
             leading: {
-                FBCheck(isOn: $model.useSystemISO, label: "Use system-provided ISO")
+                FBCheck(isOn: $model.useSystemISO, label: String(localized: "Use system-provided ISO"))
                     .disabled(model.isRunning)
                     .help("Fetch the recommended base ISO automatically (like Simple mode) instead of supplying your own.")
             },
             help: HelpIcon(
-                title: "Recommended distributions",
-                blurb: "Advanced mode remasters a stock Debian installer ISO you supply. See the list of distributions known to assemble and boot cleanly.",
+                title: String(localized: "Recommended distributions"),
+                blurb: String(localized: "Advanced mode remasters a stock Debian installer ISO you supply. See the list of distributions known to assemble and boot cleanly."),
                 url: FlagshipLinks.recommendedDistros
             )
         )
@@ -780,8 +780,8 @@ struct WizardView: View {
         optionGroup(
             card: { DiskPickerRow(model: model) },
             help: HelpIcon(
-                title: "How does it work?",
-                blurb: "The chosen USB drive is formatted and written with a single-use boot image. Booting your box from it installs an encrypted, phone-unlocked server that registers itself automatically.",
+                title: String(localized: "How does it work?"),
+                blurb: String(localized: "The chosen USB drive is formatted and written with a single-use boot image. Booting your box from it installs an encrypted, phone-unlocked server that registers itself automatically."),
                 url: FlagshipLinks.bootingProcess
             )
         )
@@ -822,7 +822,7 @@ struct WizardView: View {
     // MARK: - Bake
 
     private var progressCaption: String {
-        let label = model.phaseLabel ?? "Working…"
+        let label = model.phaseLabel ?? String(localized: "Working…")
         if let p = model.progress {
             return "\(label)  \(Int((p * 100).rounded()))%"
         }
@@ -834,7 +834,7 @@ struct WizardView: View {
             if let error = model.operationError, !model.isRunning {
                 StatusCard(icon: "exclamationmark.triangle.fill",
                            tint: FB.Colors.warning,
-                           title: "Couldn't build the server",
+                           title: String(localized: "Couldn't build the server"),
                            subtitle: error)
             }
             if model.isRunning {
