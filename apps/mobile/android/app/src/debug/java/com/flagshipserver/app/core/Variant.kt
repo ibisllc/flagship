@@ -12,7 +12,9 @@ import com.flagshipserver.app.api.MockBuildClient
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.MockScreensClient
 import com.flagshipserver.app.api.MockSecretMailboxClient
+import com.flagshipserver.app.api.MockNameDibsClient
 import com.flagshipserver.app.api.MockServerTransferClient
+import com.flagshipserver.app.api.NameDibsClient
 import com.flagshipserver.app.api.MockServiceAccessClient
 import com.flagshipserver.app.api.PodDirect
 import com.flagshipserver.app.api.ScreensClient
@@ -163,6 +165,7 @@ object Variant : AppVariant {
                 flagshipServer = flagshipServer,
                 relay = relay,
                 transfer = transfer,
+                nameDibs = MockNameDibsClient(),
                 mailbox = mailbox,
                 podClients = FixedPodClients(screens, build),
                 shares = shares,
@@ -189,6 +192,7 @@ object Variant : AppVariant {
     override fun defaultQrRelay(): QrRelayClient = MockQrRelayClient()
     override fun defaultMailbox(): SecretMailboxClient = MockSecretMailboxClient()
     override fun defaultTransfer(): ServerTransferClient = MockServerTransferClient()
+    override fun defaultNameDibs(): NameDibsClient = MockNameDibsClient()
 
     override fun serviceAccessFixture(screens: ScreensClient): ServiceAccessFixture? {
         if (screens !is MockScreensClient) return null

@@ -6,6 +6,7 @@ package com.flagshipserver.app.core
 import android.content.Intent
 import com.flagshipserver.app.api.BuildClient
 import com.flagshipserver.app.api.FlagshipServerClient
+import com.flagshipserver.app.api.NameDibsClient
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.api.ServerTransferClient
@@ -43,6 +44,7 @@ object Variant : AppVariant {
     override fun defaultQrRelay(): QrRelayClient = missing("QrRelayClient")
     override fun defaultMailbox(): SecretMailboxClient = missing("SecretMailboxClient")
     override fun defaultTransfer(): ServerTransferClient = missing("ServerTransferClient")
+    override fun defaultNameDibs(): NameDibsClient = missing("NameDibsClient")
 
     override fun serviceAccessFixture(screens: ScreensClient): ServiceAccessFixture? = null
     override fun freeAiClient(): FreeAiClient? = null

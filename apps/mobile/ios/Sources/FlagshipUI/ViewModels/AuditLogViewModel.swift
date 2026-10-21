@@ -150,6 +150,7 @@ public final class AuditLogViewModel {
         case "quarantine-blocked-revoke": return String(localized: "Blocked a quarantined device's action")
         case "account-deleted":     return String(localized: "Deleted account")
         case "username-reclaimed":  return String(localized: "Username reclaimed")
+        case "account-renamed":     return String(localized: "Changed account name")
         case "account-type-changed-single-to-multi": return String(localized: "Switched to multi-device")
         case "account-type-changed-multi-to-single": return String(localized: "Switched to single-device")
         case "ct-unexpected-cert":  return String(localized: "Unexpected certificate observed")

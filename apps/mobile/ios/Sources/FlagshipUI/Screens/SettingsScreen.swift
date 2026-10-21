@@ -106,6 +106,9 @@ public struct SettingsScreen: View {
     var onOpenAccountSecurity: () -> Void = {}
     /// W3 — open the Profiles picker (multi-cloud).
     var onOpenProfiles: () -> Void = {}
+    /// Name dibs — shown only while the one-year window is open.
+    var nameDibsOpen: Bool = false
+    var onOpenNameDibs: () -> Void = {}
     /// P9 — open the peer-backup management screen.
     var onOpenPeerBackup: () -> Void = {}
     /// P14 — open the "Remote" browser-pairing screen.
@@ -204,6 +207,8 @@ public struct SettingsScreen: View {
         onOpenKeyfileBackup: @escaping () -> Void = {},
         onOpenAccountSecurity: @escaping () -> Void = {},
         onOpenProfiles: @escaping () -> Void = {},
+        nameDibsOpen: Bool = false,
+        onOpenNameDibs: @escaping () -> Void = {},
         onOpenPeerBackup: @escaping () -> Void = {},
         onOpenCompanionDock: @escaping () -> Void = {},
         onOpenSecuredSessions: @escaping () -> Void = {},
@@ -250,6 +255,8 @@ public struct SettingsScreen: View {
         self.onOpenKeyfileBackup = onOpenKeyfileBackup
         self.onOpenAccountSecurity = onOpenAccountSecurity
         self.onOpenProfiles = onOpenProfiles
+        self.nameDibsOpen = nameDibsOpen
+        self.onOpenNameDibs = onOpenNameDibs
         self.onOpenPeerBackup = onOpenPeerBackup
         self.onOpenCompanionDock = onOpenCompanionDock
         self.onOpenSecuredSessions = onOpenSecuredSessions
@@ -505,7 +512,10 @@ public struct SettingsScreen: View {
         ] + (isDemoAccount ? [] : [
             FSSettingsRow(icon: "key.horizontal.fill", title: String(localized: "Cloud recovery"), subtitle: String(localized: "Recover on a new device"), action: onOpenRecovery),
             FSSettingsRow(icon: "doc.badge.arrow.up.fill", title: String(localized: "Back up account key"), subtitle: String(localized: "Save an encrypted key file"), action: onOpenKeyfileBackup),
-        ]) + [
+        ]) + (nameDibsOpen && !isDemoAccount ? [
+            FSSettingsRow(icon: "flag.fill", title: String(localized: "Claim your .com name"), subtitle: String(localized: "Own the .com? The matching name is held for you"),
+                          accessibilityId: "settings-open-name-dibs", action: onOpenNameDibs),
+        ] : []) + [
             FSSettingsRow(icon: "person.2.circle.fill", title: String(localized: "Profiles"), subtitle: String(localized: "Switch between your clouds"), action: onOpenProfiles),
         ])
     }

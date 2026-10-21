@@ -10,6 +10,7 @@ package com.flagshipserver.app.core
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.flagshipserver.app.api.BuildClient
 import com.flagshipserver.app.api.FlagshipServerClient
+import com.flagshipserver.app.api.NameDibsClient
 import com.flagshipserver.app.api.ServerTransferClient
 import com.flagshipserver.app.api.InMemorySessionStore
 import com.flagshipserver.app.api.ScreensClient
@@ -37,6 +38,9 @@ val LocalSecretMailboxClient = staticCompositionLocalOf<SecretMailboxClient> { V
  *  box-pinned pipe. Production MainActivity wires the live client; previews +
  *  tests get the in-memory Mock. */
 val LocalServerTransferClient = staticCompositionLocalOf<ServerTransferClient> { Variant.defaultTransfer() }
+
+/** Name-dibs client (`.com`): the public window + IRK-signed claim initiate/verify. */
+val LocalNameDibsClient = staticCompositionLocalOf<NameDibsClient> { Variant.defaultNameDibs() }
 
 /** The pod session store backing the BFF (holds podBaseUrl + session token).
  *  Production MainActivity installs the EncryptedSessionStore; previews + tests
