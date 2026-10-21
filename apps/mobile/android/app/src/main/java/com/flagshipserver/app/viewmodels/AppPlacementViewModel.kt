@@ -7,6 +7,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.AppCopyGrantBody
 import com.flagshipserver.app.api.AppCopyRecord
@@ -133,13 +135,13 @@ class AppPlacementViewModel(
         _message.value = null
         set(podId, Presence.Working)
         val key = try {
-            copySigner("Copy $appName to ${target.pod.name}")
+            copySigner(FSStrings.get(R.string.copy_to, appName, target.pod.name))
         } catch (e: CancellationException) {
             set(podId, Presence.Absent)
             throw e
         } catch (t: Throwable) {
             set(podId, Presence.Absent)
-            _message.value = "Couldn't access your account key: ${UserErrorText.reason(t)}"
+            _message.value = FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(t))
             return false
         }
         val issuedAt = maxOf(now(), lastIssuedAt + 1)
@@ -181,19 +183,19 @@ class AppPlacementViewModel(
         val parts = has.app.creator.takeIf { it.isNotEmpty() }?.let { it to has.app.slug }
             ?: UninstallServiceOrder.split(serviceId)
             ?: run {
-                _message.value = "Couldn't tell which app to remove."
+                _message.value = FSStrings.get(R.string.couldnt_tell_which_app_to_remove)
                 return false
             }
         _message.value = null
         set(podId, Presence.Working)
         val key = try {
-            uninstallSigner("Remove $appName from ${target.pod.name}")
+            uninstallSigner(FSStrings.get(R.string.remove_from_2, appName, target.pod.name))
         } catch (e: CancellationException) {
             set(podId, has)
             throw e
         } catch (t: Throwable) {
             set(podId, has)
-            _message.value = "Couldn't access your account key: ${UserErrorText.reason(t)}"
+            _message.value = FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(t))
             return false
         }
         return try {
@@ -210,7 +212,7 @@ class AppPlacementViewModel(
             throw e
         } catch (t: Throwable) {
             set(podId, has)
-            _message.value = "Couldn't remove $appName from ${target.pod.name}: ${t.boxError() ?: t.userFacing()}"
+            _message.value = FSStrings.get(R.string.couldnt_remove_from, appName, target.pod.name, t.boxError() ?: t.userFacing())
             false
         }
     }
@@ -241,7 +243,7 @@ class AppPlacementViewModel(
                     when {
                         record == null -> row.presence
                         record.state == "failed" -> {
-                            _message.value = "Couldn't copy $appName to ${row.pod.name}" +
+                            _message.value = FSStrings.get(R.string.couldnt_copy_to, appName, row.pod.name) +
                                 (record.reason?.takeIf { it.isNotEmpty() }?.let { ": $it" } ?: ".")
                             Presence.Absent
                         }
@@ -273,11 +275,11 @@ class AppPlacementViewModel(
     }
 
     companion object {
-        const val NO_SESSION = "Not set up on this phone"
-        const val UNREACHABLE = "Can't reach this server right now"
-        const val LAST_COPY = "This is the only copy. To delete it, use Uninstall below."
-        const val NO_SOURCE = "No server has this app to copy it from."
-        const val NEEDS_UPDATE = "This server needs an update to receive copies."
+        val NO_SESSION get() = FSStrings.get(R.string.not_set_up_on_this_phone)
+        val UNREACHABLE get() = FSStrings.get(R.string.cant_reach_this_server_right_now_2)
+        val LAST_COPY get() = FSStrings.get(R.string.this_is_the_only_copy_to)
+        val NO_SOURCE get() = FSStrings.get(R.string.no_server_has_this_app_to)
+        val NEEDS_UPDATE get() = FSStrings.get(R.string.this_server_needs_an_update_to)
 
         fun copyFailure(t: Throwable, appName: String, server: String): String {
             if (t is ScreensError.NotImplemented) return NEEDS_UPDATE
@@ -285,23 +287,21 @@ class AppPlacementViewModel(
             val box = t.boxError()
             return when (t.status) {
                 404 -> NEEDS_UPDATE
-                409 -> "$appName is already on $server, or a copy is on its way there."
-                403 -> "$server refused the copy" + (box?.let { ": $it." } ?: ". Check this phone's clock and try again.")
-                400 -> box ?: "$server couldn't read the copy order."
+                409 -> FSStrings.get(R.string.is_already_on_or_a_copy, appName, server)
+                403 -> FSStrings.get(R.string.refused_the_copy, server) + (box?.let { ": $it." } ?: ". Check this phone's clock and try again.")
+                400 -> box ?: FSStrings.get(R.string.couldnt_read_the_copy_order, server)
                 else -> box ?: t.userFacing()
             }
         }
 
         fun pendingEnvText(appName: String, server: String, names: List<String>): String =
-            "$appName is on $server. Its ${if (names.size == 1) "setting" else "settings"} " +
-                "${names.joinToString(", ")} didn't come along: set ${if (names.size == 1) "it" else "them"} " +
-                "in its environment on $server."
+            FSStrings.get(R.string.is_on_its_didnt_come_along, appName, server, if (names.size == 1) "setting" else "settings", names.joinToString(", "), if (names.size == 1) "it" else "them", server)
 
         /** "Copying…", or with its progress (0..1; a box reporting 0..100 reads too). */
         fun progressText(progress: Double?): String {
-            val p = progress?.takeIf { it.isFinite() && it >= 0 } ?: return "Copying…"
+            val p = progress?.takeIf { it.isFinite() && it >= 0 } ?: return FSStrings.get(R.string.copying)
             val pct = if (p <= 1.0) (p * 100).roundToInt() else p.roundToInt().coerceAtMost(100)
-            return "Copying… $pct%"
+            return FSStrings.get(R.string.copying_2, pct)
         }
 
         /** That server's state of the app (§6); a copy underway shows its
@@ -310,7 +310,7 @@ class AppPlacementViewModel(
 
         fun rowNote(vm: AppPlacementViewModel, row: Row): String? = when (val p = row.presence) {
             is Presence.Copying -> progressText(p.progress)
-            is Presence.Working -> "Working…"
+            is Presence.Working -> FSStrings.get(R.string.working)
             else -> vm.blockedReason(row)
         }
     }

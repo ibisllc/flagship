@@ -1,5 +1,7 @@
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.UsernameSuggestion
 import com.flagshipserver.app.core.RateLimitedException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -66,7 +68,7 @@ class SuggestUsernameViewModel(
             if (s.message != null) _error.value = s.message
             _cooldown.value = ceil(max(0, s.retryAfterMs) / 1000.0).toInt()
         } catch (t: Throwable) {
-            _error.value = RateLimitedException.messageOf(t) ?: "Couldn't get a handle. Try again."
+            _error.value = RateLimitedException.messageOf(t) ?: FSStrings.get(R.string.couldnt_get_a_handle_try_again)
             _cooldown.value = 2
         } finally {
             _loading.value = false

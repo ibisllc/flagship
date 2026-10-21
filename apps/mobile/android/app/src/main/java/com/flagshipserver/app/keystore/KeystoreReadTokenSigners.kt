@@ -6,6 +6,8 @@
 
 package com.flagshipserver.app.keystore
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.IrkMaterial
 import com.flagshipserver.app.core.Profile
@@ -28,7 +30,7 @@ object KeystoreReadTokenSigners {
             )
         },
         umk: () -> ByteArray = Keystore::currentUmkSeed,
-        irk: suspend () -> IrkMaterial = { KeystoreIrkAccess().resolve("Refresh server status") },
+        irk: suspend () -> IrkMaterial = { KeystoreIrkAccess().resolve(FSStrings.get(R.string.refresh_server_status)) },
     ): List<ReadTokenSigner> {
         if (!hasUmk() || !username.equals(currentUser, ignoreCase = true)) return emptyList()
         val out = ArrayList<ReadTokenSigner>(2)

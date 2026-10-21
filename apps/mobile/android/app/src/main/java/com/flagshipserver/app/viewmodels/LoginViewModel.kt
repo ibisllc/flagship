@@ -37,6 +37,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.AccountResolution
 import com.flagshipserver.app.api.FlagshipServerClient
@@ -319,7 +321,7 @@ class LoginViewModel(
         if (_phase.value != LoginPhase.AwaitingSecondFactor) return
         val trimmed = code.trim()
         if (trimmed.isEmpty()) {
-            _phase.value = LoginPhase.Failed("Enter your recovery code.")
+            _phase.value = LoginPhase.Failed(FSStrings.get(R.string.enter_your_recovery_code_2))
             return
         }
         secondFactor = RePairInitiateRequest.TotpProof(
@@ -347,7 +349,7 @@ class LoginViewModel(
      */
     suspend fun confirmTakeover() {
         val seed = recoveredSeed ?: run {
-            _phase.value = LoginPhase.Failed("Recovered key missing — start over.")
+            _phase.value = LoginPhase.Failed(FSStrings.get(R.string.recovered_key_missing_start_over))
             return
         }
         if (isMulti && secondFactor == null) {
@@ -416,7 +418,7 @@ class LoginViewModel(
             //    a second factor) — and keys oldIrkPub on the locally
             //    derived current-version IRK as before.
             val recoveredVersion = Keystore.currentIrkVersion()
-            Keystore.deriveIRK("Confirm takeover", recoveredVersion)
+            Keystore.deriveIRK(FSStrings.get(R.string.confirm_takeover), recoveredVersion)
             val recoveredPubHex = pubHexForVersion(recoveredVersion)
 
             if (!isMulti && recoveredKeyMatchesRegistered(recoveredPubHex)) {
@@ -439,7 +441,7 @@ class LoginViewModel(
             // multi falls back to the locally derived current-version pub.
             val oldVersion = recoveredVersion
             val newVersion = oldVersion + 1
-            val newSign = Keystore.deriveIRK("Take over your Flagship account", newVersion)
+            val newSign = Keystore.deriveIRK(FSStrings.get(R.string.take_over_your_flagship_account), newVersion)
             val oldPubHex = if (!isMulti) {
                 resolution.registeredIrkPubHex ?: recoveredPubHex
             } else {
@@ -524,7 +526,7 @@ class LoginViewModel(
         _phase.value = LoginPhase.TakingOver
         try {
             val version = Keystore.pendingIrkRotationVersion() ?: Keystore.currentIrkVersion()
-            val newSign = Keystore.deriveIRK("Finish restoring access", version)
+            val newSign = Keystore.deriveIRK(FSStrings.get(R.string.finish_restoring_access), version)
             val newPubHex = pubHexForVersion(version)
             val issuedAt = System.currentTimeMillis()
             val completeSig = newSign.sign(
@@ -589,19 +591,19 @@ class LoginViewModel(
             // elapsed and the cloud swept the pending row (410 Gone).
             // Unlike 404 this is NOT "already done" — start over.
             t is HttpException && t.status == 410 ->
-                "This recovery expired before it was completed. Start again."
+                FSStrings.get(R.string.this_recovery_expired_before_it_was)
             m.contains("totpproof") || m.contains("invalid totp") || m.contains("401") ->
-                "That recovery code didn't check out. Try the current 6-digit code or a recovery code."
+                FSStrings.get(R.string.that_recovery_code_didnt_check_out)
             m.contains("no credential") || m.contains("no recovery") ||
                 m.contains("nomatchingcredential") ->
-                "We couldn't find a recovery passkey for this account."
-            m.contains("cancel") -> "Recovery cancelled."
+                FSStrings.get(R.string.we_couldnt_find_a_recovery_passkey)
+            m.contains("cancel") -> FSStrings.get(R.string.recovery_cancelled)
             // UX-B: never surface a raw status code / transport message —
             // fold network-class failures into plain language via the shared
             // humanizer (offline / temporary server problem / cert mismatch).
             NetworkErrorHumanizer.classify(t).kind != NetworkErrorHumanizer.Kind.UNKNOWN ->
                 NetworkErrorHumanizer.humanize(t)
-            else -> "Recovery couldn't be completed. Please try again."
+            else -> FSStrings.get(R.string.recovery_couldnt_be_completed_please_try)
         }
     }
 }

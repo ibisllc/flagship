@@ -13,6 +13,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
@@ -83,17 +85,17 @@ class AccountSecurityViewModel(
     suspend fun beginEnrollment() {
         val user = username()
         if (user.isNullOrEmpty()) {
-            _phase.value = AccountSecurityPhase.Failed("No active account on this device.")
+            _phase.value = AccountSecurityPhase.Failed(FSStrings.get(R.string.no_active_account_on_this_device))
             return
         }
         _phase.value = AccountSecurityPhase.Beginning
 
         val issuedAt = System.currentTimeMillis()
         val signature = try {
-            val signer = Keystore.deriveIRK("Turn on code protection", Keystore.currentIrkVersion())
+            val signer = Keystore.deriveIRK(FSStrings.get(R.string.turn_on_code_protection), Keystore.currentIrkVersion())
             signer.sign(canonicalEnrollBegin(user, issuedAt))
         } catch (e: Throwable) {
-            _phase.value = AccountSecurityPhase.Failed("Couldn't sign enroll-begin: ${UserErrorText.reason(e)}")
+            _phase.value = AccountSecurityPhase.Failed(FSStrings.get(R.string.couldnt_sign_enroll_begin, UserErrorText.reason(e)))
             return
         }
 
@@ -114,9 +116,9 @@ class AccountSecurityViewModel(
         } catch (e: Throwable) {
             val msg = e.message.orEmpty()
             val friendly = com.flagshipserver.app.core.RateLimitedException.messageOf(e) ?: if (msg.contains("503")) {
-                "Code protection isn't available on this server yet. Try again later."
+                FSStrings.get(R.string.code_protection_isnt_available_on_this)
             } else {
-                "Couldn't start enrollment: $msg"
+                FSStrings.get(R.string.couldnt_start_enrollment, msg)
             }
             _phase.value = AccountSecurityPhase.Failed(friendly)
         }
@@ -125,22 +127,22 @@ class AccountSecurityViewModel(
     suspend fun confirmEnrollment(sampleCode: String) {
         val trimmed = sampleCode.trim()
         if (trimmed.isEmpty()) {
-            _phase.value = AccountSecurityPhase.Failed("Enter the 6-digit code from your authenticator app.")
+            _phase.value = AccountSecurityPhase.Failed(FSStrings.get(R.string.enter_the_6_digit_code_from))
             return
         }
         val user = username()
         if (user.isNullOrEmpty()) {
-            _phase.value = AccountSecurityPhase.Failed("No active account on this device.")
+            _phase.value = AccountSecurityPhase.Failed(FSStrings.get(R.string.no_active_account_on_this_device))
             return
         }
         _phase.value = AccountSecurityPhase.Confirming
 
         val issuedAt = System.currentTimeMillis()
         val signature = try {
-            val signer = Keystore.deriveIRK("Confirm 2FA code", Keystore.currentIrkVersion())
+            val signer = Keystore.deriveIRK(FSStrings.get(R.string.confirm_2fa_code), Keystore.currentIrkVersion())
             signer.sign(canonicalEnrollConfirm(user, issuedAt))
         } catch (e: Throwable) {
-            _phase.value = AccountSecurityPhase.Failed("Couldn't sign enroll-confirm: ${UserErrorText.reason(e)}")
+            _phase.value = AccountSecurityPhase.Failed(FSStrings.get(R.string.couldnt_sign_enroll_confirm, UserErrorText.reason(e)))
             return
         }
 
@@ -163,9 +165,9 @@ class AccountSecurityViewModel(
             val msg = e.message.orEmpty()
             // A refused 429 says when to try again in `.com`'s own words.
             val friendly = com.flagshipserver.app.core.RateLimitedException.messageOf(e) ?: if (msg.contains("401")) {
-                "That code didn't match. Try again with a fresh code from your authenticator."
+                FSStrings.get(R.string.that_code_didnt_match_try_again)
             } else {
-                "Couldn't confirm: $msg"
+                FSStrings.get(R.string.couldnt_confirm, msg)
             }
             _phase.value = AccountSecurityPhase.Failed(friendly)
         }
@@ -181,21 +183,21 @@ class AccountSecurityViewModel(
     suspend fun disableEnrollment(code: String) {
         val trimmed = code.trim()
         if (trimmed.isEmpty()) {
-            _phase.value = AccountSecurityPhase.Failed("Enter your 6-digit code or a recovery code to confirm.")
+            _phase.value = AccountSecurityPhase.Failed(FSStrings.get(R.string.enter_your_6_digit_code_or))
             return
         }
         val user = username()
         if (user.isNullOrEmpty()) {
-            _phase.value = AccountSecurityPhase.Failed("No active account on this device.")
+            _phase.value = AccountSecurityPhase.Failed(FSStrings.get(R.string.no_active_account_on_this_device))
             return
         }
         _phase.value = AccountSecurityPhase.Disabling
         val issuedAt = System.currentTimeMillis()
         val signature = try {
-            val signer = Keystore.deriveIRK("Turn off code protection", Keystore.currentIrkVersion())
+            val signer = Keystore.deriveIRK(FSStrings.get(R.string.turn_off_code_protection), Keystore.currentIrkVersion())
             signer.sign(canonicalDisable(user, issuedAt))
         } catch (e: Throwable) {
-            _phase.value = AccountSecurityPhase.Failed("Couldn't sign disable: ${UserErrorText.reason(e)}")
+            _phase.value = AccountSecurityPhase.Failed(FSStrings.get(R.string.couldnt_sign_disable, UserErrorText.reason(e)))
             return
         }
         try {
@@ -213,9 +215,9 @@ class AccountSecurityViewModel(
         } catch (e: Throwable) {
             val msg = e.message.orEmpty()
             val friendly = com.flagshipserver.app.core.RateLimitedException.messageOf(e) ?: when {
-                msg.contains("401") -> "That code didn't match. Try a fresh code from your authenticator."
-                msg.contains("409") -> "Disable refused — other devices are still trusted on this account. Disconnect them first."
-                else -> "Couldn't disable: $msg"
+                msg.contains("401") -> FSStrings.get(R.string.that_code_didnt_match_try_a)
+                msg.contains("409") -> FSStrings.get(R.string.disable_refused_other_devices_are_still)
+                else -> FSStrings.get(R.string.couldnt_disable, msg)
             }
             _phase.value = AccountSecurityPhase.Failed(friendly)
         }

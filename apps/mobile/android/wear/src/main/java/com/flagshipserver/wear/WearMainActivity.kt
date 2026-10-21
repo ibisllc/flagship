@@ -5,6 +5,7 @@
 
 package com.flagshipserver.wear
 
+import androidx.compose.ui.res.stringResource
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -106,7 +107,7 @@ private fun Home(data: WatchContext, onApproval: (PendingApproval) -> Unit) {
                 item {
                     Chip(
                         onClick = {},
-                        label = { Text(p.podName ?: "New server", maxLines = 1) },
+                        label = { Text(p.podName ?: stringResource(R.string.new_server), maxLines = 1) },
                         secondaryLabel = { Text(p.detail?.takeIf { p.phase == "error" } ?: WatchProjection.phaseTitle(p.phase), maxLines = 2) },
                         colors = ChipDefaults.secondaryChipColors(),
                         modifier = Modifier.fillMaxWidth().testTag("watch-provision"),
@@ -114,19 +115,19 @@ private fun Home(data: WatchContext, onApproval: (PendingApproval) -> Unit) {
                 }
             }
             if (approvals.isNotEmpty()) {
-                item { ListHeader { Text("Waiting for you") } }
+                item { ListHeader { Text(stringResource(R.string.waiting_for_you)) } }
                 items(approvals) { a ->
                     Chip(
                         onClick = { onApproval(a) },
                         label = { Text(a.serverName ?: a.serverFqdn, maxLines = 1) },
-                        secondaryLabel = { Text("Waiting to unlock", maxLines = 1) },
+                        secondaryLabel = { Text(stringResource(R.string.waiting_to_unlock), maxLines = 1) },
                         colors = ChipDefaults.primaryChipColors(),
                         modifier = Modifier.fillMaxWidth().testTag("watch-approval-${a.serverFqdn}"),
                     )
                 }
             }
             if (data.status.pods.isNotEmpty()) {
-                item { ListHeader { Text("Servers") } }
+                item { ListHeader { Text(stringResource(R.string.servers)) } }
                 items(data.status.pods) { pod ->
                     Chip(
                         onClick = {},
@@ -141,7 +142,7 @@ private fun Home(data: WatchContext, onApproval: (PendingApproval) -> Unit) {
                 }
             }
             if (events.isNotEmpty()) {
-                item { ListHeader { Text("Recent activity") } }
+                item { ListHeader { Text(stringResource(R.string.recent_activity)) } }
                 items(events) { e ->
                     Text(
                         WatchProjection.eventLabel(e.kind),
@@ -153,7 +154,7 @@ private fun Home(data: WatchContext, onApproval: (PendingApproval) -> Unit) {
             if (data.status.pods.isEmpty() && approvals.isEmpty() && data.provision == null) {
                 item {
                     Text(
-                        "Open Flagship on your phone to see your servers here.",
+                        stringResource(R.string.open_flagship_on_your_phone_to),
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.caption2,
                         modifier = Modifier.padding(8.dp),
@@ -197,7 +198,7 @@ private fun Approve(
             Spacer(Modifier.height(10.dp))
             when {
                 busy -> CircularProgressIndicator()
-                approved -> Text("Approved", color = Color(com.flagshipserver.companion.StatusPalette.DARK_OK), modifier = Modifier.testTag("watch-approved"))
+                approved -> Text(stringResource(R.string.approved), color = Color(com.flagshipserver.companion.StatusPalette.DARK_OK), modifier = Modifier.testTag("watch-approved"))
                 else -> Button(
                     onClick = {
                         busy = true
@@ -205,11 +206,11 @@ private fun Approve(
                         scope.launch {
                             val reply = approve(ctx, approval)
                             busy = false
-                            if (reply.ok) approved = true else error = reply.errorMessage ?: "Approval failed."
+                            if (reply.ok) approved = true else error = reply.errorMessage ?: FSStrings.get(R.string.approval_failed)
                         }
                     },
                     modifier = Modifier.testTag("watch-approve"),
-                ) { Text("Approve") }
+                ) { Text(stringResource(R.string.approve)) }
             }
             error?.let {
                 Spacer(Modifier.height(6.dp))
@@ -223,6 +224,6 @@ private fun Approve(
 @Composable
 private fun Gone() {
     Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-        Text("This server isn't waiting any more.", textAlign = TextAlign.Center)
+        Text(stringResource(R.string.this_server_isnt_waiting_any_more), textAlign = TextAlign.Center)
     }
 }

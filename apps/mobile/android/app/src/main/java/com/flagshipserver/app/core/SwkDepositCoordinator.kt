@@ -20,6 +20,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.keystore.BiometricAuthority
 import com.flagshipserver.app.keystore.Keystore
@@ -98,7 +99,7 @@ class SwkDepositCoordinator(
         }
         try {
             val (irk, irkPubHex, swkHex) =
-                deriveIrkAndSwk(swkServerId, "Authorize $serverDomain to run apps")
+                deriveIrkAndSwk(swkServerId, FSStrings.get(R.string.authorize_to_run_apps, serverDomain))
 
             if (swkOwed) {
                 val swk = HexUtil.decode(swkHex)

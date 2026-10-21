@@ -5,6 +5,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.UnrevokeServerRequest
@@ -39,18 +41,18 @@ class UnrevokeServerViewModel(
     suspend fun run() {
         val user = username()
         if (user.isNullOrEmpty()) {
-            _phase.value = UnrevokeServerPhase.Failed("No active account on this device.")
+            _phase.value = UnrevokeServerPhase.Failed(FSStrings.get(R.string.no_active_account_on_this_device))
             return
         }
         _phase.value = UnrevokeServerPhase.Signing
         val issuedAt = now()
         val signature = try {
-            signer("Un-revoke server $serverDomain")
+            signer(FSStrings.get(R.string.un_revoke_server_2, serverDomain))
                 .sign(ServerUnrevocation.canonicalBytes(user, serverDomain, issuedAt))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            _phase.value = UnrevokeServerPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
+            _phase.value = UnrevokeServerPhase.Failed(FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(e)))
             return
         }
 
@@ -79,14 +81,14 @@ class UnrevokeServerViewModel(
     }
 
     companion object {
-        const val SUCCESS_MESSAGE =
-            "Server restored. If it unlocks on its own, approve its unlock once from your phone."
+        val SUCCESS_MESSAGE get() =
+            FSStrings.get(R.string.server_restored_if_it_unlocks_on)
 
         fun friendlyError(status: Int, body: String): String = when (status) {
-            403 -> "The server rejected the request. Sign in again and retry."
-            404 -> "That server is no longer on your account."
-            409 -> "This server was deleted or transferred, so it can't be restored."
-            else -> "Server error ($status): $body"
+            403 -> FSStrings.get(R.string.the_server_rejected_the_request_sign)
+            404 -> FSStrings.get(R.string.that_server_is_no_longer_on)
+            409 -> FSStrings.get(R.string.this_server_was_deleted_or_transferred)
+            else -> FSStrings.get(R.string.server_error, status, body)
         }
     }
 }

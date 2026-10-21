@@ -9,6 +9,8 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AddCircleOutline
 import androidx.compose.material.icons.outlined.Autorenew
@@ -73,12 +75,12 @@ fun AuditLogScreen(nav: NavController) {
     LaunchedEffect(Unit) { vm.load() }
 
     FSScreen(
-        title = "Audit log",
+        title = stringResource(R.string.audit_log),
         onBack = { nav.popBackStack() },
-        subtitle = "Signed account-level actions, newest first.",
+        subtitle = stringResource(R.string.signed_account_level_actions_newest_first),
         onRefresh = { vm.load() },
         refreshing = state is LoadingState.Loading,
-        actions = { FSBarAction(Icons.Outlined.Refresh, "Refresh", onClick = { vm.load() }) },
+        actions = { FSBarAction(Icons.Outlined.Refresh, stringResource(R.string.refresh), onClick = { vm.load() }) },
     ) {
         when (val s = state) {
             is LoadingState.Loaded -> Body(s.value, onLoadMore = { vm.loadMore() })
@@ -95,8 +97,8 @@ fun AuditLogScreen(nav: NavController) {
 private fun Body(page: AuditLogPage, onLoadMore: () -> Unit) {
     if (page.events.isEmpty()) {
         FSEmptyState(
-            title = "No account events yet.",
-            message = "Signed actions — disconnecting a device, rotating recovery, renaming an app URL — land here so you have one place to review your account history.",
+            title = stringResource(R.string.no_account_events_yet),
+            message = stringResource(R.string.signed_actions_disconnecting_a_device),
             icon = Icons.Outlined.History,
         )
         return
@@ -111,7 +113,7 @@ private fun Body(page: AuditLogPage, onLoadMore: () -> Unit) {
 
     if (page.canLoadMore) {
         FSSecondaryButton(
-            label = if (page.loadingMore) "Loading…" else "Load more",
+            label = if (page.loadingMore) stringResource(R.string.loading) else stringResource(R.string.load_more),
             onClick = onLoadMore,
             enabled = !page.loadingMore,
             block = true,

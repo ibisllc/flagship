@@ -11,6 +11,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.PeerBackupStatusResponse
 import com.flagshipserver.app.api.PeerRootArchive
 import com.flagshipserver.app.api.PeerRootSummary
@@ -36,7 +37,7 @@ object PeerBackup {
     /** The server address as the box and `.com` key it (trimmed, lowercase), or a sentence. */
     fun normalizeServerId(raw: String?): String {
         val id = raw.orEmpty().trim().lowercase()
-        if (!SERVER_ID.matches(id)) throw PeerBackupException("That isn't a server address.")
+        if (!SERVER_ID.matches(id)) throw PeerBackupException(FSStrings.get(R.string.that_isnt_a_server_address))
         return id
     }
 
@@ -56,7 +57,7 @@ object PeerBackup {
 
     /** Open a sealed root with the PBK; the same checks as the box. Returns the root JSON. */
     fun openSealedRoot(sealed: SealedRoot, pbkHex: String, serverId: String): JsonObject {
-        val rootKey = ServerKeys.hkdf32(HexUtil.decode(pbkHex) ?: throw PeerBackupException("That isn't a peer backup key."), INFO_ROOT)
+        val rootKey = ServerKeys.hkdf32(HexUtil.decode(pbkHex) ?: throw PeerBackupException(FSStrings.get(R.string.that_isnt_a_peer_backup_key)), INFO_ROOT)
         val plain = try {
             val c = Cipher.getInstance("AES/GCM/NoPadding")
             c.init(
@@ -67,11 +68,11 @@ object PeerBackup {
             c.updateAAD("$INFO_ROOT|$serverId".toByteArray(Charsets.UTF_8))
             c.doFinal(HexUtil.decode(sealed.ciphertextHex) ?: ByteArray(0))
         } catch (_: Exception) {
-            throw PeerBackupException("The peer backup record doesn't open with this account's key.")
+            throw PeerBackupException(FSStrings.get(R.string.the_peer_backup_record_doesnt_open))
         }
         val root = Json.parseToJsonElement(String(plain, Charsets.UTF_8)).jsonObject
         if (root["v"]?.jsonPrimitive?.content != "1" || root["serverId"]?.jsonPrimitive?.content != serverId) {
-            throw PeerBackupException("That peer backup record is for another server.")
+            throw PeerBackupException(FSStrings.get(R.string.that_peer_backup_record_is_for))
         }
         return root
     }
@@ -101,31 +102,31 @@ object PeerBackup {
     // ── Words ──────────────────────────────────────────────────────
 
     fun stateTitle(state: String?): String = when (state) {
-        "waiting-for-peers" -> "Looking for servers to keep pieces"
-        "filling" -> "Getting ready"
-        "placing" -> "Sending pieces to other servers"
+        "waiting-for-peers" -> FSStrings.get(R.string.looking_for_servers_to_keep_pieces)
+        "filling" -> FSStrings.get(R.string.getting_ready)
+        "placing" -> FSStrings.get(R.string.sending_pieces_to_other_servers)
         "protected" -> "Protected"
-        "at-risk" -> "At risk"
-        "leaving" -> "Leaving peer backups"
+        "at-risk" -> FSStrings.get(R.string.at_risk)
+        "leaving" -> FSStrings.get(R.string.leaving_peer_backups)
         "off" -> "Off"
         else -> state.orEmpty()
     }
 
     fun stateNote(state: String?): String = when (state) {
-        "waiting-for-peers" -> "Peer backup starts once enough other servers can hold it."
-        "filling" -> "This server is setting aside space for other servers' pieces first."
-        "placing" -> "Your newest backup is being spread over other servers."
-        "protected" -> "Enough of the servers holding your pieces answer to bring your backup back."
-        "at-risk" -> "Too few pieces are safe. Your server is moving them to other servers."
-        "leaving" -> "This server stops taking new pieces and frees its space in two weeks."
-        "off" -> "Choose Peer-distributed backups in this server's Backups to turn it on."
+        "waiting-for-peers" -> FSStrings.get(R.string.peer_backup_starts_once_enough_other)
+        "filling" -> FSStrings.get(R.string.this_server_is_setting_aside_space)
+        "placing" -> FSStrings.get(R.string.your_newest_backup_is_being_spread)
+        "protected" -> FSStrings.get(R.string.enough_of_the_servers_holding_your)
+        "at-risk" -> FSStrings.get(R.string.too_few_pieces_are_safe_your)
+        "leaving" -> FSStrings.get(R.string.this_server_stops_taking_new_pieces)
+        "off" -> FSStrings.get(R.string.choose_peer_distributed_backups_in_this)
         else -> ""
     }
 
     private fun holderState(state: String?): String = when (state) {
         "ok" -> "Answering"
         "checking" -> "Checking"
-        "failing" -> "Not answering"
+        "failing" -> FSStrings.get(R.string.not_answering)
         "offline" -> "Offline"
         else -> state.orEmpty()
     }
@@ -134,9 +135,9 @@ object PeerBackup {
         if (n < 0) return ""
         val gb = 1024.0 * 1024 * 1024
         return when {
-            n >= gb -> if (n < 10 * gb) "%.1f GB".format(java.util.Locale.US, n / gb) else "${Math.round(n / gb)} GB"
-            n >= 1024L * 1024 -> "${Math.round(n / (1024.0 * 1024))} MB"
-            else -> "${maxOf(0L, Math.round(n / 1024.0))} KB"
+            n >= gb -> if (n < 10 * gb) "%.1f GB".format(java.util.Locale.US, n / gb) else FSStrings.get(R.string.gb, Math.round(n / gb))
+            n >= 1024L * 1024 -> FSStrings.get(R.string.mb, Math.round(n / (1024.0 * 1024)))
+            else -> FSStrings.get(R.string.kb, maxOf(0L, Math.round(n / 1024.0)))
         }
     }
 
@@ -151,7 +152,7 @@ object PeerBackup {
                 line = listOf(
                     holderState(h.state),
                     h.lastProofAt?.takeIf { it > 0 }?.let { "last proof ${formatTime(it)}" } ?: "no proof yet",
-                    "${h.bricks} piece${if (h.bricks == 1) "" else "s"}",
+                    FSStrings.plural(R.plurals.pieces_count, h.bricks, h.bricks),
                 ).joinToString(" · "),
             )
         }
@@ -165,9 +166,9 @@ object PeerBackup {
     /** The date by which a lost server's backup must be restored, or "". */
     fun restoreByLine(keepUntil: Long?, now: Long = System.currentTimeMillis(), formatDate: (Long) -> String = ::defaultDate): String {
         if (keepUntil == null || keepUntil <= 0) return ""
-        if (keepUntil <= now) return "The pieces of this backup are no longer kept."
+        if (keepUntil <= now) return FSStrings.get(R.string.the_pieces_of_this_backup_are)
         val days = Math.ceil((keepUntil - now).toDouble() / DAY_MS).toLong()
-        return "Restore by ${formatDate(keepUntil)} ($days day${if (days == 1L) "" else "s"} left)."
+        return FSStrings.plural(R.plurals.restore_by_days_left, days.toInt(), formatDate(keepUntil), days)
     }
 
     /** What this server keeps for others. */
@@ -176,21 +177,21 @@ object PeerBackup {
         if (h.poolBytes <= 0) return emptyList()
         return buildList {
             add("Pool: ${formatSize(h.poolBytes)}, of which ${formatSize(h.realBytes)} holds other servers' pieces and ${formatSize(h.fillerBytes)} is proof filler.")
-            add("Proven so far: ${formatSize(h.provenBytes)}.")
-            if (h.leaving) add("This server is leaving peer backups.")
+            add(FSStrings.get(R.string.proven_so_far, formatSize(h.provenBytes)))
+            if (h.leaving) add(FSStrings.get(R.string.this_server_is_leaving_peer_backups))
         }
     }
 
     /** The card a restore shows once a lost server's record is found. */
     fun rootLines(summary: PeerRootSummary, now: Long = System.currentTimeMillis()): List<String> = buildList {
         val a = summary.archive
-        add("Backup of ${summary.serverId}, saved ${defaultTime(a.createdAt)} (${formatSize(a.bytes)}).")
-        add("${summary.holders} server${if (summary.holders == 1) "" else "s"} hold its pieces; ${summary.needed} bring it back.")
+        add(FSStrings.get(R.string.backup_of_saved, summary.serverId, defaultTime(a.createdAt), formatSize(a.bytes)))
+        add(FSStrings.plural(R.plurals.servers_hold_its_pieces, summary.holders, summary.holders, summary.needed))
         restoreByLine(summary.keepUntil, now).takeIf { it.isNotEmpty() }?.let { add(it) }
     }
 
-    const val OLDER_ENGINE = "This server runs an older peer backup. Update the server to see its new status here."
+    val OLDER_ENGINE get() = FSStrings.get(R.string.this_server_runs_an_older_peer)
 
-    const val RESTORE_INTRO =
-        "Your lost server's latest backup is kept in pieces on other Flagship servers. Pick the lost server, this phone gets the pieces back, and you name the new server."
+    val RESTORE_INTRO get() =
+        FSStrings.get(R.string.your_lost_servers_latest_backup_is)
 }

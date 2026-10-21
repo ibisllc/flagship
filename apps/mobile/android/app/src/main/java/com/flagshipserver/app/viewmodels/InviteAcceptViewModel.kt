@@ -7,6 +7,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.ServiceAccessClient
 import com.flagshipserver.app.api.ServiceAccessError
 import com.flagshipserver.app.core.InviteLink
@@ -46,15 +48,15 @@ class InviteAcceptViewModel(
             val result = client.acceptInvite(server, accept = a.accept, acceptSigHex = a.acceptSigHex)
             InviteAcceptPhase.Done(result.serviceRef.ifEmpty { serviceRef })
         } catch (_: ServiceAccessError.InviteExpiredOrFull) {
-            InviteAcceptPhase.Failed("This invite has expired or is already used up.")
+            InviteAcceptPhase.Failed(FSStrings.get(R.string.this_invite_has_expired_or_is))
         } catch (_: ServiceAccessError) {
-            InviteAcceptPhase.Failed("Couldn't verify this approval. Ask them to open the invite again and resend.")
+            InviteAcceptPhase.Failed(FSStrings.get(R.string.couldnt_verify_this_approval_ask_them))
         } catch (_: Throwable) {
-            InviteAcceptPhase.Failed("Couldn't reach the server. Check your connection and try again.")
+            InviteAcceptPhase.Failed(FSStrings.get(R.string.couldnt_reach_the_server_check_your))
         }
     }
 
     companion object {
-        const val MALFORMED = "That approval link is incomplete. Ask your contact to send it again."
+        val MALFORMED get() = FSStrings.get(R.string.that_approval_link_is_incomplete_ask)
     }
 }

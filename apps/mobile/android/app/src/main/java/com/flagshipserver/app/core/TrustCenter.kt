@@ -7,6 +7,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,8 +30,8 @@ data class TrustFailure(
     /** The sliver line — one canonical shape per class. */
     val label: String
         get() = when (certClass) {
-            TrustCertClass.CONTROL -> "Control server certificate expired · $slug"
-            TrustCertClass.RELAY -> "Relay certificate expired · $slug"
+            TrustCertClass.CONTROL -> FSStrings.get(R.string.control_server_certificate_expired, slug)
+            TrustCertClass.RELAY -> FSStrings.get(R.string.relay_certificate_expired, slug)
         }
 }
 

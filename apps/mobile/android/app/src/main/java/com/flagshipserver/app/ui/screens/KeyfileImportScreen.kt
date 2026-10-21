@@ -9,6 +9,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -77,7 +81,7 @@ fun KeyfileImportScreen(
             ctx.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
         }.getOrNull()
         if (text == null) {
-            pickError = "Couldn't read that file. Try choosing it again."
+            pickError = FSStrings.get(R.string.couldnt_read_that_file_try_choosing)
         } else {
             pickedText = text
             pickError = null
@@ -90,9 +94,9 @@ fun KeyfileImportScreen(
     }
 
     FSScreen(
-        title = "Import backup file",
+        title = stringResource(R.string.import_backup_file),
         onBack = onBack,
-        subtitle = "Bring this device into your account using its backup key file. You'll need the file and its passphrase.",
+        subtitle = stringResource(R.string.bring_this_device_into_your_account),
         modifier = Modifier.semantics { contentDescription = "keyfile-import" },
     ) {
         when (val p = phase) {
@@ -146,12 +150,12 @@ private fun ChooseAndUnlock(
             )
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    if (pickedText == null) "Choose your backup file" else "Backup file selected",
+                    if (pickedText == null) stringResource(R.string.choose_your_backup_file) else stringResource(R.string.backup_file_selected),
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Text(
-                    if (pickedText == null) "Pick the .flagshipkey file you saved earlier."
-                    else "Now enter the passphrase you set when you created it.",
+                    if (pickedText == null) stringResource(R.string.pick_the_flagshipkey_file_you_saved)
+                    else stringResource(R.string.now_enter_the_passphrase_you_set),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -159,7 +163,7 @@ private fun ChooseAndUnlock(
         }
     }
     FSSecondaryButton(
-        label = if (pickedText == null) "Choose file" else "Choose a different file",
+        label = if (pickedText == null) stringResource(R.string.choose_file) else stringResource(R.string.choose_a_different_file),
         onClick = onChoose,
         block = true,
         modifier = Modifier.semantics { contentDescription = "keyfile-import-choose" },
@@ -169,8 +173,8 @@ private fun ChooseAndUnlock(
         FSField(
             value = passphrase,
             onValueChange = onPassphrase,
-            label = "Passphrase",
-            placeholder = "The passphrase for this file",
+            label = stringResource(R.string.passphrase),
+            placeholder = stringResource(R.string.the_passphrase_for_this_file),
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.semantics { contentDescription = "keyfile-import-passphrase" },
         )
@@ -186,7 +190,7 @@ private fun ChooseAndUnlock(
     }
 
     FSPrimaryButton(
-        label = "Import",
+        label = stringResource(R.string.import_label),
         onClick = onImport,
         enabled = canImport,
         block = true,
@@ -204,9 +208,9 @@ private fun WorkingView() {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         CircularProgressIndicator()
-        Text("Unlocking your account key…", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.unlocking_your_account_key), style = MaterialTheme.typography.titleMedium)
         Text(
-            "Decrypting the backup and bringing this device into your Flagship account.",
+            stringResource(R.string.decrypting_the_backup_and_bringing_this),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
@@ -227,19 +231,19 @@ private fun GraceView(completesAt: Long, onFinish: () -> Unit) {
     val elapsed = remaining == 0L
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s4),
         modifier = Modifier.semantics { contentDescription = "keyfile-import-grace" }) {
-        Text("Bringing this device in", style = MaterialTheme.typography.titleLarge)
+        Text(stringResource(R.string.bringing_this_device_in), style = MaterialTheme.typography.titleLarge)
         FSCard {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 Icon(Icons.Outlined.Schedule, contentDescription = null, tint = FS.colors.accent, modifier = Modifier.size(24.dp))
                 Text(
-                    if (elapsed) "The grace period has elapsed — you can finish now."
-                    else "This device takes over in ${formatRemaining(remaining)}. Your other devices are being alerted.",
+                    if (elapsed) stringResource(R.string.the_grace_period_has_elapsed_you_2)
+                    else fsString(R.string.this_device_takes_over_in_your_2, formatRemaining(remaining)),
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
         }
         FSPrimaryButton(
-            label = "Finish now",
+            label = stringResource(R.string.finish_now),
             onClick = onFinish,
             enabled = elapsed,
             block = true,
@@ -253,9 +257,9 @@ private fun formatRemaining(ms: Long): String {
     val s = ms / 1000
     val d = s / 86400; val h = (s % 86400) / 3600; val m = (s % 3600) / 60; val sec = s % 60
     return when {
-        d > 0 -> "${d}d ${h}h"
-        h > 0 -> "${h}h ${m}m"
-        m > 0 -> "${m}m ${sec}s"
+        d > 0 -> FSStrings.get(R.string.d_h, d, h)
+        h > 0 -> FSStrings.get(R.string.h_m, h, m)
+        m > 0 -> FSStrings.get(R.string.m_s, m, sec)
         else -> "${sec}s"
     }
 }
