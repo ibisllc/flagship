@@ -47,6 +47,7 @@ import { buildRecoveryEnvelope, ciphertextMismatch, verifySignedRecord } from ".
 import { controlApex, recoveryOrigin } from "./apex.js";
 import { throwIfRateLimited } from "./rateLimited.js";
 
+import { tr } from "./i18n.js";
 const APEX = controlApex();
 const RECOVERY_ORIGIN = recoveryOrigin();
 
@@ -87,7 +88,7 @@ export async function setupCloudRecovery(username) {
     ...(adminRootSeed ? { adminRootSeed } : {}),
   });
   if (result.type !== "flagship-recovery-enroll-result") {
-    throw new Error(`enroll: ${result.reason ?? "no result"}`);
+    throw new Error(`enroll: ${result.reason ?? tr("no result")}`);
   }
   const { credentialIdHex, wrappedUmkB64, wrappedAdminRootB64, fetchTokenHashHex, prfSaltHashHex } = result;
   if (typeof credentialIdHex !== "string" || typeof wrappedUmkB64 !== "string") {
@@ -161,7 +162,7 @@ export async function recoverFromCloud(username) {
   if (!username) throw new Error("username required");
   const result = await runSubOriginFlow("recover", { hintUsername: username });
   if (result.type !== "flagship-recovery-recover-result") {
-    throw new Error(`recover: ${result.reason ?? "no result"}`);
+    throw new Error(`recover: ${result.reason ?? tr("no result")}`);
   }
   if (!Array.isArray(result.umk) || result.umk.length !== 32) {
     throw new Error("recover: malformed UMK payload");
@@ -294,7 +295,7 @@ export async function enrollNewRecoveryPasskey(umk, username) {
   if (!username) throw new Error("username required");
   const result = await runSubOriginFlow("enroll", { umk, username });
   if (result.type !== "flagship-recovery-enroll-result") {
-    throw new Error(`enroll: ${result.reason ?? "no result"}`);
+    throw new Error(`enroll: ${result.reason ?? tr("no result")}`);
   }
   const { credentialIdHex, wrappedUmkB64 } = result;
   if (typeof credentialIdHex !== "string" || typeof wrappedUmkB64 !== "string") {

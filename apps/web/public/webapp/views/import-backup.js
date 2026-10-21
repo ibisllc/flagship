@@ -41,8 +41,8 @@ import { createServerForRestore, isValidServerName } from "./create-server.js";
 import { canAddServers, refuseAddServer } from "../lib/addServerGate.js";
 import { describePeerRoot, startPeerRestore, waitForPeerData, rootLines } from "../lib/peerBackup.js";
 
-import { tr } from "../lib/i18n.js";
-export const ADD_IMPORT_LABEL = "+ Add/Restore server";
+import { tr, dateLocale } from "../lib/i18n.js";
+export const ADD_IMPORT_LABEL = tr("+ Add/Restore server");
 
 function openDialog(label, html) {
   const dlg = document.createElement("dialog");
@@ -168,8 +168,8 @@ export function serverWaitingFor(pods, archiveId) {
 
 /** "unlocks on its own" / "asks your phone at every boot", disk on/off. */
 export function savedSettingsLine(server) {
-  const unlock = server.bootUnlockMode === "approve" ? "asks your phone at every start" : "unlocks on its own after the first start";
-  const disk = server.diskEncryption === "none" ? "disk not encrypted" : "disk encrypted";
+  const unlock = server.bootUnlockMode === "approve" ? tr("asks your phone at every start") : tr("unlocks on its own after the first start");
+  const disk = server.diskEncryption === "none" ? tr("disk not encrypted") : tr("disk encrypted");
   return tr("Copied from the backup: {0}, {1}.", unlock, disk);
 }
 
@@ -195,7 +195,7 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
     tr("Import a backup"),
     `
     <h3 class="modal-title">${tr("Import a backup")}</h3>
-    <p class="note" data-imp-intro>${escapeHtml(targetFqdn ? `${podShortName(targetFqdn) || targetFqdn} is waiting for its backup. Pick the backup's .flagship file and this page sends it.` : IMPORT_INTRO)}</p>
+    <p class="note" data-imp-intro>${escapeHtml(targetFqdn ? tr("{0} is waiting for its backup. Pick the backup's .flagship file and this page sends it.", podShortName(targetFqdn) || targetFqdn) : IMPORT_INTRO)}</p>
     <div data-imp-pick>
       <input type="file" class="full-width" data-imp-file accept="${BACKUP_BUNDLE_EXTENSION},application/octet-stream" />
       <p class="note small" data-imp-files></p>
@@ -298,10 +298,10 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
   async function afterOpen() {
     show(ui.passEl, false);
     const { body } = state.opened;
-    const names = body.apps.map((a) => a.name).join(", ") || "no apps";
+    const names = body.apps.map((a) => a.name).join(", ") || tr("no apps");
     ui.summaryEl.textContent =
-      tr("From {0}, saved {1}: {2}.", body.server.domain, new Date(body.createdAt).toLocaleString(), names) +
-      (body.left.length ? tr(" Not in this backup: {0}.", body.left.map((a) => a.name).join(", ")) : "");
+      tr("From {0}, saved {1}: {2}.", body.server.domain, new Date(body.createdAt).toLocaleString(dateLocale()), names) +
+      (body.left.length ? " " + tr("Not in this backup: {0}.", body.left.map((a) => a.name).join(", ")) : "");
     show(ui.summaryEl);
     describeFiles();
     await checkData();
@@ -412,12 +412,12 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
           }
           if (st && !st.waiting && st.restore?.state === "done") break;
           if (st?.waiting && st.waiting.archiveId !== state.parsed.archiveId) {
-            throw userError(`${name} is waiting for a different backup.`);
+            throw userError(tr("{0} is waiting for a different backup.", name));
           }
         }
         status(
-          tr("Waiting for {0} to come online… Set it up with the recipe if you haven't yet. Keep this page open: ", name) +
-            `the backup goes as soon as the server is up. If you leave, ${name} keeps waiting and shows on Home with Send the backup.`,
+          tr("Waiting for {0} to come online… Set it up with the recipe if you haven't yet. Keep this page open:", name) + " " +
+            tr("the backup goes as soon as the server is up. If you leave, {0} keeps waiting and shows on Home with Send the backup.", name),
         );
         await sleep(5000);
       }
@@ -615,7 +615,7 @@ export async function openRestoreFromPeers() {
       }
       const body = state.opened.body;
       el.summary.textContent =
-        rootLines(state.root).join(" ") + tr(" Apps: {0}.", body.apps.map((x) => x.name).join(", ") || "none");
+        rootLines(state.root).join(" ") + " " + tr("Apps: {0}.", body.apps.map((x) => x.name).join(", ") || tr("none"));
       show(el.summary);
       show(el.pick, false);
       status("");
@@ -704,7 +704,7 @@ export async function openRestoreFromPeers() {
           const st = await restoreStatus({ client }).catch(() => null);
           if (st?.waiting?.archiveId === a.archiveId) {
             if (st.restore && ["checking", "restoring"].includes(st.restore.state)) break;
-            status(`${name} is getting the backup from other servers…`);
+            status(tr("{0} is getting the backup from other servers…", name));
             bar(0, null);
             await startPeerRestore({ client, umkSeed: session.umk, serverId: state.lost });
             await waitForPeerData({
@@ -720,7 +720,7 @@ export async function openRestoreFromPeers() {
         }
         status(
           tr("Waiting for {0} to come online… Set it up with the recipe if you haven't yet. Keep this page open: ", name) +
-            `it gets the backup as soon as the server is up. If you leave, ${name} keeps waiting and shows on Home.`,
+            tr("it gets the backup as soon as the server is up. If you leave, {0} keeps waiting and shows on Home.", name),
         );
         await sleep(5000);
       }

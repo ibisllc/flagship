@@ -22,11 +22,11 @@ export function sessionStatusLabel(status) {
     case "streaming": return tr("AI is working");
     case "awaiting-tool-response": return tr("Waiting for you");
     case "ready-to-deploy": return tr("Ready to deploy");
-    case "deploying": return "Deploying";
-    case "deployed": return "Deployed";
-    case "failed": return "Failed";
-    case "cancelled": return "Cancelled";
-    default: return "Stopped";
+    case "deploying": return tr("Deploying");
+    case "deployed": return tr("Deployed");
+    case "failed": return tr("Failed");
+    case "cancelled": return tr("Cancelled");
+    default: return tr("Stopped");
   }
 }
 
@@ -38,10 +38,10 @@ export function sessionActionLabel(status) {
   switch (status) {
     case "awaiting-tool-response":
     case "ready-to-deploy":
-    case "failed": return "Continue";
+    case "failed": return tr("Continue");
     case "streaming":
-    case "deploying": return "Resume";
-    default: return "Open";
+    case "deploying": return tr("Resume");
+    default: return tr("Open");
   }
 }
 
@@ -110,8 +110,9 @@ export function canDiscard(session) {
 export const DISCARD_TITLE = tr("Discard this build?");
 
 export function discardMessage(session) {
-  const freed = session?.name ? tr(" Its name, \"{0}\", becomes free again.", session.name) : "";
-  return tr("This stops the AI and deletes what it has written on your server.{0}", freed);
+  return session?.name
+    ? tr("This stops the AI and deletes what it has written on your server. Its name, \"{0}\", becomes free again.", session.name)
+    : tr("This stops the AI and deletes what it has written on your server.");
 }
 
 /** Past builds the box no longer holds a session for. */

@@ -74,9 +74,9 @@ export function formatCredits(n, locale) {
  * "free", so it can go when the promotion ends.
  */
 export function creditsLine(credits, locale) {
-  const left = `${formatCredits(creditsLeft(credits), locale)} free credits left`;
+  const left = tr("{0} free credits left", formatCredits(creditsLeft(credits), locale));
   const weekly = weeklyCredits(credits);
-  return weekly === null ? left : `${left} · ${formatCredits(weekly, locale)} added each week`;
+  return weekly === null ? left : tr("{0} · {1} added each week", left, formatCredits(weekly, locale));
 }
 
 /**

@@ -47,15 +47,15 @@ function renderReport(report) {
   const root = $("post-recovery-content");
   if (!root) return;
   if (!report) {
-    root.innerHTML = '<div class="card placeholder">no recovery has run on this daemon yet</div>';
+    root.innerHTML = `<div class="card placeholder">${tr("no recovery has run on this daemon yet")}</div>`;
     return;
   }
   const statusPill =
     report.status === "complete"
-      ? '<span class="pill ok">Done</span>'
+      ? `<span class="pill ok">${tr("Done")}</span>`
       : report.status === "failed"
-      ? '<span class="pill err">Failed</span>'
-      : '<span class="pill">Running…</span>';
+      ? `<span class="pill err">${tr("Failed")}</span>`
+      : `<span class="pill">${tr("Running…")}</span>`;
   const undoText = report.undoWindowExpiresAt
     ? formatWhen(report.undoWindowExpiresAt)
     : "—";
@@ -71,7 +71,7 @@ function renderReport(report) {
     </div>
     <h3 class="mt-4">${tr("Per-app")}</h3>
     ${(report.apps ?? []).length === 0
-      ? '<div class="card placeholder">no apps walked</div>'
+      ? `<div class="card placeholder">${tr("no apps walked")}</div>`
       : (report.apps ?? []).map((a) => `
         <div class="card">
           <div class="row"><span class="label">${escapeHtml(a.slug ?? a.serviceId)}</span><span class="value text-xs">${escapeHtml(a.serviceId)}</span></div>

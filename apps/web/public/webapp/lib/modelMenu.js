@@ -15,7 +15,7 @@ import { escapeHtml } from "./util.js";
 
 import { tr, trn } from "./i18n.js";
 export const FLAGSHIP_TITLE = tr("Flagship Inference");
-export const UNKNOWN_NOTE = "capabilities unknown";
+export const UNKNOWN_NOTE = tr("capabilities unknown");
 export const REFUSED_NOTE = tr("The key was refused");
 export const PROVIDER_DEFAULT = tr("Provider default");
 export const ATTACH_NOTICE = tr("The AI will see what you attach.");
@@ -208,7 +208,7 @@ export const MAX_ATTACHMENTS = 6;
 const MB = 1024 * 1024;
 export const ATTACHMENT_LIMITS = {
   image: { bytes: 4 * MB, text: tr("4 MB"), noun: "images" },
-  text: { bytes: 256 * 1024, text: tr("256 KB"), noun: "text files" },
+  text: { bytes: 256 * 1024, text: tr("256 KB"), noun: tr("text files") },
   data: { bytes: 2 * MB, text: tr("2 MB"), noun: tr("CSV and JSON files") },
   document: { bytes: 10 * MB, text: tr("10 MB"), noun: "PDFs" },
 };

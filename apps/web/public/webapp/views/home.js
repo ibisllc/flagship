@@ -516,8 +516,8 @@ export function renderServerCard(server, pod, opts = {}) {
   const certCountdown = pod?.currentCert?.validUntil
     ? formatCertCountdown(pod.currentCert.validUntil) : "";
   const autoUnlock = pod?.routingTarget
-    ? "auto-unlock on"
-    : "phone-tap only";
+    ? tr("auto-unlock on")
+    : tr("phone-tap only");
   // Subtitle folds the app count + auto-unlock state into one muted line; the
   // cert countdown (when <30d) rides the mono detail line.
   let subtitle = trn(serviceCount, "{0} service · {1}", "{0} services · {1}", autoUnlock);
@@ -564,7 +564,7 @@ export function renderServerCard(server, pod, opts = {}) {
   `;
 }
 
-export const LEADER_LABEL = "Leader";
+export const LEADER_LABEL = tr("Leader");
 export const LEADER_PENDING_LABEL = tr("Leader, waiting for the server to confirm");
 
 /** The Leader badge: gray until the leader confirms it holds the order. */
@@ -593,13 +593,13 @@ function orderControlsHtml(server, order) {
 export function standingInText(standingInFor) {
   if (!standingInFor?.length) return "";
   const names = standingInFor.map((n) => serverShortName(n));
-  return `standing in for ${names.length === 1 ? names[0] : `${names[0]} and ${names.length - 1} more`}`;
+  return tr("standing in for {0}", names.length === 1 ? names[0] : tr("{0} and {1} more", names[0], names.length - 1));
 }
 
 function formatCertCountdown(validUntilMs) {
   const ms = validUntilMs - Date.now();
-  if (ms < 0) return "cert expired";
-  if (ms < 30 * 86400_000) return `cert renews ${formatDays(ms)}`;
+  if (ms < 0) return tr("cert expired");
+  if (ms < 30 * 86400_000) return tr("cert renews {0}", formatDays(ms));
   return ""; // omit chip when comfortably valid — reduces visual noise
 }
 
@@ -697,7 +697,7 @@ export function renderEmptyServersList(root, { reason, username, canAdd = canAdd
   const action = accountOpen
     ? `<button class="primary full-width" id="home-add-server">${escapeHtml(ADD_IMPORT_LABEL)}</button>
       <button class="linklike mt-2" id="home-take-over">${escapeHtml(TAKE_OVER_LINK)}</button>`
-    : '<button class="primary full-width" id="empty-create-server">Create a server</button>';
+    : `<button class="primary full-width" id="empty-create-server">${tr("Create a server")}</button>`;
   root.innerHTML = `
     <div class="card empty-state">
       ${EMPTY_MARK_SVG}
@@ -1443,8 +1443,8 @@ export async function renderHome() {
   homeFilter = "all";
   homeQuery = "";
   const session = getSession();
-  setSubtitle(session.username ? `signed in as ${session.username}` : "signed in");
-  $("home-username").textContent = session.username || "(not set)";
+  setSubtitle(session.username ? tr("signed in as {0}", session.username) : tr("signed in"));
+  $("home-username").textContent = session.username || tr("(not set)");
   void renderWelcomeHierarchy(session);
   $("home-irkpub").textContent = session.irk
     ? bytesToHex(session.irk.publicKey).slice(0, 16) + "…" + bytesToHex(session.irk.publicKey).slice(-4)
@@ -1803,7 +1803,7 @@ async function deleteRegisteredServer(serverDomain, identityPubKey) {
  */
 /** Release a never-registered server's name (a pending order's Delete, and
  *  the pending view's Cancel order). Resolves true once the name is free. */
-export async function deleteDeadServer(serverDomain, btn, { label = "Delete server (free name)" } = {}) {
+export async function deleteDeadServer(serverDomain, btn, { label = tr("Delete server (free name)") } = {}) {
   if (!serverDomain) return false;
   const session = getSession();
   const username = session.username;
@@ -1849,7 +1849,7 @@ export async function deleteDeadServer(serverDomain, btn, { label = "Delete serv
     // a name the user can't reuse. Say why in plain words and re-enable the
     // button, so the same tap tries again.
     console.error("release server name failed", e);
-    const what = label === "Cancel order" ? "cancel the order" : "delete the server";
+    const what = label === "Cancel order" ? tr("cancel the order") : tr("delete the server");
     toast(tr("Couldn't {0} — the name is still reserved. {1}", what, boxErrorText(e)), "err");
     if (btn) { btn.disabled = false; btn.textContent = label; }
     return false;
