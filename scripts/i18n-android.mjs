@@ -762,7 +762,7 @@ else if (cmd === "check") {
     }
     for (const l of locales.locales.filter((x) => x.status === "ga" && x.code !== locales.source)) {
       const tr = readTr(M.surface, l.code);
-      const missing = Object.keys(en).filter((k) => tr[k] == null);
+      const missing = Object.keys(en).filter((k) => tr[k] == null && en[k].translatable !== false);
       if (missing.length) problems.push(`${M.surface}/${l.code} is ga but lacks ${missing.length} strings (first: ${missing[0]})`);
     }
   }
