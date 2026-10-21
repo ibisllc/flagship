@@ -2171,12 +2171,12 @@
     "en": "Not answering",
     "ctx": "webapp/lib/peerBackup.js:142"
   },
-  "{1} piece": {
-    "en": "{1} piece",
+  "{0} piece": {
+    "en": "{0} piece",
     "ctx": "webapp/lib/peerBackup.js:163"
   },
-  "{1} pieces": {
-    "en": "{1} pieces",
+  "{0} pieces": {
+    "en": "{0} pieces",
     "ctx": "webapp/lib/peerBackup.js:163"
   },
   "The pieces of this backup are no longer kept.": {
@@ -8972,7 +8972,8 @@
   },
   "personal / work": {
     "en": "personal / work",
-    "ctx": "webapp/index.html"
+    "ctx": "webapp/index.html",
+    "translatable": false
   },
   "Add key": {
     "en": "Add key",
@@ -9216,7 +9217,8 @@
   },
   "ssh-ed25519 AAAA… you@computer": {
     "en": "ssh-ed25519 AAAA… you@computer",
-    "ctx": "webapp/index.html"
+    "ctx": "webapp/index.html",
+    "translatable": false
   },
   "Save draft": {
     "en": "Save draft",
@@ -9386,11 +9388,13 @@
   },
   "personal / work / home-ollama": {
     "en": "personal / work / home-ollama",
-    "ctx": "webapp/index.html"
+    "ctx": "webapp/index.html",
+    "translatable": false
   },
   "claude-sonnet-4-6 / gpt-4 / llama3": {
     "en": "claude-sonnet-4-6 / gpt-4 / llama3",
-    "ctx": "webapp/index.html"
+    "ctx": "webapp/index.html",
+    "translatable": false
   },
   "Your key stays on this device, wrapped under your passphrase. flagshipserver.com never sees it.": {
     "en": "Your key stays on this device, wrapped under your passphrase. flagshipserver.com never sees it.",

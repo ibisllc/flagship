@@ -161,7 +161,7 @@ export function holderRows(status, { formatTime = (t) => new Date(t).toLocaleStr
     line: [
       HOLDER_STATE[h.state] ?? String(h.state ?? ""),
       Number.isFinite(h.lastProofAt) && h.lastProofAt > 0 ? `last proof ${formatTime(h.lastProofAt)}` : "no proof yet",
-      trn(h.bricks, "{1} piece", "{1} pieces", h.bricks ?? 0),
+      trn(h.bricks ?? 0, "{0} piece", "{0} pieces"),
     ].join(" · "),
   }));
 }
