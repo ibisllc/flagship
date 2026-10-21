@@ -13,6 +13,8 @@ superseded base that no server uses is deleted.
 """
 from __future__ import annotations
 
+from i18n import tr
+
 import hashlib
 import json
 import os
@@ -51,26 +53,26 @@ class ApplianceCacheError(Exception):
 
 
 def _unavailable(arch: str) -> ApplianceCacheError:
-    return ApplianceCacheError("unavailable", f"No prebuilt {arch} server image is published yet.")
+    return ApplianceCacheError("unavailable", tr('No prebuilt {0} server image is published yet.').format(arch))
 
 
 def _invalid() -> ApplianceCacheError:
-    return ApplianceCacheError("invalid-manifest", "The prebuilt server image's manifest is malformed.")
+    return ApplianceCacheError("invalid-manifest", tr("The prebuilt server image's manifest is malformed."))
 
 
 def _offline(why: str) -> ApplianceCacheError:
-    return ApplianceCacheError("offline", f"Couldn't download the prebuilt server image: {why}")
+    return ApplianceCacheError("offline", tr("Couldn't download the prebuilt server image: {0}").format(why))
 
 
 def _http(code: int) -> ApplianceCacheError:
     return ApplianceCacheError(
-        "http-status", f"The server returned HTTP {code} for the prebuilt server image."
+        "http-status", tr('The server returned HTTP {0} for the prebuilt server image.').format(code)
     )
 
 
 def _checksum(what: str) -> ApplianceCacheError:
     return ApplianceCacheError(
-        "checksum", f"The prebuilt server image failed its integrity check ({what})."
+        "checksum", tr('The prebuilt server image failed its integrity check ({0}).').format(what)
     )
 
 
@@ -215,7 +217,7 @@ def _live_download(url: str, sink: Callable[[bytes], None], cancel: Optional[thr
             return status
         while True:
             if cancel is not None and cancel.is_set():
-                raise ApplianceCacheError("cancelled", "Download cancelled.")
+                raise ApplianceCacheError("cancelled", tr("Download cancelled."))
             block = resp.read(1 << 20)
             if not block:
                 return status
@@ -284,8 +286,7 @@ class ApplianceCache:
         if dist.installer_git_ref != installer_git_ref:
             raise ApplianceCacheError(
                 "ref-mismatch",
-                f"The prebuilt server image is for {dist.installer_git_ref}, "
-                f"but this recipe installs {installer_git_ref}.",
+                tr('The prebuilt server image is for {0}, but this recipe installs {1}.').format(dist.installer_git_ref, installer_git_ref),
             )
 
         directory = os.path.join(self.arch_root, dist.sha256[:16])
@@ -304,8 +305,7 @@ class ApplianceCache:
         if free is not None and free < needed:
             raise ApplianceCacheError(
                 "insufficient-space",
-                "Not enough free disk space for the server image: needs "
-                f"{needed / 1e9:.1f} GB, {free / 1e9:.1f} GB free.",
+                tr('Not enough free disk space for the server image: needs {0:.1f} GB, {1:.1f} GB free.').format(needed / 1e9, free / 1e9),
             )
 
         offset = 0

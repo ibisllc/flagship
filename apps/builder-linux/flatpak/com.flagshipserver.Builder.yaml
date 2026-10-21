@@ -44,6 +44,8 @@ modules:
       - install -Dm644 pairing_watch.py     ${FLATPAK_DEST}/share/flagship-builder/pairing_watch.py
       - install -Dm644 wifi_store.py        ${FLATPAK_DEST}/share/flagship-builder/wifi_store.py
       - install -Dm644 tray.py              ${FLATPAK_DEST}/share/flagship-builder/tray.py
+      - install -Dm644 i18n.py              ${FLATPAK_DEST}/share/flagship-builder/i18n.py
+      - for po in po/*.po; do [ -e "$po" ] || continue; l=$(basename "$po" .po); install -d ${FLATPAK_DEST}/share/flagship-builder/locale/$l/LC_MESSAGES; msgfmt -o ${FLATPAK_DEST}/share/flagship-builder/locale/$l/LC_MESSAGES/flagship-studio.mo "$po"; done
       - install -Dm644 version.py           ${FLATPAK_DEST}/share/flagship-builder/version.py
       - mkdir -p ${FLATPAK_DEST}/share/flagship-builder/vm
       - install -m644 -t ${FLATPAK_DEST}/share/flagship-builder/vm vm/*.py

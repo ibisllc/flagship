@@ -1,0 +1,944 @@
+{
+  "No prebuilt %@ server image is published yet.": {
+    "en": "No prebuilt %@ server image is published yet.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceCache.swift:65"
+  },
+  "The prebuilt server image is for %@, but this recipe installs %@.": {
+    "en": "The prebuilt server image is for %@, but this recipe installs %@.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceCache.swift:67"
+  },
+  "The prebuilt server image's manifest is malformed.": {
+    "en": "The prebuilt server image's manifest is malformed.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceCache.swift:69"
+  },
+  "Couldn't download the prebuilt server image: %@": {
+    "en": "Couldn't download the prebuilt server image: %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceCache.swift:71"
+  },
+  "The server returned HTTP %lld for the prebuilt server image.": {
+    "en": "The server returned HTTP %lld for the prebuilt server image.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceCache.swift:73"
+  },
+  "The prebuilt server image failed its integrity check (%@).": {
+    "en": "The prebuilt server image failed its integrity check (%@).",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceCache.swift:75"
+  },
+  "Not enough free disk space for the server image: needs %@, %@ free.": {
+    "en": "Not enough free disk space for the server image: needs %@, %@ free.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceCache.swift:78"
+  },
+  "The prebuilt VM image is missing: %@": {
+    "en": "The prebuilt VM image is missing: %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceProvisioner.swift:41"
+  },
+  "The prebuilt VM image manifest is missing: %@": {
+    "en": "The prebuilt VM image manifest is missing: %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceProvisioner.swift:43"
+  },
+  "The prebuilt VM image manifest is invalid: %@": {
+    "en": "The prebuilt VM image manifest is invalid: %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceProvisioner.swift:45"
+  },
+  "The prebuilt VM image is for %@, but this Mac needs %@.": {
+    "en": "The prebuilt VM image is for %@, but this Mac needs %@.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceProvisioner.swift:47"
+  },
+  "The prebuilt VM image contains installer ref %@, but this recipe requires %@.": {
+    "en": "The prebuilt VM image contains installer ref %@, but this recipe requires %@.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceProvisioner.swift:49"
+  },
+  "The prebuilt VM image has %llu bytes, but its manifest declares %llu.": {
+    "en": "The prebuilt VM image has %llu bytes, but its manifest declares %llu.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceProvisioner.swift:51"
+  },
+  "The prebuilt VM image failed its integrity check (expected %@…, got %@…).": {
+    "en": "The prebuilt VM image failed its integrity check (expected %@…, got %@…).",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceProvisioner.swift:53"
+  },
+  "The hosted-server disk is too small for this image (needs %llu bytes; configured for %llu).": {
+    "en": "The hosted-server disk is too small for this image (needs %llu bytes; configured for %llu).",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceProvisioner.swift:55"
+  },
+  "Appliance seed payload is too large.": {
+    "en": "Appliance seed payload is too large.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceSeed.swift:25"
+  },
+  "This pairing session reached its time limit.": {
+    "en": "This pairing session reached its time limit.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/BuilderPairingEngine.swift:112"
+  },
+  "A different phone connected while waiting to reconnect — ignoring.": {
+    "en": "A different phone connected while waiting to reconnect — ignoring.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/BuilderPairingEngine.swift:134"
+  },
+  "Ignoring malformed phone-hello.": {
+    "en": "Ignoring malformed phone-hello.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/BuilderPairingEngine.swift:130"
+  },
+  "Ignoring malformed recipe delivery.": {
+    "en": "Ignoring malformed recipe delivery.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/BuilderPairingEngine.swift:165"
+  },
+  "Recipe arrived before pairing completed.": {
+    "en": "Recipe arrived before pairing completed.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/BuilderPairingEngine.swift:163"
+  },
+  "Couldn't resume the session: %@": {
+    "en": "Couldn't resume the session: %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/BuilderPairingEngine.swift:144"
+  },
+  "Handshake failed: %@": {
+    "en": "Handshake failed: %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/BuilderPairingEngine.swift:156"
+  },
+  "Couldn't read the recipe.": {
+    "en": "Couldn't read the recipe.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/BuilderPairingEngine.swift:171"
+  },
+  "QR unavailable": {
+    "en": "QR unavailable",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/BuilderPairingViews.swift:26"
+  },
+  "Couldn't build the relay URL.": {
+    "en": "Couldn't build the relay URL.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/BuilderSessionClient.swift:45"
+  },
+  "Lost the connection to the relay.": {
+    "en": "Lost the connection to the relay.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/BuilderSessionClient.swift:64"
+  },
+  "Couldn't return the recipe receipt to the phone.": {
+    "en": "Couldn't return the recipe receipt to the phone.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/BuilderSessionClient.swift:115"
+  },
+  "Write failed %lld MB in: %@": {
+    "en": "Write failed %lld MB in: %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/DiskWrite.swift:23"
+  },
+  "%@ (errno %d)": {
+    "en": "%@ (errno %d)",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/DiskWrite.swift:125"
+  },
+  "Flagship Studio": {
+    "en": "Flagship Studio",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/FlagshipBuilderApp.swift:52"
+  },
+  "View": {
+    "en": "View",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/FlagshipBuilderApp.swift:88"
+  },
+  "About Flagship Studio": {
+    "en": "About Flagship Studio",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/FlagshipBuilderApp.swift:77"
+  },
+  "New Server": {
+    "en": "New Server",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/FlagshipBuilderApp.swift:85"
+  },
+  "Appearance": {
+    "en": "Appearance",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/FlagshipBuilderApp.swift:89"
+  },
+  "Auto (System)": {
+    "en": "Auto (System)",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/FlagshipBuilderApp.swift:90"
+  },
+  "Light": {
+    "en": "Light",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/FlagshipBuilderApp.swift:91"
+  },
+  "Dark": {
+    "en": "Dark",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/FlagshipBuilderApp.swift:92"
+  },
+  "Flagship Studio Help": {
+    "en": "Flagship Studio Help",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/FlagshipBuilderApp.swift:97"
+  },
+  "Report an Issue…": {
+    "en": "Report an Issue…",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/FlagshipBuilderApp.swift:100"
+  },
+  "No servers hosted yet": {
+    "en": "No servers hosted yet",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/FlagshipBuilderApp.swift:143"
+  },
+  "Open Flagship Studio": {
+    "en": "Open Flagship Studio",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/FlagshipBuilderApp.swift:137"
+  },
+  "Stop all running servers": {
+    "en": "Stop all running servers",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/FlagshipBuilderApp.swift:152"
+  },
+  "Quit Flagship Studio": {
+    "en": "Quit Flagship Studio",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/FlagshipBuilderApp.swift:160"
+  },
+  "Start": {
+    "en": "Start",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/FlagshipBuilderApp.swift:166"
+  },
+  "Stop": {
+    "en": "Stop",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/FlagshipBuilderApp.swift:170"
+  },
+  "Restart": {
+    "en": "Restart",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/FlagshipBuilderApp.swift:173"
+  },
+  "Approve “Flagship Studio” in System Settings → General → Login Items (under “Allow in the Background”), then click Assemble again.": {
+    "en": "Approve “Flagship Studio” in System Settings → General → Login Items (under “Allow in the Background”), then click Assemble again.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HelperClient.swift:22"
+  },
+  "Couldn't register the privileged helper: %@\nThe app must be signed with a Developer ID Application certificate and run from /Applications (ad-hoc/Apple-Development signatures and swift-build binaries are rejected by macOS).": {
+    "en": "Couldn't register the privileged helper: %@\nThe app must be signed with a Developer ID Application certificate and run from /Applications (ad-hoc/Apple-Development signatures and swift-build binaries are rejected by macOS).",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HelperClient.swift:24"
+  },
+  "Servers on this Mac": {
+    "en": "Servers on this Mac",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:28"
+  },
+  "Delete %@?": {
+    "en": "Delete %@?",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:42"
+  },
+  "Delete VM and its disk": {
+    "en": "Delete VM and its disk",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:47"
+  },
+  "The VM and its encrypted disk image are removed from this Mac. The server's identity stays with your account. Backups stored on this server are deleted with it; copies kept on your phone or with peers (depending on its backup policy) are not.": {
+    "en": "The VM and its encrypted disk image are removed from this Mac. The server's identity stays with your account. Backups stored on this server are deleted with it; copies kept on your phone or with peers (depending on its backup policy) are not.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:56"
+  },
+  "Pair a new server": {
+    "en": "Pair a new server",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:76"
+  },
+  "Retry install": {
+    "en": "Retry install",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:283"
+  },
+  "Stop installation": {
+    "en": "Stop installation",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:288"
+  },
+  "Open console": {
+    "en": "Open console",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:296"
+  },
+  "Delete…": {
+    "en": "Delete…",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:299"
+  },
+  "No guest progress for %lldm · %@": {
+    "en": "No guest progress for %lldm · %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:224"
+  },
+  "Taking longer than expected — check the network or approve on your phone": {
+    "en": "Taking longer than expected — check the network or approve on your phone",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:169"
+  },
+  "Keeping this Mac awake while servers run. Closing the lid still puts it to sleep and takes them offline, unless it's connected to a display.": {
+    "en": "Keeping this Mac awake while servers run. Closing the lid still puts it to sleep and takes them offline, unless it's connected to a display.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:201"
+  },
+  "Starting the server from the prebuilt image": {
+    "en": "Starting the server from the prebuilt image",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:742"
+  },
+  "Booting the Debian installer": {
+    "en": "Booting the Debian installer",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:743"
+  },
+  "%lld vCPU": {
+    "en": "%lld vCPU",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:233"
+  },
+  "%llu GiB RAM": {
+    "en": "%llu GiB RAM",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:234"
+  },
+  "%llu GiB disk": {
+    "en": "%llu GiB disk",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:237"
+  },
+  "This server was removed.": {
+    "en": "This server was removed.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:367"
+  },
+  "No new guest checkpoint for %lld minutes. Last reported: %@. The VM may be stalled.": {
+    "en": "No new guest checkpoint for %lld minutes. Last reported: %@. The VM may be stalled.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:460"
+  },
+  "%@. Last guest checkpoint %@; %lld minute%@ total.": {
+    "en": "%@. Last guest checkpoint %@; %lld minute%@ total.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:462"
+  },
+  "%@; %lld minute%@ so far. Progress appears here once the server checks in.": {
+    "en": "%@; %lld minute%@ so far. Progress appears here once the server checks in.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:464"
+  },
+  "Serving at https://%@/": {
+    "en": "Serving at https://%@/",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:466"
+  },
+  "Start the server to bring it online.": {
+    "en": "Start the server to bring it online.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:470"
+  },
+  "Preparing the installer…": {
+    "en": "Preparing the installer…",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:472"
+  },
+  "Server health": {
+    "en": "Server health",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:422"
+  },
+  "%lld minute%@ ago": {
+    "en": "%lld minute%@ ago",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:552"
+  },
+  "%lld of %lld cores": {
+    "en": "%lld of %lld cores",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:490"
+  },
+  "%llu GiB reserved": {
+    "en": "%llu GiB reserved",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:494"
+  },
+  "LUKS encrypted": {
+    "en": "LUKS encrypted",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:499"
+  },
+  "Host allocation": {
+    "en": "Host allocation",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:486"
+  },
+  "%llu GiB sparse disk": {
+    "en": "%llu GiB sparse disk",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:495"
+  },
+  "Last state change": {
+    "en": "Last state change",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:531"
+  },
+  "Last connected": {
+    "en": "Last connected",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:533"
+  },
+  "Installer checkpoint": {
+    "en": "Installer checkpoint",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:536"
+  },
+  "Checkpoint received": {
+    "en": "Checkpoint received",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:537"
+  },
+  "NAT + outbound tunnel": {
+    "en": "NAT + outbound tunnel",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:540"
+  },
+  "Phone approval": {
+    "en": "Phone approval",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:542"
+  },
+  "Automatic lease": {
+    "en": "Automatic lease",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:542"
+  },
+  "Server details": {
+    "en": "Server details",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:525"
+  },
+  "Not yet": {
+    "en": "Not yet",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:534"
+  },
+  "Delete this server and pair again to rebuild its provisioning media.": {
+    "en": "Delete this server and pair again to rebuild its provisioning media.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:582"
+  },
+  "Console available while the server is running.": {
+    "en": "Console available while the server is running.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:621"
+  },
+  "CLI access": {
+    "en": "CLI access",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:607"
+  },
+  "Hide serial console": {
+    "en": "Hide serial console",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:613"
+  },
+  "This production server was created without the phone-approved debug grant, so the VM has no console device.": {
+    "en": "This production server was created without the phone-approved debug grant, so the VM has no console device.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:636"
+  },
+  "CLI access locked": {
+    "en": "CLI access locked",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:633"
+  },
+  "Delete this server": {
+    "en": "Delete this server",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:650"
+  },
+  "Type a command and press return…": {
+    "en": "Type a command and press return…",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift:698"
+  },
+  "Couldn't download the base image — check your internet connection. (%@)": {
+    "en": "Couldn't download the base image — check your internet connection. (%@)",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/IsoBaseCache.swift:33"
+  },
+  "Base-image download failed (HTTP %lld).": {
+    "en": "Base-image download failed (HTTP %lld).",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/IsoBaseCache.swift:35"
+  },
+  "Base image failed its integrity check (expected %@…, got %@…). It was discarded — try again.": {
+    "en": "Base image failed its integrity check (expected %@…, got %@…). It was discarded — try again.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/IsoBaseCache.swift:37"
+  },
+  "Couldn't open the cache directory.": {
+    "en": "Couldn't open the cache directory.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/IsoBaseCache.swift:39"
+  },
+  "No base image is available yet — the server has nothing to download and nothing is cached.": {
+    "en": "No base image is available yet — the server has nothing to download and nothing is cached.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/IsoBaseCache.swift:43"
+  },
+  "The server doesn't offer an arm64 base image yet, so Simple mode can't host a server on this Apple-silicon Mac for now. Use Advanced mode with an arm64 Debian netinst ISO instead.": {
+    "en": "The server doesn't offer an arm64 base image yet, so Simple mode can't host a server on this Apple-silicon Mac for now. Use Advanced mode with an arm64 Debian netinst ISO instead.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/IsoBaseCache.swift:45"
+  },
+  "Couldn't reach the base-image service — check your internet connection. (%@)": {
+    "en": "Couldn't reach the base-image service — check your internet connection. (%@)",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/IsoManifestClient.swift:113"
+  },
+  "The base-image service returned HTTP %lld.": {
+    "en": "The base-image service returned HTTP %lld.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/IsoManifestClient.swift:115"
+  },
+  "The base-image service sent a response we couldn't read. (%@)": {
+    "en": "The base-image service sent a response we couldn't read. (%@)",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/IsoManifestClient.swift:117"
+  },
+  "Failed to evaluate the preseed engine: %@": {
+    "en": "Failed to evaluate the preseed engine: %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/PreseedEngine.swift:80"
+  },
+  "FlagshipPreseed global not installed by the preseed engine.": {
+    "en": "FlagshipPreseed global not installed by the preseed engine.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/PreseedEngine.swift:82"
+  },
+  "The preseed engine threw: %@": {
+    "en": "The preseed engine threw: %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/PreseedEngine.swift:84"
+  },
+  "The preseed engine returned a non-string result.": {
+    "en": "The preseed engine returned a non-string result.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/PreseedEngine.swift:86"
+  },
+  "This recipe expired %@.": {
+    "en": "This recipe expired %@.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/Recipe.swift:70"
+  },
+  "The recipe's signature doesn't verify — it may be tampered or corrupt.": {
+    "en": "The recipe's signature doesn't verify — it may be tampered or corrupt.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/Recipe.swift:72"
+  },
+  "This is not a Debian installer image. Flagship installs from a Debian netinst ISO.": {
+    "en": "This is not a Debian installer image. Flagship installs from a Debian netinst ISO.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/Remaster.swift:20"
+  },
+  "%@ failed (exit %d): %@": {
+    "en": "%@ failed (exit %d): %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/Remaster.swift:22"
+  },
+  "Waiting for an installer checkpoint": {
+    "en": "Waiting for an installer checkpoint",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMInstallObservation.swift:27"
+  },
+  "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry.": {
+    "en": "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMInventoryStore.swift:38"
+  },
+  "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there.": {
+    "en": "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMInventoryStore.swift:39"
+  },
+  "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.": {
+    "en": "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMInventoryStore.swift:40"
+  },
+  "The disk is sealed — approve the unlock on your phone.": {
+    "en": "The disk is sealed — approve the unlock on your phone.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMInventoryStore.swift:41"
+  },
+  "Library/Application Support": {
+    "en": "Library/Application Support",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMInventoryStore.swift:79"
+  },
+  "The app quit while the install was running.": {
+    "en": "The app quit while the install was running.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:73"
+  },
+  "Hosting Flagship servers for the internet": {
+    "en": "Hosting Flagship servers for the internet",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:192"
+  },
+  "Keeping this Mac awake while it hosts servers": {
+    "en": "Keeping this Mac awake while it hosts servers",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:193"
+  },
+  "No servers running; this Mac may sleep again": {
+    "en": "No servers running; this Mac may sleep again",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:198"
+  },
+  "VM %@: ignored %@ in state %@": {
+    "en": "VM %@: ignored %@ in state %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:161"
+  },
+  "Installation stopped by you.": {
+    "en": "Installation stopped by you.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:134"
+  },
+  "VM %@: started (%lld vCPU, %llu GiB)": {
+    "en": "VM %@: started (%lld vCPU, %llu GiB)",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:253"
+  },
+  "VM %@: failed to start — %@": {
+    "en": "VM %@: failed to start — %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:257"
+  },
+  "VM %@: %@ — booting sealed disk": {
+    "en": "VM %@: %@ — booting sealed disk",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:298"
+  },
+  "VM %@: stopped after %llds, before %@ could run": {
+    "en": "VM %@: stopped after %llds, before %@ could run",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:307"
+  },
+  "The virtual machine stopped after %llds, before %@ could run. The base image may be the wrong architecture for this Mac (Apple silicon can only run an arm64 image) or otherwise not bootable.": {
+    "en": "The virtual machine stopped after %llds, before %@ could run. The base image may be the wrong architecture for this Mac (Apple silicon can only run an arm64 image) or otherwise not bootable.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:309"
+  },
+  "VM %@: health back to normal": {
+    "en": "VM %@: health back to normal",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:399"
+  },
+  "VM %@: health — %@": {
+    "en": "VM %@: health — %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:400"
+  },
+  "VM %@: installer checkpoint — %@": {
+    "en": "VM %@: installer checkpoint — %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:451"
+  },
+  "VM %@: no guest checkpoint for %lld minutes; last: %@": {
+    "en": "VM %@: no guest checkpoint for %lld minutes; last: %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift:461"
+  },
+  "No health report for %@ min. The server itself may be off or frozen.": {
+    "en": "No health report for %@ min. The server itself may be off or frozen.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMServerHealth.swift:52"
+  },
+  "Ran out of memory %@× since it started (%@ MB free of %@ MB now).": {
+    "en": "Ran out of memory %@× since it started (%@ MB free of %@ MB now).",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMServerHealth.swift:56"
+  },
+  "The server software isn't running (%@; restarted %@×, last exit code %@).": {
+    "en": "The server software isn't running (%@; restarted %@×, last exit code %@).",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMServerHealth.swift:59"
+  },
+  "The server software restarted %@× since it started (last exit code %@).": {
+    "en": "The server software restarted %@× since it started (last exit code %@).",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMServerHealth.swift:61"
+  },
+  "Can't reach the Flagship relay.": {
+    "en": "Can't reach the Flagship relay.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMServerHealth.swift:63"
+  },
+  "Disk is %@%% full.": {
+    "en": "Disk is %@%% full.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMServerHealth.swift:64"
+  },
+  "Healthy · %@ MB free of %@ MB · disk %@%% · up %@": {
+    "en": "Healthy · %@ MB free of %@ MB · disk %@%% · up %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMServerHealth.swift:67"
+  },
+  "VZVirtualMachine.start OK · attachISO=%@ · state=%@": {
+    "en": "VZVirtualMachine.start OK · attachISO=%@ · state=%@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMSmoke.swift:345"
+  },
+  "VZ start FAILED: %@": {
+    "en": "VZ start FAILED: %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMSmoke.swift:349"
+  },
+  "VZ state → %@": {
+    "en": "VZ state → %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VMSmoke.swift:392"
+  },
+  "Unsupported network mode for this VM.": {
+    "en": "Unsupported network mode for this VM.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VZHost.swift:33"
+  },
+  "VM disk image missing: %@": {
+    "en": "VM disk image missing: %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/VZHost.swift:35"
+  },
+  "Waiting for your phone…": {
+    "en": "Waiting for your phone…",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:70"
+  },
+  "Phone connected — confirm the code matches.": {
+    "en": "Phone connected — confirm the code matches.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:204"
+  },
+  "Paired.": {
+    "en": "Paired.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:207"
+  },
+  "Phone left before sending the recipe — waiting for it to reconnect…": {
+    "en": "Phone left before sending the recipe — waiting for it to reconnect…",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:210"
+  },
+  "Couldn't stage the received recipe: %@": {
+    "en": "Couldn't stage the received recipe: %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:238"
+  },
+  "Recipe received — phone session finished.": {
+    "en": "Recipe received — phone session finished.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:187"
+  },
+  "Pairing session ended: %@": {
+    "en": "Pairing session ended: %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:295"
+  },
+  "USB drive": {
+    "en": "USB drive",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:413"
+  },
+  "Pasted recipe was empty.": {
+    "en": "Pasted recipe was empty.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:434"
+  },
+  "Could not stage pasted recipe: %@": {
+    "en": "Could not stage pasted recipe: %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:449"
+  },
+  "+ %@ Using the Debian installer instead.": {
+    "en": "+ %@ Using the Debian installer instead.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:554"
+  },
+  "+ remaster %@ → %@": {
+    "en": "+ remaster %@ → %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:606"
+  },
+  "+ installer family: %@": {
+    "en": "+ installer family: %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:611"
+  },
+  "+ remaster %@ → prepared image": {
+    "en": "+ remaster %@ → prepared image",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:676"
+  },
+  "+ helper write-image → %@": {
+    "en": "+ helper write-image → %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:723"
+  },
+  "Full Disk Access": {
+    "en": "Full Disk Access",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:745"
+  },
+  "Write failed (code %lld).": {
+    "en": "Write failed (code %lld).",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:749"
+  },
+  "+ verified appliance %@ sha256=%@": {
+    "en": "+ verified appliance %@ sha256=%@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:824"
+  },
+  "+ cloned generalized disk and wrote one-use specialization seed": {
+    "en": "+ cloned generalized disk and wrote one-use specialization seed",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:839"
+  },
+  "+ remaster %@ → VM installer": {
+    "en": "+ remaster %@ → VM installer",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:887"
+  },
+  "This Mac is at its hosting limit (%lld server%@). Remove one first, or burn to USB.": {
+    "en": "This Mac is at its hosting limit (%lld server%@). Remove one first, or burn to USB.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:790"
+  },
+  "This Mac doesn't have enough free memory to host a server (each server needs ~%llu GiB).": {
+    "en": "This Mac doesn't have enough free memory to host a server (each server needs ~%llu GiB).",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift:786"
+  },
+  "Recipe handed off": {
+    "en": "Recipe handed off",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:120"
+  },
+  "The server operation is continuing in the background. You can follow it from Servers on this Mac.": {
+    "en": "The server operation is continuing in the background. You can follow it from Servers on this Mac.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:121"
+  },
+  "Returning home in %lld…": {
+    "en": "Returning home in %lld…",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:125"
+  },
+  "Burn to USB": {
+    "en": "Burn to USB",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:166"
+  },
+  "Build a dedicated hardware appliance — the gold standard. Boot any spare box from the USB stick.": {
+    "en": "Build a dedicated hardware appliance — the gold standard. Boot any spare box from the USB stick.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:167"
+  },
+  "Run the same encrypted, phone-gated appliance as a managed VM inside this app. Same recipe, same unlock — your phone still holds the keys.": {
+    "en": "Run the same encrypted, phone-gated appliance as a managed VM inside this app. Same recipe, same unlock — your phone still holds the keys.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:174"
+  },
+  "Recipe verified — choose where this server should live.": {
+    "en": "Recipe verified — choose where this server should live.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:158"
+  },
+  "This Mac doesn't have enough free memory to host a server.": {
+    "en": "This Mac doesn't have enough free memory to host a server.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:191"
+  },
+  "This Mac is at its hosting limit (%lld).": {
+    "en": "This Mac is at its hosting limit (%lld).",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:194"
+  },
+  "Will run as a managed VM on this Mac — %lld vCPU, %llu GiB RAM, %llu GiB disk.": {
+    "en": "Will run as a managed VM on this Mac — %lld vCPU, %llu GiB RAM, %llu GiB disk.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:257"
+  },
+  "The server starts from Flagship's prebuilt image, seals its disk to your phone, then waits for you to approve the unlock there. This app never sees the disk key.": {
+    "en": "The server starts from Flagship's prebuilt image, seals its disk to your phone, then waits for you to approve the unlock there. This app never sees the disk key.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:260"
+  },
+  "Couldn't create the server": {
+    "en": "Couldn't create the server",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:270"
+  },
+  "Choose destination": {
+    "en": "Choose destination",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:247"
+  },
+  "Recommended distributions": {
+    "en": "Recommended distributions",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:765"
+  },
+  "Advanced mode remasters a stock Debian installer ISO you supply. See the list of distributions known to assemble and boot cleanly.": {
+    "en": "Advanced mode remasters a stock Debian installer ISO you supply. See the list of distributions known to assemble and boot cleanly.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:766"
+  },
+  "Encrypted disk · unlocked by your phone": {
+    "en": "Encrypted disk · unlocked by your phone",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:313"
+  },
+  "Try again": {
+    "en": "Try again",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:306"
+  },
+  "Host on this Mac instead": {
+    "en": "Host on this Mac instead",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:338"
+  },
+  "How does it work?": {
+    "en": "How does it work?",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:783"
+  },
+  "The chosen USB drive is formatted and written with a single-use boot image. Booting your box from it installs an encrypted, phone-unlocked server that registers itself automatically.": {
+    "en": "The chosen USB drive is formatted and written with a single-use boot image. Booting your box from it installs an encrypted, phone-unlocked server that registers itself automatically.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:784"
+  },
+  "Recipe received · phone session finished": {
+    "en": "Recipe received · phone session finished",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:370"
+  },
+  "Start over": {
+    "en": "Start over",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:378"
+  },
+  "Pair a phone instead": {
+    "en": "Pair a phone instead",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:396"
+  },
+  "Recipe received from your phone.": {
+    "en": "Recipe received from your phone.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:412"
+  },
+  "Send the server recipe from the Flagship app.": {
+    "en": "Send the server recipe from the Flagship app.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:423"
+  },
+  "Couldn't read the recipe": {
+    "en": "Couldn't read the recipe",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:417"
+  },
+  "Pair your phone to begin": {
+    "en": "Pair your phone to begin",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:452"
+  },
+  "Open the Flagship app on your phone and scan this code — or type it in. You'll confirm a short security code, then build your server here.": {
+    "en": "Open the Flagship app on your phone and scan this code — or type it in. You'll confirm a short security code, then build your server here.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:456"
+  },
+  "Already have a recipe file from someone else? Load it directly (basic burn only).": {
+    "en": "Already have a recipe file from someone else? Load it directly (basic burn only).",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:518"
+  },
+  "Or enter this code": {
+    "en": "Or enter this code",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:471"
+  },
+  "Connect to the internet to pair your phone.": {
+    "en": "Connect to the internet to pair your phone.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:493"
+  },
+  "Waiting for internet connection…": {
+    "en": "Waiting for internet connection…",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:501"
+  },
+  "I have a recipe": {
+    "en": "I have a recipe",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:514"
+  },
+  "Awaiting authorization": {
+    "en": "Awaiting authorization",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:535"
+  },
+  "Finish authorizing this server in the Flagship app. This screen will continue automatically when your phone sends the approved recipe.": {
+    "en": "Finish authorizing this server in the Flagship app. This screen will continue automatically when your phone sends the approved recipe.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:538"
+  },
+  "Cancel pairing": {
+    "en": "Cancel pairing",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:550"
+  },
+  "Confirm the security code": {
+    "en": "Confirm the security code",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:572"
+  },
+  "Check that this code matches the one shown in the Flagship app, then confirm on your phone.": {
+    "en": "Check that this code matches the one shown in the Flagship app, then confirm on your phone.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:575"
+  },
+  "Waiting for you to confirm on your phone…": {
+    "en": "Waiting for you to confirm on your phone…",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:591"
+  },
+  "Return to pairing home": {
+    "en": "Return to pairing home",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:650"
+  },
+  "Certificate": {
+    "en": "Certificate",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:685"
+  },
+  "Drop or choose the JSON certificate — or paste it": {
+    "en": "Drop or choose the JSON certificate — or paste it",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:686"
+  },
+  "Where to get a recipe": {
+    "en": "Where to get a recipe",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:710"
+  },
+  "Pairing with the Flagship phone app is the easy path. This screen is for a recipe someone sent you out of band — paste it or drop the JSON file here.": {
+    "en": "Pairing with the Flagship phone app is the easy path. This screen is for a recipe someone sent you out of band — paste it or drop the JSON file here.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:711"
+  },
+  "Paste certificate from clipboard": {
+    "en": "Paste certificate from clipboard",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:704"
+  },
+  "Linux ISO": {
+    "en": "Linux ISO",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:743"
+  },
+  "Please use one of the approved distributions for best results": {
+    "en": "Please use one of the approved distributions for best results",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:744"
+  },
+  "Use system-provided ISO": {
+    "en": "Use system-provided ISO",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:760"
+  },
+  "Fetch the recommended base ISO automatically (like Simple mode) instead of supplying your own.": {
+    "en": "Fetch the recommended base ISO automatically (like Simple mode) instead of supplying your own.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:762"
+  },
+  "Only needed if this machine has no Ethernet cable. Baked into the single-use USB.": {
+    "en": "Only needed if this machine has no Ethernet cable. Baked into the single-use USB.",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:814"
+  },
+  "Wi-Fi network (optional)": {
+    "en": "Wi-Fi network (optional)",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:804"
+  },
+  "Password": {
+    "en": "Password",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:807"
+  },
+  "Working…": {
+    "en": "Working…",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:825"
+  },
+  "Couldn't build the server": {
+    "en": "Couldn't build the server",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:837"
+  },
+  "Writes to %@ · erases what's there": {
+    "en": "Writes to %@ · erases what's there",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:889"
+  },
+  "Or save an ISO file to flash later…": {
+    "en": "Or save an ISO file to flash later…",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:900"
+  },
+  "Ready to boot": {
+    "en": "Ready to boot",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:918"
+  },
+  "Log": {
+    "en": "Log",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:967"
+  },
+  "%lld": {
+    "en": "%lld",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:971",
+    "translatable": false
+  },
+  "Clear": {
+    "en": "Clear",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:1006"
+  },
+  "USB Boot Drive": {
+    "en": "USB Boot Drive",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:1196"
+  },
+  "No removable drives detected": {
+    "en": "No removable drives detected",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:1229"
+  },
+  "Refresh": {
+    "en": "Refresh",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:1239"
+  },
+  "%@ — %@": {
+    "en": "%@ — %@",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:1235",
+    "translatable": false
+  },
+  "Choose drive to create boot disk (will be formatted)": {
+    "en": "Choose drive to create boot disk (will be formatted)",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:1248"
+  },
+  "Learn more →": {
+    "en": "Learn more →",
+    "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:1437"
+  }
+}
