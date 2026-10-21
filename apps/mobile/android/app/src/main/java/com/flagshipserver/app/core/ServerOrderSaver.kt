@@ -7,6 +7,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.ScreensClient
 import com.google.crypto.tink.subtle.Ed25519Sign
 import kotlinx.coroutines.CoroutineScope
@@ -44,7 +45,7 @@ class ServerOrderSaver(
     }
 
     companion object {
-        const val REASON = "Confirm the new server order"
+        val REASON get() = FSStrings.get(R.string.confirm_the_new_server_order)
     }
 
     /** Make [podId] the first server in the order. */
@@ -92,7 +93,7 @@ class ServerOrderSaver(
                 Outcome.Superseded
             } else {
                 app.setServerOrder(previous, previousIssuedAt)
-                Outcome.Failed("Couldn't save the new order (${e.status}). Your servers are back in their old order.")
+                Outcome.Failed(FSStrings.get(R.string.couldnt_save_the_new_order_your, e.status))
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
             app.setServerOrder(previous, previousIssuedAt)
@@ -100,8 +101,8 @@ class ServerOrderSaver(
         } catch (e: Throwable) {
             app.setServerOrder(previous, previousIssuedAt)
             Outcome.Failed(
-                if (e is com.flagshipserver.app.keystore.BiometricCancelled) "Order not changed: you didn't confirm it."
-                else "Couldn't save the new order. Your servers are back in their old order.",
+                if (e is com.flagshipserver.app.keystore.BiometricCancelled) FSStrings.get(R.string.order_not_changed_you_didnt_confirm)
+                else FSStrings.get(R.string.couldnt_save_the_new_order_your_2),
             )
         }
     }

@@ -8,6 +8,9 @@
 
 package com.flagshipserver.app.ui.shell
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -186,7 +189,7 @@ private fun LockCard(notice: SecurityNotice, unlocked: Boolean, onBackup: () -> 
                             isDemoAccount = Variant.usesMockClients || AppState.isDemoAccount(profiles.firstOrNull { it.cloudName == activeCloud }, pods),
                         )
                         if (policy == SignOutPolicy.ALLOWED) confirmSignOut = true
-                        else toasts.info("Set up account recovery to use this.")
+                        else toasts.info(FSStrings.get(R.string.set_up_account_recovery_to_use))
                     },
                     block = true,
                     large = true,
@@ -211,15 +214,13 @@ private fun LockCard(notice: SecurityNotice, unlocked: Boolean, onBackup: () -> 
                     // material; the account and its servers are untouched.
                     Keystore.wipe()
                     app.signOut()
-                }) { Text("Sign out", color = FS.colors.danger) }
+                }) { Text(stringResource(R.string.sign_out_2), color = FS.colors.danger) }
             },
-            dismissButton = { TextButton(onClick = { confirmSignOut = false }) { Text("Cancel") } },
-            title = { Text("Sign out?") },
+            dismissButton = { TextButton(onClick = { confirmSignOut = false }) { Text(stringResource(R.string.cancel)) } },
+            title = { Text(stringResource(R.string.sign_out)) },
             text = {
                 Text(
-                    "This erases this device's account key and data so nothing sensitive is left at rest. " +
-                        "Your account and your servers are untouched; sign back in with your recovery passkey " +
-                        "and the same key is restored, no re-pair.",
+                    stringResource(R.string.this_erases_this_devices_account_key_3),
                 )
             },
         )

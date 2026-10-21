@@ -13,6 +13,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -82,22 +86,21 @@ fun AccountDeletionScreen(nav: NavController) {
         typed.trim().lowercase() == username.lowercase()
 
     FSScreen(
-        title = "Delete account",
+        title = stringResource(R.string.delete_account),
         onBack = { if (!busy) nav.popBackStack() },
-        subtitle = "This permanently deletes your account. It can't be undone — there's " +
-            "no recovery passkey and no other device to restore from.",
+        subtitle = stringResource(R.string.this_permanently_deletes_your_account_it),
     ) {
         FSCard {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                Consequence(Icons.Outlined.Badge, "Your username “$username” is lost and may be claimed by someone else.")
-                Consequence(Icons.Outlined.Dns, "Your servers stop being reachable and you can no longer manage them. If you want to keep a server, transfer it to another account FIRST.")
-                Consequence(Icons.Outlined.Block, "There is no way back: no passkey, no other device, no reset.")
+                Consequence(Icons.Outlined.Badge, fsString(R.string.your_username_is_lost_and_may, username))
+                Consequence(Icons.Outlined.Dns, stringResource(R.string.your_servers_stop_being_reachable_and))
+                Consequence(Icons.Outlined.Block, stringResource(R.string.there_is_no_way_back_no))
             }
         }
 
         FSGroup {
             FSRow(
-                title = "Also ask all my servers to delete their content",
+                title = stringResource(R.string.also_ask_all_my_servers_to),
                 onClick = { alsoDeleteContent = !alsoDeleteContent },
                 trailing = {
                     Checkbox(
@@ -111,7 +114,7 @@ fun AccountDeletionScreen(nav: NavController) {
         FSField(
             value = typed,
             onValueChange = { typed = it; error = null },
-            label = "Type your username to confirm",
+            label = stringResource(R.string.type_your_username_to_confirm),
             fieldTag = "account-delete-confirm",
         )
 
@@ -121,7 +124,7 @@ fun AccountDeletionScreen(nav: NavController) {
 
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             FSDangerButton(
-                label = if (busy) "Deleting…" else "Delete my account forever",
+                label = if (busy) stringResource(R.string.deleting) else stringResource(R.string.delete_my_account_forever),
                 enabled = typedMatches && !busy,
                 modifier = Modifier.testTag("account-delete-go"),
                 onClick = {
@@ -134,7 +137,7 @@ fun AccountDeletionScreen(nav: NavController) {
                             // root): sign with the admin root when this device
                             // holds one, else the owner IRK (legacy). Canonical
                             // bytes unchanged. Biometric rides the derivation.
-                            val irk = Keystore.adminSigningKey(reason = "Delete your account")
+                            val irk = Keystore.adminSigningKey(reason = FSStrings.get(R.string.delete_your_account))
                             val issuedAt = System.currentTimeMillis()
                             val u = username.lowercase()
                             val accountSig = HexUtil.encode(
@@ -167,14 +170,14 @@ fun AccountDeletionScreen(nav: NavController) {
                         } catch (e: HttpException) {
                             error = when {
                                 e.status == 403 && otherDevicesRemain(e.body) ->
-                                    "Another device is still on this account. Remove it in Settings, Trusted devices, then delete the account."
-                                e.status == 404 -> "That account no longer exists."
-                                e.status == 403 -> "The server rejected the request. Sign in again and retry."
-                                else -> "That didn't work (HTTP ${e.status}). Try again in a moment."
+                                    FSStrings.get(R.string.another_device_is_still_on_this)
+                                e.status == 404 -> FSStrings.get(R.string.that_account_no_longer_exists)
+                                e.status == 403 -> FSStrings.get(R.string.the_server_rejected_the_request_sign)
+                                else -> FSStrings.get(R.string.that_didnt_work_http_try_again, e.status)
                             }
                             busy = false
                         } catch (e: Exception) {
-                            error = "Couldn't reach the server. Check your connection and try again."
+                            error = FSStrings.get(R.string.couldnt_reach_the_server_check_your)
                             busy = false
                         }
                     }
@@ -182,7 +185,7 @@ fun AccountDeletionScreen(nav: NavController) {
                 block = true,
             )
             FSSecondaryButton(
-                label = "Cancel",
+                label = stringResource(R.string.cancel),
                 onClick = { if (!busy) nav.popBackStack() },
                 block = true,
             )
@@ -194,7 +197,7 @@ fun AccountDeletionScreen(nav: NavController) {
  *  "not the last device"). */
 internal fun otherDevicesRemain(body: String): Boolean {
     val b = body.lowercase()
-    return b.contains("other-devices-remain") || b.contains("last device") || b.contains("another device is still")
+    return b.contains("other-devices-remain") || b.contains(FSStrings.get(R.string.last_device)) || b.contains(FSStrings.get(R.string.another_device_is_still))
 }
 
 @Composable

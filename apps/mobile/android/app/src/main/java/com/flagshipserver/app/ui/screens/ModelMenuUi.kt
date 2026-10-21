@@ -5,6 +5,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -169,7 +173,7 @@ private fun MenuRow(title: String, subtitle: String?, selected: Boolean, tag: St
             }
         },
         trailingIcon = {
-            if (selected) Icon(Icons.Outlined.Check, contentDescription = "Selected", tint = FS.colors.accent, modifier = Modifier.size(18.dp))
+            if (selected) Icon(Icons.Outlined.Check, contentDescription = stringResource(R.string.selected), tint = FS.colors.accent, modifier = Modifier.size(18.dp))
         },
         onClick = onClick,
         modifier = Modifier.testTag(tag),
@@ -333,8 +337,8 @@ fun GroupedModelMenuItems(
     }
 }
 
-internal const val MODELS_LOADING = "Loading models…"
-internal const val MODELS_UNAVAILABLE = "The models couldn't be listed right now."
+internal val MODELS_LOADING get() = FSStrings.get(R.string.loading_models)
+internal val MODELS_UNAVAILABLE get() = FSStrings.get(R.string.the_models_couldnt_be_listed_right)
 
 private fun iconFor(kind: AttachKind): ImageVector = when (kind) {
     AttachKind.IMAGE -> Icons.Outlined.Image
@@ -373,7 +377,7 @@ fun AttachmentChip(a: VibeCodeAttachment, onRemove: (() -> Unit)? = null) {
             if (onRemove != null) {
                 Icon(
                     Icons.Outlined.Close,
-                    contentDescription = "Remove ${ChatAttachments.displayName(a)}",
+                    contentDescription = fsString(R.string.remove, ChatAttachments.displayName(a)),
                     tint = scheme.onSurfaceVariant,
                     modifier = Modifier
                         .size(28.dp)
@@ -433,9 +437,9 @@ fun VisionDialog(check: VisionCheck, onSwitch: (ModelChoice) -> Unit, onDismiss:
             onDismissRequest = onDismiss,
             text = { Text(check.message, modifier = Modifier.testTag("vision-message")) },
             confirmButton = {
-                TextButton(onClick = { onSwitch(check.to) }, modifier = Modifier.testTag("vision-switch")) { Text("Switch") }
+                TextButton(onClick = { onSwitch(check.to) }, modifier = Modifier.testTag("vision-switch")) { Text(stringResource(R.string.switch_label)) }
             },
-            dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.testTag("vision-cancel")) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.testTag("vision-cancel")) { Text(stringResource(R.string.cancel)) } },
         )
         is VisionCheck.Blocked -> AlertDialog(
             onDismissRequest = onDismiss,
@@ -478,7 +482,7 @@ fun readAttachment(context: Context, uri: Uri, staged: Int): Pair<VibeCodeAttach
         }
     } catch (_: Throwable) {
         null
-    } ?: return null to "$name couldn't be read."
+    } ?: return null to FSStrings.get(R.string.couldnt_be_read, name)
     ChatAttachments.problem(kind, name, bytes.size.toLong(), staged)?.let { return null to it }
     return ChatAttachments.build(kind, name, mime, bytes) to null
 }

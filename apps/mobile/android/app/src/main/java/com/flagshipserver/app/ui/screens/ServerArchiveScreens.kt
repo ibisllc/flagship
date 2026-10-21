@@ -4,6 +4,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import com.flagshipserver.app.ui.components.fsFocusRing
 import androidx.compose.foundation.selection.selectable
 import android.content.ClipData
@@ -89,7 +93,7 @@ private val bodySmStyle: TextStyle @Composable get() = MaterialTheme.typography.
 internal fun ServerBackupButton(serverDomain: String) {
     var show by remember { mutableStateOf(false) }
     FSSecondaryButton(
-        label = "Back up with a passcode…",
+        label = stringResource(R.string.back_up_with_a_passcode),
         onClick = { show = true },
         block = true,
         enabled = !LocalServerReadOnly.current,
@@ -129,7 +133,7 @@ private fun ServerBackupDialog(serverDomain: String, onDismiss: () -> Unit) {
         ServerBackupViewModel(
             serverFqdn = serverDomain,
             client = (pod?.let { podClients.screens(it) }) ?: screens,
-            accountKek = { id -> Keystore.deriveServerArchiveKey(id, "Back up $serverDomain") },
+            accountKek = { id -> Keystore.deriveServerArchiveKey(id, FSStrings.get(R.string.back_up, serverDomain)) },
             downloadDir = { File(context.cacheDir, "server-backups") },
         )
     }
@@ -143,10 +147,10 @@ private fun ServerBackupDialog(serverDomain: String, onDismiss: () -> Unit) {
         onSaving = { saving = it; if (it) saveError = null },
         onResult = { ok ->
             if (ok) {
-                saveNote = "Saved."
+                saveNote = FSStrings.get(R.string.saved)
                 (phase as? ServerBackupViewModel.Phase.Saved)?.file?.delete()
             } else {
-                saveError = "Couldn't save the backup there. Pick another place."
+                saveError = FSStrings.get(R.string.couldnt_save_the_backup_there_pick)
             }
         },
     )
@@ -154,7 +158,7 @@ private fun ServerBackupDialog(serverDomain: String, onDismiss: () -> Unit) {
     AlertDialog(
         // Closing never stops the server: reopening follows the same backup.
         onDismissRequest = { if (!saving) onDismiss() },
-        title = { Text("Back up this server") },
+        title = { Text(stringResource(R.string.back_up_this_server)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 when (val p = phase) {
@@ -164,7 +168,7 @@ private fun ServerBackupDialog(serverDomain: String, onDismiss: () -> Unit) {
                         copied = copied,
                         onCopy = {
                             val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            cm.setPrimaryClip(ClipData.newPlainText("Backup passcode", vm.suggestedPasscode))
+                            cm.setPrimaryClip(ClipData.newPlainText(FSStrings.get(R.string.backup_passcode), vm.suggestedPasscode))
                             copied = true
                         },
                         onStart = { scope.launch { vm.start() } },
@@ -174,28 +178,28 @@ private fun ServerBackupDialog(serverDomain: String, onDismiss: () -> Unit) {
                         LinearProgressIndicator(progress = { p.fraction.toFloat() }, modifier = Modifier.fillMaxWidth())
                     }
                     is ServerBackupViewModel.Phase.Ready -> {
-                        Text("Backup ready: one file, ${ServerArchive.formatBytes(p.bytes)}.", color = FS.colors.text)
+                        Text(fsString(R.string.backup_ready_one_file, ServerArchive.formatBytes(p.bytes)), color = FS.colors.text)
                         if (vm.leftOut.isNotEmpty()) {
                             Text(
-                                "Left out (no source to rebuild them from): ${vm.leftOut.joinToString(", ")}.",
+                                fsString(R.string.left_out_no_source_to_rebuild, vm.leftOut.joinToString(", ")),
                                 color = MaterialTheme.colorScheme.error,
                                 style = captionStyle,
                             )
                         }
                         FSPrimaryButton(
-                            label = "Download the backup",
+                            label = stringResource(R.string.download_the_backup),
                             onClick = { scope.launch { vm.download() } },
                             block = true,
                             modifier = Modifier.testTag("backup-download"),
                         )
                     }
                     is ServerBackupViewModel.Phase.Downloading -> {
-                        Text("Downloading…", color = FS.colors.text)
+                        Text(stringResource(R.string.downloading), color = FS.colors.text)
                         LinearProgressIndicator(progress = { p.fraction.toFloat() }, modifier = Modifier.fillMaxWidth())
                     }
                     is ServerBackupViewModel.Phase.Saved -> {
                         Text(
-                            "Downloaded. The server has removed its copy. Save the file somewhere safe: on this phone, a cloud drive or a USB drive.",
+                            stringResource(R.string.downloaded_the_server_has_removed_its),
                             color = FS.colors.text,
                         )
                         Text(p.file.name, color = MaterialTheme.colorScheme.onSurfaceVariant, style = captionStyle)
@@ -203,7 +207,7 @@ private fun ServerBackupDialog(serverDomain: String, onDismiss: () -> Unit) {
                         saveError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                         if (saveNote == null) {
                             FSPrimaryButton(
-                                label = if (saving) "Saving…" else "Save the backup…",
+                                label = if (saving) stringResource(R.string.saving) else stringResource(R.string.save_the_backup),
                                 onClick = { saver.launch(p.file.name) },
                                 enabled = !saving,
                                 block = true,
@@ -213,13 +217,13 @@ private fun ServerBackupDialog(serverDomain: String, onDismiss: () -> Unit) {
                     }
                     is ServerBackupViewModel.Phase.Failed -> {
                         Text(p.message, color = MaterialTheme.colorScheme.error)
-                        FSSecondaryButton(label = "Try again", onClick = { vm.tryAgain() }, block = true)
+                        FSSecondaryButton(label = stringResource(R.string.try_again), onClick = { vm.tryAgain() }, block = true)
                     }
                 }
                 Text(ServerArchive.EXCLUDES_NOTE, color = MaterialTheme.colorScheme.onSurfaceVariant, style = captionStyle)
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss, enabled = !saving) { Text("Done") } },
+        confirmButton = { TextButton(onClick = onDismiss, enabled = !saving) { Text(stringResource(R.string.done)) } },
     )
 }
 
@@ -227,7 +231,7 @@ private fun ServerBackupDialog(serverDomain: String, onDismiss: () -> Unit) {
 internal fun PasscodeStep(vm: ServerBackupViewModel, copied: Boolean, onCopy: () -> Unit, onStart: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
         Text(
-            "Set the backup's passcode",
+            stringResource(R.string.set_the_backups_passcode),
             color = FS.colors.text,
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
         )
@@ -237,24 +241,24 @@ internal fun PasscodeStep(vm: ServerBackupViewModel, copied: Boolean, onCopy: ()
             FSField(
                 value = vm.ownPasscode,
                 onValueChange = { vm.ownPasscode = it },
-                label = "Your passcode",
+                label = stringResource(R.string.your_passcode),
                 visualTransformation = PasswordVisualTransformation(),
                 fieldTag = "backup-own-passcode",
             )
             FSField(
                 value = vm.ownPasscodeAgain,
                 onValueChange = { vm.ownPasscodeAgain = it },
-                label = "Type it again",
+                label = stringResource(R.string.type_it_again),
                 visualTransformation = PasswordVisualTransformation(),
                 fieldTag = "backup-own-passcode-again",
             )
             vm.ownPasscodeHint?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = captionStyle) }
-            TextButton(onClick = { vm.useOwnPasscode = false }) { Text("Use the suggested passcode") }
+            TextButton(onClick = { vm.useOwnPasscode = false }) { Text(stringResource(R.string.use_the_suggested_passcode)) }
         } else {
             FSCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                     Text(
-                        "Suggested passcode",
+                        stringResource(R.string.suggested_passcode),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
                     )
@@ -266,15 +270,15 @@ internal fun PasscodeStep(vm: ServerBackupViewModel, copied: Boolean, onCopy: ()
                             modifier = Modifier.testTag("backup-suggested-passcode"),
                         )
                     }
-                    TextButton(onClick = onCopy) { Text(if (copied) "Copied" else "Copy") }
+                    TextButton(onClick = onCopy) { Text(if (copied) stringResource(R.string.copied_2) else stringResource(R.string.copy)) }
                 }
             }
             TextButton(onClick = { vm.useOwnPasscode = true }, modifier = Modifier.testTag("backup-use-own-passcode")) {
-                Text("Use my own passcode instead")
+                Text(stringResource(R.string.use_my_own_passcode_instead))
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text("I've saved the passcode somewhere safe", color = FS.colors.text, style = bodySmStyle, modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.ive_saved_the_passcode_somewhere_safe), color = FS.colors.text, style = bodySmStyle, modifier = Modifier.weight(1f))
             Switch(
                 checked = vm.passcodeSaved,
                 onCheckedChange = { vm.passcodeSaved = it },
@@ -282,7 +286,7 @@ internal fun PasscodeStep(vm: ServerBackupViewModel, copied: Boolean, onCopy: ()
             )
         }
         FSPrimaryButton(
-            label = "Make the backup",
+            label = stringResource(R.string.make_the_backup),
             onClick = onStart,
             enabled = vm.canStart,
             block = true,
@@ -317,7 +321,7 @@ private class SafPickedFile(private val context: Context, private val uri: Uri) 
     }
 
     override fun open(): InputStream =
-        context.contentResolver.openInputStream(uri) ?: throw java.io.IOException("can't open $name")
+        context.contentResolver.openInputStream(uri) ?: throw java.io.IOException(FSStrings.get(R.string.cant_open, name))
 
     override fun release() {
         runCatching { context.contentResolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
@@ -365,7 +369,7 @@ internal fun ImportBackupRoute(
             waitingServers = waiting,
             targetFqdn = targetFqdn,
             clientFor = clientFor,
-            accountKek = { id -> Keystore.deriveServerArchiveKey(id, "Open the backup") },
+            accountKek = { id -> Keystore.deriveServerArchiveKey(id, FSStrings.get(R.string.open_the_backup)) },
             onRestored = { fqdn -> app.clearAwaitingBackup(fqdn) },
         )
     }
@@ -431,8 +435,8 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
         is ImportBackupViewModel.Phase.Waiting, is ImportBackupViewModel.Phase.Sending,
         is ImportBackupViewModel.Phase.Restoring, is ImportBackupViewModel.Phase.Done,
         is ImportBackupViewModel.Phase.Fetching,
-        -> "Restore a backup"
-        else -> if (vm.isPeerRestore) "Restore from other servers" else "Import a backup"
+        -> stringResource(R.string.restore_a_backup)
+        else -> if (vm.isPeerRestore) stringResource(R.string.restore_from_other_servers) else stringResource(R.string.import_a_backup)
     }
     fun serverName(fqdn: String) = fqdn.substringBefore('.')
 
@@ -443,7 +447,7 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
             when (val p = phase) {
                 ImportBackupViewModel.Phase.Pick -> {
                     Text(
-                        vm.targetFqdn?.let { "${serverName(it)} is waiting for its backup. Pick the backup file and this screen sends it." }
+                        vm.targetFqdn?.let { fsString(R.string.is_waiting_for_its_backup_pick, serverName(it)) }
                             ?: ServerArchive.IMPORT_INTRO,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -451,13 +455,13 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
                         Text(vm.fileSummary, color = FS.colors.text, style = bodySmStyle, modifier = Modifier.testTag("import-backup-files"))
                     }
                     FSPrimaryButton(
-                        label = if (vm.fileName == null) "Choose the backup file" else "Choose another file",
+                        label = if (vm.fileName == null) stringResource(R.string.choose_the_backup_file) else stringResource(R.string.choose_another_file),
                         onClick = pick,
                         block = true,
                         modifier = Modifier.testTag("import-backup-choose"),
                     )
                     Text(
-                        "It's read where it is; nothing is copied onto this phone.",
+                        stringResource(R.string.its_read_where_it_is_nothing),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = captionStyle,
                     )
@@ -470,7 +474,7 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
                     FSField(
                         value = vm.lost,
                         onValueChange = { vm.lost = it },
-                        label = "The lost server",
+                        label = stringResource(R.string.the_lost_server),
                         placeholder = "home.you.flagship.services",
                         fieldTag = "restore-peers-lost",
                     )
@@ -493,7 +497,7 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
                         }
                     }
                     FSPrimaryButton(
-                        label = "Find its backup",
+                        label = stringResource(R.string.find_its_backup),
                         onClick = { scope.launch { vm.findPeerBackup() } },
                         enabled = vm.lost.isNotBlank(),
                         block = true,
@@ -505,26 +509,26 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
                     horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
                 ) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Text("Looking for the backup…", color = FS.colors.text)
+                    Text(stringResource(R.string.looking_for_the_backup), color = FS.colors.text)
                 }
                 is ImportBackupViewModel.Phase.Fetching -> {
-                    Text("${serverName(p.fqdn)} is getting the backup from other servers…", color = FS.colors.text, modifier = Modifier.testTag("restore-peers-fetching"))
+                    Text(fsString(R.string.is_getting_the_backup_from_other, serverName(p.fqdn)), color = FS.colors.text, modifier = Modifier.testTag("restore-peers-fetching"))
                     val f = p.fraction
                     if (f == null) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     else LinearProgressIndicator(progress = { f.toFloat() }, modifier = Modifier.fillMaxWidth())
-                    Text("Keep this screen open. If it stops, the server keeps waiting and shows on Home.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = captionStyle)
+                    Text(stringResource(R.string.keep_this_screen_open_if_it), color = MaterialTheme.colorScheme.onSurfaceVariant, style = captionStyle)
                 }
                 ImportBackupViewModel.Phase.Passcode -> {
-                    Text("This backup was made on another account. Enter its passcode to open it.", color = FS.colors.text)
+                    Text(stringResource(R.string.this_backup_was_made_on_another), color = FS.colors.text)
                     FSField(
                         value = vm.passcode,
                         onValueChange = { vm.passcode = it },
-                        label = "Passcode",
+                        label = stringResource(R.string.passcode),
                         visualTransformation = PasswordVisualTransformation(),
                         fieldTag = "import-backup-passcode",
                     )
                     FSPrimaryButton(
-                        label = "Open the backup",
+                        label = stringResource(R.string.open_the_backup),
                         onClick = { scope.launch { vm.unlock() } },
                         enabled = vm.passcode.isNotEmpty(),
                         block = true,
@@ -536,30 +540,30 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
                     horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
                 ) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Text("Opening the backup…", color = FS.colors.text)
+                    Text(stringResource(R.string.opening_the_backup), color = FS.colors.text)
                 }
                 is ImportBackupViewModel.Phase.Checking -> {
                     summary?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = bodySmStyle) }
-                    Text("Checking the data file…", color = FS.colors.text)
+                    Text(stringResource(R.string.checking_the_data_file), color = FS.colors.text)
                     LinearProgressIndicator(progress = { p.fraction.toFloat() }, modifier = Modifier.fillMaxWidth())
                 }
                 is ImportBackupViewModel.Phase.ChooseTarget -> {
                     summary?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = bodySmStyle) }
-                    Text("${serverName(p.fqdn)} is waiting for this backup.", color = FS.colors.text)
+                    Text(fsString(R.string.is_waiting_for_this_backup, serverName(p.fqdn)), color = FS.colors.text)
                     FSPrimaryButton(
-                        label = "Send it to ${serverName(p.fqdn)}",
+                        label = fsString(R.string.send_it_to, serverName(p.fqdn)),
                         onClick = { vm.send(p.fqdn) },
                         block = true,
                         modifier = Modifier.testTag("import-backup-send-existing"),
                     )
-                    FSSecondaryButton(label = "Create a new server instead", onClick = { vm.showName() }, block = true)
+                    FSSecondaryButton(label = stringResource(R.string.create_a_new_server_instead), onClick = { vm.showName() }, block = true)
                 }
                 ImportBackupViewModel.Phase.Name -> {
                     summary?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = bodySmStyle) }
                     FSField(
                         value = vm.name,
                         onValueChange = { vm.name = it },
-                        label = "Name of the new server",
+                        label = stringResource(R.string.name_of_the_new_server),
                         placeholder = "home",
                         error = vm.nameProblem,
                         fieldTag = "import-backup-name",
@@ -569,14 +573,14 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
                     }
                     vm.settingsLine?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = bodySmStyle) }
                     FSPrimaryButton(
-                        label = "Create the server",
+                        label = stringResource(R.string.create_the_server),
                         onClick = { vm.create() },
                         enabled = vm.canCreate,
                         block = true,
                         modifier = Modifier.testTag("import-backup-create"),
                     )
                     Text(
-                        "Next you choose how to set it up (Flagship Studio, a recipe file, a USB stick), like any new server.",
+                        stringResource(R.string.next_you_choose_how_to_set),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = captionStyle,
                     )
@@ -588,27 +592,27 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Text("Waiting for ${serverName(p.fqdn)} to come online…", color = FS.colors.text)
+                        Text(fsString(R.string.waiting_for_to_come_online, serverName(p.fqdn)), color = FS.colors.text)
                     }
                     Text(
-                        "Set it up with the recipe if you haven't yet. Keep this screen open: the backup goes as soon as the server is up. If you leave, ${serverName(p.fqdn)} keeps waiting and shows on Home with Send the backup.",
+                        fsString(R.string.set_it_up_with_the_recipe, serverName(p.fqdn)),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = bodySmStyle,
                     )
                 }
                 is ImportBackupViewModel.Phase.Sending -> {
-                    Text("Sending the backup to ${serverName(p.fqdn)}…", color = FS.colors.text)
+                    Text(fsString(R.string.sending_the_backup_to, serverName(p.fqdn)), color = FS.colors.text)
                     LinearProgressIndicator(progress = { p.fraction.toFloat() }, modifier = Modifier.fillMaxWidth())
-                    Text("Keep this screen open. If it stops, it picks up where it left off.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = captionStyle)
+                    Text(stringResource(R.string.keep_this_screen_open_if_it_2), color = MaterialTheme.colorScheme.onSurfaceVariant, style = captionStyle)
                 }
                 is ImportBackupViewModel.Phase.Restoring -> {
-                    Text("Restoring the apps on ${serverName(p.fqdn)}…", color = FS.colors.text)
+                    Text(fsString(R.string.restoring_the_apps_on, serverName(p.fqdn)), color = FS.colors.text)
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     p.apps.forEach { Text(ImportBackupViewModel.describe(it), color = MaterialTheme.colorScheme.onSurfaceVariant, style = captionStyle) }
                 }
                 is ImportBackupViewModel.Phase.Done -> {
                     Text(
-                        "${serverName(p.fqdn)} is restored.",
+                        fsString(R.string.is_restored, serverName(p.fqdn)),
                         color = FS.colors.success,
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     )
@@ -620,18 +624,18 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
                             modifier = Modifier.testTag(if (i == 0) "import-backup-restored" else "import-backup-failed-app"),
                         )
                     }
-                    FSPrimaryButton(label = "Done", onClick = onClose, block = true, modifier = Modifier.testTag("import-backup-done"))
+                    FSPrimaryButton(label = stringResource(R.string.done), onClick = onClose, block = true, modifier = Modifier.testTag("import-backup-done"))
                 }
                 is ImportBackupViewModel.Phase.Failed -> {
                     Text(p.message, color = MaterialTheme.colorScheme.error)
                     if (p.keepsWaiting) {
                         Text(
-                            "The server keeps waiting for its backup. Pick the backup again from Home to send it, or delete the server there.",
+                            stringResource(R.string.the_server_keeps_waiting_for_its),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = bodySmStyle,
                         )
                     }
-                    FSSecondaryButton(label = "Close", onClick = onClose, block = true)
+                    FSSecondaryButton(label = stringResource(R.string.close), onClick = onClose, block = true)
                 }
             }
             vm.fileError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("import-backup-error")) }
@@ -652,17 +656,17 @@ internal fun BackupDownloadApprovalDialog(serverFqdn: String, archiveId: String,
             archiveId = archiveId,
             requestId = requestId,
             client = pod?.let { podClients.screens(it) },
-            sign = { bytes -> Keystore.adminSigningKey("Approve downloading the backup of $serverFqdn").sign(bytes) },
+            sign = { bytes -> Keystore.adminSigningKey(FSStrings.get(R.string.approve_downloading_the_backup_of, serverFqdn)).sign(bytes) },
         )
     }
     val phase by vm.phase.collectAsState()
     AlertDialog(
         onDismissRequest = { if (phase != com.flagshipserver.app.viewmodels.BackupDownloadApprovalViewModel.Phase.Working) onDismiss() },
-        title = { Text("Download a backup in a browser?") },
+        title = { Text(stringResource(R.string.download_a_backup_in_a_browser)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Text(
-                    "A browser is asking to download the backup of $serverFqdn. Approve only if this code is on the page in front of you:",
+                    fsString(R.string.a_browser_is_asking_to_download, serverFqdn),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
@@ -672,13 +676,13 @@ internal fun BackupDownloadApprovalDialog(serverFqdn: String, archiveId: String,
                     modifier = Modifier.semantics { contentDescription = "backup-approve-code" },
                 )
                 Text(
-                    "The backup opens only with its passcode or on your own devices, but anyone at that browser can save the files.",
+                    stringResource(R.string.the_backup_opens_only_with_its),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = captionStyle,
                 )
                 when (val p = phase) {
                     com.flagshipserver.app.viewmodels.BackupDownloadApprovalViewModel.Phase.Approved ->
-                        Text("Approved. The downloads start in that browser.", color = FS.colors.success)
+                        Text(stringResource(R.string.approved_the_downloads_start_in_that), color = FS.colors.success)
                     is com.flagshipserver.app.viewmodels.BackupDownloadApprovalViewModel.Phase.Failed ->
                         Text(p.message, color = MaterialTheme.colorScheme.error)
                     else -> {}
@@ -687,18 +691,18 @@ internal fun BackupDownloadApprovalDialog(serverFqdn: String, archiveId: String,
         },
         confirmButton = {
             if (phase == com.flagshipserver.app.viewmodels.BackupDownloadApprovalViewModel.Phase.Approved) {
-                TextButton(onClick = onDismiss) { Text("Done") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.done)) }
             } else {
                 TextButton(
                     onClick = { scope.launch { vm.approve() } },
                     enabled = phase != com.flagshipserver.app.viewmodels.BackupDownloadApprovalViewModel.Phase.Working,
                     modifier = Modifier.semantics { contentDescription = "backup-approve" },
-                ) { Text(if (phase == com.flagshipserver.app.viewmodels.BackupDownloadApprovalViewModel.Phase.Working) "Approving…" else "Approve") }
+                ) { Text(if (phase == com.flagshipserver.app.viewmodels.BackupDownloadApprovalViewModel.Phase.Working) stringResource(R.string.approving) else stringResource(R.string.approve)) }
             }
         },
         dismissButton = {
             if (phase != com.flagshipserver.app.viewmodels.BackupDownloadApprovalViewModel.Phase.Approved) {
-                TextButton(onClick = onDismiss) { Text("Don't approve") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.dont_approve)) }
             }
         },
     )

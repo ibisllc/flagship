@@ -7,6 +7,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.DemoServerBlock
 import com.flagshipserver.app.api.DeviceCapabilityBlock
 
@@ -26,7 +27,7 @@ object DemoAccount {
         return PodInfo(
             podId = "demo-server-$username",
             name = label.replaceFirstChar { it.uppercaseChar() },
-            description = "Live demo server",
+            description = FSStrings.get(R.string.live_demo_server),
             fqdn = block.fqdn,
             status = mapStatus(block.lifecycle),
             demoServer = block,

@@ -9,6 +9,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
@@ -79,7 +81,7 @@ class ReplaceDeviceViewModel(
     suspend fun initiate(currentEtag: String?) {
         val user = username()
         if (user.isNullOrEmpty()) {
-            _phase.value = ReplaceDevicePhase.Failed("No active account on this device.")
+            _phase.value = ReplaceDevicePhase.Failed(FSStrings.get(R.string.no_active_account_on_this_device))
             return
         }
         _phase.value = ReplaceDevicePhase.Signing
@@ -91,8 +93,8 @@ class ReplaceDeviceViewModel(
         val oldPubHex: String
         val newPubHex: String
         try {
-            oldSign = Keystore.deriveIRK("Confirm replace device", oldVersion)
-            newSign = Keystore.deriveIRK("Authorize replace device", newVersion)
+            oldSign = Keystore.deriveIRK(FSStrings.get(R.string.confirm_replace_device), oldVersion)
+            newSign = Keystore.deriveIRK(FSStrings.get(R.string.authorize_replace_device), newVersion)
             // Pubkey derivation re-creates the keypair from the seed.
             // We can't read the seed back out (Keystore caches it
             // privately), so use irkPubHex helper variants per
@@ -104,7 +106,7 @@ class ReplaceDeviceViewModel(
             oldPubHex = pubHexForVersion(oldVersion)
             newPubHex = pubHexForVersion(newVersion)
         } catch (e: Throwable) {
-            _phase.value = ReplaceDevicePhase.Failed("Couldn't access your account keys: ${UserErrorText.reason(e)}")
+            _phase.value = ReplaceDevicePhase.Failed(FSStrings.get(R.string.couldnt_access_your_account_keys, UserErrorText.reason(e)))
             return
         }
         val issuedAt = System.currentTimeMillis()
@@ -145,9 +147,9 @@ class ReplaceDeviceViewModel(
             val rateLimit = RateLimitedException.messageOf(e)
             val friendly = when {
                 rateLimit != null -> rateLimit
-                msg.contains("412") -> "Your device list changed in the background. Refresh and try again."
-                msg.contains("409") -> "A device replacement is already pending on this account."
-                else -> "Couldn't reach the server: $msg"
+                msg.contains("412") -> FSStrings.get(R.string.your_device_list_changed_in_the)
+                msg.contains("409") -> FSStrings.get(R.string.a_device_replacement_is_already_pending)
+                else -> FSStrings.get(R.string.couldnt_reach_the_server, msg)
             }
             _phase.value = ReplaceDevicePhase.Failed(friendly)
         }
@@ -156,12 +158,12 @@ class ReplaceDeviceViewModel(
     suspend fun complete() {
         val user = username()
         if (user.isNullOrEmpty()) {
-            _phase.value = ReplaceDevicePhase.Failed("No active account on this device.")
+            _phase.value = ReplaceDevicePhase.Failed(FSStrings.get(R.string.no_active_account_on_this_device))
             return
         }
         val pending = Keystore.pendingIrkRotationVersion()
         if (pending == null) {
-            _phase.value = ReplaceDevicePhase.Failed("No pending rotation found on this device.")
+            _phase.value = ReplaceDevicePhase.Failed(FSStrings.get(R.string.no_pending_rotation_found_on_this))
             return
         }
         _phase.value = ReplaceDevicePhase.Completing
@@ -169,7 +171,7 @@ class ReplaceDeviceViewModel(
             // Signed by the PENDING version — the key the swap installs,
             // not the one this device still signs everything else with.
             // `.com` refuses an unsigned finalization.
-            val newSign = Keystore.deriveIRK("Finish replacing this device", pending)
+            val newSign = Keystore.deriveIRK(FSStrings.get(R.string.finish_replacing_this_device), pending)
             val newPubHex = pubHexForVersion(pending)
             val issuedAt = System.currentTimeMillis()
             val completeSig = newSign.sign(
@@ -200,15 +202,15 @@ class ReplaceDeviceViewModel(
         } catch (e: Throwable) {
             val msg = e.message.orEmpty()
             val friendly = when {
-                msg.contains("425") -> "The 24-hour grace hasn't ended yet. Try again later."
+                msg.contains("425") -> FSStrings.get(R.string.the_24_hour_grace_hasnt_ended)
                 msg.contains("409") -> {
                     // Server rejected — clear local pending so the
                     // UI doesn't keep showing a phantom pending
                     // state.
                     Keystore.setPendingIrkRotationVersion(null)
-                    "This replacement was cancelled. Local state stays unchanged."
+                    FSStrings.get(R.string.this_replacement_was_cancelled_local_state)
                 }
-                else -> "Couldn't complete: $msg"
+                else -> FSStrings.get(R.string.couldnt_complete_2, msg)
             }
             _phase.value = ReplaceDevicePhase.Failed(friendly)
         }

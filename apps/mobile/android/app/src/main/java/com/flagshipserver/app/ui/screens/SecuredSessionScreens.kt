@@ -7,6 +7,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -68,16 +72,16 @@ fun SecuredSessionsScreen(
     LaunchedEffect(Unit) { vm.reload() }
 
     FSScreen(
-        title = "Secured sessions",
+        title = stringResource(R.string.secured_sessions),
         onBack = { nav.popBackStack() },
         titleTag = "secured-sessions-title",
-        subtitle = "Browsers you signed in to private apps. Stop one to sign that browser out.",
+        subtitle = stringResource(R.string.browsers_you_signed_in_to_private),
         onRefresh = { vm.reload() },
     ) {
         if (rows.isEmpty()) {
             FSEmptyState(
-                title = "No open sessions",
-                message = "Scan a private app's sign-in QR with this app to sign a browser in.",
+                title = stringResource(R.string.no_open_sessions),
+                message = stringResource(R.string.scan_a_private_apps_sign_in),
                 icon = Icons.Outlined.Laptop,
                 modifier = Modifier.testTag("secured-sessions-empty"),
             )
@@ -117,7 +121,7 @@ private fun SecuredSessionCard(
                     modifier = Modifier.testTag("secured-session-status"),
                 )
                 Text(
-                    "· started ${formatTs(row.session.startedAt)}",
+                    fsString(R.string.started_2, formatTs(row.session.startedAt)),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -130,13 +134,13 @@ private fun SecuredSessionCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 FSSecondaryButton(
-                    label = if (row.refreshing) "Checking…" else "Refresh",
+                    label = if (row.refreshing) stringResource(R.string.checking) else stringResource(R.string.refresh),
                     enabled = !row.refreshing,
                     onClick = onRefresh,
                     modifier = Modifier.testTag("secured-session-refresh"),
                 )
                 FSDangerButton(
-                    label = "Stop",
+                    label = stringResource(R.string.stop),
                     onClick = onStop,
                     modifier = Modifier.testTag("secured-session-stop"),
                 )
@@ -146,10 +150,10 @@ private fun SecuredSessionCard(
 }
 
 private fun livenessLabel(l: SessionLiveness, refreshing: Boolean): String = when {
-    refreshing -> "Checking…"
-    l == SessionLiveness.ONLINE -> "Online"
-    l == SessionLiveness.OFFLINE -> "Offline"
-    else -> "Tap Refresh to check"
+    refreshing -> FSStrings.get(R.string.checking)
+    l == SessionLiveness.ONLINE -> FSStrings.get(R.string.online)
+    l == SessionLiveness.OFFLINE -> FSStrings.get(R.string.offline)
+    else -> FSStrings.get(R.string.tap_refresh_to_check)
 }
 
 @Composable
@@ -177,16 +181,15 @@ fun ProcessUrlScreen(nav: NavController) {
     val deepLinker = LocalDeepLinker.current
 
     FSScreen(
-        title = "Process a link",
+        title = stringResource(R.string.process_a_link),
         onBack = { nav.popBackStack() },
         titleTag = "process-url-title",
-        subtitle = "Paste a Flagship link: a private app's \"Get link\" string, or a " +
-            "\"take over this server\" transfer link someone shared with you.",
+        subtitle = stringResource(R.string.paste_a_flagship_link_a_private),
     ) {
         FSField(
             value = text,
             onValueChange = { text = it; error = null },
-            label = "Link",
+            label = stringResource(R.string.link),
             placeholder = "https://${com.flagshipserver.app.core.Endpoints.controlHost}/…",
             fieldTag = "process-url-input",
         )
@@ -199,7 +202,7 @@ fun ProcessUrlScreen(nav: NavController) {
             )
         }
         FSPrimaryButton(
-            label = "Open",
+            label = stringResource(R.string.open_2),
             block = true,
             enabled = text.isNotBlank(),
             onClick = {
@@ -222,7 +225,7 @@ fun ProcessUrlScreen(nav: NavController) {
                     is DeepLink.BuilderPair -> deepLinker.enqueue(link)
                     is DeepLink.AcceptInvite -> deepLinker.enqueue(link)
                     is DeepLink.RedeemInvite -> deepLinker.enqueue(link)
-                    else -> error = "That doesn't look like a Flagship link."
+                    else -> error = FSStrings.get(R.string.that_doesnt_look_like_a_flagship)
                 }
             },
             modifier = Modifier.testTag("process-url-submit"),

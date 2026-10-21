@@ -20,6 +20,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.KnockAuthorizeError
 import com.flagshipserver.app.api.KnockAuthorizeResult
@@ -72,7 +74,7 @@ class KnockAuthorizeViewModel(
     private val sharedServers: suspend (fetch: Boolean) -> List<Pair<String, String>> = { emptyList() },
     /** The share's member key (signer + pub), shown only to that share's server. */
     private val shareKey: suspend (shareId: String, reason: String) -> Pair<Ed25519Sign, ByteArray> = { id, r ->
-        BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = r)
+        BiometricAuthority.current()?.ensureFresh(title = FSStrings.get(R.string.authorize_flagship), subtitle = r)
         val umk = Keystore.loadOrCreateUmkSeed()
         ServerShare.deriveShareMemberKey(umk, id) to ServerShare.deriveShareMemberPub(umk, id)
     },
@@ -97,12 +99,12 @@ class KnockAuthorizeViewModel(
     val serverName: String get() = serverId.substringBefore('.').ifEmpty { serverId }
 
     /** "Open <app> on <server>?" (or "Open <server>?" for an apex service). */
-    val title: String get() = if (svc.isBlank()) "Open $serverName?" else "Open $svc on $serverName?"
+    val title: String get() = if (svc.isBlank()) FSStrings.get(R.string.open_3, serverName) else FSStrings.get(R.string.open_on, svc, serverName)
 
     suspend fun authorize() {
         if (_phase.value is KnockAuthorizePhase.Authorizing) return
         if (serverId.isEmpty() || serviceRef.isEmpty() || pageId.isEmpty()) {
-            _phase.value = KnockAuthorizePhase.Failed("This link is missing or malformed.")
+            _phase.value = KnockAuthorizePhase.Failed(FSStrings.get(R.string.this_link_is_missing_or_malformed))
             return
         }
         _phase.value = KnockAuthorizePhase.Authorizing
@@ -173,20 +175,20 @@ class KnockAuthorizeViewModel(
         } catch (e: KnockAuthorizeError) {
             _phase.value = KnockAuthorizePhase.Failed(
                 when (e) {
-                    is KnockAuthorizeError.NotAllowed -> "You don't have access to this service."
-                    is KnockAuthorizeError.Refused -> "Couldn't sign in. Refresh the page and try again."
-                    is KnockAuthorizeError.PageExpired -> "The page expired — refresh it and try again."
+                    is KnockAuthorizeError.NotAllowed -> FSStrings.get(R.string.you_dont_have_access_to_this)
+                    is KnockAuthorizeError.Refused -> FSStrings.get(R.string.couldnt_sign_in_refresh_the_page)
+                    is KnockAuthorizeError.PageExpired -> FSStrings.get(R.string.the_page_expired_refresh_it_and)
                 },
             )
         } catch (e: Throwable) {
-            _phase.value = KnockAuthorizePhase.Failed("Couldn't reach the server. Check your connection and try again.")
+            _phase.value = KnockAuthorizePhase.Failed(FSStrings.get(R.string.couldnt_reach_the_server_check_your))
         }
     }
 
     companion object {
-        const val NO_DEVICE_KEY =
-            "This device isn't set up on your account yet. Sign in to your account on it again, then try again."
-        const val NOT_YOURS = "This isn't one of your servers. Open its invite link on this phone first, then try again."
+        val NO_DEVICE_KEY get() =
+            FSStrings.get(R.string.this_device_isnt_set_up_on)
+        val NOT_YOURS get() = FSStrings.get(R.string.this_isnt_one_of_your_servers)
     }
 }
 

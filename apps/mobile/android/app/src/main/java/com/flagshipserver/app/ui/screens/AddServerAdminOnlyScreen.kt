@@ -4,6 +4,8 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,7 +31,7 @@ import com.flagshipserver.app.ui.theme.FS
 
 @Composable
 fun AddServerAdminOnlyScreen(onBack: () -> Unit, message: String = AddServerGate.ADMIN_ONLY) {
-    FSScreen(title = "Add a server", onBack = onBack, scrollable = false) {
+    FSScreen(title = stringResource(R.string.add_a_server), onBack = onBack, scrollable = false) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(
                 Modifier
@@ -47,7 +49,7 @@ fun AddServerAdminOnlyScreen(onBack: () -> Unit, message: String = AddServerGate
                     modifier = Modifier.size(40.dp),
                 )
                 Text(
-                    "Admin devices only",
+                    stringResource(R.string.admin_devices_only),
                     color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.titleLarge,
                     textAlign = TextAlign.Center,

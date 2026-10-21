@@ -8,6 +8,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import android.content.Context
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.SavedBackup
@@ -82,7 +83,7 @@ class PhoneBackupCopies(
         )
         val bundle = File(dir, b.bundleFileName)
         bundle.delete()
-        check(part.renameTo(bundle)) { "The backup couldn't be saved on this phone." }
+        check(part.renameTo(bundle)) { FSStrings.get(R.string.the_backup_couldnt_be_saved_on) }
         File(dir, META).writeText(json.encodeToString(SavedBackup.serializer(), b))
     }
 
@@ -103,7 +104,7 @@ class PhoneBackupCopies(
             return if (both) setOf(newest.archiveId, prev!!.archiveId) else setOf(newest.archiveId)
         }
 
-        fun needsSpaceLine(bytes: Long): String = "This phone needs about ${ServerArchive.formatBytes(bytes)} free to keep a copy."
+        fun needsSpaceLine(bytes: Long): String = FSStrings.get(R.string.this_phone_needs_about_free_to, ServerArchive.formatBytes(bytes))
     }
 }
 

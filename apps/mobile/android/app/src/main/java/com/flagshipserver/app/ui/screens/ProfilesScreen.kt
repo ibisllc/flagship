@@ -8,6 +8,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.runtime.Composable
@@ -32,17 +35,17 @@ fun ProfilesScreen(nav: NavController) {
     val profiles by app.profiles.collectAsState()
     val activeName by app.activeCloudName.collectAsState()
     FSScreen(
-        title = "Profiles",
+        title = stringResource(R.string.profiles),
         onBack = { nav.popBackStack() },
-        subtitle = "Switch the cloud this phone is using. Each profile has its own account key.",
+        subtitle = stringResource(R.string.switch_the_cloud_this_phone_is),
     ) {
         if (profiles.isEmpty()) {
             FSEmptyState(
-                title = "No profiles yet",
-                message = "Set one up to bind this phone to a cloud.",
+                title = stringResource(R.string.no_profiles_yet),
+                message = stringResource(R.string.set_one_up_to_bind_this),
                 icon = Icons.Outlined.Cloud,
                 action = {
-                    FSPrimaryButton(label = "Set one up", block = true, onClick = {
+                    FSPrimaryButton(label = stringResource(R.string.set_one_up), block = true, onClick = {
                         // Drop to Welcome by signing the session out;
                         // OnboardingFlow takes over.
                         app.signOut()
@@ -66,7 +69,7 @@ fun ProfilesScreen(nav: NavController) {
 private fun ProfileRow(profile: Profile, isActive: Boolean, onClick: () -> Unit) {
     val lines = buildList {
         if (profile.accountDisplayName != null) add("@${profile.cloudName}")
-        profile.deviceDisplayName?.let { add("This device: $it") }
+        profile.deviceDisplayName?.let { add(fsString(R.string.this_device_2, it)) }
     }
     FSRow(
         title = profile.accountDisplayName ?: "@${profile.cloudName}",
@@ -74,6 +77,6 @@ private fun ProfileRow(profile: Profile, isActive: Boolean, onClick: () -> Unit)
         icon = Icons.Outlined.Cloud,
         iconTint = if (isActive) FS.colors.primary else null,
         onClick = onClick,
-        trailing = if (isActive) ({ FSPill("Active", FSPillKind.Provisioning) }) else null,
+        trailing = if (isActive) ({ FSPill(stringResource(R.string.active_2), FSPillKind.Provisioning) }) else null,
     )
 }

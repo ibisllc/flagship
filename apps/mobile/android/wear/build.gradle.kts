@@ -37,7 +37,16 @@ android {
         // the watch build is the phone's plus 1,000,000.
         versionCode = 1_000_000 + (releaseVersion["androidVersionCode"] as Number).toInt()
         versionName = releaseVersion["product"] as String
-        resourceConfigurations += setOf("en")
+    }
+
+    // Languages come from i18n/locales.json: English plus every language marked "ga" (see app/build.gradle.kts).
+    androidResources {
+        localeFilters += run {
+            val all = groovy.json.JsonSlurper().parse(rootProject.file("../../../i18n/locales.json")) as Map<*, *>
+            (all["locales"] as List<*>).map { it as Map<*, *> }
+                .filter { it["code"] == all["source"] || it["status"] == "ga" }
+                .map { (it["androidId"] ?: it["code"]) as String }
+        }
     }
 
     signingConfigs {
@@ -57,6 +66,12 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+        }
+    }
+
+    testOptions {
+        unitTests.all { test ->
+            test.systemProperty("fs.test.strings", file("src/main/res/values/strings.xml").absolutePath)
         }
     }
 

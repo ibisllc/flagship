@@ -12,6 +12,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.LockPowerClient
@@ -145,7 +147,7 @@ class PowerOffViewModel(
         try {
             irk = signer(reason)
         } catch (e: Throwable) {
-            _phase.value = PowerOffPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
+            _phase.value = PowerOffPhase.Failed(FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(e)))
             return
         }
         val issuedAt = now()
@@ -153,7 +155,7 @@ class PowerOffViewModel(
         try {
             signature = irk.sign(PowerOffOrder.canonicalBytes(serverDomain, mode, issuedAt))
         } catch (e: Throwable) {
-            _phase.value = PowerOffPhase.Failed("Couldn't sign: ${UserErrorText.reason(e)}")
+            _phase.value = PowerOffPhase.Failed(FSStrings.get(R.string.couldnt_sign, UserErrorText.reason(e)))
             return
         }
 

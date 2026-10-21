@@ -6,12 +6,15 @@
 
 package com.flagshipserver.app.push
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
+
 object AccountNoticePush {
     const val TITLE = "Flagship"
 
-    private val TEXT = mapOf(
-        "cert-alert" to "One of your servers needs your attention.",
-        "server-registered" to "A new server was added to your account.",
+    private val TEXT get() = mapOf(
+        "cert-alert" to FSStrings.get(R.string.one_of_your_servers_needs_your),
+        "server-registered" to FSStrings.get(R.string.a_new_server_was_added_to),
     )
 
     /** The notice's text, or null for any other push. */

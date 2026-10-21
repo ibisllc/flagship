@@ -6,6 +6,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.LlmProviderCredential
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.ScreensError
@@ -56,7 +58,7 @@ class VibeCodeDeployViewModel(
             when {
                 r.started == true -> follow()
                 r.ok && r.url != null -> _phase.value = Phase.Deployed(r.url, leftOpen = r.inviteOnly == false)
-                else -> _phase.value = Phase.Failed("Deploy was rejected by the server.")
+                else -> _phase.value = Phase.Failed(FSStrings.get(R.string.deploy_was_rejected_by_the_server))
             }
         } catch (e: CancellationException) {
             throw e
@@ -99,7 +101,7 @@ class VibeCodeDeployViewModel(
     private suspend fun follow() {
         val done = withTimeoutOrNull(pollLimitMs) { poll() }
         if (done == null) {
-            _phase.value = Phase.Failed("The deploy is taking unusually long. Check Build sessions later to see how it went.")
+            _phase.value = Phase.Failed(FSStrings.get(R.string.the_deploy_is_taking_unusually_long))
         }
     }
 
@@ -121,7 +123,7 @@ class VibeCodeDeployViewModel(
                     return
                 }
                 "failed" -> {
-                    _phase.value = Phase.Failed(s.errorReason ?: "The deploy failed.")
+                    _phase.value = Phase.Failed(s.errorReason ?: FSStrings.get(R.string.the_deploy_failed))
                     return
                 }
                 "deploying" -> _phase.value = Phase.Deploying(s.deployPhase)
@@ -131,10 +133,10 @@ class VibeCodeDeployViewModel(
     }
 
     companion object {
-        const val STAGING = "Testing the app on a private copy…"
-        const val FIXING = "The AI is fixing a problem it found…"
-        const val GOING_LIVE = "Installing…"
-        const val DEPLOYING = "Deploying…"
+        val STAGING get() = FSStrings.get(R.string.testing_the_app_on_a_private)
+        val FIXING get() = FSStrings.get(R.string.the_ai_is_fixing_a_problem)
+        val GOING_LIVE get() = FSStrings.get(R.string.installing)
+        val DEPLOYING get() = FSStrings.get(R.string.deploying_2)
 
         fun stageText(stage: String?): String = when (stage) {
             "staging" -> STAGING
