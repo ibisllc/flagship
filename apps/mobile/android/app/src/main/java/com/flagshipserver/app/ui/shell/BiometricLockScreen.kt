@@ -59,6 +59,7 @@ import com.flagshipserver.app.core.NetworkErrorHumanizer
 import com.flagshipserver.app.core.WatchApprovalPrompt
 import com.flagshipserver.app.keystore.BiometricAuthority
 import com.flagshipserver.app.keystore.BiometricCancelled
+import com.flagshipserver.app.keystore.BiometricFailed
 import com.flagshipserver.app.keystore.BiometricGate
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.ui.theme.FS
@@ -183,9 +184,13 @@ fun BiometricLockScreen() {
                     // Keystore profiles (the locked user can't choose one)
                     // — the UMK / IRK that survive an app reinstall — then
                     // drop to Welcome. No server-side revoke; the same key
-                    // returns via passkey recovery.
-                    Keystore.wipeAllProfiles()
-                    app.signOut()
+                    // returns via passkey recovery. Biometric or device
+                    // PIN first, as on iOS, so both platforms ask alike.
+                    scope.launch {
+                        if (activity != null && !confirmSignOut(activity)) return@launch
+                        Keystore.wipeAllProfiles()
+                        app.signOut()
+                    }
                 }) {
                     Text(
                         if (hasRecovery) stringResource(R.string.sign_out_2) else stringResource(R.string.sign_out_anyway),
@@ -231,6 +236,22 @@ private sealed class Status {
     data object Idle : Status()
     data object Authenticating : Status()
     data class Failed(val message: String) : Status()
+}
+
+/** True when the sign-out may go ahead: the person authenticated, or the
+ *  device has nothing to authenticate with (no screen lock), where the
+ *  sign-out is the only way out of this screen. */
+private suspend fun confirmSignOut(activity: FragmentActivity): Boolean = try {
+    BiometricGate.evaluate(activity, title = "Sign out of Flagship", subtitle = "Confirm it's you")
+    true
+} catch (e: BiometricFailed) {
+    e.code in setOf(
+        androidx.biometric.BiometricPrompt.ERROR_NO_DEVICE_CREDENTIAL,
+        androidx.biometric.BiometricPrompt.ERROR_NO_BIOMETRICS,
+        androidx.biometric.BiometricPrompt.ERROR_HW_NOT_PRESENT,
+    )
+} catch (_: BiometricCancelled) {
+    false
 }
 
 private suspend fun tryUnlock(

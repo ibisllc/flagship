@@ -104,9 +104,10 @@ struct BiometricLockScreen: View {
                 // profiles (the locked user can't choose one) — the wrapped
                 // UMK / IRK that survive an app reinstall — then drop to
                 // Welcome. No server-side revoke; the same key returns via
-                // passkey recovery.
-                Keystore.wipeAllProfiles()
-                app.signOut()
+                // passkey recovery. Face ID or the device passcode first: a
+                // deleted app leaves this key in the Keychain, so without the
+                // check anyone holding the phone could destroy it.
+                Task { await confirmSignOut() }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -145,6 +146,20 @@ struct BiometricLockScreen: View {
         default:
             return gate.errorDescription
         }
+    }
+
+    private func confirmSignOut() async {
+        do {
+            try await BiometricGate().evaluate(reason: "Sign out of Flagship")
+        } catch {
+            // Nothing to ask with (no passcode set): the sign-out is the only way out.
+            guard BiometricGate.GateError.from(error) == .notAvailable else {
+                status = Self.message(for: error).map(Status.failed) ?? .idle
+                return
+            }
+        }
+        Keystore.wipeAllProfiles()
+        app.signOut()
     }
 
     private func tryUnlock() async {
