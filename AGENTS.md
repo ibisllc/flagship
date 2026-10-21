@@ -327,14 +327,18 @@ of the last check here: **not yet checked**.
 ### In flight
 
 - **Multilingual (2026-10-21, branch `feat/multilingual`, local, not pushed; `docs/i18n.md`).**
-  Six languages (es, fr, de, pt-BR, ja, zh-Hans) are generated for the website, Android + Wear, iOS +
+  Six languages (es, fr, de, pt-BR, ja, zh-Hans) are generated for the website, the webapp PWA (shell v157;
+  `tr()`/`trn()`, `scripts/i18n-pwa.mjs`), the pages the box serves itself (`t(lang, …)`, `scripts/i18n-box.mjs`;
+  a box serves new text only with an endorsed release), Android + Wear, iOS +
   Watch + widgets + Info.plist, the Mac/Windows/Linux Studios and the APNs sentences, all `"status": "draft"`
   in `i18n/locales.json`: nothing is packaged, served or offered until a language is flipped to `"ga"`
-  (then rebuild: `node scripts/i18n-ios.mjs build`, `i18n-android.mjs build`, `i18n-web.mjs build`;
+  (then rebuild: `node scripts/i18n-ios.mjs build`, `i18n-android.mjs build`, `i18n-web.mjs build`,
+  `i18n-pwa.mjs build`, `i18n-box.mjs build`;
   `npm run i18n` is the gate, `npm run i18n:status` the coverage). The translations are machine drafts for
-  a language reviewer (`i18n/REVIEW.md`); `i18n/glossary.json` holds the fixed terms. **Not localised:** the
-  webapp PWA, the box-served HTML pages (invite, knock, download, service-access), signed security-notice
-  text, and the legal pages (English by design). Not yet built for a device: the iOS app at HEAD still fails
+  a language reviewer (`i18n/REVIEW.md`); `i18n/glossary.json` holds the fixed terms. **Not localised:** signed security-notice
+  text, the legal pages (English by design), the box's JSON API error strings, and PWA text assembled from
+  fragments (e.g. "Lock and {0}"), mock/dev strings and app-store listing copy. The PWA has not been
+  exercised in a browser with a translated language. Not yet built for a device: the iOS app at HEAD still fails
   `ContentView.swift:149` type-checking with this Xcode (also on the base commit); Windows was checked with a
   Roslyn pass and the .NET 8 tests, not a WPF build. Rerun `harvest` (iOS) / `extract` (Android) after
   editing any English text.
