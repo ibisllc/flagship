@@ -81,7 +81,7 @@ export function debugAccessCardHtml(view, { isAdmin, fqdn = "", now = Date.now()
       </select>
       <p class="warn-text small mt-2" id="debug-access-warning">${escapeHtml(DEBUG_WARNING)}</p>
       <p class="err-text small hidden" id="debug-access-error"></p>
-      <button id="debug-access-on-btn" class="full-width mt-2">${on ? "Renew" : tr("Turn on")}</button>
+      <button id="debug-access-on-btn" class="full-width mt-2">${on ? tr("Renew") : tr("Turn on")}</button>
       ${on ? `<button id="debug-access-off-btn" class="danger full-width mt-2">${tr("Turn off")}</button>` : ""}`
     : `<p class="note small mt-2" id="debug-access-admin-only">${escapeHtml(DEBUG_ADMIN_ONLY)}</p>`;
   return `

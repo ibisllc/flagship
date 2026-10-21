@@ -56,8 +56,8 @@ function timeLeft(expiresAt, nowMs = Date.now()) {
   if (ms <= 0) return "expired";
   const m = Math.floor(ms / 60_000);
   const s = Math.floor((ms % 60_000) / 1000);
-  if (m > 0) return `${m}m ${s}s left`;
-  return `${s}s left`;
+  if (m > 0) return tr("{0}m {1}s left", m, s);
+  return tr("{0}s left", s);
 }
 
 /**
@@ -140,7 +140,7 @@ export function pendingCount() {
 export async function renderCompanionRequests(deps = {}) {
   const root = $("companion-requests-content");
   if (!root) return;
-  root.innerHTML = '<div class="card placeholder">loading…</div>';
+  root.innerHTML = `<div class="card placeholder">${tr("loading…")}</div>`;
 
   let body;
   try {
@@ -215,7 +215,7 @@ function setRowError(requestId, message) {
  * without DOM events.
  */
 export async function runApprove(row, deps = {}) {
-  if (!row || !row.requestId) return { ok: false, error: "no row" };
+  if (!row || !row.requestId) return { ok: false, error: tr("no row") };
   const release = deps.releaseServerName || releaseServerName;
   const revoke = deps.revokeServer || revokeServer;
   const resolve = deps.resolvePending || resolvePending;
@@ -290,7 +290,7 @@ export async function runApprove(row, deps = {}) {
  * Deny: post resolve-pending with outcome=denied; no signing required.
  */
 export async function runDeny(row, deps = {}) {
-  if (!row || !row.requestId) return { ok: false, error: "no row" };
+  if (!row || !row.requestId) return { ok: false, error: tr("no row") };
   const resolve = deps.resolvePending || resolvePending;
   setRowError(row.requestId, "");
   try {

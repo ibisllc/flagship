@@ -26,7 +26,7 @@ export const KEYFILE_COPY = {
   intro: "",
   danger:
     tr("Anyone with both this file and its passphrase can take over your account and lock you out."),
-  passphrase: "12 characters minimum",
+  passphrase: tr("12 characters minimum"),
   acks: [
     tr("I understand anyone with this file and passphrase controls my entire account."),
   ],

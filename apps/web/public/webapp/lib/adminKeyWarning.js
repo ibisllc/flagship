@@ -28,7 +28,7 @@ export const ADMIN_KEY_COPY = Object.freeze({
   signOutBackedUpMessage:
     tr("Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe."),
   signOutBackedUpOk: tr("Sign out"),
-  cancel: "Cancel",
+  cancel: tr("Cancel"),
   /** Shown when a save-first path needs the key unlocked. */
   unlockFirst: tr("Unlock first to save your key."),
 });

@@ -6,7 +6,7 @@
 //   flagship/backup-policy/v1|<serverDomain>|<phone|peer|none>|<phoneReserveBytes>|<issuedAt>
 //
 // Must pass packages/protocol/test-vectors/backup-policy/vectors.json.
-import { tr, trn } from "./i18n.js";
+import { tr, trn, dateLocale } from "./i18n.js";
 
 export const TAG_BACKUP_POLICY = "flagship/backup-policy/v1";
 export const BACKUP_POLICY_PATH = "/api/screens/backup-policy";
@@ -95,8 +95,8 @@ export function policyLine(view) {
   const p = view?.policy?.policy ?? "unset";
   const limit = view?.cap?.limitBytes;
   const label = POLICY_LABEL[p] ?? POLICY_LABEL.unset;
-  if (p === "phone" && limit) return `${label} · up to ${formatGb(limit)}`;
-  if (p === "peer" && limit) return `${label} · up to ${formatGb(limit)}`;
+  if (p === "phone" && limit) return tr("{0} · up to {1}", label, formatGb(limit));
+  if (p === "peer" && limit) return tr("{0} · up to {1}", label, formatGb(limit));
   return label;
 }
 
@@ -121,22 +121,25 @@ const PEER_STATE = {
   "waiting-for-peers": tr("Looking for servers to keep pieces"),
   filling: tr("Getting ready"),
   placing: tr("Sending pieces to other servers"),
-  protected: "Protected",
+  protected: tr("Protected"),
   "at-risk": tr("At risk"),
   leaving: tr("Leaving peer backups"),
   off: "Off",
 };
 
 /** The peer engine's status, as lines for the page. */
-export function peerLines(peer, { formatTime = (t) => new Date(t).toLocaleString() } = {}) {
+export function peerLines(peer, { formatTime = (t) => new Date(t).toLocaleString(dateLocale()) } = {}) {
   if (!peer || typeof peer !== "object") return [];
   const out = [];
   const state = PEER_STATE[peer.state] ?? String(peer.state ?? "");
   out.push(peer.reason ? `${state}: ${String(peer.reason).replace(/[.\s]+$/, "")}.` : state);
   if (Number.isFinite(peer.totalBricks) && peer.totalBricks > 0) {
-    out.push(`${peer.healthyBricks ?? 0} of ${peer.totalBricks} pieces safe${Number.isFinite(peer.holders) ? trn(peer.holders, " on {0} server", " on {0} servers") : ""}`);
+    const safe = peer.healthyBricks ?? 0;
+    out.push(Number.isFinite(peer.holders)
+      ? trn(peer.holders, "{1} of {2} pieces safe on {0} server", "{1} of {2} pieces safe on {0} servers", safe, peer.totalBricks)
+      : tr("{0} of {1} pieces safe", safe, peer.totalBricks));
   }
-  if (Number.isFinite(peer.lastPlacedAt) && peer.lastPlacedAt > 0) out.push(`Last placed: ${formatTime(peer.lastPlacedAt)}`);
-  if (Number.isFinite(peer.hostingBytes) && peer.hostingBytes > 0) out.push(`Holds ${formatGb(peer.hostingBytes)} for other servers`);
+  if (Number.isFinite(peer.lastPlacedAt) && peer.lastPlacedAt > 0) out.push(tr("Last placed: {0}", formatTime(peer.lastPlacedAt)));
+  if (Number.isFinite(peer.hostingBytes) && peer.hostingBytes > 0) out.push(tr("Holds {0} for other servers", formatGb(peer.hostingBytes)));
   return out;
 }

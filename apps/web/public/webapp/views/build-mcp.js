@@ -134,8 +134,8 @@ function renderConnection(conn) {
       <button id="mcp-deploy" class="full-width mt-2">${tr("Deploy now")}</button>
       <div id="mcp-env-requests"></div>
     </div>`;
-  $("mcp-copy-cfg").addEventListener("click", () => copy(cfg, "config copied"));
-  if (current.command) $("mcp-copy-cmd").addEventListener("click", () => copy(current.command, "command copied"));
+  $("mcp-copy-cfg").addEventListener("click", () => copy(cfg, tr("config copied")));
+  if (current.command) $("mcp-copy-cmd").addEventListener("click", () => copy(current.command, tr("command copied")));
   for (const b of box.querySelectorAll("[data-mcp-ide]")) {
     b.addEventListener("click", () => {
       ideChoice = b.dataset.mcpIde;
@@ -171,8 +171,8 @@ async function refreshEnvRequests() {
     .map((q) => {
       const why = q.why ? `<span class="note">${escapeHtml(q.why)}</span>` : "";
       const status = q.currentlySet
-        ? '<span class="value">set ✓</span>'
-        : '<span class="value">needs you</span>';
+        ? `<span class="value">${tr("set ✓")}</span>`
+        : `<span class="value">${tr("needs you")}</span>`;
       return `<div class="row mt-1"><span class="label mono">${escapeHtml(q.name)}</span>${status}</div>${why}`;
     })
     .join("");

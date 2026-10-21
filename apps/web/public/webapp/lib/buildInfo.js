@@ -16,7 +16,7 @@ export const PROTOCOL_LEVEL = 1;
 // scripts/check-versions.mjs --write keeps these two in step). It is not a
 // protocol or wire version and nothing compares it.
 export const PRODUCT_VERSION = "0.2";
-export const PRODUCT_LABEL = "Beta";
+export const PRODUCT_LABEL = tr("Beta");
 
 export function aboutVersionLine() {
   return tr("Flagship {0} {1} (web build {2})", PRODUCT_VERSION, PRODUCT_LABEL, WEB_BUILD);

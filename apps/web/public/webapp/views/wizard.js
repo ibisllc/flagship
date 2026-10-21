@@ -367,7 +367,7 @@ async function renderStepBody(state, step) {
         </div>
       `;
     default:
-      return "<p class=\"note\">Unknown step — finishing wizard.</p>";
+      return `<p class="note">${tr("Unknown step — finishing wizard.")}</p>`;
   }
 }
 

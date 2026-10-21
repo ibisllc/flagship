@@ -18,7 +18,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
-import { parse } from "parse5";
+import { parse, serialize } from "parse5";
 import { ROOT, locales, targets, readEn, writeEn, readTr, runCommon, lintSurface } from "./lib/i18n-kv.mjs";
 
 const SURFACE = "webapp";
@@ -42,6 +42,20 @@ function listJs(dir = WEBAPP, out = []) {
 
 const EXPLICIT_PROPS = new Set(["textContent", "innerText", "placeholder", "title", "alt", "ariaLabel", "label"]);
 const EXPLICIT_KEYS = new Set(["label", "title", "text", "message", "description", "placeholder", "heading", "subtitle", "caption", "hint", "note", "help", "error", "reason", "summary", "body", "buttonLabel", "confirmLabel", "cancelLabel", "okLabel", "emptyText", "tooltip", "ariaLabel", "detail", "headline", "name"]);
+// plain strings that read as a phrase to a person even though looksProse() says no (lower-case fragments of a
+// sentence, validation hints, status words); kept English where the same text is thrown as an Error.
+const FORCE = new Set(JSON.parse(fs.readFileSync(new URL("./i18n-pwa.force.json", import.meta.url), "utf8")));
+// emails to Flagship staff stay English
+const NO_TEMPLATE_FILES = /(^|\/)lib\/trademarkClaim\.js$/;
+/** A template whose fixed text holds a word next to a value or a space and nothing URL-, path- or protocol-like. */
+// diagnostics, identifiers and units stay as written (errors are English by decision)
+const DIAGNOSTIC = /\b(failed|invalid|must be|must list|must|bad|malformed|unsupported|contains|empty|expected|required|not relayable|reserved)\b|^\{\d+\}(px| KB| MB| GB)$|-backup-|^ tone-|is-tappable|^\.flagship|^[a-z-]+: [a-z{]/i;
+const inError = (n) => { for (let p = n.parent; p && !ts.isBlock(p) && !ts.isSourceFile(p); p = p.parent) if (ts.isThrowStatement(p) || ((ts.isNewExpression(p) || ts.isCallExpression(p)) && /(^|\.)(\w*Error|reject)$/.test(p.expression.getText())) ) return true; return false; };
+function looksUiTemplate(raw) {
+  const st = raw.replace(/\u0001\d+\u0001/g, "\u0000");
+  if (/[\/=?<>@\\]|:\/\/|Bearer|HTTP |^status |Flagship-Boot|^[a-z]+\./.test(st)) return false;
+  return /[A-Za-z]{2,}/.test(st) && /[A-Za-z]+[\s\u0000]|[\s\u0000][A-Za-z]+/.test(st);
+}
 const UI_CALLS = /^(toast|showToast|alert|confirm|prompt|notify|announce|setStatus|showStatus|setError|showError|inlinePrompt|confirmModal|modal|openModal|banner|setNote|flash|sheet|confirmSheet)$/i;
 const NEVER_CALLS = /^(console\.\w+|require|import|fetch|URL|RegExp|Symbol|\$|getElementById|querySelector(All)?|closest|matches|addEventListener|removeEventListener|dispatchEvent|CustomEvent|Event|setAttribute|getAttribute|removeAttribute|hasAttribute|localStorage\.\w+|sessionStorage\.\w+|JSON\.\w+|Object\.\w+|classList\.\w+|\w+\.(includes|indexOf|lastIndexOf|startsWith|endsWith|match|matchAll|test|replace|replaceAll|split|join|localeCompare|normalize|padStart|padEnd|at|charAt|get|set|has|delete|add|append|push|concat|slice|substring|toLowerCase|toUpperCase|encode|decode|fromCharCode|log|warn|error|info|debug)|btoa|atob|parseInt|parseFloat|Number|String|Boolean|Array\.\w+|Math\.\w+|Date\.\w+|Intl\.\w+|encodeURIComponent|decodeURIComponent|escapeHtml|esc|bytesToHex|hexToBytes|utf8|new TextEncoder|signWith\w+|canonical\w*|hash\w*|sha256|derive\w+|fsEvent|postMessage|importScripts|caches\.\w+|navigator\.\w+)$/;
 const INLINE_TAGS = new Set(["a", "b", "i", "em", "strong", "code", "kbd", "small", "u", "mark", "sup", "sub", "br", "abbr", "s", "wbr"]);
@@ -396,7 +410,10 @@ function transformFile(file) {
       if (!ctx) return;
       const call = callFor(raw, exprs, n, { explicit: ctx === "explicit" });
       if (call) addEdit(n.getStart(sf), n.getEnd(), call);
-      else if (lettersIn(raw) >= 4) skip(n, "template not text-like");
+      else if (looksUiTemplate(raw) && !NO_TEMPLATE_FILES.test(rel) && !inError(n) && !DIAGNOSTIC.test(toKey(raw, exprs).key)) {
+        const forced = callFor(raw, exprs, n, { html: true });
+        if (forced) addEdit(n.getStart(sf), n.getEnd(), forced);
+      } else if (lettersIn(raw) >= 4) skip(n, "template not text-like");
       return;
     }
 
@@ -425,12 +442,17 @@ function transformFile(file) {
       if (/<\/?[a-zA-Z][^<>]*>/.test(text)) {
         // an HTML string
         const ctx = contextOf(n);
-        if (ctx) skip(n, "html in plain string");
+        if (!ctx) return;
+        // handled like an HTML template: the string becomes a template literal whose text runs are wrapped
+        const raw = text.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
+        const rebuilt = transformHtml(raw, [], n);
+        if (rebuilt !== raw) addEdit(n.getStart(sf), n.getEnd(), "`" + rebuilt + "`");
+        else skip(n, "html in plain string");
         return;
       }
       const ctx = contextOf(n);
       if (!ctx) return;
-      if (ctx === "explicit" ? looksLabel(text) : looksProse(text)) {
+      if (((ctx === "explicit" ? looksLabel(text) : looksProse(text)) || FORCE.has(text)) && !(FORCE.has(text) && inError(n))) {
         // keys of lookups: `{ "Some text": x }` handled (PropertyAssignment name is not an initializer)
         note(text, n);
         usedTr = true;
@@ -483,8 +505,18 @@ function staticHtmlEntries() {
   const file = path.join(WEBAPP, "index.html");
   const doc = parse(fs.readFileSync(file, "utf8"), { sourceCodeLocationInfo: true });
   const found = {};
+  const inlineOnly = (el) => (el.childNodes ?? []).every((c) => c.nodeName === "#text" || c.nodeName === "#comment" || (INLINE_TAGS.has(c.nodeName) && inlineOnly(c)));
   const walk = (node) => {
     if (["script", "style", "template"].includes(node.nodeName)) return;
+    // an element holding only text and inline tags is one sentence: <p>Pick <strong>one</strong> now.</p>
+    if (node.tagName && node.childNodes?.some((c) => INLINE_TAGS.has(c.nodeName)) && inlineOnly(node)) {
+      const inner = serialize(node).replace(/\s+/g, " ").trim();
+      if (lettersIn(inner.replace(/<[^>]*>/g, "")) >= 2 && !/^\{\{/.test(inner)) {
+        found[inner] = { en: inner, ctx: "webapp/index.html" };
+        for (const a of node.attrs ?? []) if (["placeholder", "title", "aria-label", "alt"].includes(a.name) && lettersIn(a.value) >= 2) found[a.value] = { en: a.value, ctx: "webapp/index.html" };
+        return;
+      }
+    }
     if (node.nodeName === "#text") {
       const t = node.value.trim().replace(/\s+/g, " ");
       if (lettersIn(t) >= 2 && !/^\{\{/.test(t)) found[node.value.trim()] = { en: node.value.trim(), ctx: "webapp/index.html" };
@@ -493,6 +525,29 @@ function staticHtmlEntries() {
     for (const c of node.childNodes ?? []) walk(c);
   };
   walk(doc);
+  return found;
+}
+
+/** Every literal key the code already passes to tr()/trn(), by file:line (hand-written calls included). */
+function harvestCalls() {
+  const found = {};
+  for (const f of listJs()) {
+    const text = fs.readFileSync(f, "utf8");
+    const sf = ts.createSourceFile(f, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const rel = path.relative(WEBAPP, f);
+    const lit = (n) => (n && (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) ? n.text : null);
+    const visit = (n) => {
+      if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && /^(tr|tr_|trn)$/.test(n.expression.text)) {
+        const idx = n.expression.text === "trn" ? [1, 2] : [0];
+        for (const i of idx) {
+          const k = lit(n.arguments[i]);
+          if (k !== null && lettersIn(k) >= 1 && !(k in found)) found[k] = { en: k, ctx: `webapp/${rel}:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}` };
+        }
+      }
+      ts.forEachChild(n, visit);
+    };
+    visit(sf);
+  }
   return found;
 }
 
@@ -513,7 +568,10 @@ if (cmd === "extract") {
     }
   }
   const existing = readEn(SURFACE);
-  const merged = { ...entries, ...staticHtmlEntries() };
+  const statics = staticHtmlEntries();
+  // text that left index.html (or merged into a whole-sentence entry) is not a key any more
+  for (const [k, v] of Object.entries(existing)) if (v.ctx === "webapp/index.html" && !statics[k]) delete existing[k];
+  const merged = { ...entries, ...harvestCalls(), ...statics };
   for (const [k, v] of Object.entries(merged)) if (!existing[k]) existing[k] = v;
   if (!dry) writeEn(SURFACE, existing);
   fs.writeFileSync("/tmp/i18n-pwa-skipped.txt", skipped.join("\n"));
@@ -538,6 +596,7 @@ if (cmd === "extract") {
   const problems = lintSurface(SURFACE);
   const ga = locales.locales.filter((l) => l.status === "ga" && l.code !== locales.source);
   const en = readEn(SURFACE);
+  for (const k of Object.keys(harvestCalls())) if (!en[k]) problems.push(`not in i18n/webapp/en.json (run node scripts/i18n-pwa.mjs extract): ${k.slice(0, 70)}`);
   for (const l of ga) {
     const tr = readTr(SURFACE, l.code);
     const missing = Object.keys(en).filter((k) => en[k].translatable !== false && !tr[k]);
