@@ -589,7 +589,8 @@
   },
   "%lld row%@ rewritten · %lld app%@": {
     "en": "%lld row%@ rewritten · %lld app%@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift:270"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift:270",
+    "translatable": false
   },
   "View report": {
     "en": "View report",
@@ -597,11 +598,13 @@
   },
   "MMMdjmm": {
     "en": "MMMdjmm",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift:455"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift:455",
+    "translatable": false
   },
   "MMMdyjmm": {
     "en": "MMMdyjmm",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift:455"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift:455",
+    "translatable": false
   },
   "expanded": {
     "en": "expanded",
