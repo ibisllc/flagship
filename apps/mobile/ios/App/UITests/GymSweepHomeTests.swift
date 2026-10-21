@@ -461,6 +461,24 @@ final class GymSweepHomeTests: GymSweepCase {
         XCTAssertTrue(app.buttons["Create your account"].waitForExistence(timeout: 15), "Signing out returns to Welcome.")
     }
 
+    /// The lock screen's Sign out erases the account key (a deleted app leaves
+    /// it in the Keychain), so it asks Face ID / the passcode first. Every
+    /// prompt is dismissed here (`-smoke-refuse-biometric`): no question opens,
+    /// the lock stays, and the person is not signed out.
+    func test_lockScreenSignOutDoesNothingWithoutTheOwner() throws {
+        let app = launch(admin: true, ["-smoke-locked", "-smoke-no-recovery", "-smoke-refuse-biometric"])
+        let signOut = app.buttons["lock-sign-out-btn"]
+        XCTAssertTrue(signOut.waitForExistence(timeout: 20))
+        for _ in 0..<3 where signOut.isHittable {
+            signOut.tap()
+            sleep(2)
+        }
+        shot(app, "lock-sign-out-refused")
+        XCTAssertFalse(button(app, "Sign out anyway").exists, "A dismissed prompt must not open the question.")
+        XCTAssertTrue(app.buttons["lock-unlock-btn"].exists, "Still on the lock screen.")
+        XCTAssertFalse(app.buttons["Create your account"].exists, "Not signed out.")
+    }
+
     // MARK: Activity
 
     /// The Activity page is an accordion (one section open at a time);
