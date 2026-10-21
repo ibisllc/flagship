@@ -27,6 +27,7 @@
 import { screensFetch } from "./api.js";
 import { activeOperations } from "./activeOperations.js";
 
+import { tr } from "./i18n.js";
 /** The discriminator for the AI-chat-needs-you alert variant on the box. */
 export const AI_CHAT_ALERT_KIND = "ai-chat-needs-you";
 
@@ -39,8 +40,8 @@ export const AI_CHAT_ALERT_KIND = "ai-chat-needs-you";
  */
 export function aiChatAlertBody(alert) {
   return alert && alert.request === "requestEnvVar"
-    ? "The AI needs an environment variable to continue."
-    : "The AI is asking you a question.";
+    ? tr("The AI needs an environment variable to continue.")
+    : tr("The AI is asking you a question.");
 }
 
 /**
@@ -65,7 +66,7 @@ export function aiChatDeepLink(n) {
 export function surfaceAiChatOperation(alert, deps = {}) {
   const ops = deps.operations || activeOperations;
   const sessionId = alert.serviceId;
-  ops.upsertBuild(sessionId, "AI build", null, {
+  ops.upsertBuild(sessionId, tr("AI build"), null, {
     view: "view-vibecode-chat",
     params: alert.server ? { sessionId, server: alert.server } : { sessionId },
   });
@@ -162,7 +163,7 @@ export function makeAiChatNotifier(deps) {
     if (seen.has(tag)) return;
     seen.add(tag);
     show({
-      title: "Flagship",
+      title: tr("Flagship"),
       body: aiChatAlertBody(alert),
       tag,
       sessionId,

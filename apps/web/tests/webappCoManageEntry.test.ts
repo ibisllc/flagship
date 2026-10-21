@@ -7,8 +7,8 @@ describe("co-manage entry", () => {
 
   it("the Add/Restore menu offers it, wired to the share-link prompt", async () => {
     const menu = await get("/webapp/views/import-backup.js");
-    expect(menu).toContain("data-choice-add>Create a server<");
-    expect(menu).toContain("data-choice-co-manage>Co-manage a running server<");
+    expect(menu).toContain('data-choice-add>${tr("Create a server")}<');
+    expect(menu).toContain('data-choice-co-manage>${tr("Co-manage a running server")}<');
     expect(menu).not.toContain("Add a new server");
     expect(menu).not.toContain("To clone a server under a new name");
     const home = await get("/webapp/views/home.js");

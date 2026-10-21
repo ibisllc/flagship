@@ -44,6 +44,7 @@ import {
   remove as profileRemove,
 } from "../lib/profilesStore.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-wizard");
 
 // `wizardState` is marked device-wide-or-pre-profile in profilesStore.js —
@@ -60,14 +61,14 @@ const PEER_BACKUP_CHOICE_KEY = "flagship.peerBackup.choice.v1";
 void WIZARD_STATE_KEY; void RECOVERY_WARN_KEY; void PEER_BACKUP_CHOICE_KEY;
 
 const STEPS = [
-  { id: "device-key", label: "Generate device key" },
-  { id: "username", label: "Open your account" },
-  { id: "secure-account", label: "Secure your account", skippable: true },
-  { id: "passphrase", label: "Set recovery passphrase", skippable: true },
-  { id: "webauthn-recovery", label: "Cloud recovery (WebAuthn)", skippable: true },
-  { id: "create-server", label: "Add your first server" },
-  { id: "peer-backup", label: "Help others (peer-backup)", skippable: true },
-  { id: "demo-app", label: "Try a demo app", skippable: true },
+  { id: "device-key", label: tr("Generate device key") },
+  { id: "username", label: tr("Open your account") },
+  { id: "secure-account", label: tr("Secure your account"), skippable: true },
+  { id: "passphrase", label: tr("Set recovery passphrase"), skippable: true },
+  { id: "webauthn-recovery", label: tr("Cloud recovery (WebAuthn)"), skippable: true },
+  { id: "create-server", label: tr("Add your first server") },
+  { id: "peer-backup", label: tr("Help others (peer-backup)"), skippable: true },
+  { id: "demo-app", label: tr("Try a demo app"), skippable: true },
 ];
 
 /**
@@ -140,9 +141,8 @@ function renderTakenState(username) {
   }
   const mailto = trademarkClaimMailto(username);
   panel.innerHTML = `
-    <p>The name <strong>${escapeHtml(username)}</strong> is already taken. Try another.</p>
-    <p class="muted-sm">Hold a registered trademark to this name?
-      <a id="wizard-trademark-claim" href="${mailto}">I hold a trademark to this name</a>.</p>
+    <p>${tr("The name <strong>{0}</strong> is already taken. Try another.", escapeHtml(username))}</p>
+    <p class="muted-sm">${tr("Hold a registered trademark to this name? <a id=\"wizard-trademark-claim\" href=\"{0}\">I hold a trademark to this name</a>.", mailto)}</p>
   `;
   panel.classList.remove("hidden");
 }
@@ -152,13 +152,13 @@ async function handleOpenAccount() {
   const username = (input?.value || "").trim().toLowerCase();
   renderTakenState(null); // clear any prior taken-state on a fresh attempt
   if (!isValidUsername(username)) {
-    toast("Username must be 3–30 lowercase letters and digits; single dashes inside are OK", "err");
+    toast(tr("Username must be 3–30 lowercase letters and digits; single dashes inside are OK"), "err");
     input?.focus();
     return false;
   }
   const session = getSession();
   if (!session.umk || !session.irk) {
-    toast("Generate a device key first", "err");
+    toast(tr("Generate a device key first"), "err");
     return false;
   }
   const btn = document.getElementById("wizard-go-username");
@@ -183,17 +183,17 @@ async function handleOpenAccount() {
       .map((part) => part ? part[0].toUpperCase() + part.slice(1) : part)
       .join(" ");
     const accountDisplayName = await inlinePrompt({
-      title: "Name this account",
-      message: `This private name appears above @${username} and is never used in links.`,
+      title: tr("Name this account"),
+      message: tr("This private name appears above @{0} and is never used in links.", username),
       initial: suggestedAccountName,
-      validate: (value) => value?.trim() ? null : "Enter an account name",
+      validate: (value) => value?.trim() ? null : tr("Enter an account name"),
     });
     if (!accountDisplayName) return false;
     const deviceDisplayName = await inlinePrompt({
-      title: "Name this device",
-      message: "This private name applies only inside this Flagship account.",
-      initial: "This browser",
-      validate: (value) => value?.trim() ? null : "Enter a device name",
+      title: tr("Name this device"),
+      message: tr("This private name applies only inside this Flagship account."),
+      initial: tr("This browser"),
+      validate: (value) => value?.trim() ? null : tr("Enter a device name"),
     });
     if (!deviceDisplayName) return false;
     await openAccount(username, {
@@ -220,7 +220,7 @@ async function handleOpenAccount() {
       // step itself. The account is open; the app shell comes after the
       // remaining (skippable) wizard steps.
     });
-    toast(`Account opened — ${username}`, "ok");
+    toast(tr("Account opened — {0}", username), "ok");
     return true;
   } catch (e) {
     const msg = String(e.message || e);
@@ -249,7 +249,7 @@ async function handleOpenAccount() {
 async function handleSecureAccount() {
   const session = getSession();
   if (!session.umk || !session.irk) {
-    toast("Open your account first", "err");
+    toast(tr("Open your account first"), "err");
     return false;
   }
   const username =
@@ -262,7 +262,7 @@ async function handleSecureAccount() {
     if (useCloud) {
       const { setupCloudRecovery } = await import("../lib/recovery.js");
       await setupCloudRecovery(username);
-      toast(`Cloud backup on for ${username}`, "ok");
+      toast(tr("Cloud backup on for {0}", username), "ok");
       return true;
     }
     // File path: run the same `.flagshipkey` export ceremony the
@@ -271,7 +271,7 @@ async function handleSecureAccount() {
     const saved = await runKeyfileExportCeremony();
     return saved === true;
   } catch (e) {
-    toast(`Backup failed: ${e?.message ?? e}`, "err");
+    toast(tr("Backup failed: {0}", e?.message ?? e), "err");
     return false;
   } finally {
     if (btn) btn.disabled = false;
@@ -305,7 +305,7 @@ function wizardChrome(state, currentStep) {
   return `
     <div class="card wizard-shell">
       <div class="wizard-progress">
-        <div class="wizard-step-count muted-sm">step ${state.stepIdx + 1} of ${STEPS.length}</div>
+        <div class="wizard-step-count muted-sm">${tr("step {0} of {1}", state.stepIdx + 1, STEPS.length)}</div>
         <div class="wizard-dots">${dots}</div>
       </div>
       <h2 class="card-title">${currentStep.label}</h2>
@@ -320,28 +320,22 @@ async function renderStepBody(state, step) {
   switch (step.id) {
     case "device-key":
       return `
-        <p class="note">Your device key never leaves this browser. We use it to sign every
-        message your server trusts.</p>
+        <p class="note">${tr("Your device key never leaves this browser. We use it to sign every message your server trusts.")}</p>
         <div class="btn-row-sm">
-          <button id="wizard-go-bootstrap" class="pill primary">Generate</button>
+          <button id="wizard-go-bootstrap" class="pill primary">${tr("Generate")}</button>
         </div>
       `;
     case "username":
       return `
-        <p class="note">Your account is an identity, not a server. Claiming a handle
-        reserves your name and binds it to this device's key — that <em>is</em> your
-        account. A server comes later (and you can run zero, one, or many). The handle
-        is a routing label, not a profile — be as pseudonymous as you want; the server
-        never stores any real-world identity attribute
-        (<a href="https://flagshipserver.com/security#no-kyc">why</a>).</p>
-        <label class="field-label" for="wizard-username-input">Username</label>
+        <p class="note">${tr("Your account is an identity, not a server. Claiming a handle reserves your name and binds it to this device's key — that <em>is</em> your account. A server comes later (and you can run zero, one, or many). The handle is a routing label, not a profile — be as pseudonymous as you want; the server never stores any real-world identity attribute (<a href=\"https://flagshipserver.com/security#no-kyc\">why</a>).")}</p>
+        <label class="field-label" for="wizard-username-input">${tr("Username")}</label>
         <input id="wizard-username-input" type="text" inputmode="text" autocapitalize="none"
                autocomplete="username" spellcheck="false" placeholder="alice"
                aria-describedby="wizard-username-hint" />
-        <p id="wizard-username-hint" class="note muted-sm">3–30 lowercase letters and digits; single dashes inside are OK</p>
+        <p id="wizard-username-hint" class="note muted-sm">${tr("3–30 lowercase letters and digits; single dashes inside are OK")}</p>
         <div id="wizard-username-taken" class="note err hidden" role="alert"></div>
         <div class="btn-row-sm">
-          <button id="wizard-go-username" class="pill primary">Open my account</button>
+          <button id="wizard-go-username" class="pill primary">${tr("Open my account")}</button>
         </div>
       `;
     case "secure-account":
@@ -349,35 +343,27 @@ async function renderStepBody(state, step) {
     case "passphrase":
     case "webauthn-recovery":
       return `
-        <p class="note">Set up recovery and you can get back into your account from a
-        fresh browser if you lose this device. Skip it and getting back in needs your
-        backed-up account key file — without either, the account can't be recovered. We
-        recommend setting it up now (one minute); if you skip, a banner reminds you on the
-        home screen.</p>
+        <p class="note">${tr("Set up recovery and you can get back into your account from a fresh browser if you lose this device. Skip it and getting back in needs your backed-up account key file — without either, the account can't be recovered. We recommend setting it up now (one minute); if you skip, a banner reminds you on the home screen.")}</p>
         <div class="btn-row-sm">
-          <button id="wizard-go-recovery" class="pill primary">Set up recovery</button>
-          <button id="wizard-skip-recovery" class="pill">Skip for now</button>
+          <button id="wizard-go-recovery" class="pill primary">${tr("Set up recovery")}</button>
+          <button id="wizard-skip-recovery" class="pill">${tr("Skip for now")}</button>
         </div>
       `;
     case "create-server":
       return `
-        <p class="note">Your account is open — this step is optional. Compose your first
-        server here (you can add more later). The webapp downloads a signed recipe;
-        open it in Flagship Studio to write the installer USB. Get Studio at
-        <code>flagshipserver.com/studio</code>.</p>
+        <p class="note">${tr("Your account is open — this step is optional. Compose your first server here (you can add more later). The webapp downloads a signed recipe; open it in Flagship Studio to write the installer USB. Get Studio at <code>flagshipserver.com/studio</code>.")}</p>
         <div class="btn-row-sm">
-          <button id="wizard-go-create-server" class="pill primary">Add a server</button>
-          <button id="wizard-skip-create-server" class="pill">Skip for now</button>
+          <button id="wizard-go-create-server" class="pill primary">${tr("Add a server")}</button>
+          <button id="wizard-skip-create-server" class="pill">${tr("Skip for now")}</button>
         </div>
       `;
     case "peer-backup":
       return renderPeerBackupStep();
     case "demo-app":
       return `
-        <p class="note">You're all set. Explore your server, or finish here —
-        you can add services any time.</p>
+        <p class="note">${tr("You're all set. Explore your server, or finish here — you can add services any time.")}</p>
         <div class="btn-row-sm">
-          <button id="wizard-skip-demo" class="pill primary">Finish</button>
+          <button id="wizard-skip-demo" class="pill primary">${tr("Finish")}</button>
         </div>
       `;
     default:
@@ -390,17 +376,15 @@ async function renderStepBody(state, step) {
 function renderPeerBackupStep() {
   return `
     <p class="note">
-      Help others (and let them help you). Your encrypted shards travel to other
-      Flagship users' pods; theirs travel to yours. Nobody can read each other's
-      data — the bytes are sealed against keys only you hold.
+      ${tr("Help others (and let them help you). Your encrypted shards travel to other Flagship users' pods; theirs travel to yours. Nobody can read each other's data — the bytes are sealed against keys only you hold.")}
     </p>
     <p class="note muted-sm">
-      You can change this anytime in Settings → Peer-backup.
+      ${tr("You can change this anytime in Settings → Peer-backup.")}
     </p>
     <div class="btn-row-sm">
-      <button id="wizard-pb-enable" class="pill primary">Enable peer-backup</button>
-      <button id="wizard-pb-decline" class="pill">No thanks</button>
-      <button id="wizard-pb-later" class="pill ghost">Maybe later</button>
+      <button id="wizard-pb-enable" class="pill primary">${tr("Enable peer-backup")}</button>
+      <button id="wizard-pb-decline" class="pill">${tr("No thanks")}</button>
+      <button id="wizard-pb-later" class="pill ghost">${tr("Maybe later")}</button>
     </div>
   `;
 }
@@ -420,19 +404,18 @@ function renderPeerBackupStep() {
 export function renderSecureAccountStep() {
   const havePasskeys = passkeysAvailable();
   const cloudHint = havePasskeys
-    ? "Recover with your device passkey or password manager."
-    : "Passkeys aren't available in this browser — use a backup file.";
+    ? tr("Recover with your device passkey or password manager.")
+    : tr("Passkeys aren't available in this browser — use a backup file.");
   return `
-    <p class="note">Back up your account now so you can get back in if you lose this
-    device. No one — not even us — can recover it for you.</p>
+    <p class="note">${tr("Back up your account now so you can get back in if you lose this device. No one — not even us — can recover it for you.")}</p>
     <fieldset id="wizard-secure-options" class="secure-options stack-md">
-      <legend class="visually-hidden">Backup method</legend>
+      <legend class="visually-hidden">${tr("Backup method")}</legend>
       <label class="secure-option${havePasskeys ? "" : " disabled"}">
         <input type="radio" name="wizard-secure-method" value="cloud"
                id="wizard-secure-cloud"
                ${havePasskeys ? "checked" : "disabled"} />
         <span class="secure-option-text">
-          <span class="secure-option-label">Save to a passkey</span>
+          <span class="secure-option-label">${tr("Save to a passkey")}</span>
           <span class="secure-option-sub muted-sm" id="wizard-secure-cloud-hint">${escapeHtml(cloudHint)}</span>
         </span>
       </label>
@@ -440,16 +423,16 @@ export function renderSecureAccountStep() {
         <input type="radio" name="wizard-secure-method" value="file"
                id="wizard-secure-file" ${havePasskeys ? "" : "checked"} />
         <span class="secure-option-text">
-          <span class="secure-option-label">Save a backup file</span>
-          <span class="secure-option-sub muted-sm">An encrypted .flagshipkey you keep yourself.</span>
+          <span class="secure-option-label">${tr("Save a backup file")}</span>
+          <span class="secure-option-sub muted-sm">${tr("An encrypted .flagshipkey you keep yourself.")}</span>
         </span>
       </label>
     </fieldset>
     <div class="btn-row-sm">
-      <button id="wizard-secure-continue" class="pill primary">Continue</button>
+      <button id="wizard-secure-continue" class="pill primary">${tr("Continue")}</button>
     </div>
     <p class="note muted-sm">
-      <a id="wizard-secure-skip" href="#" role="button">Skip for now</a>
+      <a id="wizard-secure-skip" href="#" role="button">${tr("Skip for now")}</a>
     </p>
   `;
 }
@@ -484,11 +467,11 @@ function wireStepHandlers(state, step) {
         ev.preventDefault();
         const { inlineConfirm } = await import("../lib/modal.js");
         const skip = await inlineConfirm({
-          title: "Skip backup?",
+          title: tr("Skip backup?"),
           message:
-            "Without a backup, losing this device means losing your account for good. You can set this up anytime in Settings.",
-          okLabel: "Skip anyway",
-          cancelLabel: "Back",
+            tr("Without a backup, losing this device means losing your account for good. You can set this up anytime in Settings."),
+          okLabel: tr("Skip anyway"),
+          cancelLabel: tr("Back"),
           danger: true,
         });
         if (!skip) return;

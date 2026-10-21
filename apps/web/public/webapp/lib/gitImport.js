@@ -6,27 +6,28 @@
 import { slugify, conflictFromError } from "./vibeNames.js";
 import { ScreensError, boxReason, buildEntryError } from "./api.js";
 
-export const NOT_READY_MISSING = "This repo is not yet adapted for Flagship.";
-export const ADAPT_BUTTON = "Use AI to adapt and deploy";
-export const ADAPTING = "The AI is adapting the repo…";
-export const ADAPTING_STAGING = "The AI is adapting and testing the app on a private copy with sample data…";
-export const ADAPTING_GOING_LIVE = "Installing the tested app…";
-export const NOT_LIVE = "The app didn't go live.";
-export const NOT_LIVE_FALLBACK = "The tested app couldn't be installed.";
-export const RETRY_ADAPT = "Try again";
-export const CLOSED_NOTE = "The AI's work on this build is done. Check the repo again to start a new build.";
-export const ADAPTING_NOTE = "This can take several minutes. You can leave this screen; Build sessions shows how it went.";
-export const ADAPT_TOO_LONG = "The AI is taking unusually long. Check Build sessions later to see how it went.";
-export const ADAPT_FAILED = "The AI couldn't adapt this repo.";
+import { tr } from "./i18n.js";
+export const NOT_READY_MISSING = tr("This repo is not yet adapted for Flagship.");
+export const ADAPT_BUTTON = tr("Use AI to adapt and deploy");
+export const ADAPTING = tr("The AI is adapting the repo…");
+export const ADAPTING_STAGING = tr("The AI is adapting and testing the app on a private copy with sample data…");
+export const ADAPTING_GOING_LIVE = tr("Installing the tested app…");
+export const NOT_LIVE = tr("The app didn't go live.");
+export const NOT_LIVE_FALLBACK = tr("The tested app couldn't be installed.");
+export const RETRY_ADAPT = tr("Try again");
+export const CLOSED_NOTE = tr("The AI's work on this build is done. Check the repo again to start a new build.");
+export const ADAPTING_NOTE = tr("This can take several minutes. You can leave this screen; Build sessions shows how it went.");
+export const ADAPT_TOO_LONG = tr("The AI is taking unusually long. Check Build sessions later to see how it went.");
+export const ADAPT_FAILED = tr("The AI couldn't adapt this repo.");
 export const ADAPTER_FILE_NAME = "flagship.app.json";
-export const EXPORT_BUTTON = "Get flagship.app.json";
-export const EXPORT_PREPARING = "Preparing…";
-export const EXPORT_NOTE = "Is this your repo? Commit this file at its root and every Flagship server will run it this way.";
-export const SHARE_LABEL = "Anonymously share your adaptation";
-export const SHARE_NOTE = "Others can then install this repo without AI. Nothing about you or your server is included.";
-export const CHECK_AGAIN = "Check again";
+export const EXPORT_BUTTON = tr("Get flagship.app.json");
+export const EXPORT_PREPARING = tr("Preparing…");
+export const EXPORT_NOTE = tr("Is this your repo? Commit this file at its root and every Flagship server will run it this way.");
+export const SHARE_LABEL = tr("Anonymously share your adaptation");
+export const SHARE_NOTE = tr("Others can then install this repo without AI. Nothing about you or your server is included.");
+export const CHECK_AGAIN = tr("Check again");
 
-export const DEPLOY_BUTTON = "Install it";
+export const DEPLOY_BUTTON = tr("Install it");
 
 /**
  * A git or IDE build the box brought back failed, e.g. one a restart cut off
@@ -60,7 +61,7 @@ export function addressLabel(slug, assignedName) {
 }
 
 export function blankNameHint(ref) {
-  return `Leave it blank to name it after the repo${String(ref ?? "").trim() ? " and branch" : ""}.`;
+  return tr("Leave it blank to name it after the repo{0}.", String(ref ?? "").trim() ? " and branch" : "");
 }
 
 export function gitRequestBody({ gitUrl, ref, name }) {
@@ -218,7 +219,7 @@ export function downloadAdapterFile(text, { doc = globalThis.document, urls = gl
 export async function exportAdapter({ buildId, fetchJson, save = downloadAdapterFile }) {
   try {
     const r = await fetchJson(`/api/build/sessions/${encodeURIComponent(buildId)}/adapter`);
-    if (typeof r?.file !== "string") throw new ScreensError("The box sent no flagship.app.json.", 0);
+    if (typeof r?.file !== "string") throw new ScreensError(tr("The box sent no flagship.app.json."), 0);
     save(r.file);
     return { ok: true };
   } catch (e) {

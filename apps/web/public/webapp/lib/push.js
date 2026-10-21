@@ -16,6 +16,7 @@ import { get as profileGet, set as profileSet, remove as profileRemove } from ".
 import { getActiveProfile } from "./profiles.js";
 import { controlApex } from "./apex.js";
 
+import { tr } from "./i18n.js";
 const APEX = controlApex();
 
 /**
@@ -71,7 +72,7 @@ export async function subscribeToWebPush() {
  * Must run inside a user gesture.
  */
 export async function webPushProviderToken() {
-  if (!webPushSupported()) throw new Error("Web Push not supported in this browser");
+  if (!webPushSupported()) throw new Error(tr("Web Push not supported in this browser"));
 
   const perm = await Notification.requestPermission();
   if (perm !== "granted") throw new Error(`notification permission: ${perm}`);

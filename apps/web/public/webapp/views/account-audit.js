@@ -25,6 +25,7 @@ import {
   auditDisplayDetail,
 } from "../lib/auditLog.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-account-audit");
 
 let model = null;
@@ -61,7 +62,7 @@ function eventRow(e) {
       ${auditDisplayDetail(e) ? `<p class="note small">${escapeHtml(auditDisplayDetail(e))}</p>` : ""}
       ${
         e.accountTypeAtEvent
-          ? `<p class="faint-sm">account: ${escapeHtml(e.accountTypeAtEvent)}</p>`
+          ? `<p class="faint-sm">${tr("account: {0}", escapeHtml(e.accountTypeAtEvent))}</p>`
           : ""
       }
     </div>
@@ -73,10 +74,10 @@ export async function renderAccountAudit() {
   if (!root) return;
   const username = activeUsername();
   if (!username) {
-    root.innerHTML = `<div class="card placeholder">Sign in to see your account history.</div>`;
+    root.innerHTML = `<div class="card placeholder">${tr("Sign in to see your account history.")}</div>`;
     return;
   }
-  root.innerHTML = `<div class="card placeholder">Loading account history…</div>`;
+  root.innerHTML = `<div class="card placeholder">${tr("Loading account history…")}</div>`;
   model = createAuditLogModel({ username, pageSize: 30 });
   try {
     await model.load();
@@ -94,14 +95,13 @@ function paint(root) {
   if (!events.length) {
     root.innerHTML = `
       <div class="card placeholder">
-        No account events yet — security actions you take (enabling 2FA,
-        adding or disconnecting a device, setting up recovery) land here.
+        ${tr("No account events yet — security actions you take (enabling 2FA, adding or disconnecting a device, setting up recovery) land here.")}
       </div>
     `;
     return;
   }
   const more = model?.canLoadMore
-    ? `<button class="secondary full-width mt-2" id="account-audit-load-more">Load more</button>`
+    ? `<button class="secondary full-width mt-2" id="account-audit-load-more">${tr("Load more")}</button>`
     : "";
   root.innerHTML = events.map(eventRow).join("") + more;
   $("account-audit-load-more")?.addEventListener("click", async () => {

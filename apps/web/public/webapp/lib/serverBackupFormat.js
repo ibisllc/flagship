@@ -14,6 +14,7 @@ import { argon2idAsync } from "../vendor/noble-hashes/argon2.js";
 import { sha256 } from "../vendor/noble-hashes/sha2.js";
 import { bytesToHex, hexToBytes } from "../keystore.js";
 
+import { tr } from "./i18n.js";
 export const BACKUP_MAGIC = "flagship-backup";
 export const BACKUP_VERSION = 2;
 export const BACKUP_DATA_MAGIC = "flagship-backup-data/v2\n";
@@ -56,13 +57,13 @@ export function passcodeProblem(passcode) {
   const p = normalizePasscode(passcode);
   const len = [...p].length;
   if (len >= 20) return null;
-  if (len < 12) return "Use at least 12 characters (or 20 if it's all one kind, like words).";
+  if (len < 12) return tr("Use at least 12 characters (or 20 if it's all one kind, like words).");
   let kinds = 0;
   if (/[a-z]/.test(p)) kinds++;
   if (/[A-Z]/.test(p)) kinds++;
   if (/[0-9]/.test(p)) kinds++;
   if (/[^A-Za-z0-9]/.test(p)) kinds++;
-  return kinds >= 3 ? null : "Mix at least three of: lowercase, uppercase, digits, symbols (or use 20 characters).";
+  return kinds >= 3 ? null : tr("Mix at least three of: lowercase, uppercase, digits, symbols (or use 20 characters).");
 }
 
 /** A suggested passcode: five groups of four, 100 bits. */
@@ -82,7 +83,7 @@ function validParams(k) {
 
 /** Argon2id of the normalized passcode (yields to the page while it works). */
 export async function passcodeKek(passcode, kdf) {
-  if (!validParams(kdf) || !HEX32.test(String(kdf.saltHex))) throw new BackupError("The passcode settings in this backup are damaged.", "malformed");
+  if (!validParams(kdf) || !HEX32.test(String(kdf.saltHex))) throw new BackupError(tr("The passcode settings in this backup are damaged."), "malformed");
   return argon2idAsync(enc(normalizePasscode(passcode)), hexToBytes(kdf.saltHex), { m: kdf.m, t: kdf.t, p: kdf.p, dkLen: 32 });
 }
 
@@ -92,12 +93,12 @@ export async function passcodeKek(passcode, kdf) {
 
 async function seal(key, nonce, aad, plain) {
   const k = await crypto.subtle.importKey("raw", key, "AES-GCM", false, ["encrypt"]);
-  return new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, additionalData: aad }, k, plain));
+  return new Uint8Array(await crypto.subtle.encrypt({ name: tr("AES-GCM"), iv: nonce, additionalData: aad }, k, plain));
 }
 
 async function open(key, nonce, aad, ct) {
   const k = await crypto.subtle.importKey("raw", key, "AES-GCM", false, ["decrypt"]);
-  return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce, additionalData: aad }, k, ct));
+  return new Uint8Array(await crypto.subtle.decrypt({ name: tr("AES-GCM"), iv: nonce, additionalData: aad }, k, ct));
 }
 
 // ---------------------------------------------------------------------------
@@ -160,20 +161,20 @@ export function parseBackupFile(text) {
   try {
     o = JSON.parse(text);
   } catch {
-    throw new BackupError("That isn't a Flagship backup file.", "malformed");
+    throw new BackupError(tr("That isn't a Flagship backup file."), "malformed");
   }
   if (!o || typeof o !== "object" || Array.isArray(o) || o.magic !== BACKUP_MAGIC) {
-    throw new BackupError("That isn't a Flagship backup file.", "malformed");
+    throw new BackupError(tr("That isn't a Flagship backup file."), "malformed");
   }
   if (o.v !== BACKUP_VERSION) {
     throw new BackupError(
       typeof o.v === "number" && o.v > BACKUP_VERSION
-        ? "This backup is from a newer version of Flagship. Update the app and try again."
-        : "This backup is from an older version of Flagship and can't be restored.",
+        ? tr("This backup is from a newer version of Flagship. Update the app and try again.")
+        : tr("This backup is from an older version of Flagship and can't be restored."),
       "version",
     );
   }
-  const damaged = () => new BackupError("This backup file is damaged.", "malformed");
+  const damaged = () => new BackupError(tr("This backup file is damaged."), "malformed");
   if (typeof o.archiveId !== "string" || !HEX32.test(o.archiveId)) throw damaged();
   if (typeof o.bodyNonceHex !== "string" || !HEX24.test(o.bodyNonceHex)) throw damaged();
   if (typeof o.bodyHex !== "string" || !HEX.test(o.bodyHex) || o.bodyHex.length < 34) throw damaged();
@@ -219,10 +220,10 @@ export async function openBackupBody(file, contentKey) {
   try {
     plain = await open(contentKey, hexToBytes(file.bodyNonceHex), enc(`${TAG_BODY}|${file.archiveId}`), hexToBytes(file.bodyHex));
   } catch {
-    throw new BackupError("This backup file was changed or is damaged.", "damaged");
+    throw new BackupError(tr("This backup file was changed or is damaged."), "damaged");
   }
   const body = parseBackupBody(new TextDecoder().decode(plain));
-  if (!body) throw new BackupError("This backup file is damaged.", "damaged");
+  if (!body) throw new BackupError(tr("This backup file is damaged."), "damaged");
   return body;
 }
 
@@ -237,9 +238,9 @@ export async function openWithAccountKey(file, accountKek) {
 /** Open with the passcode. Throws `locked` for a wrong one. */
 export async function openWithPasscode(file, passcode) {
   const slot = file.slots.find((s) => s.kind === "passcode");
-  if (!slot) throw new BackupError("This backup has no passcode: open it on a device of the account that made it.", "locked");
+  if (!slot) throw new BackupError(tr("This backup has no passcode: open it on a device of the account that made it."), "locked");
   const key = await unwrapSlot(file.archiveId, slot, await passcodeKek(passcode, slot.kdf));
-  if (!key) throw new BackupError("That passcode doesn't open this backup.", "locked");
+  if (!key) throw new BackupError(tr("That passcode doesn't open this backup."), "locked");
   return { file, body: await openBackupBody(file, key), contentKey: key, via: "passcode" };
 }
 
@@ -266,13 +267,13 @@ export const BACKUP_BUNDLE_HEADER_BYTES = 16;
 
 /** Where the parts of a `.flagship` file of `fileBytes` start, from its first 16 bytes. Throws a sentence. */
 export function parseBundleHeader(head, fileBytes) {
-  if (!head || head.length < BACKUP_BUNDLE_HEADER_BYTES) throw new BackupError("This file is too short to be a Flagship backup.", "malformed");
-  if (new TextDecoder().decode(head.subarray(0, 8)) !== BACKUP_BUNDLE_MAGIC) throw new BackupError("This file isn't a Flagship backup.", "malformed");
+  if (!head || head.length < BACKUP_BUNDLE_HEADER_BYTES) throw new BackupError(tr("This file is too short to be a Flagship backup."), "malformed");
+  if (new TextDecoder().decode(head.subarray(0, 8)) !== BACKUP_BUNDLE_MAGIC) throw new BackupError(tr("This file isn't a Flagship backup."), "malformed");
   const len = new DataView(head.buffer, head.byteOffset, head.byteLength).getBigUint64(8, false);
-  if (len < 1n || len > BigInt(BACKUP_FILE_MAX_BYTES)) throw new BackupError("This backup's header is damaged.", "damaged");
+  if (len < 1n || len > BigInt(BACKUP_FILE_MAX_BYTES)) throw new BackupError(tr("This backup's header is damaged."), "damaged");
   const metaLength = Number(len);
   const dataOffset = BACKUP_BUNDLE_HEADER_BYTES + metaLength;
-  if (!Number.isSafeInteger(fileBytes) || fileBytes <= dataOffset) throw new BackupError("This backup is cut short: it ends before its data.", "damaged");
+  if (!Number.isSafeInteger(fileBytes) || fileBytes <= dataOffset) throw new BackupError(tr("This backup is cut short: it ends before its data."), "damaged");
   return { metaOffset: BACKUP_BUNDLE_HEADER_BYTES, metaLength, dataOffset, dataLength: fileBytes - dataOffset };
 }
 
@@ -286,7 +287,7 @@ export async function splitBundle(file) {
   try {
     head = new Uint8Array(await file.slice(0, BACKUP_BUNDLE_HEADER_BYTES).arrayBuffer());
   } catch {
-    throw new BackupError("This file can't be read (was its drive removed?).", "damaged");
+    throw new BackupError(tr("This file can't be read (was its drive removed?)."), "damaged");
   }
   const h = parseBundleHeader(head, file.size);
   const backupText = await file.slice(h.metaOffset, h.metaOffset + h.metaLength).text();
@@ -313,7 +314,7 @@ export async function classifyPicked(file) {
  */
 export async function checkDataFile(blob, data, { onProgress, sliceBytes = 8 * 1024 * 1024, isCancelled = () => false } = {}) {
   if (blob.size !== data.bytes) {
-    throw new BackupError("This backup is damaged: its data part has the wrong size.", "damaged");
+    throw new BackupError(tr("This backup is damaged: its data part has the wrong size."), "damaged");
   }
   const h = sha256.create();
   for (let at = 0; at < blob.size; at += sliceBytes) {
@@ -322,16 +323,16 @@ export async function checkDataFile(blob, data, { onProgress, sliceBytes = 8 * 1
     try {
       part = new Uint8Array(await blob.slice(at, at + sliceBytes).arrayBuffer());
     } catch {
-      throw new BackupError("The backup can't be read any more (was its drive removed?).", "damaged");
+      throw new BackupError(tr("The backup can't be read any more (was its drive removed?)."), "damaged");
     }
     if (at === 0 && new TextDecoder().decode(part.subarray(0, BACKUP_DATA_MAGIC.length)) !== BACKUP_DATA_MAGIC) {
-      throw new BackupError("This backup is damaged: its data part isn't a Flagship backup's.", "damaged");
+      throw new BackupError(tr("This backup is damaged: its data part isn't a Flagship backup's."), "damaged");
     }
     h.update(part);
     onProgress?.(Math.min(at + part.length, blob.size), blob.size);
   }
   if (bytesToHex(h.digest()) !== data.sha256) {
-    throw new BackupError("This backup is damaged or was changed: its data doesn't match its checksum.", "damaged");
+    throw new BackupError(tr("This backup is damaged or was changed: its data doesn't match its checksum."), "damaged");
   }
 }
 
