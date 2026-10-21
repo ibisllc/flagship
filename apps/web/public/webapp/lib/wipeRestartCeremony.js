@@ -36,6 +36,7 @@ import { bytesToHex, deriveIrkFromSeed, hkdf32 } from "../keystore.js";
 import { requireOwnerProfile } from "./companionGuard.js";
 import { controlApex } from "./apex.js";
 
+import { tr } from "./i18n.js";
 /** Canonical-bytes tag — MUST match @flagship/protocol TAG_WIPE_RESTART. */
 export const TAG_WIPE_RESTART = "flagship/wipe-restart/v1";
 
@@ -170,7 +171,7 @@ export async function runWipeRestartCeremony(args, deps = {}) {
     issuedAt,
   });
   const sigBytes = new Uint8Array(
-    await crypto.subtle.sign({ name: "Ed25519" }, oldIrk.privateKey, canonical),
+    await crypto.subtle.sign({ name: tr("Ed25519") }, oldIrk.privateKey, canonical),
   );
 
   // 4 — POST.
@@ -224,7 +225,7 @@ export async function runWipeRestartCeremony(args, deps = {}) {
     let parsed;
     try { parsed = JSON.parse(text); } catch { parsed = null; }
     throw makeError(
-      "Your device list changed in the background. Refresh and try again.",
+      tr("Your device list changed in the background. Refresh and try again."),
       "412",
       { currentEtag: parsed?.currentEtag ?? null },
     );
@@ -233,24 +234,24 @@ export async function runWipeRestartCeremony(args, deps = {}) {
     let parsed;
     try { parsed = JSON.parse(text); } catch { parsed = null; }
     throw makeError(
-      "Wipe rate-limited (1 per hour). Try again later.",
+      tr("Wipe rate-limited (1 per hour). Try again later."),
       "429",
       { retryAfterMs: parsed?.retryAfterMs },
     );
   }
   if (resp.status === 409) {
     throw makeError(
-      "Another rotation completed first. Refresh and check Activity for the audit trail.",
+      tr("Another rotation completed first. Refresh and check Activity for the audit trail."),
       "409",
     );
   }
   if (resp.status === 403) {
-    throw makeError("The server rejected the request — refresh and try again.", "403");
+    throw makeError(tr("The server rejected the request — refresh and try again."), "403");
   }
   if (resp.status === 400) {
-    throw makeError(`Bad request: ${text || resp.status}`, "400");
+    throw makeError(tr("Bad request: {0}", text || resp.status), "400");
   }
-  throw makeError(`Server error (${resp.status}): ${text}`, "5xx");
+  throw makeError(tr("Server error ({0}): {1}", resp.status, text), "5xx");
 }
 
 /** Default passkey-enrollment delegate — dynamically imports

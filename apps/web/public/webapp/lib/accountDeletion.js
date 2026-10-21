@@ -31,6 +31,7 @@
 import { controlApex } from "./apex.js";
 import { throwIfRateLimited } from "./rateLimited.js";
 
+import { tr } from "./i18n.js";
 /** Canonical-bytes tags — MUST match @flagship/protocol
  *  TAG_ACCOUNT_SELF_DELETE / TAG_SERVERS_SELF_DELETE. */
 export const TAG_ACCOUNT_SELF_DELETE = "flagship/account-self-delete/v1";
@@ -80,7 +81,7 @@ export function accountDeletePolicy({
 }
 
 export const OTHER_DEVICES_REMAIN_SENTENCE =
-  "Another device is still on this account. Remove it in Settings, Trusted devices, then delete the account.";
+  tr("Another device is still on this account. Remove it in Settings, Trusted devices, then delete the account.");
 
 /** `.com` answers 403 `code: other-devices-remain` while a second device is on
  *  the account (older: "not the last device"). */

@@ -65,6 +65,7 @@ import {
 import { preferLeaderAsCurrent } from "../lib/appPlacement.js";
 import { ADD_IMPORT_LABEL, openAddOrRestore } from "./import-backup.js";
 
+import { tr, trn } from "../lib/i18n.js";
 registerView("view-home", { tab: "home" });
 
 // #36 — empty-state brand mark. The flag-on-mast pennant is RETIRED;
@@ -183,10 +184,10 @@ export function serversFromPods(statusByDomain) {
   return [...statusByDomain.keys()].filter(Boolean).map((serverId) => ({ serverId, revoked: null }));
 }
 
-export const SERVER_LIST_LOCKED_TITLE = "Your server list is locked";
+export const SERVER_LIST_LOCKED_TITLE = tr("Your server list is locked");
 export const SERVER_LIST_LOCKED_NOTE =
-  "Flagship only shows your servers to your own devices. Unlock once in this browser to show them.";
-export const SHOW_MY_SERVERS = "Show my servers";
+  tr("Flagship only shows your servers to your own devices. Unlock once in this browser to show them.");
+export const SHOW_MY_SERVERS = tr("Show my servers");
 
 /** `.com` refused the list and there's nothing to show: say it's locked, with
  *  "Show my servers" (iOS's home-locked-state / home-show-my-servers). */
@@ -201,7 +202,7 @@ export function renderLockedServersList(root, { onShow } = {}) {
   const btn = root.querySelector("#home-show-my-servers");
   btn?.addEventListener("click", async () => {
     btn.disabled = true;
-    btn.textContent = "Unlocking…";
+    btn.textContent = tr("Unlocking…");
     try {
       await onShow?.();
     } finally {
@@ -270,14 +271,14 @@ export function renderPendingCard(order) {
     leading: { kind: "html", html: `<span class="server-order-slot" aria-hidden="true"></span>` },
     titleIcon: serverIcon,
     title: String(label),
-    subtitle: "Installing",
+    subtitle: tr("Installing"),
     detail: String(order.fqdn),
-    trailing: `<span class="pill warn">Pending</span>`,
+    trailing: `<span class="pill warn">${tr("Pending")}</span>`,
   });
   return `
     ${row}
     ${bar}
-    <div class="row mt-2"><button class="secondary danger full-width js-delete-dead-server" data-fqdn="${escapeHtml(String(order.fqdn))}">Delete server (free name)</button></div>
+    <div class="row mt-2"><button class="secondary danger full-width js-delete-dead-server" data-fqdn="${escapeHtml(String(order.fqdn))}">${tr("Delete server (free name)")}</button></div>
   `;
 }
 
@@ -302,7 +303,7 @@ export const COMING_ONLINE_GRACE_MS = 20 * 60 * 1000;
  * @param {{ hasLiveUnlockRequest?: boolean, now?: number }} [opts]
  */
 export function classifyServer(server, pod, opts = {}) {
-  if (server.revoked) return { kind: "revoked", label: "Revoked" };
+  if (server.revoked) return { kind: "revoked", label: tr("Revoked") };
   const now = opts.now ?? Date.now();
 
   // Fix A — honor the new /pods `liveness` field when present.
@@ -327,7 +328,7 @@ export function classifyServer(server, pod, opts = {}) {
     // The box has checked in before but is not reachable right now.
     const msAgo = typeof pod.lastSeenMsAgo === "number" ? pod.lastSeenMsAgo : null;
     const ageLabel = msAgo != null ? formatAge(msAgo) : "unknown";
-    return { kind: "offline", label: `Offline (last seen ${ageLabel} ago)` };
+    return { kind: "offline", label: tr("Offline (last seen {0} ago)", ageLabel) };
   }
 
   if (liveness === "never") {
@@ -335,13 +336,13 @@ export function classifyServer(server, pod, opts = {}) {
     // decide it, exactly like the no-lastReported path below; without the
     // grace check a box that died during install read "coming up" forever.
     if (opts.hasLiveUnlockRequest || (pod?.pendingRequests?.length ?? 0) > 0) {
-      return { kind: "waiting-for-approval", label: "Waiting for approval" };
+      return { kind: "waiting-for-approval", label: tr("Waiting for approval") };
     }
     const registeredAt = pod?.registeredAt;
     if (registeredAt != null && now - registeredAt <= COMING_ONLINE_GRACE_MS) {
-      return { kind: "coming-online", label: "Coming online…" };
+      return { kind: "coming-online", label: tr("Coming online…") };
     }
-    return { kind: "never-seen", label: "Never came online" };
+    return { kind: "never-seen", label: tr("Never came online") };
   }
 
   if (!pod || pod.lastReported == null) {
@@ -354,33 +355,33 @@ export function classifyServer(server, pod, opts = {}) {
     // in is what stops a box stuck on serve-authorization from reading "never
     // came online").
     if (opts.hasLiveUnlockRequest || (pod?.pendingRequests?.length ?? 0) > 0) {
-      return { kind: "waiting-for-approval", label: "Waiting for approval" };
+      return { kind: "waiting-for-approval", label: tr("Waiting for approval") };
     }
     // Within the grace window after registration ⇒ still coming online.
     const registeredAt = pod?.registeredAt;
     if (registeredAt != null && now - registeredAt <= COMING_ONLINE_GRACE_MS) {
-      return { kind: "coming-online", label: "Coming online…" };
+      return { kind: "coming-online", label: tr("Coming online…") };
     }
-    return { kind: "never-seen", label: "Never seen" };
+    return { kind: "never-seen", label: tr("Never seen") };
   }
   const ageMs = now - pod.lastReported;
   // Daemons HELLO at least every 5 minutes; tolerate a 15-minute
   // staleness before flipping the dot off — handles a transient
   // tunnel hiccup without lighting up the home screen.
-  if (ageMs > 15 * 60 * 1000) return { kind: "offline", label: `Offline (${formatAge(ageMs)} ago)` };
+  if (ageMs > 15 * 60 * 1000) return { kind: "offline", label: tr("Offline ({0} ago)", formatAge(ageMs)) };
   // A server created to restore a backup, until the backup is in
   // (docs/server-backup-and-clone.md).
-  if (pod.awaitingBackup?.state === "restoring") return { kind: "restoring-backup", label: "Restoring its backup" };
-  if (pod.awaitingBackup) return { kind: "awaiting-backup", label: "Waiting for its backup" };
+  if (pod.awaitingBackup?.state === "restoring") return { kind: "restoring-backup", label: tr("Restoring its backup") };
+  if (pod.awaitingBackup) return { kind: "awaiting-backup", label: tr("Waiting for its backup") };
   // Cert expiry within 30d — surface as warning even when daemon is online.
   if (pod.currentCert?.validUntil) {
     const msToExpiry = pod.currentCert.validUntil - Date.now();
-    if (msToExpiry < 0) return { kind: "cert-expired", label: "Cert expired" };
+    if (msToExpiry < 0) return { kind: "cert-expired", label: tr("Cert expired") };
     if (msToExpiry < 30 * 86400_000) {
-      return { kind: "cert-expiring-soon", label: `Cert renews in ${formatDays(msToExpiry)}` };
+      return { kind: "cert-expiring-soon", label: tr("Cert renews in {0}", formatDays(msToExpiry)) };
     }
   }
-  return { kind: "online", label: "Online" };
+  return { kind: "online", label: tr("Online") };
 }
 
 /** The short server label for the operations-sliver "preparing <name>"
@@ -399,10 +400,10 @@ function serverShortName(serverIdOrFqdn) {
  * narrows which cards render.
  */
 export const HOME_FILTERS = [
-  { value: "all", label: "All" },
-  { value: "online", label: "Online" },
-  { value: "pending", label: "Pending" },
-  { value: "offline", label: "Offline" },
+  { value: "all", label: tr("All") },
+  { value: "online", label: tr("Online") },
+  { value: "pending", label: tr("Pending") },
+  { value: "offline", label: tr("Offline") },
 ];
 
 /**
@@ -519,19 +520,19 @@ export function renderServerCard(server, pod, opts = {}) {
     : "phone-tap only";
   // Subtitle folds the app count + auto-unlock state into one muted line; the
   // cert countdown (when <30d) rides the mono detail line.
-  let subtitle = `${serviceCount} service${serviceCount === 1 ? "" : "s"} · ${autoUnlock}`;
+  let subtitle = trn(serviceCount, "{0} service · {1}", "{0} services · {1}", autoUnlock);
   const standingIn = opts.order?.isLeader ? standingInText(opts.order.standingInFor) : "";
   if (standingIn) subtitle += ` · ${standingIn}`;
   // A box that registered but never came online is a dead install: put Delete
   // on the card itself. Every other server deletes from its own page.
   const deadDelete = c.kind === "never-seen"
-    ? `<div class="row mt-2"><button class="secondary danger full-width js-delete-server" data-fqdn="${escapeHtml(server.serverId)}">Delete server</button></div>`
+    ? `<div class="row mt-2"><button class="secondary danger full-width js-delete-server" data-fqdn="${escapeHtml(server.serverId)}">${tr("Delete server")}</button></div>`
     : "";
   // A server waiting for its backup: send it (pick the files again), or give
   // up and delete it, right from the card.
   const awaitingBackup = c.kind === "awaiting-backup"
-    ? `<div class="row-2 mt-2"><button class="full-width js-send-backup" data-fqdn="${escapeHtml(server.serverId)}">Send the backup</button>` +
-      `<button class="secondary danger full-width js-delete-server" data-fqdn="${escapeHtml(server.serverId)}">Delete server</button></div>`
+    ? `<div class="row-2 mt-2"><button class="full-width js-send-backup" data-fqdn="${escapeHtml(server.serverId)}">${tr("Send the backup")}</button>` +
+      `<button class="secondary danger full-width js-delete-server" data-fqdn="${escapeHtml(server.serverId)}">${tr("Delete server")}</button></div>`
     : "";
   // L3 — a box waiting for the owner to approve its boot/unlock is ACTIONABLE:
   // iOS/Android approve straight from the card, so the webapp card gets an
@@ -539,7 +540,7 @@ export function renderServerCard(server, pod, opts = {}) {
   // (the IRK-signed mailbox read + approve lives there). Without this the card
   // was a dead-end status pill.
   const approveUnlock = c.kind === "waiting-for-approval"
-    ? `<div class="row mt-2"><button class="full-width js-approve-unlock">Approve unlock</button></div>`
+    ? `<div class="row mt-2"><button class="full-width js-approve-unlock">${tr("Approve unlock")}</button></div>`
     : "";
   const row = listRow({
     // The status lives in the pill; the leading column is the drag handle.
@@ -564,7 +565,7 @@ export function renderServerCard(server, pod, opts = {}) {
 }
 
 export const LEADER_LABEL = "Leader";
-export const LEADER_PENDING_LABEL = "Leader, waiting for the server to confirm";
+export const LEADER_PENDING_LABEL = tr("Leader, waiting for the server to confirm");
 
 /** The Leader badge: gray until the leader confirms it holds the order. */
 export function orderPillHtml(order) {
@@ -582,9 +583,9 @@ function orderControlsHtml(server, order) {
   if (!order?.reorderable) return `<span class="server-order-slot" aria-hidden="true"></span>`;
   const name = escapeHtml(serverShortName(server.serverId));
   return `<span class="server-order-controls">
-      <button type="button" class="server-order-step js-order-up" aria-label="Move ${name} up"${order.first ? " disabled" : ""}>↑</button>
+      <button type="button" class="server-order-step js-order-up" aria-label="${tr("Move {0} up", name)}"${order.first ? " disabled" : ""}>↑</button>
       <span class="server-order-handle js-order-handle" aria-hidden="true">⠿</span>
-      <button type="button" class="server-order-step js-order-down" aria-label="Move ${name} down"${order.last ? " disabled" : ""}>↓</button>
+      <button type="button" class="server-order-step js-order-down" aria-label="${tr("Move {0} down", name)}"${order.last ? " disabled" : ""}>↓</button>
     </span>`;
 }
 
@@ -605,7 +606,7 @@ function formatCertCountdown(validUntilMs) {
 // Only an admin device of the account adds servers to it (lib/addServerGate.js).
 export { canAddServers, ADD_SERVERS_ADMIN_ONLY };
 
-const TAKE_OVER_LINK = "Someone handing you a box? Take over →";
+const TAKE_OVER_LINK = tr("Someone handing you a box? Take over →");
 
 /** Home's one way to bring a server in: "Add/Restore server" opens the
  *  Create / Co-manage / Restore menu, whether or not the account has servers. */
@@ -679,20 +680,20 @@ export function renderEmptyServersList(root, { reason, username, canAdd = canAdd
     root.innerHTML = `
     <div class="card empty-state" data-home-empty-non-admin>
       ${EMPTY_MARK_SVG}
-      <h3 class="empty-headline">No servers yet</h3>
+      <h3 class="empty-headline">${tr("No servers yet")}</h3>
       <p class="note empty-message">${escapeHtml(ADD_SERVERS_ADMIN_ONLY)}</p>
     </div>
   `;
     return;
   }
   const headline = accountOpen
-    ? "Your account is ready"
-    : "Your first server is one tap away";
+    ? tr("Your account is ready")
+    : tr("Your first server is one tap away");
   const hint = accountOpen
-    ? "Add your first server to start running your own services."
+    ? tr("Add your first server to start running your own services.")
     : reason === "unpaired"
-      ? "Pair the webapp to your phone or pod first, or jump straight in and build a fresh server."
-      : "Mint a recipe, write it to a USB drive with the Flagship builder, and boot a spare machine — you're a few taps from your own cloud.";
+      ? tr("Pair the webapp to your phone or pod first, or jump straight in and build a fresh server.")
+      : tr("Mint a recipe, write it to a USB drive with the Flagship builder, and boot a spare machine — you're a few taps from your own cloud.");
   const action = accountOpen
     ? `<button class="primary full-width" id="home-add-server">${escapeHtml(ADD_IMPORT_LABEL)}</button>
       <button class="linklike mt-2" id="home-take-over">${escapeHtml(TAKE_OVER_LINK)}</button>`
@@ -702,10 +703,7 @@ export function renderEmptyServersList(root, { reason, username, canAdd = canAdd
       ${EMPTY_MARK_SVG}
       <h3 class="empty-headline">${escapeHtml(headline)}</h3>
       <p class="note empty-message">${escapeHtml(hint)}</p>
-      ${action}
-      <a class="pill mt-2" href="https://flagshipserver.com/studio" target="_blank" rel="noopener">
-        Get Flagship Studio →
-      </a>
+      ${tr("{0} <a class=\"pill mt-2\" href=\"https://flagshipserver.com/studio\" target=\"_blank\" rel=\"noopener\"> Get Flagship Studio → </a>", action)}
     </div>
   `;
   wireAddServer(root);
@@ -790,10 +788,10 @@ function renderRecoveryBanner() {
   host.id = RECOVERY_BANNER_ID;
   host.innerHTML = announcementCard({
     icon: keyIcon,
-    title: "Your account isn't backed up yet",
+    title: tr("Your account isn't backed up yet"),
     message:
-      "Save a passkey so you can recover your account if you get a new device.",
-    ctaLabel: "Secure my account",
+      tr("Save a passkey so you can recover your account if you get a new device."),
+    ctaLabel: tr("Secure my account"),
     dismissible: true,
     tone: "teal",
   });
@@ -862,10 +860,10 @@ async function detectAccountReset(username) {
   host.id = ACCOUNT_RESET_BANNER_ID;
   host.innerHTML = announcementCard({
     icon: alertCircleIcon,
-    title: "This device was removed from your account",
+    title: tr("This device was removed from your account"),
     message:
-      "Another device on this account ran Disconnect, Replace, or Wipe. Sign in again with your recovery passkey to get back in.",
-    ctaLabel: "Sign in again",
+      tr("Another device on this account ran Disconnect, Replace, or Wipe. Sign in again with your recovery passkey to get back in."),
+    ctaLabel: tr("Sign in again"),
     dismissible: false,
     tone: "danger",
   });
@@ -1226,18 +1224,18 @@ function renderServerCards() {
         .join("")
     : `<div class="card placeholder">${
         homeQuery || homeFilter !== "all"
-          ? "No servers match this filter."
-          : "No servers yet."
+          ? tr("No servers match this filter.")
+          : tr("No servers yet.")
       }</div>`;
 
   list.innerHTML = `
-    <div class="fs-hero-compact" data-home-compact aria-hidden="true">Servers</div>
+    <div class="fs-hero-compact" data-home-compact aria-hidden="true">${tr("Servers")}</div>
     <div class="fs-hero">
-      <h2 class="fs-hero-title" data-home-title>Servers</h2>
+      <h2 class="fs-hero-title" data-home-title>${tr("Servers")}</h2>
       ${canAddServers() ? `<button class="secondary" id="home-add-server">${escapeHtml(ADD_IMPORT_LABEL)}</button>
       <button class="linklike mt-1" id="home-take-over">${escapeHtml(TAKE_OVER_LINK)}</button>` : ""}
-      ${searchField({ value: homeQuery, placeholder: "Search servers", id: "home-search" })}
-      ${chipRow({ items: chips, selected: homeFilter, ariaLabel: "Filter servers" })}
+      ${searchField({ value: homeQuery, placeholder: tr("Search servers"), id: "home-search" })}
+      ${chipRow({ items: chips, selected: homeFilter, ariaLabel: tr("Filter servers") })}
     </div>
     <div data-server-cards${reorderable ? " data-reorderable" : ""}>${cardsHtml}</div>
   `;
@@ -1269,7 +1267,7 @@ function wireHomeListControls(list) {
           await ensureDemoServerPairing(profile.cloudName, profile.demoServer);
         } catch {
           toast(
-            "The demo server is online, but this browser couldn't create a paired session. Tap the server to retry.",
+            tr("The demo server is online, but this browser couldn't create a paired session. Tap the server to retry."),
             "err",
           );
           return;
@@ -1461,7 +1459,7 @@ export async function renderHome() {
     $("services-list-open-vibe-code"),
     deviceCap,
     "vibe-code",
-    "This device cannot build new services. Use a primary device.",
+    tr("This device cannot build new services. Use a primary device."),
   );
 
   // E7 — fire-and-forget account-reset detection. Renders a danger
@@ -1486,7 +1484,7 @@ export async function renderHome() {
   const list = $("servers-list");
   list.innerHTML = "";
   if (serverSource.kind === "empty") {
-    sessionStatusEl.textContent = "Unpaired";
+    sessionStatusEl.textContent = tr("Unpaired");
     sessionStatusEl.classList.remove("ok");
     // #36 — real empty state, not a "no paired session" stub. Phase 2:
     // if the account is already open (username claimed), this is the
@@ -1502,11 +1500,11 @@ export async function renderHome() {
     let inventory = null;
     if (serverSource.kind === "demo") {
       body = { servers: [serverSource.server] };
-      sessionStatusEl.textContent = "Demo";
+      sessionStatusEl.textContent = tr("Demo");
     } else if (serverSource.kind === "account") {
       inventory = await fetchPodInventory(session.username);
       if (inventory.status === "refused" && inventory.statusByDomain.size === 0 && inventory.pending.length === 0) {
-        sessionStatusEl.textContent = "Locked";
+        sessionStatusEl.textContent = tr("Locked");
         sessionStatusEl.classList.remove("ok");
         $("home-status-paused")?.classList.add("hidden");
         renderLockedServersList(list, { onShow: showMyServers });
@@ -1515,14 +1513,14 @@ export async function renderHome() {
         return;
       }
       body = { servers: serversFromPods(inventory.statusByDomain) };
-      sessionStatusEl.textContent = "Signed in";
+      sessionStatusEl.textContent = tr("Signed in");
     } else {
       const r = await fetch(
         `/api/me/servers?sessionId=${encodeURIComponent(serverSource.sessionId)}`,
       );
       if (!r.ok) throw new Error(`status ${r.status}`);
       body = await r.json();
-      sessionStatusEl.textContent = "Paired";
+      sessionStatusEl.textContent = tr("Paired");
     }
     sessionStatusEl.classList.add("ok");
     // #31 / #56 — ONE fan-out to /api/users/:u/pods on .com (account read token)
@@ -1700,7 +1698,7 @@ export async function renderHome() {
     // show when the list comes back empty. Keep the failure in the
     // console for debugging, but leave the surface clean.
     console.warn("home: servers list failed to load", e);
-    sessionStatusEl.textContent = "No servers";
+    sessionStatusEl.textContent = tr("No servers");
     sessionStatusEl.classList.remove("ok");
     renderEmptyServersList(list, { reason: "no-servers", username: session.username });
     activeOperations.syncDeployOperations([]);
@@ -1773,7 +1771,7 @@ async function deleteRegisteredServer(serverDomain, identityPubKey) {
   if (!serverDomain) return;
   const session = getSession();
   if (!session.username || !session.umk) {
-    toast("Unlock the webapp first", "warn");
+    toast(tr("Unlock the webapp first"), "warn");
     return;
   }
   await openDeleteServerDialog(
@@ -1810,14 +1808,14 @@ export async function deleteDeadServer(serverDomain, btn, { label = "Delete serv
   const session = getSession();
   const username = session.username;
   if (!username) {
-    toast("Unlock the webapp first", "warn");
+    toast(tr("Unlock the webapp first"), "warn");
     return false;
   }
   const ok = confirm(
-    `Delete "${serverDomain}"? This frees the name for reuse and the box can no longer come online. This server never checked in.`,
+    tr("Delete \"{0}\"? This frees the name for reuse and the box can no longer come online. This server never checked in.", serverDomain),
   );
   if (!ok) return false;
-  if (btn) { btn.disabled = true; btn.textContent = "deleting…"; }
+  if (btn) { btn.disabled = true; btn.textContent = tr("deleting…"); }
   try {
     const out = await releaseServerName({
       username,
@@ -1842,7 +1840,7 @@ export async function deleteDeadServer(serverDomain, btn, { label = "Delete serv
       }
     }
     clearPendingRck(serverDomain);
-    toast(`Deleted — "${serverDomain}" is free again`);
+    toast(tr("Deleted — \"{0}\" is free again", serverDomain));
     // The name is free either way; a list that fails to repaint is not a failed cancel.
     await renderHome().catch((e) => console.error("home repaint after release failed", e));
     return true;
@@ -1852,7 +1850,7 @@ export async function deleteDeadServer(serverDomain, btn, { label = "Delete serv
     // button, so the same tap tries again.
     console.error("release server name failed", e);
     const what = label === "Cancel order" ? "cancel the order" : "delete the server";
-    toast(`Couldn't ${what} — the name is still reserved. ${boxErrorText(e)}`, "err");
+    toast(tr("Couldn't {0} — the name is still reserved. {1}", what, boxErrorText(e)), "err");
     if (btn) { btn.disabled = false; btn.textContent = label; }
     return false;
   }
@@ -1868,10 +1866,10 @@ export async function renderActiveProviderChip() {
     chip.innerHTML = `
       <div class="row">
         <div>
-          <div class="weight-600">Flagship Inference</div>
-          <div class="muted-sm">We use third-party providers and anonymize your requests.</div>
+          <div class="weight-600">${tr("Flagship Inference")}</div>
+          <div class="muted-sm">${tr("We use third-party providers and anonymize your requests.")}</div>
         </div>
-        <button class="secondary" id="chip-settings">settings</button>
+        <button class="secondary" id="chip-settings">${tr("settings")}</button>
       </div>
     `;
   } else {
@@ -1879,9 +1877,9 @@ export async function renderActiveProviderChip() {
       <div class="row">
         <div>
           <div class="weight-600">${escapeHtml(e.label)} <span class="pill">${escapeHtml(e.provider)}</span></div>
-          <div class="muted-sm">key on this device — flagshipserver.com cannot read prompts</div>
+          <div class="muted-sm">${tr("key on this device — flagshipserver.com cannot read prompts")}</div>
         </div>
-        <button class="secondary" id="chip-settings">manage</button>
+        <button class="secondary" id="chip-settings">${tr("manage")}</button>
       </div>
     `;
   }

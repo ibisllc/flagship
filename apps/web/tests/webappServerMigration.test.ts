@@ -420,7 +420,7 @@ describe("the server page's Backup / Migrate card", () => {
     const { resolve } = await import("node:path");
     const src = readFileSync(resolve(__dirname, "../public/webapp/views/server-detail.js"), "utf8");
     expect(MIGRATE_LABEL).toBe("Migrate to a new server");
-    const card = src.match(/<h2 class="mt-4">Backup \/ Migrate<\/h2>\s*<div class="card" id="backup-migrate-card"[^>]*>([\s\S]*?)<\/div>/);
+    const card = src.match(/<h2 class="mt-4">\$\{tr\("Backup \/ Migrate"\)\}<\/h2>\s*<div class="card" id="backup-migrate-card"[^>]*>([\s\S]*?)<\/div>/);
     expect(card).not.toBeNull();
     const inner = card![1]!;
     expect(inner).toContain('id="backup-start-btn"');

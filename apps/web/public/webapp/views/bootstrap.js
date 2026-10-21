@@ -33,6 +33,7 @@ import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import { set as profileSet } from "../lib/profilesStore.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-bootstrap");
 
 const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/; // 3–30, interior dashes OK, no `--` (checked separately) — see packages/control-plane/src/labels.ts
@@ -44,7 +45,7 @@ const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/; // 3–30, interior das
 // the account name (sign in) and a pairing code (join), as on iOS and Android.
 
 export const NAME_RULE_ERROR =
-  "Account names are 3 to 30 lowercase letters and digits, with single dashes inside.";
+  tr("Account names are 3 to 30 lowercase letters and digits, with single dashes inside.");
 
 function setFieldError(id, text) {
   const el = $(id);
@@ -73,7 +74,7 @@ function showConnectPanel(open) {
 /** The pairing half: a pasted or scanned link (or bare `sid=…&pk=…`) joins. */
 async function handlePairing(text) {
   const r = readPairingField(text ?? $("connect-pair-input")?.value);
-  if (r.action === "none") return setFieldError("connect-pair-error", "Paste the pairing link, or scan the code.");
+  if (r.action === "none") return setFieldError("connect-pair-error", tr("Paste the pairing link, or scan the code."));
   if (r.action === "error") return setFieldError("connect-pair-error", r.error);
   setFieldError("connect-pair-error", "");
   stopConnectScan();
@@ -96,7 +97,7 @@ async function scanPairingCode() {
   const video = $("connect-scan-video");
   if (!btn || !video) return;
   btn.disabled = true;
-  btn.textContent = "Scanning…";
+  btn.textContent = tr("Scanning…");
   video.classList.remove("hidden");
   setFieldError("connect-pair-error", "");
   try {
@@ -104,11 +105,11 @@ async function scanPairingCode() {
     const raw = String(await scanWithCamera(video, { timeoutMs: 30_000 }));
     await handlePairing(raw);
   } catch {
-    setFieldError("connect-pair-error", "Couldn't scan. Paste the pairing link instead.");
+    setFieldError("connect-pair-error", tr("Couldn't scan. Paste the pairing link instead."));
   } finally {
     stopConnectScan();
     btn.disabled = false;
-    btn.textContent = "Scan a code";
+    btn.textContent = tr("Scan a code");
   }
 }
 
@@ -136,7 +137,7 @@ async function handleContinue() {
   try {
     resolution = await resolveAccount(raw);
   } catch (e) {
-    return toast(failureText(e, "Couldn't reach the directory: "), "err");
+    return toast(failureText(e, tr("Couldn't reach the directory: ")), "err");
   }
   switch (classifyResolution(resolution)) {
     case "demo":
@@ -151,10 +152,10 @@ async function handleContinue() {
 /** A miss is a STATE, not a 404 — clear guidance, and a nudge to create. */
 async function showNoSuchAccount(username) {
   await inlineConfirm({
-    title: "No account by that name",
-    message: `We couldn't find an account called "${username}". Check the spelling, or create a new account (you'll get a free random handle).`,
-    okLabel: "OK",
-    cancelLabel: "Back",
+    title: tr("No account by that name"),
+    message: tr("We couldn't find an account called \"{0}\". Check the spelling, or create a new account (you'll get a free random handle).", username),
+    okLabel: tr("OK"),
+    cancelLabel: tr("Back"),
   });
 }
 
@@ -203,17 +204,17 @@ async function abandonNewKey() {
  *  so a custom name stays a paid change) → on to the recovery step. */
 async function createAccount() {
   const pass = await inlinePrompt({
-    title: "Create your account",
+    title: tr("Create your account"),
     message:
-      "Choose a passphrase (8+ chars). It encrypts your key in this browser — flagshipserver.com never sees it.",
+      tr("Choose a passphrase (8+ chars). It encrypts your key in this browser — flagshipserver.com never sees it."),
     placeholder: "passphrase",
     type: "password",
     validate: (v) => (!v || v.length < 8 ? "8+ characters" : null),
   });
   if (!pass) return;
   const confirm = await inlinePrompt({
-    title: "Confirm passphrase",
-    message: "Type it again.",
+    title: tr("Confirm passphrase"),
+    message: tr("Type it again."),
     placeholder: "passphrase",
     type: "password",
     validate: (v) => (v !== pass ? "passphrases don't match" : null),
@@ -249,19 +250,19 @@ async function createAccount() {
     .map((part) => part ? part[0].toUpperCase() + part.slice(1) : part)
     .join(" ");
   const accountDisplayName = await inlinePrompt({
-    title: "Name this account",
-    message: `This private name appears above @${chosen} and is never used in links.`,
-    placeholder: "Account name",
+    title: tr("Name this account"),
+    message: tr("This private name appears above @{0} and is never used in links.", chosen),
+    placeholder: tr("Account name"),
     initial: suggestedAccountName,
-    validate: (v) => (!v?.trim() ? "Enter an account name" : null),
+    validate: (v) => (!v?.trim() ? tr("Enter an account name") : null),
   });
   if (!accountDisplayName) return abandonNewKey();
   const deviceDisplayName = await inlinePrompt({
-    title: "Name this device",
-    message: "This private name applies only inside this Flagship account.",
-    placeholder: "This browser",
-    initial: "This browser",
-    validate: (v) => (!v?.trim() ? "Enter a device name" : null),
+    title: tr("Name this device"),
+    message: tr("This private name applies only inside this Flagship account."),
+    placeholder: tr("This browser"),
+    initial: tr("This browser"),
+    validate: (v) => (!v?.trim() ? tr("Enter a device name") : null),
   });
   if (!deviceDisplayName) return abandonNewKey();
 
@@ -287,7 +288,7 @@ async function createAccount() {
       // No dispatchInitialView — route into the recovery step (a backup is
       // required; the wizard owns that flow, then the app shell).
     });
-    toast(`Account created — ${chosen}`, "ok");
+    toast(tr("Account created — {0}", chosen), "ok");
     try {
       const { enterWizard } = await import("./wizard.js");
       await enterWizard({ step: "secure-account" });
@@ -308,7 +309,7 @@ function showAccessOptions(resolution) {
   if (!host) return;
   const opts = accessOptions(resolution);
   host.innerHTML =
-    `<p class="note">"<strong>${escapeHtml(resolution.username)}</strong>" already exists — that's an account. How do you want to get back in?</p>` +
+    `<p class="note">${tr("\"<strong>{0}</strong>\" already exists — that's an account. How do you want to get back in?", escapeHtml(resolution.username))}</p>` +
     opts
       .map(
         (o) => `
@@ -369,9 +370,9 @@ async function joinDemo(resolution) {
       dispatchInitialView,
       setUsername: (u) => profileSet("username", u),
     });
-    toast(`Joined ${resolution.username}`, "ok");
+    toast(tr("Joined {0}", resolution.username), "ok");
   } catch (e) {
-    toast(`Couldn't open the demo: ${e.message ?? e}`, "err");
+    toast(tr("Couldn't open the demo: {0}", e.message ?? e), "err");
   }
 }
 
@@ -393,8 +394,8 @@ async function recoverRealAccount(resolution) {
         inlineConfirm({
           title: state.title,
           message: state.message,
-          okLabel: "OK",
-          cancelLabel: "Back",
+          okLabel: tr("OK"),
+          cancelLabel: tr("Back"),
         }),
       confirm: (opts) => inlineConfirm(opts),
       prompt: (opts) => inlinePrompt(opts),
@@ -423,10 +424,10 @@ async function recoverRealAccount(resolution) {
       },
     });
     if (result.outcome === "takeover") {
-      toast(`Taking over ${username} — you're now the admin device`, "ok");
+      toast(tr("Taking over {0} — you're now the admin device", username), "ok");
     }
   } catch (e) {
-    toast(failureText(e, `Couldn't take over ${username}: `), "err");
+    toast(failureText(e, tr("Couldn't take over {0}: ", username)), "err");
   }
 }
 

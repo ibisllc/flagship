@@ -245,7 +245,7 @@ describe("webapp build chat sends the choice", () => {
     expect(vibe).toContain("Object.assign(startBody, wireChoice(currentMenu(), modelChoice))");
     expect(vibe).toContain("Object.assign(replyBody, wireChoice(currentMenu(), modelChoice, { reply: true }))");
     expect(vibe.match(/await checkVision\(attachments\)/g)).toHaveLength(2);
-    expect(vibe).toContain('okLabel: "Switch", cancelLabel: "Cancel"');
+    expect(vibe).toContain('okLabel: tr("Switch"), cancelLabel: tr("Cancel")');
     expect(vibe).not.toContain("flagship-free");
     expect(src("index.html")).toContain('id="vc-model-bar"');
     const { creditsMarkup } = await load("views", "vibe-code.js");

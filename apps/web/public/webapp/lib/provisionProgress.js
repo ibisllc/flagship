@@ -6,6 +6,7 @@
 // match iOS / Android exactly.
 //
 // Pure (no DOM, no network) so it unit-tests in isolation.
+import { tr } from "./i18n.js";
 
 /** The canonical ladder, in order, EXCLUDING the terminal `error`.
  *  Mirror of PROVISION_STATUS_PHASES (control-plane) minus `error`. */
@@ -30,16 +31,16 @@ export const PROVISION_LADDER = Object.freeze([
 /** Human title per canonical phase. Lockstep with PHASE_TITLES
  *  (packages/control-plane/src/provisionStatus.ts) — every surface uses these. */
 export const PROVISION_PHASE_TITLES = Object.freeze({
-  booting: "Booting up",
+  booting: tr("Booting up"),
   downloading: "Downloading",
-  partitioning: "Partitioning disk",
+  partitioning: tr("Partitioning disk"),
   installing: "Installing",
-  installed: "Install complete",
-  registering: "Registering with Flagship",
-  sealing: "Sealing your disk key",
-  pairing: "Pairing with your phone",
-  live: "Your server is live",
-  error: "Setup hit a problem",
+  installed: tr("Install complete"),
+  registering: tr("Registering with Flagship"),
+  sealing: tr("Sealing your disk key"),
+  pairing: tr("Pairing with your phone"),
+  live: tr("Your server is live"),
+  error: tr("Setup hit a problem"),
 });
 
 /** The canonical UI group projection (design §1.2), in order. Each
@@ -53,12 +54,12 @@ export const PROVISION_PHASE_TITLES = Object.freeze({
  *  ACTIVE (action-needed, nothing spins) carrying the unplug-and-power-on
  *  instruction; `live` is the terminal success. */
 export const PROVISION_STEP_GROUPS = Object.freeze([
-  { key: "booting", label: "Booting", phases: ["booting", "partitioning"] },
-  { key: "installing", label: "Installing", phases: ["installing", "downloading"] },
-  { key: "registering", label: "Registering", phases: ["registering", "pairing"] },
-  { key: "securing", label: "Securing (TLS certificate)", phases: ["sealing"] },
-  { key: "installed", label: "Install complete", phases: ["installed"] },
-  { key: "ready", label: "Ready", phases: ["live"] },
+  { key: "booting", label: tr("Booting"), phases: ["booting", "partitioning"] },
+  { key: "installing", label: tr("Installing"), phases: ["installing", "downloading"] },
+  { key: "registering", label: tr("Registering"), phases: ["registering", "pairing"] },
+  { key: "securing", label: tr("Securing (TLS certificate)"), phases: ["sealing"] },
+  { key: "installed", label: tr("Install complete"), phases: ["installed"] },
+  { key: "ready", label: tr("Ready"), phases: ["live"] },
 ]);
 
 /** Detail copy shown on the `installed` row when the box reaches the
@@ -66,7 +67,7 @@ export const PROVISION_STEP_GROUPS = Object.freeze([
  *  awaiting the user. Longer than PROVISION_PHASE_TITLES.installed (the push
  *  banner's short form) because the in-ladder row spells out BOTH actions. */
 export const INSTALLED_DONE_DETAIL =
-  "Install complete. If it ran from a USB stick, unplug it and power the server back on.";
+  tr("Install complete. If it ran from a USB stick, unplug it and power the server back on.");
 
 /** The box's failure text for a person: "Setup stopped while Expanding the
  *  disk (line 66)" loses the shell line number; empty becomes the title.
@@ -237,10 +238,10 @@ export function renderProgressDetail(block) {
     })
     .join("");
   const info = [
-    block.ip ? `<div>IP: <code>${esc(block.ip)}</code></div>` : "",
-    block.region ? `<div>Location: ${esc(block.region)}</div>` : "",
-    block.image ? `<div>OS: ${esc(block.image)}</div>` : "",
-    block.serverType ? `<div>Size: ${esc(block.serverType)}</div>` : "",
+    block.ip ? `<div>${tr("IP: <code>{0}</code>", esc(block.ip))}</div>` : "",
+    block.region ? `<div>${tr("Location: {0}", esc(block.region))}</div>` : "",
+    block.image ? `<div>${tr("OS: {0}", esc(block.image))}</div>` : "",
+    block.serverType ? `<div>${tr("Size: {0}", esc(block.serverType))}</div>` : "",
   ]
     .filter(Boolean)
     .join("");
@@ -261,17 +262,17 @@ export function renderSetupStopped({ serial, step } = {}) {
   const where = failureDetail(step);
   const note = where === PROVISION_PHASE_TITLES.error ? "" : `. ${where.replace(/[.!?]+$/, "")}`;
   const body =
-    `My server's setup stopped.\nOrder: ${serial || "unknown"}\nStep: ${step ? failureDetail(step) : ""}\n`;
+    tr("My server's setup stopped. Order: {0} Step: {1} ", serial || "unknown", step ? failureDetail(step) : "");
   const mailto =
     `mailto:support@flagshipserver.com?subject=${encodeURIComponent("Server setup stopped")}` +
     `&body=${encodeURIComponent(body)}`;
   return (
     `<div class="card" id="setup-stopped">` +
-    `<h3>Setup stopped</h3>` +
+    `<h3>${tr("Setup stopped")}</h3>` +
     `<p class="note mt-2">${esc(`This server didn't finish installing${note}. Cancel this order to free the name and create the server again, or contact us and we'll look at it.`)}</p>` +
     `<div class="row-2 mt-2">` +
-    `<button class="danger" id="setup-stopped-start-again">Cancel order and start again</button>` +
-    `<a class="secondary" id="setup-stopped-contact" href="${esc(mailto)}">Contact us</a>` +
+    `<button class="danger" id="setup-stopped-start-again">${tr("Cancel order and start again")}</button>` +
+    `<a class="secondary" id="setup-stopped-contact" href="${esc(mailto)}">${tr("Contact us")}</a>` +
     `</div></div>`
   );
 }
