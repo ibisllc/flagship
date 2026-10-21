@@ -14,6 +14,7 @@ import { ROOT, locales, targets, readEn, readTr } from "./lib/i18n-kv.mjs";
 const run = (script, ...a) => spawnSync("node", [path.join(ROOT, "scripts", script), ...a], { encoding: "utf8" });
 const CHECKS = [
   ["web", "i18n-web.mjs", ["check"]],
+  ["webapp (PWA)", "i18n-pwa.mjs", ["check"]],
   ["android + wear", "i18n-android.mjs", ["check"]],
   ["ios + watch", "i18n-ios.mjs", ["check"]],
   ["studio-linux", "i18n-linux.mjs", ["check"]],
