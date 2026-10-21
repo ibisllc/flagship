@@ -61,10 +61,10 @@ public static class NativePairingCrypto
     public static NativeSessionMaterial DeriveSessionMaterial(
         Key privateKey, ReadOnlySpan<byte> peerPublicKey)
     {
-        if (peerPublicKey.Length != 32) throw new CryptographicException("Phone public key must be 32 bytes.");
+        if (peerPublicKey.Length != 32) throw new CryptographicException(Strings.T("phonePublicKeyMustBe32"));
         var peer = PublicKey.Import(KeyAgreementAlgorithm.X25519, peerPublicKey, KeyBlobFormat.RawPublicKey);
         using var shared = KeyAgreementAlgorithm.X25519.Agree(privateKey, peer)
-            ?? throw new CryptographicException("X25519 key agreement failed.");
+            ?? throw new CryptographicException(Strings.T("x25519KeyAgreementFailed"));
         var enc = new byte[32];
         var sas = new byte[4];
         KeyDerivationAlgorithm.HkdfSha256.DeriveBytes(shared, RelaySalt, EncInfo, enc);

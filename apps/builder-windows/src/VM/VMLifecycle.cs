@@ -52,12 +52,12 @@ public sealed record VMState(VMStateKind Kind, VMFailure? Failure = null)
     public string Label => Kind switch
     {
         VMStateKind.Created => "Created",
-        VMStateKind.Installing => "Installing…",
+        VMStateKind.Installing => Strings.T("installing"),
         VMStateKind.Installed => "Installed",
-        VMStateKind.AwaitingPhoneUnlock => "Waiting for you to unlock",
+        VMStateKind.AwaitingPhoneUnlock => Strings.T("waitingForYouToUnlock"),
         VMStateKind.Running => "Running",
         VMStateKind.Stopped => "Stopped",
-        VMStateKind.Failed => Failure?.Phase == VMFailurePhase.Install ? "Install failed" : "Stopped unexpectedly",
+        VMStateKind.Failed => Failure?.Phase == VMFailurePhase.Install ? Strings.T("installFailed") : Strings.T("stoppedUnexpectedly"),
         _ => "Unknown",
     };
 }
@@ -108,7 +108,7 @@ public sealed class VMLifecycleException : Exception
     public VMEvent On { get; }
 
     public VMLifecycleException(VMState from, VMEvent on)
-        : base($"Invalid VM transition: {from.Kind} on {on.Kind}.")
+        : base(Strings.F("invalidVmTransitionOn", from.Kind, on.Kind))
     {
         From = from;
         On = on;
@@ -160,8 +160,8 @@ public sealed class VMLifecycle
         if (elapsedSinceInstallStart >= MinPlausibleInstallDuration) return VMEvent.InstallSucceeded;
         var secs = (int)Math.Round(elapsedSinceInstallStart.TotalSeconds);
         return VMEvent.InstallFailed(
-            $"The installer stopped after only {secs}s — too fast to have completed. " +
-            "The guest likely failed to boot the installer ISO. Retry the install; " +
+            Strings.F("theInstallerStoppedAfterOnlyS", secs) +
+            Strings.T("theGuestLikelyFailedToBoot") +
             "if it persists, re-download the base image and remaster again.");
     }
 
@@ -174,8 +174,8 @@ public sealed class VMLifecycle
             return VMEvent.InstallSucceeded;
         var secs = (int)Math.Round(elapsedSinceInstallStart.TotalSeconds);
         return VMEvent.InstallFailed(
-            $"The appliance stopped after only {secs}s — too fast to have specialized. " +
-            "The image may be the wrong architecture or otherwise not bootable.");
+            Strings.F("theApplianceStoppedAfterOnlyS", secs) +
+            Strings.T("theImageMayBeTheWrong"));
     }
 
     /// <summary>

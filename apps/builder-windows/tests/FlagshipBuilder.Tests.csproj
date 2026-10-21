@@ -27,6 +27,8 @@
          DiskWrite.cs is [SupportedOSPlatform("windows")] but its parsers
          + pre-open guards run on any host. -->
     <Compile Include="..\src\DiskEnumerator.cs" />
+    <Compile Include="..\src\Strings.cs" />
+    <EmbeddedResource Include="..\src\Strings.resx" Link="Strings.resx" />
     <Compile Include="..\src\VerifyResult.cs" />
     <Compile Include="..\src\StudioVersion.cs" />
     <Compile Include="..\src\Recipe.cs" />

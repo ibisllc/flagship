@@ -31,7 +31,7 @@ public static class QemuFailure
     public static string NotEnoughMemoryMessage(ulong needBytes)
     {
         var gib = (needBytes + VMResourcePlan.GiB - 1) / VMResourcePlan.GiB;
-        return $"Not enough free memory: this server needs {gib} GiB. Close other apps and try again.";
+        return Strings.F("notEnoughFreeMemoryThisServer", gib);
     }
 
     /// <summary>Null when the host has enough free RAM (or can't tell),
@@ -55,7 +55,7 @@ public static class QemuFailure
         if (OutOfMemory.Any(lowered.Contains)) return NotEnoughMemoryMessage(memoryBytes);
         var line = LastMeaningfulLine(stderr);
         return line.Length == 0
-            ? $"QEMU stopped unexpectedly (exit {exitCode})."
-            : $"QEMU stopped (exit {exitCode}): {line}";
+            ? Strings.F("qemuStoppedUnexpectedlyExit", exitCode)
+            : Strings.F("qemuStoppedExit", exitCode, line);
     }
 }

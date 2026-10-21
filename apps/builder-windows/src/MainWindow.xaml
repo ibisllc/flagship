@@ -5,7 +5,7 @@
         mc:Ignorable="d"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        Title="Flagship Studio (Experimental)"
+        Title="{local:Str flagshipStudioExperimental}"
         Icon="/assets/Flagship.ico"
         Width="940" Height="660"
         ResizeMode="NoResize"
@@ -45,17 +45,17 @@
          hamburger. (Appearance/dark-mode is not here yet: this WPF app ships a
          single light palette; adding Auto/Light/Dark needs a dark resource set.) -->
     <Menu Grid.Row="0" Background="Transparent" Padding="4,2">
-        <MenuItem Header="_File">
-            <MenuItem Header="New Server" Click="MenuNewServer_Click"/>
-            <MenuItem Header="Restart as administrator…" Click="MenuRestartElevated_Click"/>
+        <MenuItem Header="{local:Str file}">
+            <MenuItem Header="{local:Str newServer}" Click="MenuNewServer_Click"/>
+            <MenuItem Header="{local:Str restartAsAdministrator2}" Click="MenuRestartElevated_Click"/>
             <Separator/>
-            <MenuItem Header="Exit" Click="MenuExit_Click"/>
+            <MenuItem Header="{local:Str exit}" Click="MenuExit_Click"/>
         </MenuItem>
-        <MenuItem Header="_Help">
-            <MenuItem Header="Documentation" Click="MenuDocumentation_Click"/>
-            <MenuItem Header="Report an Issue" Click="MenuReportIssue_Click"/>
+        <MenuItem Header="{local:Str help}">
+            <MenuItem Header="{local:Str documentation}" Click="MenuDocumentation_Click"/>
+            <MenuItem Header="{local:Str reportAnIssue}" Click="MenuReportIssue_Click"/>
             <Separator/>
-            <MenuItem Header="About Flagship Studio" Click="MenuAbout_Click"/>
+            <MenuItem Header="{local:Str aboutFlagshipStudio}" Click="MenuAbout_Click"/>
         </MenuItem>
     </Menu>
         <!-- Header -->
@@ -63,8 +63,8 @@
             <Button HorizontalAlignment="Left"
                     VerticalAlignment="Center"
                     Style="{StaticResource LinkButton}"
-                    Content="⌂  Home"
-                    ToolTip="Return to pairing home"
+                    Content="{local:Str home}"
+                    ToolTip="{local:Str returnToPairingHome}"
                     Click="AddServer_Click"
                     Visibility="{Binding ShowServerDetail,
                         Converter={StaticResource BoolToVisibility}}"/>
@@ -87,7 +87,7 @@
                     <!-- ===== Phone pairing: separate QR, SAS, and authorization stages ===== -->
                     <Grid Margin="22,10,22,12" Visibility="{Binding ShowPairingCover, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel x:Name="PairingHome" VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="470" AllowDrop="True" DragOver="PairingHome_DragOver" Drop="PairingHome_Drop" Visibility="{Binding ShowPairingQr, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="Pair your phone to begin" FontFamily="{StaticResource FB.Font.Title}" FontSize="20" HorizontalAlignment="Center" Margin="0,0,0,16"/>
+                            <TextBlock Text="{local:Str pairYourPhoneToBegin}" FontFamily="{StaticResource FB.Font.Title}" FontSize="20" HorizontalAlignment="Center" Margin="0,0,0,16"/>
                             <Border Background="White" BorderBrush="{StaticResource FB.Border}" BorderThickness="1" CornerRadius="10" Padding="16" Width="252" Height="252">
                                 <Grid>
                                     <ProgressBar Width="120" Height="4" IsIndeterminate="True" Visibility="{Binding PairQr, Converter={StaticResource NullToCollapsed}}"/>
@@ -95,37 +95,37 @@
                                 </Grid>
                             </Border>
                             <TextBlock Text="{Binding PairCode}" FontFamily="{StaticResource FB.Font.Mono}" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,10,0,0"/>
-                            <TextBlock Text="In the Flagship app, scan the QR or type the code to pair" Style="{StaticResource Caption}" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,10,0,0"/>
+                            <TextBlock Text="{local:Str inTheFlagshipAppScanThe}" Style="{StaticResource Caption}" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,10,0,0"/>
                             <Border Width="280" Height="1" Background="{StaticResource FB.Border}" HorizontalAlignment="Center" Margin="0,22,0,18"/>
-                            <TextBlock Text="Or provide a server recipe" Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                            <TextBlock Text="{local:Str orProvideAServerRecipe}" Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,0,0,8"/>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                 <Button Style="{StaticResource LinkButton}" Margin="14,0" Click="BrowseRecipe_Click">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="&#xE8E5;" FontFamily="Segoe MDL2 Assets" Margin="0,0,7,0"/>
-                                        <TextBlock Text="Load from file"/>
+                                        <TextBlock Text="{local:Str loadFromFile}"/>
                                     </StackPanel>
                                 </Button>
                                 <Button Style="{StaticResource LinkButton}" Margin="14,0" Click="PasteRecipe_Click">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="&#xE77F;" FontFamily="Segoe MDL2 Assets" Margin="0,0,7,0"/>
-                                        <TextBlock Text="Paste from clipboard"/>
+                                        <TextBlock Text="{local:Str pasteFromClipboard}"/>
                                     </StackPanel>
                                 </Button>
                             </StackPanel>
                         </StackPanel>
                         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="440" Visibility="{Binding ShowPairingConfirm, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="▣" FontSize="40" Foreground="{StaticResource FB.PrimaryDeep}" HorizontalAlignment="Center"/>
-                            <TextBlock Text="Confirm the security code" FontFamily="{StaticResource FB.Font.Title}" FontSize="20" HorizontalAlignment="Center" Margin="0,12,0,0"/>
-                            <TextBlock Text="Check that this code matches the Flagship app, then confirm on your phone." Style="{StaticResource RowHint}" TextWrapping="Wrap" TextAlignment="Center" Margin="16,8,16,16"/>
+                            <TextBlock Text="{local:Str confirmTheSecurityCode}" FontFamily="{StaticResource FB.Font.Title}" FontSize="20" HorizontalAlignment="Center" Margin="0,12,0,0"/>
+                            <TextBlock Text="{local:Str checkThatThisCodeMatchesThe}" Style="{StaticResource RowHint}" TextWrapping="Wrap" TextAlignment="Center" Margin="16,8,16,16"/>
                             <Border Background="{StaticResource FB.SurfaceElevated}" CornerRadius="10" Padding="24,14" HorizontalAlignment="Center" MinWidth="230"><TextBlock Text="{Binding PairSas}" FontFamily="{StaticResource FB.Font.Mono}" FontSize="38" FontWeight="Bold" HorizontalAlignment="Center" TextAlignment="Center"/></Border>
-                            <TextBlock Text="Waiting for you to confirm on your phone…" Style="{StaticResource Caption}" Margin="0,14,0,0" HorizontalAlignment="Center" TextAlignment="Center"/>
+                            <TextBlock Text="{local:Str waitingForYouToConfirmOn}" Style="{StaticResource Caption}" Margin="0,14,0,0" HorizontalAlignment="Center" TextAlignment="Center"/>
                         </StackPanel>
                         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="440" Visibility="{Binding ShowAwaitingAuthorization, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="▯" FontSize="42" Foreground="{StaticResource FB.PrimaryDeep}" HorizontalAlignment="Center"/>
-                            <TextBlock Text="Awaiting authorization" FontFamily="{StaticResource FB.Font.Title}" FontSize="20" HorizontalAlignment="Center" Margin="0,12,0,0"/>
+                            <TextBlock Text="{local:Str awaitingAuthorization}" FontFamily="{StaticResource FB.Font.Title}" FontSize="20" HorizontalAlignment="Center" Margin="0,12,0,0"/>
                             <TextBlock Text="{Binding PairStatus}" Style="{StaticResource RowHint}" TextWrapping="Wrap" TextAlignment="Center" Margin="16,8,16,12"/>
                             <ProgressBar Width="180" Height="5" IsIndeterminate="True"/>
-                            <Button Style="{StaticResource LinkButton}" Foreground="{StaticResource FB.Danger}" Content="Cancel pairing" HorizontalAlignment="Center" Margin="0,16,0,0" Click="CancelPairing_Click"/>
+                            <Button Style="{StaticResource LinkButton}" Foreground="{StaticResource FB.Danger}" Content="{local:Str cancelPairing}" HorizontalAlignment="Center" Margin="0,16,0,0" Click="CancelPairing_Click"/>
                         </StackPanel>
                     </Grid>
 
@@ -134,15 +134,15 @@
                                 Visibility="{Binding ShowWizardPanes,
                                     Converter={StaticResource BoolToVisibility}}">
 
-                        <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Content="‹ Pair a phone instead" Margin="0,0,0,8" Click="ReturnToPairing_Click" Visibility="{Binding ManualRecipeMode, Converter={StaticResource BoolToVisibility}}"/>
+                        <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Content="{local:Str pairAPhoneInstead}" Margin="0,0,0,8" Click="ReturnToPairing_Click" Visibility="{Binding ManualRecipeMode, Converter={StaticResource BoolToVisibility}}"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,12" Visibility="{Binding AdvancedAllowed, Converter={StaticResource BoolToVisibility}}">
-                            <RadioButton Content="Simple" GroupName="BurnMode" Margin="8,0" IsChecked="{Binding IsSimpleMode, Mode=OneWay}" Click="SimpleMode_Click"/>
-                            <RadioButton Content="Advanced" GroupName="BurnMode" Margin="8,0" IsChecked="{Binding IsAdvancedMode, Mode=OneWay}" Click="AdvancedMode_Click"/>
+                            <RadioButton Content="{local:Str simple2}" GroupName="BurnMode" Margin="8,0" IsChecked="{Binding IsSimpleMode, Mode=OneWay}" Click="SimpleMode_Click"/>
+                            <RadioButton Content="{local:Str advanced2}" GroupName="BurnMode" Margin="8,0" IsChecked="{Binding IsAdvancedMode, Mode=OneWay}" Click="AdvancedMode_Click"/>
                         </StackPanel>
                         <!-- Back to the destination chooser (USB branch only). -->
                         <Button Style="{StaticResource LinkButton}"
                                 HorizontalAlignment="Left"
-                                Content="‹ Choose destination"
+                                Content="{local:Str chooseDestination}"
                                 Margin="0,0,0,4"
                                 Click="BackToChooser_Click"
                                 Visibility="{Binding ShowDestinationBackLink,
@@ -173,7 +173,7 @@
                                 </Border>
                                 <StackPanel Grid.Column="1" Margin="12,0,8,0"
                                             VerticalAlignment="Center">
-                                    <TextBlock Style="{StaticResource RowTitle}" Text="Recipe"/>
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="{local:Str recipe}"/>
                                     <TextBlock Style="{StaticResource RowHint}"
                                                Text="{Binding RecipeHint}"
                                                Visibility="{Binding HasRecipePrimary,
@@ -196,7 +196,7 @@
                             </Grid>
                         </Border>
 
-                        <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Content="Paste recipe from clipboard" Margin="4,-2,0,8" Click="PasteRecipe_Click" Visibility="{Binding ManualRecipeMode, Converter={StaticResource BoolToVisibility}}"/>
+                        <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Content="{local:Str pasteRecipeFromClipboard}" Margin="4,-2,0,8" Click="PasteRecipe_Click" Visibility="{Binding ManualRecipeMode, Converter={StaticResource BoolToVisibility}}"/>
 
                         <!-- Row 2: ISO — Advanced mode only. -->
                         <Border x:Name="IsoRow"
@@ -227,9 +227,9 @@
                                 <StackPanel Grid.Column="1" Margin="12,0,8,0"
                                             VerticalAlignment="Center">
                                     <TextBlock Style="{StaticResource RowTitle}"
-                                               Text="Debian ISO"/>
+                                               Text="{local:Str debianIso}"/>
                                     <TextBlock Style="{StaticResource RowHint}"
-                                               Text="Drop a stock installer ISO to remaster"
+                                               Text="{local:Str dropAStockInstallerIsoTo}"
                                                Visibility="{Binding HasIso,
                                                    Converter={StaticResource BoolToVisibility},
                                                    ConverterParameter=invert}"/>
@@ -246,7 +246,7 @@
                             </Grid>
                         </Border>
 
-                        <CheckBox Content="Use system-provided ISO" IsChecked="{Binding UseSystemIso, Mode=TwoWay}" Margin="4,-2,0,10" FontSize="12" Visibility="{Binding ShowIsoRow, Converter={StaticResource BoolToVisibility}}"/>
+                        <CheckBox Content="{local:Str useSystemProvidedIso}" IsChecked="{Binding UseSystemIso, Mode=TwoWay}" Margin="4,-2,0,10" FontSize="12" Visibility="{Binding ShowIsoRow, Converter={StaticResource BoolToVisibility}}"/>
 
                         <!-- Row 3: USB Drive -->
                         <Border x:Name="DiskRow"
@@ -268,7 +268,7 @@
                                 </Border>
                                 <StackPanel Grid.Column="1" Margin="12,0,8,0"
                                             VerticalAlignment="Center">
-                                    <TextBlock Style="{StaticResource RowTitle}" Text="USB Drive"/>
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="{local:Str usbDrive}"/>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -283,12 +283,12 @@
                                                   Margin="0,2,0,0"/>
                                         <Button Grid.Column="1"
                                                 Style="{StaticResource LinkButton}"
-                                                Content="Refresh"
+                                                Content="{local:Str refresh}"
                                                 Margin="8,0,0,0"
                                                 Click="RefreshDisks_Click"/>
                                     </Grid>
                                     <TextBlock Style="{StaticResource Caption}"
-                                               Text="No removable drives detected. Plug one in and click Refresh."
+                                               Text="{local:Str noRemovableDrivesDetectedPlugOne}"
                                                Margin="0,4,0,0"
                                                Visibility="{Binding HasDisks,
                                                    Converter={StaticResource BoolToVisibility},
@@ -304,10 +304,10 @@
 
                         <StackPanel Margin="4,8,4,0">
                             <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="160"/></Grid.ColumnDefinitions>
-                                <TextBox Grid.Column="0" Text="{Binding WifiSsid, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0" ToolTip="Wi-Fi network name (optional)"/>
-                                <PasswordBox x:Name="WifiPasswordBox" Grid.Column="1" PasswordChanged="WifiPassword_Changed" ToolTip="Wi-Fi password (optional)"/>
+                                <TextBox Grid.Column="0" Text="{Binding WifiSsid, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0" ToolTip="{local:Str wiFiNetworkNameOptional}"/>
+                                <PasswordBox x:Name="WifiPasswordBox" Grid.Column="1" PasswordChanged="WifiPassword_Changed" ToolTip="{local:Str wiFiPasswordOptional}"/>
                             </Grid>
-                            <TextBlock Text="Optional Wi-Fi for a server without Ethernet. Baked into this single-use installer, and remembered on this PC for your account only." Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                            <TextBlock Text="{local:Str optionalWiFiForAServer}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
                         </StackPanel>
                         <!-- Bake button -->
                         <StackPanel Margin="0,18,0,12" HorizontalAlignment="Center">
@@ -358,7 +358,7 @@
                                 <Button Style="{StaticResource LinkButton}"
                                         HorizontalAlignment="Center"
                                         Margin="0,6,0,0"
-                                        Content="Cancel"
+                                        Content="{local:Str cancel}"
                                         Click="Bake_Click"/>
                             </StackPanel>
 
@@ -378,7 +378,7 @@
                                                    Foreground="{StaticResource FB.Success}"
                                                    VerticalAlignment="Center"
                                                    Margin="0,0,8,0"/>
-                                        <TextBlock Text="Ready to boot"
+                                        <TextBlock Text="{local:Str readyToBoot}"
                                                    Style="{StaticResource RowTitle}"/>
                                     </StackPanel>
                                     <TextBlock Text="{Binding DoneServerDomain}"
@@ -413,7 +413,7 @@
                                 <StackPanel>
                                     <TextBlock Text="{Binding DoneServerDomain}"
                                                Style="{StaticResource RowTitle}"/>
-                                    <TextBlock Text="Recipe verified — choose where this server should live."
+                                    <TextBlock Text="{local:Str recipeVerifiedChooseWhereThisServer}"
                                                Style="{StaticResource RowHint}"/>
                                 </StackPanel>
                             </StackPanel>
@@ -433,13 +433,13 @@
                                 </Border>
                                 <StackPanel Grid.Column="1" Margin="12,0,0,0">
                                     <Grid>
-                                        <TextBlock Text="Burn to USB" Style="{StaticResource RowTitle}"/>
+                                        <TextBlock Text="{local:Str burnToUsb}" Style="{StaticResource RowTitle}"/>
                                         <TextBlock Text="{Binding HardwareBadgeLabel}"
                                                    Style="{StaticResource Caption}"
                                                    HorizontalAlignment="Right"/>
                                     </Grid>
                                     <TextBlock Style="{StaticResource RowHint}"
-                                               Text="Build a dedicated hardware appliance — the gold standard. Boot any spare box from the USB stick."/>
+                                               Text="{local:Str buildADedicatedHardwareApplianceThe}"/>
                                 </StackPanel>
                             </Grid>
                         </Button>
@@ -458,13 +458,13 @@
                                 </Border>
                                 <StackPanel Grid.Column="1" Margin="12,0,0,0">
                                     <Grid>
-                                        <TextBlock Text="Host on this PC" Style="{StaticResource RowTitle}"/>
+                                        <TextBlock Text="{local:Str hostOnThisPc}" Style="{StaticResource RowTitle}"/>
                                         <TextBlock Text="{Binding HostedVmBadgeLabel}"
                                                    Style="{StaticResource Caption}"
                                                    HorizontalAlignment="Right"/>
                                     </Grid>
                                     <TextBlock Style="{StaticResource RowHint}"
-                                               Text="Run the same encrypted, phone-gated appliance as a managed VM inside this app. Same recipe, same unlock — your phone still holds the keys."
+                                               Text="{local:Str runTheSameEncryptedPhoneGated}"
                                                Visibility="{Binding HostHereDisabledReason,
                                                    Converter={StaticResource NullToCollapsed}}"/>
                                     <TextBlock Style="{StaticResource RowHint}"
@@ -483,7 +483,7 @@
                                     Converter={StaticResource BoolToVisibility}}">
                         <Button Style="{StaticResource LinkButton}"
                                 HorizontalAlignment="Left"
-                                Content="‹ Choose destination"
+                                Content="{local:Str chooseDestination}"
                                 IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBool}}"
                                 Click="BackToChooser_Click"/>
 
@@ -502,11 +502,11 @@
 
                         <TextBlock Style="{StaticResource Caption}"
                                    TextWrapping="Wrap"
-                                   Text="The VM installs unattended from the same image a USB burn uses, then boots encrypted and waits for your phone to unlock it. This app never sees the disk key."/>
+                                   Text="{local:Str theVmInstallsUnattendedFromThe}"/>
 
                         <StackPanel Margin="0,22,0,0" HorizontalAlignment="Center">
                             <Button Style="{StaticResource BakeButton}"
-                                    Content="Create server on this PC"
+                                    Content="{local:Str createServerOnThisPc}"
                                     Click="CreateHostHere_Click"
                                     Visibility="{Binding ShowProgress,
                                         Converter={StaticResource BoolToVisibility},
@@ -514,7 +514,7 @@
                             <TextBlock Style="{StaticResource Caption}"
                                        HorizontalAlignment="Center"
                                        Margin="0,8,0,0"
-                                       Text="Encrypted disk · unlocked by your phone"
+                                       Text="{local:Str encryptedDiskUnlockedByYourPhone}"
                                        Visibility="{Binding ShowProgress,
                                            Converter={StaticResource BoolToVisibility},
                                            ConverterParameter=invert}"/>
@@ -612,23 +612,23 @@
                         <StackPanel Orientation="Horizontal">
                             <Button Style="{StaticResource BakeButton}"
                                     MinWidth="110"
-                                    Content="Start"
+                                    Content="{local:Str start}"
                                     Click="StartServer_Click"
                                     Visibility="{Binding CanStart,
                                         Converter={StaticResource BoolToVisibility}}"/>
                             <Button Style="{StaticResource SecondaryButton}"
-                                    Content="Stop"
+                                    Content="{local:Str stop}"
                                     Click="StopServer_Click"
                                     Visibility="{Binding CanStop,
                                         Converter={StaticResource BoolToVisibility}}"/>
                             <Button Style="{StaticResource BakeButton}"
                                     MinWidth="130"
-                                    Content="Retry install"
+                                    Content="{local:Str retryInstall}"
                                     Click="RetryInstall_Click"
                                     Visibility="{Binding CanRetryInstall,
                                         Converter={StaticResource BoolToVisibility}}"/>
                             <Button Style="{StaticResource SecondaryButton}"
-                                    Content="Stop installation"
+                                    Content="{local:Str stopInstallation}"
                                     Click="CancelInstall_Click"
                                     Visibility="{Binding CanCancelInstall,
                                         Converter={StaticResource BoolToVisibility}}"/>
@@ -658,7 +658,7 @@
                                         </StackPanel>
                                     </ControlTemplate>
                                 </ToggleButton.Template>
-                                <TextBlock Text="Open CLI/console"
+                                <TextBlock Text="{local:Str openCliConsole}"
                                            Foreground="{StaticResource FB.PrimaryDeep}"
                                            FontSize="12.5"/>
                             </ToggleButton>
@@ -667,12 +667,12 @@
                                     Margin="16,0,0,0"
                                     Foreground="{StaticResource FB.PrimaryDeep}"
                                     FontSize="12.5"
-                                    Content="Open in SSH"
+                                    Content="{local:Str openInSsh}"
                                     Click="OpenSsh_Click"/>
                             </StackPanel>
                             <TextBlock x:Name="ConsoleHint"
                                        Style="{StaticResource Caption}"
-                                       Text="Console + SSH available while the server is running."
+                                       Text="{local:Str consoleSshAvailableWhileTheServer}"
                                        Visibility="Collapsed"/>
                             <Border x:Name="ConsolePanel"
                                     Visibility="Collapsed"
@@ -707,7 +707,7 @@
                                 HorizontalAlignment="Right"
                                 Margin="0,24,0,0"
                                 Foreground="{StaticResource FB.Danger}"
-                                Content="Delete this server"
+                                Content="{local:Str deleteThisServer}"
                                 Click="DeleteServer_Click"/>
                     </StackPanel>
                 </Grid>
@@ -764,7 +764,7 @@
                             </ControlTemplate>
                         </ToggleButton.Template>
                         <TextBlock>
-                            <Run Text="Log"
+                            <Run Text="{local:Str log}"
                                  Foreground="{DynamicResource FB.TextMuted}"
                                  FontSize="11.5"/>
                             <Run Text="{Binding LogCountLabel, Mode=OneWay}"
@@ -775,7 +775,7 @@
                     </ToggleButton>
                     <Button Grid.Column="2"
                             Style="{StaticResource LinkButton}"
-                            Content="Clear"
+                            Content="{local:Str clear}"
                             Click="ClearLog_Click"
                             Visibility="{Binding HasLogLines,
                                 Converter={StaticResource BoolToVisibility}}"/>
@@ -823,7 +823,7 @@
                          to title; an empty machine shows just the "None yet"
                          message below, no header. -->
                     <TextBlock Grid.Row="0"
-                               Text="Servers on this PC"
+                               Text="{local:Str serversOnThisPc}"
                                Style="{StaticResource RowTitle}"
                                Margin="12,12,12,8"
                                Visibility="{Binding HasHostedServers,
@@ -856,30 +856,30 @@
                                     <Grid.ContextMenu>
                                         <ContextMenu DataContext="{Binding PlacementTarget.DataContext,
                                                          RelativeSource={RelativeSource Self}}">
-                                            <MenuItem Header="Open in SSH"
+                                            <MenuItem Header="{local:Str openInSsh}"
                                                       Click="ServerRow_OpenSsh_Click"
                                                       Visibility="{Binding ConsoleEnabled,
                                                           Converter={StaticResource BoolToVisibility}}"/>
-                                            <MenuItem Header="Open console"
+                                            <MenuItem Header="{local:Str openConsole}"
                                                       Click="ServerRow_OpenConsole_Click"
                                                       Visibility="{Binding ConsoleEnabled,
                                                           Converter={StaticResource BoolToVisibility}}"/>
                                             <Separator Visibility="{Binding ConsoleEnabled,
                                                           Converter={StaticResource BoolToVisibility}}"/>
-                                            <MenuItem Header="Start"
+                                            <MenuItem Header="{local:Str start}"
                                                       Click="ServerRow_Start_Click"
                                                       Visibility="{Binding CanStart,
                                                           Converter={StaticResource BoolToVisibility}}"/>
-                                            <MenuItem Header="Stop"
+                                            <MenuItem Header="{local:Str stop}"
                                                       Click="ServerRow_Stop_Click"
                                                       Visibility="{Binding CanStop,
                                                           Converter={StaticResource BoolToVisibility}}"/>
-                                            <MenuItem Header="Stop installation"
+                                            <MenuItem Header="{local:Str stopInstallation}"
                                                       Click="ServerRow_CancelInstall_Click"
                                                       Visibility="{Binding CanCancelInstall,
                                                           Converter={StaticResource BoolToVisibility}}"/>
                                             <Separator/>
-                                            <MenuItem Header="Delete…"
+                                            <MenuItem Header="{local:Str delete}"
                                                       Click="ServerRow_Delete_Click"/>
                                         </ContextMenu>
                                     </Grid.ContextMenu>
@@ -912,7 +912,7 @@
                                             FontSize="16"
                                             Padding="6,0,2,0"
                                             VerticalAlignment="Top"
-                                            ToolTip="Actions"
+                                            ToolTip="{local:Str actions}"
                                             Click="ServerRowMenu_Click"/>
                                 </Grid>
                             </DataTemplate>
@@ -920,7 +920,7 @@
                     </ListBox>
                     <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="{Binding HasHostedServers, Converter={StaticResource BoolToVisibility}, ConverterParameter=invert}">
                         <TextBlock Text="▥" FontSize="24" Foreground="{StaticResource FB.TextMuted}" HorizontalAlignment="Center"/>
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" Text="No servers hosted yet" HorizontalAlignment="Center"/>
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" Text="{local:Str noServersHostedYet}" HorizontalAlignment="Center"/>
                     </StackPanel>
                     <Border Grid.Row="2" Height="42"
                             BorderThickness="0,1,0,0"
@@ -928,7 +928,7 @@
                         <Button Style="{StaticResource LinkButton}"
                                 HorizontalAlignment="Left"
                                 Margin="8,0" VerticalAlignment="Stretch"
-                                Content="⊕  Pair a new server"
+                                Content="{local:Str pairANewServer}"
                                 Click="AddServer_Click"/>
                     </Border>
                 </Grid>

@@ -31,7 +31,7 @@ public static class ApplianceHosting
         }
         catch (ApplianceCacheException e) when (e.FallsBackToInstaller)
         {
-            log($"{e.Message} Using the Debian installer instead.");
+            log(Strings.F("usingTheDebianInstallerInstead", e.Message));
             return null;
         }
     }

@@ -33,7 +33,7 @@ public sealed record VMRecord
     /// <summary>State.Label, except a sealed boot that needs no one reads as unlocking.</summary>
     [JsonIgnore]
     public string StateLabel => State.Kind == VMStateKind.AwaitingPhoneUnlock && UnlocksOnItsOwn
-        ? "Unlocking…"
+        ? Strings.T("unlocking")
         : State.Label;
 }
 
@@ -82,8 +82,8 @@ public sealed class VMStoreException : Exception
         : base(kind switch
         {
             VMStoreErrorKind.InvalidName => $"'{name}' is not a valid server name.",
-            VMStoreErrorKind.AlreadyExists => $"A hosted server named '{name}' already exists.",
-            VMStoreErrorKind.NotFound => $"No hosted server named '{name}'.",
+            VMStoreErrorKind.AlreadyExists => Strings.F("aHostedServerNamedAlreadyExists", name),
+            VMStoreErrorKind.NotFound => Strings.F("noHostedServerNamed", name),
             _ => name,
         })
     {
@@ -233,7 +233,7 @@ public sealed class VMStateJsonConverter : JsonConverter<VMState>
             "running" => VMState.Running,
             "stopped" => VMState.Stopped,
             "failed" => ReadFailed(root),
-            var s => throw new JsonException($"Unknown VM state '{s}'."),
+            var s => throw new JsonException(Strings.F("unknownVmState", s)),
         };
     }
 
@@ -244,7 +244,7 @@ public sealed class VMStateJsonConverter : JsonConverter<VMState>
         {
             "install" => VMFailurePhase.Install,
             "run" => VMFailurePhase.Run,
-            var s => throw new JsonException($"Unknown VM failure phase '{s}'."),
+            var s => throw new JsonException(Strings.F("unknownVmFailurePhase", s)),
         };
         return VMState.Failed(phase, f.GetProperty("reason").GetString() ?? "");
     }
@@ -261,7 +261,7 @@ public sealed class VMStateJsonConverter : JsonConverter<VMState>
             VMStateKind.Running => "running",
             VMStateKind.Stopped => "stopped",
             VMStateKind.Failed => "failed",
-            _ => throw new JsonException($"Unknown VM state kind {value.Kind}."),
+            _ => throw new JsonException(Strings.F("unknownVmStateKind", value.Kind)),
         });
         if (value.Kind == VMStateKind.Failed && value.Failure is { } failure)
         {

@@ -98,7 +98,7 @@ public sealed record VMServerHealth(
     {
         var staleMin = (now.ToUnixTimeMilliseconds() - ReceivedAtMs) / 60_000;
         if (staleMin >= 5)
-            return new HealthVerdict(false, new[] { $"No health report for {staleMin} min. The server itself may be off or frozen." });
+            return new HealthVerdict(false, new[] { Strings.F("noHealthReportForMinThe", staleMin) });
         var lines = new List<string>();
         if (OomKills > 0)
             lines.Add($"Ran out of memory {OomKills}× since it started ({MemAvailMB} MB free of {MemTotalMB} MB now).");
@@ -111,7 +111,7 @@ public sealed record VMServerHealth(
         if (lines.Count > 0) return new HealthVerdict(false, lines);
         return new HealthVerdict(true, new[]
         {
-            $"Healthy · {MemAvailMB} MB free of {MemTotalMB} MB · disk {DiskUsedPct}% · up {Uptime(UptimeS)}",
+            Strings.F("healthyMbFreeOfMbDisk", MemAvailMB, MemTotalMB, DiskUsedPct, Uptime(UptimeS)),
         });
     }
 

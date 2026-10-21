@@ -37,7 +37,7 @@ public static class WhpxProbe
     /// start. Kept separate from the spawn so it's unit-testable.</summary>
     public static WhpxVerdict Classify(int exitCode, string stderr)
     {
-        if (exitCode == 0) return new WhpxVerdict(WhpxVerdictKind.Available, "WHPX is available.");
+        if (exitCode == 0) return new WhpxVerdict(WhpxVerdictKind.Available, Strings.T("whpxIsAvailable"));
         var s = stderr.ToLowerInvariant();
         if (s.Contains("whpx") && (s.Contains("not present") || s.Contains("no accelerator") ||
                                    s.Contains("failed to setup") || s.Contains("initialization failed") ||
@@ -47,17 +47,17 @@ public static class WhpxProbe
             // where the message allows; both need owner action outside the app.
             if (s.Contains("vmx") || s.Contains("svm") || s.Contains("firmware") || s.Contains("bios"))
                 return new WhpxVerdict(WhpxVerdictKind.VirtualizationDisabledInFirmware,
-                    "CPU virtualization (Intel VT-x / AMD-V) is disabled in your PC's firmware. " +
-                    "Enable it in BIOS/UEFI settings, then try again.");
+                    Strings.T("cpuVirtualizationIntelVtXAmd") +
+                    Strings.T("enableItInBiosUefiSettings"));
             return new WhpxVerdict(WhpxVerdictKind.HypervisorPlatformDisabled,
-                "The Windows Hypervisor Platform feature is turned off. Enable it under " +
-                "\"Turn Windows features on or off\" → \"Windows Hypervisor Platform\", reboot, and try again.");
+                Strings.T("theWindowsHypervisorPlatformFeatureIs") +
+                Strings.T("turnWindowsFeaturesOnOrOff"));
         }
         if (s.Contains("could not load") || s.Contains("no such file") || s.Contains("pflash"))
             return new WhpxVerdict(WhpxVerdictKind.QemuNotUsable,
-                "QEMU is installed but its firmware files are missing or unreadable — reinstall QEMU.");
+                Strings.T("qemuIsInstalledButItsFirmware"));
         return new WhpxVerdict(WhpxVerdictKind.Unknown,
-            $"Could not start the virtual machine engine: {Truncate(stderr.Trim(), 300)}");
+            Strings.F("couldNotStartTheVirtualMachine", Truncate(stderr.Trim(), 300)));
     }
 
     /// <summary>Live probe. graceMs: how long a surviving process counts as success.</summary>
@@ -78,7 +78,7 @@ public static class WhpxProbe
         try { p = Process.Start(psi) ?? throw new InvalidOperationException("spawn returned null"); }
         catch (Exception e)
         {
-            return new WhpxVerdict(WhpxVerdictKind.QemuNotUsable, $"Could not launch QEMU: {e.Message}");
+            return new WhpxVerdict(WhpxVerdictKind.QemuNotUsable, Strings.F("couldNotLaunchQemu", e.Message));
         }
 
         using (p)
@@ -90,7 +90,7 @@ public static class WhpxProbe
                 // Still running after the grace period ⇒ WHPX initialized.
                 try { p.Kill(entireProcessTree: true); } catch { }
                 try { p.WaitForExit(2000); } catch { }
-                return new WhpxVerdict(WhpxVerdictKind.Available, "WHPX is available.");
+                return new WhpxVerdict(WhpxVerdictKind.Available, Strings.T("whpxIsAvailable"));
             }
             var stderr = await stderrTask;
             return Classify(p.ExitCode, stderr);
