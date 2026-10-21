@@ -168,6 +168,15 @@ class CanonicalBytesVectorsTest {
                 i.str("username"), i.str("oldAdminRootPub"), i.str("newAdminRootPub"), i.long("issuedAt"),
             )
         },
+        "name-dibs-initiate" to { i ->
+            NameDibsInitiate.canonicalBytes(i.str("username"), i.str("name"), i.str("irkPubHex"), i.long("issuedAt"))
+        },
+        "name-dibs-verify" to { i ->
+            NameDibsVerify.canonicalBytes(i.str("username"), i.str("name"), i.str("nonce"), i.long("issuedAt"))
+        },
+        "name-change" to { i ->
+            NameChangeEnvelope.canonicalBytes(i.str("aidPubHex"), i.str("oldUsername"), i.str("newUsername"), i.long("issuedAt"))
+        },
     )
 
     private fun powerMode(wire: String): PowerMode =
