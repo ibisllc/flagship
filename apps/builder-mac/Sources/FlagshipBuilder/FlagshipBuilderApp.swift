@@ -49,7 +49,7 @@ struct FlagshipBuilderApp: App {
     @StateObject private var model = WizardModel()
 
     var body: some Scene {
-        WindowGroup("Flagship Studio", id: "main") {
+        WindowGroup(String(localized: "Flagship Studio"), id: "main") {
             WizardView(model: model)
                 .onAppear { appDelegate.vmManager = model.vmManager }
         }

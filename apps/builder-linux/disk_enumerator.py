@@ -18,6 +18,8 @@ classification logic is unit-testable without touching real disks.
 """
 from __future__ import annotations
 
+from i18n import tr
+
 import json
 import subprocess
 from dataclasses import dataclass
@@ -113,7 +115,7 @@ def parse_lsblk(payload: object) -> list[DeviceInfo]:
         is_internal = (tran in ("sata", "ata") or is_nvme) and not rm
         vendor = str(node.get("vendor") or "").strip()
         model_str = str(node.get("model") or "").strip()
-        model = " ".join(p for p in (vendor, model_str) if p) or "(unknown model)"
+        model = " ".join(p for p in (vendor, model_str) if p) or tr("(unknown model)")
         mounted = _node_or_child_mounted(node)
         verdict, reason = compute_verdict(
             device_path=device_path,
@@ -173,7 +175,7 @@ def compute_verdict(
                 f"device is {fmt_size(size_bytes)} (>{fmt_size(MAX_DEVICE_SIZE_BYTES)} "
                 f"— almost certainly an internal drive)")
     if internal_:
-        return ("internal", f"OS marks {device_path} as internal media")
+        return ("internal", tr('OS marks {0} as internal media').format(device_path))
     if virtual:
         return ("unknown", "device is a virtual disk image, not physical hardware")
     if removable or bus == "USB":

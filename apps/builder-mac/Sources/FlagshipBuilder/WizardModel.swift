@@ -67,7 +67,7 @@ final class WizardModel: ObservableObject {
     @Published var pairQrPayload: String? = nil
     @Published var pairCodeDisplay: String? = nil
     /// One-line status under the QR ("Waiting for your phone…", etc.).
-    @Published var pairStatus: String = "Waiting for your phone…"
+    @Published var pairStatus: String = String(localized: "Waiting for your phone…")
     /// The 6-digit SAS to confirm on the phone (set in `.pairing`).
     @Published var pairMatchCode: String? = nil
     /// Network reachability. The locked cover swaps its whole pairing block for a
@@ -179,12 +179,12 @@ final class WizardModel: ObservableObject {
         sessionClient = client
         pairQrPayload = client.qrPayload
         pairCodeDisplay = client.humanCodeDisplay
-        pairStatus = "Waiting for your phone…"
+        pairStatus = String(localized: "Waiting for your phone…")
         client.onStage = { [weak self] stage in Task { @MainActor in self?.applyEngineStage(stage) } }
         client.onRecipe = { [weak self] data in Task { @MainActor in self?.handleSessionRecipe(data) } }
         client.onRecipeReceiptQueued = { [weak self] in
             Task { @MainActor in
-                self?.pairStatus = "Recipe received — phone session finished."
+                self?.pairStatus = String(localized: "Recipe received — phone session finished.")
                 self?.builderStage = .recipeReady
             }
         }
@@ -197,17 +197,17 @@ final class WizardModel: ObservableObject {
         case .waitingForPhone:
             // Phone left before pairing — keep the SAME QR live and wait again.
             pairMatchCode = nil
-            pairStatus = "Waiting for your phone…"
+            pairStatus = String(localized: "Waiting for your phone…")
             builderStage = .locked
         case .awaitingConfirm(let code):
             pairMatchCode = code
-            pairStatus = "Phone connected — confirm the code matches."
+            pairStatus = String(localized: "Phone connected — confirm the code matches.")
             builderStage = .pairing
         case .paired:
-            pairStatus = "Paired."
+            pairStatus = String(localized: "Paired.")
             builderStage = .session
         case .reconnecting:
-            pairStatus = "Phone left before sending the recipe — waiting for it to reconnect…"
+            pairStatus = String(localized: "Phone left before sending the recipe — waiting for it to reconnect…")
             builderStage = .session
         case .ended(let reason):
             // One-shot deposit: a DELIVERED recipe survives a phone disconnect.
@@ -235,7 +235,7 @@ final class WizardModel: ObservableObject {
             try FileManager.default.setAttributes(
                 [.posixPermissions: NSNumber(value: 0o600)], ofItemAtPath: staging.path)
         } catch {
-            appendLog(stream: .stderr, text: "Couldn't stage the received recipe: \(error.localizedDescription)")
+            appendLog(stream: .stderr, text: String(localized: "Couldn't stage the received recipe: \(error.localizedDescription)"))
             return
         }
         pastedRecipeStaging = staging
@@ -292,7 +292,7 @@ final class WizardModel: ObservableObject {
         homeResetCountdown = nil
         // The old yellow "session ended" cover notice is gone; keep the reason in
         // the log for diagnostics instead of surfacing a sticky banner.
-        if let reason { appendLog(stream: .stderr, text: "Pairing session ended: \(reason)") }
+        if let reason { appendLog(stream: .stderr, text: String(localized: "Pairing session ended: \(reason)")) }
         // Sensitive session/recipe material.
         recipe = nil
         verified = nil
@@ -410,7 +410,7 @@ final class WizardModel: ObservableObject {
         var missing: [String] = []
         if mode.requiresRecipe && recipe == nil { missing.append("Certificate") }
         if effectiveRequiresUserISO && iso == nil { missing.append("ISO") }
-        if selectedDisk == nil { missing.append("USB drive") }
+        if selectedDisk == nil { missing.append(String(localized: "USB drive")) }
         if missing.isEmpty {
             let what = effectiveRequiresUserISO ? (iso?.lastPathComponent ?? "") : (verified?.serverDomain ?? "your server")
             return "Ready: \(what) → \(selectedDisk?.deviceNode ?? "")"
@@ -431,7 +431,7 @@ final class WizardModel: ObservableObject {
         recipeError = nil
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            recipeError = "Pasted recipe was empty."
+            recipeError = String(localized: "Pasted recipe was empty.")
             return
         }
         // Stage to a temp file the CLI can read. Marked 0o600 so it isn't
@@ -446,7 +446,7 @@ final class WizardModel: ObservableObject {
                 ofItemAtPath: staging.path
             )
         } catch {
-            recipeError = "Could not stage pasted recipe: \(error.localizedDescription)"
+            recipeError = String(localized: "Could not stage pasted recipe: \(error.localizedDescription)")
             return
         }
         pastedRecipeStaging = staging
@@ -551,7 +551,7 @@ final class WizardModel: ObservableObject {
             }
             return base.path
         } catch let error as ApplianceCache.CacheError where error.fallsBackToInstaller {
-            appendLog(stream: .stdout, text: "+ \(error.localizedDescription) Using the Debian installer instead.")
+            appendLog(stream: .stdout, text: String(localized: "+ \(error.localizedDescription) Using the Debian installer instead."))
             return nil
         } catch {
             reportOperationFailure(error)
@@ -603,12 +603,12 @@ final class WizardModel: ObservableObject {
         outIsoPath = outURL
         do {
             let preseed = try installerPreseed(forRecipe: recipe)
-            appendLog(stream: .stdout, text: "+ remaster \(iso.lastPathComponent) → \(outURL.lastPathComponent)")
+            appendLog(stream: .stdout, text: String(localized: "+ remaster \(iso.lastPathComponent) → \(outURL.lastPathComponent)"))
             let used = try await Task.detached(priority: .userInitiated) { () -> String in
                 try Remaster.remasterInstaller(srcISO: iso, outISO: outURL,
                                                preseedCfg: preseed)
             }.value
-            appendLog(stream: .stdout, text: "+ installer family: \(used)")
+            appendLog(stream: .stdout, text: String(localized: "+ installer family: \(used)"))
             isFinished = true
         } catch {
             reportOperationFailure(error)
@@ -673,13 +673,13 @@ final class WizardModel: ObservableObject {
             .appendingPathComponent("flagship-prepared-\(UUID().uuidString).iso")
         do {
             let preseed = try installerPreseed(forRecipe: recipe)
-            appendLog(stream: .stdout, text: "+ remaster \(srcISO.lastPathComponent) → prepared image")
+            appendLog(stream: .stdout, text: String(localized: "+ remaster \(srcISO.lastPathComponent) → prepared image"))
             let used = try await Task.detached(priority: .userInitiated) { () -> String in
                 try Remaster.remasterInstaller(srcISO: srcISO, outISO: preparedURL,
                                                preseedCfg: preseed)
             }.value
             didRemasterForTest = true
-            appendLog(stream: .stdout, text: "+ installer family: \(used)")
+            appendLog(stream: .stdout, text: String(localized: "+ installer family: \(used)"))
         } catch {
             reportOperationFailure(error)
             try? FileManager.default.removeItem(at: preparedURL)
@@ -720,7 +720,7 @@ final class WizardModel: ObservableObject {
                 }
             }
         }
-        appendLog(stream: .stdout, text: "+ helper write-image → \(disk.deviceNode)")
+        appendLog(stream: .stdout, text: String(localized: "+ helper write-image → \(disk.deviceNode)"))
 
         let conn = HelperClient.makeConnection()
         let result: (code: Int, message: String) = await withCheckedContinuation { cont in
@@ -742,11 +742,11 @@ final class WizardModel: ObservableObject {
             isFinished = true
             scheduleHomeReset()
         } else {
-            if result.message.contains("Full Disk Access") {
+            if result.message.contains(String(localized: "Full Disk Access")) {
                 HelperClient.openFullDiskAccessSettings()
             }
             reportOperationFailure(result.message.isEmpty
-                ? "Write failed (code \(result.code))."
+                ? String(localized: "Write failed (code \(result.code)).")
                 : result.message)
         }
     }
@@ -783,11 +783,11 @@ final class WizardModel: ObservableObject {
         let host = HostResources.current()
         let cap = VMResourcePlan.maxVMCount(host: host)
         guard cap > 0 else {
-            reportOperationFailure("This Mac doesn't have enough free memory to host a server (each server needs ~\(VMResourcePlan.minimumVMMemoryBytes / VMResourcePlan.gib) GiB).")
+            reportOperationFailure(String(localized: "This Mac doesn't have enough free memory to host a server (each server needs ~\(VMResourcePlan.minimumVMMemoryBytes / VMResourcePlan.gib) GiB)."))
             return
         }
         guard vmManager.servers.count < cap else {
-            reportOperationFailure("This Mac is at its hosting limit (\(cap) server\(cap == 1 ? "" : "s")). Remove one first, or burn to USB.")
+            reportOperationFailure(String(localized: "This Mac is at its hosting limit (\(cap) server\(cap == 1 ? "" : "s")). Remove one first, or burn to USB."))
             return
         }
 
@@ -821,7 +821,7 @@ final class WizardModel: ObservableObject {
                 }.value
                 phase = "clone appliance"
                 appendLog(stream: .stdout,
-                          text: "+ verified appliance \(baseURL.lastPathComponent) sha256=\(provisioner.manifest.sha256)")
+                          text: String(localized: "+ verified appliance \(baseURL.lastPathComponent) sha256=\(provisioner.manifest.sha256)"))
                 let bootstrap = try UserData.applianceBootstrap(
                     recipeJSON: recipeData,
                     installerGitRef: parsed.installerGitRef,
@@ -836,7 +836,7 @@ final class WizardModel: ObservableObject {
                         bootstrap: bootstrap)
                 }.value
                 appendLog(stream: .stdout,
-                          text: "+ cloned generalized disk and wrote one-use specialization seed")
+                          text: String(localized: "+ cloned generalized disk and wrote one-use specialization seed"))
             } catch {
                 reportOperationFailure(error)
                 await vmManager.deleteServer(named: config.name)
@@ -884,7 +884,7 @@ final class WizardModel: ObservableObject {
         do {
             let preseed = try installerPreseed(forRecipe: recipe)
             let outISO = vmManager.installerISOPath(for: config.name)
-            appendLog(stream: .stdout, text: "+ remaster \(srcISO.lastPathComponent) → VM installer")
+            appendLog(stream: .stdout, text: String(localized: "+ remaster \(srcISO.lastPathComponent) → VM installer"))
             let used = try await Task.detached(priority: .userInitiated) { () -> String in
                 try Remaster.remasterInstaller(srcISO: srcISO, outISO: outISO,
                                                preseedCfg: preseed)
@@ -892,7 +892,7 @@ final class WizardModel: ObservableObject {
             try FileManager.default.setAttributes([.posixPermissions: 0o600],
                                                   ofItemAtPath: outISO.path)
             didRemasterForTest = true
-            appendLog(stream: .stdout, text: "+ installer family: \(used)")
+            appendLog(stream: .stdout, text: String(localized: "+ installer family: \(used)"))
         } catch {
             reportOperationFailure(error)
             await vmManager.deleteServer(named: config.name)
