@@ -196,7 +196,7 @@ export async function renderActivity() {
       auditDetail: auditDisplayDetail,
     });
     const feed = rows.length === 0
-      ? '<div class="card placeholder">Nothing has happened yet.</div>'
+      ? `<div class="card placeholder">${tr("Nothing has happened yet.")}</div>`
       : rows.map((r) => `
         <div class="card${r.ok ? "" : " warning"}">
           <div class="row">

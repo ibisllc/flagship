@@ -82,7 +82,7 @@ export async function ensureUsername() {
   const { inlinePrompt } = await import("./modal.js");
   const handle = await inlinePrompt({
     title: tr("Pick a username"),
-    message: "DNS-safe label — will appear at <name>.flagship.services.",
+    message: tr("DNS-safe label — will appear at <name>.flagship.services."),
     placeholder: "alice",
     validate: (v) => {
       if (!v) return "username required";
@@ -126,6 +126,6 @@ export async function checkUsernameAvailability(handle) {
     }
     return { ok: false, reason: `status ${r.status}` };
   } catch (e) {
-    return { ok: false, reason: e?.message ?? "network error" };
+    return { ok: false, reason: e?.message ?? tr("network error") };
   }
 }

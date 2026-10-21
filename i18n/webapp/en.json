@@ -653,29 +653,9 @@
     "en": "Pair with this server first",
     "ctx": "webapp/lib/appDb.js:180"
   },
-  "~{1} row": {
-    "en": "~{1} row",
-    "ctx": "webapp/lib/appDb.js:281"
-  },
-  "~{1} rows": {
-    "en": "~{1} rows",
-    "ctx": "webapp/lib/appDb.js:281"
-  },
   "No rows": {
     "en": "No rows",
     "ctx": "webapp/lib/appDb.js:286"
-  },
-  "Rows {0}–{1}{2}": {
-    "en": "Rows {0}–{1}{2}",
-    "ctx": "webapp/lib/appDb.js:290"
-  },
-  "{1} · {2} row": {
-    "en": "{1} · {2} row",
-    "ctx": "webapp/lib/appDb.js:303"
-  },
-  "{1} · {2} rows": {
-    "en": "{1} · {2} rows",
-    "ctx": "webapp/lib/appDb.js:303"
   },
   "Your server refused this statement": {
     "en": "Your server refused this statement",
@@ -852,14 +832,6 @@
   "Remove this app?": {
     "en": "Remove this app?",
     "ctx": "webapp/lib/appPlacement.js:347"
-  },
-  " Your {0}.": {
-    "en": " Your {0}.",
-    "ctx": "webapp/lib/appPlacement.js:353"
-  },
-  "This uninstalls {0}{1} and deletes its data there. This can't be undone.{2}": {
-    "en": "This uninstalls {0}{1} and deletes its data there. This can't be undone.{2}",
-    "ctx": "webapp/lib/appPlacement.js:355"
   },
   "The server refused the request. Check this device's clock and try again.": {
     "en": "The server refused the request. Check this device's clock and try again.",
@@ -1144,14 +1116,6 @@
   "Leaving peer backups": {
     "en": "Leaving peer backups",
     "ctx": "webapp/lib/backupPolicy.js:125"
-  },
-  " on {0} server": {
-    "en": " on {0} server",
-    "ctx": "webapp/lib/backupPolicy.js:136"
-  },
-  " on {0} servers": {
-    "en": " on {0} servers",
-    "ctx": "webapp/lib/backupPolicy.js:136"
   },
   "Unlock device and authorize it to join your cloud": {
     "en": "Unlock device and authorize it to join your cloud",
@@ -1727,10 +1691,6 @@
     "en": "Back up your account key",
     "ctx": "webapp/lib/keyfileBackup.js:24"
   },
-  "Anyone with both this file and its passphrase can take over your account and lock you out.": {
-    "en": "Anyone with both this file and its passphrase can take over your account and lock you out.",
-    "ctx": "webapp/index.html"
-  },
   "I understand anyone with this file and passphrase controls my entire account.": {
     "en": "I understand anyone with this file and passphrase controls my entire account.",
     "ctx": "webapp/lib/keyfileBackup.js:30"
@@ -2303,10 +2263,6 @@
     "en": "Size: {0}",
     "ctx": "webapp/lib/provisionProgress.js:243"
   },
-  "My server's setup stopped. Order: {0} Step: {1} ": {
-    "en": "My server's setup stopped. Order: {0} Step: {1} ",
-    "ctx": "webapp/lib/provisionProgress.js:264"
-  },
   "Setup stopped": {
     "en": "Setup stopped",
     "ctx": "webapp/lib/provisionProgress.js:270"
@@ -2350,10 +2306,6 @@
   "in about {0} hours": {
     "en": "in about {0} hours",
     "ctx": "webapp/lib/rateLimited.js:25"
-  },
-  "Too many tries {0}. Try again {1}.": {
-    "en": "Too many tries {0}. Try again {1}.",
-    "ctx": "webapp/lib/rateLimited.js:33"
   },
   "Recovery cancelled — TOTP code is required.": {
     "en": "Recovery cancelled — TOTP code is required.",
@@ -3099,10 +3051,6 @@
     "en": "Last update installed and running.",
     "ctx": "webapp/lib/serverUpdate.js:220"
   },
-  "The last update{0} didn't start cleanly, so the server went back{1} on its own.": {
-    "en": "The last update{0} didn't start cleanly, so the server went back{1} on its own.",
-    "ctx": "webapp/lib/serverUpdate.js:225"
-  },
   "The server refused the last update: {0}": {
     "en": "The server refused the last update: {0}",
     "ctx": "webapp/lib/serverUpdate.js:229"
@@ -3387,14 +3335,6 @@
   "Discard this build?": {
     "en": "Discard this build?",
     "ctx": "webapp/lib/vibeSessions.js:109"
-  },
-  " Its name, \"{0}\", becomes free again.": {
-    "en": " Its name, \"{0}\", becomes free again.",
-    "ctx": "webapp/lib/vibeSessions.js:112"
-  },
-  "This stops the AI and deletes what it has written on your server.{0}": {
-    "en": "This stops the AI and deletes what it has written on your server.{0}",
-    "ctx": "webapp/lib/vibeSessions.js:113"
   },
   "This deletes what was imported or written on your server. Its name, \"{0}\", becomes free again.": {
     "en": "This deletes what was imported or written on your server. Its name, \"{0}\", becomes free again.",
@@ -4026,10 +3966,6 @@
     "en": "audit log not yet available — the daemon's <code>/api/screens/audit-log</code> surface is on the v1-launch checklist (task #34, BFF side pending). Once the daemon exposes the endpoint, every signed event the user has authored will land here.",
     "ctx": "webapp/views/audit-log.js:221",
     "translatable": false
-  },
-  "no events yet{0} — signed actions you take (claiming a URL, granting an app, issuing an invite) will land here with the underlying envelope you can verify yourself.": {
-    "en": "no events yet{0} — signed actions you take (claiming a URL, granting an app, issuing an invite) will land here with the underlying envelope you can verify yourself.",
-    "ctx": "webapp/views/audit-log.js:240"
   },
   "load more": {
     "en": "load more",
@@ -5129,10 +5065,6 @@
     "en": "From {0}, saved {1}: {2}.",
     "ctx": "webapp/views/import-backup.js:304"
   },
-  " Not in this backup: {0}.": {
-    "en": " Not in this backup: {0}.",
-    "ctx": "webapp/views/import-backup.js:305"
-  },
   "Checking the backup…": {
     "en": "Checking the backup…",
     "ctx": "webapp/views/import-backup.js:313"
@@ -5220,10 +5152,6 @@
   "The backup record doesn't match its file. Nothing was restored.": {
     "en": "The backup record doesn't match its file. Nothing was restored.",
     "ctx": "webapp/views/import-backup.js:616"
-  },
-  " Apps: {0}.": {
-    "en": " Apps: {0}.",
-    "ctx": "webapp/views/import-backup.js:620"
   },
   "Get it onto {0} (waiting for this backup)": {
     "en": "Get it onto {0} (waiting for this backup)",
@@ -6357,17 +6285,9 @@
     "en": "Left out (no source to rebuild them from): {0}.",
     "ctx": "webapp/views/server-detail.js:1698"
   },
-  "Download here, or copy the link to open it on another computer: that page asks the Flagship app on your phone to approve. ": {
-    "en": "Download here, or copy the link to open it on another computer: that page asks the Flagship app on your phone to approve. ",
-    "ctx": "webapp/views/server-detail.js:1706"
-  },
   "The link works until {0}; a download that stops picks up where it left off.": {
     "en": "The link works until {0}; a download that stops picks up where it left off.",
     "ctx": "webapp/views/server-detail.js:1707"
-  },
-  "Download here, or copy the link to open it on another computer: that page asks the Flagship app on your phone to approve. {0}": {
-    "en": "Download here, or copy the link to open it on another computer: that page asks the Flagship app on your phone to approve. {0}",
-    "ctx": "webapp/views/server-detail.js:1706"
   },
   "Download started": {
     "en": "Download started",
@@ -6485,10 +6405,6 @@
     "en": "Freeze old server and hand off",
     "ctx": "webapp/views/server-detail.js:2254"
   },
-  "About {0} to move at {1}/s between the servers. ": {
-    "en": "About {0} to move at {1}/s between the servers. ",
-    "ctx": "webapp/views/server-detail.js:2284"
-  },
   "Your apps pause for {0}: they show \"moving to a new server\" until the new one takes over.": {
     "en": "Your apps pause for {0}: they show \"moving to a new server\" until the new one takes over.",
     "ctx": "webapp/views/server-detail.js:2285"
@@ -6568,10 +6484,6 @@
   "Server revoked. It can't connect or unlock until you un-revoke it.": {
     "en": "Server revoked. It can't connect or unlock until you un-revoke it.",
     "ctx": "webapp/views/server-detail.js:2632"
-  },
-  "Share this server": {
-    "en": "Share this server",
-    "ctx": "webapp/index.html"
   },
   "Shared with": {
     "en": "Shared with",
@@ -6677,14 +6589,6 @@
     "en": "Remove {0}?",
     "ctx": "webapp/views/server-sharing.js:251"
   },
-  " Their copy of the disk key is deleted, but a copy they already used can't be taken back.": {
-    "en": " Their copy of the disk key is deleted, but a copy they already used can't be taken back.",
-    "ctx": "webapp/views/server-sharing.js:252"
-  },
-  "{0} loses access to {1} right away.{2}": {
-    "en": "{0} loses access to {1} right away.{2}",
-    "ctx": "webapp/views/server-sharing.js:252"
-  },
   "Removed {0}": {
     "en": "Removed {0}",
     "ctx": "webapp/views/server-sharing.js:256"
@@ -6700,10 +6604,6 @@
   "Let {0} approve start-up?": {
     "en": "Let {0} approve start-up?",
     "ctx": "webapp/views/server-sharing.js:290"
-  },
-  "{0} They can unlock {1} when it starts. {2}": {
-    "en": "{0} They can unlock {1} when it starts. {2}",
-    "ctx": "webapp/views/server-sharing.js:291"
   },
   "Let {0} see app data?": {
     "en": "Let {0} see app data?",
@@ -6774,17 +6674,9 @@
     "en": "They'll {0} it with their own account.",
     "ctx": "webapp/views/server-sharing.js:440"
   },
-  "Send this link to {0}. It works once and expires in 7 days. ": {
-    "en": "Send this link to {0}. It works once and expires in 7 days. ",
-    "ctx": "webapp/views/server-sharing.js:526"
-  },
   "When they open it, their phone shows a 6-digit code: check it with them here before they get access.": {
     "en": "When they open it, their phone shows a 6-digit code: check it with them here before they get access.",
     "ctx": "webapp/views/server-sharing.js:527"
-  },
-  "{0}When they open it, their phone shows a 6-digit code: check it with them here before they get access.": {
-    "en": "{0}When they open it, their phone shows a 6-digit code: check it with them here before they get access.",
-    "ctx": "webapp/views/server-sharing.js:526"
   },
   "This device isn't set up on your account yet. Sign in to your account on it again.": {
     "en": "This device isn't set up on your account yet. Sign in to your account on it again.",
@@ -6982,14 +6874,6 @@
   "Creating…": {
     "en": "Creating…",
     "ctx": "webapp/views/service-access.js:479"
-  },
-  "Invite for": {
-    "en": "Invite for",
-    "ctx": "webapp/views/service-access.js:519"
-  },
-  "{0} {1} created.{2}": {
-    "en": "{0} {1} created.{2}",
-    "ctx": "webapp/views/service-access.js:519"
   },
   "That doesn't look like an acceptance code. Paste the whole thing.": {
     "en": "That doesn't look like an acceptance code. Paste the whole thing.",
@@ -7329,14 +7213,6 @@
     "en": "Couldn't copy — long-press to copy manually.",
     "ctx": "webapp/views/service-detail.js:1156"
   },
-  "This will update all the links to this service, replacing \"{0}\" ": {
-    "en": "This will update all the links to this service, replacing \"{0}\" ",
-    "ctx": "webapp/views/service-detail.js:1170"
-  },
-  "Replace access URLs. {0}with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):": {
-    "en": "Replace access URLs. {0}with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):",
-    "ctx": "webapp/views/service-detail.js:1169"
-  },
   "Stem must be a DNS label: lowercase, [a-z0-9-], 1–40 chars, no leading/trailing hyphen.": {
     "en": "Stem must be a DNS label: lowercase, [a-z0-9-], 1–40 chars, no leading/trailing hyphen.",
     "ctx": "webapp/views/service-detail.js:1181"
@@ -7662,14 +7538,6 @@
     "en": "You left {0}",
     "ctx": "webapp/views/shared-server.js:424"
   },
-  "Group name ": {
-    "en": "Group name ",
-    "ctx": "webapp/views/shared-server.js:485"
-  },
-  "Name ": {
-    "en": "Name ",
-    "ctx": "webapp/views/shared-server.js:485"
-  },
   "Invite created": {
     "en": "Invite created",
     "ctx": "webapp/views/shared-server.js:527"
@@ -7729,10 +7597,6 @@
   "Take over a box": {
     "en": "Take over a box",
     "ctx": "webapp/views/transfer-claim.js:64"
-  },
-  "Someone is handing you their box. Paste the transfer link they created (Server → Transfer to another account){0}. You'll become the new owner of the box and all its contents.": {
-    "en": "Someone is handing you their box. Paste the transfer link they created (Server → Transfer to another account){0}. You'll become the new owner of the box and all its contents.",
-    "ctx": "webapp/views/transfer-claim.js:65"
   },
   "Paste the transfer link or code…": {
     "en": "Paste the transfer link or code…",
@@ -7809,10 +7673,6 @@
   "Remove managed name": {
     "en": "Remove managed name",
     "ctx": "webapp/views/trusted-devices.js:166"
-  },
-  "{0} · Device {1} · added {2} {3}": {
-    "en": "{0} · Device {1} · added {2} {3}",
-    "ctx": "webapp/views/trusted-devices.js:141"
   },
   "Lost a device or worried about a stolen one? These actions rotate your account's identity keys, disconnecting every device on this account in one shot.": {
     "en": "Lost a device or worried about a stolen one? These actions rotate your account's identity keys, disconnecting every device on this account in one shot.",
@@ -8327,10 +8187,6 @@
     "en": "Your account is open — this step is optional. Compose your first server here (you can add more later). The webapp downloads a signed recipe; open it in Flagship Studio to write the installer USB. Get Studio at <code>flagshipserver.com/studio</code>.",
     "ctx": "webapp/views/wizard.js:363"
   },
-  "Add a server": {
-    "en": "Add a server",
-    "ctx": "webapp/index.html"
-  },
   "You're all set. Explore your server, or finish here — you can add services any time.": {
     "en": "You're all set. Explore your server, or finish here — you can add services any time.",
     "ctx": "webapp/views/wizard.js:376"
@@ -8538,14 +8394,6 @@
     "en": "Advanced — connect to an existing server manually",
     "ctx": "webapp/index.html"
   },
-  "Most people just tap": {
-    "en": "Most people just tap",
-    "ctx": "webapp/index.html"
-  },
-  "above — new\n              servers pair automatically. Use these only to connect this\n              browser to a server you already run.": {
-    "en": "above — new\n              servers pair automatically. Use these only to connect this\n              browser to a server you already run.",
-    "ctx": "webapp/index.html"
-  },
   "Enter a server URL": {
     "en": "Enter a server URL",
     "ctx": "webapp/index.html"
@@ -8650,10 +8498,6 @@
     "en": "Open secured sessions",
     "ctx": "webapp/index.html"
   },
-  "BACKUP & PEERS": {
-    "en": "BACKUP & PEERS",
-    "ctx": "webapp/index.html"
-  },
   "Peer-backup": {
     "en": "Peer-backup",
     "ctx": "webapp/index.html"
@@ -8702,10 +8546,6 @@
     "en": "Your server runs on your own hardware and terminates its own TLS,\n            so flagshipserver.com cannot read your content — it only relays\n            encrypted traffic and holds your account identity. Your account key\n            never leaves your devices.",
     "ctx": "webapp/index.html"
   },
-  "Read the security disclosure →": {
-    "en": "Read the security disclosure →",
-    "ctx": "webapp/index.html"
-  },
   "About Flagship": {
     "en": "About Flagship",
     "ctx": "webapp/index.html"
@@ -8731,17 +8571,8 @@
     "en": "Home",
     "ctx": "webapp/index.html"
   },
-  "flagshipserver.com": {
-    "en": "flagshipserver.com",
-    "ctx": "webapp/index.html",
-    "translatable": false
-  },
   "Report an issue": {
     "en": "Report an issue",
-    "ctx": "webapp/index.html"
-  },
-  "Security report": {
-    "en": "Security report",
     "ctx": "webapp/index.html"
   },
   "Pod pairing": {
@@ -8835,16 +8666,6 @@
   },
   "plant-tracker": {
     "en": "plant-tracker",
-    "ctx": "webapp/index.html",
-    "translatable": false
-  },
-  "https://": {
-    "en": "https://",
-    "ctx": "webapp/index.html",
-    "translatable": false
-  },
-  "<name>": {
-    "en": "<name>",
     "ctx": "webapp/index.html",
     "translatable": false
   },
@@ -9017,11 +8838,6 @@
     "en": "From the repo's name",
     "ctx": "webapp/index.html"
   },
-  "<repo name>": {
-    "en": "<repo name>",
-    "ctx": "webapp/index.html",
-    "translatable": false
-  },
   "Build a service from your own IDE (Claude Code, Cursor, VS Code or Cline) using your own AI subscription. Your box runs a small MCP server, scoped to this one build, that exposes only safe build tools (write files, validate, request a secret value-free, deploy).": {
     "en": "Build a service from your own IDE (Claude Code, Cursor, VS Code or Cline) using your own AI subscription. Your box runs a small MCP server, scoped to this one build, that exposes only safe build tools (write files, validate, request a secret value-free, deploy).",
     "ctx": "webapp/index.html"
@@ -9175,26 +8991,6 @@
     "en": "Encrypt disk",
     "ctx": "webapp/index.html"
   },
-  "On by default: the disk is encrypted and unlocks over the network at boot, so your data is unreadable if the box is stolen. Turn this off only for a box that": {
-    "en": "On by default: the disk is encrypted and unlocks over the network at boot, so your data is unreadable if the box is stolen. Turn this off only for a box that",
-    "ctx": "webapp/index.html"
-  },
-  "can't keep a network connection at boot": {
-    "en": "can't keep a network connection at boot",
-    "ctx": "webapp/index.html"
-  },
-  "(e.g. Wi-Fi-only) — it'll boot without needing the network, but the disk is then": {
-    "en": "(e.g. Wi-Fi-only) — it'll boot without needing the network, but the disk is then",
-    "ctx": "webapp/index.html"
-  },
-  "not encrypted": {
-    "en": "not encrypted",
-    "ctx": "webapp/index.html"
-  },
-  ", which is less safe.": {
-    "en": ", which is less safe.",
-    "ctx": "webapp/index.html"
-  },
   "Advanced mode": {
     "en": "Advanced mode",
     "ctx": "webapp/index.html"
@@ -9284,14 +9080,6 @@
     "en": "Add a device",
     "ctx": "webapp/index.html"
   },
-  "For your own phones and tablets. To give another person access, use": {
-    "en": "For your own phones and tablets. To give another person access, use",
-    "ctx": "webapp/index.html"
-  },
-  "on the server's page.": {
-    "en": "on the server's page.",
-    "ctx": "webapp/index.html"
-  },
   "Have the new device scan this code (or open the link). Compare the match code on both screens before you confirm.": {
     "en": "Have the new device scan this code (or open the link). Compare the match code on both screens before you confirm.",
     "ctx": "webapp/index.html"
@@ -9308,10 +9096,6 @@
     "en": "CLOUD RECOVERY",
     "ctx": "webapp/index.html"
   },
-  "Re-attach progress": {
-    "en": "Re-attach progress",
-    "ctx": "webapp/index.html"
-  },
   "See per-app re-anchoring after recovery.": {
     "en": "See per-app re-anchoring after recovery.",
     "ctx": "webapp/index.html"
@@ -9324,42 +9108,12 @@
     "en": "Store an encrypted copy of your account key for a new browser.",
     "ctx": "webapp/index.html"
   },
-  "Import backup file": {
-    "en": "Import backup file",
-    "ctx": "webapp/index.html"
-  },
-  "Choose your": {
-    "en": "Choose your",
-    "ctx": "webapp/index.html"
-  },
-  ".flagshipkey": {
-    "en": ".flagshipkey",
-    "ctx": "webapp/index.html",
-    "translatable": false
-  },
-  "file": {
-    "en": "file",
-    "ctx": "webapp/index.html",
-    "translatable": false
-  },
-  "How this works": {
-    "en": "How this works",
-    "ctx": "webapp/index.html"
-  },
   "Recovery requires both your recovery passphrase and access to the passkey stored by your browser or password manager. Together they unlock the encrypted account key; Flagship cannot read it or reset your passphrase.": {
     "en": "Recovery requires both your recovery passphrase and access to the passkey stored by your browser or password manager. Together they unlock the encrypted account key; Flagship cannot read it or reset your passphrase.",
     "ctx": "webapp/index.html"
   },
   "Advanced: legacy wrapped-UMK export": {
     "en": "Advanced: legacy wrapped-UMK export",
-    "ctx": "webapp/index.html"
-  },
-  "Older device-to-device transfer of the raw wrapped key (same passphrase on both browsers). Prefer the": {
-    "en": "Older device-to-device transfer of the raw wrapped key (same passphrase on both browsers). Prefer the",
-    "ctx": "webapp/index.html"
-  },
-  "backup above.": {
-    "en": "backup above.",
     "ctx": "webapp/index.html"
   },
   "Export wrapped UMK": {
@@ -9412,40 +9166,12 @@
     "en": "This is the last device on this account and there is no cloud recovery, so removing it ends the account. There is no undo — no passkey, no other device, no reset.",
     "ctx": "webapp/index.html"
   },
-  "Your username is": {
-    "en": "Your username is",
-    "ctx": "webapp/index.html"
-  },
-  "permanently lost": {
-    "en": "permanently lost",
-    "ctx": "webapp/index.html"
-  },
-  "and may be claimed by someone else.": {
-    "en": "and may be claimed by someone else.",
-    "ctx": "webapp/index.html"
-  },
-  "Your servers stop being reachable and manageable. If you want to keep one,": {
-    "en": "Your servers stop being reachable and manageable. If you want to keep one,",
-    "ctx": "webapp/index.html"
-  },
-  "transfer it first": {
-    "en": "transfer it first",
-    "ctx": "webapp/index.html"
-  },
-  "from its server page, then come back.": {
-    "en": "from its server page, then come back.",
-    "ctx": "webapp/index.html"
-  },
   "The account key on this device is erased.": {
     "en": "The account key on this device is erased.",
     "ctx": "webapp/index.html"
   },
   "Ask all my servers to delete their content. Offline servers act on next boot. Leave off to just orphan them — their sealed data stays on disk but goes dark.": {
     "en": "Ask all my servers to delete their content. Offline servers act on next boot. Leave off to just orphan them — their sealed data stays on disk but goes dark.",
-    "ctx": "webapp/index.html"
-  },
-  "To confirm, type your username": {
-    "en": "To confirm, type your username",
     "ctx": "webapp/index.html"
   },
   "username": {
@@ -9464,5 +9190,1256 @@
   "Primary": {
     "en": "Primary",
     "ctx": "webapp/index.html"
+  },
+  "startup failed": {
+    "en": "startup failed",
+    "ctx": "webapp/app.js:849"
+  },
+  "account deleted": {
+    "en": "account deleted",
+    "ctx": "webapp/lib/accountDeletion.js:241"
+  },
+  "preparing {0}": {
+    "en": "preparing {0}",
+    "ctx": "webapp/lib/activeOperations.js:51"
+  },
+  "building {0} on {1}": {
+    "en": "building {0} on {1}",
+    "ctx": "webapp/lib/activeOperations.js:52"
+  },
+  "building {0}": {
+    "en": "building {0}",
+    "ctx": "webapp/lib/activeOperations.js:53"
+  },
+  "start the line with \"allow\" or \"deny\"": {
+    "en": "start the line with \"allow\" or \"deny\"",
+    "ctx": "webapp/lib/appAccess.js:42"
+  },
+  "say what to allow or deny, e.g. \"allow example.com\"": {
+    "en": "say what to allow or deny, e.g. \"allow example.com\"",
+    "ctx": "webapp/lib/appAccess.js:43"
+  },
+  "one host per line": {
+    "en": "one host per line",
+    "ctx": "webapp/lib/appAccess.js:44"
+  },
+  "write the host only, without http:// or https://": {
+    "en": "write the host only, without http:// or https://",
+    "ctx": "webapp/lib/appAccess.js:45"
+  },
+  "write the host only, without a path": {
+    "en": "write the host only, without a path",
+    "ctx": "webapp/lib/appAccess.js:46"
+  },
+  "write the host only, without a port": {
+    "en": "write the host only, without a port",
+    "ctx": "webapp/lib/appAccess.js:47"
+  },
+  "write \"all\" instead of \"*\"": {
+    "en": "write \"all\" instead of \"*\"",
+    "ctx": "webapp/lib/appAccess.js:49"
+  },
+  "a * may only start a host, as in *.example.com": {
+    "en": "a * may only start a host, as in *.example.com",
+    "ctx": "webapp/lib/appAccess.js:50"
+  },
+  "an access list can have at most {0} rules": {
+    "en": "an access list can have at most {0} rules",
+    "ctx": "webapp/lib/appAccess.js:51"
+  },
+  "{0} rules": {
+    "en": "{0} rules",
+    "ctx": "webapp/lib/appAccess.js:320"
+  },
+  "{0} wants to reach {1}": {
+    "en": "{0} wants to reach {1}",
+    "ctx": "webapp/lib/appAccess.js:324"
+  },
+  "{0} suggests an access list": {
+    "en": "{0} suggests an access list",
+    "ctx": "webapp/lib/appAccess.js:336"
+  },
+  "{0} can now reach {1}": {
+    "en": "{0} can now reach {1}",
+    "ctx": "webapp/lib/appAccess.js:341"
+  },
+  "{0} won't reach {1}": {
+    "en": "{0} won't reach {1}",
+    "ctx": "webapp/lib/appAccess.js:341"
+  },
+  "unknown": {
+    "en": "unknown",
+    "ctx": "webapp/lib/appPlacement.js:443"
+  },
+  "Checking your servers…": {
+    "en": "Checking your servers…",
+    "ctx": "webapp/lib/appPlacement.js:451"
+  },
+  "its internet firewall isn't running": {
+    "en": "its internet firewall isn't running",
+    "ctx": "webapp/lib/appPlacement.js:737"
+  },
+  "unknown reason": {
+    "en": "unknown reason",
+    "ctx": "webapp/lib/appPlacement.js:745"
+  },
+  "{0} · up to {1}": {
+    "en": "{0} · up to {1}",
+    "ctx": "webapp/lib/backupPolicy.js:98"
+  },
+  "{0}m ago": {
+    "en": "{0}m ago",
+    "ctx": "webapp/lib/dateFormat.js:44"
+  },
+  "{0}h ago": {
+    "en": "{0}h ago",
+    "ctx": "webapp/lib/dateFormat.js:45"
+  },
+  "in {0}m": {
+    "en": "in {0}m",
+    "ctx": "webapp/lib/dateFormat.js:47"
+  },
+  "in {0}h": {
+    "en": "in {0}h",
+    "ctx": "webapp/lib/dateFormat.js:48"
+  },
+  "Edit {0}": {
+    "en": "Edit {0}",
+    "ctx": "webapp/lib/editService.js:23"
+  },
+  "{0} free credits left": {
+    "en": "{0} free credits left",
+    "ctx": "webapp/lib/freeAi.js:77"
+  },
+  "{0} · {1} added each week": {
+    "en": "{0} · {1} added each week",
+    "ctx": "webapp/lib/freeAi.js:79"
+  },
+  "12 characters minimum": {
+    "en": "12 characters minimum",
+    "ctx": "webapp/lib/keyfileBackup.js:29"
+  },
+  "passphrases don't match": {
+    "en": "passphrases don't match",
+    "ctx": "webapp/lib/localPassphrase.js:39"
+  },
+  "5 minutes (tighten)": {
+    "en": "5 minutes (tighten)",
+    "ctx": "webapp/lib/lockAndPower.js:230"
+  },
+  "{0} left": {
+    "en": "{0} left",
+    "ctx": "webapp/lib/lockAndPower.js:251"
+  },
+  "enter a 6-digit code or a recovery code": {
+    "en": "enter a 6-digit code or a recovery code",
+    "ctx": "webapp/lib/loginTakeover.js:138"
+  },
+  "Device {0}": {
+    "en": "Device {0}",
+    "ctx": "webapp/lib/memberRoles.js:258"
+  },
+  "also in {0}": {
+    "en": "also in {0}",
+    "ctx": "webapp/lib/memberRoles.js:322"
+  },
+  "about a minute": {
+    "en": "about a minute",
+    "ctx": "webapp/lib/migrateArchive.js:31"
+  },
+  "about {0} minutes": {
+    "en": "about {0} minutes",
+    "ctx": "webapp/lib/migrateArchive.js:33"
+  },
+  "about {0} hours": {
+    "en": "about {0} hours",
+    "ctx": "webapp/lib/migrateArchive.js:34"
+  },
+  "capabilities unknown": {
+    "en": "capabilities unknown",
+    "ctx": "webapp/lib/modelMenu.js:18"
+  },
+  "Advisory {0}": {
+    "en": "Advisory {0}",
+    "ctx": "webapp/lib/noticeUi.js:42"
+  },
+  "last proof {0}": {
+    "en": "last proof {0}",
+    "ctx": "webapp/lib/peerBackup.js:163"
+  },
+  "{0} · keeps {1} daily and {2} weekly": {
+    "en": "{0} · keeps {1} daily and {2} weekly",
+    "ctx": "webapp/lib/savedBackups.js:134"
+  },
+  "the backup couldn't be made": {
+    "en": "the backup couldn't be made",
+    "ctx": "webapp/lib/savedBackups.js:151"
+  },
+  "{0}: restored": {
+    "en": "{0}: restored",
+    "ctx": "webapp/lib/serverArchive.js:275"
+  },
+  "{0}: skipped ({1})": {
+    "en": "{0}: skipped ({1})",
+    "ctx": "webapp/lib/serverArchive.js:276"
+  },
+  "it couldn't be restored": {
+    "en": "it couldn't be restored",
+    "ctx": "webapp/lib/serverArchive.js:277"
+  },
+  "{0}: restoring…": {
+    "en": "{0}: restoring…",
+    "ctx": "webapp/lib/serverArchive.js:278"
+  },
+  "{0}: waiting": {
+    "en": "{0}: waiting",
+    "ctx": "webapp/lib/serverArchive.js:279"
+  },
+  "{0} used": {
+    "en": "{0} used",
+    "ctx": "webapp/lib/serverMonitoring.js:76"
+  },
+  "shared this server with {0}": {
+    "en": "shared this server with {0}",
+    "ctx": "webapp/lib/serverShares.js:457"
+  },
+  "changed what {0} can do": {
+    "en": "changed what {0} can do",
+    "ctx": "webapp/lib/serverShares.js:458"
+  },
+  "removed {0}": {
+    "en": "removed {0}",
+    "ctx": "webapp/lib/serverShares.js:459"
+  },
+  "started building an app with AI": {
+    "en": "started building an app with AI",
+    "ctx": "webapp/lib/serverShares.js:461"
+  },
+  "answered the AI": {
+    "en": "answered the AI",
+    "ctx": "webapp/lib/serverShares.js:462"
+  },
+  "changed {0}'s internet access": {
+    "en": "changed {0}'s internet access",
+    "ctx": "webapp/lib/serverShares.js:463"
+  },
+  "dismissed an internet request from {0}": {
+    "en": "dismissed an internet request from {0}",
+    "ctx": "webapp/lib/serverShares.js:464"
+  },
+  "accepted an update to {0}": {
+    "en": "accepted an update to {0}",
+    "ctx": "webapp/lib/serverShares.js:465"
+  },
+  "changed data in {0}": {
+    "en": "changed data in {0}",
+    "ctx": "webapp/lib/serverShares.js:466"
+  },
+  "read data in {0}": {
+    "en": "read data in {0}",
+    "ctx": "webapp/lib/serverShares.js:467"
+  },
+  "the server was no longer on the version the update was made for. Send it again.": {
+    "en": "the server was no longer on the version the update was made for. Send it again.",
+    "ctx": "webapp/lib/serverUpdate.js:204"
+  },
+  "it couldn't download or build the new version. Nothing changed.": {
+    "en": "it couldn't download or build the new version. Nothing changed.",
+    "ctx": "webapp/lib/serverUpdate.js:205"
+  },
+  "the request was too old. Send it again.": {
+    "en": "the request was too old. Send it again.",
+    "ctx": "webapp/lib/serverUpdate.js:207"
+  },
+  "the request was for a different server.": {
+    "en": "the request was for a different server.",
+    "ctx": "webapp/lib/serverUpdate.js:208"
+  },
+  "network error": {
+    "en": "network error",
+    "ctx": "webapp/lib/state.js:129"
+  },
+  "{0} scopes": {
+    "en": "{0} scopes",
+    "ctx": "webapp/lib/usersCheck.js:120"
+  },
+  "an unknown date": {
+    "en": "an unknown date",
+    "ctx": "webapp/views/account-security.js:89"
+  },
+  "Nothing has happened yet.": {
+    "en": "Nothing has happened yet.",
+    "ctx": "webapp/views/activity.js:199"
+  },
+  "{0}: access list": {
+    "en": "{0}: access list",
+    "ctx": "webapp/views/app-access.js:56"
+  },
+  "view": {
+    "en": "view",
+    "ctx": "webapp/views/app-db.js:77"
+  },
+  "you (this device)": {
+    "en": "you (this device)",
+    "ctx": "webapp/views/audit-log.js:116"
+  },
+  "loading audit log…": {
+    "en": "loading audit log…",
+    "ctx": "webapp/views/audit-log.js:185"
+  },
+  "loading event…": {
+    "en": "loading event…",
+    "ctx": "webapp/views/audit-log.js:270"
+  },
+  "no tabs open for this app": {
+    "en": "no tabs open for this app",
+    "ctx": "webapp/views/browser-viewer.js:48"
+  },
+  "streaming tab {0}": {
+    "en": "streaming tab {0}",
+    "ctx": "webapp/views/browser-viewer.js:93"
+  },
+  "stream closed": {
+    "en": "stream closed",
+    "ctx": "webapp/views/browser-viewer.js:106"
+  },
+  "no flagship.app.json": {
+    "en": "no flagship.app.json",
+    "ctx": "webapp/views/build-git.js:133"
+  },
+  "{0} will be removed from this browser. Builds that are already running keep working.": {
+    "en": "{0} will be removed from this browser. Builds that are already running keep working.",
+    "ctx": "webapp/views/build-key.js:86"
+  },
+  "Last used": {
+    "en": "Last used",
+    "ctx": "webapp/views/build-key.js:146"
+  },
+  "config copied": {
+    "en": "config copied",
+    "ctx": "webapp/views/build-mcp.js:137"
+  },
+  "command copied": {
+    "en": "command copied",
+    "ctx": "webapp/views/build-mcp.js:138"
+  },
+  "set ✓": {
+    "en": "set ✓",
+    "ctx": "webapp/views/build-mcp.js:174"
+  },
+  "needs you": {
+    "en": "needs you",
+    "ctx": "webapp/views/build-mcp.js:175"
+  },
+  "{0} active": {
+    "en": "{0} active",
+    "ctx": "webapp/views/build-source.js:78"
+  },
+  "{0}h {1}m left": {
+    "en": "{0}h {1}m left",
+    "ctx": "webapp/views/companion-dock.js:40"
+  },
+  "{0}m left": {
+    "en": "{0}m left",
+    "ctx": "webapp/views/companion-dock.js:41"
+  },
+  "{0}m {1}s left": {
+    "en": "{0}m {1}s left",
+    "ctx": "webapp/views/companion-requests.js:59"
+  },
+  "{0}s left": {
+    "en": "{0}s left",
+    "ctx": "webapp/views/companion-requests.js:60"
+  },
+  "no saved drafts yet": {
+    "en": "no saved drafts yet",
+    "ctx": "webapp/views/create-server.js:106"
+  },
+  "auto-unlock on": {
+    "en": "auto-unlock on",
+    "ctx": "webapp/views/home.js:519"
+  },
+  "phone-tap only": {
+    "en": "phone-tap only",
+    "ctx": "webapp/views/home.js:520"
+  },
+  "{0} and {1} more": {
+    "en": "{0} and {1} more",
+    "ctx": "webapp/views/home.js:596"
+  },
+  "standing in for {0}": {
+    "en": "standing in for {0}",
+    "ctx": "webapp/views/home.js:596"
+  },
+  "cert renews {0}": {
+    "en": "cert renews {0}",
+    "ctx": "webapp/views/home.js:602"
+  },
+  "signed in as {0}": {
+    "en": "signed in as {0}",
+    "ctx": "webapp/views/home.js:1446"
+  },
+  "cancel the order": {
+    "en": "cancel the order",
+    "ctx": "webapp/views/home.js:1852"
+  },
+  "delete the server": {
+    "en": "delete the server",
+    "ctx": "webapp/views/home.js:1852"
+  },
+  "+ Add/Restore server": {
+    "en": "+ Add/Restore server",
+    "ctx": "webapp/views/import-backup.js:45"
+  },
+  "asks your phone at every start": {
+    "en": "asks your phone at every start",
+    "ctx": "webapp/views/import-backup.js:171"
+  },
+  "unlocks on its own after the first start": {
+    "en": "unlocks on its own after the first start",
+    "ctx": "webapp/views/import-backup.js:171"
+  },
+  "disk not encrypted": {
+    "en": "disk not encrypted",
+    "ctx": "webapp/views/import-backup.js:172"
+  },
+  "disk encrypted": {
+    "en": "disk encrypted",
+    "ctx": "webapp/views/import-backup.js:172"
+  },
+  "the backup goes as soon as the server is up. If you leave, {0} keeps waiting and shows on Home with Send the backup.": {
+    "en": "the backup goes as soon as the server is up. If you leave, {0} keeps waiting and shows on Home with Send the backup.",
+    "ctx": "webapp/views/import-backup.js:420"
+  },
+  "{0} is getting the backup from other servers…": {
+    "en": "{0} is getting the backup from other servers…",
+    "ctx": "webapp/views/import-backup.js:707"
+  },
+  "it gets the backup as soon as the server is up. If you leave, {0} keeps waiting and shows on Home.": {
+    "en": "it gets the backup as soon as the server is up. If you leave, {0} keeps waiting and shows on Home.",
+    "ctx": "webapp/views/import-backup.js:723"
+  },
+  "waiting for your box to phone home — it may not have booted yet": {
+    "en": "waiting for your box to phone home — it may not have booted yet",
+    "ctx": "webapp/views/install-progress.js:46"
+  },
+  "No browser sessions. Browsers you open through Remote show here.": {
+    "en": "No browser sessions. Browsers you open through Remote show here.",
+    "ctx": "webapp/views/paired-sessions.js:33"
+  },
+  "this device": {
+    "en": "this device",
+    "ctx": "webapp/views/paired-sessions.js:40"
+  },
+  "can't revoke self": {
+    "en": "can't revoke self",
+    "ctx": "webapp/views/paired-sessions.js:45"
+  },
+  "None yet. Pieces are placed once your newest backup is ready and enough other servers can hold it.": {
+    "en": "None yet. Pieces are placed once your newest backup is ready and enough other servers can hold it.",
+    "ctx": "webapp/views/peer-backup.js:51"
+  },
+  "Not paired with any server yet": {
+    "en": "Not paired with any server yet",
+    "ctx": "webapp/views/pod-pair.js:65"
+  },
+  "no recovery has run on this daemon yet": {
+    "en": "no recovery has run on this daemon yet",
+    "ctx": "webapp/views/post-recovery.js:50"
+  },
+  "Failed": {
+    "en": "Failed",
+    "ctx": "webapp/views/post-recovery.js:57"
+  },
+  "no apps walked": {
+    "en": "no apps walked",
+    "ctx": "webapp/views/post-recovery.js:74"
+  },
+  "ACTIVE": {
+    "en": "ACTIVE",
+    "ctx": "webapp/views/profiles.js:62"
+  },
+  "no username yet": {
+    "en": "no username yet",
+    "ctx": "webapp/views/recovery.js:142"
+  },
+  "Unknown": {
+    "en": "Unknown",
+    "ctx": "webapp/views/secured-sessions.js:34"
+  },
+  "No secured sessions. Sign a browser in to a private app with Process URL, then it shows up here.": {
+    "en": "No secured sessions. Sign a browser in to a private app with Process URL, then it shows up here.",
+    "ctx": "webapp/views/secured-sessions.js:42"
+  },
+  "{0} min ago": {
+    "en": "{0} min ago",
+    "ctx": "webapp/views/server-detail.js:265"
+  },
+  "{0} h ago": {
+    "en": "{0} h ago",
+    "ctx": "webapp/views/server-detail.js:267"
+  },
+  "{0} days ago": {
+    "en": "{0} days ago",
+    "ctx": "webapp/views/server-detail.js:268"
+  },
+  "not ranked yet": {
+    "en": "not ranked yet",
+    "ctx": "webapp/views/server-detail.js:781"
+  },
+  "{0} (no longer installed)": {
+    "en": "{0} (no longer installed)",
+    "ctx": "webapp/views/server-detail.js:965"
+  },
+  "(journal is empty)": {
+    "en": "(journal is empty)",
+    "ctx": "webapp/views/server-detail.js:1057"
+  },
+  "{0} sent": {
+    "en": "{0} sent",
+    "ctx": "webapp/views/server-detail.js:1136"
+  },
+  "Group name": {
+    "en": "Group name",
+    "ctx": "webapp/views/service-access.js:312"
+  },
+  "Couldn't load roles from your server.": {
+    "en": "Couldn't load roles from your server.",
+    "ctx": "webapp/views/service-access.js:704"
+  },
+  "Couldn't load ranks from your server.": {
+    "en": "Couldn't load ranks from your server.",
+    "ctx": "webapp/views/service-access.js:812"
+  },
+  "Your server doesn't list this account's devices yet.": {
+    "en": "Your server doesn't list this account's devices yet.",
+    "ctx": "webapp/views/service-access.js:817"
+  },
+  "no stores": {
+    "en": "no stores",
+    "ctx": "webapp/views/service-detail.js:210"
+  },
+  "{0} requests": {
+    "en": "{0} requests",
+    "ctx": "webapp/views/service-detail.js:377"
+  },
+  "{0} tables": {
+    "en": "{0} tables",
+    "ctx": "webapp/views/service-detail.js:564"
+  },
+  "No env vars set yet.": {
+    "en": "No env vars set yet.",
+    "ctx": "webapp/views/service-env.js:68"
+  },
+  "unlock first": {
+    "en": "unlock first",
+    "ctx": "webapp/views/settings.js:110"
+  },
+  "Add your own key": {
+    "en": "Add your own key",
+    "ctx": "webapp/views/settings.js:252"
+  },
+  "not allowed yet": {
+    "en": "not allowed yet",
+    "ctx": "webapp/views/settings.js:338"
+  },
+  "{0} is unlocking": {
+    "en": "{0} is unlocking",
+    "ctx": "webapp/views/shared-server.js:620"
+  },
+  "Collected {0}": {
+    "en": "Collected {0}",
+    "ctx": "webapp/views/shared-server.js:656"
+  },
+  "{0} · Device {1}": {
+    "en": "{0} · Device {1}",
+    "ctx": "webapp/views/trusted-devices.js:79"
+  },
+  "{0}d ago": {
+    "en": "{0}d ago",
+    "ctx": "webapp/views/trusted-devices.js:89"
+  },
+  "Unknown step — finishing wizard.": {
+    "en": "Unknown step — finishing wizard.",
+    "ctx": "webapp/views/wizard.js:370"
+  },
+  "<a href=\"https://flagshipserver.com/\" target=\"_blank\" rel=\"noopener\">flagshipserver.com</a>": {
+    "en": "<a href=\"https://flagshipserver.com/\" target=\"_blank\" rel=\"noopener\">flagshipserver.com</a>",
+    "ctx": "webapp/index.html",
+    "translatable": false
+  },
+  "<a href=\"https://flagshipserver.com/security#report\" target=\"_blank\" rel=\"noopener\">Security report</a>": {
+    "en": "<a href=\"https://flagshipserver.com/security#report\" target=\"_blank\" rel=\"noopener\">Security report</a>",
+    "ctx": "webapp/index.html"
+  },
+  "https://<strong class=\"vc-address-name\">&lt;name&gt;</strong>": {
+    "en": "https://<strong class=\"vc-address-name\">&lt;name&gt;</strong>",
+    "ctx": "webapp/index.html",
+    "translatable": false
+  },
+  "https://<strong class=\"vc-address-name\">&lt;repo name&gt;</strong>": {
+    "en": "https://<strong class=\"vc-address-name\">&lt;repo name&gt;</strong>",
+    "ctx": "webapp/index.html",
+    "translatable": false
+  },
+  "On by default: the disk is encrypted and unlocks over the network at boot, so your data is unreadable if the box is stolen. Turn this off only for a box that <strong>can't keep a network connection at boot</strong> (e.g. Wi-Fi-only) — it'll boot without needing the network, but the disk is then <strong>not encrypted</strong>, which is less safe.": {
+    "en": "On by default: the disk is encrypted and unlocks over the network at boot, so your data is unreadable if the box is stolen. Turn this off only for a box that <strong>can't keep a network connection at boot</strong> (e.g. Wi-Fi-only) — it'll boot without needing the network, but the disk is then <strong>not encrypted</strong>, which is less safe.",
+    "ctx": "webapp/index.html"
+  },
+  "For your own phones and tablets. To give another person access, use <strong>Share this server</strong> on the server's page.": {
+    "en": "For your own phones and tablets. To give another person access, use <strong>Share this server</strong> on the server's page.",
+    "ctx": "webapp/index.html"
+  },
+  "<strong>Re-attach progress</strong>": {
+    "en": "<strong>Re-attach progress</strong>",
+    "ctx": "webapp/index.html"
+  },
+  "<strong>Import backup file</strong>": {
+    "en": "<strong>Import backup file</strong>",
+    "ctx": "webapp/index.html"
+  },
+  "Choose your <code>.flagshipkey</code> file": {
+    "en": "Choose your <code>.flagshipkey</code> file",
+    "ctx": "webapp/index.html"
+  },
+  "<strong>Anyone with both this file and its passphrase can take over your account and lock you out.</strong>": {
+    "en": "<strong>Anyone with both this file and its passphrase can take over your account and lock you out.</strong>",
+    "ctx": "webapp/index.html"
+  },
+  "<strong>How this works</strong>": {
+    "en": "<strong>How this works</strong>",
+    "ctx": "webapp/index.html"
+  },
+  "Older device-to-device transfer of the raw wrapped key (same passphrase on both browsers). Prefer the <code>.flagshipkey</code> backup above.": {
+    "en": "Older device-to-device transfer of the raw wrapped key (same passphrase on both browsers). Prefer the <code>.flagshipkey</code> backup above.",
+    "ctx": "webapp/index.html"
+  },
+  "Your username is <strong>permanently lost</strong> and may be claimed by someone else.": {
+    "en": "Your username is <strong>permanently lost</strong> and may be claimed by someone else.",
+    "ctx": "webapp/index.html"
+  },
+  "Your servers stop being reachable and manageable. If you want to keep one, <strong>transfer it first</strong> from its server page, then come back.": {
+    "en": "Your servers stop being reachable and manageable. If you want to keep one, <strong>transfer it first</strong> from its server page, then come back.",
+    "ctx": "webapp/index.html"
+  },
+  "To confirm, type your username <strong id=\"account-delete-confirm-prompt\"></strong>:": {
+    "en": "To confirm, type your username <strong id=\"account-delete-confirm-prompt\"></strong>:",
+    "ctx": "webapp/index.html"
+  },
+  "Most people just tap <strong>Add a server</strong> above — new servers pair automatically. Use these only to connect this browser to a server you already run.": {
+    "en": "Most people just tap <strong>Add a server</strong> above — new servers pair automatically. Use these only to connect this browser to a server you already run.",
+    "ctx": "webapp/index.html"
+  },
+  "BACKUP & PEERS": {
+    "en": "BACKUP & PEERS",
+    "ctx": "webapp/index.html"
+  },
+  "<a class=\"pill\" href=\"https://flagshipserver.com/security#disclosure\" target=\"_blank\" rel=\"noopener\"> Read the security disclosure → </a>": {
+    "en": "<a class=\"pill\" href=\"https://flagshipserver.com/security#disclosure\" target=\"_blank\" rel=\"noopener\"> Read the security disclosure → </a>",
+    "ctx": "webapp/index.html"
+  },
+  "rate limited — slow down": {
+    "en": "rate limited — slow down",
+    "ctx": "webapp/lib/accountResolve.js:110"
+  },
+  "Event": {
+    "en": "Event",
+    "ctx": "webapp/lib/activityFeed.js:44"
+  },
+  "{0} by {1}": {
+    "en": "{0} by {1}",
+    "ctx": "webapp/lib/activityFeed.js:58"
+  },
+  "Direct": {
+    "en": "Direct",
+    "ctx": "webapp/lib/aiRelay.js:9"
+  },
+  "Ignore": {
+    "en": "Ignore",
+    "ctx": "webapp/lib/appAccess.js:24"
+  },
+  "Review": {
+    "en": "Review",
+    "ctx": "webapp/lib/appAccess.js:34"
+  },
+  "size unknown": {
+    "en": "size unknown",
+    "ctx": "webapp/lib/appDb.js:268"
+  },
+  "rows unknown": {
+    "en": "rows unknown",
+    "ctx": "webapp/lib/appDb.js:280"
+  },
+  "~{0} row": {
+    "en": "~{0} row",
+    "ctx": "webapp/lib/appDb.js:282"
+  },
+  "~{0} rows": {
+    "en": "~{0} rows",
+    "ctx": "webapp/lib/appDb.js:282"
+  },
+  "Rows {0}–{1}": {
+    "en": "Rows {0}–{1}",
+    "ctx": "webapp/lib/appDb.js:290"
+  },
+  "Rows {0}–{1} of {2}": {
+    "en": "Rows {0}–{1} of {2}",
+    "ctx": "webapp/lib/appDb.js:291"
+  },
+  "{1} · {0} row": {
+    "en": "{1} · {0} row",
+    "ctx": "webapp/lib/appDb.js:304"
+  },
+  "{1} · {0} rows": {
+    "en": "{1} · {0} rows",
+    "ctx": "webapp/lib/appDb.js:304"
+  },
+  "{0} (at character {1})": {
+    "en": "{0} (at character {1})",
+    "ctx": "webapp/lib/appDb.js:320"
+  },
+  "This uninstalls {0} from {1} and deletes its data there. This can't be undone.": {
+    "en": "This uninstalls {0} from {1} and deletes its data there. This can't be undone.",
+    "ctx": "webapp/lib/appPlacement.js:353"
+  },
+  "This uninstalls {0} and deletes its data there. This can't be undone.": {
+    "en": "This uninstalls {0} and deletes its data there. This can't be undone.",
+    "ctx": "webapp/lib/appPlacement.js:354"
+  },
+  "Your other server keeps its copy.": {
+    "en": "Your other server keeps its copy.",
+    "ctx": "webapp/lib/appPlacement.js:356"
+  },
+  "Your other {0} servers keep their copies.": {
+    "en": "Your other {0} servers keep their copies.",
+    "ctx": "webapp/lib/appPlacement.js:356"
+  },
+  "Starting": {
+    "en": "Starting",
+    "ctx": "webapp/lib/appPlacement.js:626"
+  },
+  "Deploying": {
+    "en": "Deploying",
+    "ctx": "webapp/lib/appPlacement.js:628"
+  },
+  "Copying": {
+    "en": "Copying",
+    "ctx": "webapp/lib/appPlacement.js:629"
+  },
+  "Editing": {
+    "en": "Editing",
+    "ctx": "webapp/lib/appPlacement.js:630"
+  },
+  "{0} is full: new data is refused until you free space or raise the limit.": {
+    "en": "{0} is full: new data is refused until you free space or raise the limit.",
+    "ctx": "webapp/lib/appStorage.js:45"
+  },
+  "Protected": {
+    "en": "Protected",
+    "ctx": "webapp/lib/backupPolicy.js:124"
+  },
+  "{1} of {2} pieces safe on {0} server": {
+    "en": "{1} of {2} pieces safe on {0} server",
+    "ctx": "webapp/lib/backupPolicy.js:139"
+  },
+  "{1} of {2} pieces safe on {0} servers": {
+    "en": "{1} of {2} pieces safe on {0} servers",
+    "ctx": "webapp/lib/backupPolicy.js:139"
+  },
+  "{0} of {1} pieces safe": {
+    "en": "{0} of {1} pieces safe",
+    "ctx": "webapp/lib/backupPolicy.js:140"
+  },
+  "Last placed: {0}": {
+    "en": "Last placed: {0}",
+    "ctx": "webapp/lib/backupPolicy.js:142"
+  },
+  "Holds {0} for other servers": {
+    "en": "Holds {0} for other servers",
+    "ctx": "webapp/lib/backupPolicy.js:143"
+  },
+  "Beta": {
+    "en": "Beta",
+    "ctx": "webapp/lib/buildInfo.js:19"
+  },
+  "A remote browser can't sign — open your owner app to approve this": {
+    "en": "A remote browser can't sign — open your owner app to approve this",
+    "ctx": "webapp/lib/companionGuard.js:21"
+  },
+  "just now": {
+    "en": "just now",
+    "ctx": "webapp/lib/dateFormat.js:43"
+  },
+  "Anyone with both this file and its passphrase can take over your account and lock you out.": {
+    "en": "Anyone with both this file and its passphrase can take over your account and lock you out.",
+    "ctx": "webapp/lib/keyfileBackup.js:28"
+  },
+  "Member": {
+    "en": "Member",
+    "ctx": "webapp/lib/memberRoles.js:27"
+  },
+  "Manager": {
+    "en": "Manager",
+    "ctx": "webapp/lib/memberRoles.js:27"
+  },
+  "Master": {
+    "en": "Master",
+    "ctx": "webapp/lib/memberRoles.js:27"
+  },
+  "Refused": {
+    "en": "Refused",
+    "ctx": "webapp/lib/memberRoles.js:27"
+  },
+  "Co-manager": {
+    "en": "Co-manager",
+    "ctx": "webapp/lib/memberRoles.js:255"
+  },
+  "Admin device": {
+    "en": "Admin device",
+    "ctx": "webapp/lib/memberRoles.js:266"
+  },
+  "Device on your account": {
+    "en": "Device on your account",
+    "ctx": "webapp/lib/memberRoles.js:266"
+  },
+  "text files": {
+    "en": "text files",
+    "ctx": "webapp/lib/modelMenu.js:211"
+  },
+  "Updating": {
+    "en": "Updating",
+    "ctx": "webapp/lib/noticeUi.js:31"
+  },
+  "Answering": {
+    "en": "Answering",
+    "ctx": "webapp/lib/peerBackup.js:143"
+  },
+  "Checking": {
+    "en": "Checking",
+    "ctx": "webapp/lib/peerBackup.js:143"
+  },
+  "no proof yet": {
+    "en": "no proof yet",
+    "ctx": "webapp/lib/peerBackup.js:163"
+  },
+  "{0} server holds its pieces; {1} bring it back.": {
+    "en": "{0} server holds its pieces; {1} bring it back.",
+    "ctx": "webapp/lib/peerBackup.js:193"
+  },
+  "{0} servers hold its pieces; {1} bring it back.": {
+    "en": "{0} servers hold its pieces; {1} bring it back.",
+    "ctx": "webapp/lib/peerBackup.js:193"
+  },
+  "Downloading": {
+    "en": "Downloading",
+    "ctx": "webapp/lib/provisionProgress.js:35"
+  },
+  "My server's setup stopped. Order: {0} Step: {1}": {
+    "en": "My server's setup stopped. Order: {0} Step: {1}",
+    "ctx": "webapp/lib/provisionProgress.js:265"
+  },
+  "This server didn't finish installing{0}. Cancel this order to free the name and create the server again, or contact us and we'll look at it.": {
+    "en": "This server didn't finish installing{0}. Cancel this order to free the name and create the server again, or contact us and we'll look at it.",
+    "ctx": "webapp/lib/provisionProgress.js:272"
+  },
+  "Too many tries from your network. Try again {0}.": {
+    "en": "Too many tries from your network. Try again {0}.",
+    "ctx": "webapp/lib/rateLimited.js:15"
+  },
+  "Too many tries from this account. Try again {0}.": {
+    "en": "Too many tries from this account. Try again {0}.",
+    "ctx": "webapp/lib/rateLimited.js:16"
+  },
+  "Too many tries for this account name. Try again {0}.": {
+    "en": "Too many tries for this account name. Try again {0}.",
+    "ctx": "webapp/lib/rateLimited.js:17"
+  },
+  "in a minute": {
+    "en": "in a minute",
+    "ctx": "webapp/lib/rateLimited.js:22"
+  },
+  "no result": {
+    "en": "no result",
+    "ctx": "webapp/lib/recovery.js:87"
+  },
+  "{0} couldn't be restored; the server works with the rest.": {
+    "en": "{0} couldn't be restored; the server works with the rest.",
+    "ctx": "webapp/lib/serverArchive.js:271"
+  },
+  "Ran out of memory {0}× since it started ({1} MB free of {2} MB now).": {
+    "en": "Ran out of memory {0}× since it started ({1} MB free of {2} MB now).",
+    "ctx": "webapp/lib/serverHealth.js:47"
+  },
+  "The server software isn't running ({0}; restarted {1}×, last exit code {2}).": {
+    "en": "The server software isn't running ({0}; restarted {1}×, last exit code {2}).",
+    "ctx": "webapp/lib/serverHealth.js:50"
+  },
+  "The server software restarted {0}× since it started (last exit code {1}).": {
+    "en": "The server software restarted {0}× since it started (last exit code {1}).",
+    "ctx": "webapp/lib/serverHealth.js:52"
+  },
+  "Disk is {0}% full.": {
+    "en": "Disk is {0}% full.",
+    "ctx": "webapp/lib/serverHealth.js:55"
+  },
+  "Used": {
+    "en": "Used",
+    "ctx": "webapp/lib/serverMonitoring.js:133"
+  },
+  "Free": {
+    "en": "Free",
+    "ctx": "webapp/lib/serverMonitoring.js:134"
+  },
+  "Total": {
+    "en": "Total",
+    "ctx": "webapp/lib/serverMonitoring.js:135"
+  },
+  "Write": {
+    "en": "Write",
+    "ctx": "webapp/lib/serverMonitoring.js:137"
+  },
+  "Provisioning": {
+    "en": "Provisioning",
+    "ctx": "webapp/lib/serverMonitoring.js:150"
+  },
+  "Renews": {
+    "en": "Renews",
+    "ctx": "webapp/lib/serverMonitoring.js:153"
+  },
+  "Issued": {
+    "en": "Issued",
+    "ctx": "webapp/lib/serverMonitoring.js:154"
+  },
+  "Issuer": {
+    "en": "Issuer",
+    "ctx": "webapp/lib/serverMonitoring.js:155"
+  },
+  "Expired": {
+    "en": "Expired",
+    "ctx": "webapp/lib/serverMonitoring.js:161"
+  },
+  "Healthy": {
+    "en": "Healthy",
+    "ctx": "webapp/lib/serverMonitoring.js:173"
+  },
+  "Someone": {
+    "en": "Someone",
+    "ctx": "webapp/lib/serverShares.js:472"
+  },
+  "Withdraw": {
+    "en": "Withdraw",
+    "ctx": "webapp/lib/serverShares.js:1190"
+  },
+  "Not opened yet": {
+    "en": "Not opened yet",
+    "ctx": "webapp/lib/serverShares.js:1211"
+  },
+  "{0} person joined": {
+    "en": "{0} person joined",
+    "ctx": "webapp/lib/serverShares.js:1211"
+  },
+  "{0} people joined": {
+    "en": "{0} people joined",
+    "ctx": "webapp/lib/serverShares.js:1211"
+  },
+  "the request wasn't signed by this account's admin key.": {
+    "en": "the request wasn't signed by this account's admin key.",
+    "ctx": "webapp/lib/serverUpdate.js:206"
+  },
+  "The last update to {0} didn't start cleanly, so the server went back to {1} on its own.": {
+    "en": "The last update to {0} didn't start cleanly, so the server went back to {1} on its own.",
+    "ctx": "webapp/lib/serverUpdate.js:224"
+  },
+  "The last update to {0} didn't start cleanly, so the server went back on its own.": {
+    "en": "The last update to {0} didn't start cleanly, so the server went back on its own.",
+    "ctx": "webapp/lib/serverUpdate.js:225"
+  },
+  "The last update didn't start cleanly, so the server went back to {0} on its own.": {
+    "en": "The last update didn't start cleanly, so the server went back to {0} on its own.",
+    "ctx": "webapp/lib/serverUpdate.js:226"
+  },
+  "The last update didn't start cleanly, so the server went back on its own.": {
+    "en": "The last update didn't start cleanly, so the server went back on its own.",
+    "ctx": "webapp/lib/serverUpdate.js:227"
+  },
+  "DNS-safe label — will appear at <name>.flagship.services.": {
+    "en": "DNS-safe label — will appear at <name>.flagship.services.",
+    "ctx": "webapp/lib/state.js:85"
+  },
+  "Cancelled": {
+    "en": "Cancelled",
+    "ctx": "webapp/lib/vibeSessions.js:28"
+  },
+  "This stops the AI and deletes what it has written on your server. Its name, \"{0}\", becomes free again.": {
+    "en": "This stops the AI and deletes what it has written on your server. Its name, \"{0}\", becomes free again.",
+    "ctx": "webapp/lib/vibeSessions.js:114"
+  },
+  "This stops the AI and deletes what it has written on your server.": {
+    "en": "This stops the AI and deletes what it has written on your server.",
+    "ctx": "webapp/lib/vibeSessions.js:115"
+  },
+  "wrote {1} ({0} line)": {
+    "en": "wrote {1} ({0} line)",
+    "ctx": "webapp/lib/vibeTranscript.js:30"
+  },
+  "wrote {1} ({0} lines)": {
+    "en": "wrote {1} ({0} lines)",
+    "ctx": "webapp/lib/vibeTranscript.js:30"
+  },
+  "writing {1}… ({0} line)": {
+    "en": "writing {1}… ({0} line)",
+    "ctx": "webapp/lib/vibeTranscript.js:48"
+  },
+  "writing {1}… ({0} lines)": {
+    "en": "writing {1}… ({0} lines)",
+    "ctx": "webapp/lib/vibeTranscript.js:48"
+  },
+  "Couldn't load account history.": {
+    "en": "Couldn't load account history.",
+    "ctx": "webapp/views/account-audit.js:86"
+  },
+  "Couldn't load.": {
+    "en": "Couldn't load.",
+    "ctx": "webapp/views/account-security.js:271"
+  },
+  "no events yet for filter \"{0}\" — signed actions you take (claiming a URL, granting an app, issuing an invite) will land here with the underlying envelope you can verify yourself.": {
+    "en": "no events yet for filter \"{0}\" — signed actions you take (claiming a URL, granting an app, issuing an invite) will land here with the underlying envelope you can verify yourself.",
+    "ctx": "webapp/views/audit-log.js:233"
+  },
+  "no events yet — signed actions you take (claiming a URL, granting an app, issuing an invite) will land here with the underlying envelope you can verify yourself.": {
+    "en": "no events yet — signed actions you take (claiming a URL, granting an app, issuing an invite) will land here with the underlying envelope you can verify yourself.",
+    "ctx": "webapp/views/audit-log.js:233"
+  },
+  "stream error": {
+    "en": "stream error",
+    "ctx": "webapp/views/browser-viewer.js:101"
+  },
+  "no row": {
+    "en": "no row",
+    "ctx": "webapp/views/companion-requests.js:218"
+  },
+  "not chosen yet": {
+    "en": "not chosen yet",
+    "ctx": "webapp/views/create-server.js:126"
+  },
+  "lowercase letters, digits, and hyphens (not at the start or end)": {
+    "en": "lowercase letters, digits, and hyphens (not at the start or end)",
+    "ctx": "webapp/views/create-server.js:933"
+  },
+  "\"{0}\" is reserved — pick another name": {
+    "en": "\"{0}\" is reserved — pick another name",
+    "ctx": "webapp/views/create-server.js:935"
+  },
+  "cert expired": {
+    "en": "cert expired",
+    "ctx": "webapp/views/home.js:601"
+  },
+  "signed in": {
+    "en": "signed in",
+    "ctx": "webapp/views/home.js:1446"
+  },
+  "(not set)": {
+    "en": "(not set)",
+    "ctx": "webapp/views/home.js:1447"
+  },
+  "{0} is waiting for its backup. Pick the backup's .flagship file and this page sends it.": {
+    "en": "{0} is waiting for its backup. Pick the backup's .flagship file and this page sends it.",
+    "ctx": "webapp/views/import-backup.js:198"
+  },
+  "no apps": {
+    "en": "no apps",
+    "ctx": "webapp/views/import-backup.js:301"
+  },
+  "Not in this backup: {0}.": {
+    "en": "Not in this backup: {0}.",
+    "ctx": "webapp/views/import-backup.js:304"
+  },
+  "{0} is waiting for a different backup.": {
+    "en": "{0} is waiting for a different backup.",
+    "ctx": "webapp/views/import-backup.js:415"
+  },
+  "Waiting for {0} to come online… Set it up with the recipe if you haven't yet. Keep this page open:": {
+    "en": "Waiting for {0} to come online… Set it up with the recipe if you haven't yet. Keep this page open:",
+    "ctx": "webapp/views/import-backup.js:419"
+  },
+  "Apps: {0}.": {
+    "en": "Apps: {0}.",
+    "ctx": "webapp/views/import-backup.js:618"
+  },
+  "none": {
+    "en": "none",
+    "ctx": "webapp/views/import-backup.js:618"
+  },
+  "the service": {
+    "en": "the service",
+    "ctx": "webapp/views/invite-redeem.js:210"
+  },
+  "this service": {
+    "en": "this service",
+    "ctx": "webapp/views/invite-redeem.js:257"
+  },
+  "Passphrases don't match.": {
+    "en": "Passphrases don't match.",
+    "ctx": "webapp/views/recovery.js:275"
+  },
+  "Lock & power": {
+    "en": "Lock & power",
+    "ctx": "webapp/views/server-detail.js:522"
+  },
+  "Power": {
+    "en": "Power",
+    "ctx": "webapp/views/server-detail.js:522"
+  },
+  "Power the box down or restart it.": {
+    "en": "Power the box down or restart it.",
+    "ctx": "webapp/views/server-detail.js:527"
+  },
+  "Unavailable": {
+    "en": "Unavailable",
+    "ctx": "webapp/views/server-detail.js:926"
+  },
+  "turn off": {
+    "en": "turn off",
+    "ctx": "webapp/views/server-detail.js:1079"
+  },
+  "Download here, or copy the link to open it on another computer: that page asks the Flagship app on your phone to approve.": {
+    "en": "Download here, or copy the link to open it on another computer: that page asks the Flagship app on your phone to approve.",
+    "ctx": "webapp/views/server-detail.js:1688"
+  },
+  "The server is already running this release.": {
+    "en": "The server is already running this release.",
+    "ctx": "webapp/views/server-detail.js:2047"
+  },
+  "About {0} to move at {1}/s between the servers.": {
+    "en": "About {0} to move at {1}/s between the servers.",
+    "ctx": "webapp/views/server-detail.js:2261"
+  },
+  "Transfer": {
+    "en": "Transfer",
+    "ctx": "webapp/views/server-detail.js:2275"
+  },
+  "Lost": {
+    "en": "Lost",
+    "ctx": "webapp/views/server-detail.js:2637"
+  },
+  "Stolen": {
+    "en": "Stolen",
+    "ctx": "webapp/views/server-detail.js:2638"
+  },
+  "Decommissioned": {
+    "en": "Decommissioned",
+    "ctx": "webapp/views/server-detail.js:2639"
+  },
+  "Share this server": {
+    "en": "Share this server",
+    "ctx": "webapp/views/server-sharing.js:52"
+  },
+  "{0} loses access to {1} right away. Their copy of the disk key is deleted, but a copy they already used can't be taken back.": {
+    "en": "{0} loses access to {1} right away. Their copy of the disk key is deleted, but a copy they already used can't be taken back.",
+    "ctx": "webapp/views/server-sharing.js:254"
+  },
+  "{0} loses access to {1} right away.": {
+    "en": "{0} loses access to {1} right away.",
+    "ctx": "webapp/views/server-sharing.js:255"
+  },
+  "They can unlock {0} when it starts.": {
+    "en": "They can unlock {0} when it starts.",
+    "ctx": "webapp/views/server-sharing.js:294"
+  },
+  "Send this link to {0}. It works once and expires in 7 days.": {
+    "en": "Send this link to {0}. It works once and expires in 7 days.",
+    "ctx": "webapp/views/server-sharing.js:529"
+  },
+  "Couldn't set the rank ({0}): change it in the list.": {
+    "en": "Couldn't set the rank ({0}): change it in the list.",
+    "ctx": "webapp/views/service-access.js:510"
+  },
+  "Group {0} created.{1}": {
+    "en": "Group {0} created.{1}",
+    "ctx": "webapp/views/service-access.js:515"
+  },
+  "Invite for {0} created.{1}": {
+    "en": "Invite for {0} created.{1}",
+    "ctx": "webapp/views/service-access.js:515"
+  },
+  "{0} of {1} joined": {
+    "en": "{0} of {1} joined",
+    "ctx": "webapp/views/service-access.js:889"
+  },
+  "{0} of {1} joined · expired": {
+    "en": "{0} of {1} joined · expired",
+    "ctx": "webapp/views/service-access.js:891"
+  },
+  "{0} of {1} joined · expires {2}": {
+    "en": "{0} of {1} joined · expires {2}",
+    "ctx": "webapp/views/service-access.js:891"
+  },
+  "you approve — waiting for their acceptance": {
+    "en": "you approve — waiting for their acceptance",
+    "ctx": "webapp/views/service-access.js:894"
+  },
+  "active": {
+    "en": "active",
+    "ctx": "webapp/views/service-access.js:896"
+  },
+  "invite sent — not opened yet": {
+    "en": "invite sent — not opened yet",
+    "ctx": "webapp/views/service-access.js:896"
+  },
+  "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):": {
+    "en": "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):",
+    "ctx": "webapp/views/service-detail.js:1161"
+  },
+  "{0}: you can open each app's Database section.": {
+    "en": "{0}: you can open each app's Database section.",
+    "ctx": "webapp/views/share-accept.js:52"
+  },
+  "Someone is handing you their box. Paste the transfer link they created (Server → Transfer to another account), or scan their QR code. You'll become the new owner of the box and all its contents.": {
+    "en": "Someone is handing you their box. Paste the transfer link they created (Server → Transfer to another account), or scan their QR code. You'll become the new owner of the box and all its contents.",
+    "ctx": "webapp/views/transfer-claim.js:72"
+  },
+  "Someone is handing you their box. Paste the transfer link they created (Server → Transfer to another account). You'll become the new owner of the box and all its contents.": {
+    "en": "Someone is handing you their box. Paste the transfer link they created (Server → Transfer to another account). You'll become the new owner of the box and all its contents.",
+    "ctx": "webapp/views/transfer-claim.js:73"
+  },
+  "Managed": {
+    "en": "Managed",
+    "ctx": "webapp/views/trusted-devices.js:151"
+  },
+  "{0} · Device {1} · added {2} · last seen {3}": {
+    "en": "{0} · Device {1} · added {2} · last seen {3}",
+    "ctx": "webapp/views/trusted-devices.js:156"
+  },
+  "{0} · Device {1} · added {2}": {
+    "en": "{0} · Device {1} · added {2}",
+    "ctx": "webapp/views/trusted-devices.js:157"
+  },
+  "Couldn't load devices": {
+    "en": "Couldn't load devices",
+    "ctx": "webapp/views/trusted-devices.js:259"
+  },
+  "new service": {
+    "en": "new service",
+    "ctx": "webapp/views/vibe-code.js:185"
+  },
+  "Up to {0} files per message.": {
+    "en": "Up to {0} files per message.",
+    "ctx": "webapp/views/vibe-code.js:243"
+  },
+  "Couldn't attach \"{0}\".": {
+    "en": "Couldn't attach \"{0}\".",
+    "ctx": "webapp/views/vibe-code.js:263"
+  },
+  "Add a server": {
+    "en": "Add a server",
+    "ctx": "webapp/views/wizard.js:356"
+  },
+  "{0} can now manage this server": {
+    "en": "{0} can now manage this server",
+    "ctx": "webapp/views/server-sharing.js:222"
+  },
+  "{0} can now see this server": {
+    "en": "{0} can now see this server",
+    "ctx": "webapp/views/server-sharing.js:222"
   }
 }

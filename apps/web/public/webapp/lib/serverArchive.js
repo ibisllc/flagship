@@ -268,7 +268,7 @@ export async function waitForRestore({ client, onProgress, sleep = (ms) => new P
 export function restoreSummary(apps = []) {
   const ok = apps.filter((a) => a.state === "done").length;
   const failed = apps.filter((a) => a.state === "failed").length;
-  return trn(ok, "Restored {0} app.", "Restored {0} apps.") + (failed ? ` ${failed} couldn't be restored; the server works with the rest.` : "");
+  return trn(ok, "Restored {0} app.", "Restored {0} apps.") + (failed ? " " + tr("{0} couldn't be restored; the server works with the rest.", failed) : "");
 }
 
 /**

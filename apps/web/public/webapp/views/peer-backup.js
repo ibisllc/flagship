@@ -48,7 +48,7 @@ export function renderStatus(body, { formatTime = formatWhen, now = Date.now() }
   const holdersCard = `
     <h3 class="mt-4">${tr("Servers holding your pieces")}</h3>
     ${rows.length === 0
-      ? '<div class="card placeholder">None yet. Pieces are placed once your newest backup is ready and enough other servers can hold it.</div>'
+      ? `<div class="card placeholder">${tr("None yet. Pieces are placed once your newest backup is ready and enough other servers can hold it.")}</div>`
       : rows.map((r) => `
         <div class="card" data-pb-holder>
           <div class="weight-600">${escapeHtml(r.label)}</div>

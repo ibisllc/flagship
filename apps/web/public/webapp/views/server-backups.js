@@ -45,9 +45,10 @@ import {
   utcToLocal,
 } from "../lib/savedBackups.js";
 
-import { tr } from "../lib/i18n.js";
+import { tr, dateLocale } from "../lib/i18n.js";
+import { weekdayName } from "../lib/savedBackups.js";
 const GB = 1024 ** 3;
-const fmtTime = (t) => new Date(t).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+const fmtTime = (t) => new Date(t).toLocaleString(dateLocale(), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 export function backupsSectionHtml(body) {
   const admin = canSignAdminOrders();
@@ -106,7 +107,7 @@ export function backupsSectionHtml(body) {
           <div id="bk-weekday-row" class="hidden">
             <label class="caption" for="bk-weekday">${tr("Day")}</label>
             <select id="bk-weekday" class="full-width">
-              ${["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d, i) => `<option value="${i}">${d}</option>`).join("")}
+              ${[0, 1, 2, 3, 4, 5, 6].map((i) => `<option value="${i}">${weekdayName(i)}</option>`).join("")}
             </select>
           </div>
           <label class="caption" for="bk-time">${tr("Time")}</label>
