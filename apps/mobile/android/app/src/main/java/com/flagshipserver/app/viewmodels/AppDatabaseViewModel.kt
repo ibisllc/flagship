@@ -7,6 +7,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.AppDbQueryRequest
 import com.flagshipserver.app.api.AppDbQueryResult
@@ -64,10 +66,10 @@ class AppDatabaseViewModel(
 
     companion object {
         const val TITLE = "Database"
-        const val RUN_SQL = "Run SQL"
-        const val EXPORT_CSV = "Export CSV"
-        const val NO_TABLES = "No tables yet."
-        const val NOTE = "Live data. Only you can see it here; no AI ever does."
+        val RUN_SQL get() = FSStrings.get(R.string.run_sql)
+        val EXPORT_CSV get() = FSStrings.get(R.string.export_csv)
+        val NO_TABLES get() = FSStrings.get(R.string.no_tables_yet)
+        val NOTE get() = FSStrings.get(R.string.live_data_only_you_can_see)
 
         /** The page offers the entry only to the owner, for an app with a Postgres store. */
         fun showsEntry(detail: AppDetailResponse, restricted: Boolean): Boolean =
@@ -80,15 +82,15 @@ class AppDatabaseViewModel(
         fun failure(t: Throwable): String {
             if (t !is ScreensError.Http) return t.userFacing()
             return when (t.status) {
-                503 -> "The database isn't reachable right now. Try again in a moment."
+                503 -> FSStrings.get(R.string.the_database_isnt_reachable_right_now)
                 else -> t.boxError() ?: t.userFacing()
             }
         }
 
         fun summaryText(stores: List<AppDbStore>): String {
             val n = stores.sumOf { it.tables.size }
-            val tables = if (n == 1) "1 table" else "$n tables"
-            return if (stores.size > 1) "$tables in ${stores.size} stores" else tables
+            val tables = if (n == 1) "1 table" else FSStrings.get(R.string.tables, n)
+            return if (stores.size > 1) FSStrings.get(R.string.in_stores, tables, stores.size) else tables
         }
 
         fun rowsText(t: AppDbTable): String {
@@ -105,7 +107,7 @@ class AppDatabaseViewModel(
             val b = bytes.coerceAtLeast(0.0)
             return when {
                 b < 1024 -> "${b.toLong()} B"
-                b < 1024 * 1024 -> "${(b / 1024).toLong()} KB"
+                b < 1024 * 1024 -> FSStrings.get(R.string.kb, (b / 1024).toLong())
                 b < 1024.0 * 1024 * 1024 -> String.format(Locale.US, "%.1f MB", b / (1024 * 1024))
                 else -> String.format(Locale.US, "%.1f GB", b / (1024.0 * 1024 * 1024))
             }
@@ -180,7 +182,7 @@ class AppDbTableViewModel(
             throw e
         } catch (t: Throwable) {
             _error.value = if (t is ScreensError.Http && t.status == 413) {
-                "This table is too big to export in one file. Export it in parts with a query."
+                FSStrings.get(R.string.this_table_is_too_big_to)
             } else {
                 AppDatabaseViewModel.failure(t)
             }
@@ -192,10 +194,10 @@ class AppDbTableViewModel(
 
     fun rangeText(): String {
         val p = _page.value ?: return ""
-        if (p.rows.isEmpty()) return if (p.total == 0L) "No rows" else "No rows here (${p.total} in all)"
+        if (p.rows.isEmpty()) return if (p.total == 0L) FSStrings.get(R.string.no_rows) else FSStrings.get(R.string.no_rows_here_in_all, p.total)
         val from = _offset.value + 1
         val to = _offset.value + p.rows.size
-        return "Rows ${fmt(from.toLong())}–${fmt(to.toLong())} of ${fmt(p.total)}"
+        return FSStrings.get(R.string.rows_of, fmt(from.toLong()), fmt(to.toLong()), fmt(p.total))
     }
 
     companion object {
@@ -260,15 +262,15 @@ class AppDbQueryViewModel(
         val domain = runCatching { client.boxFqdn() }.getOrNull()?.takeIf { it.isNotEmpty() }
             ?: fallbackServerDomain()?.takeIf { it.isNotEmpty() }
         if (domain == null) {
-            _phase.value = Phase.Failed("Couldn't tell which server this app is on.")
+            _phase.value = Phase.Failed(FSStrings.get(R.string.couldnt_tell_which_server_this_app))
             return
         }
         val key = try {
-            signer("Change the data in $appName")
+            signer(FSStrings.get(R.string.change_the_data_in, appName))
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {
-            _phase.value = Phase.Failed("Couldn't access your account key: ${UserErrorText.reason(t)}")
+            _phase.value = Phase.Failed(FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(t)))
             return
         }
         _phase.value = try {
@@ -308,11 +310,11 @@ class AppDbQueryViewModel(
 
     companion object {
         const val RUN = "Run"
-        const val NEEDS_GRANT = "This changes data. Confirm with your fingerprint, face or screen lock to run it."
-        const val CONFIRM = "Confirm and run"
+        val NEEDS_GRANT get() = FSStrings.get(R.string.this_changes_data_confirm_with_your)
+        val CONFIRM get() = FSStrings.get(R.string.confirm_and_run)
         const val CANCEL = "Cancel"
-        const val SQL_REQUIRED = "Write a statement first."
-        const val HELP = "One statement. It runs read-only unless it changes data, which you confirm first."
+        val SQL_REQUIRED get() = FSStrings.get(R.string.write_a_statement_first)
+        val HELP get() = FSStrings.get(R.string.one_statement_it_runs_read_only)
 
         private val LENIENT = Json { ignoreUnknownKeys = true }
 
@@ -328,20 +330,20 @@ class AppDbQueryViewModel(
                 400 -> {
                     val r = refusal(t)
                     val where = listOfNotNull(
-                        r?.sqlState?.let { "SQLSTATE $it" },
+                        r?.sqlState?.let { FSStrings.get(R.string.sqlstate, it) },
                         r?.position?.let { "at character $it" },
                     ).joinToString(", ")
-                    (box ?: "The server couldn't run this statement.") + if (where.isNotEmpty()) " ($where)" else ""
+                    (box ?: FSStrings.get(R.string.the_server_couldnt_run_this_statement)) + if (where.isNotEmpty()) " ($where)" else ""
                 }
                 403 -> if (signed) {
-                    "The server refused this change${box?.let { ": $it" } ?: ""}. Check this phone's clock and try again."
+                    FSStrings.get(R.string.the_server_refused_this_change_check, box?.let { ": $it" } ?: "")
                 } else {
-                    "This device can't use the database."
+                    FSStrings.get(R.string.this_device_cant_use_the_database)
                 }
-                404 -> "This app or its store is no longer on the server."
-                409 -> "That signed order was already used. Run it again to sign a new one."
-                413 -> box ?: "The statement is too long."
-                503 -> "The database isn't reachable right now. Try again in a moment."
+                404 -> FSStrings.get(R.string.this_app_or_its_store_is)
+                409 -> FSStrings.get(R.string.that_signed_order_was_already_used)
+                413 -> box ?: FSStrings.get(R.string.the_statement_is_too_long)
+                503 -> FSStrings.get(R.string.the_database_isnt_reachable_right_now)
                 else -> box ?: t.userFacing()
             }
         }
@@ -353,6 +355,6 @@ class AppDbQueryViewModel(
         }
 
         fun truncatedText(r: AppDbQueryResult): String? =
-            if (r.truncated) "Showing the first ${r.rows.size} rows. There are more: narrow the query to see them." else null
+            if (r.truncated) FSStrings.get(R.string.showing_the_first_rows_there_are, r.rows.size) else null
     }
 }

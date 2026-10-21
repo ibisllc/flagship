@@ -5,6 +5,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.AppCopyRecord
 import com.flagshipserver.app.api.AppSummary
 import com.flagshipserver.app.api.ScreensClient
@@ -70,8 +72,8 @@ class ServerAppsViewModel(private val client: ScreensClient) {
 
     companion object {
         const val TITLE = "Apps"
-        const val CREATE_HERE = "Create app here"
-        const val EMPTY = "No apps on this server yet."
+        val CREATE_HERE get() = FSStrings.get(R.string.create_app_here)
+        val EMPTY get() = FSStrings.get(R.string.no_apps_on_this_server_yet)
 
         fun displayName(slug: String): String = slug.replaceFirstChar { it.uppercase() }
 
@@ -84,7 +86,7 @@ class ServerAppsViewModel(private val client: ScreensClient) {
                     address = app.url.removePrefix("https://").removePrefix("http://").trimEnd('/'),
                     status = when {
                         copying != null -> AppPlacementViewModel.progressText(copying.progress)
-                        else -> AppStatus.pill(app)?.label ?: "Status unknown"
+                        else -> AppStatus.pill(app)?.label ?: FSStrings.get(R.string.status_unknown)
                     },
                     copying = copying != null,
                     membersOnly = app.accessMode == "members-only",
@@ -104,7 +106,7 @@ class ServerAppsViewModel(private val client: ScreensClient) {
                         c.state == "failed" && c.copyId in seenUnderway -> out.add(
                             Row(
                                 c.serviceId, name, "",
-                                "Couldn't copy" + (c.reason?.takeIf { it.isNotEmpty() }?.let { ": $it" } ?: ""),
+                                FSStrings.get(R.string.couldnt_copy) + (c.reason?.takeIf { it.isNotEmpty() }?.let { ": $it" } ?: ""),
                                 failed = true,
                             ),
                         )

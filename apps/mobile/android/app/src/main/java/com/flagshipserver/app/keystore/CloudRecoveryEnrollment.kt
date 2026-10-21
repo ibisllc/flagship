@@ -24,6 +24,8 @@
 
 package com.flagshipserver.app.keystore
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.RecoveryEnvelopeRequest
 import com.flagshipserver.app.core.AcmeAccountKey
@@ -83,7 +85,7 @@ object CloudRecoveryEnrollment {
         adminRootSeed: ByteArray? = null,
     ): EnrollResult {
         if (passphrase.length < MIN_PASSPHRASE) {
-            throw ValidationError("Passphrase must be at least $MIN_PASSPHRASE characters.")
+            throw ValidationError(FSStrings.get(R.string.passphrase_must_be_at_least_characters, MIN_PASSPHRASE))
         }
         if (passphrase != passphraseConfirm) {
             throw ValidationError("Passphrases don't match.")
@@ -158,7 +160,7 @@ object CloudRecoveryEnrollment {
         now: Long,
     ): RestoreResult {
         if (passphrase.length < MIN_PASSPHRASE) {
-            throw ValidationError("Passphrase must be at least $MIN_PASSPHRASE characters.")
+            throw ValidationError(FSStrings.get(R.string.passphrase_must_be_at_least_characters, MIN_PASSPHRASE))
         }
         val secrets = RecoveryDerivation.derivePassphraseSecrets(passphrase, username)
 
@@ -314,7 +316,7 @@ object CloudRecoveryEnrollment {
         now: Long,
     ) {
         if (passphrase.length < MIN_PASSPHRASE) {
-            throw ValidationError("Passphrase must be at least $MIN_PASSPHRASE characters.")
+            throw ValidationError(FSStrings.get(R.string.passphrase_must_be_at_least_characters, MIN_PASSPHRASE))
         }
         val secrets = RecoveryDerivation.derivePassphraseSecrets(passphrase, username)
 
@@ -326,7 +328,7 @@ object CloudRecoveryEnrollment {
             )
         } catch (e: HttpException) {
             // The gate 403s on a fetchToken derived from the wrong passphrase.
-            if (e.status == 403) throw ValidationError("That passphrase didn't match.")
+            if (e.status == 403) throw ValidationError(FSStrings.get(R.string.that_passphrase_didnt_match))
             throw e
         }
 

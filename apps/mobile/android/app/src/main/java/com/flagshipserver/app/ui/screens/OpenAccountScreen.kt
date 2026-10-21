@@ -10,6 +10,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.material3.MaterialTheme
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
@@ -77,13 +80,12 @@ fun OpenAccountScreen(
         verticalArrangement = Arrangement.spacedBy(FS.space.s6),
     ) {
         Text(
-            text = "Open your account.",
+            text = stringResource(R.string.open_your_account),
             color = FS.colors.text,
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
         )
         Text(
-            text = "Reserving “$username” and bringing this device into your account. " +
-                "Give this device a name so you can recognise it later.",
+            text = fsString(R.string.reserving_and_bringing_this_device_into, username),
             color = FS.colors.textMuted,
             style = MaterialTheme.typography.bodyLarge,
         )
@@ -91,18 +93,18 @@ fun OpenAccountScreen(
         FSField(
             value = accountName,
             onValueChange = { accountName = it },
-            label = "Account display name",
-            placeholder = "Johnson Family",
-            helper = "Encrypted and shown above @$username. It is never used in links.",
+            label = stringResource(R.string.account_display_name),
+            placeholder = stringResource(R.string.johnson_family),
+            helper = fsString(R.string.encrypted_and_shown_above_it_is, username),
             enabled = phase !is OpenAccountPhase.Working,
         )
 
         FSField(
             value = deviceName,
             onValueChange = { deviceName = it },
-            label = "This device's name",
-            placeholder = "$username's phone",
-            helper = "You can rename it anytime in Settings.",
+            label = stringResource(R.string.this_devices_name),
+            placeholder = fsString(R.string.s_phone, username),
+            helper = stringResource(R.string.you_can_rename_it_anytime_in),
             enabled = phase !is OpenAccountPhase.Working,
         )
 
@@ -117,14 +119,14 @@ fun OpenAccountScreen(
         Spacer(Modifier.height(FS.space.s4))
 
         FSPrimaryButton(
-            label = if (phase is OpenAccountPhase.Failed) "Try again" else "Open account",
+            label = if (phase is OpenAccountPhase.Failed) stringResource(R.string.try_again) else stringResource(R.string.open_account),
             onClick = { scope.launch { vm.openAccount(deviceName, accountName) } },
             block = true,
             large = true,
             enabled = phase !is OpenAccountPhase.Working && deviceName.isNotBlank() && accountName.isNotBlank(),
         )
         FSGhostButton(
-            label = "Back",
+            label = stringResource(R.string.back),
             onClick = onBack,
             block = true,
         )

@@ -6,6 +6,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.BackupCap
 import com.flagshipserver.app.api.BackupPolicyState
 import com.flagshipserver.app.api.BackupSchedule
@@ -38,37 +39,37 @@ object BackupFeatures {
 object BackupsText {
     const val GB: Long = 1024L * 1024 * 1024
 
-    const val PHONE_TITLE = "Phone-side backups"
-    const val PHONE_BODY =
-        "Your server makes an encrypted backup every night and this phone keeps a copy, over Wi-Fi while charging. Your server's apps can hold up to the space you reserve here."
-    const val PEER_TITLE = "Peer-distributed backups"
-    const val PEER_BODY =
-        "Encrypted pieces of your backup are kept on other Flagship servers, and yours keeps theirs. Your apps can use up to a third of this server's disk; the rest holds other servers' pieces."
-    const val NONE_TITLE = "No backups"
-    const val NONE_BODY =
-        "Nothing is backed up. If this server's disk fails, its apps and data are gone. You can still use Back up now on the server page."
+    val PHONE_TITLE get() = FSStrings.get(R.string.phone_side_backups)
+    val PHONE_BODY get() =
+        FSStrings.get(R.string.your_server_makes_an_encrypted_backup)
+    val PEER_TITLE get() = FSStrings.get(R.string.peer_distributed_backups)
+    val PEER_BODY get() =
+        FSStrings.get(R.string.encrypted_pieces_of_your_backup_are)
+    val NONE_TITLE get() = FSStrings.get(R.string.no_backups)
+    val NONE_BODY get() =
+        FSStrings.get(R.string.nothing_is_backed_up_if_this)
 
     // Create-server's backup step: short, plain, nothing preselected.
-    const val CREATE_NONE_TITLE = "No backup"
-    const val CREATE_NONE_BODY = "Nothing is saved off this server. If its disk fails, its apps and data are gone."
-    const val CREATE_PHONE_TITLE = "On my phone"
-    const val CREATE_PHONE_BODY = "Your phone keeps an encrypted copy of each night's backup."
-    const val CREATE_PEER_TITLE = "On other servers"
-    const val CREATE_PEER_BODY = "Encrypted pieces of your backup are kept on other Flagship servers."
-    const val CREATE_CHANGE_NOTE = "You can change this any time in the server's Backups section."
+    val CREATE_NONE_TITLE get() = FSStrings.get(R.string.no_backup)
+    val CREATE_NONE_BODY get() = FSStrings.get(R.string.nothing_is_saved_off_this_server)
+    val CREATE_PHONE_TITLE get() = FSStrings.get(R.string.on_my_phone)
+    val CREATE_PHONE_BODY get() = FSStrings.get(R.string.your_phone_keeps_an_encrypted_copy)
+    val CREATE_PEER_TITLE get() = FSStrings.get(R.string.on_other_servers)
+    val CREATE_PEER_BODY get() = FSStrings.get(R.string.encrypted_pieces_of_your_backup_are_2)
+    val CREATE_CHANGE_NOTE get() = FSStrings.get(R.string.you_can_change_this_any_time)
 
-    const val NO_BACKUPS = "No backups yet."
-    const val SCHEDULE_OFF = "Scheduled backups are off."
-    const val APPROVE = "Approve backups for this server"
-    const val KEEP_COPY = "Keep a copy on this phone"
-    const val KEEP_COPY_NOTE = "Only on Wi-Fi while charging."
-    const val DELETE_CONFIRM = "Delete this backup from the server?"
-    const val LIST_NOTE =
-        "Each backup is one .flagship file. Import a backup on Home restores it. It opens on your own devices without a passcode."
-    const val NOT_CHOSEN = "Not chosen yet"
+    val NO_BACKUPS get() = FSStrings.get(R.string.no_backups_yet)
+    val SCHEDULE_OFF get() = FSStrings.get(R.string.scheduled_backups_are_off)
+    val APPROVE get() = FSStrings.get(R.string.approve_backups_for_this_server)
+    val KEEP_COPY get() = FSStrings.get(R.string.keep_a_copy_on_this_phone)
+    val KEEP_COPY_NOTE get() = FSStrings.get(R.string.only_on_wi_fi_while_charging)
+    val DELETE_CONFIRM get() = FSStrings.get(R.string.delete_this_backup_from_the_server)
+    val LIST_NOTE get() =
+        FSStrings.get(R.string.each_backup_is_one_flagship_file)
+    val NOT_CHOSEN get() = FSStrings.get(R.string.not_chosen_yet)
     /** Back up now's passcode step (owner, 2026-10-16). */
-    const val PASSCODE_WHY =
-        "You'll need this passcode to import the backup into an account that isn't yours. Your own account opens it without the passcode."
+    val PASSCODE_WHY get() =
+        FSStrings.get(R.string.youll_need_this_passcode_to_import)
 
     /** The box's own `formatGb`: one decimal under 10 GB, none above. */
     fun gb(n: Long): String {
@@ -91,8 +92,8 @@ object BackupsText {
 
     /** "Backup policy: Phone-side backups · up to 32 GB". */
     fun policyLine(p: BackupPolicyState): String {
-        val base = "Backup policy: ${policyTitle(p.policy)}"
-        return if (p.policy == "phone" && p.phoneReserveBytes > 0) "$base · up to ${gb(p.phoneReserveBytes)}" else base
+        val base = FSStrings.get(R.string.backup_policy, policyTitle(p.policy))
+        return if (p.policy == "phone" && p.phoneReserveBytes > 0) FSStrings.get(R.string.up_to, base, gb(p.phoneReserveBytes)) else base
     }
 
     /** "Apps use 3.2 GB of 32 GB"; null until the box has measured. */
@@ -100,28 +101,28 @@ object BackupsText {
         val used = cap.usedBytes ?: return null
         val limit = cap.limitBytes
         return when {
-            limit == null -> "Apps use ${gb(used)}"
-            policy == "peer" -> "Apps use ${gb(used)} of ${gb(limit)} (a third of this server's disk)"
-            else -> "Apps use ${gb(used)} of ${gb(limit)}"
+            limit == null -> FSStrings.get(R.string.apps_use, gb(used))
+            policy == "peer" -> FSStrings.get(R.string.apps_use_of_a_third_of, gb(used), gb(limit))
+            else -> FSStrings.get(R.string.apps_use_of, gb(used), gb(limit))
         }
     }
 
     fun peerStateLabel(state: String): String = when (state) {
-        "waiting-for-peers" -> "Waiting for other servers"
-        "filling" -> "Making room"
-        "placing" -> "Placing pieces"
+        "waiting-for-peers" -> FSStrings.get(R.string.waiting_for_other_servers)
+        "filling" -> FSStrings.get(R.string.making_room)
+        "placing" -> FSStrings.get(R.string.placing_pieces)
         "protected" -> "Protected"
-        "at-risk" -> "At risk"
+        "at-risk" -> FSStrings.get(R.string.at_risk)
         "leaving" -> "Leaving"
         else -> "Off"
     }
 
     fun peerLines(p: PeerBackupStatus): List<String> = buildList {
         add(peerStateLabel(p.state) + (p.reason?.let { ": ${sentence(it)}." } ?: ""))
-        if (p.totalBricks > 0) add("${p.healthyBricks} of ${p.totalBricks} pieces safe")
-        if (p.holders > 0) add("Held by ${p.holders} other server${if (p.holders == 1) "" else "s"}")
-        p.lastPlacedAt?.let { add("Last placed: ${whenText(it)}") }
-        add("Holds ${ServerArchive.formatBytes(p.hostingBytes)} for other servers")
+        if (p.totalBricks > 0) add(FSStrings.get(R.string.of_pieces_safe, p.healthyBricks, p.totalBricks))
+        if (p.holders > 0) add(FSStrings.plural(R.plurals.held_by_other_servers, p.holders, p.holders))
+        p.lastPlacedAt?.let { add(FSStrings.get(R.string.last_placed, whenText(it))) }
+        add(FSStrings.get(R.string.holds_for_other_servers, ServerArchive.formatBytes(p.hostingBytes)))
     }
 
     /** A phone's default reserve: a quarter of its free space, whole GB, at least 2 GB. */
@@ -135,33 +136,33 @@ object BackupsText {
     fun statusLine(v: SavedBackupsView): String {
         v.running?.let { r ->
             val p = r.progress
-            return if (p.total > 0) "Backing up… ${p.app} (${p.done}/${p.total})" else "Backing up…"
+            return if (p.total > 0) FSStrings.get(R.string.backing_up, p.app, p.done, p.total) else FSStrings.get(R.string.backing_up_2)
         }
         val newest = v.backups.firstOrNull() ?: return NO_BACKUPS
-        return "Last backup: ${whenText(newest.createdAt)} · ${size(newest)}"
+        return FSStrings.get(R.string.last_backup, whenText(newest.createdAt), size(newest))
     }
 
     fun failedLine(v: SavedBackupsView): String? {
         val r = v.lastRun ?: return null
         if (r.ok || v.running != null) return null
-        return "The last backup failed: ${sentence(r.reason ?: "the backup couldn't be made")}."
+        return FSStrings.get(R.string.the_last_backup_failed, sentence(r.reason ?: "the backup couldn't be made"))
     }
 
     /** "Next backup: …", or off; null when the keys are out (the waiting reason or the approve button). */
     fun nextLine(v: SavedBackupsView): String? = when {
         v.schedule.frequency == "off" -> SCHEDULE_OFF
-        v.nextRunAt != null -> "Next backup: ${whenText(v.nextRunAt)}"
+        v.nextRunAt != null -> FSStrings.get(R.string.next_backup, whenText(v.nextRunAt))
         else -> null
     }
 
     fun rowLine(b: SavedBackup): String {
-        val kind = if (b.trigger == "now") "Back up now" else "Scheduled"
-        val apps = "${b.apps.size} app${if (b.apps.size == 1) "" else "s"}"
+        val kind = if (b.trigger == "now") FSStrings.get(R.string.back_up_now) else "Scheduled"
+        val apps = FSStrings.plural(R.plurals.apps_count, b.apps.size, b.apps.size)
         return "${whenText(b.createdAt)} · ${size(b)} · $kind · $apps"
     }
 
     fun leftLine(b: SavedBackup): String? =
-        if (b.left.isEmpty()) null else "Left out: ${b.left.joinToString(", ") { it.name }}"
+        if (b.left.isEmpty()) null else FSStrings.get(R.string.left_out, b.left.joinToString(", ") { it.name })
 
     /** Admin + the box asks for keys: the only time a device deposits. */
     fun shouldDeposit(isAdmin: Boolean, v: SavedBackupsView?): Boolean = isAdmin && v != null && v.keysWanted > 0
@@ -217,8 +218,8 @@ object BackupsText {
     fun scheduleLine(s: BackupSchedule, zone: ZoneId = ZoneId.systemDefault(), now: Instant = Instant.now(), locale: Locale = Locale.getDefault()): String {
         if (s.frequency == "off") return SCHEDULE_OFF
         val l = toLocal(s, zone, now)
-        val whenPart = if (s.frequency == "weekly") "Weekly on ${weekdayName(l.weekday, locale)} at ${timeText(l.minuteOfDay, locale)}"
-        else "Daily at ${timeText(l.minuteOfDay, locale)}"
-        return "$whenPart · keeps ${s.keepDaily} daily and ${s.keepWeekly} weekly"
+        val whenPart = if (s.frequency == "weekly") FSStrings.get(R.string.weekly_on_at, weekdayName(l.weekday, locale), timeText(l.minuteOfDay, locale))
+        else FSStrings.get(R.string.daily_at, timeText(l.minuteOfDay, locale))
+        return FSStrings.get(R.string.keeps_daily_and_weekly, whenPart, s.keepDaily, s.keepWeekly)
     }
 }

@@ -3,6 +3,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -41,21 +45,21 @@ fun InviteAcceptScreen(rawReply: String, onDone: () -> Unit) {
     val toasts = LocalToastCenter.current
     val vm = remember(rawReply) { InviteAcceptViewModel(rawReply) }
     val phase by vm.phase.collectAsState()
-    val app = vm.serviceRef.ifEmpty { "your app" }
+    val app = vm.serviceRef.ifEmpty { stringResource(R.string.your_app) }
 
-    FSScreen(title = "Approve access", onBack = onDone) {
+    FSScreen(title = stringResource(R.string.approve_access), onBack = onDone) {
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 when (val p = phase) {
                     is InviteAcceptPhase.Done -> {
-                        Text("Approved", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
+                        Text(stringResource(R.string.approved), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
                         Text(
-                            "They now have access to ${p.serviceRef.ifEmpty { "the app" }}.",
+                            fsString(R.string.they_now_have_access_to, p.serviceRef.ifEmpty { stringResource(R.string.the_app) }),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyLarge,
                         )
                         FSPrimaryButton(
-                            label = "Done",
+                            label = stringResource(R.string.done),
                             block = true,
                             large = true,
                             onClick = onDone,
@@ -63,17 +67,16 @@ fun InviteAcceptScreen(rawReply: String, onDone: () -> Unit) {
                         )
                     }
                     else -> {
-                        Text("Approve this person", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
+                        Text(stringResource(R.string.approve_this_person), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
                         Text(
-                            "You sent an invite to $app and they accepted. Approving gives them access. " +
-                                "You won't see their username, only the label you gave them.",
+                            fsString(R.string.you_sent_an_invite_to_and, app),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyLarge,
                         )
                         val submitting = p is InviteAcceptPhase.Submitting
                         if (vm.serverDomain != null) {
                             FSPrimaryButton(
-                                label = if (submitting) "Approving…" else "Approve",
+                                label = if (submitting) stringResource(R.string.approving) else stringResource(R.string.approve),
                                 enabled = !submitting,
                                 block = true,
                                 large = true,
@@ -81,7 +84,7 @@ fun InviteAcceptScreen(rawReply: String, onDone: () -> Unit) {
                                     scope.launch {
                                         vm.approve()
                                         when (val after = vm.phase.value) {
-                                            is InviteAcceptPhase.Done -> toasts.success("Approved.")
+                                            is InviteAcceptPhase.Done -> toasts.success(FSStrings.get(R.string.approved_2))
                                             is InviteAcceptPhase.Failed -> toasts.error(after.message)
                                             else -> {}
                                         }
@@ -93,7 +96,7 @@ fun InviteAcceptScreen(rawReply: String, onDone: () -> Unit) {
                         (p as? InviteAcceptPhase.Failed)?.let {
                             Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.semantics { testTag = "invite-accept-error" })
                         }
-                        FSSecondaryButton(label = "Not now", block = true, onClick = onDone)
+                        FSSecondaryButton(label = stringResource(R.string.not_now), block = true, onClick = onDone)
                     }
                 }
             }

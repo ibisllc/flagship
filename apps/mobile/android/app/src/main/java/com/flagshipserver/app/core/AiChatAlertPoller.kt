@@ -21,6 +21,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.AiChatRequest
 import com.flagshipserver.app.api.PhoneAlert
 import com.flagshipserver.app.api.PhoneAlertClient
@@ -121,7 +122,7 @@ class AiChatAlertPoller(
             // reconcile on the same op rather than dueling.
             operations.upsertBuild(
                 id = alert.sessionId,
-                subject = "AI build",
+                subject = FSStrings.get(R.string.ai_build),
                 onServer = null,
                 target = DeepLink.VibeCodeChat(alert.sessionId, server),
             )

@@ -17,6 +17,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.MigrationSession
 import com.flagshipserver.app.api.ScreensClient
@@ -119,7 +121,7 @@ class MigrationViewModel(
             mailbox.fetchMigration(serverFqdn)
         } catch (_: Throwable) {
             _mode.value = MigrationMode.Failed(
-                "Couldn't check for a migration in progress. Check your connection and try again.",
+                FSStrings.get(R.string.couldnt_check_for_a_migration_in),
             )
             return
         }
@@ -138,14 +140,14 @@ class MigrationViewModel(
             val stk = pods.identityPubKey(serverFqdn)
             if (stk == null) {
                 _mode.value = MigrationMode.Failed(
-                    "Couldn't read this server's current key from the directory — is it online? It must be reachable to migrate.",
+                    FSStrings.get(R.string.couldnt_read_this_servers_current_key),
                 )
                 return
             }
             oldStkPubHex = stk
         } catch (_: Throwable) {
             _mode.value = MigrationMode.Failed(
-                "Couldn't reach your account directory. Check your connection and try again.",
+                FSStrings.get(R.string.couldnt_reach_your_account_directory_check),
             )
             return
         }
@@ -197,16 +199,16 @@ class MigrationViewModel(
         _errorMessage.value = null
         val oldStk = oldStkPubHex
         if (oldStk == null) {
-            _errorMessage.value = "Couldn't read this server's current key — refresh and try again."
+            _errorMessage.value = FSStrings.get(R.string.couldnt_read_this_servers_current_key_2)
             return
         }
         if (backupMissing) {
-            _errorMessage.value = "This server has no backup yet — enable backup first."
+            _errorMessage.value = FSStrings.get(R.string.this_server_has_no_backup_yet_2)
             return
         }
         _working.value = true
         try {
-            val reason = "Migrate $serverFqdn to a new machine / VM"
+            val reason = FSStrings.get(R.string.migrate_to_a_new_machine_vm, serverFqdn)
             val irk = signer(reason)
             val pub = irkPubHex()
             val orderKey = orderSigner(reason)
@@ -224,7 +226,7 @@ class MigrationViewModel(
             )
             mailbox.depositMigrationStart(serverFqdn, body)
         } catch (e: Throwable) {
-            _errorMessage.value = "Couldn't start the migration. ${UserErrorText.of(e)}"
+            _errorMessage.value = FSStrings.get(R.string.couldnt_start_the_migration, UserErrorText.of(e))
             return
         } finally {
             _working.value = false
@@ -250,7 +252,7 @@ class MigrationViewModel(
         _errorMessage.value = null
         _working.value = true
         try {
-            val reason = "Hand $serverFqdn off to the new server"
+            val reason = FSStrings.get(R.string.hand_off_to_the_new_server_2, serverFqdn)
             val irk = signer(reason)
             val pub = irkPubHex()
             val orderKey = orderSigner(reason)
@@ -282,7 +284,7 @@ class MigrationViewModel(
             )
             mailbox.depositMigrationFreeze(serverFqdn, freeze)
         } catch (e: Throwable) {
-            _errorMessage.value = "Couldn't hand off. ${UserErrorText.of(e)}"
+            _errorMessage.value = FSStrings.get(R.string.couldnt_hand_off, UserErrorText.of(e))
         } finally {
             _working.value = false
         }
@@ -304,7 +306,7 @@ class MigrationViewModel(
         _errorMessage.value = null
         _working.value = true
         try {
-            val reason = "Abort migrating $serverFqdn"
+            val reason = FSStrings.get(R.string.abort_migrating, serverFqdn)
             val irk = signer(reason)
             val pub = irkPubHex()
             val orderKey = orderSigner(reason)
@@ -322,7 +324,7 @@ class MigrationViewModel(
             mailbox.depositMigrationAbort(serverFqdn, body)
             holdStore.clearHold(serverFqdn)
         } catch (e: Throwable) {
-            _errorMessage.value = "Couldn't abort. ${UserErrorText.of(e)}"
+            _errorMessage.value = FSStrings.get(R.string.couldnt_abort, UserErrorText.of(e))
         } finally {
             _working.value = false
         }

@@ -6,11 +6,13 @@
 
 package com.flagshipserver.app.keystore
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.IrkAccess
 import com.flagshipserver.app.core.IrkMaterial
 import com.flagshipserver.app.core.WatchDelegateSigner
 
-class SessionLockedException : Exception("This app session isn't unlocked.")
+class SessionLockedException : Exception(FSStrings.get(R.string.this_app_session_isnt_unlocked))
 
 class SessionIrkAccess(
     private val sessionUnlocked: () -> Boolean = { isSessionUnlocked() },

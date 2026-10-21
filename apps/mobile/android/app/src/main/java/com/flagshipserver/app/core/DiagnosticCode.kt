@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
@@ -47,7 +48,7 @@ class DiagnosticsLog(private val clock: () -> Long = { System.currentTimeMillis(
 
     /** One line per entry, newest last: `2026-10-20T10:00:00Z relay-route-unverified home.x.flagship.services net-dropped`. */
     fun text(): String = recent().joinToString("\n") {
-        "${java.time.Instant.ofEpochMilli(it.at)} ${it.code} ${it.host}${if (it.detail.isEmpty()) "" else " ${it.detail}"}"
+        FSStrings.get(R.string.text, java.time.Instant.ofEpochMilli(it.at), it.code, it.host, if (it.detail.isEmpty()) "" else " ${it.detail}")
     }
 
     companion object {

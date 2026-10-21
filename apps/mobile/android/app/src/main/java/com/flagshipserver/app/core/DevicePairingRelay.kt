@@ -16,6 +16,8 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
+
 /** Admin (QR-shower) side of the pairing relay. The admin opens the
  *  session, waits for the incoming device's hello (its fresh X25519
  *  pubkey), then — after the user confirms the SAS — delivers the sealed
@@ -65,8 +67,8 @@ interface IncomingPairingRelay {
  *  the two surfaces read identically. */
 sealed class PairingRelayError(message: String) : RuntimeException(message) {
     data class ConnectionFailed(val why: String) : PairingRelayError("Couldn't reach the relay: $why")
-    object PeerMissing : PairingRelayError("The other device isn't connected yet — keep this screen open.")
-    object SessionExpired : PairingRelayError("This pairing code expired. Generate a fresh one and try again.")
-    object NoReturnChannel : PairingRelayError("The other device didn't open a return channel. Ask it to reopen the pairing link.")
+    object PeerMissing : PairingRelayError(FSStrings.get(R.string.the_other_device_isnt_connected_yet))
+    object SessionExpired : PairingRelayError(FSStrings.get(R.string.this_pairing_code_expired_generate_a))
+    object NoReturnChannel : PairingRelayError(FSStrings.get(R.string.the_other_device_didnt_open_a))
     data class RelayErr(val msg: String) : PairingRelayError("Relay: $msg")
 }

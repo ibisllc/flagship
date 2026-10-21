@@ -5,6 +5,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.ScrollState
@@ -111,7 +115,7 @@ fun DatabaseEntrySection(nav: NavController, serviceId: String, detail: AppDetai
             subtitle = when (val p = phase) {
                 is AppDatabaseViewModel.Phase.Loaded -> AppDatabaseViewModel.summaryText(p.stores)
                 is AppDatabaseViewModel.Phase.Failed -> p.message
-                else -> "Loading…"
+                else -> stringResource(R.string.loading)
             },
             icon = Icons.Outlined.Storage,
             iconTint = FS.colors.accent,
@@ -160,18 +164,18 @@ fun AppDatabaseScreen(nav: NavController, serviceId: String) {
     LazyColumn(Modifier.fillMaxSize()) {
         item { DbBlock { DbSubtitle("$appName · ${AppDatabaseViewModel.NOTE}") } }
         when (val p = phase) {
-            is AppDatabaseViewModel.Phase.Loading -> item { MutedLine("Loading…") }
+            is AppDatabaseViewModel.Phase.Loading -> item { MutedLine(stringResource(R.string.loading)) }
             is AppDatabaseViewModel.Phase.Hidden -> item {
-                MutedLine(if (restricted) "Only your owner device can open the database." else "This server can't show the database.")
+                MutedLine(if (restricted) stringResource(R.string.only_your_owner_device_can_open) else stringResource(R.string.this_server_cant_show_the_database))
             }
             is AppDatabaseViewModel.Phase.Failed -> item {
                 DbBlock {
                     FSEmptyState(
-                        title = "Couldn't load the database",
+                        title = stringResource(R.string.couldnt_load_the_database),
                         message = p.message,
                         icon = Icons.Outlined.ErrorOutline,
                         iconTint = MaterialTheme.colorScheme.error,
-                        action = { FSSecondaryButton("Try again", onClick = { scope.launch { vm.load() } }) },
+                        action = { FSSecondaryButton(stringResource(R.string.try_again), onClick = { scope.launch { vm.load() } }) },
                     )
                 }
             }
@@ -196,7 +200,7 @@ fun AppDatabaseScreen(nav: NavController, serviceId: String) {
                                 }
                             }
                             FSSecondaryButton(
-                                label = if (p.stores.size > 1) "${AppDatabaseViewModel.RUN_SQL} on ${store.store}" else AppDatabaseViewModel.RUN_SQL,
+                                label = if (p.stores.size > 1) fsString(R.string.on_2, AppDatabaseViewModel.RUN_SQL, store.store) else AppDatabaseViewModel.RUN_SQL,
                                 block = true,
                                 modifier = Modifier.testTag("db-run-sql"),
                                 onClick = { nav.navigate(appDbQueryRoute(serviceId, store.store)) },
@@ -239,7 +243,7 @@ fun AppDbTableScreen(nav: NavController, serviceId: String, store: String, table
         actions = {
             FSBarAction(
                 icon = Icons.Outlined.Share,
-                label = if (exporting) "Exporting…" else AppDatabaseViewModel.EXPORT_CSV,
+                label = if (exporting) stringResource(R.string.exporting) else AppDatabaseViewModel.EXPORT_CSV,
                 enabled = !exporting,
                 modifier = Modifier.testTag("db-export-csv"),
                 onClick = {
@@ -256,7 +260,7 @@ fun AppDbTableScreen(nav: NavController, serviceId: String, store: String, table
             DbBlock {
                 DbSubtitle("${displayName(serviceId)} · $store")
                 Text(
-                    if (page == null) (if (loading) "Loading…" else "") else vm.rangeText(),
+                    if (page == null) (if (loading) stringResource(R.string.loading) else "") else vm.rangeText(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = FS.space.s1).testTag("db-range"),
@@ -273,13 +277,13 @@ fun AppDbTableScreen(nav: NavController, serviceId: String, store: String, table
                 modifier = Modifier.padding(top = FS.space.s4, bottom = FS.space.s6),
             ) {
                 FSSecondaryButton(
-                    "Previous",
+                    stringResource(R.string.previous),
                     enabled = !loading && vm.hasPrevious,
                     modifier = Modifier.weight(1f).testTag("db-prev"),
                     onClick = { scope.launch { vm.previous() } },
                 )
                 FSSecondaryButton(
-                    "Next",
+                    stringResource(R.string.next),
                     enabled = !loading && vm.hasNext,
                     modifier = Modifier.weight(1f).testTag("db-next"),
                     onClick = { scope.launch { vm.next() } },
@@ -338,13 +342,13 @@ fun AppDbQueryScreen(nav: NavController, serviceId: String, store: String) {
                         sql = it
                         vm.cancelWrite()
                     },
-                    placeholder = { Text("SELECT * FROM …", fontFamily = FontFamily.Monospace) },
+                    placeholder = { Text(stringResource(R.string.select_from), fontFamily = FontFamily.Monospace) },
                     textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface),
                     shape = MaterialTheme.shapes.small,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp).testTag("db-sql-editor"),
                 )
                 FSPrimaryButton(
-                    label = if (running) "Running…" else AppDbQueryViewModel.RUN,
+                    label = if (running) stringResource(R.string.running) else AppDbQueryViewModel.RUN,
                     enabled = !running && sql.isNotBlank(),
                     block = true,
                     modifier = Modifier.testTag("db-sql-run"),
@@ -516,7 +520,7 @@ private suspend fun shareCsv(ctx: Context, name: String, csv: ByteArray) {
         putExtra(Intent.EXTRA_SUBJECT, name)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    val chooser = Intent.createChooser(send, "Share $name")
+    val chooser = Intent.createChooser(send, FSStrings.get(R.string.share, name))
     chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     ctx.startActivity(chooser)
 }

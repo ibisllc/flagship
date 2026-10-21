@@ -7,6 +7,8 @@
 
 package com.flagshipserver.app.push
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
@@ -135,9 +137,9 @@ class FlagshipFcmService : FirebaseMessagingService() {
 
     companion object {
         const val GENERIC_CATEGORY = "generic"
-        const val GENERIC_TEXT = "Open Flagship to see what's new."
+        val GENERIC_TEXT get() = FSStrings.get(R.string.open_flagship_to_see_whats_new)
         const val APP_ACCESS_CATEGORY = "app-access"
-        const val APP_ACCESS_TEXT = "One of your apps wants to reach the internet"
+        val APP_ACCESS_TEXT get() = FSStrings.get(R.string.one_of_your_apps_wants_to)
         private const val NOTIF_ID_BASE = 1000
 
         /** Every channel (one per kind of push, see NotificationChannels). */
@@ -197,9 +199,9 @@ class FlagshipFcmService : FirebaseMessagingService() {
             // A per-session request code so distinct sessions don't collide.
             val pending = PendingIntent.getActivity(context, sessionId.hashCode(), intent, pendingFlags)
             val body = if (isEnvVar) {
-                "The AI needs an environment variable to continue."
+                FSStrings.get(R.string.the_ai_needs_an_environment_variable)
             } else {
-                "The AI is asking you a question."
+                FSStrings.get(R.string.the_ai_is_asking_you_a)
             }
             val notif = NotificationCompat.Builder(context, NotificationChannels.BUILDS.id)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)

@@ -1,5 +1,6 @@
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -65,7 +66,7 @@ class BuilderPairController(
         if (consumeJob != null) return
         _phase.value = Phase.Connecting
         val scanned = BuilderPairing.parse(raw)
-        if (scanned == null) { _phase.value = Phase.Failed("That code isn't valid."); return }
+        if (scanned == null) { _phase.value = Phase.Failed(FSStrings.get(R.string.that_code_isnt_valid)); return }
         val sid = BuilderPairing.sessionId(scanned.codeBytes)
         sessionId = sid
         builderPub = scanned.builderPublicKey
@@ -107,8 +108,8 @@ class BuilderPairController(
                 client.close()
             }
             is BuilderInbound.ConsentRequest -> { /* no debug-consent round-trip in the one-shot model */ }
-            is BuilderInbound.PeerGone -> fail("The computer's builder app disconnected.")
-            is BuilderInbound.Expired -> fail("The pairing session timed out.")
+            is BuilderInbound.PeerGone -> fail(FSStrings.get(R.string.the_computers_builder_app_disconnected))
+            is BuilderInbound.Expired -> fail(FSStrings.get(R.string.the_pairing_session_timed_out))
             is BuilderInbound.RelayError -> handleConnectionLoss(ev.message)
             is BuilderInbound.Pong -> { /* liveness */ }
         }
@@ -141,11 +142,11 @@ class BuilderPairController(
             receiptTimeoutJob = scope.launch {
                 delay(20_000)
                 if (_phase.value is Phase.Delivering) {
-                    fail("The builder saved the recipe but didn't confirm receipt. Update or reopen the builder and try again.")
+                    fail(FSStrings.get(R.string.the_builder_saved_the_recipe_but))
                 }
             }
         } catch (t: Throwable) {
-            fail(UserErrorText.of(t, "Delivery failed."))
+            fail(UserErrorText.of(t, FSStrings.get(R.string.delivery_failed)))
         }
     }
 

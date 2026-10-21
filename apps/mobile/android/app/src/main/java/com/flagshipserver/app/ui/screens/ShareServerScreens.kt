@@ -4,6 +4,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -184,7 +188,7 @@ private fun shareText(ctx: Context, text: String) {
         type = "text/plain"
         putExtra(Intent.EXTRA_TEXT, text)
     }
-    ctx.startActivity(Intent.createChooser(send, "Share server link").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    ctx.startActivity(Intent.createChooser(send, FSStrings.get(R.string.share_server_link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
 
 // ── Owner: "Shared with" + Activity on the server's page ──────────────────
@@ -234,7 +238,7 @@ fun ShareServerCard(serverDomain: String, podId: String) {
         ui = ui,
         readOnly = LocalServerReadOnly.current,
         onShare = { sheetOpen = true },
-        onConfirm = { s -> scope.launch { if (vm.confirm(s)) toasts.success("${s.label} can now use this server.") } },
+        onConfirm = { s -> scope.launch { if (vm.confirm(s)) toasts.success(FSStrings.get(R.string.can_now_use_this_server, s.label)) } },
         onNoMatch = { s -> removing = s.shareId to s.label },
         onLevel = { s, level -> scope.launch { vm.change(s, level = level) } },
         onUnlock = { s, on -> scope.launch { vm.change(s, unlockAtBoot = on) } },
@@ -242,9 +246,9 @@ fun ShareServerCard(serverDomain: String, podId: String) {
         onRemove = { s -> removing = s.shareId to s.label },
         onCopy = { p ->
             clipboard.setText(AnnotatedString(p.link))
-            toasts.success("Link copied.")
+            toasts.success(FSStrings.get(R.string.link_copied_2))
         },
-        onCancelOffer = { p -> scope.launch { if (vm.cancel(p)) toasts.success("Link cancelled.") } },
+        onCancelOffer = { p -> scope.launch { if (vm.cancel(p)) toasts.success(FSStrings.get(R.string.link_cancelled)) } },
     )
     if (ui.activity.isNotEmpty()) {
         ShareActivityCard(ui.activity)
@@ -254,18 +258,18 @@ fun ShareServerCard(serverDomain: String, podId: String) {
     removing?.let { (id, label) ->
         AlertDialog(
             onDismissRequest = { removing = null },
-            title = { Text("Stop sharing with $label?") },
-            text = { Text("$label loses access to $serverName at once. To share again you'd send a new link.") },
+            title = { Text(fsString(R.string.stop_sharing_with, label)) },
+            text = { Text(fsString(R.string.loses_access_to_at_once_to, label, serverName)) },
             confirmButton = {
                 TextButton(
                     onClick = {
                         removing = null
-                        scope.launch { if (vm.remove(id, label)) toasts.success("$label no longer has access.") }
+                        scope.launch { if (vm.remove(id, label)) toasts.success(FSStrings.get(R.string.no_longer_has_access, label)) }
                     },
                     modifier = Modifier.testTag("share-remove-confirm"),
-                ) { Text("Stop sharing", color = MaterialTheme.colorScheme.error) }
+                ) { Text(stringResource(R.string.stop_sharing), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { removing = null }) { Text("Keep") } },
+            dismissButton = { TextButton(onClick = { removing = null }) { Text(stringResource(R.string.keep)) } },
         )
     }
 
@@ -294,16 +298,16 @@ fun ShareServerCardContent(
     onCancelOffer: (PendingShare) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-    SectionTitle("Shared with", Modifier.testTag("share-card-title"))
+    SectionTitle(stringResource(R.string.shared_with), Modifier.testTag("share-card-title"))
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.fillMaxWidth().testTag("share-server-card")) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s4)) {
             val shares = ui.shares
             when {
-                ui.loading && shares == null -> Muted("Checking who has access…")
-                shares == null -> Text(ui.error ?: "Couldn't load who has access.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                ui.loading && shares == null -> Muted(stringResource(R.string.checking_who_has_access))
+                shares == null -> Text(ui.error ?: stringResource(R.string.couldnt_load_who_has_access), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                 else -> {
                     if (shares.active.isEmpty() && shares.pending.isEmpty() && shares.accepted.isEmpty()) {
-                        Muted("Only you can use this server. Share it to let someone else see it, or help run it.")
+                        Muted(stringResource(R.string.only_you_can_use_this_server))
                     }
                     var first = true
                     val divider: @Composable () -> Unit = {
@@ -329,14 +333,14 @@ fun ShareServerCardContent(
                         divider()
                         PendingRow(p, busy = p.shareId in ui.busy || readOnly, onCopy = { onCopy(p) }, onCancel = { onCancelOffer(p) })
                     }
-                    shares.boxProblem?.let { Muted("$it Changes to who has access wait until it's back.") }
+                    shares.boxProblem?.let { Muted(fsString(R.string.changes_to_who_has_access_wait, it)) }
                 }
             }
             if (readOnly) {
                 Muted(com.flagshipserver.app.core.AdminOrderGate.SHARE, modifier = Modifier.testTag("share-admin-only"))
             }
             FSPrimaryButton(
-                label = "Share this server",
+                label = stringResource(R.string.share_this_server),
                 onClick = onShare,
                 block = true,
                 enabled = !readOnly,
@@ -352,23 +356,23 @@ private fun AcceptedRow(s: AcceptedShare, busy: Boolean, onConfirm: () -> Unit, 
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.testTag("share-row-${s.shareId}")) {
         val sas = s.sas
         if (sas == null) {
-            Text("${s.label}'s acceptance doesn't check out", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.titleSmall)
-            Muted("Someone other than ${s.label} may have used the link. Remove it and share again.")
-            FSDangerButton(label = "Remove", onClick = onNoMatch, enabled = !busy, block = true)
+            Text(fsString(R.string.s_acceptance_doesnt_check_out, s.label), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.titleSmall)
+            Muted(fsString(R.string.someone_other_than_may_have_used, s.label))
+            FSDangerButton(label = stringResource(R.string.remove_3), onClick = onNoMatch, enabled = !busy, block = true)
             return@Column
         }
-        Text("${s.label} accepted", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall)
-        Muted("Does their phone show this code?")
+        Text(fsString(R.string.accepted, s.label), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall)
+        Muted(stringResource(R.string.does_their_phone_show_this_code))
         SasText(sas, Modifier.testTag("share-sas-${s.shareId}"))
         Muted("${ShareCopy.level(s.options.level)}${if (s.options.unlockAtBoot) " · can approve start-up" else ""}${if (s.options.seeAppData) " · can see app data" else ""}")
         Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
             FSPrimaryButton(
-                label = if (busy) "Confirming…" else "It matches",
+                label = if (busy) stringResource(R.string.confirming) else stringResource(R.string.it_matches),
                 onClick = onConfirm,
                 enabled = !busy,
                 modifier = Modifier.weight(1f).testTag("share-confirm"),
             )
-            FSSecondaryButton(label = "It doesn't", onClick = onNoMatch, enabled = !busy, modifier = Modifier.weight(1f))
+            FSSecondaryButton(label = stringResource(R.string.it_doesnt), onClick = onNoMatch, enabled = !busy, modifier = Modifier.weight(1f))
         }
     }
 }
@@ -387,23 +391,23 @@ private fun ActiveRow(
             Text(s.label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             FSPill(ShareCopy.level(s.level), kind = if (s.level == ServerShare.LEVEL_MANAGE) FSPillKind.Provisioning else FSPillKind.Idle)
         }
-        Muted(s.lastSeenAt?.let { "Last signed in ${FlagshipDateFormat.format(it)}" } ?: "Hasn't signed in yet")
+        Muted(s.lastSeenAt?.let { fsString(R.string.last_signed_in, FlagshipDateFormat.format(it)) } ?: stringResource(R.string.hasnt_signed_in_yet))
         LevelChoice(level = s.level, onChange = { if (it != s.level) onLevel(it) }, enabled = !busy)
         OptionSwitch(ShareCopy.UNLOCK_TITLE, ShareCopy.UNLOCK_LINE, s.unlockAtBoot, !busy, onUnlock, "share-unlock-${s.shareId}")
         Muted(ShareCopy.HOUSE_KEY_LINE, size = 12, modifier = Modifier.testTag("share-house-key-${s.shareId}"))
         OptionSwitch(ShareCopy.DATA_TITLE, ShareCopy.DATA_LINE, s.seeAppData, !busy, onData, "share-data-${s.shareId}")
-        FSDangerButton(label = "Remove", onClick = onRemove, enabled = !busy, block = true, modifier = Modifier.testTag("share-remove-${s.shareId}"))
+        FSDangerButton(label = stringResource(R.string.remove_3), onClick = onRemove, enabled = !busy, block = true, modifier = Modifier.testTag("share-remove-${s.shareId}"))
     }
 }
 
 @Composable
 private fun PendingRow(p: PendingShare, busy: Boolean, onCopy: () -> Unit, onCancel: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.testTag("share-row-${p.shareId}")) {
-        Text("Waiting for ${p.label} to open the link", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall)
-        Muted("${ShareCopy.level(p.level)} · the link works until ${FlagshipDateFormat.format(p.expiresAt)}")
+        Text(fsString(R.string.waiting_for_to_open_the_link, p.label), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall)
+        Muted(fsString(R.string.the_link_works_until, ShareCopy.level(p.level), FlagshipDateFormat.format(p.expiresAt)))
         Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
-            FSSecondaryButton(label = "Copy link", onClick = onCopy, modifier = Modifier.weight(1f))
-            FSDangerButton(label = "Cancel", onClick = onCancel, enabled = !busy, modifier = Modifier.weight(1f))
+            FSSecondaryButton(label = stringResource(R.string.copy_link), onClick = onCopy, modifier = Modifier.weight(1f))
+            FSDangerButton(label = stringResource(R.string.cancel), onClick = onCancel, enabled = !busy, modifier = Modifier.weight(1f))
         }
     }
 }
@@ -411,7 +415,7 @@ private fun PendingRow(p: PendingShare, busy: Boolean, onCopy: () -> Unit, onCan
 @Composable
 fun ShareActivityCard(entries: List<ActivityEntry>) {
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-    SectionTitle("Activity")
+    SectionTitle(stringResource(R.string.activity))
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.fillMaxWidth().testTag("share-activity")) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             entries.sortedByDescending { it.ts }.take(50).forEach { e ->
@@ -509,55 +513,55 @@ fun ShareSheetContent(
         verticalArrangement = Arrangement.spacedBy(FS.space.s4),
         modifier = Modifier.verticalScroll(rememberScrollState()).testTag("share-sheet"),
     ) {
-        Text("Share $serverName", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineSmall)
+        Text(fsString(R.string.share, serverName), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineSmall)
         when (step) {
             ShareSheetStep.Label -> {
-                Muted("Who are you sharing it with? They'll need their own Flagship account.", size = 14)
+                Muted(stringResource(R.string.who_are_you_sharing_it_with), size = 14)
                 FSField(
                     value = label,
                     onValueChange = onLabel,
-                    label = "Their name",
-                    placeholder = "Sam",
-                    helper = "Only you and this server see this name.",
-                    error = if (label.isNotEmpty() && name == null) "Use up to 64 characters, without |." else null,
+                    label = stringResource(R.string.their_name),
+                    placeholder = stringResource(R.string.sam),
+                    helper = stringResource(R.string.only_you_and_this_server_see),
+                    error = if (label.isNotEmpty() && name == null) stringResource(R.string.use_up_to_64_characters_without) else null,
                     fieldTag = "share-label",
                 )
-                FSPrimaryButton(label = "Next", onClick = { onStep(ShareSheetStep.Level) }, enabled = name != null, block = true, modifier = Modifier.testTag("share-next"))
-                FSGhostButton(label = "Cancel", onClick = onClose, block = true)
+                FSPrimaryButton(label = stringResource(R.string.next), onClick = { onStep(ShareSheetStep.Level) }, enabled = name != null, block = true, modifier = Modifier.testTag("share-next"))
+                FSGhostButton(label = stringResource(R.string.cancel), onClick = onClose, block = true)
             }
             ShareSheetStep.Level -> {
-                Muted("What can ${name ?: "they"} do?", size = 14)
+                Muted(fsString(R.string.what_can_do, name ?: "they"), size = 14)
                 LevelChoice(level = level, onChange = onLevel)
                 Muted(ShareCopy.NEVER_LINE, size = 12)
-                FSPrimaryButton(label = "Next", onClick = { onStep(ShareSheetStep.Options) }, block = true, modifier = Modifier.testTag("share-next"))
-                FSGhostButton(label = "Back", onClick = { onStep(ShareSheetStep.Label) }, block = true)
+                FSPrimaryButton(label = stringResource(R.string.next), onClick = { onStep(ShareSheetStep.Options) }, block = true, modifier = Modifier.testTag("share-next"))
+                FSGhostButton(label = stringResource(R.string.back), onClick = { onStep(ShareSheetStep.Label) }, block = true)
             }
             ShareSheetStep.Options -> {
-                Muted("Both are off unless you turn them on. You can change them later.", size = 14)
+                Muted(stringResource(R.string.both_are_off_unless_you_turn), size = 14)
                 OptionSwitch(ShareCopy.UNLOCK_TITLE, ShareCopy.UNLOCK_LINE, unlockAtBoot, !busy, onUnlock, "share-opt-unlock")
                 Muted(ShareCopy.HOUSE_KEY_LINE, size = 12, modifier = Modifier.testTag("share-house-key"))
                 OptionSwitch(ShareCopy.DATA_TITLE, ShareCopy.DATA_LINE, seeAppData, !busy, onData, "share-opt-data")
                 FSPrimaryButton(
-                    label = if (busy) "Creating link…" else "Create link",
+                    label = if (busy) stringResource(R.string.creating_link) else stringResource(R.string.create_link),
                     onClick = onCreate,
                     enabled = !busy,
                     block = true,
                     modifier = Modifier.testTag("share-create"),
                 )
-                FSGhostButton(label = "Back", onClick = { onStep(ShareSheetStep.Level) }, enabled = !busy, block = true)
+                FSGhostButton(label = stringResource(R.string.back), onClick = { onStep(ShareSheetStep.Level) }, enabled = !busy, block = true)
             }
             ShareSheetStep.Link -> {
                 val l = link.orEmpty()
-                Muted("Send this link to ${name ?: "them"}. It works once, for 7 days. When they accept, their phone shows a code: check it here before they get access.", size = 14)
+                Muted(fsString(R.string.send_this_link_to_it_works, name ?: "them"), size = 14)
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    QrImage(payload = l, size = 200.dp, contentDescription = "Share link QR code", modifier = Modifier.testTag("share-qr"))
+                    QrImage(payload = l, size = 200.dp, contentDescription = stringResource(R.string.share_link_qr_code), modifier = Modifier.testTag("share-qr"))
                 }
                 Text(l, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), modifier = Modifier.testTag("share-link"))
                 Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
-                    FSPrimaryButton(label = "Share", onClick = { shareText(ctx, l) }, modifier = Modifier.weight(1f))
-                    FSSecondaryButton(label = "Copy link", onClick = { clipboard.setText(AnnotatedString(l)) }, modifier = Modifier.weight(1f))
+                    FSPrimaryButton(label = stringResource(R.string.share_3), onClick = { shareText(ctx, l) }, modifier = Modifier.weight(1f))
+                    FSSecondaryButton(label = stringResource(R.string.copy_link), onClick = { clipboard.setText(AnnotatedString(l)) }, modifier = Modifier.weight(1f))
                 }
-                FSGhostButton(label = "Done", onClick = onClose, block = true)
+                FSGhostButton(label = stringResource(R.string.done), onClick = onClose, block = true)
             }
         }
     }
@@ -580,7 +584,7 @@ fun SharedWithMeContent(ui: SharedWithMeUi, onOpen: (String) -> Unit) {
     // starts from the create-server screen or a scanned link.
     if (ui.items.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.testTag("home-shared-with-me")) {
-        SectionTitle("Shared with me")
+        SectionTitle(stringResource(R.string.shared_with_me))
         ui.items.forEach { item ->
             val (status, kind) = when (val s = item.status) {
                 is SharedItem.Status.Active -> ShareCopy.level(s.level) to FSPillKind.Online
@@ -606,8 +610,8 @@ fun SharedWithMeContent(ui: SharedWithMeUi, onOpen: (String) -> Unit) {
 fun ShareAcceptScreen(initialLink: String?, onOpenServer: (String) -> Unit, onDone: () -> Unit) {
     val runtime = LocalServerShares.current
     if (runtime == null) {
-        FSScreen(title = "Shared server", onBack = onDone) {
-            FSNote("Sharing needs a live account on this phone.")
+        FSScreen(title = stringResource(R.string.shared_server), onBack = onDone) {
+            FSNote(stringResource(R.string.sharing_needs_a_live_account_on))
         }
         return
     }
@@ -641,23 +645,23 @@ fun ShareAcceptContent(
     onOpenServer: () -> Unit,
     onDone: () -> Unit,
 ) {
-    FSScreen(title = "Shared server", onBack = onDone, modifier = Modifier.testTag("share-accept")) {
+    FSScreen(title = stringResource(R.string.shared_server), onBack = onDone, modifier = Modifier.testTag("share-accept")) {
             when (phase) {
                 ShareAcceptViewModel.Phase.Input -> LinkInput(onOpen = onOpen, onCancel = onDone)
-                ShareAcceptViewModel.Phase.Opening -> Busy("Opening the link…")
+                ShareAcceptViewModel.Phase.Opening -> Busy(stringResource(R.string.opening_the_link))
                 is ShareAcceptViewModel.Phase.Offer -> OfferView(phase.opened.offer, busy = false, onAccept = onAccept, onCancel = onDone)
                 is ShareAcceptViewModel.Phase.Accepting -> OfferView(phase.opened.offer, busy = true, onAccept = {}, onCancel = {})
                 is ShareAcceptViewModel.Phase.Code -> {
                     Text(phase.entry.serverName, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineMedium)
                     if (phase.signedIn) {
-                        Text("You're in", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
-                        Muted("The owner confirmed the code. ${phase.entry.serverName} is now under Shared with me.", size = 15)
-                        FSPrimaryButton(label = "Open ${phase.entry.serverName}", onClick = onOpenServer, block = true, modifier = Modifier.testTag("share-accept-open"))
-                        FSSecondaryButton(label = "Done", onClick = onDone, block = true)
+                        Text(stringResource(R.string.youre_in), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
+                        Muted(fsString(R.string.the_owner_confirmed_the_code_is, phase.entry.serverName), size = 15)
+                        FSPrimaryButton(label = fsString(R.string.open, phase.entry.serverName), onClick = onOpenServer, block = true, modifier = Modifier.testTag("share-accept-open"))
+                        FSSecondaryButton(label = stringResource(R.string.done), onClick = onDone, block = true)
                     } else {
                         FSCard(padding = PaddingValues(FS.space.s5), modifier = Modifier.fillMaxWidth()) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                                Muted("Read this code to the owner", size = 15)
+                                Muted(stringResource(R.string.read_this_code_to_the_owner), size = 15)
                                 Spacer(Modifier.height(FS.space.s2))
                                 SasText(phase.sas, Modifier.testTag("share-accept-sas"))
                             }
@@ -665,21 +669,21 @@ fun ShareAcceptContent(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.width(FS.space.s2))
-                            Muted("Waiting for the owner to confirm", size = 14)
+                            Muted(stringResource(R.string.waiting_for_the_owner_to_confirm), size = 14)
                         }
-                        Muted("If the code on their phone is different, someone else may have the link: tell them not to confirm.", size = 13)
-                        FSSecondaryButton(label = "Close", onClick = onDone, block = true)
+                        Muted(stringResource(R.string.if_the_code_on_their_phone), size = 13)
+                        FSSecondaryButton(label = stringResource(R.string.close), onClick = onDone, block = true)
                     }
                 }
                 is ShareAcceptViewModel.Phase.Failed -> {
                     FSEmptyState(
-                        title = "Can't open this share",
+                        title = stringResource(R.string.cant_open_this_share),
                         message = phase.message,
                         icon = Icons.Outlined.ErrorOutline,
                         iconTint = MaterialTheme.colorScheme.error,
                     )
-                    FSPrimaryButton(label = "Try another link", onClick = onRetry, block = true)
-                    FSSecondaryButton(label = "Close", onClick = onDone, block = true)
+                    FSPrimaryButton(label = stringResource(R.string.try_another_link), onClick = onRetry, block = true)
+                    FSSecondaryButton(label = stringResource(R.string.close), onClick = onDone, block = true)
                 }
             }
     }
@@ -702,19 +706,19 @@ private fun LinkInput(onOpen: (String) -> Unit, onCancel: () -> Unit) {
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         scanning = granted
     }
-    Text("Open a share link", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineSmall)
-    Muted("Paste the link the owner sent you, or scan the code on their phone.", size = 15)
+    Text(stringResource(R.string.open_a_share_link), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineSmall)
+    Muted(stringResource(R.string.paste_the_link_the_owner_sent), size = 15)
     if (scanning) {
         QRScanner(onScanned = { scanned ->
             scanning = false
             onOpen(scanned)
         })
-        FSSecondaryButton(label = "Stop scanning", onClick = { scanning = false }, block = true)
+        FSSecondaryButton(label = stringResource(R.string.stop_scanning), onClick = { scanning = false }, block = true)
     } else {
-        FSField(value = text, onValueChange = { text = it }, label = "Share link", placeholder = "https://flagshipserver.com/share#…", fieldTag = "share-link-input")
-        FSPrimaryButton(label = "Open", onClick = { onOpen(text) }, enabled = text.isNotBlank(), block = true, modifier = Modifier.testTag("share-link-open"))
+        FSField(value = text, onValueChange = { text = it }, label = stringResource(R.string.share_link), placeholder = "https://flagshipserver.com/share#…", fieldTag = "share-link-input")
+        FSPrimaryButton(label = stringResource(R.string.open_2), onClick = { onOpen(text) }, enabled = text.isNotBlank(), block = true, modifier = Modifier.testTag("share-link-open"))
         FSSecondaryButton(
-            label = "Scan a code",
+            label = stringResource(R.string.scan_a_code),
             onClick = {
                 val granted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
                 if (granted) scanning = true else permission.launch(Manifest.permission.CAMERA)
@@ -726,20 +730,20 @@ private fun LinkInput(onOpen: (String) -> Unit, onCancel: () -> Unit) {
 
 @Composable
 private fun OfferView(offer: ServerShare.OfferPayload, busy: Boolean, onAccept: () -> Unit, onCancel: () -> Unit) {
-    Muted("A server was shared with you", size = 15)
+    Muted(stringResource(R.string.a_server_was_shared_with_you), size = 15)
     Text(offer.serverName.ifBlank { offer.serverDomain.substringBefore('.') }, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineMedium)
     Muted(offer.serverDomain)
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             FSPill(ShareCopy.level(offer.level), kind = FSPillKind.Idle)
-            Muted(if (offer.level == ServerShare.LEVEL_MANAGE) "You can see it and help run it: ${ShareCopy.MANAGE_LINE.replaceFirstChar { it.lowercase() }}" else "You can ${ShareCopy.VIEW_LINE.replaceFirstChar { it.lowercase() }}", size = 14)
-            if (offer.unlockAtBoot) Muted("You can approve its start-up.", size = 14)
-            if (offer.seeAppData) Muted("You can see its apps' data.", size = 14)
+            Muted(if (offer.level == ServerShare.LEVEL_MANAGE) fsString(R.string.you_can_see_it_and_help, ShareCopy.MANAGE_LINE.replaceFirstChar { it.lowercase() }) else fsString(R.string.you_can, ShareCopy.VIEW_LINE.replaceFirstChar { it.lowercase() }), size = 14)
+            if (offer.unlockAtBoot) Muted(stringResource(R.string.you_can_approve_its_start_up), size = 14)
+            if (offer.seeAppData) Muted(stringResource(R.string.you_can_see_its_apps_data), size = 14)
         }
     }
-    Muted("Accepting shows a code to read to the owner. They confirm it before you get access.", size = 13)
-    FSPrimaryButton(label = if (busy) "Accepting…" else "Accept", onClick = onAccept, enabled = !busy, block = true, large = true, modifier = Modifier.testTag("share-accept-button"))
-    FSSecondaryButton(label = "Not now", onClick = onCancel, enabled = !busy, block = true)
+    Muted(stringResource(R.string.accepting_shows_a_code_to_read), size = 13)
+    FSPrimaryButton(label = if (busy) stringResource(R.string.accepting) else "Accept", onClick = onAccept, enabled = !busy, block = true, large = true, modifier = Modifier.testTag("share-accept-button"))
+    FSSecondaryButton(label = stringResource(R.string.not_now), onClick = onCancel, enabled = !busy, block = true)
 }
 
 // ── The other account: the shared server's page ───────────────────────────
@@ -753,8 +757,8 @@ fun SharedServerScreen(shareId: String, onBack: () -> Unit, onOpenApp: (String) 
     val entry = shared.items.firstOrNull { it.entry.shareId == shareId }?.entry
     LaunchedEffect(entry == null) { if (entry == null) runtime.sharedWithMe.refresh(interactive = true) }
     if (entry == null) {
-        FSScreen(title = "Shared server", onBack = onBack) {
-            if (shared.loaded) FSNote("This server isn't shared with you any more.") else ServerCardSkeleton()
+        FSScreen(title = stringResource(R.string.shared_server), onBack = onBack) {
+            if (shared.loaded) FSNote(stringResource(R.string.this_server_isnt_shared_with_you_3)) else ServerCardSkeleton()
         }
         return
     }
@@ -779,9 +783,9 @@ fun SharedServerScreen(shareId: String, onBack: () -> Unit, onOpenApp: (String) 
         serverDomain = entry.serverDomain,
         ui = ui,
         onBack = onBack,
-        onApprove = { s -> scope.launch { if (vm.approve(s)) toasts.success("Unlocked. ${entry.serverName} is starting.") } },
+        onApprove = { s -> scope.launch { if (vm.approve(s)) toasts.success(FSStrings.get(R.string.unlocked_is_starting, entry.serverName)) } },
         onAnswer = { r, allow -> scope.launch { vm.answer(r, allow) } },
-        onLeave = { scope.launch { if (vm.leave()) toasts.success("You left ${entry.serverName}.") } },
+        onLeave = { scope.launch { if (vm.leave()) toasts.success(FSStrings.get(R.string.you_left, entry.serverName)) } },
         onRetry = { scope.launch { vm.load() } },
         onNotices = { on -> scope.launch { vm.setNotices(on) } },
         onUpdate = {
@@ -811,7 +815,7 @@ fun SharedServerContent(
     var confirmUpdate by remember { mutableStateOf(false) }
     FSScreen(title = serverName, onBack = onBack, modifier = Modifier.testTag("shared-server"), spacing = FS.space.s6) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Muted("Shared with you", size = 14, modifier = Modifier.padding(start = FS.space.s1))
+            Muted(stringResource(R.string.shared_with_you), size = 14, modifier = Modifier.padding(start = FS.space.s1))
             ui.level?.let { FSPill(ShareCopy.level(it), kind = FSPillKind.Idle) }
         }
 
@@ -829,39 +833,39 @@ fun SharedServerContent(
             SharedServerUi.Phase.Loading -> ServerCardSkeleton()
             SharedServerUi.Phase.Waiting -> {
                 FSEmptyState(
-                    title = "Waiting for the owner to confirm",
-                    message = "Once they check the code you read them, this page fills in.",
+                    title = stringResource(R.string.waiting_for_the_owner_to_confirm),
+                    message = stringResource(R.string.once_they_check_the_code_you),
                     icon = Icons.Outlined.HourglassEmpty,
                 )
             }
             SharedServerUi.Phase.Unreachable -> {
                 ErrorCard(
-                    if (ui.canUnlock) "$serverName isn't answering. If it's starting, you can approve it above when it asks." else "$serverName isn't answering right now.",
+                    if (ui.canUnlock) fsString(R.string.isnt_answering_if_its_starting_you, serverName) else fsString(R.string.isnt_answering_right_now, serverName),
                     onRetry = onRetry,
                 )
             }
             SharedServerUi.Phase.Ended, SharedServerUi.Phase.Left -> {
-                FSNote("The owner stopped sharing this server.")
+                FSNote(stringResource(R.string.the_owner_stopped_sharing_this_server))
             }
             SharedServerUi.Phase.Ready -> ReadySections(serverDomain, ui, onAnswer, onUpdate = { confirmUpdate = true }, onOpenApp = onOpenApp)
         }
 
         if (ui.phase != SharedServerUi.Phase.Ended && ui.phase != SharedServerUi.Phase.Left) {
-            FSDangerButton(label = "Leave this server", onClick = { confirmLeave = true }, enabled = !ui.busy, block = true, modifier = Modifier.testTag("shared-leave"))
+            FSDangerButton(label = stringResource(R.string.leave_this_server), onClick = { confirmLeave = true }, enabled = !ui.busy, block = true, modifier = Modifier.testTag("shared-leave"))
         }
     }
     if (confirmLeave) {
         AlertDialog(
             onDismissRequest = { confirmLeave = false },
-            title = { Text("Leave $serverName?") },
-            text = { Text("You lose access at once. The owner would have to share it with you again.") },
+            title = { Text(fsString(R.string.leave_2, serverName)) },
+            text = { Text(stringResource(R.string.you_lose_access_at_once_the)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmLeave = false
                     onLeave()
-                }, modifier = Modifier.testTag("shared-leave-confirm")) { Text("Leave", color = MaterialTheme.colorScheme.error) }
+                }, modifier = Modifier.testTag("shared-leave-confirm")) { Text(stringResource(R.string.leave_3), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { confirmLeave = false }) { Text("Stay") } },
+            dismissButton = { TextButton(onClick = { confirmLeave = false }) { Text(stringResource(R.string.stay)) } },
         )
     }
     val latest = ui.releases?.latest
@@ -874,9 +878,9 @@ fun SharedServerContent(
                 TextButton(onClick = {
                     confirmUpdate = false
                     onUpdate()
-                }, modifier = Modifier.testTag("shared-update-confirm")) { Text("Update") }
+                }, modifier = Modifier.testTag("shared-update-confirm")) { Text(stringResource(R.string.update_2)) }
             },
-            dismissButton = { TextButton(onClick = { confirmUpdate = false }) { Text("Not now") } },
+            dismissButton = { TextButton(onClick = { confirmUpdate = false }) { Text(stringResource(R.string.not_now)) } },
         )
     }
 }
@@ -887,10 +891,10 @@ private fun StartupCard(serverName: String, s: ShareStartup, busy: Boolean, onAp
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Icon(Icons.Outlined.Lock, contentDescription = null, tint = FS.colors.warning)
-                Text("$serverName is starting", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+                Text(fsString(R.string.is_starting, serverName), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
             }
-            Muted("It's waiting for its disk to be unlocked. Approve only if you expected it to start${if (s.pending.postedAt > 0) " (asked ${FlagshipDateFormat.format(s.pending.postedAt)})" else ""}.")
-            FSPrimaryButton(label = if (busy) "Unlocking…" else "Unlock it", onClick = onApprove, enabled = !busy, block = true, modifier = Modifier.testTag("shared-approve-startup"))
+            Muted(fsString(R.string.its_waiting_for_its_disk_to, if (s.pending.postedAt > 0) " (asked ${FlagshipDateFormat.format(s.pending.postedAt)})" else ""))
+            FSPrimaryButton(label = if (busy) stringResource(R.string.unlocking) else stringResource(R.string.unlock_it), onClick = onApprove, enabled = !busy, block = true, modifier = Modifier.testTag("shared-approve-startup"))
         }
     }
 }
@@ -904,12 +908,12 @@ private fun ReadySections(
     onOpenApp: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-        SectionTitle("Status")
+        SectionTitle(stringResource(R.string.status))
         SharedStatusCard(serverDomain, ui.detail)
     }
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-        SectionTitle("Monitoring")
-        ui.metrics?.let { SharedMetricsCard(it) } ?: FSNote("No readings yet.")
+        SectionTitle(stringResource(R.string.monitoring))
+        ui.metrics?.let { SharedMetricsCard(it) } ?: FSNote(stringResource(R.string.no_readings_yet))
     }
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
         SectionTitle(ServerAppsViewModel.TITLE)
@@ -947,18 +951,18 @@ private fun ReadySections(
     }
     if (ui.manage) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            SectionTitle("Internet requests")
+            SectionTitle(stringResource(R.string.internet_requests))
             FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.fillMaxWidth().testTag("shared-access")) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                    if (ui.accessRequests.isEmpty()) Muted("No app is asking to reach the internet.")
+                    if (ui.accessRequests.isEmpty()) Muted(stringResource(R.string.no_app_is_asking_to_reach))
                     ui.accessRequests.forEachIndexed { idx, r ->
                         if (idx > 0) FSCardDivider()
                         val app = r.appName ?: r.serviceId
                         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                            Text("$app wants to reach ${r.host}", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall)
+                            Text(fsString(R.string.wants_to_reach, app, r.host), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall)
                             Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
-                                FSPrimaryButton(label = "Allow", onClick = { onAnswer(r, true) }, enabled = !ui.busy, modifier = Modifier.weight(1f))
-                                FSSecondaryButton(label = "Deny", onClick = { onAnswer(r, false) }, enabled = !ui.busy, modifier = Modifier.weight(1f))
+                                FSPrimaryButton(label = stringResource(R.string.allow), onClick = { onAnswer(r, true) }, enabled = !ui.busy, modifier = Modifier.weight(1f))
+                                FSSecondaryButton(label = stringResource(R.string.deny), onClick = { onAnswer(r, false) }, enabled = !ui.busy, modifier = Modifier.weight(1f))
                             }
                         }
                     }
@@ -974,10 +978,10 @@ private fun SharedUpdateCard(ui: SharedServerUi, onUpdate: () -> Unit) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             val catalog = ui.releases
             val current = catalog?.currentTag ?: (ui.detail?.currentCommit ?: catalog?.currentCommit)?.take(8)
-            current?.let { Muted("Running $it") }
+            current?.let { Muted(fsString(R.string.running_3, it)) }
             val latest = catalog?.latest
             when {
-                catalog == null -> Muted("Couldn't list the releases right now.")
+                catalog == null -> Muted(stringResource(R.string.couldnt_list_the_releases_right_now))
                 latest == null -> Muted(ShareCopy.UPDATE_CURRENT)
                 else -> FSPrimaryButton(
                     label = ShareCopy.updateButton(latest.tag, latest.commit),
@@ -998,14 +1002,14 @@ private fun SharedStatusCard(serverDomain: String, detail: ServerDetailResponse?
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Text(serverDomain, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall)
             if (detail == null) {
-                Muted("Status unavailable.")
+                Muted(stringResource(R.string.status_unavailable))
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                    FSPill("Online", kind = FSPillKind.Online)
-                    FSPill("Server ${detail.daemonVersion}", kind = FSPillKind.Idle)
+                    FSPill(stringResource(R.string.online), kind = FSPillKind.Online)
+                    FSPill(fsString(R.string.server_3, detail.daemonVersion), kind = FSPillKind.Idle)
                     FSPill(plural(detail.serviceCount, "app"), kind = FSPillKind.Idle)
                 }
-                Muted("Up for ${uptime(detail.uptimeMs)}")
+                Muted(fsString(R.string.up_for, uptime(detail.uptimeMs)))
             }
         }
     }
@@ -1014,9 +1018,9 @@ private fun SharedStatusCard(serverDomain: String, detail: ServerDetailResponse?
 private fun uptime(ms: Long): String {
     val m = ms / 60_000
     return when {
-        m < 60 -> "$m min"
-        m < 48 * 60 -> "${m / 60} h ${m % 60} min"
-        else -> "${m / (24 * 60)} days"
+        m < 60 -> FSStrings.get(R.string.min, m)
+        m < 48 * 60 -> FSStrings.get(R.string.h_min, m / 60, m % 60)
+        else -> FSStrings.get(R.string.days, m / (24 * 60))
     }
 }
 
@@ -1035,9 +1039,9 @@ private fun bytes(b: Long): String {
 private fun SharedMetricsCard(m: ServerMetricsResponse) {
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.fillMaxWidth().testTag("shared-metrics")) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            Meter("Processor", "%.0f%%".format(m.cpuPercent), (m.cpuPercent / 100).toFloat())
-            Meter("Memory", "${bytes(m.memUsedBytes)} of ${bytes(m.memTotalBytes)}", if (m.memTotalBytes > 0) m.memUsedBytes.toFloat() / m.memTotalBytes else 0f)
-            Meter("Disk", "${bytes(m.diskUsedBytes)} of ${bytes(m.diskTotalBytes)}", if (m.diskTotalBytes > 0) m.diskUsedBytes.toFloat() / m.diskTotalBytes else 0f)
+            Meter(stringResource(R.string.processor), "%.0f%%".format(m.cpuPercent), (m.cpuPercent / 100).toFloat())
+            Meter(stringResource(R.string.memory), fsString(R.string.of, bytes(m.memUsedBytes), bytes(m.memTotalBytes)), if (m.memTotalBytes > 0) m.memUsedBytes.toFloat() / m.memTotalBytes else 0f)
+            Meter(stringResource(R.string.disk), fsString(R.string.of, bytes(m.diskUsedBytes), bytes(m.diskTotalBytes)), if (m.diskTotalBytes > 0) m.diskUsedBytes.toFloat() / m.diskTotalBytes else 0f)
             Muted("Network: ${bytes(m.netRxBytesPerSec.toLong())}/s in · ${bytes(m.netTxBytesPerSec.toLong())}/s out")
         }
     }

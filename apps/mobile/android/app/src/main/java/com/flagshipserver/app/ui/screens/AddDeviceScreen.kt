@@ -13,6 +13,8 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -99,7 +101,7 @@ fun AddDeviceScreen(
     }
     val relays = remember { com.flagshipserver.app.core.Variant.devicePairingRelays() }
     if (relays == null) {
-        DevicePairingUnavailable(title = "Add a device", onCancel = onCancel)
+        DevicePairingUnavailable(title = stringResource(R.string.add_a_device), onCancel = onCancel)
         return
     }
     val vm: AddDeviceViewModel = viewModel(
@@ -114,18 +116,17 @@ fun AddDeviceScreen(
     LaunchedEffect(Unit) { vm.start() }
 
     FSScreen(
-        title = "Add a device",
+        title = stringResource(R.string.add_a_device),
         onBack = { vm.cancel(); onCancel() },
         modifier = Modifier.semantics { contentDescription = "add-device" },
-        subtitle = "Have your new phone or tablet scan this code to join your account.",
+        subtitle = stringResource(R.string.have_your_new_phone_or_tablet),
     ) {
         RiskWarning(
-            "Anyone who scans this code holds your whole account, so add only " +
-                "your own phones and tablets. Don't screenshot or share this code.",
-            title = "Only for your own devices",
+            stringResource(R.string.anyone_who_scans_this_code_holds),
+            title = stringResource(R.string.only_for_your_own_devices),
         )
         Text(
-            "To give another person access, use Share this server on the server's page instead.",
+            stringResource(R.string.to_give_another_person_access_use),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier
@@ -156,14 +157,14 @@ fun AddDeviceScreen(
                 )
             }
             AddDevicePhase.Delivering -> StatusPanel(
-                title = "Sharing your account key…",
-                message = "Hold on — sending the keys securely to the new device.",
+                title = stringResource(R.string.sharing_your_account_key),
+                message = stringResource(R.string.hold_on_sending_the_keys_securely),
                 icon = Icons.Outlined.Lock,
                 spinner = true,
             )
             AddDevicePhase.Delivered -> DeliveredPanel(onDone = onDone)
             is AddDevicePhase.Failed -> StatusPanel(
-                title = "Couldn't add the device",
+                title = stringResource(R.string.couldnt_add_the_device),
                 message = p.message,
                 icon = Icons.Outlined.ErrorOutline,
                 danger = true,
@@ -171,11 +172,11 @@ fun AddDeviceScreen(
         }
 
         if (phase is AddDevicePhase.Failed) {
-            FSSecondaryButton(label = "Try again", onClick = { scope.launch { vm.start() } }, block = true, modifier = Modifier.testTag("add-device-retry"))
-            FSSecondaryButton(label = "Close", onClick = { vm.cancel(); onCancel() }, block = true)
+            FSSecondaryButton(label = stringResource(R.string.try_again), onClick = { scope.launch { vm.start() } }, block = true, modifier = Modifier.testTag("add-device-retry"))
+            FSSecondaryButton(label = stringResource(R.string.close), onClick = { vm.cancel(); onCancel() }, block = true)
         }
         if (phase is AddDevicePhase.ShowingQr) {
-            FSSecondaryButton(label = "Cancel", onClick = { vm.cancel(); onCancel() }, block = true)
+            FSSecondaryButton(label = stringResource(R.string.cancel), onClick = { vm.cancel(); onCancel() }, block = true)
         }
     }
 }
@@ -200,7 +201,7 @@ private fun QrPanel(joinUrl: String) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
                 Text(
-                    "Waiting for the other device to scan…",
+                    stringResource(R.string.waiting_for_the_other_device_to),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -221,9 +222,9 @@ private fun ConfirmPanel(
             verticalArrangement = Arrangement.spacedBy(FS.space.s3),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Check the codes match", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.check_the_codes_match), style = MaterialTheme.typography.titleMedium)
             Text(
-                "Both screens should show the same six digits. If they don't, stop — someone may be in the middle.",
+                stringResource(R.string.both_screens_should_show_the_same),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -237,27 +238,25 @@ private fun ConfirmPanel(
                     .semantics { contentDescription = "add-device-sas" },
             )
             FSPrimaryButton(
-                label = "Codes match — add device",
+                label = stringResource(R.string.codes_match_add_device),
                 onClick = onConfirm,
                 enabled = confirmEnabled,
                 block = true,
             )
         }
     }
-    FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
+    FSSecondaryButton(label = stringResource(R.string.cancel), onClick = onCancel, block = true)
 }
 
 @Composable
 private fun DeliveredPanel(onDone: () -> Unit) {
     StatusPanel(
-        title = "Device added",
-        message = "The new device is finishing setup. It joins as a non-admin " +
-            "device for the first 14 days — you'll get reminders to " +
-            "review your trusted devices.",
+        title = stringResource(R.string.device_added),
+        message = stringResource(R.string.the_new_device_is_finishing_setup),
         icon = Icons.Outlined.CheckCircle,
         tint = FS.colors.success,
     )
-    FSPrimaryButton(label = "Done", onClick = onDone, block = true)
+    FSPrimaryButton(label = stringResource(R.string.done), onClick = onDone, block = true)
 }
 
 @Composable
@@ -311,11 +310,9 @@ private fun AdminPromoteToggle(
                 tint = if (checked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
             )
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-                Text("Also make this device an admin", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.also_make_this_device_an_admin), style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "Off by default. If on, this device will be able to wipe, transfer, " +
-                        "or decommission your cloud. Only turn this on for a device " +
-                        "you fully trust.",
+                    stringResource(R.string.off_by_default_if_on_this),
                     color = if (checked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -327,7 +324,7 @@ private fun AdminPromoteToggle(
 
 /** The always-on safeguard card: a warning icon, a title and the risk. */
 @Composable
-internal fun RiskWarning(text: String, title: String = "Heads up") {
+internal fun RiskWarning(text: String, title: String = stringResource(R.string.heads_up)) {
     FSCard {
         Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = FS.colors.warning)
@@ -372,6 +369,6 @@ internal fun DevicePairingUnavailable(
             color = FS.colors.textMuted,
             style = MaterialTheme.typography.bodyLarge,
         )
-        FSPrimaryButton(label = "Back", onClick = onCancel, block = true)
+        FSPrimaryButton(label = stringResource(R.string.back), onClick = onCancel, block = true)
     }
 }

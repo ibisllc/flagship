@@ -13,6 +13,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.PodDirectoryEntry
 import com.flagshipserver.app.core.BoxTrustStatusReport.RelayVerdict
 
@@ -32,7 +33,7 @@ data class RelayCertFailure(
     val serverCount: Int get() = servers.size
     /** First 8 hex — the sliver slug (shared cross-surface contract). */
     val slug: String get() = certHash.take(8)
-    val label: String get() = "Relay certificate expired · $slug"
+    val label: String get() = FSStrings.get(R.string.relay_certificate_expired, slug)
 
     /** The failing cert as a TrustException-signable descriptor (certClass
      *  RELAY; caPubkey is unused for relay — the cert-hash IS the anchor). */
