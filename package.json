@@ -44,7 +44,9 @@
     "reap-orphans": "node scripts/reap-orphans.mjs",
     "zone-health": "node scripts/dns-zone-health.mjs",
     "inference-settings": "node scripts/inference-settings.mjs",
-    "ready": "node scripts/release-readiness.mjs"
+    "ready": "node scripts/release-readiness.mjs",
+    "i18n": "node scripts/i18n-check.mjs",
+    "i18n:status": "node scripts/i18n-check.mjs status"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
