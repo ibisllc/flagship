@@ -9052,15 +9052,18 @@
   },
   "no cloud recovery for that username": {
     "en": "no cloud recovery for that username",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3692"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3692",
+    "translatable": false
   },
   "this record predates the passphrase gate — re-enrol cloud recovery first": {
     "en": "this record predates the passphrase gate — re-enrol cloud recovery first",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3694"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3694",
+    "translatable": false
   },
   "too many attempts — wait 15 minutes before retrying": {
     "en": "too many attempts — wait 15 minutes before retrying",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3699"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FlagshipServerClient.swift:3699",
+    "translatable": false
   },
   "We use third-party providers and anonymize your requests.": {
     "en": "We use third-party providers and anonymize your requests.",
@@ -9120,11 +9123,13 @@
   },
   "no response": {
     "en": "no response",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FrontPageClient.swift:70"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FrontPageClient.swift:70",
+    "translatable": false
   },
   "bad URL": {
     "en": "bad URL",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FrontPageClient.swift:81"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/FrontPageClient.swift:81",
+    "translatable": false
   },
   "%@ proved itself at %@; using the local network": {
     "en": "%@ proved itself at %@; using the local network",
@@ -9136,7 +9141,8 @@
   },
   "unexpected backup path": {
     "en": "unexpected backup path",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/LiveScreensClient.swift:221"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/LiveScreensClient.swift:221",
+    "translatable": false
   },
   "Couldn't reach the server to load this build.": {
     "en": "Couldn't reach the server to load this build.",
@@ -9157,19 +9163,23 @@
   },
   "Dashboard": {
     "en": "Dashboard",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:750"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:750",
+    "translatable": false
   },
   "Wiki": {
     "en": "Wiki",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1431"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1431",
+    "translatable": false
   },
   "via vibe-code": {
     "en": "via vibe-code",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:100"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:100",
+    "translatable": false
   },
   "This debug access grant is from an older app. Update the app and turn debug access on again.": {
     "en": "This debug access grant is from an older app. Update the app and turn debug access on again.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:167"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:167",
+    "translatable": false
   },
   "Debug access needs an SSH public key.": {
     "en": "Debug access needs an SSH public key.",
@@ -9181,11 +9191,13 @@
   },
   "That debug access grant is for another server.": {
     "en": "That debug access grant is for another server.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:177"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:177",
+    "translatable": false
   },
   "This server takes debug access only from an admin device of this account.": {
     "en": "This server takes debug access only from an admin device of this account.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:179"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:179",
+    "translatable": false
   },
   "That isn't an SSH public key this server can use.": {
     "en": "That isn't an SSH public key this server can use.",
@@ -9193,27 +9205,33 @@
   },
   "That debug access grant can't be read.": {
     "en": "That debug access grant can't be read.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:172"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:172",
+    "translatable": false
   },
   "That request is for another server.": {
     "en": "That request is for another server.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:195"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:195",
+    "translatable": false
   },
   "That request to turn off debug access can't be read.": {
     "en": "That request to turn off debug access can't be read.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:193"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:193",
+    "translatable": false
   },
   "Houseplant watering tracker": {
     "en": "Houseplant watering tracker",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:246"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:246",
+    "translatable": false
   },
   "Personal notes + recipes": {
     "en": "Personal notes + recipes",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:259"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:259",
+    "translatable": false
   },
   "Markdown scratchpad": {
     "en": "Markdown scratchpad",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:272"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:272",
+    "translatable": false
   },
   "{\"error\":\"the app is already on this server\"}": {
     "en": "{\"error\":\"the app is already on this server\"}",
@@ -9252,7 +9270,8 @@
   },
   "Plant %lld": {
     "en": "Plant %lld",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:543"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:543",
+    "translatable": false
   },
   "{\"error\":\"refused\"}": {
     "en": "{\"error\":\"refused\"}",
@@ -9266,139 +9285,173 @@
   },
   "no such app": {
     "en": "no such app",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:889"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:889",
+    "translatable": false
   },
   "Build a habit tracker.": {
     "en": "Build a habit tracker.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:967"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:967",
+    "translatable": false
   },
   "Sketching schema for habits + check-ins…": {
     "en": "Sketching schema for habits + check-ins…",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:968"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:968",
+    "translatable": false
   },
   "Tab %@": {
     "en": "Tab %@",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:982"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:982",
+    "translatable": false
   },
   "Sketching ": {
     "en": "Sketching ",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1151"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1151",
+    "translatable": false
   },
   "Two tables: ": {
     "en": "Two tables: ",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1151"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1151",
+    "translatable": false
   },
   "Building manifest…\n": {
     "en": "Building manifest…\n",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1152"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1152",
+    "translatable": false
   },
   "Creating Docker image…\n": {
     "en": "Creating Docker image…\n",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1153"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1153",
+    "translatable": false
   },
   "Deploying to ": {
     "en": "Deploying to ",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1154"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1154",
+    "translatable": false
   },
   "Live. 🎉": {
     "en": "Live. 🎉",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1155"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1155",
+    "translatable": false
   },
   "FROM node:20-alpine": {
     "en": "FROM node:20-alpine",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1166"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1166",
+    "translatable": false
   },
   "RUN apk add postgresql-client": {
     "en": "RUN apk add postgresql-client",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1166"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1166",
+    "translatable": false
   },
   "COPY . /app": {
     "en": "COPY . /app",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1166"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1166",
+    "translatable": false
   },
   "Build ok in 8.4s": {
     "en": "Build ok in 8.4s",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1166"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1166",
+    "translatable": false
   },
   "Build me a plants tracker": {
     "en": "Build me a plants tracker",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1294"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1294",
+    "translatable": false
   },
   "Sure — I need a weather API key to send notifications when a plant has been thirsty too long.": {
     "en": "Sure — I need a weather API key to send notifications when a plant has been thirsty too long.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1295"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1295",
+    "translatable": false
   },
   "OpenWeather API key": {
     "en": "OpenWeather API key",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1300"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1300",
+    "translatable": false
   },
   "Plants": {
     "en": "Plants",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1606"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1606",
+    "translatable": false
   },
   "This server holds %@ of app data, over its backup limit of %@ (%@). Remove apps or data, or change the backup policy on the server page.": {
     "en": "This server holds %@ of app data, over its backup limit of %@ (%@). Remove apps or data, or change the backup policy on the server page.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1768"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1768",
+    "translatable": false
   },
   "This server holds %@ of app data, more than the %@ your device would keep. Reserve at least %@ on that device, or remove apps or data first.": {
     "en": "This server holds %@ of app data, more than the %@ your device would keep. Reserve at least %@ on that device, or remove apps or data first.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1795"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1795",
+    "translatable": false
   },
   "This server holds %@ of app data, more than a third of its disk (%@), which is all a server may use with peer backups. Remove apps or data first, or choose another policy.": {
     "en": "This server holds %@ of app data, more than a third of its disk (%@), which is all a server may use with peer backups. Remove apps or data first, or choose another policy.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1796"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:1796",
+    "translatable": false
   },
   "Claude Code": {
     "en": "Claude Code",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2044"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2044",
+    "translatable": false
   },
   "Run the command in a terminal, or pass the JSON with --mcp-config": {
     "en": "Run the command in a terminal, or pass the JSON with --mcp-config",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2045"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2045",
+    "translatable": false
   },
   "Cursor": {
     "en": "Cursor",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2047"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2047",
+    "translatable": false
   },
   "VS Code": {
     "en": "VS Code",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2050"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2050",
+    "translatable": false
   },
   "Your user mcp.json (Command Palette → MCP: Open User Configuration)": {
     "en": "Your user mcp.json (Command Palette → MCP: Open User Configuration)",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2051"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2051",
+    "translatable": false
   },
   "Cline": {
     "en": "Cline",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2053"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2053",
+    "translatable": false
   },
   "Cline → MCP Servers → Configure MCP Servers": {
     "en": "Cline → MCP Servers → Configure MCP Servers",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2053"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2053",
+    "translatable": false
   },
   "Found flagship.app.json": {
     "en": "Found flagship.app.json",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2075"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2075",
+    "translatable": false
   },
   "no flagship.app.json — repo isn't a Flagship app yet; the AI can adapt it": {
     "en": "no flagship.app.json — repo isn't a Flagship app yet; the AI can adapt it",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2083"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2083",
+    "translatable": false
   },
   "AI adapt not configured": {
     "en": "AI adapt not configured",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2093"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2093",
+    "translatable": false
   },
   "Build a houseplant watering tracker": {
     "en": "Build a houseplant watering tracker",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2244"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2244",
+    "translatable": false
   },
   "wrote flagship.app.json": {
     "en": "wrote flagship.app.json",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2249"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2249",
+    "translatable": false
   },
   "deployed to home pod": {
     "en": "deployed to home pod",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2254"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/MockScreensClient.swift:2254",
+    "translatable": false
   },
   "Looking for servers to keep pieces": {
     "en": "Looking for servers to keep pieces",
@@ -9454,7 +9507,8 @@
   },
   "%lld piece%@": {
     "en": "%lld piece%@",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift:130"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift:130",
+    "translatable": false
   },
   "The pieces of this backup are no longer kept.": {
     "en": "The pieces of this backup are no longer kept.",
@@ -9462,7 +9516,8 @@
   },
   "Restore by %@ (%lld day%@ left).": {
     "en": "Restore by %@ (%lld day%@ left).",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift:139"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift:139",
+    "translatable": false
   },
   "Proven so far: %@.": {
     "en": "Proven so far: %@.",
@@ -9478,7 +9533,8 @@
   },
   "%lld server%@ hold its pieces; %lld bring it back.": {
     "en": "%lld server%@ hold its pieces; %lld bring it back.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift:156"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift:156",
+    "translatable": false
   },
   "Too many tries. Try again later.": {
     "en": "Too many tries. Try again later.",
@@ -9490,19 +9546,23 @@
   },
   "HTTP/1.": {
     "en": "HTTP/1.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RelayFallback.swift:296"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RelayFallback.swift:296",
+    "translatable": false
   },
   "HTTP/1.1 400 Bad Request\r\n\r\n": {
     "en": "HTTP/1.1 400 Bad Request\r\n\r\n",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RelayFallback.swift:444"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RelayFallback.swift:444",
+    "translatable": false
   },
   "HTTP/1.1 403 Forbidden\r\n\r\n": {
     "en": "HTTP/1.1 403 Forbidden\r\n\r\n",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RelayFallback.swift:447"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RelayFallback.swift:447",
+    "translatable": false
   },
   "HTTP/1.1 502 Bad Gateway\r\n\r\n": {
     "en": "HTTP/1.1 502 Bad Gateway\r\n\r\n",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RelayFallback.swift:459"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RelayFallback.swift:459",
+    "translatable": false
   },
   "This device isn't connected to a server yet.": {
     "en": "This device isn't connected to a server yet.",
@@ -9594,63 +9654,78 @@
   },
   "bad boot URL": {
     "en": "bad boot URL",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:1029"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:1029",
+    "translatable": false
   },
   "bad stream URL": {
     "en": "bad stream URL",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:861"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:861",
+    "translatable": false
   },
   "bad pairing-deposit URL": {
     "en": "bad pairing-deposit URL",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:898"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:898",
+    "translatable": false
   },
   "bad entitlement-deposit URL": {
     "en": "bad entitlement-deposit URL",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:913"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:913",
+    "translatable": false
   },
   "bad swk-deposit URL": {
     "en": "bad swk-deposit URL",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:928"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:928",
+    "translatable": false
   },
   "bad cgk-deposit URL": {
     "en": "bad cgk-deposit URL",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:943"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:943",
+    "translatable": false
   },
   "bad server-order URL": {
     "en": "bad server-order URL",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:958"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:958",
+    "translatable": false
   },
   "bad update URL": {
     "en": "bad update URL",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:973"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:973",
+    "translatable": false
   },
   "bad releases URL": {
     "en": "bad releases URL",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:988"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:988",
+    "translatable": false
   },
   "bad decommission URL": {
     "en": "bad decommission URL",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:1008"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:1008",
+    "translatable": false
   },
   "no sealed key on file": {
     "en": "no sealed key on file",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:1126"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:1126",
+    "translatable": false
   },
   "bad migration URL": {
     "en": "bad migration URL",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/ServerMigrationClient.swift:204"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/ServerMigrationClient.swift:204",
+    "translatable": false
   },
   "bad transfer URL": {
     "en": "bad transfer URL",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/ServerTransferClient.swift:234"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/ServerTransferClient.swift:234",
+    "translatable": false
   },
   "%@ on %@ by %@": {
     "en": "%@ on %@ by %@",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/ServiceAccessClient.swift:552"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/ServiceAccessClient.swift:552",
+    "translatable": false
   },
   "Mozilla/5.0 (Macintosh)": {
     "en": "Mozilla/5.0 (Macintosh)",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/ServiceAccessClient.swift:558"
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/ServiceAccessClient.swift:558",
+    "translatable": false
   },
   "Update required. Flagship is paused on this device until you update.": {
     "en": "Update required. Flagship is paused on this device until you update.",
@@ -9726,15 +9801,18 @@
   },
   "%lld minute%@ ago": {
     "en": "%lld minute%@ ago",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/AppState.swift:1172"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/AppState.swift:1172",
+    "translatable": false
   },
   "%lld hour%@ ago": {
     "en": "%lld hour%@ ago",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/AppState.swift:1174"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/AppState.swift:1174",
+    "translatable": false
   },
   "%lld day%@ ago": {
     "en": "%lld day%@ ago",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/AppState.swift:1176"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/AppState.swift:1176",
+    "translatable": false
   },
   "%lldm ago": {
     "en": "%lldm ago",
@@ -9778,11 +9856,13 @@
   },
   "connect failed (HTTP %lld): %@": {
     "en": "connect failed (HTTP %lld): %@",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoConnectCoordinator.swift:70"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoConnectCoordinator.swift:70",
+    "translatable": false
   },
   "connect failed: %@": {
     "en": "connect failed: %@",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoConnectCoordinator.swift:72"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoConnectCoordinator.swift:72",
+    "translatable": false
   },
   "Still booting (last status: %@). Try again in a minute.": {
     "en": "Still booting (last status: %@). Try again in a minute.",
@@ -9794,47 +9874,58 @@
   },
   "poll failed: %@": {
     "en": "poll failed: %@",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoConnectCoordinator.swift:94"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoConnectCoordinator.swift:94",
+    "translatable": false
   },
   "cancel failed: %@": {
     "en": "cancel failed: %@",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoConnectCoordinator.swift:162"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoConnectCoordinator.swift:162",
+    "translatable": false
   },
   "Living-room mini-PC": {
     "en": "Living-room mini-PC",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoFixtures.swift:21"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoFixtures.swift:21",
+    "translatable": false
   },
   "Office": {
     "en": "Office",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoFixtures.swift:27"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoFixtures.swift:27",
+    "translatable": false
   },
   "Office tower, work failover": {
     "en": "Office tower, work failover",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoFixtures.swift:28"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoFixtures.swift:28",
+    "translatable": false
   },
   "Music": {
     "en": "Music",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoFixtures.swift:34"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoFixtures.swift:34",
+    "translatable": false
   },
   "Garage rack, music studio": {
     "en": "Garage rack, music studio",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoFixtures.swift:35"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoFixtures.swift:35",
+    "translatable": false
   },
   "Remote box, waiting to unlock": {
     "en": "Remote box, waiting to unlock",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoFixtures.swift:59"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoFixtures.swift:59",
+    "translatable": false
   },
   "Attic": {
     "en": "Attic",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoFixtures.swift:84"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoFixtures.swift:84",
+    "translatable": false
   },
   "Old box that never came online": {
     "en": "Old box that never came online",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoFixtures.swift:85"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoFixtures.swift:85",
+    "translatable": false
   },
   "Revoked after it went missing": {
     "en": "Revoked after it went missing",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoFixtures.swift:107"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/DemoFixtures.swift:107",
+    "translatable": false
   },
   "Adding a device from this phone isn't available yet. Use the web app.": {
     "en": "Adding a device from this phone isn't available yet. Use the web app.",
@@ -10098,11 +10189,13 @@
   },
   "Only an admin device of their account can accept a co-manage invitation. Cancel this link and send a new one for them to open on an admin device.": {
     "en": "Only an admin device of their account can accept a co-manage invitation. Cancel this link and send a new one for them to open on an admin device.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareAcceptMockWorld.swift:15"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareAcceptMockWorld.swift:15",
+    "translatable": false
   },
   "Their acceptance isn't signed by their account's admin key, so this server can't trust it. Cancel this link and send a new one.": {
     "en": "Their acceptance isn't signed by their account's admin key, so this server can't trust it. Cancel this link and send a new one.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareAcceptMockWorld.swift:17"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareAcceptMockWorld.swift:17",
+    "translatable": false
   },
   "People you invite join as Member. You can withdraw your own invites.": {
     "en": "People you invite join as Member. You can withdraw your own invites.",
@@ -10222,39 +10315,48 @@
   },
   "Jo": {
     "en": "Jo",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareCoInvitesMockBox.swift:45"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareCoInvitesMockBox.swift:45",
+    "translatable": false
   },
   "That app isn't on this server.": {
     "en": "That app isn't on this server.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareCoInvitesMockBox.swift:78"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareCoInvitesMockBox.swift:78",
+    "translatable": false
   },
   "Co-managers can't make approve-first invites.": {
     "en": "Co-managers can't make approve-first invites.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareCoInvitesMockBox.swift:93"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareCoInvitesMockBox.swift:93",
+    "translatable": false
   },
   "That invite already exists.": {
     "en": "That invite already exists.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareCoInvitesMockBox.swift:107"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareCoInvitesMockBox.swift:107",
+    "translatable": false
   },
   "The invite must name the server's owner.": {
     "en": "The invite must name the server's owner.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareCoInvitesMockBox.swift:97"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareCoInvitesMockBox.swift:97",
+    "translatable": false
   },
   "That request isn't complete.": {
     "en": "That request isn't complete.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareCoInvitesMockBox.swift:92"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareCoInvitesMockBox.swift:92",
+    "translatable": false
   },
   "That isn't one of your invites.": {
     "en": "That isn't one of your invites.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareCoInvitesMockBox.swift:122"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareCoInvitesMockBox.swift:122",
+    "translatable": false
   },
   "Not found.": {
     "en": "Not found.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareCoInvitesMockBox.swift:135"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareCoInvitesMockBox.swift:135",
+    "translatable": false
   },
   "Sign in again.": {
     "en": "Sign in again.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareCoInvitesMockBox.swift:71"
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/ShareCoInvitesMockBox.swift:71",
+    "translatable": false
   },
   "Server setup stopped": {
     "en": "Server setup stopped",
