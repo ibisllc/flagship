@@ -62,6 +62,6 @@ export async function enterPodPair() {
     `;
     $("pod-pair-unpair")?.addEventListener("click", () => handleUnpair());
   } else {
-    status.innerHTML = '<p class="note">Not paired with any server yet</p>';
+    status.innerHTML = `<p class="note">${tr("Not paired with any server yet")}</p>`;
   }
 }

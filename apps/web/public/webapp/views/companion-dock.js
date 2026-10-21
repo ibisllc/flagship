@@ -37,14 +37,14 @@ function timeLeft(expiresAt, nowMs = Date.now()) {
   if (ms <= 0) return "expired";
   const h = Math.floor(ms / 3_600_000);
   const m = Math.floor((ms % 3_600_000) / 60_000);
-  if (h > 0) return `${h}h ${m}m left`;
-  return `${m}m left`;
+  if (h > 0) return tr("{0}h {1}m left", h, m);
+  return tr("{0}m left", m);
 }
 
 export async function renderCompanionDock() {
   const root = $("companion-dock-content");
   if (!root) return;
-  root.innerHTML = '<div class="card placeholder">loading…</div>';
+  root.innerHTML = `<div class="card placeholder">${tr("loading…")}</div>`;
 
   let body;
   try {

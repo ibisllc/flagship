@@ -49,7 +49,7 @@ function errorCard(message) {
 export function offerCardHtml(offer) {
   const extras = [];
   if (offer.unlockAtBoot) extras.push("You can approve its start-up. Your phone gets a copy of its disk key.");
-  if (offer.seeAppData) extras.push(`${DATA_TITLE}: you can open each app's Database section.`);
+  if (offer.seeAppData) extras.push(tr("{0}: you can open each app's Database section.", DATA_TITLE));
   return `
       <div class="card share-offer">
         <span class="fs-listrow-icon fs-listrow-icon--teal icon share-offer-icon" aria-hidden="true">${serverIcon}</span>

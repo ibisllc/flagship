@@ -46,7 +46,7 @@ export function initServiceEnvView() {
 async function reload() {
   const root = $("service-env-list");
   if (!root) return;
-  root.innerHTML = '<div class="card placeholder">Loading…</div>';
+  root.innerHTML = `<div class="card placeholder">${tr("Loading…")}</div>`;
   try {
     const body = await screensFetch(
       `/api/screens/services/${encodeURIComponent(currentAppId)}/env`,
@@ -65,7 +65,7 @@ function renderList(names) {
   const root = $("service-env-list");
   if (!root) return;
   if (names.length === 0) {
-    root.innerHTML = '<div class="card placeholder">No env vars set yet.</div>';
+    root.innerHTML = `<div class="card placeholder">${tr("No env vars set yet.")}</div>`;
     return;
   }
   root.innerHTML = names

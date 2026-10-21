@@ -32,9 +32,9 @@ export const PROVISION_LADDER = Object.freeze([
  *  (packages/control-plane/src/provisionStatus.ts) — every surface uses these. */
 export const PROVISION_PHASE_TITLES = Object.freeze({
   booting: tr("Booting up"),
-  downloading: "Downloading",
+  downloading: tr("Downloading"),
   partitioning: tr("Partitioning disk"),
-  installing: "Installing",
+  installing: tr("Installing"),
   installed: tr("Install complete"),
   registering: tr("Registering with Flagship"),
   sealing: tr("Sealing your disk key"),
@@ -262,14 +262,14 @@ export function renderSetupStopped({ serial, step } = {}) {
   const where = failureDetail(step);
   const note = where === PROVISION_PHASE_TITLES.error ? "" : `. ${where.replace(/[.!?]+$/, "")}`;
   const body =
-    tr("My server's setup stopped. Order: {0} Step: {1} ", serial || "unknown", step ? failureDetail(step) : "");
+    tr("My server's setup stopped. Order: {0} Step: {1}", serial || "unknown", step ? failureDetail(step) : "") + " ";
   const mailto =
     `mailto:support@flagshipserver.com?subject=${encodeURIComponent("Server setup stopped")}` +
     `&body=${encodeURIComponent(body)}`;
   return (
     `<div class="card" id="setup-stopped">` +
     `<h3>${tr("Setup stopped")}</h3>` +
-    `<p class="note mt-2">${esc(`This server didn't finish installing${note}. Cancel this order to free the name and create the server again, or contact us and we'll look at it.`)}</p>` +
+    `<p class="note mt-2">${esc(tr("This server didn't finish installing{0}. Cancel this order to free the name and create the server again, or contact us and we'll look at it.", note))}</p>` +
     `<div class="row-2 mt-2">` +
     `<button class="danger" id="setup-stopped-start-again">${tr("Cancel order and start again")}</button>` +
     `<a class="secondary" id="setup-stopped-contact" href="${esc(mailto)}">${tr("Contact us")}</a>` +

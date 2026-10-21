@@ -6,7 +6,7 @@ import { tr } from "./i18n.js";
 export const RELAY_LABEL = tr("Send through the Flagship relay");
 export const RELAY_NOTE = tr("Better for your anonymity: the AI provider sees Flagship's address, not yours.");
 export const RELAY_ON_CAPTION = tr("Through the Flagship relay");
-export const RELAY_OFF_CAPTION = "Direct";
+export const RELAY_OFF_CAPTION = tr("Direct");
 export const TURN_RELAY_OFF = tr("Turn the relay off for this key");
 export const RELAY_TURNED_OFF = tr("The relay is off for this key.");
 

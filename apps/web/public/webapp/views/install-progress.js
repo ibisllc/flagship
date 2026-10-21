@@ -43,7 +43,7 @@ function render() {
   if (!root) return;
   if (!latest || !latest.phase) {
     root.innerHTML =
-      '<div class="card placeholder">waiting for your box to phone home — it may not have booted yet</div>';
+      `<div class="card placeholder">${tr("waiting for your box to phone home — it may not have booted yet")}</div>`;
     return;
   }
   // Reuse the shared canonical step-ladder renderer so the webapp matches

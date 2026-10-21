@@ -11,6 +11,7 @@
 // carries a precise "h:mm a" clock (forensic logs / exact-event rows).
 // `formatDuration` / `formatDays` render a raw elapsed span (uptime,
 // "renews in {n}d") rather than an absolute instant.
+import { tr, dateLocale } from "./i18n.js";
 
 const MS_MIN = 60_000;
 const MS_HOUR = 3_600_000;
@@ -21,13 +22,13 @@ function isInstant(ms) {
 }
 
 function monthDay(d) {
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return d.toLocaleDateString(dateLocale(), { month: "short", day: "numeric" });
 }
 function monthDayYear(d) {
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString(dateLocale(), { month: "short", day: "numeric", year: "numeric" });
 }
 function clock(d) {
-  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return d.toLocaleTimeString(dateLocale(), { hour: "numeric", minute: "2-digit" });
 }
 function calendar(d, nowMs) {
   return d.getFullYear() === new Date(nowMs).getFullYear() ? monthDay(d) : monthDayYear(d);
@@ -39,13 +40,13 @@ export function formatWhen(ms, nowMs = Date.now()) {
   const d = new Date(ms);
   const diff = nowMs - ms; // positive = past
   const abs = Math.abs(diff);
-  if (abs < MS_MIN) return "just now";
+  if (abs < MS_MIN) return tr("just now");
   if (diff >= 0) {
-    if (abs < MS_HOUR) return `${Math.floor(abs / MS_MIN)}m ago`;
-    if (abs < MS_DAY) return `${Math.floor(abs / MS_HOUR)}h ago`;
+    if (abs < MS_HOUR) return tr("{0}m ago", Math.floor(abs / MS_MIN));
+    if (abs < MS_DAY) return tr("{0}h ago", Math.floor(abs / MS_HOUR));
   } else {
-    if (abs < MS_HOUR) return `in ${Math.ceil(abs / MS_MIN)}m`;
-    if (abs < MS_DAY) return `in ${Math.ceil(abs / MS_HOUR)}h`;
+    if (abs < MS_HOUR) return tr("in {0}m", Math.ceil(abs / MS_MIN));
+    if (abs < MS_DAY) return tr("in {0}h", Math.ceil(abs / MS_HOUR));
   }
   return calendar(d, nowMs);
 }

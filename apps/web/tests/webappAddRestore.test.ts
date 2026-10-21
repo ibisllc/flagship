@@ -14,7 +14,7 @@ describe("the Add/Restore server menu", () => {
   const menu = IMPORT_SRC.slice(IMPORT_SRC.indexOf("export function openAddOrRestore"), IMPORT_SRC.indexOf("export const RESTORE_SOURCES"));
 
   it("is titled Add/Restore server and offers exactly three choices in order", () => {
-    expect(IMPORT_SRC).toContain('export const ADD_IMPORT_LABEL = "+ Add/Restore server";');
+    expect(IMPORT_SRC).toContain('export const ADD_IMPORT_LABEL = tr("+ Add/Restore server");');
     expect(menu).toContain('"Add or restore a server"');
     expect(menu).toContain('<h3 class="modal-title">${tr("Add/Restore server")}</h3>');
     const labels = [...menu.matchAll(/data-choice-(add|co-manage|restore)>([^<]+)</g)].map((m) => [m[1], m[2].replace(/^\$\{tr\("|"\)\}$/g, "")]);

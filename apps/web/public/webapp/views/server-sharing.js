@@ -140,15 +140,15 @@ function offeredRow(o, canEdit) {
           ${canEdit
             ? `<div class="row-2 mt-1">
                 ${o.expired ? "" : `<button class="secondary" data-share-copy="${escapeHtml(o.shareId)}">${tr("Copy link")}</button>`}
-                <button class="secondary" data-share-cancel="${escapeHtml(o.shareId)}">${o.expired ? "Remove" : "Cancel"}</button>
+                <button class="secondary" data-share-cancel="${escapeHtml(o.shareId)}">${o.expired ? tr("Remove") : tr("Cancel")}</button>
               </div>`
             : ""}
         </div>`;
 }
 
 function endedLine(e) {
-  const who = escapeHtml(e.label || "Someone");
-  return `<p class="faint-sm">${e.reason === "left" ? `${who} left` : tr("You removed {0}", who)} · ${escapeHtml(formatWhen(e.endedAt))}</p>`;
+  const who = escapeHtml(e.label || tr("Someone"));
+  return `<p class="faint-sm">${e.reason === "left" ? tr("{0} left", who) : tr("You removed {0}", who)} · ${escapeHtml(formatWhen(e.endedAt))}</p>`;
 }
 
 /** The card's list. Pure so tests and screenshots can render it. */
@@ -219,7 +219,7 @@ function wireRows(body, state) {
         });
         if (!unlocked) return;
         const r = await confirmShare(fqdn, a);
-        toast(`${a.label} can now ${a.level === "manage" ? "manage" : "see"} this server`, "ok");
+        toast(a.level === "manage" ? tr("{0} can now manage this server", a.label) : tr("{0} can now see this server", a.label), "ok");
         if (r.unlockError) toast(tr("Start-up approval isn't set up yet: {0}", shareErrorText(r.unlockError)), "err");
       });
     });
@@ -250,7 +250,9 @@ function wireRows(body, state) {
       if (!s) return;
       const ok = await inlineConfirm({
         title: tr("Remove {0}?", s.label),
-        message: tr("{0} loses access to {1} right away.{2}", s.label, serverNameOf(fqdn), s.unlockAtBoot ? tr(" Their copy of the disk key is deleted, but a copy they already used can't be taken back.") : ""),
+        message: s.unlockAtBoot
+          ? tr("{0} loses access to {1} right away. Their copy of the disk key is deleted, but a copy they already used can't be taken back.", s.label, serverNameOf(fqdn))
+          : tr("{0} loses access to {1} right away.", s.label, serverNameOf(fqdn)),
         okLabel: tr("Remove"),
         danger: true,
       });
@@ -289,7 +291,7 @@ function wireRows(body, state) {
           key === "unlockAtBoot"
             ? {
                 title: tr("Let {0} approve start-up?", s.label),
-                message: tr("{0} They can unlock {1} when it starts. {2}", UNLOCK_LINE, serverNameOf(fqdn), UNLOCK_WARNING),
+                message: `${UNLOCK_LINE} ${tr("They can unlock {0} when it starts.", serverNameOf(fqdn))} ${UNLOCK_WARNING}`,
                 okLabel: tr("Allow"),
               }
             : { title: tr("Let {0} see app data?", s.label), message: DATA_LINE, okLabel: tr("Allow") },
@@ -524,7 +526,7 @@ function showLink(dlg, created) {
   q('[data-share-stage="form"]').classList.add("hidden");
   q('[data-share-stage="link"]').classList.remove("hidden");
   q("[data-share-sent]").textContent =
-    tr("{0}When they open it, their phone shows a 6-digit code: check it with them here before they get access.", tr("Send this link to {0}. It works once and expires in 7 days. ", created.label));
+    tr("Send this link to {0}. It works once and expires in 7 days.", created.label) + " " + tr("When they open it, their phone shows a 6-digit code: check it with them here before they get access.");
   q("[data-share-link]").value = created.link;
   q("[data-share-copy-link]").addEventListener("click", () => void copyLink(created.link));
   q("[data-share-send]").addEventListener("click", () => void shareLink(created.link, created.label));

@@ -48,6 +48,7 @@ import { controlApex } from "./apex.js";
 import { throwIfRateLimited } from "./rateLimited.js";
 import { generateDeviceId } from "./accountMetadata.js";
 
+import { tr } from "./i18n.js";
 /** Login field is a bare handle: 3–30 lowercase letters/digits, interior single
  *  dashes OK (no leading/trailing), no dots, no `--`. Mirror of control-plane
  *  labels.ts (docs/service-addressing-double-dash.md). */
@@ -106,7 +107,7 @@ export async function resolveAccount(username, opts = {}) {
   if (resp.status === 429) {
     const retry = resp.headers?.get?.("retry-after");
     throw new Error(
-      retry ? `rate limited — retry in ${retry}s` : "rate limited — slow down",
+      retry ? `rate limited — retry in ${retry}s` : tr("rate limited — slow down"),
     );
   }
   if (!resp.ok) {

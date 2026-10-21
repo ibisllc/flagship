@@ -12,7 +12,7 @@ import { deriveSwkFromSeed, hexToBytes, bytesToHex, hkdf32 } from "../keystore.j
 import { userError } from "./humanError.js";
 import { RESTORE_PATH } from "./serverArchive.js";
 
-import { tr, trn } from "./i18n.js";
+import { tr, trn, dateLocale } from "./i18n.js";
 export const PEER_STATUS_PATH = "/api/screens/peer-backup/status";
 export const PEER_ROOT_PATH = "/api/screens/peer-backup/root";
 export const FROM_PEERS_PATH = `${RESTORE_PATH}/from-peers`;
@@ -126,7 +126,7 @@ const STATE_TITLE = {
   "waiting-for-peers": tr("Looking for servers to keep pieces"),
   filling: tr("Getting ready"),
   placing: tr("Sending pieces to other servers"),
-  protected: "Protected",
+  protected: tr("Protected"),
   "at-risk": tr("At risk"),
   leaving: tr("Leaving peer backups"),
   off: "Off",
@@ -140,7 +140,7 @@ const STATE_NOTE = {
   leaving: tr("This server stops taking new pieces and frees its space in two weeks."),
   off: tr("Choose Peer-distributed backups in this server's Backups to turn it on."),
 };
-const HOLDER_STATE = { ok: "Answering", checking: "Checking", failing: tr("Not answering"), offline: "Offline" };
+const HOLDER_STATE = { ok: tr("Answering"), checking: tr("Checking"), failing: tr("Not answering"), offline: tr("Offline") };
 
 export const stateTitle = (s) => STATE_TITLE[s] ?? String(s ?? "");
 export const stateNote = (s) => STATE_NOTE[s] ?? "";
@@ -154,20 +154,20 @@ export function formatSize(n) {
 }
 
 /** The list for the status page: "Server 1: Answering · proof 2 hours ago · 12 pieces". */
-export function holderRows(status, { formatTime = (t) => new Date(t).toLocaleString() } = {}) {
+export function holderRows(status, { formatTime = (t) => new Date(t).toLocaleString(dateLocale()) } = {}) {
   return (status?.holderList ?? []).map((h) => ({
     label: String(h.label ?? ""),
     state: h.state,
     line: [
       HOLDER_STATE[h.state] ?? String(h.state ?? ""),
-      Number.isFinite(h.lastProofAt) && h.lastProofAt > 0 ? `last proof ${formatTime(h.lastProofAt)}` : "no proof yet",
+      Number.isFinite(h.lastProofAt) && h.lastProofAt > 0 ? tr("last proof {0}", formatTime(h.lastProofAt)) : tr("no proof yet"),
       trn(h.bricks ?? 0, "{0} piece", "{0} pieces"),
     ].join(" · "),
   }));
 }
 
 /** The date by which a lost server's backup must be restored, or "". */
-export function restoreByLine(keepUntil, { now = Date.now(), formatTime = (t) => new Date(t).toLocaleDateString() } = {}) {
+export function restoreByLine(keepUntil, { now = Date.now(), formatTime = (t) => new Date(t).toLocaleDateString(dateLocale()) } = {}) {
   if (!Number.isFinite(keepUntil) || keepUntil <= 0) return "";
   if (keepUntil <= now) return tr("The pieces of this backup are no longer kept.");
   const days = Math.ceil((keepUntil - now) / DAY_MS);
@@ -189,8 +189,8 @@ export function hostingLines(status) {
 /** The card a restore shows once a lost server's record is found. */
 export function rootLines(summary, opts = {}) {
   const a = summary?.archive ?? {};
-  const out = [tr("Backup of {0}, saved {1} ({2}).", summary.serverId, new Date(a.createdAt).toLocaleString(), formatSize(a.bytes))];
-  out.push(`${summary.holders} server${summary.holders === 1 ? "" : "s"} hold its pieces; ${summary.needed} bring it back.`);
+  const out = [tr("Backup of {0}, saved {1} ({2}).", summary.serverId, new Date(a.createdAt).toLocaleString(dateLocale()), formatSize(a.bytes))];
+  out.push(trn(summary.holders, "{0} server holds its pieces; {1} bring it back.", "{0} servers hold its pieces; {1} bring it back.", summary.needed));
   const by = restoreByLine(summary.keepUntil, opts);
   if (by) out.push(by);
   return out;

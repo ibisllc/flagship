@@ -24,7 +24,7 @@ export const MEMBER_ROLES = ["member", "manager", "master"];
 export const RANK_REFUSED = "refused";
 
 // The ONE place the webapp names the ranks. Master is shown with a crown.
-const ROLE_LABELS = { member: "Member", manager: "Manager", master: "Master", refused: "Refused" };
+const ROLE_LABELS = { member: tr("Member"), manager: tr("Manager"), master: tr("Master"), refused: tr("Refused") };
 export const CROWNED_ROLE = "master";
 
 /** "Member" / "Manager" / "Master" / "Refused" (anything else as given). */
@@ -252,10 +252,10 @@ export function invitedByText(invite, { deviceId, deviceNames, members = null })
 
 /** An Account members row's name: the decrypted device name, the owner's label for a co-manager, or a generic one. */
 export function accountMemberName(row, { deviceNames } = {}) {
-  if (row?.kind === "co-manager") return row.label || "Co-manager";
+  if (row?.kind === "co-manager") return row.label || tr("Co-manager");
   const name = row?.deviceId ? deviceNames?.get(row.deviceId) : null;
   if (name) return name;
-  return row?.deviceId ? `Device ${row.deviceId.slice(0, 8)}` : `Device ${String(row?.devicePub ?? "").slice(0, 8)}`;
+  return row?.deviceId ? tr("Device {0}", row.deviceId.slice(0, 8)) : tr("Device {0}", String(row?.devicePub ?? "").slice(0, 8));
 }
 
 /** The line under an Account members row's name. */
@@ -263,7 +263,7 @@ export function accountMemberLine(row, { devicePub } = {}) {
   if (row?.kind === "co-manager") return tr("Co-manages this server");
   const parts = [];
   if (devicePub && row?.devicePub === devicePub.toLowerCase()) parts.push("This device");
-  parts.push(row?.tier === "admin" ? "Admin device" : "Device on your account");
+  parts.push(row?.tier === "admin" ? tr("Admin device") : tr("Device on your account"));
   return parts.join(" · ");
 }
 
@@ -319,7 +319,7 @@ export function otherGrants({ inviteId, boundAID }, members, labelOf) {
 /** "also in Family: Member, Chess club: Manager" (empty when none). */
 export function alsoInText(others) {
   if (!others.length) return "";
-  return `also in ${others.map((o) => `${o.label}: ${roleLabel(o.role)}`).join(", ")}`;
+  return tr("also in {0}", others.map((o) => `${o.label}: ${roleLabel(o.role)}`).join(", "));
 }
 
 /**

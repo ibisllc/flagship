@@ -135,7 +135,7 @@ export async function collectRecoveryFactor(inlinePrompt) {
     message:
       tr("This account requires a second factor. Enter your 6-digit recovery TOTP, or one of your recovery codes."),
     placeholder: "123456",
-    validate: (v) => (parseRecoveryFactor(v) ? null : "enter a 6-digit code or a recovery code"),
+    validate: (v) => (parseRecoveryFactor(v) ? null : tr("enter a 6-digit code or a recovery code")),
   });
   return parseRecoveryFactor(raw ?? "");
 }

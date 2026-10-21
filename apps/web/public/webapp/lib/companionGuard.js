@@ -18,7 +18,7 @@ import { tr } from "./i18n.js";
 export const COMPANION_WRITE_ERROR_CODE = "companion-write-not-allowed";
 
 export class CompanionWriteError extends Error {
-  constructor(message = "A remote browser can't sign — open your owner app to approve this") {
+  constructor(message = tr("A remote browser can't sign — open your owner app to approve this")) {
     super(message);
     this.name = "CompanionWriteError";
     this.code = COMPANION_WRITE_ERROR_CODE;

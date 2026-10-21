@@ -846,6 +846,6 @@ async function boot() {
 
 boot().catch((e) => {
   console.error("boot failed", e);
-  setSubtitle("startup failed");
+  setSubtitle(tr("startup failed"));
   toast(humanError(e), "err");
 });

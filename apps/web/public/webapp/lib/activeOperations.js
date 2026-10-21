@@ -26,6 +26,7 @@
 
 import { PROVISION_LADDER } from "./provisionProgress.js";
 
+import { tr } from "./i18n.js";
 /**
  * Whether a pending pod has genuinely started provisioning (so it deserves a
  * spinning sliver op) vs. merely awaiting a burn. Started when it carries a
@@ -48,9 +49,9 @@ function deployStarted(pod) {
  * @param {{kind:"deploy"|"build", subject:string, onServer?:string|null}} op
  */
 export function operationLabel(op) {
-  if (op.kind === "deploy") return `preparing ${op.subject}`;
-  if (op.onServer) return `building ${op.subject} on ${op.onServer}`;
-  return `building ${op.subject}`;
+  if (op.kind === "deploy") return tr("preparing {0}", op.subject);
+  if (op.onServer) return tr("building {0} on {1}", op.subject, op.onServer);
+  return tr("building {0}", op.subject);
 }
 
 /** Namespaced ids keep the two feeders from ever colliding (a pod and a

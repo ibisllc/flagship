@@ -68,7 +68,9 @@ export async function enterTransferClaim(prefillOffer) {
 
     <div data-stage="input">
       <p class="modal-message">
-        ${tr("Someone is handing you their box. Paste the transfer link they created (Server → Transfer to another account){0}. You'll become the new owner of the box and all its contents.", hasBarcodeDetector() ? ", or scan their QR code" : "")}
+        ${hasBarcodeDetector()
+          ? tr("Someone is handing you their box. Paste the transfer link they created (Server → Transfer to another account), or scan their QR code. You'll become the new owner of the box and all its contents.")
+          : tr("Someone is handing you their box. Paste the transfer link they created (Server → Transfer to another account). You'll become the new owner of the box and all its contents.")}
       </p>
       <textarea class="full-width mt-2" rows="4" data-claim-input placeholder="${tr("Paste the transfer link or code…")}"></textarea>
       ${hasBarcodeDetector()

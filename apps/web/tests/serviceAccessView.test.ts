@@ -88,8 +88,8 @@ describe("service-access admin view", () => {
     expect(r.body).toContain("parseAcceptReply");
     expect(r.body).toContain("runFinalizeAccept");
     // The group entry shows one "k of N joined" line with a revoke.
-    expect(r.body).toContain("of ${cap} joined");
-    expect(r.body).toContain('isGroup ? "Revoke" : "Remove"');
+    expect(r.body).toContain("{0} of {1} joined");
+    expect(r.body).toContain('isGroup ? tr("Revoke") : tr("Remove")');
     expect(r.body).toContain("boundAIDs");
   });
 

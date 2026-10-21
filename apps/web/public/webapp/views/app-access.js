@@ -53,7 +53,7 @@ function paintState(state) {
 export async function renderAppAccess(serviceId, appName, { draft = false } = {}) {
   current = { serviceId, appName: appName || serviceId, list: "", draft };
   const title = $("app-access-title");
-  if (title) title.textContent = `${current.appName}: access list`;
+  if (title) title.textContent = tr("{0}: access list", current.appName);
   const root = $("app-access-content");
   root.innerHTML = skeletonCards(1);
   const companion = isCompanionProfile();

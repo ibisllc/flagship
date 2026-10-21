@@ -45,7 +45,7 @@ async function renderTabs() {
       `/api/screens/browser-tabs/list/${encodeURIComponent(activeAppId)}`,
     );
     if (!body.tabs?.length) {
-      root.innerHTML = '<div class="card placeholder">no tabs open for this app</div>';
+      root.innerHTML = `<div class="card placeholder">${tr("no tabs open for this app")}</div>`;
       return;
     }
     root.innerHTML = body.tabs.map((t) => `
@@ -90,7 +90,7 @@ function openStream(tabId) {
 
   const img = $("bv-frame");
   s.addEventListener("open", () => {
-    $("bv-stream-status").textContent = `streaming tab ${tabId}`;
+    $("bv-stream-status").textContent = tr("streaming tab {0}", tabId);
   });
   s.addEventListener("message", (ev) => {
     let frame;
@@ -98,15 +98,15 @@ function openStream(tabId) {
     if (frame.kind === "frame" && typeof frame.dataBase64 === "string") {
       img.src = `data:image/jpeg;base64,${frame.dataBase64}`;
     } else if (frame.kind === "error") {
-      toast(frame.message ?? "stream error", "err");
+      toast(frame.message ?? tr("stream error"), "err");
     }
   });
   s.addEventListener("close", () => {
     if (socket === s) socket = null;
-    $("bv-stream-status").textContent = "stream closed";
+    $("bv-stream-status").textContent = tr("stream closed");
   });
   s.addEventListener("error", () => {
-    $("bv-stream-status").textContent = "stream error";
+    $("bv-stream-status").textContent = tr("stream error");
   });
 
   bindInputForwarding(img, s);
@@ -184,7 +184,7 @@ export async function enterBrowserViewer(serviceId) {
   activeTabId = null;
   $("bv-app-id").textContent = activeAppId;
   $("bv-frame").src = "";
-  $("bv-stream-status").textContent = "no tab selected";
+  $("bv-stream-status").textContent = tr("no tab selected");
   show("view-browser-viewer");
   await renderTabs();
 }

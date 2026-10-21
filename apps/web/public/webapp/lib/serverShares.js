@@ -20,7 +20,7 @@ import { deriveHouseholdKeyFromSeed, signWithIrk, bytesToHex, hexToBytes, adminR
 import { confirmFreshUnlock } from "./freshUnlock.js";
 import { getActiveProfile } from "./profiles.js";
 
-import { tr } from "./i18n.js";
+import { tr, trn } from "./i18n.js";
 export const LEVEL_TEXT = Object.freeze({ view: tr("Can view"), manage: tr("Can manage") });
 export const LEVEL_LINE = Object.freeze({
   view: tr("See the server's status, monitoring and apps."),
@@ -39,7 +39,7 @@ export const NOTIFY_NOT_ALLOWED = tr("The owner hasn't let you approve this serv
 export const MEMBERS_ONLY_HINT = tr("Members only. As a co-manager you can open it.");
 export const DATA_TITLE = tr("Can see app data");
 export const DATA_LINE = tr("They can open each app's Database section.");
-export const SHARED_DB_OPEN = "Database";
+export const SHARED_DB_OPEN = tr("Database");
 // The words iOS uses (ShareServerScreens "Leave this server").
 export const LEAVE_LABEL = tr("Leave this server");
 export const LEAVE_TITLE = tr("Leave this server?");
@@ -454,22 +454,22 @@ export async function setUnlockDeposit(serverDomain, { shareId, memberPubHex, on
 
 const ACTION_TEXT = {
   "share.signed-in": () => "signed in",
-  "share.granted": (t) => `shared this server with ${t || "someone"}`,
-  "share.changed": (t) => `changed what ${t || "someone"} can do`,
-  "share.revoked": (t) => `removed ${t || "someone"}`,
+  "share.granted": (t) => tr("shared this server with {0}", t || "someone"),
+  "share.changed": (t) => tr("changed what {0} can do", t || "someone"),
+  "share.revoked": (t) => tr("removed {0}", t || "someone"),
   "share.left": () => "left",
-  "ai.start": () => "started building an app with AI",
-  "ai.reply": () => "answered the AI",
-  "app.access.edit": (t) => `changed ${t || "an app"}'s internet access`,
-  "app.access.dismiss": (t) => `dismissed an internet request from ${t || "an app"}`,
-  "app.update.accept": (t) => `accepted an update to ${t || "an app"}`,
-  "db.write": (t) => `changed data in ${t || "an app"}`,
-  "db.read": (t) => `read data in ${t || "an app"}`,
+  "ai.start": () => tr("started building an app with AI"),
+  "ai.reply": () => tr("answered the AI"),
+  "app.access.edit": (t) => tr("changed {0}'s internet access", t || "an app"),
+  "app.access.dismiss": (t) => tr("dismissed an internet request from {0}", t || "an app"),
+  "app.update.accept": (t) => tr("accepted an update to {0}", t || "an app"),
+  "db.write": (t) => tr("changed data in {0}", t || "an app"),
+  "db.read": (t) => tr("read data in {0}", t || "an app"),
 };
 
 /** One activity entry as a line: "<label> · <what>" (A's own lines say "You"). */
 export function activityLine(e) {
-  const who = e?.actor?.kind === "share" ? String(e.actor.label || "Someone") : "You";
+  const who = e?.actor?.kind === "share" ? String(e.actor.label || tr("Someone")) : "You";
   const action = String(e?.action ?? "");
   const what = ACTION_TEXT[action]?.(e?.target) ?? (e?.target ? `${action} · ${e.target}` : action);
   return `${who} · ${what}${e?.ok === false ? " (refused)" : ""}`;
@@ -1187,9 +1187,9 @@ export const CO_INVITE_NAME_HINT = tr("Only your devices see it.");
 export const CO_INVITE_LINK_LINE = tr("Send the link over a private channel. Whoever opens it joins as Member.");
 export const CO_INVITE_YOURS = tr("Your invites");
 export const CO_INVITE_NONE = tr("You haven't invited anyone to this app yet.");
-export const CO_INVITE_WITHDRAW = "Withdraw";
+export const CO_INVITE_WITHDRAW = tr("Withdraw");
 export const CO_INVITE_WITHDRAW_TITLE = tr("Withdraw this invite?");
-export const CO_INVITE_UNNAMED = "Someone";
+export const CO_INVITE_UNNAMED = tr("Someone");
 /** Why B can't invite (the box sends the same sentence as `whyText`; this is the fallback). */
 export const CO_INVITE_WHY = Object.freeze({
   "not-shared": tr("This server isn't shared with you anymore."),
@@ -1208,7 +1208,7 @@ export function coInviteStatusText(inv, nowMs = Date.now()) {
   const n = Number.isInteger(inv?.joined) ? inv.joined : 0;
   let text;
   if (inv?.maxRedemptions === null || inv?.maxRedemptions === undefined) {
-    text = n === 0 ? "Not opened yet" : n === 1 ? "1 person joined" : `${n} people joined`;
+    text = n === 0 ? tr("Not opened yet") : trn(n, "{0} person joined", "{0} people joined");
   } else {
     text = inv.maxRedemptions === 0 ? `${n} joined` : `${n} of ${inv.maxRedemptions} joined`;
   }

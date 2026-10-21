@@ -201,11 +201,11 @@ export async function depositUpdateOrder(args, deps = {}) {
 const REFUSAL_COPY = {
   unendorsed: tr("Flagship's maintainers haven't endorsed that release."),
   "from-commit-mismatch":
-    "the server was no longer on the version the update was made for. Send it again.",
-  "apply-failed": "it couldn't download or build the new version. Nothing changed.",
-  rejected: "the request wasn't signed by this account's admin key.",
-  stale: "the request was too old. Send it again.",
-  "wrong-domain": "the request was for a different server.",
+    tr("the server was no longer on the version the update was made for. Send it again."),
+  "apply-failed": tr("it couldn't download or build the new version. Nothing changed."),
+  rejected: tr("the request wasn't signed by this account's admin key."),
+  stale: tr("the request was too old. Send it again."),
+  "wrong-domain": tr("the request was for a different server."),
 };
 
 /**
@@ -221,9 +221,10 @@ export function describeLastUpdate(lastUpdate) {
     return target ? tr("Last update: {0} installed and running.", target) : tr("Last update installed and running.");
   }
   if (lastUpdate.outcome === "rolled-back") {
-    const to = target ? ` to ${target}` : "";
-    const back = previous ? ` to ${previous}` : "";
-    return tr("The last update{0} didn't start cleanly, so the server went back{1} on its own.", to, back);
+    if (target && previous) return tr("The last update to {0} didn't start cleanly, so the server went back to {1} on its own.", target, previous);
+    if (target) return tr("The last update to {0} didn't start cleanly, so the server went back on its own.", target);
+    if (previous) return tr("The last update didn't start cleanly, so the server went back to {0} on its own.", previous);
+    return tr("The last update didn't start cleanly, so the server went back on its own.");
   }
   if (lastUpdate.outcome === "refused") {
     const why = REFUSAL_COPY[lastUpdate.reason];

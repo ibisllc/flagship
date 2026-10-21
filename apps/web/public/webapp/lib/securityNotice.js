@@ -18,6 +18,7 @@ import { controlApex } from "./apex.js";
 import { clientIdentity } from "./buildInfo.js";
 import { setUpdateLocked } from "./updateLock.js";
 
+import { dateLocale } from "./i18n.js";
 export const TAG_SECURITY_NOTICE = "flagship/security-notice/v1";
 export const SECURITY_NOTICE_MAX_WINDOW_MS = 30 * 24 * 3600_000;
 export const SECURITY_NOTICE_MAX_MESSAGE = 280;
@@ -254,7 +255,7 @@ export function securityNoticeText(n, formatDate) {
 /** A date for a person, in their own locale and zone, never sent anywhere. */
 export function formatNoticeDate(ms) {
   try {
-    return new Date(ms).toLocaleString(undefined, {
+    return new Date(ms).toLocaleString(dateLocale(), {
       weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit",
     });
   } catch {

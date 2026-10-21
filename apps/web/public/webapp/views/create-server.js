@@ -103,7 +103,7 @@ function renderDraftList(drafts) {
   const list = $("cs-drafts");
   if (!list) return;
   if (drafts.length === 0) {
-    list.innerHTML = '<p class="note">no saved drafts yet</p>';
+    list.innerHTML = `<p class="note">${tr("no saved drafts yet")}</p>`;
     return;
   }
   list.innerHTML = drafts.map((d) => {
@@ -123,7 +123,7 @@ function renderDraftList(drafts) {
       </div>
       <div class="row">
         <span class="label">${tr("backup")}</span>
-        <span class="value">${escapeHtml(BACKUP_POLICY_LABELS[d.backupPolicy] ?? d.backupPolicy ?? "not chosen yet")}</span>
+        <span class="value">${escapeHtml(BACKUP_POLICY_LABELS[d.backupPolicy] ?? d.backupPolicy ?? tr("not chosen yet"))}</span>
       </div>
       <div class="row">
         <span class="label">${tr("updated")}</span>
@@ -930,9 +930,9 @@ function wireServerNameValidation() {
     let msg = "";
     if (v.length > 0) {
       if (!SERVER_NAME_RE.test(v)) {
-        msg = "lowercase letters, digits, and hyphens (not at the start or end)";
+        msg = tr("lowercase letters, digits, and hyphens (not at the start or end)");
       } else if (RESERVED_SERVER_LABELS.has(v)) {
-        msg = `"${v}" is reserved — pick another name`;
+        msg = tr("\"{0}\" is reserved — pick another name", v);
       }
     }
     err.textContent = msg;

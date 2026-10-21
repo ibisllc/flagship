@@ -13,11 +13,11 @@
 
 import { requireOwnerProfile } from "./companionGuard.js";
 
-import { tr, trn } from "./i18n.js";
+import { tr, trn, fmtNum } from "./i18n.js";
 export const TAG_APP_DB_WRITE = "flagship/app-db-write/v1";
 export const DB_PAGE_SIZE = 100;
 
-export const DB_TITLE = "Database";
+export const DB_TITLE = tr("Database");
 export const DB_OPEN = tr("Open database");
 export const DB_RUN_SQL = tr("Run SQL");
 export const DB_RUN = "Run";
@@ -265,7 +265,7 @@ export function canUseDatabase({ companion, deviceCapability, isFullyScoped }) {
 }
 
 export function formatBytes(n) {
-  if (typeof n !== "number" || !Number.isFinite(n) || n < 0) return "size unknown";
+  if (typeof n !== "number" || !Number.isFinite(n) || n < 0) return tr("size unknown");
   const units = ["B", "KB", "MB", "GB", "TB"];
   let v = n;
   let u = 0;
@@ -277,9 +277,9 @@ export function formatBytes(n) {
 }
 
 export function approxRowsText(rows) {
-  if (rows === null || rows === undefined) return "rows unknown";
+  if (rows === null || rows === undefined) return tr("rows unknown");
   const n = Math.max(0, Math.round(rows));
-  return trn(n, "~{1} row", "~{1} rows", n.toLocaleString("en-US"));
+  return trn(n, "~{0} row", "~{0} rows");
 }
 
 /** "Rows 101–200 of 1,234" (or "No rows"). */
@@ -287,8 +287,8 @@ export function pageRangeText({ offset, rows, total }) {
   if (rows === 0 && offset === 0) return tr("No rows");
   const from = offset + 1;
   const to = offset + rows;
-  const of = total === null || total === undefined ? "" : ` of ${total.toLocaleString("en-US")}`;
-  return tr("Rows {0}–{1}{2}", from.toLocaleString("en-US"), to.toLocaleString("en-US"), of);
+  if (total === null || total === undefined) return tr("Rows {0}–{1}", fmtNum(from), fmtNum(to));
+  return tr("Rows {0}–{1} of {2}", fmtNum(from), fmtNum(to), fmtNum(total));
 }
 
 /** Whether there's a next page after this one. */
@@ -299,9 +299,9 @@ export function hasNextPage({ offset, rows, limit, total }) {
 
 /** "UPDATE · 3 rows" / "SELECT · 1 row" / "CREATE". */
 export function queryResultSummary(r) {
-  const cmd = r.command || "Done";
+  const cmd = r.command || tr("Done");
   if (r.rowCount === null || r.rowCount === undefined) return cmd;
-  return trn(r.rowCount, "{1} · {2} row", "{1} · {2} rows", cmd, r.rowCount.toLocaleString("en-US"));
+  return trn(r.rowCount, "{1} · {0} row", "{1} · {0} rows", cmd);
 }
 
 /** A cell as text, or null for SQL NULL. */
@@ -316,8 +316,8 @@ export function dbErrorMessage(e) {
   const status = e?.status;
   const raw = typeof e?.body?.error === "string" && e.body.error ? e.body.error : String(e?.message ?? "");
   if (status === 400) {
-    const pos = Number.isFinite(e?.body?.position) ? ` (at character ${e.body.position})` : "";
-    return `${raw || tr("Your server refused this statement")}${pos}`;
+    const msg = raw || tr("Your server refused this statement");
+    return Number.isFinite(e?.body?.position) ? tr("{0} (at character {1})", msg, e.body.position) : msg;
   }
   if (status === 404) return tr("This app, store or table isn't on this server anymore.");
   if (status === 409) return tr("That confirmation was already used. Confirm again to run it.");

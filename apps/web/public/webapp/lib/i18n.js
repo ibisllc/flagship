@@ -51,6 +51,22 @@ export async function initI18n() {
 
 export function currentLanguage() { return active; }
 
+/** The locale to hand to Intl / toLocale*String: the app's language, or the browser's own while the app is in English. */
+export function dateLocale() { return active === "en" ? undefined : active; }
+
+/** A number with the active language's digit grouping and decimal mark. */
+export function fmtNum(n, opts) {
+  try { return new Intl.NumberFormat(dateLocale(), opts).format(n); } catch { return String(n); }
+}
+
+let rules = null, rulesFor = "";
+/** Whether `n` takes the singular form in the active language (French counts 0 as singular, Japanese and Chinese never do). */
+function isOne(n) {
+  if (active === "en") return n === 1;
+  if (rulesFor !== active) { try { rules = new Intl.PluralRules(active); } catch { rules = null; } rulesFor = active; }
+  return rules ? rules.select(n) === "one" : n === 1;
+}
+
 export function setLanguage(code) {
   try { localStorage.setItem(STORE_KEY, code); } catch { /* ignore */ }
 }
@@ -67,14 +83,23 @@ export function tr(en, ...args) {
 
 /** Plural by count. The two English forms are the keys; a catalog entry may be {one, other}. */
 export function trn(n, one, other, ...args) {
-  const key = n === 1 ? one : other;
+  const key = isOne(n) ? one : other;
   const hit = catalog && Object.prototype.hasOwnProperty.call(catalog, key) ? catalog[key] : null;
-  return fill(typeof hit === "string" && hit ? hit : key, [n, ...args]);
+  return fill(typeof hit === "string" && hit ? hit : key, [typeof n === "number" && n >= 1000 ? fmtNum(n) : n, ...args]);
 }
 
 /** Translate the static text of a server-rendered or index.html subtree (text nodes and a few attributes). */
 export function translateStatic(root = document) {
   if (!catalog) return;
+  // an element of only text and inline tags is translated as one sentence (the key is its innerHTML)
+  const INLINE = new Set(["A", "B", "I", "EM", "STRONG", "CODE", "KBD", "SMALL", "U", "MARK", "SUP", "SUB", "BR", "ABBR", "S", "WBR"]);
+  const inlineOnly = (el) => Array.from(el.childNodes).every((c) => c.nodeType === 3 || c.nodeType === 8 || (c.nodeType === 1 && INLINE.has(c.tagName) && inlineOnly(c)));
+  for (const el of root.querySelectorAll?.("*") ?? []) {
+    if (!el.children.length || !Array.from(el.children).every((c) => INLINE.has(c.tagName)) || !inlineOnly(el)) continue;
+    const key = el.innerHTML.replace(/\s+/g, " ").trim();
+    const hit = Object.prototype.hasOwnProperty.call(catalog, key) ? catalog[key] : null;
+    if (typeof hit === "string" && hit) el.innerHTML = hit;
+  }
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
     const raw = n.nodeValue ?? "";

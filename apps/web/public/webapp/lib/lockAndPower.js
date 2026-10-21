@@ -20,6 +20,7 @@
 // signing key IS the IRK (same as every other PhoneOrder the webapp sends — see
 // podPair.js's add-paired-session). So "sign with the box PSK" maps to
 // signWithIrk on this surface.
+import { tr } from "./i18n.js";
 
 // ---- Canonical-bytes tags — MUST match @flagship/protocol ----
 export const TAG_ORDER_POWER_OFF = "flagship/order/power-off/v1";
@@ -227,7 +228,7 @@ export const DEADMAN_WINDOW_PRESETS = [
   { id: "8h", label: "8 hours", windowMs: 8 * HOUR, graceMs: 2 * HOUR },
   { id: "1h", label: "1 hour", windowMs: 1 * HOUR, graceMs: 15 * MIN },
   { id: "15m", label: "15 minutes", windowMs: 15 * MIN, graceMs: 5 * MIN },
-  { id: "5m", label: "5 minutes (tighten)", windowMs: 5 * MIN, graceMs: 2 * MIN },
+  { id: "5m", label: tr("5 minutes (tighten)"), windowMs: 5 * MIN, graceMs: 2 * MIN },
 ];
 
 /** The "tighten now" preset — the shortest window. */
@@ -248,5 +249,5 @@ export function fmtRemaining(expiryMs, nowMs) {
   if (h) parts.push(`${h}h`);
   if (m || h) parts.push(`${m}m`);
   parts.push(`${s}s`);
-  return `${parts.join(" ")} left`;
+  return tr("{0} left", parts.join(" "));
 }

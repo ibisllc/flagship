@@ -139,7 +139,7 @@ import { SERVER_ADMIN_ONLY, canSignAdminOrders } from "../lib/addServerGate.js";
 import { isAdminDevice } from "../lib/memberRoles.js";
 import { debugAccessBannerHtml, debugAccessCardHtml, wireDebugAccess } from "./debug-access.js";
 
-import { tr, trn } from "../lib/i18n.js";
+import { tr, trn, dateLocale } from "../lib/i18n.js";
 registerView("view-server-detail");
 
 function fmtUptime(ms) {
@@ -262,10 +262,10 @@ function lastSeenText(pod, now) {
     : typeof pod?.lastReported === "number" ? now - pod.lastReported : null;
   if (ms == null || ms < 0) return "";
   const min = Math.round(ms / 60_000);
-  if (min < 60) return `${Math.max(1, min)} min ago`;
+  if (min < 60) return tr("{0} min ago", Math.max(1, min));
   const h = Math.round(min / 60);
-  if (h < 48) return `${h} h ago`;
-  return `${Math.round(h / 24)} days ago`;
+  if (h < 48) return tr("{0} h ago", h);
+  return tr("{0} days ago", Math.round(h / 24));
 }
 
 /** Each state's words, as iOS shows them (same accessibility ids). */
@@ -323,13 +323,13 @@ export function renderUnreachableDetail({ serverFqdn, username, revoked, message
   const k = kind || (revoked ? "revoked" : "connecting");
   const copy = unreachableCopy(k, { message, lastSeen: lastSeenText(pod, now) });
   const pairButton = k === "not-paired"
-    ? '<button class="primary full-width mt-3" id="sd-pair-server" type="button">Pair this server</button>'
+    ? `<button class="primary full-width mt-3" id="sd-pair-server" type="button">${tr("Pair this server")}</button>`
     : "";
   // An offline server says only that, with a way to look again (the web has no
   // pull gesture); its Monitoring has nothing to show until a re-check finds it.
   const offline = k === "offline";
   const checkAgain = offline
-    ? '<button class="secondary full-width mt-3" id="sd-check-again" type="button">Check again</button>'
+    ? `<button class="secondary full-width mt-3" id="sd-check-again" type="button">${tr("Check again")}</button>`
     : "";
   return `
       <div class="card" id="${copy.id}" data-unreachable-kind="${escapeHtml(k)}">
@@ -519,12 +519,12 @@ export async function renderServerDetail() {
         <button id="front-page-save" class="full-width mt-2" disabled>${tr("Save")}</button>
         <p class="note small hidden" id="front-page-status"></p>
       </div>
-      <h2 class="mt-4">${escapeHtml(isLuksBox(body) ? "Lock & power" : "Power")}</h2>
+      <h2 class="mt-4">${escapeHtml(isLuksBox(body) ? tr("Lock & power") : tr("Power"))}</h2>
       <div class="card" id="lock-power-card">
         <p class="note">
           ${escapeHtml(isLuksBox(body)
             ? "Power the box down or restart it. Either drops the in-memory disk key, so the next boot waits for your approval to unlock."
-            : "Power the box down or restart it.")}
+            : tr("Power the box down or restart it."))}
         </p>
         <div class="row-2 mt-2">
           <button id="power-off-btn" class="danger" data-power-mode="off">${escapeHtml(powerLabel("off", body))}</button>
@@ -778,7 +778,7 @@ export async function makeServerLeader(fqdn, deps = {}) {
 /** The order card's status line, pill style and confirmation caption. */
 export async function leaderStatus(fqdn, deps = {}) {
   const m = await leaderModel(fqdn, deps).catch(() => null);
-  if (!m || m.position < 1) return { text: "not ranked yet", pill: "pill", waiting: false, canLead: false, model: m };
+  if (!m || m.position < 1) return { text: tr("not ranked yet"), pill: "pill", waiting: false, canLead: false, model: m };
   if (m.isLeader) {
     return { text: tr("Leader"), pill: m.confirmed ? "pill ok" : "pill", waiting: !m.confirmed, canLead: m.position !== 1, model: m };
   }
@@ -923,7 +923,7 @@ function startMetricsPolling(serverFqdn) {
       if (metricsFor !== serverFqdn) return;
       const root = $("server-detail-content");
       const why = `<p class="note">${escapeHtml(humanError(e))}</p>`;
-      for (const key of METRIC_KEYS) paintMonitorRow(root, key, { value: "Unavailable", tone: "", detail: why });
+      for (const key of METRIC_KEYS) paintMonitorRow(root, key, { value: tr("Unavailable"), tone: "", detail: why });
     }
   };
   void tick();
@@ -962,7 +962,7 @@ function wireFrontPage(body) {
       if (current && !options.some((o) => o.urlLabel === current)) {
         const opt = document.createElement("option");
         opt.value = current;
-        opt.textContent = `${current} (no longer installed)`;
+        opt.textContent = tr("{0} (no longer installed)", current);
         select.appendChild(opt);
       }
       select.value = current;
@@ -1054,7 +1054,7 @@ async function runJournalFetch(body, btn) {
     });
     if (out) {
       out.classList.remove("hidden");
-      out.textContent = res.lines.length ? res.lines.join("\n") : "(journal is empty)";
+      out.textContent = res.lines.length ? res.lines.join("\n") : tr("(journal is empty)");
     }
     if (status) status.textContent = trn(res.lines.length, "{0} line from {1}.", "{0} lines from {1}.", res.unit);
   } finally {
@@ -1076,7 +1076,7 @@ function isLuksBox(body) {
 }
 
 function powerLabel(mode, body) {
-  const verb = mode === "restart" ? "restart" : "turn off";
+  const verb = mode === "restart" ? "restart" : tr("turn off");
   const cap = verb.charAt(0).toUpperCase() + verb.slice(1);
   return isLuksBox(body) ? tr("Lock and {0}", verb) : cap;
 }
@@ -1133,7 +1133,7 @@ async function runPowerAction(body, mode, btn, allButtons, status) {
         status.textContent =
           mode === "restart" ? tr("Restarting — the server will go offline briefly.") : tr("Powering off — the server is going offline.");
       }
-      toast(`${actionLabel} sent`, "ok");
+      toast(tr("{0} sent", actionLabel), "ok");
     } finally {
       btn.textContent = origLabel;
       for (const b of allButtons) b.disabled = false;
@@ -1685,7 +1685,7 @@ async function openBackupDialog(body) {
       copyBtn.classList.remove("hidden");
       removeBtn.classList.remove("hidden");
       hintEl.textContent =
-        tr("Download here, or copy the link to open it on another computer: that page asks the Flagship app on your phone to approve. {0}", tr("The link works until {0}; a download that stops picks up where it left off.", new Date(link.expiresAt).toLocaleString()));
+        tr("Download here, or copy the link to open it on another computer: that page asks the Flagship app on your phone to approve.") + " " + tr("The link works until {0}; a download that stops picks up where it left off.", new Date(link.expiresAt).toLocaleString(dateLocale()));
       hintEl.classList.remove("hidden");
       saveBtn.addEventListener("click", async () => {
         saveBtn.disabled = true;
@@ -2044,7 +2044,7 @@ export async function openUpdateDialog(body, { sendAgain = false } = {}) {
     if (t.length > 0 && !COMMIT_SHA_RE.test(t)) {
       problem = "Enter the full 40-character commit hash of the blessed release.";
     } else if (t === from) {
-      problem = "The server is already running this release.";
+      problem = tr("The server is already running this release.");
     }
     hintEl.textContent = problem || "";
     hintEl.classList.toggle("hidden", !problem);
@@ -2258,7 +2258,7 @@ async function openMigrateDialog(body) {
       .then((e) => {
         estimated = e;
         estimateEl.textContent =
-          tr("About {0} to move at {1}/s between the servers. ", formatBytes(e.archiveBytes || 0), formatBytes(e.bytesPerSecond)) +
+          tr("About {0} to move at {1}/s between the servers.", formatBytes(e.archiveBytes || 0), formatBytes(e.bytesPerSecond)) + " " +
           tr("Your apps pause for {0}: they show \"moving to a new server\" until the new one takes over.", downtimeText(e.downtimeSec));
         moveBtn.disabled = !canSignAdminOrders();
       })
@@ -2272,7 +2272,7 @@ async function openMigrateDialog(body) {
       moveBtn.disabled = true;
       moveStepEl.classList.remove("hidden");
       moveBarEl.classList.remove("hidden");
-      const label = { backup: "Backup", transfer: "Transfer", restore: "Restore" };
+      const label = { backup: tr("Backup"), transfer: tr("Transfer"), restore: tr("Restore") };
       try {
         const out = await moveData({
           oldClient: boxClient(serverFqdn),
@@ -2634,9 +2634,9 @@ async function openRevokeDialog(serverFqdn, username) {
 
 function reasonLabel(r) {
   switch (r) {
-    case "lost": return "Lost";
-    case "stolen": return "Stolen";
-    case "decommissioned": return "Decommissioned";
+    case "lost": return tr("Lost");
+    case "stolen": return tr("Stolen");
+    case "decommissioned": return tr("Decommissioned");
     default: return r;
   }
 }

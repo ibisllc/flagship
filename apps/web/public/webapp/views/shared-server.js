@@ -483,7 +483,7 @@ function wireInvitePanel(entry, serviceId, appName, slot, state) {
       q("[data-co-result]")?.classList.add("hidden");
       q("[data-co-group]")?.classList.toggle("hidden", kind !== "group");
       const label = q("[data-co-name-label]");
-      if (label) label.firstChild.textContent = kind === "group" ? tr("Group name ") : tr("Name ");
+      if (label) label.firstChild.textContent = kind === "group" ? tr("Group name") + " " : tr("Name") + " ";
       const input = q("[data-co-name]");
       if (input) {
         input.placeholder = kind === "group" ? tr("Chess club") : tr("Alex");
@@ -617,7 +617,7 @@ function wireStartup(entry, my, startups) {
     btn.textContent = tr("Approving…");
     try {
       for (const req of startups) await approveShareStartup(entry, req);
-      toast(`${entry.serverName || entry.serverDomain} is unlocking`, "ok");
+      toast(tr("{0} is unlocking", entry.serverName || entry.serverDomain), "ok");
       $("shared-startup-card")?.remove();
     } catch (e) {
       toast(shareErrorText(e), "err");
@@ -653,7 +653,7 @@ function startMetrics(entry, client, my) {
       set("sh-metrics-mem", `${humanBytes(m.memUsedBytes)} / ${humanBytes(m.memTotalBytes)}`);
       set("sh-metrics-disk", `${humanBytes(m.diskUsedBytes)} / ${humanBytes(m.diskTotalBytes)}`);
       set("sh-metrics-net", `↓ ${humanBytes(m.netRxBytesPerSec)}/s · ↑ ${humanBytes(m.netTxBytesPerSec)}/s`);
-      set("sh-metrics-at", `Collected ${formatWhen(m.collectedAt)}`);
+      set("sh-metrics-at", tr("Collected {0}", formatWhen(m.collectedAt)));
     } catch {
       const at = $("sh-metrics-at");
       if (at && onPage(my)) at.textContent = tr("Couldn't read metrics from this server.");

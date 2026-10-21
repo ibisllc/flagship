@@ -76,17 +76,17 @@ function platformDisplay(p) {
  *  (or `label` AND `platform`) still reads sensibly. */
 function deviceName(device) {
   if (device.displayName) return device.displayName;
-  return `${platformDisplay(device.platformClass)} · Device ${device.supportCode ?? device.deviceId.slice(0, 8)}`;
+  return tr("{0} · Device {1}", platformDisplay(device.platformClass), device.supportCode ?? device.deviceId.slice(0, 8));
 }
 
 function relative(ms) {
   if (!ms) return "unknown";
   const d = Date.now() - ms;
   const s = Math.max(0, Math.floor(d / 1000));
-  if (s < 60) return "just now";
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86_400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86_400)}d ago`;
+  if (s < 60) return tr("just now");
+  if (s < 3600) return tr("{0}m ago", Math.floor(s / 60));
+  if (s < 86_400) return tr("{0}h ago", Math.floor(s / 3600));
+  return tr("{0}d ago", Math.floor(s / 86_400));
 }
 
 async function fetchDevices() {
@@ -148,13 +148,13 @@ function renderDeviceCard(device) {
           ${escapeHtml(deviceName(device))}
           ${device.isCurrent ? `<span class="pill">${tr("This device")}</span>` : ""}
           ${device.grant?.signerRoot === "admin-root" ? `<span class="pill">${tr("Administrator")}</span>` : ""}
-          ${device.managed ? `<span class="pill">${device.locked ? tr("Managed · locked") : "Managed"}</span>` : ""}
+          ${device.managed ? `<span class="pill">${device.locked ? tr("Managed · locked") : tr("Managed")}</span>` : ""}
         </div>
       </div>
       <div class="note small">
-        ${tr("{0} · Device {1} · added {2} {3}", escapeHtml(platformDisplay(device.platformClass)), escapeHtml(device.supportCode ?? device.deviceId.slice(0, 8)), escapeHtml(relative(device.createdAt)), device.lastSeenAt > device.createdAt
-            ? `· last seen ${escapeHtml(relative(device.lastSeenAt))}`
-            : "")}
+        ${device.lastSeenAt > device.createdAt
+          ? tr("{0} · Device {1} · added {2} · last seen {3}", escapeHtml(platformDisplay(device.platformClass)), escapeHtml(device.supportCode ?? device.deviceId.slice(0, 8)), escapeHtml(relative(device.createdAt)), escapeHtml(relative(device.lastSeenAt)))
+          : tr("{0} · Device {1} · added {2}", escapeHtml(platformDisplay(device.platformClass)), escapeHtml(device.supportCode ?? device.deviceId.slice(0, 8)), escapeHtml(relative(device.createdAt)))}
       </div>
       <div class="row mt-2">
         ${device.isCurrent ? `<button class="secondary" data-self-rename="${escapeHtml(device.deviceId)}">${tr("Rename this device")}</button>` : ""}
@@ -256,7 +256,7 @@ async function renderTrustedDevices() {
     bindPendingBanner();
     bindDangerZone();
   } catch (e) {
-    root.innerHTML = `<div class="card placeholder err-text">${escapeHtml(e.message ?? "Couldn't load devices")}</div>`;
+    root.innerHTML = `<div class="card placeholder err-text">${escapeHtml(e.message ?? tr("Couldn't load devices"))}</div>`;
   }
 }
 
@@ -459,7 +459,7 @@ async function runReplaceDeviceSheet() {
       <p>${tr("Rotates your account's identity key. Every other device on this account — including this phone — will need to confirm a new pairing the next time it opens the app. You won't be locked out, but you'll see a one-time biometric prompt on each device.")}</p>
       <p>${tr("Servers stay running. Apps stay installed.")}</p>
     `,
-    primaryLabel: "Replace",
+    primaryLabel: tr("Replace"),
     primaryClass: "danger",
   });
   if (!confirmed) return;

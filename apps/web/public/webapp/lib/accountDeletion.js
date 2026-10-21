@@ -238,7 +238,7 @@ export async function runDeletionCeremony(args, deps = {}) {
     try { forgetProfile(username); } catch { /* best-effort local cleanup */ }
   }
   lockSession();
-  setSubtitle?.("account deleted");
+  setSubtitle?.(tr("account deleted"));
   show(welcomeViewId);
   return result;
 }

@@ -13,7 +13,7 @@
 import { deriveServerArchiveKeyFromSeed } from "../keystore.js";
 import { approveArchiveDownload, newArchiveId, startBrowserDownload } from "./serverArchive.js";
 
-import { tr, trn } from "./i18n.js";
+import { tr, trn, dateLocale } from "./i18n.js";
 export const SAVED_PATH = "/api/screens/server-archive/backups";
 export const TAG_SERVER_ARCHIVE_KEYS = "flagship/server-archive-keys/v1";
 export const MAX_KEYS_PER_DEPOSIT = 400;
@@ -120,24 +120,25 @@ export function utcToLocal({ minuteOfDayUtc, weekdayUtc = 0, frequency }, ref = 
   return { hour: d.getHours(), minute: d.getMinutes(), weekday: d.getDay() };
 }
 
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+/** Weekday names in the app's language (0 = Sunday); 2024-01-07 was a Sunday. */
+export const weekdayName = (i) => new Date(2024, 0, 7 + i).toLocaleDateString(dateLocale(), { weekday: "long" });
 
 function timeText(hour, minute) {
-  return new Date(2000, 0, 1, hour, minute).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return new Date(2000, 0, 1, hour, minute).toLocaleTimeString(dateLocale(), { hour: "numeric", minute: "2-digit" });
 }
 
 /** "Daily at 3:00 AM · keeps 7 daily and 4 weekly" */
 export function scheduleLine(s, ref = new Date()) {
   if (!s || s.frequency === "off") return tr("Scheduled backups are off.");
   const l = utcToLocal(s, ref);
-  const when = s.frequency === "weekly" ? tr("Weekly on {0} at {1}", WEEKDAYS[l.weekday], timeText(l.hour, l.minute)) : tr("Daily at {0}", timeText(l.hour, l.minute));
-  return `${when} · keeps ${s.keepDaily} daily and ${s.keepWeekly} weekly`;
+  const when = s.frequency === "weekly" ? tr("Weekly on {0} at {1}", weekdayName(l.weekday), timeText(l.hour, l.minute)) : tr("Daily at {0}", timeText(l.hour, l.minute));
+  return tr("{0} · keeps {1} daily and {2} weekly", when, s.keepDaily, s.keepWeekly);
 }
 
 const trimStop = (s) => String(s ?? "").trim().replace(/[.\s]+$/, "");
 
 /** The status line and, when the last run failed, the box's sentence. */
-export function statusLines(view, { formatBytes, formatTime = (t) => new Date(t).toLocaleString() }) {
+export function statusLines(view, { formatBytes, formatTime = (t) => new Date(t).toLocaleString(dateLocale()) }) {
   const out = { status: "", failed: "", next: "" };
   if (view?.running) {
     const p = view.running.progress ?? {};
@@ -148,7 +149,7 @@ export function statusLines(view, { formatBytes, formatTime = (t) => new Date(t)
   } else {
     out.status = tr("No backups yet.");
   }
-  if (view?.lastRun && view.lastRun.ok === false) out.failed = tr("The last backup failed: {0}.", trimStop(view.lastRun.reason) || "the backup couldn't be made");
+  if (view?.lastRun && view.lastRun.ok === false) out.failed = tr("The last backup failed: {0}.", trimStop(view.lastRun.reason) || tr("the backup couldn't be made"));
   if (view?.scheduleActive === false || view?.schedule?.frequency === "off") out.next = tr("Scheduled backups are off.");
   else if (view?.nextRunAt) out.next = tr("Next backup: {0}", formatTime(view.nextRunAt));
   else if (view?.waitingReason) out.next = `${trimStop(view.waitingReason).replace(/^./, (c) => c.toUpperCase())}.`;
@@ -156,7 +157,7 @@ export function statusLines(view, { formatBytes, formatTime = (t) => new Date(t)
 }
 
 /** One row of the list: "Oct 16, 3:00 AM · 1.2 GB · Scheduled · 3 apps" and a left-out line. */
-export function rowText(b, { formatBytes, formatTime = (t) => new Date(t).toLocaleString() }) {
+export function rowText(b, { formatBytes, formatTime = (t) => new Date(t).toLocaleString(dateLocale()) }) {
   const n = b.apps?.length ?? 0;
   const main = trn(n, "{1} · {2} · {3} · {0} app", "{1} · {2} · {3} · {0} apps", formatTime(b.createdAt), formatBytes(b.bundleBytes ?? b.bytes + b.backupBytes), b.trigger === "schedule" ? "Scheduled" : tr("Back up now"));
   const left = b.left?.length ? tr("Left out: {0}", b.left.map((x) => x.name).join(", ")) : "";

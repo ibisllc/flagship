@@ -19,36 +19,36 @@ export const DEFAULT_ACCESS_LIST = "# Uncomment the following line to allow all 
 
 export const ACCESS_TITLE = tr("Internet access");
 export const ACCESS_VIEW_LIST = tr("View access list");
-export const ACCESS_ALLOW = "Allow";
-export const ACCESS_DENY = "Deny";
-export const ACCESS_IGNORE = "Ignore";
+export const ACCESS_ALLOW = tr("Allow");
+export const ACCESS_DENY = tr("Deny");
+export const ACCESS_IGNORE = tr("Ignore");
 export const ACCESS_NOT_NOW = tr("Not now");
-export const ACCESS_CLOSE = "Close";
-export const ACCESS_SAVE = "Save";
+export const ACCESS_CLOSE = tr("Close");
+export const ACCESS_SAVE = tr("Save");
 export const ACCESS_PENDING_BADGE = tr("Wants internet");
 export const ACCESS_COMPANION_NOTE = tr("Change this from your owner app.");
 export const ACCESS_LIST_HELP =
   tr("One rule per line: allow or deny, then a host, *.example.com for its subdomains, or all. The first rule that matches decides; a host no rule matches is blocked. # starts a comment.");
 export const ACCESS_PUSH_TEXT = tr("One of your apps wants to reach the internet");
 export const ACCESS_DRAFT_TITLE = tr("This app suggests letting it reach these hosts");
-export const ACCESS_DRAFT_REVIEW = "Review";
-export const ACCESS_DRAFT_DISMISS = "Dismiss";
+export const ACCESS_DRAFT_REVIEW = tr("Review");
+export const ACCESS_DRAFT_DISMISS = tr("Dismiss");
 export const ACCESS_DRAFT_BADGE = tr("Access suggested");
 export const ACCESS_DRAFT_WAITING = tr("A suggested access list is waiting…");
 export const ACCESS_DRAFT_EDITOR_NOTE =
   tr("This is the list the app suggests. Nothing changes until you save it; edit it first if you like.");
 
 const MSG = {
-  verb: 'start the line with "allow" or "deny"',
-  noTarget: 'say what to allow or deny, e.g. "allow example.com"',
-  oneHost: "one host per line",
-  scheme: "write the host only, without http:// or https://",
-  path: "write the host only, without a path",
-  port: "write the host only, without a port",
+  verb: tr("start the line with \"allow\" or \"deny\""),
+  noTarget: tr("say what to allow or deny, e.g. \"allow example.com\""),
+  oneHost: tr("one host per line"),
+  scheme: tr("write the host only, without http:// or https://"),
+  path: tr("write the host only, without a path"),
+  port: tr("write the host only, without a port"),
   ip: tr("IP addresses can't be allowed or denied; use a host name"),
-  star: 'write "all" instead of "*"',
-  starPlace: "a * may only start a host, as in *.example.com",
-  tooMany: `an access list can have at most ${MAX_ACCESS_RULES} rules`,
+  star: tr("write \"all\" instead of \"*\""),
+  starPlace: tr("a * may only start a host, as in *.example.com"),
+  tooMany: tr("an access list can have at most {0} rules", MAX_ACCESS_RULES),
 };
 
 const LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -317,11 +317,11 @@ export function hasPendingInternetRequest(app, hasPendingEgress = () => false) {
 
 export function ruleCountText(n) {
   if (!n) return tr("No rules: this app can't reach the internet.");
-  return n === 1 ? "1 rule" : `${n} rules`;
+  return n === 1 ? "1 rule" : tr("{0} rules", n);
 }
 
 export function accessRequestTitle(appName, host) {
-  return `${appName || tr("An app")} wants to reach ${host}`;
+  return tr("{0} wants to reach {1}", appName || tr("An app"), host);
 }
 
 /** Whether it tried to connect or asked at install. */
@@ -333,12 +333,12 @@ export function accessRequestNote(req) {
 }
 
 export function accessDraftAlertTitle(appName) {
-  return `${appName || tr("An app")} suggests an access list`;
+  return tr("{0} suggests an access list", appName || tr("An app"));
 }
 
 export function accessAnsweredText(appName, host, action) {
   const name = appName || tr("This app");
-  return action === "allow" ? `${name} can now reach ${host}` : `${name} won't reach ${host}`;
+  return action === "allow" ? tr("{0} can now reach {1}", name, host) : tr("{0} won't reach {1}", name, host);
 }
 
 /** The box's refusal, said plainly. */

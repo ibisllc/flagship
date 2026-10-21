@@ -309,8 +309,8 @@ function openAddCard(kind) {
   const group = kind === "group";
   $("sa-add-title").textContent = group ? tr("Add a group") : tr("Add a person");
   $("sa-name-label").innerHTML = group
-    ? 'Group name <span class="faint-sm">(only you and your servers see it)</span>'
-    : 'Name <span class="faint-sm">(only you and your servers see it)</span>';
+    ? `${tr("Group name")} <span class="faint-sm">${tr("(only you and your servers see it)")}</span>`
+    : `${tr("Name")} <span class="faint-sm">${tr("(only you and your servers see it)")}</span>`;
   $("sa-name").placeholder = group ? tr("Chess club") : tr("Alex");
   $("sa-person-opts")?.classList.toggle("hidden", group);
   $("sa-group-opts")?.classList.toggle("hidden", !group);
@@ -507,12 +507,12 @@ async function onAdd(serviceRef) {
           fetchJson: screensJson,
         });
       } catch (e) {
-        roleNote = ` Couldn't set the rank (${humanError(e)}): change it in the list.`;
+        roleNote = ` ${tr("Couldn't set the rank ({0}): change it in the list.", humanError(e))}`;
       }
     }
     if (status) {
       status.className = roleNote ? "mt-2 text-sm err-text" : "mt-2 text-sm ok-text";
-      status.textContent = tr("{0} {1} created.{2}", isGroup ? "Group" : tr("Invite for"), name, roleNote);
+      status.textContent = (isGroup ? tr("Group {0} created.{1}", name, roleNote) : tr("Invite for {0} created.{1}", name, roleNote));
     }
     const result = $("sa-add-result");
     const linkEl = $("sa-link");
@@ -701,7 +701,7 @@ async function renderPeople(serviceRef) {
     deviceNames: deviceNamesMap,
   };
   root.innerHTML =
-    (lastMembers ? "" : '<div class="card"><p class="err-text">Couldn\'t load roles from your server.</p></div>') +
+    (lastMembers ? "" : `<div class="card"><p class="err-text">${tr("Couldn't load roles from your server.")}</p></div>`) +
     lastInvites.map((i) => peopleRowHtml(i, lastMembers, labelOf, ctx)).join("");
   root.querySelectorAll('[data-action="sa-remove"]').forEach((b) => {
     b.addEventListener("click", () =>
@@ -809,12 +809,12 @@ function renderAccountMembers(serviceRef, { isAdmin, deviceNames }) {
   const root = $("sa-account-people");
   if (!root) return;
   if (!lastMembers) {
-    root.innerHTML = '<div class="card"><p class="err-text">Couldn\'t load ranks from your server.</p></div>';
+    root.innerHTML = `<div class="card"><p class="err-text">${tr("Couldn't load ranks from your server.")}</p></div>`;
     return;
   }
   const rows = lastMembers.accountMembers ?? [];
   if (rows.length === 0) {
-    root.innerHTML = '<div class="card placeholder">Your server doesn\'t list this account\'s devices yet.</div>';
+    root.innerHTML = `<div class="card placeholder">${tr("Your server doesn't list this account's devices yet.")}</div>`;
     return;
   }
   const ctx = { isAdmin, devicePub: lastDevicePub, deviceNames };
@@ -886,14 +886,14 @@ export function peopleRowHtml(i, members, labelOf, ctx = { isAdmin: false, devic
   if (isGroup) {
     const used = typeof i.redemptions === "number" ? i.redemptions : (Array.isArray(i.boundAIDs) ? i.boundAIDs.length : 0);
     const cap = i.maxRedemptions === 0 ? "∞" : i.maxRedemptions;
-    statusText = `${used} of ${cap} joined`;
+    statusText = tr("{0} of {1} joined", used, cap);
     if (i.expiresAt) {
-      statusText += i.expiresAt <= Date.now() ? " · expired" : ` · expires ${formatWhen(i.expiresAt)}`;
+      statusText = i.expiresAt <= Date.now() ? tr("{0} of {1} joined · expired", used, cap) : tr("{0} of {1} joined · expires {2}", used, cap, formatWhen(i.expiresAt));
     }
   } else if (i.approvalMode === "manual" && !i.boundAID) {
-    statusText = "you approve — waiting for their acceptance";
+    statusText = tr("you approve — waiting for their acceptance");
   } else {
-    statusText = i.boundAID ? "active" : "invite sent — not opened yet";
+    statusText = i.boundAID ? tr("active") : tr("invite sent — not opened yet");
   }
   const also = isGroup ? "" : alsoInText(otherGrants(i, members, labelOf));
   const avatar = isGroup
@@ -908,7 +908,7 @@ export function peopleRowHtml(i, members, labelOf, ctx = { isAdmin: false, devic
     : ctx.isAdmin
       ? `${crownHtml(role)}<select data-action="sa-role" data-target="${escapeHtml(target)}" data-current="${escapeHtml(role)}" data-name="${escapeHtml(name)}" aria-label="${tr("Rank for {0}", escapeHtml(name))}">${roleOptionsHtml(role)}</select>`
       : `${crownHtml(role)}<span class="sa-rank" data-rank="${escapeHtml(role)}">${escapeHtml(roleLabel(role))}</span>`;
-  const removeLabel = isGroup ? "Revoke" : "Remove";
+  const removeLabel = isGroup ? tr("Revoke") : tr("Remove");
   const invitedBy = invitedByText(i, ctx);
   const remove = canRevokeInvite(i, { ...ctx, members })
     ? `<button class="sa-remove" type="button" data-action="sa-remove" data-id="${escapeHtml(i.inviteId)}" data-aid="${escapeHtml(i.boundAID ?? "")}" data-name="${escapeHtml(name)}" data-group="${isGroup ? "1" : "0"}">${removeLabel}</button>`

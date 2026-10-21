@@ -20,7 +20,7 @@ export const EDIT_ROW_TITLE = tr("Edit this service");
 export const EDIT_ROW_CAPTION = tr("Change it with AI, or in your own editor");
 
 export function editTitle(name) {
-  return `Edit ${name}`;
+  return tr("Edit {0}", name);
 }
 
 export const AI_OPTION = {

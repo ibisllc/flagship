@@ -123,7 +123,7 @@ function hasBrowserBundle(body) {
 }
 
 function formatStoreBytes(n) {
-  if (typeof n !== "number" || !Number.isFinite(n) || n < 0) return "size unknown";
+  if (typeof n !== "number" || !Number.isFinite(n) || n < 0) return tr("size unknown");
   const units = ["B", "KB", "MB", "GB", "TB"];
   let v = n;
   let u = 0;
@@ -152,7 +152,7 @@ export function renderAppStorage(storage) {
 
 /** One data-layer store: a Postgres database (by store name) or the app's files folder (with its size). */
 function renderStoreRow(i) {
-  const label = i.store === "postgres" ? "Postgres" : i.store === "files" ? "Files" : String(i.store ?? "");
+  const label = i.store === "postgres" ? "Postgres" : i.store === "files" ? tr("Files") : String(i.store ?? "");
   const value =
     i.store === "files"
       ? formatStoreBytes(i.bytes)
@@ -207,7 +207,7 @@ export async function renderServiceDetail(serviceId) {
       </div>
       <h2 class="mt-4">${tr("Data layer")}</h2>
       ${(body.dataLayerInstances ?? []).length === 0
-        ? '<div class="card placeholder">no stores</div>'
+        ? `<div class="card placeholder">${tr("no stores")}</div>`
         : (body.dataLayerInstances ?? []).map(renderStoreRow).join("")}
       ${renderAppStorage(body.storage)}
       ${hasBrowserBundle(body) ? `
@@ -374,7 +374,7 @@ export function renderAccessSection(app, { summary = readAccessSummary(app), sta
       pendingHtml += `<p class="faint-sm mt-2" data-access-locked>${escapeHtml(locked)}</p>`;
     }
   } else if (summary?.pending > 0) {
-    pendingHtml = `<p class="muted-sm mt-2">${tr("{0} waiting…", summary.pending === 1 ? "1 request" : `${summary.pending} requests`)}</p>`;
+    pendingHtml = `<p class="muted-sm mt-2">${tr("{0} waiting…", summary.pending === 1 ? "1 request" : tr("{0} requests", summary.pending))}</p>`;
   }
   return `
       <h2 class="mt-4">${escapeHtml(ACCESS_TITLE)}</h2>
@@ -561,7 +561,7 @@ export function renderDatabaseEntry({ stores = null, error = "" } = {}) {
   const tables = (stores ?? []).reduce((n, s) => n + s.tables.length, 0);
   const line = error
     ? `<p class="err-text text-sm mt-1">${escapeHtml(error)}</p>`
-    : `<div class="muted-sm mt-1">${tables === 1 ? "1 table" : `${tables} tables`}</div>`;
+    : `<div class="muted-sm mt-1">${tables === 1 ? "1 table" : tr("{0} tables", tables)}</div>`;
   return `
       <h2 class="mt-4">${escapeHtml(DB_TITLE)}</h2>
       <div class="card">
@@ -1158,7 +1158,7 @@ async function openReplaceModal(service) {
   const { inlineConfirm } = await import("../lib/modal.js");
   const currentLabel = currentServiceLinks?.displayLabel ?? service.urlLabel ?? "";
   const draft = window.prompt(
-    tr("Replace access URLs. {0}with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):", tr("This will update all the links to this service, replacing \"{0}\" ", currentLabel)),
+    tr("Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):", currentLabel),
     currentLabel,
   );
   if (draft === null) return; // cancelled

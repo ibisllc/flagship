@@ -182,7 +182,7 @@ function pairedServerName() {
  *  sliver shows something human while the service has no name yet. */
 function subjectFromPrompt(text) {
   const t = String(text ?? "").trim().replace(/\s+/g, " ");
-  if (!t) return "new service";
+  if (!t) return tr("new service");
   const words = t.split(" ").slice(0, 4).join(" ");
   return words.length > 32 ? `${words.slice(0, 31)}…` : words;
 }
@@ -192,7 +192,7 @@ function registerBuildOp() {
   if (!activeSessionId) return;
   activeOperations.upsertBuild(
     activeSessionId,
-    buildSubject || "new service",
+    buildSubject || tr("new service"),
     pairedServerName(),
     { view: "view-vibe-code" },
   );
@@ -240,7 +240,7 @@ async function stageFiles(fileList) {
   const errors = [];
   for (const file of files) {
     if (staged.length >= MAX_ATTACHMENTS) {
-      errors.push(`Up to ${MAX_ATTACHMENTS} files per message.`);
+      errors.push(tr("Up to {0} files per message.", MAX_ATTACHMENTS));
       break;
     }
     const c = classifyFile(file);
@@ -260,7 +260,7 @@ async function stageFiles(fileList) {
         staged.push({ kind: "text", text: await readFileAsText(file), name: file.name });
       }
     } catch {
-      errors.push(`Couldn't attach "${file.name}".`);
+      errors.push(tr("Couldn't attach \"{0}\".", file.name));
     }
   }
   showAttachError(errors.join(" "));
@@ -813,9 +813,9 @@ export function statusLabel(status, deployPhase) {
     case "awaiting-tool-response": return tr("The AI has a question");
     case "ready-to-deploy": return tr("Ready to deploy");
     case "deploying": return deployPhaseText(deployPhase);
-    case "deployed": return "Deployed";
+    case "deployed": return tr("Deployed");
     case "failed": return tr("Something went wrong");
-    case "cancelled": return "Cancelled";
+    case "cancelled": return tr("Cancelled");
     default: return status || "idle";
   }
 }
@@ -859,7 +859,7 @@ function render(state) {
     followTail = true;
   }
   if (all.length === 0) {
-    log.innerHTML = '<div class="card placeholder">Say what you\'d like to build to get started.</div>';
+    log.innerHTML = `<div class="card placeholder">${tr("Say what you'd like to build to get started.")}</div>`;
   } else {
     const summarised = state.summarised ? `<div class="vc-summarised">${escapeHtml(SUMMARISED_NOTE)}</div>` : "";
     const { hidden, messages: shown } = transcriptWindow(all);
@@ -894,10 +894,10 @@ function render(state) {
   // Files tree.
   const files = state.files || {};
   const paths = Object.keys(files).sort();
-  $("vc-files-count").textContent = paths.length === 0 ? "(none yet)" : `(${paths.length})`;
+  $("vc-files-count").textContent = paths.length === 0 ? tr("(none yet)") : `(${paths.length})`;
   const filesRoot = $("vc-files");
   if (paths.length === 0) {
-    filesRoot.innerHTML = '<div class="card placeholder">files appear here as the AI emits them…</div>';
+    filesRoot.innerHTML = `<div class="card placeholder">${tr("files appear here as the AI emits them…")}</div>`;
   } else {
     filesRoot.innerHTML = paths
       .map(
@@ -1178,9 +1178,9 @@ function reset() {
   renderVisibilityNote();
   $("vc-status").textContent = "idle";
   $("vc-messages").innerHTML =
-    '<div class="card placeholder">Say what you\'d like to build to get started.</div>';
+    `<div class="card placeholder">${tr("Say what you'd like to build to get started.")}</div>`;
   $("vc-files").innerHTML = "";
-  $("vc-files-count").textContent = "(none yet)";
+  $("vc-files-count").textContent = tr("(none yet)");
   $("vc-deploy-box")?.classList.add("hidden");
   $("vc-result")?.classList.add("hidden");
   renderNameStatus();

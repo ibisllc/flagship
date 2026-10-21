@@ -83,7 +83,7 @@ export function orderedEntries(entries, activeId) {
 export const DELETE_TITLE = tr("Delete this key?");
 
 export function deleteMessage(label) {
-  return `${label} will be removed from this browser. Builds that are already running keep working.`;
+  return tr("{0} will be removed from this browser. Builds that are already running keep working.", label);
 }
 
 async function chooseEntry(e) {
@@ -143,7 +143,7 @@ export function freeAiRowHtml(state, { lastUsed = false } = {}) {
           <strong>${escapeHtml(PROVIDER_TITLE)}</strong>
           <span class="note">${escapeHtml(PROVIDER_SUBTITLE)}</span>
           <span class="note" id="build-key-free-ai-status">${escapeHtml(state.text)}</span>
-          ${lastUsed ? '<span class="note">Last used</span>' : ""}
+          ${lastUsed ? `<span class="note">${tr("Last used")}</span>` : ""}
         </div>
         ${use ? `<button class="build-key-use" id="build-key-free-ai-use" aria-label="${tr("Use {0}", escapeHtml(PROVIDER_TITLE))}">${tr("Use this")}</button>` : ""}
       </div>`;
@@ -173,7 +173,7 @@ async function renderSaved({ autoFreeAi = false } = {}) {
   box.innerHTML = "";
   const session = getSession();
   if (!session.umk) {
-    box.innerHTML = '<div class="card placeholder">Unlock first.</div>';
+    box.innerHTML = `<div class="card placeholder">${tr("Unlock first.")}</div>`;
     return;
   }
   let stored;
@@ -209,7 +209,7 @@ async function renderSaved({ autoFreeAi = false } = {}) {
         <div class="build-key-row-body">
           <strong>${escapeHtml(e.label)}</strong>
           <span class="value text-sm">${slugFor(e)}</span>
-          ${e.id === stored.activeId ? '<span class="note">Last used</span>' : ""}
+          ${e.id === stored.activeId ? `<span class="note">${tr("Last used")}</span>` : ""}
           ${relaySwitch(e)}
         </div>
         <button class="build-key-delete" data-delete-id="${escapeHtml(e.id)}" aria-label="${tr("Delete {0}", escapeHtml(e.label))}">🗑</button>

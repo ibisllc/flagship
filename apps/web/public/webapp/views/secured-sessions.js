@@ -31,15 +31,15 @@ const liveness = new Map();
 
 function statusPill(secretId) {
   const s = liveness.get(secretId);
-  if (!s || s.status === "unknown") return '<span class="pill">Unknown</span>';
-  return s.status === "online" ? '<span class="pill ok">Online</span>' : '<span class="pill">Offline</span>';
+  if (!s || s.status === "unknown") return `<span class="pill">${tr("Unknown")}</span>`;
+  return s.status === "online" ? `<span class="pill ok">${tr("Online")}</span>` : `<span class="pill">${tr("Offline")}</span>`;
 }
 
 export function renderSecuredSessions() {
   const root = $("secured-sessions-content");
   const sessions = listSecuredSessions();
   if (!sessions.length) {
-    root.innerHTML = '<div class="card placeholder">No secured sessions. Sign a browser in to a private app with Process URL, then it shows up here.</div>';
+    root.innerHTML = `<div class="card placeholder">${tr("No secured sessions. Sign a browser in to a private app with Process URL, then it shows up here.")}</div>`;
     return;
   }
   root.innerHTML = sessions

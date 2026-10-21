@@ -75,7 +75,7 @@ async function refreshActiveCount() {
   const n = countActiveSessions(lists.flat());
   const badge = $("build-source-active-count");
   badge.textContent = n > 0 ? String(n) : "";
-  badge.setAttribute("aria-label", `${n} active`);
+  badge.setAttribute("aria-label", tr("{0} active", n));
   badge.classList.toggle("hidden", n === 0);
   $("build-source-journal-link").classList.toggle("has-active", n > 0);
 }

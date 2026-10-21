@@ -44,15 +44,15 @@ export function serverHealthVerdict(h, now) {
 
   const issues = [];
   if (oomKills > 0) {
-    issues.push(`Ran out of memory ${oomKills}× since it started (${memAvail} MB free of ${memTotal} MB now).`);
+    issues.push(tr("Ran out of memory {0}× since it started ({1} MB free of {2} MB now).", oomKills, memAvail, memTotal));
   }
   if (state !== "active") {
-    issues.push(`The server software isn't running (${state}; restarted ${restarts}×, last exit code ${lastExit}).`);
+    issues.push(tr("The server software isn't running ({0}; restarted {1}×, last exit code {2}).", state, restarts, lastExit));
   } else if (restarts >= 3) {
-    issues.push(`The server software restarted ${restarts}× since it started (last exit code ${lastExit}).`);
+    issues.push(tr("The server software restarted {0}× since it started (last exit code {1}).", restarts, lastExit));
   }
   if (h.tunnel === false) issues.push("Can't reach the Flagship relay.");
-  if (disk >= 90) issues.push(`Disk is ${disk}% full.`);
+  if (disk >= 90) issues.push(tr("Disk is {0}% full.", disk));
 
   if (issues.length > 0) return { ok: false, lines: issues };
   return {
