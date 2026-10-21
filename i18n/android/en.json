@@ -257,7 +257,8 @@
   },
   "private_key": {
     "en": "PRIVATE KEY",
-    "ctx": "core/AcmeAccountKeyGrantProducer.kt:66 (prose)"
+    "ctx": "core/AcmeAccountKeyGrantProducer.kt:66 (prose)",
+    "translatable": false
   },
   "only_an_admin_device_of_this": {
     "en": "Only an admin device of this account can add servers.",
@@ -1001,7 +1002,8 @@
   "text": {
     "en": "%1$s %2$s %3$s%4$s",
     "ctx": "core/DiagnosticCode.kt:50 (prose)",
-    "args": 4
+    "args": 4,
+    "translatable": false
   },
   "we_use_third_party_providers_and": {
     "en": "We use third-party providers and anonymize your requests.",
