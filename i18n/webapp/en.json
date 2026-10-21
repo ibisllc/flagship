@@ -4702,7 +4702,8 @@
   },
   "RCK register failed ({0})": {
     "en": "RCK register failed ({0})",
-    "ctx": "webapp/views/create-server.js:751"
+    "ctx": "webapp/views/create-server.js:751",
+    "translatable": false
   },
   "That name can't be used for a server.": {
     "en": "That name can't be used for a server.",
