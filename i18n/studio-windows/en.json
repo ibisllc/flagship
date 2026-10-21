@@ -215,10 +215,6 @@
     "en": "Assemble and flash",
     "ctx": "Recipe.cs:311 (prose)"
   },
-  "beta": {
-    "en": "Beta",
-    "ctx": "StudioVersion.cs:12 (label)"
-  },
   "openFlagshipStudio": {
     "en": "Open Flagship Studio",
     "ctx": "TrayIcon.cs:55 (prose)"
