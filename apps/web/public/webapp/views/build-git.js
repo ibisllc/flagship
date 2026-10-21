@@ -130,7 +130,7 @@ export async function resumeBuildGit({ buildId: id, server = "", state, fileCoun
   $("build-git-verdict").classList.remove("hidden");
   const a = state?.adapt;
   if (a?.status !== "failed") {
-    lastVerdict = { buildId: id, fit: state?.gitFit === true, reason: state?.gitFit ? RESUMED_FIT : "no flagship.app.json", fileCount, name: assignedName };
+    lastVerdict = { buildId: id, fit: state?.gitFit === true, reason: state?.gitFit ? RESUMED_FIT : tr("no flagship.app.json"), fileCount, name: assignedName };
     if (a?.status === "running") {
       adaptPhase = a.phase ?? null;
       adaptProgress = null;

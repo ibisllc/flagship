@@ -107,7 +107,7 @@ export async function renderProviders() {
   const list = $("providers-list");
   list.innerHTML = "";
   if (!session.umk) {
-    list.innerHTML = '<div class="card placeholder">unlock first</div>';
+    list.innerHTML = `<div class="card placeholder">${tr("unlock first")}</div>`;
     return;
   }
   const stored = await loadProviders(session.umk);
@@ -249,7 +249,7 @@ export function freeAiCardHtml(status, { isActive = false } = {}) {
           ? `<div class="btn-row-sm"><button class="${isActive ? "" : "secondary"}" id="free-ai-use" aria-label="${tr("Use {0}", escapeHtml(PROVIDER_TITLE))}">${isActive ? "active" : "use"}</button></div>`
           : ""}
     </div>
-    ${!view.usable && view.offerOwnKey ? '<button id="free-ai-add-key" class="full-width mt-2">Add your own key</button>' : ""}
+    ${!view.usable && view.offerOwnKey ? `<button id="free-ai-add-key" class="full-width mt-2">${tr("Add your own key")}</button>` : ""}
   `;
 }
 
@@ -335,7 +335,7 @@ async function refreshPushStatus() {
   } catch {
     active = false;
   }
-  pill.textContent = !on ? "off" : active ? "on" : perm === "denied" ? "blocked" : "not allowed yet";
+  pill.textContent = !on ? "off" : active ? "on" : perm === "denied" ? "blocked" : tr("not allowed yet");
   // On, but this browser isn't subscribed (never allowed, or allowed before
   // the switch existed): offer the permission prompt, which needs a tap.
   enableBtn.style.display = on && !active && perm !== "denied" ? "" : "none";
