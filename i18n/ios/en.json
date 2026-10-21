@@ -4963,7 +4963,8 @@
   },
   "Re-anchored %lld membership rows across %lld app%@.": {
     "en": "Re-anchored %lld membership rows across %lld app%@.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PostRecoveryScreen.swift:139"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PostRecoveryScreen.swift:139",
+    "translatable": false
   },
   "Per-app results": {
     "en": "Per-app results",
@@ -4971,7 +4972,8 @@
   },
   "%lld row%@ re-anchored": {
     "en": "%lld row%@ re-anchored",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PostRecoveryScreen.swift:165"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PostRecoveryScreen.swift:165",
+    "translatable": false
   },
   "Undo window": {
     "en": "Undo window",
@@ -4999,7 +5001,8 @@
   },
   "https://%@/access#…": {
     "en": "https://%@/access#…",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ProcessUrlScreen.swift:34"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ProcessUrlScreen.swift:34",
+    "translatable": false
   },
   "We couldn't read that link. Copy the full link from the sign-in page and try again.": {
     "en": "We couldn't read that link. Copy the full link from the sign-in page and try again.",
@@ -5128,7 +5131,8 @@
   },
   "123456 or ABCD-EFGH-IJ": {
     "en": "123456 or ABCD-EFGH-IJ",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RealAccountLoginScreen.swift:302"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RealAccountLoginScreen.swift:302",
+    "translatable": false
   },
   "6-digit code from your authenticator app, or one of your recovery codes.": {
     "en": "6-digit code from your authenticator app, or one of your recovery codes.",
@@ -5328,7 +5332,8 @@
   },
   "Local base64 round-trip failed": {
     "en": "Local base64 round-trip failed",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RecoveryViewModel.swift:102"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/RecoveryViewModel.swift:102",
+    "translatable": false
   },
   "Restore your admin key": {
     "en": "Restore your admin key",
@@ -5456,7 +5461,8 @@
   },
   "mynotes": {
     "en": "mynotes",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ReplaceServiceStemSheet.swift:56"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ReplaceServiceStemSheet.swift:56",
+    "translatable": false
   },
   "Replace": {
     "en": "Replace",
@@ -5512,7 +5518,8 @@
   },
   "Flagship": {
     "en": "Flagship",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/RootShell.swift:470"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/RootShell.swift:470",
+    "translatable": false
   },
   "%lld %@": {
     "en": "%lld %@",
@@ -5973,7 +5980,8 @@
   },
   "Restored %lld app%@": {
     "en": "Restored %lld app%@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerArchiveViewModels.swift:712"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerArchiveViewModels.swift:712",
+    "translatable": false
   },
   "Couldn't restore: %@: %@": {
     "en": "Couldn't restore: %@: %@",
@@ -6181,7 +6189,8 @@
   },
   "Kept on %lld other server%@": {
     "en": "Kept on %lld other server%@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:381"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:381",
+    "translatable": false
   },
   "Last placed %@": {
     "en": "Last placed %@",
