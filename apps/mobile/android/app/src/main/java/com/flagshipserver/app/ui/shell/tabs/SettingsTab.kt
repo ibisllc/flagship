@@ -139,6 +139,7 @@ fun SettingsTab() {
         composable("ai-keys") { AiKeysManagerScreen(nav) }
         composable("privacy") { PrivacyScreen(nav) }
         composable("profiles") { ProfilesScreen(nav) }
+        composable("name-dibs") { com.flagshipserver.app.ui.screens.NameDibsScreen() }
         // Web-experience gating — the browser QR-logins this phone authorized.
         composable("secured-sessions") { SecuredSessionsScreen(nav) }
         // Web-experience gating — paste an https://flagshipserver.com/access link / "Get link".

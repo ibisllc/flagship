@@ -10,6 +10,7 @@ import com.flagshipserver.app.R
 import android.content.Intent
 import com.flagshipserver.app.api.BuildClient
 import com.flagshipserver.app.api.FlagshipServerClient
+import com.flagshipserver.app.api.NameDibsClient
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.api.ServerTransferClient
@@ -61,6 +62,7 @@ interface AppVariant {
     fun defaultQrRelay(): QrRelayClient
     fun defaultMailbox(): SecretMailboxClient
     fun defaultTransfer(): ServerTransferClient
+    fun defaultNameDibs(): NameDibsClient
 
     /** Gym: the mock box's access-control fixture for a mock [screens]. */
     fun serviceAccessFixture(screens: ScreensClient): ServiceAccessFixture?
@@ -105,6 +107,7 @@ class GymMocks(
     val flagshipServer: FlagshipServerClient,
     val relay: QrRelayClient,
     val transfer: ServerTransferClient,
+    val nameDibs: NameDibsClient,
     val mailbox: SecretMailboxClient,
     val podClients: PodClients,
     val shares: ServerShareRuntime?,
