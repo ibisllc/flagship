@@ -24,6 +24,7 @@ import {
   MAX_PIN_LEN,
 } from "../lib/pinLock.js";
 
+import { tr, trn } from "../lib/i18n.js";
 registerView("view-pin-unlock");
 registerView("view-pin-set");
 
@@ -45,7 +46,7 @@ export function lockToPin() {
 export function startSetPin({ mode = "set" } = {}) {
   setMode = mode;
   const title = $("pin-set-title");
-  if (title) title.textContent = mode === "change" ? "Change PIN" : "Set a PIN";
+  if (title) title.textContent = mode === "change" ? tr("Change PIN") : tr("Set a PIN");
   $("pin-set-current")?.classList.toggle("hidden", mode !== "change");
   hideErr("pin-set-error");
   for (const id of ["pin-set-current", "pin-set-input", "pin-set-confirm"]) {
@@ -71,29 +72,29 @@ async function handleSetPinSave() {
   const next = $("pin-set-input").value;
   const confirm = $("pin-set-confirm").value;
   if (!isValidPin(next)) {
-    showErr("pin-set-error", `PIN must be ${MIN_PIN_LEN}–${MAX_PIN_LEN} digits.`);
+    showErr("pin-set-error", tr("PIN must be {0}–{1} digits.", MIN_PIN_LEN, MAX_PIN_LEN));
     return;
   }
   if (next !== confirm) {
-    showErr("pin-set-error", "PINs don't match.");
+    showErr("pin-set-error", tr("PINs don't match."));
     return;
   }
   if (setMode === "change") {
     const current = $("pin-set-current").value;
     if (!(await verifyPin(current))) {
-      showErr("pin-set-error", "Current PIN is incorrect.");
+      showErr("pin-set-error", tr("Current PIN is incorrect."));
       return;
     }
   }
   const seed = getSession().umk;
   if (!seed) {
-    showErr("pin-set-error", "Unlock first.");
+    showErr("pin-set-error", tr("Unlock first."));
     return;
   }
   try {
     await setPin(next, seed);
   } catch {
-    showErr("pin-set-error", "Couldn't save the PIN.");
+    showErr("pin-set-error", tr("Couldn't save the PIN."));
     return;
   }
   // Clear the inputs either way so the PIN isn't left sitting in the DOM.
@@ -102,7 +103,7 @@ async function handleSetPinSave() {
     if (el) el.value = "";
   }
   if (setMode === "change") {
-    toast("PIN updated", "ok");
+    toast(tr("PIN updated"), "ok");
     show("view-settings-tab");
   } else {
     // First-time set: lock immediately so the PIN is in effect.
@@ -119,18 +120,18 @@ async function handlePinUnlock() {
     await unlockSession(seed);
     input.value = "";
     await dispatchInitialView();
-    toast("Unlocked");
+    toast(tr("Unlocked"));
   } catch (e) {
     input.value = "";
     if (e && e.lockedOut) {
-      toast("Too many wrong PINs — use your passphrase.", "err");
+      toast(tr("Too many wrong PINs — use your passphrase."), "err");
       show("view-unlock");
       return;
     }
     const left = e && typeof e.remaining === "number" ? e.remaining : null;
     showErr(
       "pin-unlock-error",
-      left != null ? `Wrong PIN — ${left} ${left === 1 ? "try" : "tries"} left.` : "Wrong PIN.",
+      left != null ? trn(left, "Wrong PIN — {0} try left.", "Wrong PIN — {0} tries left.") : tr("Wrong PIN."),
     );
   }
 }

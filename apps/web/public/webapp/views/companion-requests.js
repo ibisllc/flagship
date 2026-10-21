@@ -43,6 +43,7 @@ import { signWithIrk } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
 import { formatWhen } from "../lib/dateFormat.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-companion-requests");
 
 function fmtDate(unixMs) {
@@ -71,15 +72,15 @@ export function renderPendingRowHtml(row, nowMs = Date.now()) {
       <div class="card" data-row="${escapeHtml(row.requestId ?? "")}">
         <div class="row row-top">
           <div>
-            <div class="weight-600">Session ${escapeHtml(prefix)}</div>
-            <div class="faint-sm">queued ${escapeHtml(fmtDate(row.queuedAt))} · ${escapeHtml(timeLeft(row.expiresAt, nowMs))}</div>
+            <div class="weight-600">${tr("Session {0}", escapeHtml(prefix))}</div>
+            <div class="faint-sm">${tr("queued {0} · {1}", escapeHtml(fmtDate(row.queuedAt)), escapeHtml(timeLeft(row.expiresAt, nowMs)))}</div>
           </div>
           <span class="pill">${escapeHtml(row.kind ?? "?")}</span>
         </div>
         <p class="note mt-2">${escapeHtml(summary)}</p>
         <div class="row-2 mt-2">
-          <button class="secondary" data-action="deny" data-id="${escapeHtml(row.requestId ?? "")}">Deny</button>
-          <button data-action="approve" data-id="${escapeHtml(row.requestId ?? "")}">Approve</button>
+          <button class="secondary" data-action="deny" data-id="${escapeHtml(row.requestId ?? "")}">${tr("Deny")}</button>
+          <button data-action="approve" data-id="${escapeHtml(row.requestId ?? "")}">${tr("Approve")}</button>
         </div>
         <p class="note err-text hidden" data-row-error></p>
       </div>
@@ -88,7 +89,7 @@ export function renderPendingRowHtml(row, nowMs = Date.now()) {
 
 /** Pure copy for the empty-state surface. */
 export const EMPTY_STATE_HTML = `
-      <div class="card placeholder">No pending requests</div>
+      <div class="card placeholder">${tr("No pending requests")}</div>
     `;
 
 /**
@@ -100,12 +101,12 @@ export function intentSummary(kind, intent) {
   if (!intent || typeof intent !== "object") return "(no intent)";
   if (kind === "release-server") {
     const dom = typeof intent.serverDomain === "string" ? intent.serverDomain : "(no domain)";
-    return `Release the name: ${dom}`;
+    return tr("Release the name: {0}", dom);
   }
   if (kind === "revoke-server") {
     const sid = typeof intent.revokedServerId === "string" ? intent.revokedServerId : "(no server)";
     const reason = typeof intent.reason === "string" ? intent.reason : "(no reason)";
-    return `Revoke ${sid} (${reason})`;
+    return tr("Revoke {0} ({1})", sid, reason);
   }
   return `${kind}: ${JSON.stringify(intent)}`;
 }
@@ -150,8 +151,7 @@ export async function renderCompanionRequests(deps = {}) {
       if (e.status === 503 || e.status === 404) {
         root.innerHTML = `
           <div class="card placeholder">
-            Your server isn't running the companion write-relay yet (pre-P14.2 daemon).
-            Update the daemon to surface pending companion requests here.
+            ${tr("Your server isn't running the companion write-relay yet (pre-P14.2 daemon). Update the daemon to surface pending companion requests here.")}
           </div>
         `;
         setBadge(0);
@@ -278,7 +278,7 @@ export async function runApprove(row, deps = {}) {
     setRowError(row.requestId, humanError(e));
     return { ok: false, error: String(e?.message ?? e) };
   }
-  toast(`Approved ${row.kind}`, "ok");
+  toast(tr("Approved {0}", row.kind), "ok");
   // Refresh the list — non-fatal if the DOM isn't here (test env).
   if (typeof document !== "undefined") {
     await renderCompanionRequests(deps).catch(() => { /* swallow */ });
@@ -300,7 +300,7 @@ export async function runDeny(row, deps = {}) {
     setRowError(row.requestId, humanError(e));
     return { ok: false, error: String(e?.message ?? e) };
   }
-  toast(`Denied`, "ok");
+  toast(tr("Denied"), "ok");
   if (typeof document !== "undefined") {
     await renderCompanionRequests(deps).catch(() => { /* swallow */ });
   }

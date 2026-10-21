@@ -50,6 +50,7 @@ import {
   mintFreeAiCredential,
 } from "../lib/freeAi.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-build-key");
 
 // The caller's callback for the chosen credential + a back target.
@@ -79,7 +80,7 @@ export function orderedEntries(entries, activeId) {
   return [active, ...entries.filter((e) => e.id !== active.id)];
 }
 
-export const DELETE_TITLE = "Delete this key?";
+export const DELETE_TITLE = tr("Delete this key?");
 
 export function deleteMessage(label) {
   return `${label} will be removed from this browser. Builds that are already running keep working.`;
@@ -144,7 +145,7 @@ export function freeAiRowHtml(state, { lastUsed = false } = {}) {
           <span class="note" id="build-key-free-ai-status">${escapeHtml(state.text)}</span>
           ${lastUsed ? '<span class="note">Last used</span>' : ""}
         </div>
-        ${use ? `<button class="build-key-use" id="build-key-free-ai-use" aria-label="Use ${escapeHtml(PROVIDER_TITLE)}">Use this</button>` : ""}
+        ${use ? `<button class="build-key-use" id="build-key-free-ai-use" aria-label="${tr("Use {0}", escapeHtml(PROVIDER_TITLE))}">${tr("Use this")}</button>` : ""}
       </div>`;
 }
 
@@ -152,12 +153,12 @@ async function confirmDelete(e) {
   const ok = await inlineConfirm({
     title: DELETE_TITLE,
     message: deleteMessage(e.label),
-    okLabel: "Delete key",
+    okLabel: tr("Delete key"),
     danger: true,
   });
   if (!ok) return;
   const session = getSession();
-  if (!session.umk) return toast("Unlock first", "err");
+  if (!session.umk) return toast(tr("Unlock first"), "err");
   try {
     await removeProvider(session.umk, e.id);
   } catch (err) {
@@ -185,7 +186,7 @@ async function renderSaved({ autoFreeAi = false } = {}) {
   savedCount = entries.length;
   const status = await fetchFreeAiStatus();
   if (autoFreeAi && shouldAutoUseFreeAi(entries, status)) {
-    toast("Using Flagship Inference", "info");
+    toast(tr("Using Flagship Inference"), "info");
     await chooseFreeAi();
     return;
   }
@@ -201,9 +202,7 @@ async function renderSaved({ autoFreeAi = false } = {}) {
   }
 
   box.innerHTML =
-    freeRow +
-    `<p class="note build-section-caption">Saved keys</p>` +
-    orderedEntries(entries, stored.activeId)
+    tr("{0}<p class=\"note build-section-caption\">Saved keys</p>{1}", freeRow, orderedEntries(entries, stored.activeId)
       .map(
         (e) => `
       <div class="card mt-2 build-key-row">
@@ -213,11 +212,11 @@ async function renderSaved({ autoFreeAi = false } = {}) {
           ${e.id === stored.activeId ? '<span class="note">Last used</span>' : ""}
           ${relaySwitch(e)}
         </div>
-        <button class="build-key-delete" data-delete-id="${escapeHtml(e.id)}" aria-label="Delete ${escapeHtml(e.label)}">🗑</button>
-        <button class="build-key-use" data-use-id="${escapeHtml(e.id)}">Use this</button>
+        <button class="build-key-delete" data-delete-id="${escapeHtml(e.id)}" aria-label="${tr("Delete {0}", escapeHtml(e.label))}">🗑</button>
+        <button class="build-key-use" data-use-id="${escapeHtml(e.id)}">${tr("Use this")}</button>
       </div>`,
       )
-      .join("");
+      .join(""));
 
   $("build-key-free-ai-use")?.addEventListener("click", () => void chooseFreeAi());
   const byId = (id) => entries.find((e) => e.id === id);
@@ -251,7 +250,7 @@ export function relaySwitch(e) {
 
 async function changeRelay(id, relay) {
   const session = getSession();
-  if (!session.umk) return toast("Unlock first", "err");
+  if (!session.umk) return toast(tr("Unlock first"), "err");
   try {
     await setRelay(session.umk, id, relay);
   } catch (err) {
@@ -269,13 +268,13 @@ function showForm(visible) {
 // separate step, so adding one never moves the flow on.
 async function addFromForm() {
   const session = getSession();
-  if (!session.umk) return toast("Unlock first", "err");
+  if (!session.umk) return toast(tr("Unlock first"), "err");
   const provider = $("bk-provider").value;
   const apiKey = $("bk-key").value.trim();
   const baseUrl = $("bk-base").value.trim();
   const label = $("bk-label").value.trim();
   const relay = $("bk-relay") ? $("bk-relay").checked : true;
-  if (!apiKey) return toast("Enter an API key.", "err");
+  if (!apiKey) return toast(tr("Enter an API key."), "err");
   try {
     const added = await addProvider(session.umk, {
       provider,

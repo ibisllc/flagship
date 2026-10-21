@@ -29,6 +29,7 @@ import {
   sendAccessList,
 } from "../lib/appAccess.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-app-access");
 
 let current = null;
@@ -36,7 +37,7 @@ let current = null;
 function errorsHtml(errors) {
   if (errors.length === 0) return "";
   return `<ul class="access-errors">${errors
-    .map((e) => `<li class="err-text text-sm"><span class="mono">Line ${e.line}</span>: ${escapeHtml(e.message)}</li>`)
+    .map((e) => `<li class="err-text text-sm"><span class="mono">${tr("Line {0}", e.line)}</span>: ${escapeHtml(e.message)}</li>`)
     .join("")}</ul>`;
 }
 
@@ -68,7 +69,7 @@ export async function renderAppAccess(serviceId, appName, { draft = false } = {}
     return;
   }
   if (!access) {
-    root.innerHTML = `<div class="card"><p class="err-text">This server doesn't support access lists yet. Update it first.</p></div>`;
+    root.innerHTML = `<div class="card"><p class="err-text">${tr("This server doesn't support access lists yet. Update it first.")}</p></div>`;
     return;
   }
   current.list = access.list;
@@ -79,7 +80,7 @@ export async function renderAppAccess(serviceId, appName, { draft = false } = {}
       ${fromDraft ? `<p class="note" data-access-draft-note>${escapeHtml(ACCESS_DRAFT_EDITOR_NOTE)}</p>` : ""}
       <p class="note">${escapeHtml(ACCESS_LIST_HELP)}</p>
       <textarea id="app-access-text" class="access-editor mt-2" rows="12" spellcheck="false" autocapitalize="off"
-        autocomplete="off" aria-label="Access list"${locked ? " readonly" : ""}
+        autocomplete="off" aria-label="${tr("Access list")}"${locked ? " readonly" : ""}
         placeholder="allow api.example.com">${escapeHtml(text)}</textarea>
       <div id="app-access-errors" aria-live="polite"></div>
       <p class="muted-sm mt-1" id="app-access-count"></p>
@@ -97,10 +98,10 @@ export async function renderAppAccess(serviceId, appName, { draft = false } = {}
 async function save(btn, textarea) {
   if (!current) return;
   const session = getSession();
-  if (!session.umk) return toast("Unlock the webapp first", "err");
+  if (!session.umk) return toast(tr("Unlock the webapp first"), "err");
   const ctx = current;
   btn.disabled = true;
-  btn.textContent = "Saving…";
+  btn.textContent = tr("Saving…");
   try {
     const access = await sendAccessList({
       serverDomain: podServerDomain(),
@@ -115,7 +116,7 @@ async function save(btn, textarea) {
     ctx.draft = false;
     textarea.value = access.list;
     document.querySelector("[data-access-draft-note]")?.remove();
-    toast("Access list saved", "ok");
+    toast(tr("Access list saved"), "ok");
   } catch (e) {
     const boxErrors = e?.status === 400 && Array.isArray(e?.body?.errors) ? e.body.errors : null;
     if (boxErrors) {

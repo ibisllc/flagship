@@ -21,6 +21,7 @@ import {
   setActiveCloudName,
 } from "../lib/profilesStore.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-profiles");
 
 /** Refresh hook the host can override (app.js wires this to a re-render of
@@ -35,9 +36,9 @@ export function setProfileSwitchHandler(fn) {
 function renderEmpty(root) {
   root.innerHTML = `
     <div class="card">
-      <h3>No profiles yet</h3>
-      <p class="note">Set one up to bind this browser to a cloud.</p>
-      <button id="profiles-set-up" class="full-width">Set one up</button>
+      <h3>${tr("No profiles yet")}</h3>
+      <p class="note">${tr("Set one up to bind this browser to a cloud.")}</p>
+      <button id="profiles-set-up" class="full-width">${tr("Set one up")}</button>
     </div>
   `;
   $("profiles-set-up")?.addEventListener("click", () => show("view-bootstrap"));
@@ -59,7 +60,7 @@ function rowMarkup(profile, active) {
         </div>
         ${isActive
           ? '<span class="pill ok">ACTIVE</span>'
-          : `<button class="secondary" data-action="switch" data-cloud="${escapeHtml(profile.cloudName)}">Switch</button>`}
+          : `<button class="secondary" data-action="switch" data-cloud="${escapeHtml(profile.cloudName)}">${tr("Switch")}</button>`}
       </div>
     </div>
   `;
@@ -101,7 +102,7 @@ export function renderProfiles() {
 
   root.innerHTML = `
     <p class="note">
-      One browser, multiple clouds. Each profile is a separate cloud (personal, family, work) with its own root key. Pods don't carry across profiles.
+      ${tr("One browser, multiple clouds. Each profile is a separate cloud (personal, family, work) with its own root key. Pods don't carry across profiles.")}
     </p>
     ${profiles.map((p) => rowMarkup(p, active)).join("")}
   `;
@@ -124,7 +125,7 @@ async function switchTo(cloudName) {
     ensureProfile(cloudName);
     setActiveProfile(cloudName);
     setActiveCloudName(cloudName);
-    toast(`Switched to ${cloudName}`);
+    toast(tr("Switched to {0}", cloudName));
     renderProfiles();
     try { onProfileSwitch(cloudName); } catch { /* swallow */ }
   } catch (e) {

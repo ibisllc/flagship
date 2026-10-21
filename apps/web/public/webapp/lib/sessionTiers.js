@@ -35,6 +35,7 @@
 //
 // Everything here is dependency-injected + side-effect-free w.r.t. module
 // state so it can be unit-tested in Node without a DOM.
+import { tr } from "./i18n.js";
 
 /**
  * Tier 1 — LOCK. Clear the in-memory unlocked session and re-gate the app.
@@ -155,19 +156,19 @@ export async function signOut(deps) {
 export function signOutConfirmCopy(hasCloudRecovery) {
   if (hasCloudRecovery) {
     return {
-      title: "Sign out?",
+      title: tr("Sign out?"),
       message:
-        "This erases this device's account key and data so nothing sensitive is left at rest. Your account and your servers are untouched — sign back in with your recovery passkey and the same key is restored, no re-pair.",
-      okLabel: "Sign out",
+        tr("This erases this device's account key and data so nothing sensitive is left at rest. Your account and your servers are untouched — sign back in with your recovery passkey and the same key is restored, no re-pair."),
+      okLabel: tr("Sign out"),
       danger: true,
       blocked: false,
     };
   }
   return {
-    title: "Set up recovery first",
+    title: tr("Set up recovery first"),
     message:
-      "Enroll cloud recovery first — signing out now would permanently lose access to this account. This device holds the only copy of your account key.",
-    okLabel: "Set up recovery",
+      tr("Enroll cloud recovery first — signing out now would permanently lose access to this account. This device holds the only copy of your account key."),
+    okLabel: tr("Set up recovery"),
     danger: false,
     blocked: true,
   };

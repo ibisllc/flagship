@@ -51,6 +51,7 @@
 
 import { controlHost } from "./apex.js";
 
+import { tr } from "./i18n.js";
 const RELAY_HOST = controlHost();
 
 function wsProto() {
@@ -95,13 +96,13 @@ export async function deriveMaterial(mySk, peerPkB64u) {
 
 async function aeadSeal(kEnc, plaintextBytes) {
   const nonce = crypto.getRandomValues(new Uint8Array(12));
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, kEnc, plaintextBytes));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: tr("AES-GCM"), iv: nonce }, kEnc, plaintextBytes));
   return { ciphertext: b64urlEncode(ct), nonce: b64urlEncode(nonce) };
 }
 export async function aeadOpen(kEnc, ciphertextB64u, nonceB64u) {
   const ct = b64urlDecode(ciphertextB64u);
   const nonce = b64urlDecode(nonceB64u);
-  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, kEnc, ct);
+  const plain = await crypto.subtle.decrypt({ name: tr("AES-GCM"), iv: nonce }, kEnc, ct);
   return new Uint8Array(plain);
 }
 

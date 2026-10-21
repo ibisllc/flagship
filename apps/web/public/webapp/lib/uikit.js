@@ -26,6 +26,7 @@
 import { escapeHtml } from "./util.js";
 import { searchIcon, chevronRightIcon, xIcon } from "./icons.js";
 
+import { tr } from "./i18n.js";
 /**
  * The initials shown in a monogram: the first two alphanumeric characters
  * of `name`, uppercased; `?` when the name has no alphanumerics. Byte-for-
@@ -97,7 +98,7 @@ export function searchField({ value = "", placeholder = "Search", id } = {}) {
              autocomplete="off" autocapitalize="none" autocorrect="off"
              aria-label="${escapeHtml(placeholder)}" />
       <button type="button" class="fs-search-clear${hasText ? "" : " hidden"}"
-              data-search-clear aria-label="Clear search">${xIcon}</button>
+              data-search-clear aria-label="${tr("Clear search")}">${xIcon}</button>
     </div>
   `;
 }
@@ -129,7 +130,7 @@ export function monogram(name, { size = "md" } = {}) {
  * @returns {string}
  */
 export function profileCard({ name, subtitle }) {
-  const display = name && String(name).length ? name : "Your account";
+  const display = name && String(name).length ? name : tr("Your account");
   return `
     <button type="button" class="fs-profile-card" data-profile-card>
       ${monogram(name, { size: "lg" })}
@@ -171,7 +172,7 @@ export function announcementCard({
       )}</button>`
     : "";
   const dismiss = dismissible
-    ? `<button type="button" class="fs-announcement-dismiss" data-ann-dismiss aria-label="Dismiss">${xIcon}</button>`
+    ? `<button type="button" class="fs-announcement-dismiss" data-ann-dismiss aria-label="${tr("Dismiss")}">${xIcon}</button>`
     : "";
   return `
     <div${idAttr} class="fs-announcement${toneClass}">

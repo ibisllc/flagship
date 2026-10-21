@@ -14,6 +14,7 @@
 import { verifyWithEd25519Pub, hexToBytes } from "../keystore.js";
 import { importX25519Private } from "./x25519.js";
 
+import { tr } from "./i18n.js";
 const encoder = new TextEncoder();
 const FLAGSHIP_SEAL_TAG = "flagship.seal.v1";
 const HEX_64 = /^[0-9a-f]{64}$/;
@@ -81,8 +82,8 @@ async function openSealedWithEd25519Seed(blob, edSeed) {
   const ephKey = await crypto.subtle.importKey("raw", ephPub, "X25519", false, []);
   const shared = await crypto.subtle.deriveBits({ name: "X25519", public: ephKey }, myKey, 256);
   const sym = await hkdfSeal(shared, ephPub);
-  const aesKey = await crypto.subtle.importKey("raw", sym, { name: "AES-GCM" }, false, ["decrypt"]);
-  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, aesKey, ct);
+  const aesKey = await crypto.subtle.importKey("raw", sym, { name: tr("AES-GCM") }, false, ["decrypt"]);
+  const pt = await crypto.subtle.decrypt({ name: tr("AES-GCM"), iv: nonce }, aesKey, ct);
   return new Uint8Array(pt);
 }
 

@@ -22,6 +22,7 @@ import { ed25519PubToX25519 } from "./edToMont.js";
 import { accountReadFetch } from "./accountRead.js";
 import { boundedLeaseTtl, cachedDeadManView, readSuspension, retryPendingLocks } from "./bootSuspension.js";
 
+import { tr } from "./i18n.js";
 export const TAG_AUTO_UNLOCK_LEASE_V2 = "flagship/auto-unlock-lease/v2";
 export const TAG_AUTO_UNLOCK_LEASE_REVOKE = "flagship/auto-unlock-lease-revoke/v1";
 
@@ -256,9 +257,9 @@ export async function sealForEd25519Pub(plaintext, edPub) {
     hk,
     256,
   );
-  const aesKey = await crypto.subtle.importKey("raw", sym, { name: "AES-GCM" }, false, ["encrypt"]);
+  const aesKey = await crypto.subtle.importKey("raw", sym, { name: tr("AES-GCM") }, false, ["encrypt"]);
   const nonce = randomBytes(12);
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, aesKey, plaintext));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: tr("AES-GCM"), iv: nonce }, aesKey, plaintext));
   const out = new Uint8Array(32 + 12 + ct.length);
   out.set(ephPub, 0);
   out.set(nonce, 32);
@@ -332,12 +333,12 @@ export async function openSealedWithIrk(umkSeed, blob) {
   const aesKey = await crypto.subtle.importKey(
     "raw",
     new Uint8Array(symBits),
-    { name: "AES-GCM" },
+    { name: tr("AES-GCM") },
     false,
     ["decrypt"],
   );
   const pt = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: nonce },
+    { name: tr("AES-GCM"), iv: nonce },
     aesKey,
     ct,
   );

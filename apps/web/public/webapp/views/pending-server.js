@@ -20,6 +20,7 @@ import { PROVISION_PHASE_TITLES, renderProgressDetail, renderSetupStopped } from
 import { clearPendingRck } from "../lib/pendingRck.js";
 import { controlApex } from "../lib/apex.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-pending-server", { tab: "home" });
 
 const POLL_INTERVAL_MS = 3_000;
@@ -75,12 +76,12 @@ export function enterPendingServer(order) {
     ...order,
     serial: order.serial || rememberedSerial(order.fqdn),
   };
-  $("pending-server-name").textContent = currentOrder.name || "New server";
+  $("pending-server-name").textContent = currentOrder.name || tr("New server");
   $("pending-server-fqdn").textContent = currentOrder.fqdn || "—";
   const cancel = $("pending-server-cancel");
   if (cancel) {
     cancel.disabled = false;
-    cancel.textContent = "Cancel order";
+    cancel.textContent = tr("Cancel order");
   }
   paint(currentOrder.phase ?? null, currentOrder.detail ?? null);
   show("view-pending-server");
@@ -92,9 +93,9 @@ function paint(phase, detail) {
   if (note) {
     note.textContent = phase
       ? phase === "error"
-        ? "Setup stopped"
+        ? tr("Setup stopped")
         : PROVISION_PHASE_TITLES[phase] || phase
-      : "Waiting for the server to start. Write the recipe to a USB stick with Flagship Studio, then boot the server from it.";
+      : tr("Waiting for the server to start. Write the recipe to a USB stick with Flagship Studio, then boot the server from it.");
   }
   const progress = $("pending-server-progress");
   if (progress) {
@@ -161,7 +162,7 @@ async function runCancel({ startAgain = false } = {}) {
   const order = currentOrder;
   if (!order?.fqdn) return;
   const { deleteDeadServer } = await import("./home.js");
-  const done = await deleteDeadServer(order.fqdn, $("pending-server-cancel"), { label: "Cancel order" });
+  const done = await deleteDeadServer(order.fqdn, $("pending-server-cancel"), { label: tr("Cancel order") });
   if (!done || order !== currentOrder) return;
   forgetPendingOrder(order.fqdn);
   clearStatusPoll();

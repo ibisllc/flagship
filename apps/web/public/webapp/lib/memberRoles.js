@@ -17,6 +17,7 @@
 // targets only). The display names live in ROLE_LABELS only.
 //
 // Must pass packages/protocol/test-vectors/app-access-orders/vectors.json.
+import { tr } from "./i18n.js";
 
 export const TAG_APP_RANK = "flagship/app-rank/v1";
 export const MEMBER_ROLES = ["member", "manager", "master"];
@@ -99,7 +100,7 @@ const membersPath = (serviceId) => `/api/screens/services/${encodeURIComponent(s
  * order already landed (sign again), a 403 that this device isn't an admin.
  */
 export async function setAppRank({ serviceId, target, rank, umk, signWithIrk, fetchJson, now = Date.now }) {
-  if (!umk || typeof signWithIrk !== "function") throw new Error("Unlock the webapp first");
+  if (!umk || typeof signWithIrk !== "function") throw new Error(tr("Unlock the webapp first"));
   const body = await signAppRank({ serviceRef: serviceId, target, rank, issuedAt: now(), umk, signWithIrk });
   return fetchJson(`${membersPath(serviceId)}/rank`, { method: "POST", body: JSON.stringify(body) });
 }
@@ -180,11 +181,11 @@ export function inviteTier(inviteId, members) {
 // the admin root) everything; any other device of the account invites at
 // Member and withdraws its own invites while it is manager-class in the app.
 
-export const ADMIN_ONLY_RANK_NOTE = "Only an admin device can give a higher rank";
-export const INVITE_NEEDS_MANAGER_NOTE = "Only an admin can let you invite people to this app.";
-export const DEVICE_NOT_LISTED_NOTE = "Your server doesn't list this device yet. Refresh in a minute.";
-export const RANKS_UNKNOWN_NOTE = "Couldn't read your rank in this app from your server.";
-export const ADMIN_ONLY_MODE_NOTE = "Only an admin device can change who can open it.";
+export const ADMIN_ONLY_RANK_NOTE = tr("Only an admin device can give a higher rank");
+export const INVITE_NEEDS_MANAGER_NOTE = tr("Only an admin can let you invite people to this app.");
+export const DEVICE_NOT_LISTED_NOTE = tr("Your server doesn't list this device yet. Refresh in a minute.");
+export const RANKS_UNKNOWN_NOTE = tr("Couldn't read your rank in this app from your server.");
+export const ADMIN_ONLY_MODE_NOTE = tr("Only an admin device can change who can open it.");
 
 /** Whether this unlocked session holds the account's admin root. */
 export function isAdminDevice(session) {
@@ -240,13 +241,13 @@ export function canRevokeInvite(invite, { isAdmin, deviceId, devicePub = "", man
 export function invitedByText(invite, { deviceId, deviceNames, members = null }) {
   if (invite?.creatorTier === "co-manager") {
     const label = members?.invites?.find((i) => i.inviteId === invite.inviteId)?.creatorLabel ?? null;
-    return label ? `Invited by ${label} (co-manager)` : "Invited by a co-manager";
+    return label ? tr("Invited by {0} (co-manager)", label) : tr("Invited by a co-manager");
   }
   const by = invite?.creatorDeviceId ?? null;
   if (by === null && (invite?.creatorTier ?? null) === null) return "";
-  if (by !== null && by === deviceId) return "Invited by this device";
+  if (by !== null && by === deviceId) return tr("Invited by this device");
   const name = by !== null ? deviceNames?.get(by) : null;
-  return name ? `Invited by ${name}` : "Invited by another device";
+  return name ? tr("Invited by {0}", name) : tr("Invited by another device");
 }
 
 /** An Account members row's name: the decrypted device name, the owner's label for a co-manager, or a generic one. */
@@ -259,7 +260,7 @@ export function accountMemberName(row, { deviceNames } = {}) {
 
 /** The line under an Account members row's name. */
 export function accountMemberLine(row, { devicePub } = {}) {
-  if (row?.kind === "co-manager") return "Co-manages this server";
+  if (row?.kind === "co-manager") return tr("Co-manages this server");
   const parts = [];
   if (devicePub && row?.devicePub === devicePub.toLowerCase()) parts.push("This device");
   parts.push(row?.tier === "admin" ? "Admin device" : "Device on your account");
