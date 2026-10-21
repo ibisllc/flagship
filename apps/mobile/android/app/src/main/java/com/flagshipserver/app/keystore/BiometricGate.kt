@@ -43,6 +43,7 @@ fun interface PromptStarter {
 
 object BiometricGate {
     suspend fun evaluate(activity: FragmentActivity, title: String, subtitle: String) {
+        if (com.flagshipserver.app.core.Variant.refuseBiometricGates) throw BiometricCancelled()
         if (com.flagshipserver.app.core.Variant.bypassBiometricGates) return
         withContext(Dispatchers.Main.immediate) {
             run(activity.lifecycle, PlatformPromptStarter(activity, title, subtitle))
