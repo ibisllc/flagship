@@ -1,0 +1,8 @@
+{
+  "Flagship servers": "Flagship 服务器",
+  "Shows a server's install while one is under way, else how your servers are doing.": "有安装进行时显示服务器的安装进度，否则显示你的服务器状态。",
+  "Install failed": "安装失败",
+  "Server is live": "服务器已上线",
+  "No install in flight": "没有进行中的安装",
+  "%lld servers": "%lld 台服务器"
+}

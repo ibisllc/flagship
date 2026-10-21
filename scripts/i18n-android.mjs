@@ -645,7 +645,9 @@ function buildOne(mod) {
   // keep hand-written entries (app_name, widget labels) that live in the same file
   const f = path.join(resDir, "values/strings.xml");
   fs.writeFileSync(f, emitXml(entries, null));
+  const withDrafts = process.argv.includes("--drafts");
   for (const l of targets) {
+    if (l.status !== "ga" && !withDrafts) continue; // a draft language is generated only on request, like the iOS catalogs
     const tr = readTr(M.surface, l.code);
     if (!Object.keys(tr).length) continue;
     const dir = path.join(resDir, `values-${androidDir(l)}`);
@@ -658,7 +660,7 @@ function buildOne(mod) {
     fs.mkdirSync(path.join(resDir, "xml"), { recursive: true });
     fs.writeFileSync(path.join(resDir, "xml/locales_config.xml"), xml);
   }
-  console.log(`${mod}: wrote values/ and ${targets.filter((l) => Object.keys(readTr(M.surface, l.code)).length).length} translated value sets`);
+  console.log(`${mod}: wrote values/ and ${targets.filter((l) => (l.status === "ga" || process.argv.includes("--drafts")) && Object.keys(readTr(M.surface, l.code)).length).length} translated value sets`);
 }
 
 // ---- fix: compile errors -> FSStrings --------------------------------------------------------
@@ -767,6 +769,6 @@ else if (cmd === "check") {
   if (problems.length) { console.error(problems.join("\n") + `\n\n${problems.length} problem(s)`); process.exit(1); }
   console.log("i18n-android: ok");
 } else if (!runCommon(MODULES[moduleName].surface, args)) {
-  console.error("usage: i18n-android.mjs extract [--dry] | build | check | dump | merge | status | lint   [--module app|wear]");
+  console.error("usage: i18n-android.mjs extract [--dry] | build [--drafts] | check | dump | merge | status | lint   [--module app|wear]");
   process.exit(2);
 }
