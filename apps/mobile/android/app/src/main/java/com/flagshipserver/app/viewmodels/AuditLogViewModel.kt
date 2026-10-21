@@ -67,6 +67,7 @@ fun auditEventLabel(kind: String): String = when (kind) {
     "invite-created"      -> "Someone was invited to an app"
     "account-deleted"     -> "Deleted account"
     "username-reclaimed"  -> "Username reclaimed"
+    "account-renamed"     -> "Changed account name"
     else -> kind.replace(Regex("[._-]+"), " ").trim()
         .ifEmpty { FSStrings.get(R.string.account_event) }
         .replaceFirstChar { it.uppercaseChar() }
