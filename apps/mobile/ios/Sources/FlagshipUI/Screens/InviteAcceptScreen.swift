@@ -82,7 +82,7 @@ public struct InviteAcceptScreen: View {
                 Text("You sent an invite to \(serviceRef.isEmpty ? "a service" : serviceRef) and they accepted. Approving binds their access. (You won't see their username — only the label you gave them.)")
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
-                FSPrimaryButton(isSubmitting ? "Approving…" : "Approve", block: true, large: true) {
+                FSPrimaryButton(isSubmitting ? String(localized: "Approving…") : String(localized: "Approve"), block: true, large: true) {
                     Task { await approve() }
                 }
                 .disabled(isSubmitting)
@@ -107,7 +107,7 @@ public struct InviteAcceptScreen: View {
                 Text("They now have access to \(serviceRef.isEmpty ? "the service" : serviceRef).")
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
-                FSPrimaryButton("Done", block: true, large: true) { onDone() }
+                FSPrimaryButton(String(localized: "Done"), block: true, large: true) { onDone() }
                     .accessibilityIdentifier("invite-accept-done")
             }
         }

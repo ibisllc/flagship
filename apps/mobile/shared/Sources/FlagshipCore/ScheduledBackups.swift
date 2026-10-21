@@ -167,12 +167,12 @@ public enum BackupScheduleClock {
 
     /// "Daily at 3:00 AM · keeps 7 daily and 4 weekly" (or "Weekly on Sunday at …", or off).
     public static func summary(_ s: BackupSchedule, timeZone: TimeZone = .current, locale: Locale = .current, reference: Date = Date()) -> String {
-        if s.frequency == "off" { return "Scheduled backups are off." }
+        if s.frequency == "off" { return String(localized: "Scheduled backups are off.") }
         let local = toLocal(minuteOfDayUtc: s.minuteOfDayUtc, weekdayUtc: s.weekdayUtc, timeZone: timeZone, reference: reference)
         let when = s.frequency == "weekly"
-            ? "Weekly on \(weekdayName(local.weekday, locale: locale)) at \(timeText(minute: local.minute, locale: locale))"
-            : "Daily at \(timeText(minute: local.minute, locale: locale))"
-        return "\(when) · keeps \(s.keepDaily) daily and \(s.keepWeekly) weekly"
+            ? String(localized: "Weekly on \(weekdayName(local.weekday, locale: locale)) at \(timeText(minute: local.minute, locale: locale))")
+            : String(localized: "Daily at \(timeText(minute: local.minute, locale: locale))")
+        return String(localized: "\(when) · keeps \(s.keepDaily) daily and \(s.keepWeekly) weekly")
     }
 }
 
@@ -218,7 +218,7 @@ public enum PhoneBackupRetention {
     }
 
     public static func needsSpaceSentence(bytes: Int64) -> String {
-        "This phone needs about \(ServerArchive.formatBytes(bytes + headroomBytes)) free to keep a copy."
+        String(localized: "This phone needs about \(ServerArchive.formatBytes(bytes + headroomBytes)) free to keep a copy.")
     }
 }
 

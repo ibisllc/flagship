@@ -72,15 +72,15 @@ public struct CreateServerStubScreen: View {
                 case .scanQr:                scanPage(c: c)
                 case .pasteQr:               pastePage(c: c)
                 case .connecting:
-                    phaseHeader("Connecting", subtitle: "Opening the secure channel…", c: c)
+                    phaseHeader(String(localized: "Connecting"), subtitle: String(localized: "Opening the secure channel…"), c: c)
                     spinnerCard(c: c)
                 case .matching(let code, let gate):
                     matchPage(code: code, gateOpen: gate, c: c)
                 case .minting:
-                    phaseHeader("Almost there", subtitle: "Minting the install blob…", c: c)
+                    phaseHeader(String(localized: "Almost there"), subtitle: String(localized: "Minting the install blob…"), c: c)
                     spinnerCard(c: c)
                 case .delivering:
-                    phaseHeader("Delivering", subtitle: "Pushing your boot recipe to the desktop…", c: c)
+                    phaseHeader(String(localized: "Delivering"), subtitle: String(localized: "Pushing your boot recipe to the desktop…"), c: c)
                     spinnerCard(c: c)
                 case .delivered(let serial, let serverDomain):
                     deliveredPage(serial: serial, serverDomain: serverDomain, c: c)
@@ -147,8 +147,8 @@ public struct CreateServerStubScreen: View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
             Button { startPair() } label: {
                 deliveryCard(icon: "qrcode.viewfinder", accent: c.accent,
-                             title: "Pair with the builder app",
-                             body: "Scan the builder's QR (or type its code) and the recipe is sent over a secure live link. Easiest if the builder is open in front of you.",
+                             title: String(localized: "Pair with the builder app"),
+                             body: String(localized: "Scan the builder's QR (or type its code) and the recipe is sent over a secure live link. Easiest if the builder is open in front of you."),
                              c: c)
             }
             .buttonStyle(.plain)
@@ -157,8 +157,8 @@ public struct CreateServerStubScreen: View {
 
             Button { Task { await shareRecipe() } } label: {
                 deliveryCard(icon: "square.and.arrow.up", accent: c.text,
-                             title: "Save / share recipe file",
-                             body: "Save the recipe as a file or send it (AirDrop, Messages, Mail). Whoever builds the server opens it in the builder. No secrets in the file.",
+                             title: String(localized: "Save / share recipe file"),
+                             body: String(localized: "Save the recipe as a file or send it (AirDrop, Messages, Mail). Whoever builds the server opens it in the builder. No secrets in the file."),
                              c: c)
             }
             .buttonStyle(.plain)
@@ -166,8 +166,8 @@ public struct CreateServerStubScreen: View {
 
             Button { Task { await copyRecipe() } } label: {
                 deliveryCard(icon: "doc.on.clipboard", accent: c.text,
-                             title: copiedToast ? "Copied!" : "Copy recipe to clipboard",
-                             body: "Copy the recipe text, then paste it into the builder's “I have a recipe” box.",
+                             title: copiedToast ? String(localized: "Copied!") : String(localized: "Copy recipe to clipboard"),
+                             body: String(localized: "Copy the recipe text, then paste it into the builder's “I have a recipe” box."),
                              c: c)
             }
             .buttonStyle(.plain)
@@ -263,7 +263,7 @@ public struct CreateServerStubScreen: View {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     switch designStep {
                     case 0:
-                        FSField(value: $vm.name, label: "Server name", placeholder: "home", error: vm.nameError)
+                        FSField(value: $vm.name, label: String(localized: "Server name"), placeholder: "home", error: vm.nameError)
                             .accessibilityIdentifier("cs-name-field")
                             .textInputAutocapitalization(.never)
                         Text(vm.previewFqdn)
@@ -274,9 +274,9 @@ public struct CreateServerStubScreen: View {
                             .accessibilityIdentifier("cs-fqdn-preview")
                         FSField(
                             value: $vm.description,
-                            label: "Short description (optional)",
-                            placeholder: "Alice's private home server",
-                            helper: "Up to ~40 characters."
+                            label: String(localized: "Short description (optional)"),
+                            placeholder: String(localized: "Alice's private home server"),
+                            helper: String(localized: "Up to ~40 characters.")
                         )
                         .accessibilityIdentifier("cs-description-field")
                         recipeTtlPicker(c: c)
@@ -299,9 +299,9 @@ public struct CreateServerStubScreen: View {
     /// Per-step nav-bar title for the design wizard.
     private func designStepHeader(_ step: Int) -> String {
         switch step {
-        case 0:  return "Name your server"
-        case 1:  return "Boot unlock"
-        default: return "Backups"
+        case 0:  return String(localized: "Name your server")
+        case 1:  return String(localized: "Boot unlock")
+        default: return String(localized: "Backups")
         }
     }
 
@@ -312,7 +312,7 @@ public struct CreateServerStubScreen: View {
         VStack(spacing: FS.space.s2) {
             if designStep < designStepCount - 1 {
                 FSPrimaryButton(
-                    "Next",
+                    String(localized: "Next"),
                     enabled: designStep != 0 || vm.canAdvanceFromDesign,
                     block: true,
                     large: true
@@ -321,13 +321,13 @@ public struct CreateServerStubScreen: View {
                 }
                 .accessibilityIdentifier("cs-next-button")
             } else {
-                FSPrimaryButton("Continue", enabled: vm.canContinueFromBackups, block: true, large: true) {
+                FSPrimaryButton(String(localized: "Continue"), enabled: vm.canContinueFromBackups, block: true, large: true) {
                     vm.proceedToDelivery()
                 }
                 .accessibilityIdentifier("cs-continue-button")
             }
             if designStep > 0 {
-                FSGhostButton("Back", block: true) { designStep -= 1 }
+                FSGhostButton(String(localized: "Back"), block: true) { designStep -= 1 }
                     .accessibilityIdentifier("cs-back-button")
             }
         }
@@ -366,10 +366,10 @@ public struct CreateServerStubScreen: View {
 
     private func ttlLabel(_ hours: Double) -> String {
         if hours < 1 {
-            return "\(Int(round(hours * 60))) min"
+            return String(localized: "\(Int(round(hours * 60))) min")
         }
         if hours == floor(hours) {
-            return "\(Int(hours)) hour\(hours == 1 ? "" : "s")"
+            return String(localized: "\(Int(hours)) hour\(hours == 1 ? "" : "s")")
         }
         return String(format: "%.1f hours", hours)
     }
@@ -388,14 +388,14 @@ public struct CreateServerStubScreen: View {
                 .foregroundStyle(c.text)
             bootUnlockOption(
                 mode: .auto,
-                title: "Reboots on its own",
-                subtitle: "Best for flaky power or connections. After you approve its first boot, the server self-unlocks on every reboot — no phone needed. Revocable any time.",
+                title: String(localized: "Reboots on its own"),
+                subtitle: String(localized: "Best for flaky power or connections. After you approve its first boot, the server self-unlocks on every reboot — no phone needed. Revocable any time."),
                 c: c
             )
             bootUnlockOption(
                 mode: .approve,
-                title: "Authorize each boot",
-                subtitle: "Most theft-resistant. The server asks your phone to unlock on every reboot. Best for critical servers on stable infrastructure.",
+                title: String(localized: "Authorize each boot"),
+                subtitle: String(localized: "Most theft-resistant. The server asks your phone to unlock on every reboot. Best for critical servers on stable infrastructure."),
                 c: c
             )
         }
@@ -449,7 +449,7 @@ public struct CreateServerStubScreen: View {
             .tint(c.accent)
             .accessibilityIdentifier("cs-encrypt-disk-toggle")
             Text(vm.encryptDisk
-                 ? "Recommended. Your data disk is encrypted; the server unlocks it at boot."
+                 ? String(localized: "Recommended. Your data disk is encrypted; the server unlocks it at boot.")
                  : "Less safe — the disk is left unencrypted. Only for servers that can't keep network at boot (e.g. Wi-Fi-only), where the boot-time unlock can't run.")
                 .font(.caption)
                 .foregroundColor(c.textMuted)
@@ -544,8 +544,8 @@ public struct CreateServerStubScreen: View {
     private func scanPage(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
             phaseHeader(
-                "Scan the QR",
-                subtitle: "Aim the viewfinder at a compatible Flagship pairing QR.",
+                String(localized: "Scan the QR"),
+                subtitle: String(localized: "Aim the viewfinder at a compatible Flagship pairing QR."),
                 c: c
             )
 
@@ -582,7 +582,7 @@ public struct CreateServerStubScreen: View {
             .accessibilityIdentifier("cs-paste-toggle")
             .padding(.top, FS.space.s2)
 
-            FSGhostButton("Back", block: true) { vm.phase = .design }
+            FSGhostButton(String(localized: "Back"), block: true) { vm.phase = .design }
         }
     }
 
@@ -591,26 +591,26 @@ public struct CreateServerStubScreen: View {
     private func pastePage(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
             phaseHeader(
-                "Paste the QR link",
-                subtitle: "Right-click (or long-press) the QR on flagshipserver.com, copy the link, and paste it here.",
+                String(localized: "Paste the QR link"),
+                subtitle: String(localized: "Right-click (or long-press) the QR on flagshipserver.com, copy the link, and paste it here."),
                 c: c
             )
 
             FSCard {
                 FSField(
                     value: $vm.qrUrl,
-                    label: "QR link",
+                    label: String(localized: "QR link"),
                     placeholder: "https://flagshipserver.com/qr?s=…&k=…"
                 )
                 .accessibilityIdentifier("cs-qr-field")
             }
 
-            FSPrimaryButton("Submit", enabled: vm.canSubmitPaste, block: true, large: true) {
+            FSPrimaryButton(String(localized: "Submit"), enabled: vm.canSubmitPaste, block: true, large: true) {
                 Task { await vm.submitPaste() }
             }
             .accessibilityIdentifier("cs-submit-button")
 
-            FSGhostButton("Back to viewfinder", block: true) { vm.switchToScan() }
+            FSGhostButton(String(localized: "Back to viewfinder"), block: true) { vm.switchToScan() }
         }
     }
 
@@ -619,8 +619,8 @@ public struct CreateServerStubScreen: View {
     private func matchPage(code: String, gateOpen: Bool, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
             phaseHeader(
-                "Confirm match code",
-                subtitle: "These six digits must match what the desktop shows. If they don't, someone is in the middle — cancel.",
+                String(localized: "Confirm match code"),
+                subtitle: String(localized: "These six digits must match what the desktop shows. If they don't, someone is in the middle — cancel."),
                 c: c
             )
             FSCard(padding: FS.space.s6) {
@@ -633,7 +633,7 @@ public struct CreateServerStubScreen: View {
                     .accessibilityIdentifier("cs-match-label")
             }
             FSPrimaryButton(
-                gateOpen ? "Codes match — confirm" : "Reading…",
+                gateOpen ? String(localized: "Codes match — confirm") : String(localized: "Reading…"),
                 enabled: gateOpen,
                 block: true,
                 large: true
@@ -641,7 +641,7 @@ public struct CreateServerStubScreen: View {
                 Task { await vm.confirmAndDeliver() }
             }
             .accessibilityIdentifier("cs-confirm-button")
-            FSGhostButton("Cancel", block: true) { Task { await vm.cancel() } }
+            FSGhostButton(String(localized: "Cancel"), block: true) { Task { await vm.cancel() } }
         }
     }
 
@@ -658,8 +658,8 @@ public struct CreateServerStubScreen: View {
                         Image(systemName: "arrow.down.circle.fill").foregroundColor(c.success)
                         Text("Delivered").font(FS.font.h4()).foregroundColor(c.text)
                     }
-                    labeled("Server", serverDomain, mono: true, c: c)
-                    labeled("Serial", serial, mono: true, c: c)
+                    labeled(String(localized: "Server"), serverDomain, mono: true, c: c)
+                    labeled(String(localized: "Serial"), serial, mono: true, c: c)
                     ProvisionTimelineView(status: deliveredTimeline?.status)
                         .padding(.top, FS.space.s1)
                 }
@@ -702,7 +702,7 @@ public struct CreateServerStubScreen: View {
                     onCancelOrder: onCancel
                 )
             }
-            FSPrimaryButton("Done", block: true, large: true) {
+            FSPrimaryButton(String(localized: "Done"), block: true, large: true) {
                 onDelivered(serverDomain, vm.name, vm.description)
             }
             .accessibilityIdentifier("cs-done-button")
@@ -714,7 +714,7 @@ public struct CreateServerStubScreen: View {
             }
             if deliveredTimeline?.status?.phase != .error {
                 FSDangerButton(
-                    cancelling ? "Cancelling…" : (cancelError == nil ? "Cancel order" : CancelPendingOrder.retryLabel),
+                    cancelling ? String(localized: "Cancelling…") : (cancelError == nil ? String(localized: "Cancel order") : CancelPendingOrder.retryLabel),
                     block: true
                 ) {
                     onCancel()
@@ -729,9 +729,9 @@ public struct CreateServerStubScreen: View {
 
     private func failurePage(msg: String, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            phaseHeader("Something went wrong", subtitle: nil, c: c)
+            phaseHeader(String(localized: "Something went wrong"), subtitle: nil, c: c)
             ErrorCard(message: msg)
-            FSGhostButton("Try again", block: true) { vm.resetToDesign() }
+            FSGhostButton(String(localized: "Try again"), block: true) { vm.resetToDesign() }
         }
     }
 

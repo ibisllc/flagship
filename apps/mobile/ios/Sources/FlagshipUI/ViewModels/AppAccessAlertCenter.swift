@@ -256,7 +256,7 @@ public final class AppAccessAlertCenter {
             try await AppAccessOrder.send(
                 list: text, serviceId: item.serviceId, client: client,
                 fallbackServerDomain: item.serverDomain, signer: signer,
-                reason: "Change \(item.appName)'s access list")
+                reason: String(localized: "Change \(item.appName)'s access list"))
         }
     }
 
@@ -285,7 +285,7 @@ public final class AppAccessAlertCenter {
             let next = try await AppAccessOrder.send(
                 list: text, serviceId: item.serviceId, client: client,
                 fallbackServerDomain: item.serverDomain, signer: signer,
-                reason: "Change \(item.appName)'s access list")
+                reason: String(localized: "Change \(item.appName)'s access list"))
             if self?.current?.id == item.id { self?.stage = .saved }
             return next
         }

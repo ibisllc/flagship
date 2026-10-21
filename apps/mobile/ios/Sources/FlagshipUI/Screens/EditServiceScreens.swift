@@ -23,11 +23,11 @@ public struct EditServiceScreen: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: FS.space.s4) {
                     Spacer().frame(height: FS.space.s4)
-                    option(c: c, icon: "sparkles", title: "Describe the change",
-                           subtitle: "Tell the AI what to change. It starts from the current code.",
+                    option(c: c, icon: "sparkles", title: String(localized: "Describe the change"),
+                           subtitle: String(localized: "Tell the AI what to change. It starts from the current code."),
                            id: "edit-service-ai", action: onAI)
-                    option(c: c, icon: "laptopcomputer", title: "Use your IDE",
-                           subtitle: "Connect Cursor, Cline or another editor and change it with your own AI.",
+                    option(c: c, icon: "laptopcomputer", title: String(localized: "Use your IDE"),
+                           subtitle: String(localized: "Connect Cursor, Cline or another editor and change it with your own AI."),
                            id: "edit-service-ide", action: onIDE)
                     Text("The new version replaces the one running now. Its address, data and the people who can open it stay the same.")
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted)
@@ -106,7 +106,7 @@ public struct EditDescribeScreen: View {
                         .accessibilityIdentifier("edit-describe-prompt")
                     Text("For example: \"Add a due date to each item and sort by it.\"")
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                    FSPrimaryButton(starting ? "Starting…" : "Start",
+                    FSPrimaryButton(starting ? String(localized: "Starting…") : String(localized: "Start"),
                                     enabled: !starting && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                                     block: true, large: true) {
                         focused = false
@@ -163,7 +163,7 @@ public enum EditStartRefusal: Equatable, Sendable {
     func message(name: String) -> String {
         switch self {
         case .sessionOpen:
-            return "A build session is already changing \(name). Open it from Build sessions, or discard it there to start over."
+            return String(localized: "A build session is already changing \(name). Open it from Build sessions, or discard it there to start over.")
         case .tooBig(let m), .other(let m):
             return m
         }
@@ -175,7 +175,7 @@ public enum EditStartRefusal: Equatable, Sendable {
         if case let ScreensClientError.http(status, body) = error {
             struct Body: Decodable { let error: String? }
             let msg = (try? JSONDecoder().decode(Body.self, from: Data(body.utf8)))?.error
-            if status == 413 { return .tooBig(msg ?? "This service is too big to change in the AI chat. Use your IDE instead.") }
+            if status == 413 { return .tooBig(msg ?? String(localized: "This service is too big to change in the AI chat. Use your IDE instead.")) }
             if let msg { return .other(msg) }
         }
         return .other(ScreensClientError.userFacing(error))

@@ -26,8 +26,8 @@ extension GymSweepSeams {
     static func server(_ args: [String], _ app: AppState, _ mocks: GymMocks) {
         // Every launch: what the server page's cards read from their mocks.
         mocks.frontPage.options = [
-            FrontPageOption(urlLabel: "plants", name: "Plants"),
-            FrontPageOption(urlLabel: "wiki", name: "Wiki"),
+            FrontPageOption(urlLabel: "plants", name: String(localized: "Plants")),
+            FrontPageOption(urlLabel: "wiki", name: String(localized: "Wiki")),
         ]
         mocks.lockPower.journalLines = ["gym: flagship-daemon started", "gym: serving 2 apps"]
         mocks.migration.scripted = true
@@ -42,7 +42,7 @@ extension GymSweepSeams {
         // `-smoke-release-fails-once`: `.com` fails the first release of a name
         // (Cancel order / Delete), then works, so the retry path is exercised.
         if args.contains("-smoke-release-fails-once") {
-            mocks.server?.releaseError = ScreensClientError.http(status: 502, message: "error code: 1102")
+            mocks.server?.releaseError = ScreensClientError.http(status: 502, message: String(localized: "error code: 1102"))
             mocks.server?.releaseErrorOnce = true
         }
 
@@ -140,8 +140,8 @@ extension GymSweepSeams {
                 s.restoreWaiting = ServerRestoreWaiting(archiveId: restoreArchiveId, bytes: made.dataBytes, sha256: made.sha256)
             }
             s.restoreApps = [
-                ServerRestoreApp(serviceId: "bright-maple--wiki", name: "Wiki", state: "done"),
-                ServerRestoreApp(serviceId: "bright-maple--notes", name: "Notes", state: "failed", reason: failedAppReason),
+                ServerRestoreApp(serviceId: "bright-maple--wiki", name: String(localized: "Wiki"), state: "done"),
+                ServerRestoreApp(serviceId: "bright-maple--notes", name: String(localized: "Notes"), state: "failed", reason: failedAppReason),
             ]
             s.restoreFinalState = "done"
         }
@@ -158,8 +158,8 @@ extension GymSweepSeams {
                     holders: 8, needed: 4, keepUntil: now + 20 * day)
             }
             s.restoreApps = [
-                ServerRestoreApp(serviceId: "bright-maple--wiki", name: "Wiki", state: "done"),
-                ServerRestoreApp(serviceId: "bright-maple--notes", name: "Notes", state: "failed", reason: failedAppReason),
+                ServerRestoreApp(serviceId: "bright-maple--wiki", name: String(localized: "Wiki"), state: "done"),
+                ServerRestoreApp(serviceId: "bright-maple--notes", name: String(localized: "Notes"), state: "failed", reason: failedAppReason),
             ]
             s.restoreFinalState = "done"
         }
@@ -232,7 +232,7 @@ extension GymSweepSeams {
         let body: [String: Any] = [
             "createdAt": Int64(Date().timeIntervalSince1970 * 1000) - 86_400_000,
             "server": ["name": label, "domain": server, "bootUnlockMode": "auto", "diskEncryption": "luks"],
-            "apps": [["serviceId": "bright-maple--wiki", "name": "Wiki"], ["serviceId": "bright-maple--notes", "name": "Notes"]],
+            "apps": [["serviceId": "bright-maple--wiki", "name": String(localized: "Wiki")], ["serviceId": "bright-maple--notes", "name": String(localized: "Notes")]],
             "left": [],
             "includes": [], "excludes": [],
             "data": ["fileName": "\(label)-gym.flagship-data", "bytes": data.count, "sha256": sha, "frameBytes": 1 << 20],

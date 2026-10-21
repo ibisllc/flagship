@@ -109,7 +109,7 @@ struct AppDatabaseScreen: View {
                     .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
                 if controller.isHidden {
-                    ErrorCard(message: "This server doesn't offer this app's database.")
+                    ErrorCard(message: String(localized: "This server doesn't offer this app's database."))
                 } else {
                     switch controller.state {
                     case .idle, .loading:
@@ -257,7 +257,7 @@ struct AppDbTableScreen: View {
                     ProgressView().frame(maxWidth: .infinity).padding(.top, FS.space.s6)
                 case .failed(let msg):
                     ErrorCard(message: msg)
-                    FSSecondaryButton("Try again", block: true) { Task { await controller.load() } }
+                    FSSecondaryButton(String(localized: "Try again"), block: true) { Task { await controller.load() } }
                 case .loaded(let page):
                     Text(controller.pageLabel)
                         .font(FS.font.caption()).foregroundColor(c.textMuted)
@@ -269,11 +269,11 @@ struct AppDbTableScreen: View {
                             .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(c.border, lineWidth: 1))
                     }
                     HStack(spacing: FS.space.s2) {
-                        FSSecondaryButton("Previous") { Task { await controller.previous() } }
+                        FSSecondaryButton(String(localized: "Previous")) { Task { await controller.previous() } }
                             .disabled(!controller.hasPrevious)
                             .accessibilityIdentifier("database-page-previous")
                         Spacer()
-                        FSSecondaryButton("Next") { Task { await controller.next() } }
+                        FSSecondaryButton(String(localized: "Next")) { Task { await controller.next() } }
                             .disabled(!controller.hasNext)
                             .accessibilityIdentifier("database-page-next")
                     }
@@ -337,7 +337,7 @@ struct AppDbQueryScreen: View {
                 .background(c.surface)
                 .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(c.border, lineWidth: 1))
 
-                FSPrimaryButton(controller.phase == .running ? "Running…" : AppDbCopy.run,
+                FSPrimaryButton(controller.phase == .running ? String(localized: "Running…") : AppDbCopy.run,
                                 enabled: controller.canRun, block: true) {
                     Task { await controller.run() }
                 }
@@ -370,11 +370,11 @@ struct AppDbQueryScreen: View {
                             .accessibilityIdentifier("database-confirm-write")
                     }
                     let signing = controller.phase == .signing
-                    FSPrimaryButton(signing ? "Confirming…" : AppDbCopy.confirmButton, enabled: !signing, block: true) {
+                    FSPrimaryButton(signing ? String(localized: "Confirming…") : AppDbCopy.confirmButton, enabled: !signing, block: true) {
                         Task { await controller.confirmWrite() }
                     }
                     .accessibilityIdentifier("database-confirm-run")
-                    FSGhostButton("Cancel", block: true) { controller.cancelConfirm() }
+                    FSGhostButton(String(localized: "Cancel"), block: true) { controller.cancelConfirm() }
                         .disabled(signing)
                 }
             }

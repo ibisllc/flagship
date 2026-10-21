@@ -332,15 +332,15 @@ public extension BuildSummary {
     var displayName: String {
         if let name, !name.isEmpty { return name }
         if let serviceId, let slug = serviceId.components(separatedBy: "--").last, !slug.isEmpty { return slug }
-        return "Unnamed build"
+        return String(localized: "Unnamed build")
     }
     /// How it was made, for the pill beside the name.
     var methodLabel: String { Self.methodLabel(mode) }
     static func methodLabel(_ mode: String) -> String {
         switch mode {
-        case "git": return "From Git"
-        case "mcp": return "From your IDE"
-        default: return "AI chat"
+        case "git": return String(localized: "From Git")
+        case "mcp": return String(localized: "From your IDE")
+        default: return String(localized: "AI chat")
         }
     }
 }

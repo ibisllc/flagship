@@ -55,7 +55,7 @@ public final class LiveServiceUninstallClient: ServiceUninstallClient, @unchecke
             withAllowedCharacters: .urlPathAllowed
         ) ?? serviceId
         guard let url = URL(string: Self.baseUrl(serverDomain) + "/api/services/" + encodedId) else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "DELETE"
@@ -78,7 +78,7 @@ public final class LiveServiceUninstallClient: ServiceUninstallClient, @unchecke
             throw error
         }
         guard let http = resp as? HTTPURLResponse else {
-            throw ScreensClientError.http(status: 0, message: "no response")
+            throw ScreensClientError.http(status: 0, message: String(localized: "no response"))
         }
         if !(200..<300).contains(http.statusCode) {
             let text = String(data: data, encoding: .utf8) ?? ""

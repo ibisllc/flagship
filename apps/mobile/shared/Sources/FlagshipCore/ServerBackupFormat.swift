@@ -116,13 +116,13 @@ public enum ServerBackupFormat {
         let p = normalizePasscode(passcode)
         let len = p.unicodeScalars.count
         if len >= 20 { return nil }
-        if len < 12 { return "Use at least 12 characters (or 20 if it's all one kind, like words)." }
+        if len < 12 { return String(localized: "Use at least 12 characters (or 20 if it's all one kind, like words).") }
         var kinds = 0
         if p.unicodeScalars.contains(where: { ("a"..."z").contains($0) }) { kinds += 1 }
         if p.unicodeScalars.contains(where: { ("A"..."Z").contains($0) }) { kinds += 1 }
         if p.unicodeScalars.contains(where: { ("0"..."9").contains($0) }) { kinds += 1 }
         if p.unicodeScalars.contains(where: { !(("a"..."z").contains($0) || ("A"..."Z").contains($0) || ("0"..."9").contains($0)) }) { kinds += 1 }
-        return kinds >= 3 ? nil : "Mix at least three of: lowercase, uppercase, digits, symbols (or use 20 characters)."
+        return kinds >= 3 ? nil : String(localized: "Mix at least three of: lowercase, uppercase, digits, symbols (or use 20 characters).")
     }
 
     /// A suggested passcode: five groups of four, 100 bits.

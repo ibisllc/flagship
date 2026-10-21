@@ -156,7 +156,7 @@ public final class MockDemoConnectClient: DemoConnectClient, @unchecked Sendable
         let lower = username.lowercased()
         guard let block = server.demoServers[lower] else {
             // Mirror the Worker's 404 for "no such demo user".
-            throw ScreensClientError.http(status: 404, message: "no such demo user")
+            throw ScreensClientError.http(status: 404, message: String(localized: "no such demo user"))
         }
         // Flip the mock row to `provisioning` on first connect (mirrors
         // the Worker's state-machine: `none → provisioning`).
@@ -216,7 +216,7 @@ public final class MockDemoConnectClient: DemoConnectClient, @unchecked Sendable
         cancelCalls.append(username)
         let lower = username.lowercased()
         guard server.demoServers[lower] != nil else {
-            throw ScreensClientError.http(status: 404, message: "no such demo user")
+            throw ScreensClientError.http(status: 404, message: String(localized: "no such demo user"))
         }
         // Mirror the Worker: reset the row to the empty state. We keep
         // the FQDN so a later connect re-provisions under the same name.

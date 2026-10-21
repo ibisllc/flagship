@@ -26,7 +26,7 @@ public struct RateLimitedRefusal: Equatable, Sendable {
         self.serverMessage = serverMessage
     }
 
-    public static let fallbackMessage = "Too many tries. Try again later."
+    public static let fallbackMessage = String(localized: "Too many tries. Try again later.")
 
     /// "Too many tries from your network. Try again in about 12 minutes."
     public var message: String {
@@ -46,7 +46,7 @@ public struct RateLimitedRefusal: Equatable, Sendable {
         case .irk: who = "from this account"
         case .usernameHash: who = "for this account name"
         }
-        return "Too many tries \(who). Try again \(retryAfterPhrase(retryAfterSec))."
+        return String(localized: "Too many tries \(who). Try again \(retryAfterPhrase(retryAfterSec)).")
     }
 
     public static func retryAfterPhrase(_ sec: Int) -> String {

@@ -29,7 +29,7 @@ public struct RelayCertFailure: Identifiable, Equatable, Sendable {
     /// First 8 hex — the sliver slug (shared cross-surface contract).
     public var slug: String { String(certHash.prefix(8)) }
     /// The sliver line label (matches the control/relay contract).
-    public var label: String { "Relay certificate expired · \(slug)" }
+    public var label: String { String(localized: "Relay certificate expired · \(slug)") }
     /// The failing cert as a `TrustException`-signable descriptor (certClass
     /// `.relay`; `caPubkey` is unused for relay — the cert-hash IS the anchor).
     public var trustFailure: TrustFailure {

@@ -77,7 +77,7 @@ private struct LockScreenView: View {
                     .foregroundStyle(.tint)
                 VStack(alignment: .leading) {
                     Text(attributes.podName).font(.headline)
-                    Text(state.serverFqdn ?? "Provisioning \(attributes.serial.prefix(8))…")
+                    Text(state.serverFqdn ?? String(localized: "Provisioning \(attributes.serial.prefix(8))…"))
                         .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
                 }
