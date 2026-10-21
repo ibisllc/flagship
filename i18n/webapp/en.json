@@ -3209,7 +3209,8 @@
   },
   "3–30 lowercase letters/digits with interior single dashes": {
     "en": "3–30 lowercase letters/digits with interior single dashes",
-    "ctx": "webapp/lib/state.js:89"
+    "ctx": "webapp/lib/state.js:89",
+    "translatable": false
   },
   "Update available — tap to refresh": {
     "en": "Update available — tap to refresh",
@@ -3429,11 +3430,13 @@
   },
   "BarcodeDetector not available in this browser": {
     "en": "BarcodeDetector not available in this browser",
-    "ctx": "webapp/qrScanner.js:17"
+    "ctx": "webapp/qrScanner.js:17",
+    "translatable": false
   },
   "QR scan timed out": {
     "en": "QR scan timed out",
-    "ctx": "webapp/qrScanner.js:47"
+    "ctx": "webapp/qrScanner.js:47",
+    "translatable": false
   },
   "Open an app in a browser": {
     "en": "Open an app in a browser",
@@ -3854,7 +3857,8 @@
   },
   "SELECT * FROM items LIMIT 10": {
     "en": "SELECT * FROM items LIMIT 10",
-    "ctx": "webapp/views/app-db.js:137"
+    "ctx": "webapp/views/app-db.js:137",
+    "translatable": false
   },
   "SQLSTATE {0}": {
     "en": "SQLSTATE {0}",
@@ -3950,7 +3954,8 @@
   },
   "Recovery J.3 (re-pair envelope)": {
     "en": "Recovery J.3 (re-pair envelope)",
-    "ctx": "webapp/views/audit-log.js:68"
+    "ctx": "webapp/views/audit-log.js:68",
+    "translatable": false
   },
   "Recovery merge-back": {
     "en": "Recovery merge-back",
@@ -4006,7 +4011,8 @@
   },
   "audit log not yet available — the daemon's <code>/api/screens/audit-log</code> surface is on the v1-launch checklist (task #34, BFF side pending).": {
     "en": "audit log not yet available — the daemon's <code>/api/screens/audit-log</code> surface is on the v1-launch checklist (task #34, BFF side pending).",
-    "ctx": "webapp/views/audit-log.js:155"
+    "ctx": "webapp/views/audit-log.js:155",
+    "translatable": false
   },
   "no signed events yet — actions you take (claiming a URL, granting an app, issuing an invite) will land here with the underlying envelope you can verify yourself.": {
     "en": "no signed events yet — actions you take (claiming a URL, granting an app, issuing an invite) will land here with the underlying envelope you can verify yourself.",
@@ -4018,7 +4024,8 @@
   },
   "audit log not yet available — the daemon's <code>/api/screens/audit-log</code> surface is on the v1-launch checklist (task #34, BFF side pending). Once the daemon exposes the endpoint, every signed event the user has authored will land here.": {
     "en": "audit log not yet available — the daemon's <code>/api/screens/audit-log</code> surface is on the v1-launch checklist (task #34, BFF side pending). Once the daemon exposes the endpoint, every signed event the user has authored will land here.",
-    "ctx": "webapp/views/audit-log.js:221"
+    "ctx": "webapp/views/audit-log.js:221",
+    "translatable": false
   },
   "no events yet{0} — signed actions you take (claiming a URL, granting an app, issuing an invite) will land here with the underlying envelope you can verify yourself.": {
     "en": "no events yet{0} — signed actions you take (claiming a URL, granting an app, issuing an invite) will land here with the underlying envelope you can verify yourself.",
