@@ -1,5 +1,9 @@
 package com.flagshipserver.app.ui.components
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.PodInfo
 
 /**
@@ -16,25 +20,25 @@ object PodStatusStyle {
     fun label(pod: PodInfo, liveness: PodInfo.LivenessState): String {
         if (liveness == PodInfo.LivenessState.OFFLINE) {
             val seen = pod.humanizedLastSeen()
-            return if (seen != null) "Offline — last seen $seen" else "Offline"
+            return if (seen != null) FSStrings.get(R.string.offline_last_seen, seen) else FSStrings.get(R.string.offline)
         }
         return label(liveness, pod.status)
     }
 
     fun label(liveness: PodInfo.LivenessState, status: PodInfo.Status): String =
         when (liveness) {
-            PodInfo.LivenessState.REVOKED -> "Revoked"
-            PodInfo.LivenessState.DEAD -> "Never came online"
+            PodInfo.LivenessState.REVOKED -> FSStrings.get(R.string.revoked)
+            PodInfo.LivenessState.DEAD -> FSStrings.get(R.string.never_came_online)
             // HONEST LIVENESS (Fix A) — a previously-live box that's gone stale.
-            PodInfo.LivenessState.OFFLINE -> "Offline"
-            PodInfo.LivenessState.WAITING_FOR_APPROVAL -> "Waiting for approval"
+            PodInfo.LivenessState.OFFLINE -> FSStrings.get(R.string.offline)
+            PodInfo.LivenessState.WAITING_FOR_APPROVAL -> FSStrings.get(R.string.waiting_for_approval)
             PodInfo.LivenessState.COMING_ONLINE ->
-                if (status == PodInfo.Status.PENDING) "Pending" else "Coming online…"
+                if (status == PodInfo.Status.PENDING) FSStrings.get(R.string.pending) else FSStrings.get(R.string.coming_online)
             PodInfo.LivenessState.ONLINE -> when (status) {
-                PodInfo.Status.ONLINE -> "Online"
-                PodInfo.Status.OFFLINE -> "Offline"
-                PodInfo.Status.UNKNOWN -> "Checking"
-                PodInfo.Status.PENDING -> "Pending"
+                PodInfo.Status.ONLINE -> FSStrings.get(R.string.online)
+                PodInfo.Status.OFFLINE -> FSStrings.get(R.string.offline)
+                PodInfo.Status.UNKNOWN -> FSStrings.get(R.string.checking_2)
+                PodInfo.Status.PENDING -> FSStrings.get(R.string.pending)
             }
         }
 
@@ -68,10 +72,10 @@ enum class HomeStatusFilter {
 
     val label: String
         get() = when (this) {
-            ALL -> "All"
-            ONLINE -> "Online"
-            PENDING -> "Pending"
-            OFFLINE -> "Offline"
+            ALL -> FSStrings.get(R.string.all)
+            ONLINE -> FSStrings.get(R.string.online)
+            PENDING -> FSStrings.get(R.string.pending)
+            OFFLINE -> FSStrings.get(R.string.offline)
         }
 
     /** Whether a pod (given its derived liveness + status) belongs in this filter. */

@@ -21,6 +21,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -186,7 +187,7 @@ class LanDirectRegistry(
                         if (cached != null && clock() - cached.second < PROBE_TTL_MS) continue
                         val ok = prober.probe(box, e.address, e.port, entry.certSha256)
                         probes[key] = ok to clock()
-                        log(if (ok) "$box proved itself at ${e.address}; using the local network" else "$box isn't at ${e.address} on this network; using the relay")
+                        log(if (ok) FSStrings.get(R.string.proved_itself_at_using_the_local, box, e.address) else FSStrings.get(R.string.isnt_at_on_this_network_using, box, e.address))
                     }
                 } finally {
                     probing.remove(box)
@@ -218,7 +219,7 @@ class LanDirectRegistry(
         for ((key, v) in probes) {
             if (v.first && normalized(key.substringAfter('|')) == want) {
                 probes[key] = false to now
-                log("${key.substringBefore('|')} stopped answering at $address ($why); using the relay on this network")
+                log(FSStrings.get(R.string.stopped_answering_at_using_the_relay, key.substringBefore('|'), address, why))
             }
         }
     }

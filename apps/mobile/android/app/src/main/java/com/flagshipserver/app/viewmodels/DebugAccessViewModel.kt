@@ -6,6 +6,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.DebugAccessView
 import com.flagshipserver.app.api.ScreensClient
@@ -63,19 +65,19 @@ class DebugAccessViewModel(
     suspend fun turnOn(keyText: String, duration: DebugAccess.Duration): Boolean {
         if (!isAdminDevice()) return fail(DebugAccess.ADMIN_ONLY)
         val key = DebugAccess.normalizeSshPublicKey(keyText)
-            ?: return fail(if (keyText.isBlank()) "Debug access needs an SSH public key." else "That isn't an SSH public key this server can use.")
+            ?: return fail(if (keyText.isBlank()) FSStrings.get(R.string.debug_access_needs_an_ssh_public) else FSStrings.get(R.string.that_isnt_an_ssh_public_key))
         val issuedAt = now()
         val grant = DebugAccess.Grant(serverDomain, key, issuedAt, issuedAt + duration.ms)
         DebugAccess.grantProblem(grant)?.let { return fail(it) }
         val wasOn = isOn()
         _state.value = _state.value.copy(busy = true, error = null, notice = null)
         return try {
-            confirmGrant(if (wasOn) "Renew debug access on $serverDomain" else "Turn on debug access on $serverDomain")
-            val sig = DebugAccess.sign(grant, adminKey("Turn on debug access on $serverDomain"))
+            confirmGrant(if (wasOn) FSStrings.get(R.string.renew_debug_access_on, serverDomain) else FSStrings.get(R.string.turn_on_debug_access_on, serverDomain))
+            val sig = DebugAccess.sign(grant, adminKey(FSStrings.get(R.string.turn_on_debug_access_on, serverDomain)))
             val r = client.debugAccessGrant(DebugAccess.envelopeJson(grant, sig))
             _state.value = State(
                 view = r.debugAccess ?: DebugAccessView(true, grant.expiresAt, DebugAccess.fingerprint(key), "admin"),
-                notice = if (r.change == "renewed") "Debug access renewed." else "Debug access is on.",
+                notice = if (r.change == "renewed") FSStrings.get(R.string.debug_access_renewed_2) else FSStrings.get(R.string.debug_access_is_on),
             )
             true
         } catch (t: Throwable) {
@@ -88,9 +90,9 @@ class DebugAccessViewModel(
         _state.value = _state.value.copy(busy = true, error = null, notice = null)
         return try {
             val revoke = DebugAccess.Revoke(serverDomain, now())
-            val sig = DebugAccess.signRevoke(revoke, revokeSigner("Turn off debug access on $serverDomain"))
+            val sig = DebugAccess.signRevoke(revoke, revokeSigner(FSStrings.get(R.string.turn_off_debug_access_on, serverDomain)))
             val r = client.debugAccessRevoke(DebugAccess.revokeJson(revoke, sig))
-            _state.value = State(view = r.debugAccess ?: DebugAccessView(on = false), notice = "Debug access is off.")
+            _state.value = State(view = r.debugAccess ?: DebugAccessView(on = false), notice = FSStrings.get(R.string.debug_access_is_off))
             true
         } catch (t: Throwable) {
             fail(t.sentence())
@@ -99,7 +101,7 @@ class DebugAccessViewModel(
 
     private fun Throwable.sentence(): String =
         when {
-            this is BiometricCancelled -> "Debug access not changed: you didn't confirm it."
+            this is BiometricCancelled -> FSStrings.get(R.string.debug_access_not_changed_you_didnt)
             this is IllegalStateException && message == "Open Flagship to confirm this." -> message!!
             else -> boxError() ?: userFacing()
         }

@@ -15,6 +15,8 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material3.Icon
@@ -92,13 +94,13 @@ fun BuilderPairScreen(
     }
 
     val title = when (phase) {
-        is BuilderPairController.Phase.Scan -> "Pair with the builder"
-        is BuilderPairController.Phase.EnterCode -> "Enter the builder code"
-        is BuilderPairController.Phase.Connecting -> "Connecting"
-        is BuilderPairController.Phase.Matching -> "Confirm the security code"
-        is BuilderPairController.Phase.Delivering -> "Sending"
-        is BuilderPairController.Phase.Delivered -> "Sent"
-        is BuilderPairController.Phase.Failed -> "Pairing failed"
+        is BuilderPairController.Phase.Scan -> stringResource(R.string.pair_with_the_builder)
+        is BuilderPairController.Phase.EnterCode -> stringResource(R.string.enter_the_builder_code)
+        is BuilderPairController.Phase.Connecting -> stringResource(R.string.connecting_2)
+        is BuilderPairController.Phase.Matching -> stringResource(R.string.confirm_the_security_code)
+        is BuilderPairController.Phase.Delivering -> stringResource(R.string.sending)
+        is BuilderPairController.Phase.Delivered -> stringResource(R.string.sent)
+        is BuilderPairController.Phase.Failed -> stringResource(R.string.pairing_failed)
     }
     FSScreen(
         title = title,
@@ -117,8 +119,8 @@ fun BuilderPairScreen(
                 onScan = { controller.switchToScan() },
             )
             is BuilderPairController.Phase.Connecting -> StepHeaderSpinner(
-                title = "Connecting",
-                subtitle = "Opening the secure channel to the builder…",
+                title = stringResource(R.string.connecting_2),
+                subtitle = stringResource(R.string.opening_the_secure_channel_to_the),
             )
             is BuilderPairController.Phase.Matching -> MatchStep(
                 matchCode = p.matchCode,
@@ -126,8 +128,8 @@ fun BuilderPairScreen(
                 onCancel = { controller.cancel(); onCancel() },
             )
             is BuilderPairController.Phase.Delivering -> StepHeaderSpinner(
-                title = "Sending",
-                subtitle = "Minting your recipe and sending it to the builder…",
+                title = stringResource(R.string.sending),
+                subtitle = stringResource(R.string.minting_your_recipe_and_sending_it),
             )
             is BuilderPairController.Phase.Delivered -> DeliveredStep(
                 domain = p.serverDomain,
@@ -145,13 +147,13 @@ fun BuilderPairScreen(
 @Composable
 private fun ScanStep(onScanned: (String) -> Unit, onEnterCode: () -> Unit) {
     Header(
-        "Pair with the builder",
-        "On your computer, open the Flagship Studio — it shows a QR code and a short code. Point your camera at it.",
+        stringResource(R.string.pair_with_the_builder),
+        stringResource(R.string.on_your_computer_open_the_flagship),
     )
     Spacer(Modifier.height(FS.space.s4))
     QRScanner(onScanned = onScanned)
     Spacer(Modifier.height(FS.space.s3))
-    FSSecondaryButton(label = "Enter the code instead", onClick = onEnterCode, block = true)
+    FSSecondaryButton(label = stringResource(R.string.enter_the_code_instead), onClick = onEnterCode, block = true)
     Spacer(Modifier.height(FS.space.s4))
     WhereToGetBuilder()
 }
@@ -164,22 +166,22 @@ private fun EnterCodeStep(
     onScan: () -> Unit,
 ) {
     Header(
-        "Enter the builder code",
-        "Type the short code shown under the QR on your computer (like ABCD-EFGH).",
+        stringResource(R.string.enter_the_builder_code),
+        stringResource(R.string.type_the_short_code_shown_under),
     )
     Spacer(Modifier.height(FS.space.s4))
     FSCard {
-        FSField(value = code, onValueChange = onCode, label = "Builder code")
+        FSField(value = code, onValueChange = onCode, label = stringResource(R.string.builder_code))
     }
     Spacer(Modifier.height(FS.space.s4))
     FSPrimaryButton(
-        label = "Connect",
+        label = stringResource(R.string.connect),
         onClick = onConnect,
         enabled = BuilderPairing.looksLikeBuilderCode(code),
         block = true,
     )
     Spacer(Modifier.height(FS.space.s2))
-    FSSecondaryButton(label = "Scan the QR instead", onClick = onScan, block = true)
+    FSSecondaryButton(label = stringResource(R.string.scan_the_qr_instead), onClick = onScan, block = true)
     Spacer(Modifier.height(FS.space.s4))
     WhereToGetBuilder()
 }
@@ -187,8 +189,8 @@ private fun EnterCodeStep(
 @Composable
 private fun MatchStep(matchCode: String, onConfirm: () -> Unit, onCancel: () -> Unit) {
     Header(
-        "Confirm the security code",
-        "Check that this matches the code on your computer. Only confirm if they're the same.",
+        stringResource(R.string.confirm_the_security_code),
+        stringResource(R.string.check_that_this_matches_the_code),
     )
     Spacer(Modifier.height(FS.space.s4))
     FSCard {
@@ -203,48 +205,48 @@ private fun MatchStep(matchCode: String, onConfirm: () -> Unit, onCancel: () -> 
         }
     }
     Spacer(Modifier.height(FS.space.s6))
-    FSPrimaryButton(label = "They match — pair & send", onClick = onConfirm, block = true)
+    FSPrimaryButton(label = stringResource(R.string.they_match_pair_send), onClick = onConfirm, block = true)
     Spacer(Modifier.height(FS.space.s2))
-    FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
+    FSSecondaryButton(label = stringResource(R.string.cancel), onClick = onCancel, block = true)
 }
 
 @Composable
 private fun DeliveredStep(domain: String, onDone: () -> Unit) {
     Header(
-        "Sent",
-        "Your computer's builder has the recipe. Pick the USB drive and any Advanced options on the computer; nothing more is needed from your phone.",
+        stringResource(R.string.sent),
+        stringResource(R.string.your_computers_builder_has_the_recipe),
     )
     Spacer(Modifier.height(FS.space.s4))
     FSCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(FS.space.s3)) {
             Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = FS.colors.success)
             Column {
-                Text("You can put your phone away", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.you_can_put_your_phone_away), style = MaterialTheme.typography.titleMedium)
                 Text(domain, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
     Spacer(Modifier.height(FS.space.s6))
-    FSPrimaryButton(label = "Done", onClick = onDone, block = true)
+    FSPrimaryButton(label = stringResource(R.string.done), onClick = onDone, block = true)
 }
 
 @Composable
 private fun FailedStep(message: String, onRetry: () -> Unit, onCancel: () -> Unit) {
-    Header("Pairing failed", message)
+    Header(stringResource(R.string.pairing_failed), message)
     Spacer(Modifier.height(FS.space.s6))
-    FSPrimaryButton(label = "Try again", onClick = onRetry, block = true)
+    FSPrimaryButton(label = stringResource(R.string.try_again), onClick = onRetry, block = true)
     Spacer(Modifier.height(FS.space.s2))
-    FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
+    FSSecondaryButton(label = stringResource(R.string.cancel), onClick = onCancel, block = true)
 }
 
 @Composable
 private fun WhereToGetBuilder() {
     FSCard {
         Column {
-            Text("Don't have the builder?", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.dont_have_the_builder), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(FS.space.s1))
             Text(
-                "The Flagship Studio is a small desktop app that writes your server to a USB stick. On your computer, go to flagshipserver.com/studio, install it, and open it to see the code to scan here.",
+                stringResource(R.string.the_flagship_studio_is_a_small),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )

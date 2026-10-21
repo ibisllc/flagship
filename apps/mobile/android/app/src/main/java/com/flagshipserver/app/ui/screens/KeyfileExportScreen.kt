@@ -10,6 +10,8 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -112,7 +114,7 @@ fun KeyfileExportScreen(
     }
 
     FSScreen(
-        title = "Account backup",
+        title = stringResource(R.string.account_backup),
         onBack = { nav.popBackStack() },
         modifier = Modifier.semantics { contentDescription = "keyfile-export" },
     ) {
@@ -121,7 +123,7 @@ fun KeyfileExportScreen(
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = FS.colors.danger, modifier = Modifier.size(24.dp))
                 Text(
-                    "Anyone with both this file and its passphrase can take over your account and lock you out.",
+                    stringResource(R.string.anyone_with_both_this_file_and),
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
@@ -133,7 +135,7 @@ fun KeyfileExportScreen(
                 FSField(
                     value = passphrase,
                     onValueChange = vm::setPassphrase,
-                    label = "Passphrase",
+                    label = stringResource(R.string.passphrase),
                     helper = if (passphrase.isEmpty() || vm.passphraseStrong) KeyfileExportViewModel.RULE else null,
                     error = if (passphrase.isEmpty() || vm.passphraseStrong) null
                     else KeyfileExportViewModel.RULE_ERROR,
@@ -143,8 +145,8 @@ fun KeyfileExportScreen(
                 FSField(
                     value = confirm,
                     onValueChange = vm::setConfirmPassphrase,
-                    label = "Confirm passphrase",
-                    error = if (confirm.isEmpty() || vm.passphrasesMatch) null else "Passphrases don't match.",
+                    label = stringResource(R.string.confirm_passphrase),
+                    error = if (confirm.isEmpty() || vm.passphrasesMatch) null else stringResource(R.string.passphrases_dont_match),
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.semantics { contentDescription = "keyfile-export-confirm" },
                 )
@@ -156,7 +158,7 @@ fun KeyfileExportScreen(
             AckCheckbox(
                 checked = ackControl,
                 onToggle = { vm.setAckControl(!ackControl) },
-                text = "I understand anyone with this file and passphrase controls my entire account.",
+                text = stringResource(R.string.i_understand_anyone_with_this_file),
                 cd = "keyfile-export-ack-control",
             )
         }
@@ -166,7 +168,7 @@ fun KeyfileExportScreen(
         }
 
         FSPrimaryButton(
-            label = if (working) "Creating…" else "Create backup file",
+            label = if (working) stringResource(R.string.creating) else stringResource(R.string.create_backup_file),
             onClick = { vm.createBackup() },
             enabled = canCreate && !working,
             block = true,
@@ -179,7 +181,7 @@ fun KeyfileExportScreen(
                 Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                     Icon(Icons.Outlined.Verified, contentDescription = null, tint = FS.colors.success, modifier = Modifier.size(24.dp))
                     Text(
-                        "Backup saved. Keep it somewhere safe and offline.",
+                        stringResource(R.string.backup_saved_keep_it_somewhere_safe),
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.semantics { contentDescription = "keyfile-export-saved" },
                     )
@@ -187,7 +189,7 @@ fun KeyfileExportScreen(
             }
             if (onSaved != null) {
                 FSPrimaryButton(
-                    label = "Continue into the app",
+                    label = stringResource(R.string.continue_into_the_app),
                     onClick = onSaved,
                     block = true,
                     large = true,

@@ -4,6 +4,8 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -118,7 +120,7 @@ fun FlagshipInferenceSettingsRow(
     val entry = FreeAiCopy.entry(state)
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("free-ai-card")) {
         Column {
-            FlagshipInferenceText(entry, if (isDefault && entry.usable) "Default for new builds" else null)
+            FlagshipInferenceText(entry, if (isDefault && entry.usable) stringResource(R.string.default_for_new_builds) else null)
             if (defaultModel != null && !entry.loading) {
                 Spacer(Modifier.height(FS.space.s3))
                 defaultModel()
@@ -126,7 +128,7 @@ fun FlagshipInferenceSettingsRow(
             if (entry.usable && !isDefault) {
                 Spacer(Modifier.height(FS.space.s3))
                 FSSecondaryButton(
-                    label = "Make default",
+                    label = stringResource(R.string.make_default),
                     onClick = onMakeDefault,
                     modifier = Modifier.testTag("free-ai-make-default"),
                 )
@@ -150,10 +152,10 @@ fun FlagshipInferenceStepRow(state: FreeAiState, busy: Boolean, lastUsed: Boolea
     val entry = FreeAiCopy.entry(state)
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("build-key-free-ai")) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            FlagshipInferenceText(entry, if (lastUsed && entry.usable) "Last used" else null, Modifier.weight(1f))
+            FlagshipInferenceText(entry, if (lastUsed && entry.usable) stringResource(R.string.last_used) else null, Modifier.weight(1f))
             if (entry.usable) {
                 FSPrimaryButton(
-                    label = if (busy) "…" else "Use this",
+                    label = if (busy) "…" else stringResource(R.string.use_this),
                     onClick = { if (!busy) onUse() },
                     modifier = Modifier.testTag("build-key-use-free-ai"),
                 )

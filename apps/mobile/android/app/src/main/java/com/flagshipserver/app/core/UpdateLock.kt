@@ -10,6 +10,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import okhttp3.Interceptor
@@ -23,7 +24,7 @@ class UpdateRequiredException(
 ) : IOException(message)
 
 object UpdateLock {
-    const val REFUSAL = "Update required. Flagship is paused on this device until you update."
+    val REFUSAL get() = FSStrings.get(R.string.update_required_flagship_is_paused_on)
 
     private val state = MutableStateFlow(false)
 

@@ -5,10 +5,13 @@
 
 package com.flagshipserver.app.push
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
+
 object ShareStartupPush {
     const val KIND = "share-start-up"
     const val TITLE = "Flagship"
-    const val BODY = "A server shared with you is asking you to unlock it."
+    val BODY get() = FSStrings.get(R.string.a_server_shared_with_you_is)
 
     fun matches(data: Map<String, String>): Boolean = data["kind"] == KIND
 }

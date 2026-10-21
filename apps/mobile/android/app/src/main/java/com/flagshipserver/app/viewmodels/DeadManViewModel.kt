@@ -9,6 +9,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.DeadManAffirmInner
@@ -86,7 +88,7 @@ class DeadManViewModel(
     ): Boolean {
         val user = username()
         if (user.isNullOrEmpty()) {
-            _phase.value = DeadManPhase.Failed("No active account on this device.")
+            _phase.value = DeadManPhase.Failed(FSStrings.get(R.string.no_active_account_on_this_device))
             return false
         }
         // Turning the switch on: first remove every auto-unlock lease, because none may outlive the
@@ -107,9 +109,9 @@ class DeadManViewModel(
         val irk: Ed25519Sign
         try {
             val verb = if (enabled) "Arm" else "Disarm"
-            irk = signer("$verb dead-man lock for $serverDomain")
+            irk = signer(FSStrings.get(R.string.dead_man_lock_for, verb, serverDomain))
         } catch (e: Throwable) {
-            _phase.value = DeadManPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
+            _phase.value = DeadManPhase.Failed(FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(e)))
             return false
         }
         val issuedAt = now()
@@ -126,7 +128,7 @@ class DeadManViewModel(
                 ),
             )
         } catch (e: Throwable) {
-            _phase.value = DeadManPhase.Failed("Couldn't sign: ${UserErrorText.reason(e)}")
+            _phase.value = DeadManPhase.Failed(FSStrings.get(R.string.couldnt_sign, UserErrorText.reason(e)))
             return false
         }
 
@@ -163,9 +165,9 @@ class DeadManViewModel(
     suspend fun affirm(): Long? {
         val irk: Ed25519Sign
         try {
-            irk = signer("Keep $serverDomain unlocked")
+            irk = signer(FSStrings.get(R.string.keep_unlocked_2, serverDomain))
         } catch (e: Throwable) {
-            _phase.value = DeadManPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
+            _phase.value = DeadManPhase.Failed(FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(e)))
             return null
         }
         val nonce = nonceGen()
@@ -176,7 +178,7 @@ class DeadManViewModel(
                 DeadManAffirmation.canonicalBytes(serverDomain, nonce, issuedAt),
             )
         } catch (e: Throwable) {
-            _phase.value = DeadManPhase.Failed("Couldn't sign: ${UserErrorText.reason(e)}")
+            _phase.value = DeadManPhase.Failed(FSStrings.get(R.string.couldnt_sign, UserErrorText.reason(e)))
             return null
         }
 
@@ -207,9 +209,9 @@ class DeadManViewModel(
     }
 
     private fun friendly(e: HttpException): String = when (e.status) {
-        403 -> "The server rejected the request. Sign in again and retry."
-        404, 502, 503 -> "The server isn't reachable right now."
-        else -> "Server error (${e.status}): ${e.body}"
+        403 -> FSStrings.get(R.string.the_server_rejected_the_request_sign)
+        404, 502, 503 -> FSStrings.get(R.string.the_server_isnt_reachable_right_now)
+        else -> FSStrings.get(R.string.server_error, e.status, e.body)
     }
 
     companion object {

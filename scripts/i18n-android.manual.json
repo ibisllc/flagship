@@ -1,0 +1,38 @@
+{
+  "_about": "Edits the extractor cannot make by itself. `i18n-android.mjs extract` applies them after its own rewrite (each `edits` entry is skipped when its `find` text is not present, so re-running is safe). `plurals` are resources with one/other forms; the call sites below switch from a suffix-building string to FSStrings.plural.",
+  "plurals": {
+    "minutes_ago": { "one": "%1$s minute ago", "other": "%1$s minutes ago", "ctx": "core/AppState.kt relative time" },
+    "hours_ago": { "one": "%1$s hour ago", "other": "%1$s hours ago", "ctx": "core/AppState.kt relative time" },
+    "days_ago": { "one": "%1$s day ago", "other": "%1$s days ago", "ctx": "core/AppState.kt relative time" },
+    "held_by_other_servers": { "one": "Held by %1$s other server", "other": "Held by %1$s other servers", "ctx": "core/BackupsText.kt" },
+    "apps_count": { "one": "%1$s app", "other": "%1$s apps", "ctx": "core/BackupsText.kt" },
+    "pieces_count": { "one": "%1$s piece", "other": "%1$s pieces", "ctx": "core/PeerBackup.kt" },
+    "restore_by_days_left": { "one": "Restore by %1$s (%2$s day left).", "other": "Restore by %1$s (%2$s days left).", "ctx": "core/PeerBackup.kt" },
+    "servers_hold_its_pieces": { "one": "%1$s server holds its pieces; %2$s bring it back.", "other": "%1$s servers hold its pieces; %2$s bring it back.", "ctx": "core/PeerBackup.kt" },
+    "hours_count": { "one": "%1$s hour", "other": "%1$s hours", "ctx": "ui/screens/CreateServerScreen.kt" },
+    "started_steps": { "one": "Started %1$s · %2$s step", "other": "Started %1$s · %2$s steps", "ctx": "viewmodels/BuildModeViewModels.kt" },
+    "restored_apps": { "one": "Restored %1$s app", "other": "Restored %1$s apps", "ctx": "viewmodels/ServerArchiveViewModels.kt" }
+  },
+  "strings": {
+    "health": { "en": "Health", "ctx": "ui/screens/ServerMonitoringSection.kt (row title)" },
+    "memory": { "en": "Memory", "ctx": "ui/screens/ServerMonitoringSection.kt (row title)" },
+    "disk": { "en": "Disk", "ctx": "ui/screens/ServerMonitoringSection.kt (row title)" },
+    "network": { "en": "Network", "ctx": "ui/screens/ServerMonitoringSection.kt (row title)" },
+    "certificate": { "en": "Certificate", "ctx": "ui/screens/ServerMonitoringSection.kt (row title)" },
+    "cpu": { "en": "CPU", "ctx": "ui/screens/ServerMonitoringSection.kt (row title)", "translatable": false }
+  },
+  "edits": [
+    { "file": "ui/screens/CreateServerScreen.kt", "find": "FSStrings.get(R.string.hour, hours.toInt(), if (hours == 1.0) \"\" else \"s\")", "replace": "FSStrings.plural(R.plurals.hours_count, hours.toInt(), hours.toInt())" },
+    { "file": "viewmodels/BuildModeViewModels.kt", "find": "FSStrings.get(R.string.started_step, started, build.entryCount, if (build.entryCount == 1) \"\" else \"s\")", "replace": "FSStrings.plural(R.plurals.started_steps, build.entryCount, started, build.entryCount)" },
+    { "file": "viewmodels/ServerArchiveViewModels.kt", "find": "FSStrings.get(R.string.restored_app, ok, if (ok == 1) \"\" else \"s\")", "replace": "FSStrings.plural(R.plurals.restored_apps, ok, ok)" },
+    { "file": "core/PeerBackup.kt", "find": "FSStrings.get(R.string.piece, h.bricks, if (h.bricks == 1) \"\" else \"s\")", "replace": "FSStrings.plural(R.plurals.pieces_count, h.bricks, h.bricks)" },
+    { "file": "core/PeerBackup.kt", "find": "FSStrings.get(R.string.restore_by_day_left, formatDate(keepUntil), days, if (days == 1L) \"\" else \"s\")", "replace": "FSStrings.plural(R.plurals.restore_by_days_left, days.toInt(), formatDate(keepUntil), days)" },
+    { "file": "core/PeerBackup.kt", "find": "FSStrings.get(R.string.server_hold_its_pieces_bring_it, summary.holders, if (summary.holders == 1) \"\" else \"s\", summary.needed)", "replace": "FSStrings.plural(R.plurals.servers_hold_its_pieces, summary.holders, summary.holders, summary.needed)" },
+    { "file": "core/BackupsText.kt", "find": "FSStrings.get(R.string.held_by_other_server, p.holders, if (p.holders == 1) \"\" else \"s\")", "replace": "FSStrings.plural(R.plurals.held_by_other_servers, p.holders, p.holders)" },
+    { "file": "core/BackupsText.kt", "find": "FSStrings.get(R.string.app, b.apps.size, if (b.apps.size == 1) \"\" else \"s\")", "replace": "FSStrings.plural(R.plurals.apps_count, b.apps.size, b.apps.size)" },
+    { "file": "core/AppState.kt", "find": "FSStrings.get(R.string.minute_ago, min, if (min == 1L) \"\" else \"s\")", "replace": "FSStrings.plural(R.plurals.minutes_ago, min.toInt(), min)" },
+    { "file": "core/AppState.kt", "find": "FSStrings.get(R.string.hour_ago, hr, if (hr == 1L) \"\" else \"s\")", "replace": "FSStrings.plural(R.plurals.hours_ago, hr.toInt(), hr)" },
+    { "file": "core/AppState.kt", "find": "FSStrings.get(R.string.day_ago, day, if (day == 1L) \"\" else \"s\")", "replace": "FSStrings.plural(R.plurals.days_ago, day.toInt(), day)" },
+    { "file": "ui/screens/ServerMonitoringSection.kt", "find": "internal enum class MonitoringKey(val title: String) {\n    HEALTH(\"Health\"), CPU(\"CPU\"), MEMORY(\"Memory\"), DISK(\"Disk\"), NETWORK(\"Network\"), CERTIFICATE(\"Certificate\"),\n}", "replace": "internal enum class MonitoringKey(@androidx.annotation.StringRes private val titleRes: Int) {\n    HEALTH(R.string.health), CPU(R.string.cpu), MEMORY(R.string.memory), DISK(R.string.disk), NETWORK(R.string.network),\n    CERTIFICATE(R.string.certificate),\n    ;\n\n    /** The row's heading, in the language the person is using. */\n    val title: String get() = FSStrings.get(titleRes)\n}" }
+  ]
+}

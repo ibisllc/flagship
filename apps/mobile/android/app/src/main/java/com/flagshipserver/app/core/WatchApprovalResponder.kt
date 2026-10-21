@@ -16,6 +16,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.companion.ApproveCommand
 import com.flagshipserver.companion.ApproveReply
 
@@ -44,14 +45,14 @@ class WatchApprovalResponder(
     private val onNeedsUnlock: (ApproveCommand) -> Unit = {},
 ) {
     companion object {
-        const val NOT_ENROLLED = "Turn on Quick approve from watch in Flagship on your phone first."
+        val NOT_ENROLLED get() = FSStrings.get(R.string.turn_on_quick_approve_from_watch)
         /** The app is in front on the phone but hasn't used biometrics this session. */
-        const val UNLOCK_ONCE = "Unlock Flagship on your phone once, then approve again."
+        val UNLOCK_ONCE get() = FSStrings.get(R.string.unlock_flagship_on_your_phone_once)
         /** The app is closed or in the background. */
-        const val OPEN_AND_UNLOCK = "Open Flagship on your phone and unlock it once, then approve again."
-        const val SIGNED_OUT = "Sign in to Flagship on your phone first."
-        const val GONE = "This server isn't waiting any more."
-        const val UNSUPPORTED = "The watch asked for something this phone can't do."
+        val OPEN_AND_UNLOCK get() = FSStrings.get(R.string.open_flagship_on_your_phone_and)
+        val SIGNED_OUT get() = FSStrings.get(R.string.sign_in_to_flagship_on_your)
+        val GONE get() = FSStrings.get(R.string.this_server_isnt_waiting_any_more)
+        val UNSUPPORTED get() = FSStrings.get(R.string.the_watch_asked_for_something_this)
     }
 
     suspend fun respond(cmd: ApproveCommand): ApproveReply {
@@ -79,7 +80,7 @@ class WatchApprovalResponder(
             source.confirmAndRespond(req, depositAutoLease = false)
             ApproveReply(cmd.serverFqdn, ok = true)
         } catch (e: Throwable) {
-            fail("Approval failed: ${e.message ?: e.javaClass.simpleName}")
+            fail(FSStrings.get(R.string.approval_failed, e.message ?: e.javaClass.simpleName))
         }
     }
 }

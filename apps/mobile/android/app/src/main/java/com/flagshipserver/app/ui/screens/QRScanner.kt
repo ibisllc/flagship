@@ -6,6 +6,8 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.camera.core.CameraSelector
@@ -47,7 +49,7 @@ fun QRScanner(onScanned: (String) -> Unit) {
 
     if (com.flagshipserver.app.core.Variant.stubCamera) {
         Box(Modifier.fillMaxWidth().aspectRatio(1f).background(FS.colors.surfaceSunken), contentAlignment = Alignment.Center) {
-            Text("Viewfinder", color = FS.colors.textMuted)
+            Text(stringResource(R.string.viewfinder), color = FS.colors.textMuted)
         }
         return
     }
@@ -68,7 +70,7 @@ fun QRScanner(onScanned: (String) -> Unit) {
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                "Camera permission required to scan.",
+                stringResource(R.string.camera_permission_required_to_scan),
                 color = FS.colors.textMuted,
             )
         }

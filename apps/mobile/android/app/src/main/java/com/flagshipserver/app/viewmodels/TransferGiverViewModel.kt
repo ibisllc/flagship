@@ -16,6 +16,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.api.ServerTransferClient
@@ -78,10 +80,10 @@ class TransferGiverViewModel(
         val key: Ed25519Sign
         val pub: String
         try {
-            key = signer("Transfer $serverDomain to another account")
+            key = signer(FSStrings.get(R.string.transfer_to_another_account_2, serverDomain))
             pub = irkPubHex()
         } catch (e: Throwable) {
-            _phase.value = TransferGiverPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
+            _phase.value = TransferGiverPhase.Failed(FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(e)))
             return
         }
         irk = key
@@ -89,7 +91,7 @@ class TransferGiverViewModel(
         // The offer ORDER signs with the admin master root when held; the QR's
         // giverIrkPub tracks it. The stored `irk`/`pubHex` above (used for the
         // later disk-key re-seal + poll auth) stay the membership IRK.
-        val orderKey = orderSigner("Transfer $serverDomain to another account")
+        val orderKey = orderSigner(FSStrings.get(R.string.transfer_to_another_account_2, serverDomain))
         val orderPub = if (orderKey != null) orderKeyPubHex() else null
         try {
             val built = ServerTransferFlow.buildOffer(
@@ -139,7 +141,7 @@ class TransferGiverViewModel(
             }
         } catch (e: Throwable) {
             _phase.value = TransferGiverPhase.Failed(
-                "Ownership moved, but the disk key re-seal failed: ${e.message}. The new owner can retry from their device.",
+                FSStrings.get(R.string.ownership_moved_but_the_disk_key, e.message),
             )
             return true
         }
@@ -153,7 +155,7 @@ class TransferGiverViewModel(
         //     `RehomeAuthorization`. A box with no pinned admin root REFUSES to
         //     re-home without it.
         val nonce = transferNonce
-        val giverAdminRoot = if (nonce != null) orderSigner("Hand off admin of $serverDomain") else null
+        val giverAdminRoot = if (nonce != null) orderSigner(FSStrings.get(R.string.hand_off_admin_of, serverDomain)) else null
         if (nonce != null && giverAdminRoot != null) {
             try {
                 val oldPub = orderKeyPubHex() ?: error("admin root pub unavailable")
@@ -170,7 +172,7 @@ class TransferGiverViewModel(
                 client.postAdminHandoff(serverDomain, handoff)
             } catch (e: Throwable) {
                 _phase.value = TransferGiverPhase.Failed(
-                    "Ownership moved, but the admin hand-off failed: ${e.message}. A server with a pinned admin root will wait for this hand-off before re-homing — retry from this device.",
+                    FSStrings.get(R.string.ownership_moved_but_the_admin_hand, e.message),
                 )
                 return true
             }
@@ -188,7 +190,7 @@ class TransferGiverViewModel(
                     client.postRehomeAuth(serverDomain, rehomeAuth)
                 } catch (e: Throwable) {
                     _phase.value = TransferGiverPhase.Failed(
-                        "Ownership moved, but the re-home authorization failed: ${e.message}. The new owner's server will wait for this authorization before re-homing — retry from this device.",
+                        FSStrings.get(R.string.ownership_moved_but_the_re_home, e.message),
                     )
                     return true
                 }

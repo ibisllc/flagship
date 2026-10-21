@@ -1,5 +1,8 @@
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.text.withStyle
@@ -77,15 +80,15 @@ fun WelcomeScreen(nav: NavController) {
         Column {
             Text(
                 text = androidx.compose.ui.text.buildAnnotatedString {
-                    append("Your stuff,\non ")
-                    withStyle(androidx.compose.ui.text.SpanStyle(color = FS.colors.accent)) { append("your hardware.") }
+                    append(stringResource(R.string.your_stuff_on))
+                    withStyle(androidx.compose.ui.text.SpanStyle(color = FS.colors.accent)) { append(stringResource(R.string.your_hardware)) }
                 },
                 color = FS.colors.text,
                 style = MaterialTheme.typography.displaySmall.copy(fontSize = 40.sp, lineHeight = 48.sp),
             )
             Spacer(Modifier.height(FS.space.s4))
             Text(
-                text = "A personal cloud you actually own. Your phone holds the keys; your server runs the services.",
+                text = stringResource(R.string.a_personal_cloud_you_actually_own),
                 color = FS.colors.textMuted,
                 style = MaterialTheme.typography.titleMedium,
             )
@@ -95,13 +98,13 @@ fun WelcomeScreen(nav: NavController) {
         // the account name, or join with a pairing code from another device
         // of the account. Same footer as the app lock.
         FSActionFooter(
-            primary = "Create your account",
+            primary = stringResource(R.string.create_your_account),
             primaryTag = "welcome-create",
             onPrimary = { nav.navigate("username") },
-            secondary = "Connect to an existing account",
+            secondary = stringResource(R.string.connect_to_an_existing_account),
             secondaryTag = "welcome-connect",
             onSecondary = { nav.navigate("connect") },
-            secondaryDescription = "Connect to an existing account. Sign in with your account name, or join with a pairing code.",
+            secondaryDescription = stringResource(R.string.connect_to_an_existing_account_sign),
         )
       }
       }
@@ -136,7 +139,7 @@ private fun BoxIllustration() {
         modifier = Modifier
             .fillMaxWidth()
             .height(200.dp)
-            .semantics { contentDescription = "Your phone and your server, connected." },
+            .semantics { contentDescription = FSStrings.get(R.string.your_phone_and_your_server_connected) },
     ) {
         val w = size.width
         val h = size.height

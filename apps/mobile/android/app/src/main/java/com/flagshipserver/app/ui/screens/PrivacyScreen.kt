@@ -8,6 +8,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -64,14 +68,14 @@ fun PrivacyScreen(nav: NavController) {
         if (newValue) {
             val activity = ctx as? FragmentActivity
             if (activity == null) {
-                errorMsg = "Lost activity context; restart and retry."
+                errorMsg = FSStrings.get(R.string.lost_activity_context_restart_and_retry)
             } else {
                 scope.launch {
                     try {
                         BiometricGate.evaluate(
                             activity = activity,
-                            title = "Enable biometric lock",
-                            subtitle = "Confirm to enable",
+                            title = FSStrings.get(R.string.enable_biometric_lock),
+                            subtitle = FSStrings.get(R.string.confirm_to_enable),
                         )
                         privacy?.setRequireBiometricAtLaunch(true)
                         app.setRequireBiometricAtLaunch(true)
@@ -79,7 +83,7 @@ fun PrivacyScreen(nav: NavController) {
                     } catch (_: BiometricCancelled) {
                         // No-op — user backed out.
                     } catch (e: Throwable) {
-                        errorMsg = "Couldn't enable. ${UserErrorText.of(e)}"
+                        errorMsg = FSStrings.get(R.string.couldnt_enable, UserErrorText.of(e))
                     }
                 }
             }
@@ -89,22 +93,18 @@ fun PrivacyScreen(nav: NavController) {
         }
     }
 
-    FSScreen(title = "Privacy", onBack = { nav.popBackStack() }) {
+    FSScreen(title = stringResource(R.string.privacy), onBack = { nav.popBackStack() }) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            FSGroup(header = "Lock the app") {
+            FSGroup(header = stringResource(R.string.lock_the_app)) {
                 FSRow(
-                    title = "Lock with biometrics",
+                    title = stringResource(R.string.lock_with_biometrics),
                     icon = Icons.Outlined.Fingerprint,
                     onClick = { onBiometricChange(!enabled) },
                     trailing = { Switch(checked = enabled, onCheckedChange = onBiometricChange) },
                 )
             }
             Explainer(
-                "On by default. Flagship asks for biometrics each time the app " +
-                    "launches or comes back from the background, so you stay signed " +
-                    "in without re-entering your passphrase. Turn it off to open " +
-                    "straight in. Either way your servers stay running; this just " +
-                    "controls who can see and tap.",
+                stringResource(R.string.on_by_default_flagship_asks_for),
             )
             errorMsg?.let { msg ->
                 Text(
@@ -117,9 +117,9 @@ fun PrivacyScreen(nav: NavController) {
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            FSGroup(header = "Require your passphrase") {
+            FSGroup(header = stringResource(R.string.require_your_passphrase)) {
                 FSRow(
-                    title = "Sign in with your passphrase every time",
+                    title = stringResource(R.string.sign_in_with_your_passphrase_every),
                     icon = Icons.Outlined.Password,
                     onClick = { privacy?.setRequirePassphraseAtLaunch(!passphraseEnabled) },
                     trailing = {
@@ -133,9 +133,7 @@ fun PrivacyScreen(nav: NavController) {
                 )
             }
             Explainer(
-                "Off by default. When on, Flagship doesn't keep you signed in — " +
-                    "each launch needs a full sign-in with your account passphrase, " +
-                    "not just biometrics. The strongest option, and the slowest.",
+                stringResource(R.string.off_by_default_when_on_flagship),
             )
         }
     }

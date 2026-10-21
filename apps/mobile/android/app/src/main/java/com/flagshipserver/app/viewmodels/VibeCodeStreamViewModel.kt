@@ -10,6 +10,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.VibeCodeFrame
 import com.flagshipserver.app.core.ActiveOperationsCenter
@@ -85,7 +87,7 @@ class VibeCodeStreamViewModel(
         when (frame) {
             is VibeCodeFrame.Token -> _transcript.value += frame.text
             is VibeCodeFrame.ManifestEmit -> _manifestJson.value = frame.manifestJson
-            is VibeCodeFrame.RepoCreate -> _buildLogs.value = _buildLogs.value + "Created git repo."
+            is VibeCodeFrame.RepoCreate -> _buildLogs.value = _buildLogs.value + FSStrings.get(R.string.created_git_repo)
             is VibeCodeFrame.BuildStart -> {
                 _status.value = Status.BUILDING
                 _buildLogs.value = _buildLogs.value + "── BUILD START ──"

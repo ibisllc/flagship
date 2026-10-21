@@ -5,6 +5,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.AiModelsResponse
 import com.flagshipserver.app.api.LlmProviderCredential
 import com.flagshipserver.app.api.InferenceCatalogResponse
@@ -44,10 +45,10 @@ sealed class VisionCheck {
 }
 
 object ModelMenus {
-    const val FLAGSHIP_TITLE = "Flagship Inference"
-    const val DEFAULT_TITLE = "Default model"
+    val FLAGSHIP_TITLE get() = FSStrings.get(R.string.flagship_inference)
+    val DEFAULT_TITLE get() = FSStrings.get(R.string.default_model)
     const val UNKNOWN_CAPS = "capabilities unknown"
-    const val KEY_REFUSED = "The key was refused"
+    val KEY_REFUSED get() = FSStrings.get(R.string.the_key_was_refused)
     const val MODEL_FIELD = "Model"
     const val EFFORT = "Effort"
 
@@ -57,7 +58,7 @@ object ModelMenus {
 
     /** An effort in the provider's own words, capitalised ("xhigh" → "Extra high"). */
     fun effortLabel(effort: String): String = when (effort.lowercase()) {
-        "xhigh" -> "Extra high"
+        "xhigh" -> FSStrings.get(R.string.extra_high)
         else -> effort.lowercase().replaceFirstChar { it.uppercase() }
     }
 
@@ -166,7 +167,7 @@ object ModelMenus {
                 return if (alt != null) {
                     VisionCheck.Switch(
                         select(menu, alt.id),
-                        "I'll have to switch to ${alt.model} (${multiplier(alt.multiplier)}) for this.",
+                        FSStrings.get(R.string.ill_have_to_switch_to_for, alt.model, multiplier(alt.multiplier)),
                     )
                 } else {
                     VisionCheck.Blocked(cantSee(m.model.ifBlank { shortLabel(m) }))
@@ -177,7 +178,7 @@ object ModelMenus {
                 if (o.vision != false) return VisionCheck.Send
                 val alt = option(menu, o.visionAlternative)
                 return if (alt != null) {
-                    VisionCheck.Switch(select(menu, alt.id), "I'll have to switch to ${alt.label} for this.")
+                    VisionCheck.Switch(select(menu, alt.id), FSStrings.get(R.string.ill_have_to_switch_to_for_2, alt.label))
                 } else {
                     VisionCheck.Blocked(cantSee(o.label))
                 }
@@ -186,7 +187,7 @@ object ModelMenus {
         }
     }
 
-    private fun cantSee(name: String) = "$name can't see images. Remove them or pick another model."
+    private fun cantSee(name: String) = FSStrings.get(R.string.cant_see_images_remove_them_or, name)
 
     /** "used 2.8 credits", "used 1 credit": one decimal at most. */
     fun creditsLine(credits: Double): String {

@@ -7,6 +7,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import androidx.compose.ui.semantics.contentDescription
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -396,7 +400,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                     onRemove = { i -> staged = staged.filterIndexed { j, _ -> j != i } },
                     trailing = {
                         FSPrimaryButton(
-                            label = if (submitting) "Sending…" else "Send",
+                            label = if (submitting) stringResource(R.string.sending_2) else stringResource(R.string.send),
                             enabled = !submitting && ChatContinuation.canSend(replyDraft, continuing),
                             modifier = Modifier.semantics { testTag = sendTag },
                             onClick = {
@@ -452,13 +456,13 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                 FSCard {
                     Column {
                         Text(
-                            "Conversation",
+                            stringResource(R.string.conversation),
                             color = FS.colors.accentText,
                             style = MaterialTheme.typography.labelLarge,
                         )
                         Spacer(Modifier.height(FS.space.s3))
                         if (s.messages.isEmpty()) {
-                            Text("No messages yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.no_messages_yet), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                         } else {
                             val (hidden, shown) = transcript
                             if (hidden > 0) {
@@ -483,7 +487,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                     is VibeCodePendingRequest.TalkToUser -> {
                         FSCard {
                             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-                                Text("The AI asks", color = FS.colors.accentText, style = MaterialTheme.typography.labelLarge)
+                                Text(stringResource(R.string.the_ai_asks), color = FS.colors.accentText, style = MaterialTheme.typography.labelLarge)
                                 Text(pending.payload.message, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
                             }
                         }
@@ -492,12 +496,12 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                         val p = pending.payload
                         FSCard {
                             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-                                Text("The AI needs ${p.name}", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+                                Text(fsString(R.string.the_ai_needs, p.name), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
                                 Text(p.description, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
-                                Text("Why: ${p.why}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                                Text(fsString(R.string.why, p.why), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                                 val ex = p.example
                                 if (ex != null && ex.isNotEmpty()) {
-                                    Text("Example: $ex", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                                    Text(fsString(R.string.example, ex), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                                 }
                             }
                         }
@@ -510,7 +514,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                                 Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = FS.colors.success, modifier = Modifier.size(22.dp))
-                                Text("Deployed", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+                                Text(stringResource(R.string.deployed), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
                             }
                             if (deployed != null && deployed.url.isNotEmpty()) {
                                 Text(
@@ -534,7 +538,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-                                Text("Deploying", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+                                Text(stringResource(R.string.deploying), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
                                 Text(
                                     VibeCodeDeployViewModel.stageText(deployingStage),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -552,12 +556,12 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                     FSCard {
                         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                             Text(
-                                if (failedReason != null) "The app didn't go live" else "Ready to deploy",
+                                if (failedReason != null) stringResource(R.string.the_app_didnt_go_live) else stringResource(R.string.ready_to_deploy),
                                 color = MaterialTheme.colorScheme.onSurface,
                                 style = MaterialTheme.typography.titleMedium,
                             )
                             Text(
-                                failedReason ?: "The AI finished writing your service. Deploy it to your server.",
+                                failedReason ?: stringResource(R.string.the_ai_finished_writing_your_service),
                                 color = if (failedReason != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.semantics { testTag = "vibecode-deploy-detail" },
@@ -565,7 +569,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                             if (failedReason != null) RelayFailureAction(failedReason)
                             Spacer(Modifier.height(FS.space.s1))
                             FSPrimaryButton(
-                                label = if (failedReason != null) "Try again" else "Deploy",
+                                label = if (failedReason != null) stringResource(R.string.try_again) else stringResource(R.string.deploy),
                                 modifier = Modifier.semantics { testTag = "vibecode-deploy-btn" },
                                 block = true,
                                 onClick = { deployVm.deploy() },
@@ -596,7 +600,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                         .padding(FS.space.s2)
                         .semantics { testTag = "vibecode-jump-latest" },
                 ) {
-                    Icon(Icons.Outlined.ArrowDownward, contentDescription = "Jump to latest")
+                    Icon(Icons.Outlined.ArrowDownward, contentDescription = stringResource(R.string.jump_to_latest))
                 }
             }
         }
@@ -606,7 +610,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
         when (pending) {
             is VibeCodePendingRequest.TalkToUser -> InputBar {
                 Composer(
-                    label = "Type your reply",
+                    label = stringResource(R.string.type_your_reply),
                     placeholder = null,
                     continuing = false,
                     fieldTag = "vibecode-reply-field",
@@ -620,8 +624,8 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                         OutlinedTextField(
                             value = envValueDraft,
                             onValueChange = { envValueDraft = it },
-                            label = { Text("Paste your value") },
-                            supportingText = { Text("Sent once to your server. Not saved on your phone.") },
+                            label = { Text(stringResource(R.string.paste_your_value)) },
+                            supportingText = { Text(stringResource(R.string.sent_once_to_your_server_not)) },
                             singleLine = true,
                             visualTransformation = PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -633,7 +637,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                             FSSecondaryButton(
-                                label = "Decline",
+                                label = stringResource(R.string.decline),
                                 modifier = Modifier.weight(1f).semantics { testTag = "vibecode-envvar-decline-btn" },
                                 onClick = {
                                     scope.launch(Dispatchers.Main) {
@@ -647,7 +651,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                 },
                             )
                             FSPrimaryButton(
-                                label = if (submitting) "Sending…" else "Send value",
+                                label = if (submitting) stringResource(R.string.sending_2) else stringResource(R.string.send_value),
                                 enabled = !submitting && envValueDraft.isNotEmpty() && s.appId != null,
                                 modifier = Modifier.weight(1f).semantics { testTag = "vibecode-envvar-send-btn" },
                                 onClick = {
@@ -655,7 +659,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                     // serviceId = "<creator>--<slug>"; split on `--`
                                     // (docs/service-addressing-double-dash.md).
                                     if (appId.indexOf("--") <= 0) {
-                                        errorMessage = "Invalid app id shape"
+                                        errorMessage = FSStrings.get(R.string.invalid_app_id_shape)
                                         return@FSPrimaryButton
                                     }
                                     scope.launch(Dispatchers.Main) {
@@ -711,27 +715,27 @@ private fun InputBar(content: @Composable () -> Unit) {
 
 /** The screen's title: where the build is, in a word or two (as iOS). */
 internal fun chatTitle(status: String?): String = when (status) {
-    "streaming" -> "Generating"
-    "awaiting-tool-response" -> "Your turn"
-    "ready-to-deploy" -> "Ready to deploy"
-    "deploying" -> "Deploying"
-    "deployed" -> "Live"
-    "failed" -> "Failed"
-    "cancelled" -> "Stopped"
-    else -> "Build chat"
+    "streaming" -> FSStrings.get(R.string.generating)
+    "awaiting-tool-response" -> FSStrings.get(R.string.your_turn)
+    "ready-to-deploy" -> FSStrings.get(R.string.ready_to_deploy)
+    "deploying" -> FSStrings.get(R.string.deploying)
+    "deployed" -> FSStrings.get(R.string.live)
+    "failed" -> FSStrings.get(R.string.failed)
+    "cancelled" -> FSStrings.get(R.string.stopped)
+    else -> FSStrings.get(R.string.build_chat)
 }
 
 /** How close to the bottom still counts as following the conversation. */
 private const val FOLLOW_SLACK_PX = 120
 
-internal const val EARLIER_SUMMARISED = "Earlier conversation summarised"
+internal val EARLIER_SUMMARISED get() = FSStrings.get(R.string.earlier_conversation_summarised)
 
-internal const val KEY_GONE = "That AI key isn't saved on this phone any more. Pick another model."
+internal val KEY_GONE get() = FSStrings.get(R.string.that_ai_key_isnt_saved_on)
 
 /** When the chat takes a new message that isn't an answer, and what its field says. */
 internal object ChatContinuation {
-    const val ASK_FOR_CHANGE = "Ask for a change…"
-    const val TRY_NEXT = "Tell the AI what to try next…"
+    val ASK_FOR_CHANGE get() = FSStrings.get(R.string.ask_for_a_change)
+    val TRY_NEXT get() = FSStrings.get(R.string.tell_the_ai_what_to_try)
 
     /** The box says the chat can continue and the AI isn't asking anything. */
     fun takesMessage(s: VibeCodeSessionPublicState): Boolean = s.canContinue && s.pendingRequest == null
@@ -805,7 +809,7 @@ internal fun ChatMessage(msg: com.flagshipserver.app.api.VibeCodeSessionMessage)
             contentColor = if (mine) FS.colors.onAccent else MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
                 .fillMaxWidth(0.88f)
-                .semantics { contentDescription = if (mine) "You" else "AI" },
+                .semantics { contentDescription = if (mine) FSStrings.get(R.string.you) else "AI" },
         ) {
             Column(Modifier.padding(horizontal = FS.space.s3, vertical = FS.space.s2)) {
                 Text(msg.text, style = MaterialTheme.typography.bodyLarge)
@@ -842,13 +846,13 @@ internal fun ChatComposerAttachments(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Pill(
-                label = "Photo",
+                label = stringResource(R.string.photo),
                 leading = Icons.Outlined.Image,
                 onClick = onPhoto,
                 modifier = Modifier.semantics { testTag = "vibecode-attach-photo" },
             )
             Pill(
-                label = "File",
+                label = stringResource(R.string.file),
                 leading = Icons.Outlined.AttachFile,
                 onClick = onFile,
                 modifier = Modifier.semantics { testTag = "vibecode-attach-file" },
@@ -873,6 +877,6 @@ internal fun ChatComposerAttachments(
     }
 }
 
-internal const val LEFT_OPEN_WARNING =
-    "This server couldn't make it invite only, so anyone with the link can open it. You can restrict it from the service's Access settings."
+internal val LEFT_OPEN_WARNING get() =
+    FSStrings.get(R.string.this_server_couldnt_make_it_invite)
 

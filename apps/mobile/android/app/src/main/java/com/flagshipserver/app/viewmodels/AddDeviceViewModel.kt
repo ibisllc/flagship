@@ -24,6 +24,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -87,7 +89,7 @@ class AddDeviceViewModel(
     /** Derives + returns the account IRK keypair public + a signer.
      *  Defaults to the active profile's current IRK. */
     private val signAdmit: suspend (DeviceAdmit) -> ByteArray = { admit ->
-        val irk = Keystore.deriveIRK("Vouch for a new device")
+        val irk = Keystore.deriveIRK(FSStrings.get(R.string.vouch_for_a_new_device))
         DeviceAdmitClaim.sign(admit, irk)
     },
     /** Mints the relay session id. Random by default; injectable for
@@ -200,11 +202,11 @@ class AddDeviceViewModel(
         val current = _phase.value
         if (current !is AddDevicePhase.ConfirmSas || !current.gateExpired) return
         val devicePubHex = incomingDevicePubHex ?: run {
-            _phase.value = AddDevicePhase.Failed("Incoming device key missing — start over.")
+            _phase.value = AddDevicePhase.Failed(FSStrings.get(R.string.incoming_device_key_missing_start_over))
             return
         }
         val deviceId = incomingDeviceId ?: run {
-            _phase.value = AddDevicePhase.Failed("Incoming device identity missing — start over.")
+            _phase.value = AddDevicePhase.Failed(FSStrings.get(R.string.incoming_device_identity_missing_start_over))
             return
         }
         _phase.value = AddDevicePhase.Delivering
@@ -247,7 +249,7 @@ class AddDeviceViewModel(
             val grantSigner = if (promoted) {
                 com.google.crypto.tink.subtle.Ed25519Sign(requireNotNull(adminRootSeed()))
             } else {
-                Keystore.deriveIRK("Authorize the new device")
+                Keystore.deriveIRK(FSStrings.get(R.string.authorize_the_new_device))
             }
             val bundle = PairingBundle(
                 umkSeedHex = HexUtil.encode(seed),
@@ -282,5 +284,5 @@ class AddDeviceViewModel(
     }
 
     private fun humanize(t: Throwable): String =
-        UserErrorText.of(t, "Pairing failed. Generate a fresh code and try again.")
+        UserErrorText.of(t, FSStrings.get(R.string.pairing_failed_generate_a_fresh_code))
 }

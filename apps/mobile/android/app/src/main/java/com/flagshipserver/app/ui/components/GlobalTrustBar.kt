@@ -11,6 +11,10 @@
 
 package com.flagshipserver.app.ui.components
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -134,16 +138,13 @@ fun GlobalTrustBar() {
     overriding?.let { f ->
         AlertDialog(
             onDismissRequest = { overriding = null },
-            title = { Text("Continue anyway?") },
+            title = { Text(stringResource(R.string.continue_anyway)) },
             text = {
                 Text(
                     if (f.certClass == com.flagshipserver.app.core.TrustCertClass.CONTROL) {
-                        "We couldn't verify the Flagship control server's certificate (${f.slug}). " +
-                            "Connecting is paused. If you understand the risk, you can continue — " +
-                            "this stays flagged."
+                        fsString(R.string.we_couldnt_verify_the_flagship_control, f.slug)
                     } else {
-                        "We couldn't verify the relay's certificate (${f.slug}). If you understand " +
-                            "the risk, you can continue — this stays flagged."
+                        fsString(R.string.we_couldnt_verify_the_relays_certificate, f.slug)
                     },
                 )
             },
@@ -156,7 +157,7 @@ fun GlobalTrustBar() {
                             // Biometric-gated owner IRK signs the cert-scoped
                             // TrustException (the deriveIRK call fires Face/PIN).
                             val signer = Keystore.deriveIRK(
-                                "Continue with an unverified Flagship control server",
+                                FSStrings.get(R.string.continue_with_an_unverified_flagship_control),
                             )
                             val devicePub = Keystore.irkPubHex()
                             val grantedAt = System.currentTimeMillis()
@@ -189,13 +190,13 @@ fun GlobalTrustBar() {
                                 trustExceptions.post(user, wire)
                             }
                         } catch (t: Throwable) {
-                            toasts.error("Couldn't continue. ${UserErrorText.of(t)}")
+                            toasts.error(FSStrings.get(R.string.couldnt_continue, UserErrorText.of(t)))
                         }
                     }
-                }) { Text("Continue anyway") }
+                }) { Text(stringResource(R.string.continue_anyway_2)) }
             },
             dismissButton = {
-                TextButton(onClick = { overriding = null }) { Text("Not now") }
+                TextButton(onClick = { overriding = null }) { Text(stringResource(R.string.not_now)) }
             },
         )
     }
@@ -245,7 +246,7 @@ private fun TrustSliverLine(
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             ) {
                 Text(
-                    text = "$serverCount servers",
+                    text = fsString(R.string.servers, serverCount),
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onError,
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                 )

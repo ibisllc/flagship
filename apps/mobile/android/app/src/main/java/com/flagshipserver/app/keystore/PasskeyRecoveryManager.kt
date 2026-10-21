@@ -13,6 +13,8 @@
 
 package com.flagshipserver.app.keystore
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import android.app.Activity
 import android.content.Context
 import androidx.credentials.CreateCredentialResponse
@@ -70,7 +72,7 @@ class PasskeyRecoveryManager(
     )
 
     sealed class RecoveryError(msg: String) : RuntimeException(msg) {
-        object PrfUnavailable : RecoveryError("Authenticator doesn't support PRF; use offline codes instead.")
+        object PrfUnavailable : RecoveryError(FSStrings.get(R.string.authenticator_doesnt_support_prf_use_offline))
         data class CreateFailed(val cause0: Throwable) : RecoveryError("Couldn't create passkey: ${cause0.message}")
         data class GetFailed(val cause0: Throwable) : RecoveryError("Couldn't assert passkey: ${cause0.message}")
         data class ProtocolError(val reason: String) : RecoveryError("Recovery protocol error: $reason")
@@ -208,9 +210,9 @@ class PasskeyRecoveryManager(
         const val CREATE_ASSERT_ATTEMPTS = 3
 
         /** Passkey apps by AAGUID (the community passkey-aaguids list). */
-        val KNOWN_PROVIDERS = mapOf(
-            "ea9b8d664d011d213ce4b6b48cb575d4" to "Google Password Manager",
-            "53414d53554e47000000000000000000" to "Samsung Pass",
+        val KNOWN_PROVIDERS get() = mapOf(
+            "ea9b8d664d011d213ce4b6b48cb575d4" to FSStrings.get(R.string.google_password_manager),
+            "53414d53554e47000000000000000000" to FSStrings.get(R.string.samsung_pass),
             "bada5566a7aa401fbd9645619a55120d" to "1Password",
             "d548826e79b4db40a3d811116f7e8349" to "Bitwarden",
             "531126d6e717415c93203d9aa6981239" to "Dashlane",

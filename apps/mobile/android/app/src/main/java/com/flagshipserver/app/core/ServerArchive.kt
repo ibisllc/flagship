@@ -6,6 +6,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -16,14 +17,12 @@ import javax.crypto.spec.SecretKeySpec
 object ServerArchive {
     const val UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024
 
-    const val EXCLUDES_NOTE =
-        "Holds your apps' source, data and settings, never system images: the new server rebuilds each app, so any Flagship server can restore it. Not included: the server's keys and certificate, peer backups, and the Git host."
-    const val PASSCODE_NOTE =
-        "Anyone with the backup file and this passcode can restore the backup, on any account, so keep it somewhere safe and apart from the file. It can't be reset. Your own devices open your backups without it."
-    const val IMPORT_INTRO =
-        "Pick the backup's .flagship file from wherever you keep it. " +
-            "You choose a name; everything else comes from the backup. Then set up the new server as usual, " +
-            "and this screen sends it the backup as soon as it comes online."
+    val EXCLUDES_NOTE get() =
+        FSStrings.get(R.string.holds_your_apps_source_data_and)
+    val PASSCODE_NOTE get() =
+        FSStrings.get(R.string.anyone_with_the_backup_file_and)
+    val IMPORT_INTRO get() =
+        FSStrings.get(R.string.pick_the_backups_flagship_file_from)
 
     private val ID_RE = Regex("^[0-9a-f]{32}$")
 
@@ -71,9 +70,9 @@ object ServerArchive {
 
     fun formatBytes(n: Long): String = when {
         n < 0 -> ""
-        n < 1024 * 1024 -> "${maxOf(1L, Math.round(n / 1024.0))} KB"
+        n < 1024 * 1024 -> FSStrings.get(R.string.kb, maxOf(1L, Math.round(n / 1024.0)))
         n < 1024L * 1024 * 1024 ->
-            if (n < 10L * 1024 * 1024) "%.1f MB".format(Locale.US, n / (1024.0 * 1024)) else "${Math.round(n / (1024.0 * 1024))} MB"
+            if (n < 10L * 1024 * 1024) "%.1f MB".format(Locale.US, n / (1024.0 * 1024)) else FSStrings.get(R.string.mb, Math.round(n / (1024.0 * 1024)))
         else -> "%.1f GB".format(Locale.US, n / (1024.0 * 1024 * 1024))
     }
 }

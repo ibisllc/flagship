@@ -6,6 +6,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -60,7 +61,7 @@ object ArchiveDownloader {
                             val offset = lock.withLock { pending.removeFirstOrNull() } ?: break
                             val data = fetch(offset)
                             if (data.size.toLong() != length(offset)) {
-                                throw DownloadException("The server sent a short piece of the backup. Try again; the download resumes.")
+                                throw DownloadException(FSStrings.get(R.string.the_server_sent_a_short_piece))
                             }
                             lock.withLock {
                                 raf.seek(offset)
@@ -79,7 +80,7 @@ object ArchiveDownloader {
         if (!sha256.isNullOrEmpty() && fileSha256(file) != sha256.lowercase()) {
             file.delete()
             stateFile.delete()
-            throw DownloadException("The downloaded backup doesn't match the server's copy. Try downloading it again.")
+            throw DownloadException(FSStrings.get(R.string.the_downloaded_backup_doesnt_match_the))
         }
         stateFile.delete()
     }
