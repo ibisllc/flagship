@@ -41,7 +41,7 @@ export const BOX_EVENT_LABELS = Object.freeze({
 
 function humanize(s) {
   const words = String(s ?? "").replace(/[._-]+/g, " ").trim();
-  return words ? words.charAt(0).toUpperCase() + words.slice(1) : "Event";
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : tr("Event");
 }
 
 /**
@@ -54,13 +54,14 @@ export function boxEntryRow(e, serverName = "") {
   const key = e.kind || e.action;
   if (!e.kind && /^(get|post|put|patch|delete) \//i.test(String(e.action))) return null;
   const known = BOX_EVENT_LABELS[key];
-  const by = e.actor?.kind === "share" ? ` by ${e.actor.label}` : "";
+  const label = known?.label ?? humanize(key);
+  const title = e.actor?.kind === "share" ? tr("{0} by {1}", label, e.actor.label) : label;
   return {
     at: e.ts,
     source: "server",
     server: serverName,
     icon: known?.icon ?? (e.ok === false ? "⚠️" : "•"),
-    title: `${known?.label ?? humanize(key)}${by}`,
+    title,
     detail: e.detail || (e.target && !e.detail ? String(e.target) : ""),
     ok: e.ok !== false,
   };

@@ -86,7 +86,7 @@ async function fetchAccountType() {
 }
 
 function fmtDate(ms) {
-  if (!ms) return "an unknown date";
+  if (!ms) return tr("an unknown date");
   return formatWhen(ms);
 }
 
@@ -268,7 +268,7 @@ async function renderAccountSecurity() {
     ].join("");
     bindHandlers();
   } catch (e) {
-    root.innerHTML = `<div class="card placeholder err-text">${escapeHtml(e.message ?? "Couldn't load.")}</div>`;
+    root.innerHTML = `<div class="card placeholder err-text">${escapeHtml(e.message ?? tr("Couldn't load."))}</div>`;
   }
 }
 

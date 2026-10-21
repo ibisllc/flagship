@@ -36,7 +36,7 @@ export async function askLocalPassphrase(prompt) {
     message: tr("Type it again."),
     placeholder: "passphrase",
     type: "password",
-    validate: (v) => (v !== pass ? "passphrases don't match" : null),
+    validate: (v) => (v !== pass ? tr("passphrases don't match") : null),
   });
   return again == null ? null : pass;
 }

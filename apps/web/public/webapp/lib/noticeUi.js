@@ -26,9 +26,9 @@ import { toast } from "./toast.js";
 
 import { tr } from "./i18n.js";
 export const NOTICE_COPY = Object.freeze({
-  bannerDismiss: "Dismiss",
+  bannerDismiss: tr("Dismiss"),
   updateButton: tr("Reload to update"),
-  updating: "Updating",
+  updating: tr("Updating"),
   updateFailed: tr("Couldn't update yet. Check your connection and try again."),
   lockKicker: tr("Security update"),
   lockTitle: tr("Update required"),
@@ -39,7 +39,7 @@ export const NOTICE_COPY = Object.freeze({
   unlockFirst: tr("Unlock to back up my account key"),
   signOut: tr("Sign out"),
   signedBy: tr("Signed by the Flagship maintainers"),
-  advisory: (id) => `Advisory ${id}`,
+  advisory: (id) => tr("Advisory {0}", id),
 });
 
 const esc = (s) =>
