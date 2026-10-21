@@ -1,0 +1,262 @@
+{
+  "You've been invited · Flagship": {
+    "en": "You've been invited · Flagship",
+    "ctx": "packages/server-daemon/src/inviteHandler.ts:749"
+  },
+  "You've been invited.": {
+    "en": "You've been invited.",
+    "ctx": "packages/server-daemon/src/inviteHandler.ts:768"
+  },
+  "Loading invite details…": {
+    "en": "Loading invite details…",
+    "ctx": "packages/server-daemon/src/inviteHandler.ts:769"
+  },
+  "Issuer's note to you:": {
+    "en": "Issuer's note to you:",
+    "ctx": "packages/server-daemon/src/inviteHandler.ts:771"
+  },
+  "<strong>Before you accept</strong>: only consume this invite if you got it from the person you trust. Anyone holding this link can claim access — the daemon enforces single-use, but bearer share-links are stronger than email in one direction (no provider in the middle) and weaker in another (no recovery if you accidentally consume the wrong one).": {
+    "en": "<strong>Before you accept</strong>: only consume this invite if you got it from the person you trust. Anyone holding this link can claim access — the daemon enforces single-use, but bearer share-links are stronger than email in one direction (no provider in the middle) and weaker in another (no recovery if you accidentally consume the wrong one).",
+    "ctx": "packages/server-daemon/src/inviteHandler.ts:775"
+  },
+  "Accept and continue": {
+    "en": "Accept and continue",
+    "ctx": "packages/server-daemon/src/inviteHandler.ts:778"
+  },
+  "Cancel": {
+    "en": "Cancel",
+    "ctx": "packages/server-daemon/src/inviteHandler.ts:779"
+  },
+  "This invite link is missing required parameters.": {
+    "en": "This invite link is missing required parameters.",
+    "ctx": "packages/server-daemon/src/inviteHandler.ts:785"
+  },
+  "Cancelled.": {
+    "en": "Cancelled.",
+    "ctx": "packages/server-daemon/src/inviteHandler.ts:786"
+  },
+  "You've been invited to {0} as {1}.": {
+    "en": "You've been invited to {0} as {1}.",
+    "ctx": "packages/server-daemon/src/inviteHandler.ts:787"
+  },
+  "Could not load invite: {0}": {
+    "en": "Could not load invite: {0}",
+    "ctx": "packages/server-daemon/src/inviteHandler.ts:788"
+  },
+  "Computing acceptance…": {
+    "en": "Computing acceptance…",
+    "ctx": "packages/server-daemon/src/inviteHandler.ts:789"
+  },
+  "Open this link in your Flagship app to accept.": {
+    "en": "Open this link in your Flagship app to accept.",
+    "ctx": "packages/server-daemon/src/inviteHandler.ts:790"
+  },
+  "Accepted. You now have {0} access.": {
+    "en": "Accepted. You now have {0} access.",
+    "ctx": "packages/server-daemon/src/inviteHandler.ts:791"
+  },
+  "You're invited — Flagship": {
+    "en": "You're invited — Flagship",
+    "ctx": "packages/server-daemon/src/invitePage.ts:74"
+  },
+  "You're invited": {
+    "en": "You're invited",
+    "ctx": "packages/server-daemon/src/invitePage.ts:95"
+  },
+  "Someone invited you to an app on their Flagship server. Open the invite in the Flagship app to accept it.": {
+    "en": "Someone invited you to an app on their Flagship server. Open the invite in the Flagship app to accept it.",
+    "ctx": "packages/server-daemon/src/invitePage.ts:96"
+  },
+  "Open in the Flagship app": {
+    "en": "Open in the Flagship app",
+    "ctx": "packages/server-daemon/src/invitePage.ts:97"
+  },
+  "No app?": {
+    "en": "No app?",
+    "ctx": "packages/server-daemon/src/invitePage.ts:98"
+  },
+  "Accept in the web app": {
+    "en": "Accept in the web app",
+    "ctx": "packages/server-daemon/src/invitePage.ts:98"
+  },
+  "This invite link is incomplete. Ask for a new one.": {
+    "en": "This invite link is incomplete. Ask for a new one.",
+    "ctx": "packages/server-daemon/src/invitePage.ts:106"
+  },
+  "This is a Flagship server.": {
+    "en": "This is a Flagship server.",
+    "ctx": "packages/server-daemon/src/runtime.ts:847"
+  },
+  "online": {
+    "en": "online",
+    "ctx": "packages/server-daemon/src/runtime.ts:848"
+  },
+  "It runs on private hardware and answers to its owner's keys — not to a cloud.": {
+    "en": "It runs on private hardware and answers to its owner's keys — not to a cloud.",
+    "ctx": "packages/server-daemon/src/runtime.ts:849"
+  },
+  "If you're the owner, you can choose what appears here from the <strong>Flagship app</strong>.": {
+    "en": "If you're the owner, you can choose what appears here from the <strong>Flagship app</strong>.",
+    "ctx": "packages/server-daemon/src/runtime.ts:850"
+  },
+  "TLS terminates on this server. Flagship relays ciphertext it cannot read.": {
+    "en": "TLS terminates on this server. Flagship relays ciphertext it cannot read.",
+    "ctx": "packages/server-daemon/src/runtime.ts:853"
+  },
+  "Get yours at": {
+    "en": "Get yours at",
+    "ctx": "packages/server-daemon/src/runtime.ts:854"
+  },
+  "No app here · Flagship": {
+    "en": "No app here · Flagship",
+    "ctx": "packages/server-daemon/src/runtime.ts:2452"
+  },
+  "No app here yet.": {
+    "en": "No app here yet.",
+    "ctx": "packages/server-daemon/src/runtime.ts:2465"
+  },
+  "The URL <code>{0}</code> isn't pointing at an app right now. The owner of this username can decide which install — if any — claims it.": {
+    "en": "The URL <code>{0}</code> isn't pointing at an app right now. The owner of this username can decide which install — if any — claims it.",
+    "ctx": "packages/server-daemon/src/runtime.ts:2466"
+  },
+  "The long form (<code>&lt;app&gt;.&lt;server&gt;.&lt;user&gt;.flagship.services</code>) is always reachable.": {
+    "en": "The long form (<code>&lt;app&gt;.&lt;server&gt;.&lt;user&gt;.flagship.services</code>) is always reachable.",
+    "ctx": "packages/server-daemon/src/runtime.ts:2467"
+  },
+  "More on multiplexing →": {
+    "en": "More on multiplexing →",
+    "ctx": "packages/server-daemon/src/runtime.ts:2467"
+  },
+  "Download a server backup — Flagship": {
+    "en": "Download a server backup — Flagship",
+    "ctx": "packages/server-daemon/src/serverArchive/downloadPage.ts:37"
+  },
+  "Download a server backup": {
+    "en": "Download a server backup",
+    "ctx": "packages/server-daemon/src/serverArchive/downloadPage.ts:57"
+  },
+  "Scan this with the Flagship app on your phone and approve with Face ID. The app shows the same code:": {
+    "en": "Scan this with the Flagship app on your phone and approve with Face ID. The app shows the same code:",
+    "ctx": "packages/server-daemon/src/serverArchive/downloadPage.ts:60"
+  },
+  "QR code for the Flagship app": {
+    "en": "QR code for the Flagship app",
+    "ctx": "packages/server-daemon/src/serverArchive/downloadPage.ts:61"
+  },
+  "Approval code": {
+    "en": "Approval code",
+    "ctx": "packages/server-daemon/src/serverArchive/downloadPage.ts:62"
+  },
+  "Only approve if the code in the app matches this one.": {
+    "en": "Only approve if the code in the app matches this one.",
+    "ctx": "packages/server-daemon/src/serverArchive/downloadPage.ts:63"
+  },
+  "Approved. The download should start now. If it stops, start it again here; it picks up where it left off.": {
+    "en": "Approved. The download should start now. If it stops, start it again here; it picks up where it left off.",
+    "ctx": "packages/server-daemon/src/serverArchive/downloadPage.ts:66"
+  },
+  "Download the backup": {
+    "en": "Download the backup",
+    "ctx": "packages/server-daemon/src/serverArchive/downloadPage.ts:67"
+  },
+  "This link works until {0}. The backup opens with its passcode or on your own devices.": {
+    "en": "This link works until {0}. The backup opens with its passcode or on your own devices.",
+    "ctx": "packages/server-daemon/src/serverArchive/downloadPage.ts:69"
+  },
+  "This link has expired or was replaced by a newer backup.": {
+    "en": "This link has expired or was replaced by a newer backup.",
+    "ctx": "packages/server-daemon/src/serverArchive/downloadPage.ts:91"
+  },
+  "Moving to a new server": {
+    "en": "Moving to a new server",
+    "ctx": "packages/server-daemon/src/serverArchive/migratePause.ts:38"
+  },
+  "This app is moving to a new server": {
+    "en": "This app is moving to a new server",
+    "ctx": "packages/server-daemon/src/serverArchive/migratePause.ts:42"
+  },
+  "It will be back shortly. This page checks again on its own.": {
+    "en": "It will be back shortly. This page checks again on its own.",
+    "ctx": "packages/server-daemon/src/serverArchive/migratePause.ts:42"
+  },
+  "Link expired": {
+    "en": "Link expired",
+    "ctx": "packages/server-daemon/src/serverArchive/service.ts:686"
+  },
+  "This download link has expired or was replaced by a newer backup.": {
+    "en": "This download link has expired or was replaced by a newer backup.",
+    "ctx": "packages/server-daemon/src/serverArchive/service.ts:686"
+  },
+  "the backup is removed from the server": {
+    "en": "the backup is removed from the server",
+    "ctx": "packages/server-daemon/src/serverArchive/service.ts:705"
+  },
+  "Access restricted · Flagship": {
+    "en": "Access restricted · Flagship",
+    "ctx": "packages/server-daemon/src/serviceAccessGate.ts:167"
+  },
+  "This app is private.": {
+    "en": "This app is private.",
+    "ctx": "packages/server-daemon/src/serviceAccessGate.ts:176"
+  },
+  "The owner has enabled \"protect content\" on this app. You need a valid invite link to enter.": {
+    "en": "The owner has enabled \"protect content\" on this app. You need a valid invite link to enter.",
+    "ctx": "packages/server-daemon/src/serviceAccessGate.ts:177"
+  },
+  "If you were expecting access, ask the owner to share an invite. They can do that from their phone or webapp — the link will end in <code>/invite#k=…</code>.": {
+    "en": "If you were expecting access, ask the owner to share an invite. They can do that from their phone or webapp — the link will end in <code>/invite#k=…</code>.",
+    "ctx": "packages/server-daemon/src/serviceAccessGate.ts:178"
+  },
+  "If you already have a link, open it here.": {
+    "en": "If you already have a link, open it here.",
+    "ctx": "packages/server-daemon/src/serviceAccessGate.ts:179"
+  },
+  "Sign in — Flagship": {
+    "en": "Sign in — Flagship",
+    "ctx": "packages/server-daemon/src/serviceAccessWeb.ts:458"
+  },
+  "Restricted — Flagship": {
+    "en": "Restricted — Flagship",
+    "ctx": "packages/server-daemon/src/serviceAccessWeb.ts:458"
+  },
+  "Sign in": {
+    "en": "Sign in",
+    "ctx": "packages/server-daemon/src/serviceAccessWeb.ts:482"
+  },
+  "Access is restricted": {
+    "en": "Access is restricted",
+    "ctx": "packages/server-daemon/src/serviceAccessWeb.ts:482"
+  },
+  "This site is on a Flagship cloud. Sign in with your Flagship app.": {
+    "en": "This site is on a Flagship cloud. Sign in with your Flagship app.",
+    "ctx": "packages/server-daemon/src/serviceAccessWeb.ts:485"
+  },
+  "This page is on a Flagship cloud. Authenticate with your Flagship app to view it.": {
+    "en": "This page is on a Flagship cloud. Authenticate with your Flagship app to view it.",
+    "ctx": "packages/server-daemon/src/serviceAccessWeb.ts:486"
+  },
+  "Access site": {
+    "en": "Access site",
+    "ctx": "packages/server-daemon/src/serviceAccessWeb.ts:489"
+  },
+  "Get link to paste in the app": {
+    "en": "Get link to paste in the app",
+    "ctx": "packages/server-daemon/src/serviceAccessWeb.ts:490"
+  },
+  "Request access · Flagship": {
+    "en": "Request access · Flagship",
+    "ctx": "packages/server-daemon/src/serviceProxy.ts:116"
+  },
+  "{0} is private": {
+    "en": "{0} is private",
+    "ctx": "packages/server-daemon/src/serviceProxy.ts:125"
+  },
+  "This Flagship app is gated. Ask the host to invite you, then accept the invite in your Flagship app.": {
+    "en": "This Flagship app is gated. Ask the host to invite you, then accept the invite in your Flagship app.",
+    "ctx": "packages/server-daemon/src/serviceProxy.ts:126"
+  },
+  "URL:": {
+    "en": "URL:",
+    "ctx": "packages/server-daemon/src/serviceProxy.ts:127"
+  }
+}
