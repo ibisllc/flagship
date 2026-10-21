@@ -1,0 +1,778 @@
+{
+  "Debug access (SSH with your own key) is turned on in the Flagship app: choose “Debug-friendly server” when you make the recipe, or use Debug access on the server’s page later.": {
+    "en": "Debug access (SSH with your own key) is turned on in the Flagship app: choose “Debug-friendly server” when you make the recipe, or use Debug access on the server’s page later.",
+    "ctx": "wizard.py:79 (prose)"
+  },
+  "USB drive": {
+    "en": "USB drive",
+    "ctx": "wizard.py:276 (prose)"
+  },
+  "Ready: {0} -> {1}": {
+    "en": "Ready: {0} -> {1}",
+    "ctx": "wizard.py:283 (prose)"
+  },
+  "Need: {0}.": {
+    "en": "Need: {0}.",
+    "ctx": "wizard.py:284 (prose)"
+  },
+  "Downloading base image…": {
+    "en": "Downloading base image…",
+    "ctx": "wizard.py:289 (prose)"
+  },
+  "Downloading the server image…": {
+    "en": "Downloading the server image…",
+    "ctx": "wizard.py:290 (prose)"
+  },
+  "Verifying the server image…": {
+    "en": "Verifying the server image…",
+    "ctx": "wizard.py:291 (prose)"
+  },
+  "Preparing the server's disk…": {
+    "en": "Preparing the server's disk…",
+    "ctx": "wizard.py:292 (prose)"
+  },
+  "Starting the server…": {
+    "en": "Starting the server…",
+    "ctx": "wizard.py:293 (prose)"
+  },
+  "Building image…": {
+    "en": "Building image…",
+    "ctx": "wizard.py:294 (prose)"
+  },
+  "Writing to USB…": {
+    "en": "Writing to USB…",
+    "ctx": "wizard.py:295 (prose)"
+  },
+  "Server handed off · returning home in {0}…": {
+    "en": "Server handed off · returning home in {0}…",
+    "ctx": "wizard.py:297 (prose)"
+  },
+  "Preparing a new server…": {
+    "en": "Preparing a new server…",
+    "ctx": "wizard.py:299 (prose)"
+  },
+  "Pasted recipe was empty.": {
+    "en": "Pasted recipe was empty.",
+    "ctx": "wizard.py:311 (prose)"
+  },
+  "Building the installer needs xorriso, which isn't installed. Install it (Debian/Ubuntu: sudo apt install xorriso; Fedora: sudo dnf install xorriso; Arch: sudo pacman -S libisoburn) and try again.": {
+    "en": "Building the installer needs xorriso, which isn't installed. Install it (Debian/Ubuntu: sudo apt install xorriso; Fedora: sudo dnf install xorriso; Arch: sudo pacman -S libisoburn) and try again.",
+    "ctx": "wizard.py:327 (prose)"
+  },
+  "Could not stage pasted recipe: {0}": {
+    "en": "Could not stage pasted recipe: {0}",
+    "ctx": "wizard.py:451 (prose)"
+  },
+  "Couldn't remember the Wi-Fi details: {0}": {
+    "en": "Couldn't remember the Wi-Fi details: {0}",
+    "ctx": "wizard.py:650 (prose)"
+  },
+  "This PC doesn't have enough free memory to host a server (each server needs ~{0} GiB).": {
+    "en": "This PC doesn't have enough free memory to host a server (each server needs ~{0} GiB).",
+    "ctx": "wizard.py:804 (prose)"
+  },
+  "This PC is at its hosting limit ({0}). Remove one first, or burn to USB.": {
+    "en": "This PC is at its hosting limit ({0}). Remove one first, or burn to USB.",
+    "ctx": "wizard.py:809 (prose)"
+  },
+  "Will run as a managed VM on this PC — {0} vCPU, {1} GiB RAM, {2} GiB disk.": {
+    "en": "Will run as a managed VM on this PC — {0} vCPU, {1} GiB RAM, {2} GiB disk.",
+    "ctx": "wizard.py:834 (prose)"
+  },
+  "Cannot read the recipe: {0}": {
+    "en": "Cannot read the recipe: {0}",
+    "ctx": "wizard.py:871 (prose)"
+  },
+  "SSH is available once the server is running (a debug-enabled VM forwards a local port to the guest).": {
+    "en": "SSH is available once the server is running (a debug-enabled VM forwards a local port to the guest).",
+    "ctx": "wizard.py:1120 (prose)"
+  },
+  "Waiting for an internet connection…": {
+    "en": "Waiting for an internet connection…",
+    "ctx": "wizard.py:1157 (prose)"
+  },
+  "Starting…": {
+    "en": "Starting…",
+    "ctx": "wizard.py:1176 (prose)"
+  },
+  "Pairing couldn't start — is Node installed?": {
+    "en": "Pairing couldn't start — is Node installed?",
+    "ctx": "wizard.py:1194 (prose)"
+  },
+  "Scan the QR with the Flagship app, or type the code.": {
+    "en": "Scan the QR with the Flagship app, or type the code.",
+    "ctx": "wizard.py:1222 (prose)"
+  },
+  "Phone connected — check the security code matches, then approve on your phone.": {
+    "en": "Phone connected — check the security code matches, then approve on your phone.",
+    "ctx": "wizard.py:1226 (prose)"
+  },
+  "Paired — receiving your recipe…": {
+    "en": "Paired — receiving your recipe…",
+    "ctx": "wizard.py:1230 (prose)"
+  },
+  "Recipe received for {0}.": {
+    "en": "Recipe received for {0}.",
+    "ctx": "wizard.py:1232 (prose)"
+  },
+  "Pairing failed.": {
+    "en": "Pairing failed.",
+    "ctx": "wizard.py:1255 (prose)"
+  },
+  "CLI locate failed: {0}": {
+    "en": "CLI locate failed: {0}",
+    "ctx": "wizard.py:1303 (prose)"
+  },
+  "CLI exited {0}": {
+    "en": "CLI exited {0}",
+    "ctx": "wizard.py:1325 (prose)"
+  },
+  "Flagship Studio (Experimental)": {
+    "en": "Flagship Studio (Experimental)",
+    "ctx": "wizard.py:1348 (prose)"
+  },
+  "Return to pairing home": {
+    "en": "Return to pairing home",
+    "ctx": "wizard.py:1353 (prose)"
+  },
+  "Bring my own ISO (Advanced)": {
+    "en": "Bring my own ISO (Advanced)",
+    "ctx": "wizard.py:1359 (label=)"
+  },
+  "Build and host your own Flagship server.": {
+    "en": "Build and host your own Flagship server.",
+    "ctx": "wizard.py:1390 (prose)"
+  },
+  "New Server": {
+    "en": "New Server",
+    "ctx": "wizard.py:1418 (prose)"
+  },
+  "Auto (System)": {
+    "en": "Auto (System)",
+    "ctx": "wizard.py:1422 (prose)"
+  },
+  "Light": {
+    "en": "Light",
+    "ctx": "wizard.py:1423 (label)"
+  },
+  "Dark": {
+    "en": "Dark",
+    "ctx": "wizard.py:1424 (label)"
+  },
+  "Appearance": {
+    "en": "Appearance",
+    "ctx": "wizard.py:1426 (label)"
+  },
+  "Documentation": {
+    "en": "Documentation",
+    "ctx": "wizard.py:1430 (label)"
+  },
+  "Report an Issue": {
+    "en": "Report an Issue",
+    "ctx": "wizard.py:1431 (prose)"
+  },
+  "About Flagship Studio": {
+    "en": "About Flagship Studio",
+    "ctx": "wizard.py:1435 (prose)"
+  },
+  "Quit": {
+    "en": "Quit",
+    "ctx": "wizard.py:1436 (label)"
+  },
+  "Main menu": {
+    "en": "Main menu",
+    "ctx": "wizard.py:1441 (prose)"
+  },
+  "Drop the recipe": {
+    "en": "Drop the recipe",
+    "ctx": "wizard.py:1487 (title=)"
+  },
+  "JSON file from the website after you scanned the QR code.": {
+    "en": "JSON file from the website after you scanned the QR code.",
+    "ctx": "wizard.py:1488 (subtitle=)"
+  },
+  "Drop .flagship-recipe.json here": {
+    "en": "Drop .flagship-recipe.json here",
+    "ctx": "wizard.py:1493 (prose)"
+  },
+  "Choose file...": {
+    "en": "Choose file...",
+    "ctx": "wizard.py:1499 (label=)"
+  },
+  "Pick recipe": {
+    "en": "Pick recipe",
+    "ctx": "wizard.py:1501 (prose)"
+  },
+  "Or paste the JSON:": {
+    "en": "Or paste the JSON:",
+    "ctx": "wizard.py:1507 (label=)"
+  },
+  "Use pasted JSON": {
+    "en": "Use pasted JSON",
+    "ctx": "wizard.py:1519 (label=)"
+  },
+  "Pair with your phone": {
+    "en": "Pair with your phone",
+    "ctx": "wizard.py:1529 (label=)"
+  },
+  "Scan a QR with the Flagship app to receive a recipe — no file needed.": {
+    "en": "Scan a QR with the Flagship app to receive a recipe — no file needed.",
+    "ctx": "wizard.py:1531 (prose)"
+  },
+  "Drop the ISO": {
+    "en": "Drop the ISO",
+    "ctx": "wizard.py:1556 (title=)"
+  },
+  "Debian netinst stock image. Run `flagship-build distros` for accepted SHAs.": {
+    "en": "Debian netinst stock image. Run `flagship-build distros` for accepted SHAs.",
+    "ctx": "wizard.py:1557 (subtitle=)"
+  },
+  "Drop debian-*-netinst.iso here": {
+    "en": "Drop debian-*-netinst.iso here",
+    "ctx": "wizard.py:1562 (prose)"
+  },
+  "Pick ISO": {
+    "en": "Pick ISO",
+    "ctx": "wizard.py:1570 (prose)"
+  },
+  "Pick the USB drive": {
+    "en": "Pick the USB drive",
+    "ctx": "wizard.py:1582 (title=)"
+  },
+  "Only removable drives in the 500MB-500GB band. Internal disks are hidden by design.": {
+    "en": "Only removable drives in the 500MB-500GB band. Internal disks are hidden by design.",
+    "ctx": "wizard.py:1583 (subtitle=)"
+  },
+  "Refresh": {
+    "en": "Refresh",
+    "ctx": "wizard.py:1588 (label=)"
+  },
+  "Flash the USB": {
+    "en": "Flash the USB",
+    "ctx": "wizard.py:1616 (title=)"
+  },
+  "Writes the install image to the picked disk. Needs admin via pkexec.": {
+    "en": "Writes the install image to the picked disk. Needs admin via pkexec.",
+    "ctx": "wizard.py:1617 (subtitle=)"
+  },
+  "Wi-Fi network (optional)": {
+    "en": "Wi-Fi network (optional)",
+    "ctx": "wizard.py:1629 (prose)"
+  },
+  "Wi-Fi password": {
+    "en": "Wi-Fi password",
+    "ctx": "wizard.py:1635 (prose)"
+  },
+  "Optional Wi-Fi for a server without Ethernet. Baked into this single-use installer, and remembered on this PC for your account only.": {
+    "en": "Optional Wi-Fi for a server without Ethernet. Baked into this single-use installer, and remembered on this PC for your account only.",
+    "ctx": "wizard.py:1646 (label=)"
+  },
+  "Flash to USB": {
+    "en": "Flash to USB",
+    "ctx": "wizard.py:1655 (label=)"
+  },
+  "Bake ISO only (no flash)": {
+    "en": "Bake ISO only (no flash)",
+    "ctx": "wizard.py:1661 (label=)"
+  },
+  "Verify recipe only": {
+    "en": "Verify recipe only",
+    "ctx": "wizard.py:1665 (label=)"
+  },
+  "Done": {
+    "en": "Done",
+    "ctx": "wizard.py:1693 (title=)"
+  },
+  "Bring this USB to the machine you're installing on.": {
+    "en": "Bring this USB to the machine you're installing on.",
+    "ctx": "wizard.py:1694 (subtitle=)"
+  },
+  "Recipe verified — choose where this server should live.": {
+    "en": "Recipe verified — choose where this server should live.",
+    "ctx": "wizard.py:1711 (label=)"
+  },
+  "Burn to USB": {
+    "en": "Burn to USB",
+    "ctx": "wizard.py:1718 (label=)"
+  },
+  "Build a dedicated hardware appliance — the gold standard. Boot any spare box from the USB stick.": {
+    "en": "Build a dedicated hardware appliance — the gold standard. Boot any spare box from the USB stick.",
+    "ctx": "wizard.py:1725 (label=)"
+  },
+  "Host on this PC": {
+    "en": "Host on this PC",
+    "ctx": "wizard.py:1740 (label=)"
+  },
+  "Run the same encrypted, phone-gated appliance as a managed VM inside this app. Same recipe, same unlock — your phone still holds the keys.": {
+    "en": "Run the same encrypted, phone-gated appliance as a managed VM inside this app. Same recipe, same unlock — your phone still holds the keys.",
+    "ctx": "wizard.py:1747 (label=)"
+  },
+  "‹ Choose destination": {
+    "en": "‹ Choose destination",
+    "ctx": "wizard.py:1769 (label=)"
+  },
+  "The VM installs unattended from the same image a USB burn uses, then boots encrypted and waits for your phone to unlock it. This app never sees the disk key.": {
+    "en": "The VM installs unattended from the same image a USB burn uses, then boots encrypted and waits for your phone to unlock it. This app never sees the disk key.",
+    "ctx": "wizard.py:1782 (label=)"
+  },
+  "Create server on this PC": {
+    "en": "Create server on this PC",
+    "ctx": "wizard.py:1795 (label=)"
+  },
+  "Encrypted disk · unlocked by your phone": {
+    "en": "Encrypted disk · unlocked by your phone",
+    "ctx": "wizard.py:1801 (label=)"
+  },
+  "Security code — confirm it matches your phone": {
+    "en": "Security code — confirm it matches your phone",
+    "ctx": "wizard.py:1836 (label=)"
+  },
+  "Cancel": {
+    "en": "Cancel",
+    "ctx": "wizard.py:1845 (label=)"
+  },
+  "Start": {
+    "en": "Start",
+    "ctx": "wizard.py:1891 (label=)"
+  },
+  "Stop": {
+    "en": "Stop",
+    "ctx": "wizard.py:1894 (label=)"
+  },
+  "Restart": {
+    "en": "Restart",
+    "ctx": "wizard.py:1896 (label=)"
+  },
+  "Retry install": {
+    "en": "Retry install",
+    "ctx": "wizard.py:1898 (label=)"
+  },
+  "Stop installation": {
+    "en": "Stop installation",
+    "ctx": "wizard.py:1901 (label=)"
+  },
+  "Open in SSH": {
+    "en": "Open in SSH",
+    "ctx": "wizard.py:1906 (label=)"
+  },
+  "Delete this server": {
+    "en": "Delete this server",
+    "ctx": "wizard.py:1909 (label=)"
+  },
+  "Delete this server?": {
+    "en": "Delete this server?",
+    "ctx": "wizard.py:1925 (heading=)"
+  },
+  "Delete {0}?\n\nThe VM and its encrypted disk image are removed from this PC. The server's identity stays with your account. Backups stored on this server are deleted with it; copies kept on your phone or with peers (depending on its backup policy) are not.": {
+    "en": "Delete {0}?\n\nThe VM and its encrypted disk image are removed from this PC. The server's identity stays with your account. Backups stored on this server are deleted with it; copies kept on your phone or with peers (depending on its backup policy) are not.",
+    "ctx": "wizard.py:1926 (body=)"
+  },
+  "Delete": {
+    "en": "Delete",
+    "ctx": "wizard.py:1932 (label)"
+  },
+  "Servers on this PC": {
+    "en": "Servers on this PC",
+    "ctx": "wizard.py:1970 (label=)"
+  },
+  "None yet. Verify a recipe and choose \"Host on this PC\".": {
+    "en": "None yet. Verify a recipe and choose \"Host on this PC\".",
+    "ctx": "wizard.py:1990 (label=)"
+  },
+  "＋ Add a server": {
+    "en": "＋ Add a server",
+    "ctx": "wizard.py:1999 (label=)"
+  },
+  "Delete…": {
+    "en": "Delete…",
+    "ctx": "wizard.py:2086 (prose)"
+  },
+  "Log": {
+    "en": "Log",
+    "ctx": "wizard.py:2124 (label=)"
+  },
+  "Clear": {
+    "en": "Clear",
+    "ctx": "wizard.py:2136 (label=)"
+  },
+  "Code: {0}": {
+    "en": "Code: {0}",
+    "ctx": "wizard.py:2201 (prose)"
+  },
+  "Health": {
+    "en": "Health",
+    "ctx": "wizard.py:2218 (label)"
+  },
+  "Last connected: ": {
+    "en": "Last connected: ",
+    "ctx": "wizard.py:2222 (prose)"
+  },
+  "Not yet": {
+    "en": "Not yet",
+    "ctx": "wizard.py:2223 (prose)"
+  },
+  "Loaded: {0}": {
+    "en": "Loaded: {0}",
+    "ctx": "wizard.py:2242 (prose)"
+  },
+  "Recipe verified · server: {0} · expires: {1}": {
+    "en": "Recipe verified · server: {0} · expires: {1}",
+    "ctx": "wizard.py:2249 (prose)"
+  },
+  "Shutting down your servers…": {
+    "en": "Shutting down your servers…",
+    "ctx": "wizard.py:2405 (prose)"
+  },
+  "This can take up to a minute.": {
+    "en": "This can take up to a minute.",
+    "ctx": "wizard.py:2418 (label=)"
+  },
+  "{0} · removable: {1} · bus: {2} · {3}": {
+    "en": "{0} · removable: {1} · bus: {2} · {3}",
+    "ctx": "wizard.py:2588 (label=)"
+  },
+  "Open Flagship Studio": {
+    "en": "Open Flagship Studio",
+    "ctx": "tray.py:42 (prose)"
+  },
+  "No servers hosted yet": {
+    "en": "No servers hosted yet",
+    "ctx": "tray.py:57 (prose)"
+  },
+  "Stop all running servers": {
+    "en": "Stop all running servers",
+    "ctx": "tray.py:61 (prose)"
+  },
+  "Quit Flagship Studio": {
+    "en": "Quit Flagship Studio",
+    "ctx": "tray.py:63 (prose)"
+  },
+  "Active": {
+    "en": "Active",
+    "ctx": "tray.py:234 (label)"
+  },
+  "Activate": {
+    "en": "Activate",
+    "ctx": "tray.py:243 (label)"
+  },
+  "FLAGSHIP_PAIR ": {
+    "en": "FLAGSHIP_PAIR ",
+    "ctx": "pair_session.py:27 (prose)"
+  },
+  "(unknown model)": {
+    "en": "(unknown model)",
+    "ctx": "disk_enumerator.py:116 (prose)"
+  },
+  "OS marks {0} as internal media": {
+    "en": "OS marks {0} as internal media",
+    "ctx": "disk_enumerator.py:176 (prose)"
+  },
+  "Flagship Studio Wi-Fi": {
+    "en": "Flagship Studio Wi-Fi",
+    "ctx": "wifi_store.py:56 (prose)"
+  },
+  "No way to elevate the raw USB write: pkexec (PolicyKit) is not installed and passwordless sudo isn't available. Install pkexec (Debian/Ubuntu: sudo apt install pkexec; Fedora: sudo dnf install polkit) and retry.": {
+    "en": "No way to elevate the raw USB write: pkexec (PolicyKit) is not installed and passwordless sudo isn't available. Install pkexec (Debian/Ubuntu: sudo apt install pkexec; Fedora: sudo dnf install polkit) and retry.",
+    "ctx": "elevation.py:22 (prose)"
+  },
+  "No health report for {0} min. The server itself may be off or frozen.": {
+    "en": "No health report for {0} min. The server itself may be off or frozen.",
+    "ctx": "vm/server_health.py:107 (prose)"
+  },
+  "Ran out of memory {0}× since it started ({1} MB free of {2} MB now).": {
+    "en": "Ran out of memory {0}× since it started ({1} MB free of {2} MB now).",
+    "ctx": "vm/server_health.py:112 (prose)"
+  },
+  "The server software isn't running ({0}; restarted {1}×, last exit code {2}).": {
+    "en": "The server software isn't running ({0}; restarted {1}×, last exit code {2}).",
+    "ctx": "vm/server_health.py:117 (prose)"
+  },
+  "The server software restarted {0}× since it started (last exit code {1}).": {
+    "en": "The server software restarted {0}× since it started (last exit code {1}).",
+    "ctx": "vm/server_health.py:122 (prose)"
+  },
+  "Can't reach the Flagship relay.": {
+    "en": "Can't reach the Flagship relay.",
+    "ctx": "vm/server_health.py:126 (prose)"
+  },
+  "Disk is {0}% full.": {
+    "en": "Disk is {0}% full.",
+    "ctx": "vm/server_health.py:128 (prose)"
+  },
+  "Healthy · {0} MB free of {1} MB · disk {2}% · up {3}": {
+    "en": "Healthy · {0} MB free of {1} MB · disk {2}% · up {3}",
+    "ctx": "vm/server_health.py:132 (prose)"
+  },
+  "Not enough free memory: this server needs {0} GiB. Close other apps and try again.": {
+    "en": "Not enough free memory: this server needs {0} GiB. Close other apps and try again.",
+    "ctx": "vm/qemu_failure.py:30 (prose)"
+  },
+  "QEMU stopped unexpectedly (exit {0}).": {
+    "en": "QEMU stopped unexpectedly (exit {0}).",
+    "ctx": "vm/qemu_failure.py:60 (prose)"
+  },
+  "QEMU stopped (exit {0}): {1}": {
+    "en": "QEMU stopped (exit {0}): {1}",
+    "ctx": "vm/qemu_failure.py:61 (prose)"
+  },
+  "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry.": {
+    "en": "Taking longer than expected — the box may not have reached the network, or it may be waiting for you to approve the unlock on your phone. Check that it's online, or power off and retry.",
+    "ctx": "vm/manager.py:60 (prose)"
+  },
+  "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there.": {
+    "en": "Unlocking its disk with the key your phone left it. If your phone asks you to approve, approve it there.",
+    "ctx": "vm/manager.py:65 (prose)"
+  },
+  "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.": {
+    "en": "The disk is sealed — approve the first unlock on your phone. After that it should unlock on its own; if your phone asks again, approve it there.",
+    "ctx": "vm/manager.py:69 (prose)"
+  },
+  "The disk is sealed — approve the unlock on your phone.": {
+    "en": "The disk is sealed — approve the unlock on your phone.",
+    "ctx": "vm/manager.py:72 (prose)"
+  },
+  "Booting the installer": {
+    "en": "Booting the installer",
+    "ctx": "vm/manager.py:86 (prose)"
+  },
+  "Preparing the encrypted disk": {
+    "en": "Preparing the encrypted disk",
+    "ctx": "vm/manager.py:87 (prose)"
+  },
+  "Installing Debian": {
+    "en": "Installing Debian",
+    "ctx": "vm/manager.py:88 (prose)"
+  },
+  "Downloading Flagship software": {
+    "en": "Downloading Flagship software",
+    "ctx": "vm/manager.py:89 (prose)"
+  },
+  "Registering the server": {
+    "en": "Registering the server",
+    "ctx": "vm/manager.py:90 (prose)"
+  },
+  "Sealing the disk key": {
+    "en": "Sealing the disk key",
+    "ctx": "vm/manager.py:91 (prose)"
+  },
+  "Installation complete": {
+    "en": "Installation complete",
+    "ctx": "vm/manager.py:92 (prose)"
+  },
+  "Pairing with your phone": {
+    "en": "Pairing with your phone",
+    "ctx": "vm/manager.py:93 (prose)"
+  },
+  "Server is live": {
+    "en": "Server is live",
+    "ctx": "vm/manager.py:94 (prose)"
+  },
+  "Installation reported an error": {
+    "en": "Installation reported an error",
+    "ctx": "vm/manager.py:95 (prose)"
+  },
+  "Waiting for an installer checkpoint": {
+    "en": "Waiting for an installer checkpoint",
+    "ctx": "vm/manager.py:96 (prose)"
+  },
+  "Waiting for the first guest checkpoint.": {
+    "en": "Waiting for the first guest checkpoint.",
+    "ctx": "vm/manager.py:153 (prose)"
+  },
+  "No new guest checkpoint for {0} minutes. Last reported: {1}. The VM may be stalled.": {
+    "en": "No new guest checkpoint for {0} minutes. Last reported: {1}. The VM may be stalled.",
+    "ctx": "vm/manager.py:157 (prose)"
+  },
+  "Serving at https://{0}/": {
+    "en": "Serving at https://{0}/",
+    "ctx": "vm/manager.py:162 (prose)"
+  },
+  "Start the server to bring it online.": {
+    "en": "Start the server to bring it online.",
+    "ctx": "vm/manager.py:166 (prose)"
+  },
+  "Preparing the installer…": {
+    "en": "Preparing the installer…",
+    "ctx": "vm/manager.py:167 (prose)"
+  },
+  "Encrypted (LUKS)": {
+    "en": "Encrypted (LUKS)",
+    "ctx": "vm/manager.py:185 (prose)"
+  },
+  "Hosting isn't supported on this CPU architecture ({0}).": {
+    "en": "Hosting isn't supported on this CPU architecture ({0}).",
+    "ctx": "vm/manager.py:322 (prose)"
+  },
+  "The app quit while the install was running.": {
+    "en": "The app quit while the install was running.",
+    "ctx": "vm/manager.py:389 (prose)"
+  },
+  "Installation stopped by you.": {
+    "en": "Installation stopped by you.",
+    "ctx": "vm/manager.py:471 (prose)"
+  },
+  "VM {0}: stopped because the app quit": {
+    "en": "VM {0}: stopped because the app quit",
+    "ctx": "vm/manager.py:530 (prose)"
+  },
+  "VM {0}: {1}": {
+    "en": "VM {0}: {1}",
+    "ctx": "vm/manager.py:541 (prose)"
+  },
+  "VM {0}: ignored {1} in state {2}": {
+    "en": "VM {0}: ignored {1} in state {2}",
+    "ctx": "vm/manager.py:554 (prose)"
+  },
+  "VM {0}: waiting for the previous shutdown to finish": {
+    "en": "VM {0}: waiting for the previous shutdown to finish",
+    "ctx": "vm/manager.py:644 (prose)"
+  },
+  "QEMU is not installed.": {
+    "en": "QEMU is not installed.",
+    "ctx": "vm/manager.py:657 (prose)"
+  },
+  "VM {0}: cannot start — {1}": {
+    "en": "VM {0}: cannot start — {1}",
+    "ctx": "vm/manager.py:658 (prose)"
+  },
+  "VM {0}: started ({1} vCPU, {2} GiB, {3})": {
+    "en": "VM {0}: started ({1} vCPU, {2} GiB, {3})",
+    "ctx": "vm/manager.py:678 (prose)"
+  },
+  "VM {0}: failed to start — {1}": {
+    "en": "VM {0}: failed to start — {1}",
+    "ctx": "vm/manager.py:683 (prose)"
+  },
+  "VM {0}: {1} finished — booting sealed disk": {
+    "en": "VM {0}: {1} finished — booting sealed disk",
+    "ctx": "vm/manager.py:729 (prose)"
+  },
+  "VM {0}: installer checkpoint — {1}": {
+    "en": "VM {0}: installer checkpoint — {1}",
+    "ctx": "vm/manager.py:834 (prose)"
+  },
+  "VM {0}: no guest checkpoint for {1} minutes; last: {2}": {
+    "en": "VM {0}: no guest checkpoint for {1} minutes; last: {2}",
+    "ctx": "vm/manager.py:849 (prose)"
+  },
+  "Keeping this PC awake while it hosts servers": {
+    "en": "Keeping this PC awake while it hosts servers",
+    "ctx": "vm/manager.py:885 (prose)"
+  },
+  "No server running: this PC may sleep again": {
+    "en": "No server running: this PC may sleep again",
+    "ctx": "vm/manager.py:887 (prose)"
+  },
+  "VM {0}: health back to normal": {
+    "en": "VM {0}: health back to normal",
+    "ctx": "vm/manager.py:922 (prose)"
+  },
+  "VM {0}: health — {1}": {
+    "en": "VM {0}: health — {1}",
+    "ctx": "vm/manager.py:924 (prose)"
+  },
+  "Installing…": {
+    "en": "Installing…",
+    "ctx": "vm/lifecycle.py:89 (prose)"
+  },
+  "Waiting for you to unlock": {
+    "en": "Waiting for you to unlock",
+    "ctx": "vm/lifecycle.py:93 (prose)"
+  },
+  "Install failed": {
+    "en": "Install failed",
+    "ctx": "vm/lifecycle.py:99 (prose)"
+  },
+  "Stopped unexpectedly": {
+    "en": "Stopped unexpectedly",
+    "ctx": "vm/lifecycle.py:99 (prose)"
+  },
+  "Invalid VM transition: {0} on {1}.": {
+    "en": "Invalid VM transition: {0} on {1}.",
+    "ctx": "vm/lifecycle.py:156 (prose)"
+  },
+  "The installer stopped after only {0}s — too fast to have completed. The guest likely failed to boot the installer ISO. Retry the install; if it persists, re-download the base image and remaster again.": {
+    "en": "The installer stopped after only {0}s — too fast to have completed. The guest likely failed to boot the installer ISO. Retry the install; if it persists, re-download the base image and remaster again.",
+    "ctx": "vm/lifecycle.py:178 (prose)"
+  },
+  "The appliance stopped after only {0}s — too fast to have specialized. The image may be the wrong architecture or otherwise not bootable.": {
+    "en": "The appliance stopped after only {0}s — too fast to have specialized. The image may be the wrong architecture or otherwise not bootable.",
+    "ctx": "vm/lifecycle.py:191 (prose)"
+  },
+  "Install verdict requested in state {0}.": {
+    "en": "Install verdict requested in state {0}.",
+    "ctx": "vm/lifecycle.py:230 (prose)"
+  },
+  "Appliance (hardware)": {
+    "en": "Appliance (hardware)",
+    "ctx": "vm/server_tier.py:23 (prose)"
+  },
+  "Appliance (hosted VM)": {
+    "en": "Appliance (hosted VM)",
+    "ctx": "vm/server_tier.py:24 (prose)"
+  },
+  "Not a valid recipe: top-level is not an object.": {
+    "en": "Not a valid recipe: top-level is not an object.",
+    "ctx": "vm/recipe_info.py:66 (prose)"
+  },
+  "Not a valid recipe: missing field \"{0}\".": {
+    "en": "Not a valid recipe: missing field \"{0}\".",
+    "ctx": "vm/recipe_info.py:72 (prose)"
+  },
+  "KVM is available.": {
+    "en": "KVM is available.",
+    "ctx": "vm/kvm_probe.py:45 (prose)"
+  },
+  "CPU virtualization (Intel VT-x / AMD-V) is disabled in your PC's firmware. Enable it in the BIOS/UEFI settings, then try again.": {
+    "en": "CPU virtualization (Intel VT-x / AMD-V) is disabled in your PC's firmware. Enable it in the BIOS/UEFI settings, then try again.",
+    "ctx": "vm/kvm_probe.py:57 (prose)"
+  },
+  "The kvm kernel module isn't loaded (no /dev/kvm). Load it with `sudo modprobe kvm_intel` (or kvm_amd) — or your kernel may lack KVM.": {
+    "en": "The kvm kernel module isn't loaded (no /dev/kvm). Load it with `sudo modprobe kvm_intel` (or kvm_amd) — or your kernel may lack KVM.",
+    "ctx": "vm/kvm_probe.py:62 (prose)"
+  },
+  "Hosting Flagship servers for the internet": {
+    "en": "Hosting Flagship servers for the internet",
+    "ctx": "vm/host_power.py:14 (prose)"
+  },
+  "Can't keep this PC awake: no sleep inhibitor is available. Turn off automatic suspend while hosting.": {
+    "en": "Can't keep this PC awake: no sleep inhibitor is available. Turn off automatic suspend while hosting.",
+    "ctx": "vm/host_power.py:60 (prose)"
+  },
+  "Can't keep this PC awake: {0}": {
+    "en": "Can't keep this PC awake: {0}",
+    "ctx": "vm/host_power.py:65 (prose)"
+  },
+  "No prebuilt {0} server image is published yet.": {
+    "en": "No prebuilt {0} server image is published yet.",
+    "ctx": "vm/appliance_cache.py:54 (prose)"
+  },
+  "The prebuilt server image's manifest is malformed.": {
+    "en": "The prebuilt server image's manifest is malformed.",
+    "ctx": "vm/appliance_cache.py:58 (prose)"
+  },
+  "Couldn't download the prebuilt server image: {0}": {
+    "en": "Couldn't download the prebuilt server image: {0}",
+    "ctx": "vm/appliance_cache.py:62 (prose)"
+  },
+  "The server returned HTTP {0} for the prebuilt server image.": {
+    "en": "The server returned HTTP {0} for the prebuilt server image.",
+    "ctx": "vm/appliance_cache.py:67 (prose)"
+  },
+  "The prebuilt server image failed its integrity check ({0}).": {
+    "en": "The prebuilt server image failed its integrity check ({0}).",
+    "ctx": "vm/appliance_cache.py:73 (prose)"
+  },
+  "Download cancelled.": {
+    "en": "Download cancelled.",
+    "ctx": "vm/appliance_cache.py:218 (prose)"
+  },
+  "The prebuilt server image is for {0}, but this recipe installs {1}.": {
+    "en": "The prebuilt server image is for {0}, but this recipe installs {1}.",
+    "ctx": "vm/appliance_cache.py:287 (prose)"
+  },
+  "Not enough free disk space for the server image: needs {0:.1f} GB, {1:.1f} GB free.": {
+    "en": "Not enough free disk space for the server image: needs {0:.1f} GB, {1:.1f} GB free.",
+    "ctx": "vm/appliance_cache.py:307 (prose)"
+  }
+}

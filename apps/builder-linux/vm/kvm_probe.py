@@ -11,6 +11,8 @@ only the file probes are impure.
 """
 from __future__ import annotations
 
+from i18n import tr
+
 import enum
 import os
 from dataclasses import dataclass
@@ -42,7 +44,7 @@ def classify(kvm_exists: bool, kvm_readable: bool, kvm_writable: bool, cpu_suppo
     """Pure classifier over the probed facts. Kept separate from the file
     probes so it's unit-testable."""
     if kvm_exists and kvm_readable and kvm_writable:
-        return KvmVerdict(KvmVerdictKind.AVAILABLE, "KVM is available.")
+        return KvmVerdict(KvmVerdictKind.AVAILABLE, tr("KVM is available."))
     if kvm_exists:
         # The device node is there but we can't open it read/write.
         return KvmVerdict(
@@ -54,13 +56,13 @@ def classify(kvm_exists: bool, kvm_readable: bool, kvm_writable: bool, cpu_suppo
     if not cpu_supports_virt:
         return KvmVerdict(
             KvmVerdictKind.VIRTUALIZATION_DISABLED_IN_FIRMWARE,
-            "CPU virtualization (Intel VT-x / AMD-V) is disabled in your PC's "
-            "firmware. Enable it in the BIOS/UEFI settings, then try again.",
+            tr("CPU virtualization (Intel VT-x / AMD-V) is disabled in your PC's "
+            "firmware. Enable it in the BIOS/UEFI settings, then try again."),
         )
     return KvmVerdict(
         KvmVerdictKind.KVM_MODULE_MISSING,
-        "The kvm kernel module isn't loaded (no /dev/kvm). Load it with "
-        "`sudo modprobe kvm_intel` (or kvm_amd) — or your kernel may lack KVM.",
+        tr("The kvm kernel module isn't loaded (no /dev/kvm). Load it with "
+        "`sudo modprobe kvm_intel` (or kvm_amd) — or your kernel may lack KVM."),
     )
 
 

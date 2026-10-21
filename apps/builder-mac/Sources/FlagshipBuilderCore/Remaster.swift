@@ -17,9 +17,9 @@ public enum RemasterError: LocalizedError {
             return "xorriso not found. Install it (brew install xorriso) or ship it in the app."
         case .sourceTooSmall(let n): return "Source ISO too small (\(n) bytes); not an ISO."
         case .notDebianInstaller:
-            return "This is not a Debian installer image. Flagship installs from a Debian netinst ISO."
+            return String(localized: "This is not a Debian installer image. Flagship installs from a Debian netinst ISO.")
         case .commandFailed(let cmd, let code, let err):
-            return "\(cmd) failed (exit \(code)): \(err)"
+            return String(localized: "\(cmd) failed (exit \(code)): \(err)")
         }
     }
 }

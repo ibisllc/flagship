@@ -20,6 +20,8 @@ constructed inside `WizardWindow.__init__`, which raises a clear error
 if the libraries are missing."""
 from __future__ import annotations
 
+from i18n import tr
+
 import contextlib
 import os
 import shlex
@@ -76,9 +78,9 @@ MODE_SIMPLE = "simple"
 MODE_ADVANCED = "advanced"
 
 DEBUG_ACCESS_HINT = (
-    "Debug access (SSH with your own key) is turned on in the Flagship app: "
+    tr("Debug access (SSH with your own key) is turned on in the Flagship app: "
     "choose “Debug-friendly server” when you make the recipe, or "
-    "use Debug access on the server’s page later."
+    "use Debug access on the server’s page later.")
 )
 
 # Reported to /api/iso-manifest as `builderVersion`; stamped at release.
@@ -273,30 +275,30 @@ class WizardState:
         if self.requires_user_iso and self.iso_path is None:
             missing.append("ISO")
         if self.selected_disk is None:
-            missing.append("USB drive")
+            missing.append(tr("USB drive"))
         if not missing:
             if self.requires_user_iso:
                 what = self.iso_path.name if self.iso_path else ""
             else:
                 what = self.verified.server_domain if self.verified else "your server"
             disk_node = self.selected_disk.device_path if self.selected_disk else ""
-            return f"Ready: {what} -> {disk_node}"
-        return f"Need: {', '.join(missing)}."
+            return tr('Ready: {0} -> {1}').format(what, disk_node)
+        return tr('Need: {0}.').format(', '.join(missing))
 
     @property
     def phase_label(self) -> Optional[str]:
         return {
-            "download": "Downloading base image…",
-            "appliance": "Downloading the server image…",
-            "verify": "Verifying the server image…",
-            "clone appliance": "Preparing the server's disk…",
-            "specialize": "Starting the server…",
-            "remaster": "Building image…",
-            "write": "Writing to USB…",
+            "download": tr("Downloading base image…"),
+            "appliance": tr("Downloading the server image…"),
+            "verify": tr("Verifying the server image…"),
+            "clone appliance": tr("Preparing the server's disk…"),
+            "specialize": tr("Starting the server…"),
+            "remaster": tr("Building image…"),
+            "write": tr("Writing to USB…"),
             "handoff": (
-                f"Server handed off · returning home in {self.handoff_countdown}…"
+                tr('Server handed off · returning home in {0}…').format(self.handoff_countdown)
                 if self.handoff_countdown is not None
-                else "Preparing a new server…"
+                else tr("Preparing a new server…")
             ),
         }.get(self.phase or "")
 
@@ -308,7 +310,7 @@ def stage_pasted_recipe(text: str, tmp_dir: Optional[Path] = None) -> Path:
     whitespace-only input; OSError on filesystem failure."""
     cleaned = text.strip()
     if not cleaned:
-        raise ValueError("Pasted recipe was empty.")
+        raise ValueError(tr("Pasted recipe was empty."))
     base = tmp_dir if tmp_dir is not None else Path(tempfile.gettempdir())
     base.mkdir(parents=True, exist_ok=True)
     out = base / f"flagship-recipe-{uuid.uuid4()}.json"
@@ -324,9 +326,9 @@ def _live_ensure_appliance(installer_git_ref: str, *, arch: str, progress, cance
 
 
 XORRISO_MISSING_MESSAGE = (
-    "Building the installer needs xorriso, which isn't installed. Install it "
+    tr("Building the installer needs xorriso, which isn't installed. Install it "
     "(Debian/Ubuntu: sudo apt install xorriso; Fedora: sudo dnf install "
-    "xorriso; Arch: sudo pacman -S libisoburn) and try again."
+    "xorriso; Arch: sudo pacman -S libisoburn) and try again.")
 )
 
 
@@ -448,7 +450,7 @@ class WizardModel:
             self._notify()
             return
         except OSError as e:
-            self.state.recipe_error = f"Could not stage pasted recipe: {e}"
+            self.state.recipe_error = tr('Could not stage pasted recipe: {0}').format(e)
             self._notify()
             return
         self.state.pasted_recipe_staging = staged
@@ -647,7 +649,7 @@ class WizardModel:
         try:
             self._wifi_store.save(ssid, password)
         except OSError as e:
-            self._append_log("stderr", f"Couldn't remember the Wi-Fi details: {e}")
+            self._append_log("stderr", tr("Couldn't remember the Wi-Fi details: {0}").format(e))
 
     @contextlib.contextmanager
     def _wifi_flags(self):
@@ -801,13 +803,11 @@ class WizardModel:
         if cap == 0:
             floor = resource_plan.MINIMUM_VM_MEMORY_BYTES // resource_plan.GIB
             return (
-                "This PC doesn't have enough free memory to host a server "
-                f"(each server needs ~{floor} GiB)."
+                tr("This PC doesn't have enough free memory to host a server (each server needs ~{0} GiB).").format(floor)
             )
         if len(self.vm.servers) >= cap:
             return (
-                f"This PC is at its hosting limit ({cap}). Remove one first, "
-                "or burn to USB."
+                tr('This PC is at its hosting limit ({0}). Remove one first, or burn to USB.').format(cap)
             )
         return None
 
@@ -831,10 +831,7 @@ class WizardModel:
     def host_here_spec_summary(self) -> str:
         host = HostResources.current()
         return (
-            "Will run as a managed VM on this PC — "
-            f"{resource_plan.vm_cpu_count(host)} vCPU, "
-            f"{resource_plan.vm_memory_bytes(host) // resource_plan.GIB} GiB RAM, "
-            f"{resource_plan.DEFAULT_MAIN_DISK_SIZE_BYTES // resource_plan.GIB} GiB disk."
+            tr('Will run as a managed VM on this PC — {0} vCPU, {1} GiB RAM, {2} GiB disk.').format(resource_plan.vm_cpu_count(host), resource_plan.vm_memory_bytes(host) // resource_plan.GIB, resource_plan.DEFAULT_MAIN_DISK_SIZE_BYTES // resource_plan.GIB)
         )
 
     def run_host_here(self) -> None:
@@ -868,7 +865,7 @@ class WizardModel:
             raw = Path(recipe).read_bytes()
             fields = recipe_info.read_recipe_fields(raw)
         except (OSError, ValueError) as e:
-            self._append_log("stderr", f"Cannot read the recipe: {e}")
+            self._append_log("stderr", tr('Cannot read the recipe: {0}').format(e))
             return
         # host_here_disabled_reason above already refused a None host arch
         # (create_default sets toolchain_error), so the fallback never fires
@@ -1117,8 +1114,8 @@ class WizardModel:
         if host is None or host.ssh_port == 0:
             self._append_log(
                 "stderr",
-                "SSH is available once the server is running (a debug-enabled "
-                "VM forwards a local port to the guest).",
+                tr("SSH is available once the server is running (a debug-enabled "
+                "VM forwards a local port to the guest)."),
             )
             return
         try:
@@ -1154,7 +1151,7 @@ class WizardModel:
             s.pair_qr = None
             s.pair_code = None
             s.pair_sas = None
-            s.pair_status = "Waiting for an internet connection…"
+            s.pair_status = tr("Waiting for an internet connection…")
         self._notify()
 
     def start_pairing(self) -> None:
@@ -1173,7 +1170,7 @@ class WizardModel:
         s.pair_qr = None
         s.pair_code = None
         s.pair_sas = None
-        s.pair_status = "Starting…"
+        s.pair_status = tr("Starting…")
         s.is_pairing = True
         self._notify()
 
@@ -1191,7 +1188,7 @@ class WizardModel:
             except (CLILocateError, FileNotFoundError, OSError) as e:
                 self._append_log("stderr", f"pair failed: {e}")
                 if self._pair is session:
-                    self._end_pairing("Pairing couldn't start — is Node installed?", failed=True)
+                    self._end_pairing(tr("Pairing couldn't start — is Node installed?"), failed=True)
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -1219,17 +1216,17 @@ class WizardModel:
             self.pairing_watch.on_ready()
             s.pair_qr = ev.qr_terminal
             s.pair_code = ev.human_code
-            s.pair_status = "Scan the QR with the Flagship app, or type the code."
+            s.pair_status = tr("Scan the QR with the Flagship app, or type the code.")
         elif ev.event == "phone-connected":
             s.pair_sas = ev.sas
             s.pair_status = (
-                "Phone connected — check the security code matches, then "
-                "approve on your phone."
+                tr("Phone connected — check the security code matches, then "
+                "approve on your phone.")
             )
         elif ev.event == "paired":
-            s.pair_status = "Paired — receiving your recipe…"
+            s.pair_status = tr("Paired — receiving your recipe…")
         elif ev.event == "delivered":
-            s.pair_status = f"Recipe received for {ev.server_domain}."
+            s.pair_status = tr('Recipe received for {0}.').format(ev.server_domain)
         elif ev.event == "debug-result":
             self._append_log(
                 "stdout",
@@ -1252,7 +1249,7 @@ class WizardModel:
             self.pairing_watch.on_failed()
             return
         elif ev.event == "error":
-            self._end_pairing(ev.message or "Pairing failed.", failed=True)
+            self._end_pairing(ev.message or tr("Pairing failed."), failed=True)
             return
         self._notify()
 
@@ -1300,7 +1297,7 @@ class WizardModel:
         try:
             resolved = self._locate_fn()
         except CLILocateError as e:
-            self._append_log("stderr", f"CLI locate failed: {e}")
+            self._append_log("stderr", tr('CLI locate failed: {0}').format(e))
             return
         args = build_args(resolved.entry_path)
         runner = CLIRunner(
@@ -1322,7 +1319,7 @@ class WizardModel:
             if code == 0:
                 on_success(stdout_text)
             else:
-                self._append_log("stderr", f"CLI exited {code}")
+                self._append_log("stderr", tr('CLI exited {0}').format(code))
         finally:
             self._current_runner = None
 
@@ -1345,18 +1342,18 @@ def build_window(application, model: Optional[WizardModel] = None):
     wizard_model = model if model is not None else WizardModel(mode=MODE_SIMPLE, auto_pair=True)
 
     window = Adw.ApplicationWindow(application=application)
-    window.set_title("Flagship Studio (Experimental)")
+    window.set_title(tr("Flagship Studio (Experimental)"))
     window.set_default_size(960, 820)
 
     header = Adw.HeaderBar()
     home_btn = Gtk.Button(icon_name="go-home-symbolic")
-    home_btn.set_tooltip_text("Return to pairing home")
+    home_btn.set_tooltip_text(tr("Return to pairing home"))
     home_btn.connect("clicked", lambda _b: wizard_model.reset_to_new_server())
     header.pack_start(home_btn)
 
     # ---- mode toggle (Simple default / Advanced) ----
     mode_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-    mode_label = Gtk.Label(label="Bring my own ISO (Advanced)", xalign=0.0)
+    mode_label = Gtk.Label(label=tr("Bring my own ISO (Advanced)"), xalign=0.0)
     mode_switch = Gtk.Switch()
     mode_switch.set_active(wizard_model.state.mode == MODE_ADVANCED)
     mode_switch.set_valign(Gtk.Align.CENTER)
@@ -1387,7 +1384,7 @@ def build_window(application, model: Optional[WizardModel] = None):
         dlg.set_modal(True)
         dlg.set_program_name("Flagship Studio")
         dlg.set_version(display_version())
-        dlg.set_comments("Build and host your own Flagship server.")
+        dlg.set_comments(tr("Build and host your own Flagship server."))
         dlg.set_website("https://flagshipserver.com")
         dlg.present()
 
@@ -1415,30 +1412,30 @@ def build_window(application, model: Optional[WizardModel] = None):
 
     _menu = Gio.Menu()
     _sec_new = Gio.Menu()
-    _sec_new.append("New Server", "win.new-server")
+    _sec_new.append(tr("New Server"), "win.new-server")
     _menu.append_section(None, _sec_new)
 
     _appearance = Gio.Menu()
-    _appearance.append("Auto (System)", "win.color-scheme::auto")
-    _appearance.append("Light", "win.color-scheme::light")
-    _appearance.append("Dark", "win.color-scheme::dark")
+    _appearance.append(tr("Auto (System)"), "win.color-scheme::auto")
+    _appearance.append(tr("Light"), "win.color-scheme::light")
+    _appearance.append(tr("Dark"), "win.color-scheme::dark")
     _sec_appear = Gio.Menu()
-    _sec_appear.append_submenu("Appearance", _appearance)
+    _sec_appear.append_submenu(tr("Appearance"), _appearance)
     _menu.append_section(None, _sec_appear)
 
     _sec_help = Gio.Menu()
-    _sec_help.append("Documentation", "win.documentation")
-    _sec_help.append("Report an Issue", "win.report-issue")
+    _sec_help.append(tr("Documentation"), "win.documentation")
+    _sec_help.append(tr("Report an Issue"), "win.report-issue")
     _menu.append_section(None, _sec_help)
 
     _sec_about = Gio.Menu()
-    _sec_about.append("About Flagship Studio", "win.about")
-    _sec_about.append("Quit", "win.quit")
+    _sec_about.append(tr("About Flagship Studio"), "win.about")
+    _sec_about.append(tr("Quit"), "win.quit")
     _menu.append_section(None, _sec_about)
 
     menu_btn = Gtk.MenuButton(icon_name="open-menu-symbolic")
     menu_btn.set_menu_model(_menu)
-    menu_btn.set_tooltip_text("Main menu")
+    menu_btn.set_tooltip_text(tr("Main menu"))
     header.pack_end(menu_btn)
 
     # Main vertical layout: (main panes | hosted-servers sidebar) + log pane.
@@ -1484,27 +1481,27 @@ def build_window(application, model: Optional[WizardModel] = None):
     # ---- Step 1: recipe ----
     step1 = _wizard_card(
         step=1,
-        title="Drop the recipe",
-        subtitle="JSON file from the website after you scanned the QR code.",
+        title=tr("Drop the recipe"),
+        subtitle=tr("JSON file from the website after you scanned the QR code."),
     )
     content_box.append(step1["card"])
 
     recipe_drop = _drop_zone(
-        "Drop .flagship-recipe.json here",
+        tr("Drop .flagship-recipe.json here"),
         on_drop=lambda p: wizard_model.accept_recipe_file(Path(p)),
         Gtk=Gtk,
     )
     step1["body"].append(recipe_drop)
 
-    choose_recipe = Gtk.Button(label="Choose file...")
+    choose_recipe = Gtk.Button(label=tr("Choose file..."))
     choose_recipe.connect("clicked", lambda _b: _pick_file(
-        window, "Pick recipe", filters=[("JSON", "*.json")],
+        window, tr("Pick recipe"), filters=[("JSON", "*.json")],
         on_pick=lambda p: wizard_model.accept_recipe_file(Path(p)),
         Gtk=Gtk,
     ))
     step1["body"].append(choose_recipe)
 
-    paste_label = Gtk.Label(label="Or paste the JSON:", xalign=0.0)
+    paste_label = Gtk.Label(label=tr("Or paste the JSON:"), xalign=0.0)
     paste_label.add_css_class("dim-label")
     step1["body"].append(paste_label)
 
@@ -1516,7 +1513,7 @@ def build_window(application, model: Optional[WizardModel] = None):
     paste_scroll.set_child(paste_view)
     step1["body"].append(paste_scroll)
 
-    use_pasted = Gtk.Button(label="Use pasted JSON")
+    use_pasted = Gtk.Button(label=tr("Use pasted JSON"))
 
     def _on_use_pasted(_b):
         text = paste_buf.get_text(paste_buf.get_start_iter(), paste_buf.get_end_iter(), True)
@@ -1526,9 +1523,9 @@ def build_window(application, model: Optional[WizardModel] = None):
     step1["body"].append(use_pasted)
 
     pair_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-    pair_btn = Gtk.Button(label="Pair with your phone")
+    pair_btn = Gtk.Button(label=tr("Pair with your phone"))
     pair_btn.set_tooltip_text(
-        "Scan a QR with the Flagship app to receive a recipe — no file needed."
+        tr("Scan a QR with the Flagship app to receive a recipe — no file needed.")
     )
     pair_btn.connect("clicked", lambda _b: wizard_model.start_pairing())
     pair_row.append(pair_btn)
@@ -1553,21 +1550,21 @@ def build_window(application, model: Optional[WizardModel] = None):
     # ---- Step 2: ISO ----
     step2 = _wizard_card(
         step=2,
-        title="Drop the ISO",
-        subtitle="Debian netinst stock image. Run `flagship-build distros` for accepted SHAs.",
+        title=tr("Drop the ISO"),
+        subtitle=tr("Debian netinst stock image. Run `flagship-build distros` for accepted SHAs."),
     )
     content_box.append(step2["card"])
 
     iso_drop = _drop_zone(
-        "Drop debian-*-netinst.iso here",
+        tr("Drop debian-*-netinst.iso here"),
         on_drop=lambda p: wizard_model.accept_iso_file(Path(p)),
         Gtk=Gtk,
     )
     step2["body"].append(iso_drop)
 
-    choose_iso = Gtk.Button(label="Choose file...")
+    choose_iso = Gtk.Button(label=tr("Choose file..."))
     choose_iso.connect("clicked", lambda _b: _pick_file(
-        window, "Pick ISO", filters=[("ISO", "*.iso")],
+        window, tr("Pick ISO"), filters=[("ISO", "*.iso")],
         on_pick=lambda p: wizard_model.accept_iso_file(Path(p)),
         Gtk=Gtk,
     ))
@@ -1579,13 +1576,13 @@ def build_window(application, model: Optional[WizardModel] = None):
     # ---- Step 3: USB disk ----
     step3 = _wizard_card(
         step=3,
-        title="Pick the USB drive",
-        subtitle="Only removable drives in the 500MB-500GB band. Internal disks are hidden by design.",
+        title=tr("Pick the USB drive"),
+        subtitle=tr("Only removable drives in the 500MB-500GB band. Internal disks are hidden by design."),
     )
     content_box.append(step3["card"])
 
     disk_controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-    refresh_btn = Gtk.Button(label="Refresh")
+    refresh_btn = Gtk.Button(label=tr("Refresh"))
     refresh_btn.connect("clicked", lambda _b: wizard_model.refresh_disks())
     disk_controls.append(refresh_btn)
     refresh_spinner = Gtk.Spinner()
@@ -1613,8 +1610,8 @@ def build_window(application, model: Optional[WizardModel] = None):
     # ---- Step 4: bake ----
     step4 = _wizard_card(
         step=4,
-        title="Flash the USB",
-        subtitle="Writes the install image to the picked disk. Needs admin via pkexec.",
+        title=tr("Flash the USB"),
+        subtitle=tr("Writes the install image to the picked disk. Needs admin via pkexec."),
     )
     content_box.append(step4["card"])
 
@@ -1626,13 +1623,13 @@ def build_window(application, model: Optional[WizardModel] = None):
     # the signed recipe); remembered for this user.
     wifi_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
     wifi_ssid = Gtk.Entry()
-    wifi_ssid.set_placeholder_text("Wi-Fi network (optional)")
+    wifi_ssid.set_placeholder_text(tr("Wi-Fi network (optional)"))
     wifi_ssid.set_hexpand(True)
     wifi_ssid.set_text(wizard_model.state.wifi_ssid)
     wifi_row.append(wifi_ssid)
     wifi_password = Gtk.PasswordEntry()
     wifi_password.set_show_peek_icon(True)
-    wifi_password.set_property("placeholder-text", "Wi-Fi password")
+    wifi_password.set_property("placeholder-text", tr("Wi-Fi password"))
     wifi_password.set_text(wizard_model.state.wifi_password)
     wifi_row.append(wifi_password)
 
@@ -1643,8 +1640,8 @@ def build_window(application, model: Optional[WizardModel] = None):
     wifi_password.connect("changed", _on_wifi_changed)
     step4["body"].append(wifi_row)
     wifi_caption = Gtk.Label(
-        label="Optional Wi-Fi for a server without Ethernet. Baked into this single-use "
-        "installer, and remembered on this PC for your account only.",
+        label=tr("Optional Wi-Fi for a server without Ethernet. Baked into this single-use "
+        "installer, and remembered on this PC for your account only."),
         xalign=0.0,
     )
     wifi_caption.set_wrap(True)
@@ -1652,17 +1649,17 @@ def build_window(application, model: Optional[WizardModel] = None):
     step4["body"].append(wifi_caption)
 
     bake_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-    bake_btn = Gtk.Button(label="Flash to USB")
+    bake_btn = Gtk.Button(label=tr("Flash to USB"))
     bake_btn.add_css_class("suggested-action")
     bake_btn.add_css_class("pill")
     bake_btn.connect("clicked", lambda _b: wizard_model.run_bake())
     bake_row.append(bake_btn)
 
-    prep_btn = Gtk.Button(label="Bake ISO only (no flash)")
+    prep_btn = Gtk.Button(label=tr("Bake ISO only (no flash)"))
     prep_btn.connect("clicked", lambda _b: wizard_model.run_prepare())
     bake_row.append(prep_btn)
 
-    verify_btn = Gtk.Button(label="Verify recipe only")
+    verify_btn = Gtk.Button(label=tr("Verify recipe only"))
     verify_btn.connect("clicked", lambda _b: wizard_model.run_verify())
     bake_row.append(verify_btn)
     step4["body"].append(bake_row)
@@ -1690,8 +1687,8 @@ def build_window(application, model: Optional[WizardModel] = None):
     # ---- Step 5: done ----
     step5 = _wizard_card(
         step=5,
-        title="Done",
-        subtitle="Bring this USB to the machine you're installing on.",
+        title=tr("Done"),
+        subtitle=tr("Bring this USB to the machine you're installing on."),
     )
     content_box.append(step5["card"])
     done_label = Gtk.Label(xalign=0.0)
@@ -1708,22 +1705,22 @@ def build_window(application, model: Optional[WizardModel] = None):
     chooser_domain.add_css_class("title-3")
     chooser_box.append(chooser_domain)
     chooser_sub = Gtk.Label(
-        label="Recipe verified — choose where this server should live.", xalign=0.0
+        label=tr("Recipe verified — choose where this server should live."), xalign=0.0
     )
     chooser_sub.add_css_class("dim-label")
     chooser_box.append(chooser_sub)
 
     usb_card = Gtk.Button()
     usb_inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-    usb_title = Gtk.Label(label="Burn to USB", xalign=0.0)
+    usb_title = Gtk.Label(label=tr("Burn to USB"), xalign=0.0)
     usb_title.add_css_class("heading")
     usb_inner.append(usb_title)
     usb_badge = Gtk.Label(label=wizard_model.hardware_badge_label, xalign=0.0)
     usb_badge.add_css_class("dim-label")
     usb_inner.append(usb_badge)
     usb_hint = Gtk.Label(
-        label="Build a dedicated hardware appliance — the gold standard. "
-        "Boot any spare box from the USB stick.",
+        label=tr("Build a dedicated hardware appliance — the gold standard. "
+        "Boot any spare box from the USB stick."),
         xalign=0.0,
     )
     usb_hint.set_wrap(True)
@@ -1737,16 +1734,16 @@ def build_window(application, model: Optional[WizardModel] = None):
 
     host_card = Gtk.Button()
     host_inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-    host_title = Gtk.Label(label="Host on this PC", xalign=0.0)
+    host_title = Gtk.Label(label=tr("Host on this PC"), xalign=0.0)
     host_title.add_css_class("heading")
     host_inner.append(host_title)
     host_badge = Gtk.Label(label=wizard_model.hosted_vm_badge_label, xalign=0.0)
     host_badge.add_css_class("dim-label")
     host_inner.append(host_badge)
     host_hint = Gtk.Label(
-        label="Run the same encrypted, phone-gated appliance as a managed VM "
+        label=tr("Run the same encrypted, phone-gated appliance as a managed VM "
         "inside this app. Same recipe, same unlock — your phone still holds "
-        "the keys.",
+        "the keys."),
         xalign=0.0,
     )
     host_hint.set_wrap(True)
@@ -1766,7 +1763,7 @@ def build_window(application, model: Optional[WizardModel] = None):
     hosthere_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
     for setter in ("set_margin_top", "set_margin_bottom", "set_margin_start", "set_margin_end"):
         getattr(hosthere_box, setter)(24)
-    hh_back = Gtk.Button(label="‹ Choose destination")
+    hh_back = Gtk.Button(label=tr("‹ Choose destination"))
     hh_back.set_halign(Gtk.Align.START)
     hh_back.add_css_class("flat")
     hh_back.connect("clicked", lambda _b: wizard_model.set_destination(None))
@@ -1779,9 +1776,9 @@ def build_window(application, model: Optional[WizardModel] = None):
     hh_spec.add_css_class("dim-label")
     hosthere_box.append(hh_spec)
     hh_note = Gtk.Label(
-        label="The VM installs unattended from the same image a USB burn uses, "
+        label=tr("The VM installs unattended from the same image a USB burn uses, "
         "then boots encrypted and waits for your phone to unlock it. This app "
-        "never sees the disk key.",
+        "never sees the disk key."),
         xalign=0.0,
     )
     hh_note.set_wrap(True)
@@ -1792,13 +1789,13 @@ def build_window(application, model: Optional[WizardModel] = None):
     hh_accel_warning.add_css_class("warning")
     hh_accel_warning.set_visible(False)
     hosthere_box.append(hh_accel_warning)
-    hh_create = Gtk.Button(label="Create server on this PC")
+    hh_create = Gtk.Button(label=tr("Create server on this PC"))
     hh_create.add_css_class("suggested-action")
     hh_create.add_css_class("pill")
     hh_create.set_halign(Gtk.Align.CENTER)
     hh_create.connect("clicked", lambda _b: wizard_model.run_host_here())
     hosthere_box.append(hh_create)
-    hh_caption = Gtk.Label(label="Encrypted disk · unlocked by your phone")
+    hh_caption = Gtk.Label(label=tr("Encrypted disk · unlocked by your phone"))
     hh_caption.add_css_class("dim-label")
     hosthere_box.append(hh_caption)
     hh_progress = Gtk.ProgressBar()
@@ -1817,7 +1814,7 @@ def build_window(application, model: Optional[WizardModel] = None):
     pairing_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
     pairing_box.set_valign(Gtk.Align.CENTER)
     pairing_box.set_halign(Gtk.Align.CENTER)
-    pairing_title = Gtk.Label(label="Pair with your phone")
+    pairing_title = Gtk.Label(label=tr("Pair with your phone"))
     pairing_title.add_css_class("title-2")
     pairing_box.append(pairing_title)
     pairing_status = Gtk.Label()
@@ -1833,7 +1830,7 @@ def build_window(application, model: Optional[WizardModel] = None):
     pairing_code.set_selectable(True)
     pairing_box.append(pairing_code)
     pairing_sas_caption = Gtk.Label(
-        label="Security code — confirm it matches your phone"
+        label=tr("Security code — confirm it matches your phone")
     )
     pairing_sas_caption.add_css_class("dim-label")
     pairing_sas_caption.set_visible(False)
@@ -1842,7 +1839,7 @@ def build_window(application, model: Optional[WizardModel] = None):
     pairing_sas.add_css_class("title-1")
     pairing_sas.set_visible(False)
     pairing_box.append(pairing_sas)
-    pairing_cancel = Gtk.Button(label="Cancel")
+    pairing_cancel = Gtk.Button(label=tr("Cancel"))
     pairing_cancel.set_halign(Gtk.Align.CENTER)
     pairing_cancel.connect("clicked", lambda _b: wizard_model.cancel_pairing())
     pairing_box.append(pairing_cancel)
@@ -1888,25 +1885,25 @@ def build_window(application, model: Optional[WizardModel] = None):
     detail_last_connected.add_css_class("dim-label")
     detail_box.append(detail_last_connected)
     detail_actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-    detail_start = Gtk.Button(label="Start")
+    detail_start = Gtk.Button(label=tr("Start"))
     detail_start.add_css_class("suggested-action")
     detail_actions.append(detail_start)
-    detail_stop = Gtk.Button(label="Stop")
+    detail_stop = Gtk.Button(label=tr("Stop"))
     detail_actions.append(detail_stop)
-    detail_restart = Gtk.Button(label="Restart")
+    detail_restart = Gtk.Button(label=tr("Restart"))
     detail_actions.append(detail_restart)
-    detail_retry = Gtk.Button(label="Retry install")
+    detail_retry = Gtk.Button(label=tr("Retry install"))
     detail_retry.add_css_class("suggested-action")
     detail_actions.append(detail_retry)
-    detail_cancel_install = Gtk.Button(label="Stop installation")
+    detail_cancel_install = Gtk.Button(label=tr("Stop installation"))
     detail_actions.append(detail_cancel_install)
     # SSH exists IFF the recipe carried the owner-signed debug grant. A
     # production VM shows no debug affordance at all (the phone-signed grant is
     # the gate; there is no host-side override).
-    detail_ssh = Gtk.Button(label="Open in SSH")
+    detail_ssh = Gtk.Button(label=tr("Open in SSH"))
     detail_actions.append(detail_ssh)
     detail_box.append(detail_actions)
-    detail_delete = Gtk.Button(label="Delete this server")
+    detail_delete = Gtk.Button(label=tr("Delete this server"))
     detail_delete.add_css_class("destructive-action")
     detail_delete.add_css_class("flat")
     detail_delete.set_halign(Gtk.Align.END)
@@ -1922,14 +1919,11 @@ def build_window(application, model: Optional[WizardModel] = None):
         fqdn = server.fqdn if server else name
         dialog = Adw.MessageDialog(
             transient_for=window,
-            heading="Delete this server?",
-            body=f"Delete {fqdn}?\n\nThe VM and its encrypted disk image are "
-            "removed from this PC. The server's identity stays with your account. "
-            "Backups stored on this server are deleted with it; copies kept on "
-            "your phone or with peers (depending on its backup policy) are not.",
+            heading=tr("Delete this server?"),
+            body=tr("Delete {0}?\n\nThe VM and its encrypted disk image are removed from this PC. The server's identity stays with your account. Backups stored on this server are deleted with it; copies kept on your phone or with peers (depending on its backup policy) are not.").format(fqdn),
         )
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("delete", "Delete")
+        dialog.add_response("cancel", tr("Cancel"))
+        dialog.add_response("delete", tr("Delete"))
         dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.set_default_response("cancel")
 
@@ -1967,7 +1961,7 @@ def build_window(application, model: Optional[WizardModel] = None):
     sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
     sidebar.set_size_request(330, -1)
     content_row.append(sidebar)
-    sidebar_title = Gtk.Label(label="Servers on this PC", xalign=0.0)
+    sidebar_title = Gtk.Label(label=tr("Servers on this PC"), xalign=0.0)
     sidebar_title.add_css_class("heading")
     for setter in ("set_margin_top", "set_margin_start", "set_margin_end"):
         getattr(sidebar_title, setter)(12)
@@ -1987,7 +1981,7 @@ def build_window(application, model: Optional[WizardModel] = None):
     server_list.connect("row-selected", _on_server_row_selected)
     sidebar.append(server_list)
     no_servers = Gtk.Label(
-        label='None yet. Verify a recipe and choose "Host on this PC".',
+        label=tr('None yet. Verify a recipe and choose "Host on this PC".'),
         xalign=0.0,
     )
     no_servers.set_wrap(True)
@@ -1996,7 +1990,7 @@ def build_window(application, model: Optional[WizardModel] = None):
         getattr(no_servers, setter)(12)
     sidebar.append(no_servers)
     sidebar.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
-    add_server_btn = Gtk.Button(label="＋ Add a server")
+    add_server_btn = Gtk.Button(label=tr("＋ Add a server"))
     add_server_btn.add_css_class("flat")
     add_server_btn.set_halign(Gtk.Align.START)
     for setter in ("set_margin_start", "set_margin_end", "set_margin_bottom"):
@@ -2073,17 +2067,17 @@ def build_window(application, model: Optional[WizardModel] = None):
                 actions.append(b)
 
             if server.console_enabled:
-                _action("Open in SSH", server.name, wizard_model.open_ssh)
+                _action(tr("Open in SSH"), server.name, wizard_model.open_ssh)
             if server.can_start:
-                _action("Start", server.name, wizard_model.start_server)
+                _action(tr("Start"), server.name, wizard_model.start_server)
             if server.can_stop:
-                _action("Stop", server.name, wizard_model.stop_server)
-                _action("Restart", server.name, wizard_model.restart_server)
+                _action(tr("Stop"), server.name, wizard_model.stop_server)
+                _action(tr("Restart"), server.name, wizard_model.restart_server)
             if server.can_retry_install:
-                _action("Retry install", server.name, wizard_model.retry_install)
+                _action(tr("Retry install"), server.name, wizard_model.retry_install)
             if server.can_cancel_install:
-                _action("Stop installation", server.name, wizard_model.cancel_install)
-            _action("Delete…", server.name, _confirm_delete, destructive=True)
+                _action(tr("Stop installation"), server.name, wizard_model.cancel_install)
+            _action(tr("Delete…"), server.name, _confirm_delete, destructive=True)
             popover.set_child(actions)
             menu_btn.set_popover(popover)
             grid.append(menu_btn)
@@ -2121,19 +2115,19 @@ def build_window(application, model: Optional[WizardModel] = None):
     root.append(log_outer)
 
     log_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-    log_title = Gtk.Label(label="Log", xalign=0.0)
+    log_title = Gtk.Label(label=tr("Log"), xalign=0.0)
     log_title.add_css_class("heading")
     log_header.append(log_title)
     log_spinner = Gtk.Spinner()
     log_header.append(log_spinner)
     log_outer.append(log_header)
 
-    cancel_btn = Gtk.Button(label="Cancel")
+    cancel_btn = Gtk.Button(label=tr("Cancel"))
     cancel_btn.connect("clicked", lambda _b: wizard_model.cancel())
     cancel_btn.set_sensitive(False)
     log_header.append(cancel_btn)
 
-    clear_btn = Gtk.Button(label="Clear")
+    clear_btn = Gtk.Button(label=tr("Clear"))
     clear_btn.connect("clicked", lambda _b: wizard_model.clear_log())
     log_header.append(clear_btn)
 
@@ -2198,7 +2192,7 @@ def build_window(application, model: Optional[WizardModel] = None):
         pairing_status.set_text(s.pair_status or "")
         pairing_qr.set_text(s.pair_qr or "")
         pairing_qr.set_visible(bool(s.pair_qr))
-        pairing_code.set_text(f"Code: {s.pair_code}" if s.pair_code else "")
+        pairing_code.set_text(tr('Code: {0}').format(s.pair_code) if s.pair_code else "")
         pairing_code.set_visible(bool(s.pair_code))
         pairing_sas_caption.set_visible(bool(s.pair_sas))
         pairing_sas.set_text(s.pair_sas or "")
@@ -2215,12 +2209,12 @@ def build_window(application, model: Optional[WizardModel] = None):
             verdict = wizard_model.vm.health_verdict(server.name)
             detail_health.set_visible(verdict is not None)
             if verdict is not None:
-                title = "Health" if verdict.ok else "⚠ Server health"
+                title = tr("Health") if verdict.ok else "⚠ Server health"
                 detail_health.set_text(f"{title}: " + "\n".join(verdict.lines))
             connected = server.record.last_connected_at
             detail_last_connected.set_text(
-                "Last connected: "
-                + (time.strftime("%d %b %Y %H:%M", time.localtime(connected)) if connected else "Not yet")
+                tr("Last connected: ")
+                + (time.strftime("%d %b %Y %H:%M", time.localtime(connected)) if connected else tr("Not yet"))
             )
             detail_start.set_visible(server.can_start)
             detail_stop.set_visible(server.can_stop)
@@ -2239,14 +2233,14 @@ def build_window(application, model: Optional[WizardModel] = None):
             recipe_status.set_text(s.recipe_error)
             recipe_status.add_css_class("error")
         elif s.recipe_path:
-            recipe_status.set_text(f"Loaded: {s.recipe_path.name}")
+            recipe_status.set_text(tr('Loaded: {0}').format(s.recipe_path.name))
             recipe_status.remove_css_class("error")
         else:
             recipe_status.set_text("")
         if s.verified is not None:
             exp = s.verified.expires_at or "(unknown)"
             verify_badge.set_text(
-                f"Recipe verified · server: {s.verified.server_domain} · expires: {exp}"
+                tr('Recipe verified · server: {0} · expires: {1}').format(s.verified.server_domain, exp)
             )
             verify_badge.set_visible(True)
         else:
@@ -2257,7 +2251,7 @@ def build_window(application, model: Optional[WizardModel] = None):
         if mode_switch.get_active() != (s.mode == MODE_ADVANCED):
             mode_switch.set_active(s.mode == MODE_ADVANCED)
         if s.requires_user_iso and s.iso_path:
-            iso_status.set_text(f"Loaded: {s.iso_path.name}")
+            iso_status.set_text(tr('Loaded: {0}').format(s.iso_path.name))
         else:
             iso_status.set_text("")
         # disks
@@ -2402,7 +2396,7 @@ def build_window(application, model: Optional[WizardModel] = None):
         if not wizard_model.vm.has_live_servers:
             return False
         shutdown["started"] = True
-        tray_status["text"] = "Shutting down your servers…"
+        tray_status["text"] = tr("Shutting down your servers…")
         if tray is not None:
             tray.refresh()
         busy = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
@@ -2412,10 +2406,10 @@ def build_window(application, model: Optional[WizardModel] = None):
         spinner.set_size_request(32, 32)
         spinner.start()
         busy.append(spinner)
-        title = Gtk.Label(label="Shutting down your servers…")
+        title = Gtk.Label(label=tr("Shutting down your servers…"))
         title.add_css_class("title-2")
         busy.append(title)
-        hint = Gtk.Label(label="This can take up to a minute.")
+        hint = Gtk.Label(label=tr("This can take up to a minute."))
         hint.add_css_class("dim-label")
         busy.append(hint)
         window.set_content(busy)
@@ -2585,7 +2579,7 @@ def _rebuild_disks_list(disks_list, disks: list[DeviceInfo], selected: Optional[
         primary.set_wrap(True)
         hbox.append(primary)
         secondary = Gtk.Label(
-            label=f"{d.device_path} · removable: {d.removable} · bus: {d.bus} · {d.verdict_reason}",
+            label=tr('{0} · removable: {1} · bus: {2} · {3}').format(d.device_path, d.removable, d.bus, d.verdict_reason),
             xalign=0.0,
         )
         secondary.add_css_class("dim-label")

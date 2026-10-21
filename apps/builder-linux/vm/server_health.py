@@ -9,6 +9,8 @@ vm-core-vectors.json "serverHealth" section pins the copy on all three ports.
 """
 from __future__ import annotations
 
+from i18n import tr
+
 import json
 import re
 from dataclasses import dataclass
@@ -104,33 +106,29 @@ class VMServerHealth:
         stale_min = int((now_ms - self.received_at_ms) / 60_000)
         if stale_min >= 5:
             return HealthVerdict(False, [
-                f"No health report for {stale_min} min. The server itself may be off or frozen."
+                tr('No health report for {0} min. The server itself may be off or frozen.').format(stale_min)
             ])
         lines: List[str] = []
         if self.oom_kills > 0:
             lines.append(
-                f"Ran out of memory {self.oom_kills}× since it started "
-                f"({self.mem_avail_mb} MB free of {self.mem_total_mb} MB now)."
+                tr('Ran out of memory {0}× since it started ({1} MB free of {2} MB now).').format(self.oom_kills, self.mem_avail_mb, self.mem_total_mb)
             )
         if self.daemon_state != "active":
             lines.append(
-                f"The server software isn't running ({self.daemon_state}; restarted "
-                f"{self.daemon_restarts}×, last exit code {self.daemon_last_exit})."
+                tr("The server software isn't running ({0}; restarted {1}×, last exit code {2}).").format(self.daemon_state, self.daemon_restarts, self.daemon_last_exit)
             )
         elif self.daemon_restarts >= 3:
             lines.append(
-                f"The server software restarted {self.daemon_restarts}× since it started "
-                f"(last exit code {self.daemon_last_exit})."
+                tr('The server software restarted {0}× since it started (last exit code {1}).').format(self.daemon_restarts, self.daemon_last_exit)
             )
         if not self.tunnel:
-            lines.append("Can't reach the Flagship relay.")
+            lines.append(tr("Can't reach the Flagship relay."))
         if self.disk_used_pct >= 90:
-            lines.append(f"Disk is {self.disk_used_pct}% full.")
+            lines.append(tr('Disk is {0}% full.').format(self.disk_used_pct))
         if lines:
             return HealthVerdict(False, lines)
         return HealthVerdict(True, [
-            f"Healthy · {self.mem_avail_mb} MB free of {self.mem_total_mb} MB · "
-            f"disk {self.disk_used_pct}% · up {uptime(self.uptime_s)}"
+            tr('Healthy · {0} MB free of {1} MB · disk {2}% · up {3}').format(self.mem_avail_mb, self.mem_total_mb, self.disk_used_pct, uptime(self.uptime_s))
         ])
 
 

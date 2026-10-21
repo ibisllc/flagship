@@ -30,9 +30,9 @@ final class VZHost: NSObject {
         var errorDescription: String? {
             switch self {
             case .unsupportedNetworkMode:
-                return "Unsupported network mode for this VM."
+                return String(localized: "Unsupported network mode for this VM.")
             case .diskMissing(let p):
-                return "VM disk image missing: \(p)"
+                return String(localized: "VM disk image missing: \(p)")
             }
         }
     }

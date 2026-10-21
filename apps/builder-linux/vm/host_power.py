@@ -7,11 +7,13 @@ process lives. The display may still sleep, as on the Mac.
 """
 from __future__ import annotations
 
+from i18n import tr
+
 import shutil
 import subprocess
 from typing import Callable, List, Optional
 
-WHY = "Hosting Flagship servers for the internet"
+WHY = tr("Hosting Flagship servers for the internet")
 
 
 def systemd_inhibit_argv(binary: str) -> List[str]:
@@ -57,12 +59,12 @@ class SleepInhibitor:
                 return
             binary = self._which("systemd-inhibit")
             if binary is None:
-                self._log("Can't keep this PC awake: no sleep inhibitor is available. Turn off automatic suspend while hosting.")
+                self._log(tr("Can't keep this PC awake: no sleep inhibitor is available. Turn off automatic suspend while hosting."))
                 return
             try:
                 self._proc = self._spawn(systemd_inhibit_argv(binary))
             except OSError as e:
-                self._log(f"Can't keep this PC awake: {e}")
+                self._log(tr("Can't keep this PC awake: {0}").format(e))
         elif not on:
             if self._cookie:
                 try:
