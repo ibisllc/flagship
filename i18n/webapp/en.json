@@ -144,7 +144,8 @@
   },
   "UMK must be 32 bytes": {
     "en": "UMK must be 32 bytes",
-    "ctx": "webapp/lib/accountMetadata.js:43"
+    "ctx": "webapp/lib/accountMetadata.js:43",
+    "translatable": false
   },
   "a remote browser doesn't read the account's servers": {
     "en": "a remote browser doesn't read the account's servers",
@@ -585,7 +586,8 @@
   },
   "Authorization: Bearer {0}": {
     "en": "Authorization: Bearer {0}",
-    "ctx": "webapp/lib/appApiKeys.js:105"
+    "ctx": "webapp/lib/appApiKeys.js:105",
+    "translatable": false
   },
   "Your server didn't accept this key: {0}": {
     "en": "Your server didn't accept this key: {0}",
@@ -1177,11 +1179,13 @@
   },
   "SWK must be 32 bytes": {
     "en": "SWK must be 32 bytes",
-    "ctx": "webapp/lib/bootApproval.js:607"
+    "ctx": "webapp/lib/bootApproval.js:607",
+    "translatable": false
   },
   "CGK must be 32 bytes": {
     "en": "CGK must be 32 bytes",
-    "ctx": "webapp/lib/bootApproval.js:711"
+    "ctx": "webapp/lib/bootApproval.js:711",
+    "translatable": false
   },
   "Flagship {0} {1} (web build {2})": {
     "en": "Flagship {0} {1} (web build {2})",
@@ -1294,7 +1298,8 @@
   },
   "missing companion server or username": {
     "en": "missing companion server or username",
-    "ctx": "webapp/lib/companionReceiver.js:63"
+    "ctx": "webapp/lib/companionReceiver.js:63",
+    "translatable": false
   },
   "Connect to an existing account": {
     "en": "Connect to an existing account",
