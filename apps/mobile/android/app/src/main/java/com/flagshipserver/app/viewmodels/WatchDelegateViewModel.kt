@@ -11,6 +11,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
@@ -93,7 +95,7 @@ class WatchDelegateViewModel(
     suspend fun enable() {
         val user = username()
         if (user.isNullOrEmpty()) {
-            _phase.value = WatchDelegatePhase.Failed("No active account on this device.")
+            _phase.value = WatchDelegatePhase.Failed(FSStrings.get(R.string.no_active_account_on_this_device))
             return
         }
         _phase.value = WatchDelegatePhase.Enabling
@@ -101,14 +103,14 @@ class WatchDelegateViewModel(
         try {
             pubHex = provisionDelegatePubHex()
         } catch (e: Throwable) {
-            _phase.value = WatchDelegatePhase.Failed("Couldn't create the watch key: ${UserErrorText.reason(e)}")
+            _phase.value = WatchDelegatePhase.Failed(FSStrings.get(R.string.couldnt_create_the_watch_key, UserErrorText.reason(e)))
             return
         }
         val irk: Ed25519Sign
         try {
-            irk = signer("Allow your watch to approve boots")
+            irk = signer(FSStrings.get(R.string.allow_your_watch_to_approve_boots))
         } catch (e: Throwable) {
-            _phase.value = WatchDelegatePhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
+            _phase.value = WatchDelegatePhase.Failed(FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(e)))
             return
         }
         val issuedAt = now()
@@ -138,7 +140,7 @@ class WatchDelegateViewModel(
         } catch (e: RateLimitedException) {
             _phase.value = WatchDelegatePhase.Failed(e.userMessage)
         } catch (e: HttpException) {
-            _phase.value = WatchDelegatePhase.Failed("Server rejected the request (${e.status}): ${e.body}")
+            _phase.value = WatchDelegatePhase.Failed(FSStrings.get(R.string.server_rejected_the_request, e.status, e.body))
         } catch (e: Throwable) {
             _phase.value = WatchDelegatePhase.Failed(UserErrorText.of(e, where = "reach"))
         }
@@ -147,7 +149,7 @@ class WatchDelegateViewModel(
     suspend fun disable() {
         val user = username()
         if (user.isNullOrEmpty()) {
-            _phase.value = WatchDelegatePhase.Failed("No active account on this device.")
+            _phase.value = WatchDelegatePhase.Failed(FSStrings.get(R.string.no_active_account_on_this_device))
             return
         }
         val grantId = loadGrantId()
@@ -162,9 +164,9 @@ class WatchDelegateViewModel(
         _phase.value = WatchDelegatePhase.Disabling
         val irk: Ed25519Sign
         try {
-            irk = signer("Stop allowing your watch to approve boots")
+            irk = signer(FSStrings.get(R.string.stop_allowing_your_watch_to_approve))
         } catch (e: Throwable) {
-            _phase.value = WatchDelegatePhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
+            _phase.value = WatchDelegatePhase.Failed(FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(e)))
             return
         }
         val issuedAt = now()

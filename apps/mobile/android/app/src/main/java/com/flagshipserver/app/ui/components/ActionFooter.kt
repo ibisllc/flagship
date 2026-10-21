@@ -1,5 +1,7 @@
 package com.flagshipserver.app.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -63,7 +65,7 @@ fun FSActionFooter(
         )
         Spacer(Modifier.height(FS.space.s8))
         Text(
-            "Patent Pending",
+            stringResource(R.string.patent_pending),
             color = FS.colors.textMuted,
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier

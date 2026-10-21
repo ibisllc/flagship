@@ -1,5 +1,6 @@
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.AuthCodeRevokeRequest
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.ReleaseServerNameRequest
@@ -37,7 +38,7 @@ object CancelPendingOrder {
         now: () -> Long = { System.currentTimeMillis() },
     ): Outcome {
         if (!InstallFinishTarget.isWellFormed(pod.fqdn)) return Outcome.Cancelled(releasedName = false)
-        val reason = "Cancel server ${pod.name.ifBlank { pod.serverLabel }}"
+        val reason = FSStrings.get(R.string.cancel_server, pod.name.ifBlank { pod.serverLabel })
         try {
             val issuedAt = now()
             val key = releaseKey(reason)
@@ -72,6 +73,6 @@ object CancelPendingOrder {
     fun failureSentence(e: Throwable): String {
         val why = UserErrorText.of(e, where = "cancel-order")
         val keyProblem = NetworkErrorHumanizer.classify(e).kind == NetworkErrorHumanizer.Kind.BIOMETRIC
-        return if (keyProblem) why else "Couldn't cancel this order. $why The name stays reserved until it is cancelled."
+        return if (keyProblem) why else FSStrings.get(R.string.couldnt_cancel_this_order_the_name, why)
     }
 }

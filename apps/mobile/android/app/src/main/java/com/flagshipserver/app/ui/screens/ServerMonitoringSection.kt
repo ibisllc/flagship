@@ -5,6 +5,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.FSStrings
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -85,8 +89,13 @@ internal data class MonitoringCert(
     val sans: List<String> = emptyList(),
 )
 
-internal enum class MonitoringKey(val title: String) {
-    HEALTH("Health"), CPU("CPU"), MEMORY("Memory"), DISK("Disk"), NETWORK("Network"), CERTIFICATE("Certificate"),
+internal enum class MonitoringKey(@androidx.annotation.StringRes private val titleRes: Int) {
+    HEALTH(R.string.health), CPU(R.string.cpu), MEMORY(R.string.memory), DISK(R.string.disk), NETWORK(R.string.network),
+    CERTIFICATE(R.string.certificate),
+    ;
+
+    /** The row's heading, in the language the person is using. */
+    val title: String get() = FSStrings.get(titleRes)
 }
 
 internal enum class MonitoringTone { NORMAL, WARNING, DANGER }
@@ -115,7 +124,7 @@ internal object MonitoringRows {
             add(
                 MonitoringRow(
                     MonitoringKey.HEALTH,
-                    if (v.ok) "Healthy" else if (stale) "No report" else "Needs attention",
+                    if (v.ok) FSStrings.get(R.string.healthy) else if (stale) FSStrings.get(R.string.no_report) else FSStrings.get(R.string.needs_attention),
                     if (v.ok) MonitoringTone.NORMAL else MonitoringTone.WARNING,
                 ),
             )
@@ -123,9 +132,9 @@ internal object MonitoringRows {
         if (metrics != null) {
             val m = (metrics as? LoadingState.Loaded)?.value
             val failed = metrics is LoadingState.Failed
-            fun value(f: (ServerMetricsResponse) -> String): String? = m?.let(f) ?: if (failed) "Unavailable" else null
+            fun value(f: (ServerMetricsResponse) -> String): String? = m?.let(f) ?: if (failed) FSStrings.get(R.string.unavailable) else null
             add(MonitoringRow(MonitoringKey.CPU, value { "%.0f%%".format(it.cpuPercent) }))
-            add(MonitoringRow(MonitoringKey.MEMORY, value { "${formatBytes(it.memUsedBytes)} of ${formatBytes(it.memTotalBytes)}" }))
+            add(MonitoringRow(MonitoringKey.MEMORY, value { FSStrings.get(R.string.of, formatBytes(it.memUsedBytes), formatBytes(it.memTotalBytes)) }))
             val disk = m?.let { percent(it.diskUsedBytes, it.diskTotalBytes) } ?: 0.0
             add(
                 MonitoringRow(
@@ -144,9 +153,9 @@ internal object MonitoringRows {
             val after = cert.notAfter
             add(
                 when {
-                    after == null -> MonitoringRow(MonitoringKey.CERTIFICATE, "Provisioning")
-                    after <= nowMs -> MonitoringRow(MonitoringKey.CERTIFICATE, "Expired", MonitoringTone.DANGER)
-                    else -> MonitoringRow(MonitoringKey.CERTIFICATE, "Valid until ${FlagshipDateFormat.format(after, nowMs = nowMs)}")
+                    after == null -> MonitoringRow(MonitoringKey.CERTIFICATE, FSStrings.get(R.string.provisioning))
+                    after <= nowMs -> MonitoringRow(MonitoringKey.CERTIFICATE, FSStrings.get(R.string.expired), MonitoringTone.DANGER)
+                    else -> MonitoringRow(MonitoringKey.CERTIFICATE, FSStrings.get(R.string.valid_until, FlagshipDateFormat.format(after, nowMs = nowMs)))
                 },
             )
         }
@@ -206,7 +215,7 @@ internal fun MonitoringSection(
     val healthProblemAtStart = remember { ServerHealthVerdict.evaluate(health, now)?.ok == false }
 
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
-        FSSectionHeader("Monitoring", modifier = Modifier.semantics { heading() })
+        FSSectionHeader(stringResource(R.string.monitoring), modifier = Modifier.semantics { heading() })
         FSCard(padding = PaddingValues(vertical = FS.space.s1), modifier = Modifier.testTag("monitoring-pane")) {
             rows.forEachIndexed { i, row ->
                 if (i > 0) FSDivider(inset = FS.space.s4 + 22.dp + FS.space.s3)
@@ -220,9 +229,9 @@ internal fun MonitoringSection(
                             is LoadingState.Loaded -> MetricDetail(row.key, metrics.value)
                             is LoadingState.Failed -> {
                                 Text(metrics.message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = noteStyle)
-                                onRetryMetrics?.let { FSSecondaryButton(label = "Retry", onClick = it) }
+                                onRetryMetrics?.let { FSSecondaryButton(label = stringResource(R.string.retry), onClick = it) }
                             }
-                            else -> Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = noteStyle)
+                            else -> Text(stringResource(R.string.loading), color = MaterialTheme.colorScheme.onSurfaceVariant, style = noteStyle)
                         }
                     }
                 }
@@ -264,10 +273,10 @@ private fun MonitorRow(row: MonitoringRow, startExpanded: Boolean, detail: @Comp
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(FS.radius.sm))
-                .clickable(role = Role.Button, onClickLabel = if (expanded) "Hide the details" else "Show the details") {
+                .clickable(role = Role.Button, onClickLabel = if (expanded) stringResource(R.string.hide_the_details) else stringResource(R.string.show_the_details)) {
                     expanded = !expanded
                 }
-                .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" }
+                .semantics { stateDescription = if (expanded) FSStrings.get(R.string.expanded) else FSStrings.get(R.string.collapsed) }
                 .heightIn(min = 48.dp)
                 .padding(horizontal = FS.space.s4, vertical = FS.space.s3)
                 .testTag("monitor-$tag"),
@@ -296,7 +305,7 @@ private fun MonitorRow(row: MonitoringRow, startExpanded: Boolean, detail: @Comp
                 )
             } else {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp).semantics { stateDescription = "Loading" },
+                    modifier = Modifier.size(16.dp).semantics { stateDescription = FSStrings.get(R.string.loading_2) },
                     strokeWidth = 2.dp,
                 )
             }
@@ -324,12 +333,12 @@ private fun MetricDetail(key: MonitoringKey, m: ServerMetricsResponse) {
     when (key) {
         MonitoringKey.CPU -> {
             MetricLineChart(m.cpuHistory.map { it.value })
-            Text("Load %.2f · %.2f · %.2f".format(m.loadAvg1, m.loadAvg5, m.loadAvg15), color = MaterialTheme.colorScheme.onSurfaceVariant, style = captionStyle)
+            Text(stringResource(R.string.load_2f_2f_2f).format(m.loadAvg1, m.loadAvg5, m.loadAvg15), color = MaterialTheme.colorScheme.onSurfaceVariant, style = captionStyle)
         }
         MonitoringKey.MEMORY -> {
             MetricLineChart(m.memHistory.map { it.value })
             Text(
-                "%.0f%% in use".format(MonitoringRows.percent(m.memUsedBytes, m.memTotalBytes) * 100),
+                stringResource(R.string.n_0f_in_use).format(MonitoringRows.percent(m.memUsedBytes, m.memTotalBytes) * 100),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = captionStyle,
             )
@@ -339,20 +348,20 @@ private fun MetricDetail(key: MonitoringKey, m: ServerMetricsResponse) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s4)) {
                 DiskRing(pct)
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    InlinePair("Used", MonitoringRows.formatBytes(m.diskUsedBytes))
-                    InlinePair("Free", MonitoringRows.formatBytes((m.diskTotalBytes - m.diskUsedBytes).coerceAtLeast(0)))
-                    InlinePair("Total", MonitoringRows.formatBytes(m.diskTotalBytes))
+                    InlinePair(stringResource(R.string.used), MonitoringRows.formatBytes(m.diskUsedBytes))
+                    InlinePair(stringResource(R.string.free), MonitoringRows.formatBytes((m.diskTotalBytes - m.diskUsedBytes).coerceAtLeast(0)))
+                    InlinePair(stringResource(R.string.total), MonitoringRows.formatBytes(m.diskTotalBytes))
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(FS.space.s4)) {
-                Rate("Read", m.diskIOReadBytesPerSec, FS.colors.primary, Modifier.weight(1f))
-                Rate("Write", m.diskIOWriteBytesPerSec, FS.colors.warning, Modifier.weight(1f))
+                Rate(stringResource(R.string.read), m.diskIOReadBytesPerSec, FS.colors.primary, Modifier.weight(1f))
+                Rate(stringResource(R.string.write), m.diskIOWriteBytesPerSec, FS.colors.warning, Modifier.weight(1f))
             }
         }
         MonitoringKey.NETWORK -> {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(FS.space.s4)) {
-                Rate("In", m.netRxBytesPerSec, FS.colors.success, Modifier.weight(1f))
-                Rate("Out", m.netTxBytesPerSec, FS.colors.danger, Modifier.weight(1f))
+                Rate(stringResource(R.string.in_label), m.netRxBytesPerSec, FS.colors.success, Modifier.weight(1f))
+                Rate(stringResource(R.string.out), m.netTxBytesPerSec, FS.colors.danger, Modifier.weight(1f))
             }
             MetricDualLineChart(a = m.netHistory.map { it.read }, b = m.netHistory.map { it.write })
         }
@@ -364,14 +373,14 @@ private fun MetricDetail(key: MonitoringKey, m: ServerMetricsResponse) {
 private fun CertDetail(cert: MonitoringCert?, now: Long) {
     val after = cert?.notAfter
     if (after == null) {
-        Text("No certificate yet. The server is getting one.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = noteStyle)
+        Text(stringResource(R.string.no_certificate_yet_the_server_is), color = MaterialTheme.colorScheme.onSurfaceVariant, style = noteStyle)
         return
     }
-    Labeled("Renews", FlagshipDateFormat.format(after, nowMs = now))
-    cert.notBefore?.let { Labeled("Issued", FlagshipDateFormat.format(it, nowMs = now)) }
-    cert.issuer?.takeIf { it.isNotEmpty() }?.let { Labeled("Issuer", it) }
+    Labeled(stringResource(R.string.renews), FlagshipDateFormat.format(after, nowMs = now))
+    cert.notBefore?.let { Labeled(stringResource(R.string.issued), FlagshipDateFormat.format(it, nowMs = now)) }
+    cert.issuer?.takeIf { it.isNotEmpty() }?.let { Labeled(stringResource(R.string.issuer), it) }
     if (cert.sans.isNotEmpty()) {
-        Text("Names covered", color = MaterialTheme.colorScheme.onSurfaceVariant, style = captionStyle, modifier = Modifier.padding(top = FS.space.s1))
+        Text(stringResource(R.string.names_covered), color = MaterialTheme.colorScheme.onSurfaceVariant, style = captionStyle, modifier = Modifier.padding(top = FS.space.s1))
         cert.sans.forEach { san ->
             Text(san, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace))
         }

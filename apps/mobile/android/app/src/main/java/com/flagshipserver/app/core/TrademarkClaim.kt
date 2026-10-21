@@ -9,6 +9,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import android.net.Uri
 
 object TrademarkClaim {
@@ -17,7 +18,7 @@ object TrademarkClaim {
 
     /** Subject line for a trademark claim on [username]. */
     fun subject(username: String): String =
-        "Trademark claim for the name \"$username\""
+        FSStrings.get(R.string.trademark_claim_for_the_name, username)
 
     /** Plain-text body template. Leaves bracketed placeholders for the
      *  user to fill in. Joined with `\n` to match the JS array template. */
@@ -25,18 +26,18 @@ object TrademarkClaim {
         listOf(
             "Hello,",
             "",
-            "I'm requesting the Flagship account name \"$username\" on the basis",
+            FSStrings.get(R.string.im_requesting_the_flagship_account_name, username),
             "that I hold a registered trademark covering it.",
             "",
-            "Trademark holder / company: [your name or company]",
-            "Trademark registration number: [registration number]",
-            "Jurisdiction / registry: [e.g. USPTO, EUIPO]",
-            "Goods/services class(es): [class numbers]",
-            "Link or attachment to the registration: [URL or note that it's attached]",
+            FSStrings.get(R.string.trademark_holder_company_your_name_or),
+            FSStrings.get(R.string.trademark_registration_number_registration),
+            FSStrings.get(R.string.jurisdiction_registry_e_g_uspto_euipo),
+            FSStrings.get(R.string.goods_services_class_es_class_numbers),
+            FSStrings.get(R.string.link_or_attachment_to_the_registration),
             "",
-            "Requested name: $username",
+            FSStrings.get(R.string.requested_name, username),
             "",
-            "Thank you.",
+            FSStrings.get(R.string.thank_you),
         ).joinToString("\n")
 
     /** Build the full `mailto:` string (subject + body URL-encoded the

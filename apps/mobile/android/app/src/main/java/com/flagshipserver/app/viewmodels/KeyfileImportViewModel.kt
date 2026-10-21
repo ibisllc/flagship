@@ -16,6 +16,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
@@ -68,7 +70,7 @@ class KeyfileImportViewModel(
      */
     suspend fun importBackup(fileText: String) {
         if (!canImport) {
-            _phase.value = KeyfileImportPhase.Failed("Enter the passphrase for this backup file.")
+            _phase.value = KeyfileImportPhase.Failed(FSStrings.get(R.string.enter_the_passphrase_for_this_backup))
             return
         }
         _phase.value = KeyfileImportPhase.Working
@@ -84,7 +86,7 @@ class KeyfileImportViewModel(
             _phase.value = KeyfileImportPhase.Failed(humanizedKeyfileError(e))
             return
         } catch (_: Throwable) {
-            _phase.value = KeyfileImportPhase.Failed("This isn't a Flagship key file.")
+            _phase.value = KeyfileImportPhase.Failed(FSStrings.get(R.string.this_isnt_a_flagship_key_file))
             return
         }
 
@@ -103,8 +105,8 @@ class KeyfileImportViewModel(
             //     keyfile import is single-device proof, so no totpProof.
             val oldVersion = Keystore.currentIrkVersion()
             val newVersion = oldVersion + 1
-            val newSign = Keystore.deriveIRK("Bring this device into your Flagship account", newVersion)
-            val oldSign = Keystore.deriveIRK("Confirm import", oldVersion)
+            val newSign = Keystore.deriveIRK(FSStrings.get(R.string.bring_this_device_into_your_flagship), newVersion)
+            val oldSign = Keystore.deriveIRK(FSStrings.get(R.string.confirm_import), oldVersion)
             val oldPubHex = pubHexForVersion(oldVersion)
             val newPubHex = pubHexForVersion(newVersion)
 
@@ -148,9 +150,9 @@ class KeyfileImportViewModel(
                     // the Worker now requires at initiate even for single-
                     // device accounts. The keyfile sheet has no second-
                     // factor field (yet); route via the sign-in flow.
-                    "This account has a second factor enrolled. Choose \"Connect to an existing account\" and sign in with your account name — it will ask for your authenticator or recovery code."
+                    FSStrings.get(R.string.this_account_has_a_second_factor)
                 else
-                    "Couldn't start bringing this device in. ${UserErrorText.of(t)}",
+                    FSStrings.get(R.string.couldnt_start_bringing_this_device_in, UserErrorText.of(t)),
             )
         }
     }
@@ -168,7 +170,7 @@ class KeyfileImportViewModel(
             // Signed by the PENDING version — the key the swap installs.
             // `.com` refuses an unsigned finalization.
             val version = Keystore.pendingIrkRotationVersion() ?: Keystore.currentIrkVersion()
-            val newSign = Keystore.deriveIRK("Finish bringing this device in", version)
+            val newSign = Keystore.deriveIRK(FSStrings.get(R.string.finish_bringing_this_device_in), version)
             val newPubHex = pubHexForVersion(version)
             val issuedAt = now()
             val completeSig = newSign.sign(
@@ -201,9 +203,9 @@ class KeyfileImportViewModel(
             _phase.value = KeyfileImportPhase.Failed(
                 if (t is HttpException && t.status == 410)
                     // #52 — completion window elapsed; the cloud swept the row.
-                    "This expired before it was completed. Start again."
+                    FSStrings.get(R.string.this_expired_before_it_was_completed)
                 else
-                    "Couldn't finish bringing this device in. ${UserErrorText.of(t)}",
+                    FSStrings.get(R.string.couldnt_finish_bringing_this_device_in, UserErrorText.of(t)),
             )
         }
     }
@@ -219,9 +221,9 @@ class KeyfileImportViewModel(
     }
 
     private fun humanizedKeyfileError(e: Keyfile.KeyfileException): String = when (e.code) {
-        Keyfile.KeyfileException.Code.BAD_PASSPHRASE -> "That passphrase didn't open the file."
-        Keyfile.KeyfileException.Code.MALFORMED -> "This isn't a Flagship key file."
+        Keyfile.KeyfileException.Code.BAD_PASSPHRASE -> FSStrings.get(R.string.that_passphrase_didnt_open_the_file)
+        Keyfile.KeyfileException.Code.MALFORMED -> FSStrings.get(R.string.this_isnt_a_flagship_key_file)
         Keyfile.KeyfileException.Code.VERSION ->
-            "This backup was made by a newer version of Flagship. Update the app and try again."
+            FSStrings.get(R.string.this_backup_was_made_by_a)
     }
 }

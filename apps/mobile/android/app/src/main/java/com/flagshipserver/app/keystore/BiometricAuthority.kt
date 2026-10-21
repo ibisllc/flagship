@@ -6,6 +6,8 @@
 
 package com.flagshipserver.app.keystore
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -77,7 +79,7 @@ class BiometricAuthority internal constructor(
      * invite). With no foreground activity there is nobody to ask, so it refuses.
      */
     suspend fun confirmNow(title: String, subtitle: String) {
-        val p = prompter ?: throw IllegalStateException("Open Flagship to confirm this.")
+        val p = prompter ?: throw IllegalStateException(FSStrings.get(R.string.open_flagship_to_confirm_this))
         mutex.withLock {
             p.prompt(title, subtitle)
             fresh = true
@@ -118,8 +120,8 @@ class BiometricAuthority internal constructor(
 
         /** [confirmNow] on the bound authority; refuses when none is bound. */
         suspend fun confirmNow(subtitle: String) {
-            val a = current ?: throw IllegalStateException("Open Flagship to confirm this.")
-            a.confirmNow("Authorize Flagship", subtitle)
+            val a = current ?: throw IllegalStateException(FSStrings.get(R.string.open_flagship_to_confirm_this))
+            a.confirmNow(FSStrings.get(R.string.authorize_flagship), subtitle)
         }
 
         /** Test-only constructor — bypass the FragmentActivity wiring

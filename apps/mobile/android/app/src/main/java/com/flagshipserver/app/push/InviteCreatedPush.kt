@@ -5,12 +5,14 @@
 
 package com.flagshipserver.app.push
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.Endpoints
 
 object InviteCreatedPush {
     const val CATEGORY = "invite-created"
     const val TITLE = "Flagship"
-    const val BODY = "A device on your account invited someone to one of your apps."
+    val BODY get() = FSStrings.get(R.string.a_device_on_your_account_invited)
 
     fun matches(data: Map<String, String>): Boolean =
         data["category"] == CATEGORY || data["kind"] == CATEGORY

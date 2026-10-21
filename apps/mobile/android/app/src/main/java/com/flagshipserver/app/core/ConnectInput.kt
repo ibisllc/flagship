@@ -5,6 +5,8 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
+
 sealed interface ConnectInput {
     data object Empty : ConnectInput
     /** A /join link (https or legacy flagship://) or a bare `sid=…&pk=…` code. */
@@ -27,11 +29,11 @@ sealed interface ConnectInput {
     }
 
     companion object {
-        const val ROUTED_TO_JOIN = "That's a pairing link, so we're joining with it."
-        const val NOT_A_CODE = "That isn't a pairing code. Paste the whole link from the other device, or scan its code."
-        const val NAME_IN_CODE = "That looks like an account name. Type it under Sign in with your account name."
-        const val BAD_LINK = "That link isn't a pairing link. Ask the other device to show a new code."
-        const val EMPTY_CODE = "Paste the pairing link, or scan the code."
+        val ROUTED_TO_JOIN get() = FSStrings.get(R.string.thats_a_pairing_link_so_were)
+        val NOT_A_CODE get() = FSStrings.get(R.string.that_isnt_a_pairing_code_paste)
+        val NAME_IN_CODE get() = FSStrings.get(R.string.that_looks_like_an_account_name)
+        val BAD_LINK get() = FSStrings.get(R.string.that_link_isnt_a_pairing_link)
+        val EMPTY_CODE get() = FSStrings.get(R.string.paste_the_pairing_link_or_scan)
 
         private val SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*://")
         private val SESSION_PARAM = Regex("(^|[?&])(sid|pk)=")

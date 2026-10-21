@@ -6,6 +6,8 @@
 
 package com.flagshipserver.app.builder
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import android.app.Application
 import android.hardware.usb.UsbManager
 import androidx.lifecycle.AndroidViewModel
@@ -61,7 +63,7 @@ class BuilderOnDeviceViewModel(
         if (parsed.isFailure) {
             _state.value = _state.value.copy(
                 phase = Phase.Error,
-                error = "Couldn't read the recipe: ${parsed.exceptionOrNull()?.message}",
+                error = FSStrings.get(R.string.couldnt_read_the_recipe, parsed.exceptionOrNull()?.message),
             )
         } else {
             val r = parsed.getOrThrow()
@@ -69,7 +71,7 @@ class BuilderOnDeviceViewModel(
             if (r.expired) {
                 _state.value = _state.value.copy(
                     phase = Phase.Error,
-                    error = "This recipe has expired. Create the server again to get a fresh one.",
+                    error = FSStrings.get(R.string.this_recipe_has_expired_create_the),
                 )
             } else {
                 refreshDevices()
@@ -123,28 +125,28 @@ class BuilderOnDeviceViewModel(
                     cacheDir = File(getApplication<Application>().cacheDir, "flagship-builder"),
                     builderVersion = builderVersion(),
                 )
-                set(Phase.Downloading, status = "Preparing the operating-system image…")
+                set(Phase.Downloading, status = FSStrings.get(R.string.preparing_the_operating_system_image))
                 val baseIso = withContext(Dispatchers.IO) {
                     cache.ensure { phase ->
                         when (phase) {
                             is IsoBaseCache.Phase.Inspected ->
-                                set(Phase.Downloading, status = "Checking cached image…")
+                                set(Phase.Downloading, status = FSStrings.get(R.string.checking_cached_image))
                             is IsoBaseCache.Phase.Downloading ->
-                                set(Phase.Downloading, progress = phase.progress, status = "Downloading the operating system…")
+                                set(Phase.Downloading, progress = phase.progress, status = FSStrings.get(R.string.downloading_the_operating_system))
                             is IsoBaseCache.Phase.Ready ->
-                                set(Phase.Verifying, progress = 1.0, status = if (phase.fromCache) "Using verified cached image." else "Image verified.")
+                                set(Phase.Verifying, progress = 1.0, status = if (phase.fromCache) FSStrings.get(R.string.using_verified_cached_image) else FSStrings.get(R.string.image_verified))
                         }
                     }
                 }
 
                 // 2. Inject the recipe (seam — verbatim for now).
-                set(Phase.Injecting, status = "Preparing the install image…")
+                set(Phase.Injecting, status = FSStrings.get(R.string.preparing_the_install_image))
                 val injected = withContext(Dispatchers.IO) { injector.inject(baseIso, recipe, recipeJson) }
                 _state.value = _state.value.copy(recipeEmbedded = injected.recipeEmbedded)
 
                 // 3. Raw-write over USB Mass Storage.
                 val open = withContext(Dispatchers.IO) { UsbHost.open(usb, target) }
-                    ?: throw RuntimeException("Couldn't open the USB drive. Reconnect it and grant permission.")
+                    ?: throw RuntimeException(FSStrings.get(R.string.couldnt_open_the_usb_drive_reconnect))
                 try {
                     val written = withContext(Dispatchers.IO) {
                         val writer = MassStorageWriter(open.transport)
@@ -154,19 +156,19 @@ class BuilderOnDeviceViewModel(
                                 "The drive (${human(cap.totalBytes)}) is too small for the image (${human(injected.totalBytes)}).",
                             )
                         }
-                        set(Phase.Writing, status = "Writing to the USB drive — do not unplug…")
+                        set(Phase.Writing, status = FSStrings.get(R.string.writing_to_the_usb_drive_do))
                         injected.stream.use { stream ->
                             writer.writeImage(stream, injected.totalBytes, cap.blockSize) { w ->
                                 val frac = if (injected.totalBytes > 0) w.toDouble() / injected.totalBytes else 0.0
-                                set(Phase.Writing, progress = frac, status = "Writing to the USB drive — do not unplug…", bytes = w)
+                                set(Phase.Writing, progress = frac, status = FSStrings.get(R.string.writing_to_the_usb_drive_do), bytes = w)
                             }
                         }
                     }
                     injected.closeable.close()
                     val note = if (injected.recipeEmbedded) {
-                        "Done. Unplug the drive, put it in the new computer, and turn it on."
+                        FSStrings.get(R.string.done_unplug_the_drive_put_it)
                     } else {
-                        "Wrote the base image (${human(written)}). NOTE: the recipe is not yet embedded — see OTG-BUILDER-NOTES.md."
+                        FSStrings.get(R.string.wrote_the_base_image_note_the, human(written))
                     }
                     _state.value = _state.value.copy(phase = Phase.Done, progress = 1.0, statusLine = note, bytesWritten = written)
                 } finally {

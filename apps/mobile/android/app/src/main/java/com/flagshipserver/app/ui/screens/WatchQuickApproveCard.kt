@@ -6,6 +6,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -60,7 +63,7 @@ fun WatchQuickApproveCard(server: FlagshipServerClient, app: AppState) {
     FSCard(padding = PaddingValues(0.dp)) {
         Column {
             FSRow(
-                title = "Quick approve from watch",
+                title = stringResource(R.string.quick_approve_from_watch),
                 icon = Icons.Outlined.Watch,
                 trailing = {
                     Switch(
@@ -76,15 +79,14 @@ fun WatchQuickApproveCard(server: FlagshipServerClient, app: AppState) {
                 modifier = Modifier.padding(start = FS.space.s4, end = FS.space.s4, bottom = FS.space.s4),
             ) {
                 Text(
-                    "Approve a server boot from your Wear OS watch while Flagship is unlocked on this phone. " +
-                        "Other actions (revoke server, wipe & restart, replace device) always need your phone. Off by default.",
+                    stringResource(R.string.approve_a_server_boot_from_your),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 val exp = expiresAt
                 if (enabled && exp != null) {
                     Text(
-                        "Active — renews by ${FlagshipDateFormat.format(exp)}",
+                        fsString(R.string.active_renews_by, FlagshipDateFormat.format(exp)),
                         color = FS.colors.success,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.testTag("watch-delegate-active"),

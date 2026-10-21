@@ -22,6 +22,16 @@ val releaseVersion = (groovy.json.JsonSlurper().parse(rootProject.file("../../..
 // can produce signed APKs locally without leaking secrets into the
 // repo. The release variant falls back to debug signing if the file
 // isn't present (so a fresh checkout still builds).
+// The languages the app ships come from i18n/locales.json: English plus every language marked "ga".
+// A "draft" language has its strings.xml generated but is not packaged until it is switched to "ga".
+// (res/xml/locales_config.xml, which the system language picker reads, is generated from the same list.)
+val shippedLocales: List<String> = run {
+    val all = groovy.json.JsonSlurper().parse(rootProject.file("../../../i18n/locales.json")) as Map<*, *>
+    (all["locales"] as List<*>).map { it as Map<*, *> }
+        .filter { it["code"] == all["source"] || it["status"] == "ga" }
+        .map { (it["androidId"] ?: it["code"]) as String }
+}
+
 val keystoreProps = Properties().apply {
     val f = rootProject.file("keystore/keystore.properties")
     if (f.exists()) f.inputStream().use { load(it) }
@@ -39,8 +49,6 @@ android {
         versionName = releaseVersion["product"] as String
         buildConfigField("String", "PRODUCT_LABEL", "\"${releaseVersion["label"]}\"")
         vectorDrawables { useSupportLibrary = true }
-        // Keep APK lean (English only); reproducible-build prerequisite.
-        resourceConfigurations += setOf("en")
         // GYM (§10 Phase-5) — the on-device instrumentation runner the UI gym
         // drives via `connectedDebugAndroidTest`. AndroidJUnitRunner hosts the
         // Compose UI Test + Espresso `androidTest` suite (app/src/androidTest).
@@ -70,6 +78,10 @@ android {
         }
     }
 
+    androidResources {
+        localeFilters += shippedLocales
+    }
+
     buildFeatures {
         compose = true
         // BuildConfig.DEBUG gates the hidden developer unlock out of release builds.
@@ -96,6 +108,8 @@ android {
         // anything release-specific runs in the AGP-generated release
         // smoke task.
         unitTests.all { test ->
+            // Plain-JVM tests resolve English text from the source strings.xml (see core/FSStrings.kt).
+            test.systemProperty("fs.test.strings", file("src/main/res/values/strings.xml").absolutePath)
             if (test.name == "testReleaseUnitTest") {
                 // ui-test-manifest only ships in the debug variant, so
                 // every Compose UI test that calls createComposeRule

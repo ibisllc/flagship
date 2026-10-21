@@ -1,5 +1,7 @@
 package com.flagshipserver.app.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -98,7 +100,7 @@ fun FSScreen(
     val navIcon: @Composable () -> Unit = {
         if (onBack != null) {
             IconButton(onClick = onBack, modifier = Modifier.testTag("nav-back")) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
             }
         }
     }
