@@ -51,7 +51,7 @@ struct ErrorCard: View {
                     .font(FS.font.bodySm())
                     .foregroundColor(c.textMuted)
                 if let retry {
-                    FSSecondaryButton("Try again", block: true) { Task { await retry() } }
+                    FSSecondaryButton(String(localized: "Try again"), block: true) { Task { await retry() } }
                         .padding(.top, FS.space.s1)
                         .accessibilityIdentifier("error-card-retry")
                 }

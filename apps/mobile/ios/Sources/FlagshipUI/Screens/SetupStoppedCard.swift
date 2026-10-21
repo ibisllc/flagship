@@ -35,7 +35,7 @@ struct SetupStoppedCard: View {
                 }
                 if let onCancelOrder {
                     FSDangerButton(
-                        working ? "Cancelling…" : SetupStoppedCard.cancelLabel(afterFailure: cancelError != nil),
+                        working ? String(localized: "Cancelling…") : SetupStoppedCard.cancelLabel(afterFailure: cancelError != nil),
                         block: true,
                         large: true,
                         action: onCancelOrder
@@ -43,7 +43,7 @@ struct SetupStoppedCard: View {
                     .disabled(working)
                     .accessibilityIdentifier("setup-stopped-start-again")
                 }
-                FSSecondaryButton("Contact us", block: true) {
+                FSSecondaryButton(String(localized: "Contact us"), block: true) {
                     if let url = SupportContact.setupStoppedURL(serial: serial, step: step) { openURL(url) }
                 }
                 .accessibilityIdentifier("setup-stopped-contact")
@@ -55,7 +55,7 @@ struct SetupStoppedCard: View {
     }
 
     static func explanation(step: String?, canCancel: Bool) -> String {
-        var text = "This server didn't finish installing."
+        var text = String(localized: "This server didn't finish installing.")
         if let step, !step.isEmpty { text += " " + (step.hasSuffix(".") ? step : step + ".") }
         text += canCancel
             ? " Cancel this order to free the name and create the server again, or contact us and we'll look at it."
@@ -64,6 +64,6 @@ struct SetupStoppedCard: View {
     }
 
     static func cancelLabel(afterFailure: Bool) -> String {
-        afterFailure ? CancelPendingOrder.retryLabel : "Cancel order and start again"
+        afterFailure ? CancelPendingOrder.retryLabel : String(localized: "Cancel order and start again")
     }
 }

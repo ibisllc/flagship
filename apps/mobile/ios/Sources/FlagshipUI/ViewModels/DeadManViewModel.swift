@@ -102,9 +102,9 @@ public final class DeadManViewModel {
         let graceMs = DeadManStore.defaultGraceMs
         let key: Curve25519.Signing.PrivateKey
         do {
-            key = try await signer(enabled ? "Enable lock-down for \(serverDomain)" : "Disable lock-down for \(serverDomain)")
+            key = try await signer(enabled ? String(localized: "Enable lock-down for \(serverDomain)") : String(localized: "Disable lock-down for \(serverDomain)"))
         } catch {
-            phase = .failed("Couldn't access your account key. \(HumanError.humanize(error))")
+            phase = .failed(String(localized: "Couldn't access your account key. \(HumanError.humanize(error))"))
             return
         }
         // Turning the switch on: first remove every auto-unlock lease, because none may outlive
@@ -128,7 +128,7 @@ public final class DeadManViewModel {
         )
         let sig: Data
         do { sig = try policy.sign(with: key) } catch {
-            phase = .failed("Couldn't sign. \(HumanError.humanize(error))")
+            phase = .failed(String(localized: "Couldn't sign. \(HumanError.humanize(error))"))
             return
         }
         var policyLeaseExpiry: Int64 = 0
@@ -140,15 +140,15 @@ public final class DeadManViewModel {
                 signatureHex: env["signature"] as! String
             )
             guard result.ok else {
-                phase = .failed("The server rejected the change. Try again.")
+                phase = .failed(String(localized: "The server rejected the change. Try again."))
                 return
             }
             policyLeaseExpiry = result.leaseExpiry
         } catch let e as ScreensClientError {
-            phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
+            phase = .failed(e.errorDescription ?? String(localized: "That didn't work. Try again in a moment."))
             return
         } catch {
-            phase = .failed("Couldn't reach the server. Check your connection and try again.")
+            phase = .failed(String(localized: "Couldn't reach the server. Check your connection and try again."))
             return
         }
 
@@ -175,9 +175,9 @@ public final class DeadManViewModel {
         phase = .affirming
         let key: Curve25519.Signing.PrivateKey
         do {
-            key = try await signer("Keep \(serverDomain) unlocked")
+            key = try await signer(String(localized: "Keep \(serverDomain) unlocked"))
         } catch {
-            phase = .failed("Couldn't access your account key. \(HumanError.humanize(error))")
+            phase = .failed(String(localized: "Couldn't access your account key. \(HumanError.humanize(error))"))
             return
         }
         let affirmation = DeadManAffirmation(
@@ -187,7 +187,7 @@ public final class DeadManViewModel {
         )
         let sig: Data
         do { sig = try affirmation.sign(with: key) } catch {
-            phase = .failed("Couldn't sign. \(HumanError.humanize(error))")
+            phase = .failed(String(localized: "Couldn't sign. \(HumanError.humanize(error))"))
             return
         }
         do {
@@ -198,17 +198,17 @@ public final class DeadManViewModel {
                 signatureHex: env["signature"] as! String
             )
             guard result.ok else {
-                phase = .failed("The server rejected the affirmation. Try again.")
+                phase = .failed(String(localized: "The server rejected the affirmation. Try again."))
                 return
             }
             store.setLeaseExpiry(result.leaseExpiry, for: serverDomain)
             leaseExpiry = result.leaseExpiry
             scheduleReminders(serverDomain, serverName, result.leaseExpiry)
         } catch let e as ScreensClientError {
-            phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
+            phase = .failed(e.errorDescription ?? String(localized: "That didn't work. Try again in a moment."))
             return
         } catch {
-            phase = .failed("Couldn't reach the server. Check your connection and try again.")
+            phase = .failed(String(localized: "Couldn't reach the server. Check your connection and try again."))
             return
         }
         phase = .idle

@@ -156,7 +156,7 @@ public final class BuildKeyViewModel {
         errorMessage = nil
         let key = formApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else {
-            errorMessage = "Enter an API key."
+            errorMessage = String(localized: "Enter an API key.")
             return false
         }
         let base = formBaseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -211,7 +211,7 @@ public final class BuildKeyViewModel {
         chosenModel = nil
         let key = formApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else {
-            errorMessage = "Enter an API key."
+            errorMessage = String(localized: "Enter an API key.")
             return nil
         }
         let base = formBaseUrl.trimmingCharacters(in: .whitespacesAndNewlines)

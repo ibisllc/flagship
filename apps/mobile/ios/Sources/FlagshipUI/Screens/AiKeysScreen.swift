@@ -105,7 +105,7 @@ public struct AiKeysScreen: View {
                             showSaveToggle: false,
                             saveOnDevice: .constant(true),
                             errorMessage: vm.errorMessage,
-                            primaryLabel: "Save key",
+                            primaryLabel: String(localized: "Save key"),
                             primaryId: "ai-key-add-save",
                             onPrimary: { _ = vm.addFromForm() },
                             onCancel: {
@@ -114,7 +114,7 @@ public struct AiKeysScreen: View {
                             }
                         )
                     } else {
-                        FSPrimaryButton("Add an AI key", block: true) {
+                        FSPrimaryButton(String(localized: "Add an AI key"), block: true) {
                             vm.resetForm()
                             vm.showingForm = true
                         }
@@ -152,7 +152,7 @@ struct FlagshipInferenceEntry: View {
         FSCard {
             HStack(spacing: FS.space.s2) {
                 FlagshipInferenceLabel(status: status, lastUsed: isDefault,
-                                       lastUsedText: "Default for new builds", usable: state.isUsable)
+                                       lastUsedText: String(localized: "Default for new builds"), usable: state.isUsable)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if case .loading = state { ProgressView() }
             }

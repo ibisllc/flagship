@@ -44,9 +44,9 @@ enum MonitoringRows {
             let v = health.verdict(nowMs: nowMs)
             let stale = (nowMs - health.receivedAt) / 60_000 >= 5
             rows.append(MonitoringRow(
-                key: .health, title: "Health",
+                key: .health, title: String(localized: "Health"),
                 icon: v.ok ? "heart.text.square" : "exclamationmark.triangle.fill",
-                value: v.ok ? "Healthy" : (stale ? "No report" : "Needs attention"),
+                value: v.ok ? String(localized: "Healthy") : (stale ? String(localized: "No report") : String(localized: "Needs attention")),
                 tone: v.ok ? .normal : .warning
             ))
         }
@@ -55,25 +55,25 @@ enum MonitoringRows {
             let failed: Bool = { if case .failed = metrics { return true }; return false }()
             func value(_ f: (ServerMetricsResponse) -> String) -> String? {
                 if let m { return f(m) }
-                return failed ? "Unavailable" : nil
+                return failed ? String(localized: "Unavailable") : nil
             }
             rows.append(MonitoringRow(
                 key: .cpu, title: "CPU", icon: "cpu",
                 value: value { String(format: "%.0f%%", $0.cpuPercent) }, tone: .normal
             ))
             rows.append(MonitoringRow(
-                key: .memory, title: "Memory", icon: "memorychip",
-                value: value { "\(formatBytes($0.memUsedBytes)) of \(formatBytes($0.memTotalBytes))" },
+                key: .memory, title: String(localized: "Memory"), icon: "memorychip",
+                value: value { String(localized: "\(formatBytes($0.memUsedBytes)) of \(formatBytes($0.memTotalBytes))") },
                 tone: .normal
             ))
             let diskPct = m.map { percent($0.diskUsedBytes, of: $0.diskTotalBytes) } ?? 0
             rows.append(MonitoringRow(
-                key: .disk, title: "Disk", icon: "internaldrive",
+                key: .disk, title: String(localized: "Disk"), icon: "internaldrive",
                 value: value { _ in String(format: "%.0f%% used", diskPct * 100) },
                 tone: diskPct > 0.9 ? .danger : (diskPct > 0.75 ? .warning : .normal)
             ))
             rows.append(MonitoringRow(
-                key: .network, title: "Network", icon: "arrow.up.arrow.down",
+                key: .network, title: String(localized: "Network"), icon: "arrow.up.arrow.down",
                 value: value { "↓ \(formatRate($0.netRxBytesPerSec))  ↑ \(formatRate($0.netTxBytesPerSec))" },
                 tone: .normal
             ))
@@ -83,16 +83,16 @@ enum MonitoringRows {
             var tone = MonitoringRow.Tone.normal
             if let after = cert.notAfter {
                 if after <= nowMs {
-                    value = "Expired"
+                    value = String(localized: "Expired")
                     tone = .danger
                 } else {
-                    value = "Valid until \(Date.flagshipFormatted(epochMs: after))"
+                    value = String(localized: "Valid until \(Date.flagshipFormatted(epochMs: after))")
                 }
             } else {
-                value = "Provisioning"
+                value = String(localized: "Provisioning")
             }
             rows.append(MonitoringRow(
-                key: .certificate, title: "Certificate", icon: "lock.shield", value: value, tone: tone
+                key: .certificate, title: String(localized: "Certificate"), icon: "lock.shield", value: value, tone: tone
             ))
         }
         return rows
@@ -122,7 +122,7 @@ struct MonitoringPane: View {
             let rows = MonitoringRows.build(health: health, metrics: metrics, cert: cert, nowMs: nowMs)
             if !rows.isEmpty {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
-                    FSSectionLabel("Monitoring")
+                    FSSectionLabel(String(localized: "Monitoring"))
                         .accessibilityAddTraits(.isHeader)
                     VStack(spacing: 0) {
                         ForEach(rows) { row in
@@ -198,8 +198,8 @@ struct MonitoringPane: View {
             .buttonStyle(.plain)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(row.title)
-            .accessibilityValue("\(row.value ?? "Loading"), \(isOpen ? "expanded" : "collapsed")")
-            .accessibilityHint(isOpen ? "Hides the details." : "Shows the details.")
+            .accessibilityValue("\(row.value ?? String(localized: "Loading")), \(isOpen ? "expanded" : "collapsed")")
+            .accessibilityHint(isOpen ? String(localized: "Hides the details.") : "Shows the details.")
             .accessibilityAddTraits(.isButton)
             .accessibilityIdentifier("sd-monitor-\(row.key.rawValue)")
 
@@ -251,10 +251,10 @@ struct MonitoringPane: View {
         case .cpu:
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 Chart(m.cpuHistory) { sample in
-                    LineMark(x: .value("Time", date(sample.at)), y: .value("CPU", sample.value))
+                    LineMark(x: .value(String(localized: "Time"), date(sample.at)), y: .value("CPU", sample.value))
                         .interpolationMethod(.catmullRom)
                         .foregroundStyle(c.accent)
-                    AreaMark(x: .value("Time", date(sample.at)), y: .value("CPU", sample.value))
+                    AreaMark(x: .value(String(localized: "Time"), date(sample.at)), y: .value("CPU", sample.value))
                         .interpolationMethod(.catmullRom)
                         .foregroundStyle(LinearGradient(colors: [c.accent.opacity(0.25), c.accent.opacity(0)], startPoint: .top, endPoint: .bottom))
                 }
@@ -270,10 +270,10 @@ struct MonitoringPane: View {
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 Chart(m.memHistory) { sample in
                     let pct = MonitoringRows.percent(Int64(sample.value), of: m.memTotalBytes) * 100
-                    AreaMark(x: .value("Time", date(sample.at)), y: .value("Mem", pct))
+                    AreaMark(x: .value(String(localized: "Time"), date(sample.at)), y: .value(String(localized: "Mem"), pct))
                         .interpolationMethod(.catmullRom)
                         .foregroundStyle(LinearGradient(colors: [c.success.opacity(0.45), c.success.opacity(0.05)], startPoint: .top, endPoint: .bottom))
-                    LineMark(x: .value("Time", date(sample.at)), y: .value("Mem", pct))
+                    LineMark(x: .value(String(localized: "Time"), date(sample.at)), y: .value(String(localized: "Mem"), pct))
                         .foregroundStyle(c.success)
                 }
                 .chartYScale(domain: 0...100)
@@ -301,27 +301,27 @@ struct MonitoringPane: View {
                     .frame(width: 72, height: 72)
                     .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 4) {
-                        pair("Used", formatBytes(m.diskUsedBytes), c: c)
-                        pair("Free", formatBytes(m.diskTotalBytes - m.diskUsedBytes), c: c)
-                        pair("Total", formatBytes(m.diskTotalBytes), c: c)
+                        pair(String(localized: "Used"), formatBytes(m.diskUsedBytes), c: c)
+                        pair(String(localized: "Free"), formatBytes(m.diskTotalBytes - m.diskUsedBytes), c: c)
+                        pair(String(localized: "Total"), formatBytes(m.diskTotalBytes), c: c)
                     }
                 }
                 HStack(spacing: FS.space.s4) {
-                    rate("Read", m.diskIOReadBytesPerSec, color: c.accent, c: c)
-                    rate("Write", m.diskIOWriteBytesPerSec, color: c.warning, c: c)
+                    rate(String(localized: "Read"), m.diskIOReadBytesPerSec, color: c.accent, c: c)
+                    rate(String(localized: "Write"), m.diskIOWriteBytesPerSec, color: c.warning, c: c)
                 }
             }
         case .network:
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 HStack(spacing: FS.space.s4) {
-                    rate("In", m.netRxBytesPerSec, color: c.success, c: c)
-                    rate("Out", m.netTxBytesPerSec, color: c.danger, c: c)
+                    rate(String(localized: "In"), m.netRxBytesPerSec, color: c.success, c: c)
+                    rate(String(localized: "Out"), m.netTxBytesPerSec, color: c.danger, c: c)
                 }
                 Chart {
                     ForEach(m.netHistory) { sample in
-                        LineMark(x: .value("Time", date(sample.at)), y: .value("Rate", sample.read), series: .value("Series", "in"))
+                        LineMark(x: .value(String(localized: "Time"), date(sample.at)), y: .value(String(localized: "Rate"), sample.read), series: .value(String(localized: "Series"), "in"))
                             .foregroundStyle(c.success)
-                        LineMark(x: .value("Time", date(sample.at)), y: .value("Rate", sample.write), series: .value("Series", "out"))
+                        LineMark(x: .value(String(localized: "Time"), date(sample.at)), y: .value(String(localized: "Rate"), sample.write), series: .value(String(localized: "Series"), "out"))
                             .foregroundStyle(c.danger)
                     }
                 }
@@ -339,12 +339,12 @@ struct MonitoringPane: View {
     private func certDetail(c: FSColors) -> some View {
         if let cert, let after = cert.notAfter {
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                labeled("Renews", Date.flagshipFormatted(epochMs: after), c: c)
+                labeled(String(localized: "Renews"), Date.flagshipFormatted(epochMs: after), c: c)
                 if let before = cert.notBefore {
-                    labeled("Issued", Date.flagshipFormatted(epochMs: before), c: c)
+                    labeled(String(localized: "Issued"), Date.flagshipFormatted(epochMs: before), c: c)
                 }
                 if let issuer = cert.issuer, !issuer.isEmpty {
-                    labeled("Issuer", issuer, c: c)
+                    labeled(String(localized: "Issuer"), issuer, c: c)
                 }
                 if !cert.sans.isEmpty {
                     Text("Names covered")

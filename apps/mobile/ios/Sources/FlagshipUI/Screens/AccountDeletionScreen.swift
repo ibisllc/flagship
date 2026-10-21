@@ -53,7 +53,7 @@ struct AccountDeletionScreen: View {
                         .accessibilityIdentifier("account-delete-error")
                 }
                 FSDangerButton(
-                    busy ? "Deleting…" : "Delete my account",
+                    busy ? String(localized: "Deleting…") : String(localized: "Delete my account"),
                     block: true,
                     large: true
                 ) {
@@ -94,22 +94,22 @@ struct AccountDeletionScreen: View {
         FSCard {
             consequence(
                 icon: "at",
-                title: "Username “\(username)” is lost",
-                detail: "It frees immediately and may be claimed by someone else.",
+                title: String(localized: "Username “\(username)” is lost"),
+                detail: String(localized: "It frees immediately and may be claimed by someone else."),
                 c: c
             )
             Divider()
             consequence(
                 icon: "server.rack",
-                title: "Your servers go dark",
-                detail: "They stop being reachable and manageable. If you want to keep one, transfer it first.",
+                title: String(localized: "Your servers go dark"),
+                detail: String(localized: "They stop being reachable and manageable. If you want to keep one, transfer it first."),
                 c: c
             )
             Divider()
             consequence(
                 icon: "key.slash",
-                title: "No recovery",
-                detail: "No passkey, no other device, no reset. This is final.",
+                title: String(localized: "No recovery"),
+                detail: String(localized: "No passkey, no other device, no reset. This is final."),
                 c: c
             )
         }
@@ -158,9 +158,9 @@ struct AccountDeletionScreen: View {
     private func confirmField(c: FSColors) -> some View {
         FSField(
             value: $typed,
-            label: "Type your username to confirm",
+            label: String(localized: "Type your username to confirm"),
             placeholder: username,
-            helper: "Then confirm with your device unlock."
+            helper: String(localized: "Then confirm with your device unlock.")
         )
         .accessibilityIdentifier("account-delete-confirm-field")
     }

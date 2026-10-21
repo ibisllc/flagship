@@ -78,7 +78,7 @@ public struct ConnectAccountScreen: View {
                 .accessibilityAddTraits(.isHeader)
             FSField(
                 value: $username,
-                label: "Account name",
+                label: String(localized: "Account name"),
                 placeholder: "bright-maple",
                 helper: nameHelper,
                 error: nameError,
@@ -100,7 +100,7 @@ public struct ConnectAccountScreen: View {
             if showUnknownState { unknownState(c) }
 
             FSPrimaryButton(
-                isResolving ? "Checking…" : "Continue",
+                isResolving ? String(localized: "Checking…") : String(localized: "Continue"),
                 enabled: !username.trimmingCharacters(in: .whitespaces).isEmpty && !isResolving,
                 block: true,
                 large: true
@@ -154,7 +154,7 @@ public struct ConnectAccountScreen: View {
             .accessibilityHint("Opens the camera to scan the other device's code.")
             FSField(
                 value: $code,
-                label: "Code or link",
+                label: String(localized: "Code or link"),
                 placeholder: "https://flagshipserver.com/join?…",
                 error: codeError,
                 keyboard: .URL
@@ -163,7 +163,7 @@ public struct ConnectAccountScreen: View {
             .onSubmit { submitCode() }
             .accessibilityIdentifier("connect-pair-field")
             .onChange(of: code) { _, _ in codeError = nil }
-            FSSecondaryButton("Join", block: true, large: true) { submitCode() }
+            FSSecondaryButton(String(localized: "Join"), block: true, large: true) { submitCode() }
                 .accessibilityIdentifier("connect-pair-continue")
                 .accessibilityHint("Joins the account with this code or link.")
         }
@@ -219,7 +219,7 @@ public struct ConnectAccountScreen: View {
                         )
                     }
                 } catch {
-                    demoPairError = "The demo server is online, but this device couldn't create a paired session. Try again."
+                    demoPairError = String(localized: "The demo server is online, but this device couldn't create a paired session. Try again.")
                     return
                 }
             }
@@ -248,7 +248,7 @@ public struct ConnectAccountScreen: View {
         switch vm?.phase {
         case .resolving: return "Checking…"
         case .failed(let msg): return msg
-        default: return "The name you picked when you made the account."
+        default: return String(localized: "The name you picked when you made the account.")
         }
     }
 

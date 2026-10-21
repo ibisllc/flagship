@@ -36,8 +36,8 @@ struct ProvisionTimelineWatchView: View {
                 }
                 if !context.active {
                     Text(context.phase == "live"
-                         ? "Install complete"
-                         : (context.phase == "error" ? "Install failed" : "Done"))
+                         ? String(localized: "Install complete")
+                         : (context.phase == "error" ? String(localized: "Install failed") : String(localized: "Done")))
                         .font(.caption2)
                         .foregroundStyle(context.phase == "error" ? .red : .secondary)
                         .padding(.top, 4)
@@ -74,7 +74,7 @@ struct ProvisionTimelineWatchView: View {
                     .foregroundStyle(labelColor(row.state))
                     .lineLimit(2)
                 if let detail = row.detail {
-                    Text(row.state == .error ? "Failed — \(detail)" : detail)
+                    Text(row.state == .error ? String(localized: "Failed — \(detail)") : detail)
                         .font(.caption2)
                         .foregroundStyle(row.state == .error ? .red : .secondary)
                         .lineLimit(2)

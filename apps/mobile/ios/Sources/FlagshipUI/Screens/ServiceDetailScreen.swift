@@ -110,7 +110,7 @@ public struct ServiceDetailScreen: View {
             .fsReadingColumn()
         }
         .background(c.bg.ignoresSafeArea())
-        .navigationTitle(vm.detail.value?.app.slug.capitalized ?? "Service")
+        .navigationTitle(vm.detail.value?.app.slug.capitalized ?? String(localized: "Service"))
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -144,7 +144,7 @@ public struct ServiceDetailScreen: View {
         let lines = AppStorageText.appLines(storage)
         if !lines.isEmpty {
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                FSSectionLabel("Storage")
+                FSSectionLabel(String(localized: "Storage"))
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s2) {
                         ForEach(lines, id: \.label) { l in
@@ -176,7 +176,7 @@ public struct ServiceDetailScreen: View {
         // Replace button floats top-right of the section header.
         VStack(alignment: .leading, spacing: FS.space.s3) {
             HStack(alignment: .firstTextBaseline) {
-                FSSectionLabel("Web domains")
+                FSSectionLabel(String(localized: "Web domains"))
                 Spacer()
                 Button {
                     replaceDraft = currentDisplayLabel ?? ""
@@ -234,7 +234,7 @@ public struct ServiceDetailScreen: View {
     @ViewBuilder
     private func shortRedirectGroup(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            sectionLabel("Short redirect", c: c)
+            sectionLabel(String(localized: "Short redirect"), c: c)
             // UX-E — name the trust tradeoff vs. the canonical link below.
             Text("A convenient short link that redirects to your service.")
                 .font(FS.font.caption())
@@ -256,7 +256,7 @@ public struct ServiceDetailScreen: View {
     @ViewBuilder
     private func canonicalGroup(c: FSColors, defaultLabel: String) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            sectionLabel("Canonical (shared by all instances)", c: c)
+            sectionLabel(String(localized: "Canonical (shared by all instances)"), c: c)
             // UX-E — the permanent, verifiable address (its certificate is
             // pinned to your box); the short link above is just a redirect.
             Text("The permanent, verifiable address — safe to share.")
@@ -280,7 +280,7 @@ public struct ServiceDetailScreen: View {
         if !selected.isEmpty {
             let stem = vm.appLinks.value?.displayLabel ?? defaultLabel
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                sectionLabel("Individual instances", c: c)
+                sectionLabel(String(localized: "Individual instances"), c: c)
                 ForEach(selected) { pod in
                     let url = "https://\(stem).\(SlugUtil.slugify(pod.name)).\(username ?? "you").\(Endpoints.dataApex)"
                     urlRow(url: url, style: .muted, c: c)
@@ -378,7 +378,7 @@ public struct ServiceDetailScreen: View {
     @ViewBuilder
     private func browserTabsRow(d: AppDetailResponse, c: FSColors) -> some View {
         if !d.browserTabs.isEmpty {
-            section("Browser", c: c) {
+            section(String(localized: "Browser"), c: c) {
                 Button(action: onOpenBrowserTabs) {
                     FSCard {
                         HStack(spacing: FS.space.s3) {
@@ -470,7 +470,7 @@ public struct ServiceDetailScreen: View {
                                         .textSelection(.enabled)
                                     Spacer(minLength: FS.space.s2)
                                     if card.canChange {
-                                        FSPrimaryButton("Allow", enabled: !vm.isChangingEgress) {
+                                        FSPrimaryButton(String(localized: "Allow"), enabled: !vm.isChangingEgress) {
                                             Task { await vm.allowEgress(host: host) }
                                         }
                                         .accessibilityIdentifier("service-detail-egress-allow")
@@ -483,13 +483,13 @@ public struct ServiceDetailScreen: View {
                     .accessibilityIdentifier("service-detail-egress-pending")
                 }
                 if !card.approved.isEmpty {
-                    section("Internet access", c: c) {
+                    section(String(localized: "Internet access"), c: c) {
                         FSCard {
                             VStack(alignment: .leading, spacing: FS.space.s2) {
                                 Text("This app may reach:").font(FS.font.bodySm()).foregroundColor(c.textMuted)
                                 hostList(card.approved, c: c)
                                 if card.canChange {
-                                    FSSecondaryButton(vm.isChangingEgress ? "Stopping…" : "Stop access", block: true) {
+                                    FSSecondaryButton(vm.isChangingEgress ? String(localized: "Stopping…") : String(localized: "Stop access"), block: true) {
                                         confirmStopEgress = true
                                     }
                                     .disabled(vm.isChangingEgress)
@@ -546,7 +546,7 @@ public struct ServiceDetailScreen: View {
     }
 
     private func accessRow(c: FSColors) -> some View {
-        section("Access control", c: c) {
+        section(String(localized: "Access control"), c: c) {
             Button(action: onOpenAccess) {
                 FSCard {
                     HStack(spacing: FS.space.s3) {
@@ -570,7 +570,7 @@ public struct ServiceDetailScreen: View {
     private func logsAndBackup(d: AppDetailResponse, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
             if !d.recentLogs.isEmpty {
-                section("Recent logs", c: c) {
+                section(String(localized: "Recent logs"), c: c) {
                     FSCard {
                         VStack(alignment: .leading, spacing: 4) {
                             ForEach(d.recentLogs, id: \.self) { line in
@@ -581,7 +581,7 @@ public struct ServiceDetailScreen: View {
                 }
             }
             if let backup = vm.backup {
-                section("Backup", c: c) {
+                section(String(localized: "Backup"), c: c) {
                     FSCard { backupCard(backup, last: d.lastBackup, c: c) }
                 }
             }
@@ -625,7 +625,7 @@ public struct ServiceDetailScreen: View {
                 EmptyView()
             }
             FSSecondaryButton(
-                backup.phase == .creating ? "Packing…" : backup.phase == .downloading ? "Downloading…" : "Back up now",
+                backup.phase == .creating ? String(localized: "Packing…") : backup.phase == .downloading ? String(localized: "Downloading…") : String(localized: "Back up now"),
                 block: true
             ) {
                 Task { await backup.backUp() }
@@ -638,7 +638,7 @@ public struct ServiceDetailScreen: View {
     private func removeButton(c: FSColors) -> some View {
         VStack(spacing: FS.space.s3) {
             FSDangerButton(
-                vm.isRemoving ? "Removing…" : "Remove app",
+                vm.isRemoving ? String(localized: "Removing…") : String(localized: "Remove app"),
                 block: true,
                 action: onRemove
             )
@@ -703,7 +703,7 @@ struct AdapterReportSheet: View {
                                 .accessibilityIdentifier("adapter-report-text")
                             Text("\(detail.count) / 2000").font(FS.font.caption()).foregroundColor(c.textMuted)
                             if let error { ErrorCard(message: error) }
-                            FSPrimaryButton(sending ? "Sending…" : "Send report",
+                            FSPrimaryButton(sending ? String(localized: "Sending…") : String(localized: "Send report"),
                                             enabled: !sending && !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && detail.count <= 2000,
                                             block: true) {
                                 Task { await send() }
@@ -717,7 +717,7 @@ struct AdapterReportSheet: View {
             .navigationTitle("Report a problem")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(sent ? "Done" : "Cancel") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(sent ? String(localized: "Done") : "Cancel") { dismiss() } }
             }
         }
     }

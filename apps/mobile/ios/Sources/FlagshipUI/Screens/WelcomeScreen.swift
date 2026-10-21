@@ -40,11 +40,11 @@ public struct WelcomeScreen: View {
                         // name (recovery / re-pair / demo) or join with a pairing
                         // code from another device. Same footer as the app lock.
                         FSActionFooter(
-                            primary: "Create your account",
+                            primary: String(localized: "Create your account"),
                             primaryId: "welcome-create",
-                            secondary: "Connect to an existing account",
+                            secondary: String(localized: "Connect to an existing account"),
                             secondaryId: "welcome-connect",
-                            secondaryHint: "Sign in with your account name, or join with a pairing code.",
+                            secondaryHint: String(localized: "Sign in with your account name, or join with a pairing code."),
                             onPrimary: onCreate,
                             onSecondary: onExisting
                         )

@@ -39,20 +39,20 @@ public struct PendingUpdateOrder: Codable, Equatable, Sendable {
     public func isStale(now: Int64) -> Bool { now - orderedAt >= Self.staleAfterMs }
 
     public func sentCopy(now: Int64) -> String {
-        "Update to \(targetLabel) sent \(Self.ago(ms: now - orderedAt)). The server picks it up within about five minutes, restarts, and goes back on its own if the new version doesn't start."
+        String(localized: "Update to \(targetLabel) sent \(Self.ago(ms: now - orderedAt)). The server picks it up within about five minutes, restarts, and goes back on its own if the new version doesn't start.")
     }
 
-    public static let staleCopy = "The server hasn't applied this update yet. It may be offline."
+    public static let staleCopy = String(localized: "The server hasn't applied this update yet. It may be offline.")
 
     static func ago(ms: Int64) -> String {
         let s = max(0, ms / 1000)
         if s < 60 { return "just now" }
         let m = s / 60
-        if m < 60 { return m == 1 ? "1 minute ago" : "\(m) minutes ago" }
+        if m < 60 { return m == 1 ? "1 minute ago" : String(localized: "\(m) minutes ago") }
         let h = m / 60
-        if h < 24 { return h == 1 ? "1 hour ago" : "\(h) hours ago" }
+        if h < 24 { return h == 1 ? "1 hour ago" : String(localized: "\(h) hours ago") }
         let d = h / 24
-        return d == 1 ? "1 day ago" : "\(d) days ago"
+        return d == 1 ? "1 day ago" : String(localized: "\(d) days ago")
     }
 }
 

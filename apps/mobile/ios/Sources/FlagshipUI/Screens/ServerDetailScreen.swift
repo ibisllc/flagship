@@ -151,7 +151,7 @@ public struct ServerDetailScreen: View {
     private var title: String {
         if let n = serverName, !n.isEmpty { return n }
         if let f = approvalFqdn, !f.isEmpty { return DeleteServerViewModel.serverLabel(forFqdn: f) }
-        return "Server"
+        return String(localized: "Server")
     }
 
     private var isLoaded: Bool {
@@ -331,7 +331,7 @@ public struct ServerDetailScreen: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                FSPrimaryButton(pairing ? "Pairing…" : "Pair this server", block: true, large: true) {
+                FSPrimaryButton(pairing ? String(localized: "Pairing…") : String(localized: "Pair this server"), block: true, large: true) {
                     onPair()
                 }
                 .disabled(pairing)
@@ -416,7 +416,7 @@ public struct ServerDetailScreen: View {
 
     /// The whole offline banner (web: "This server has gone offline. Check again"
     /// with a button, as it has no pull gesture; Android says the same as iOS).
-    static let offlineBanner = "This server has gone offline. Pull down to re-check"
+    static let offlineBanner = String(localized: "This server has gone offline. Pull down to re-check")
 
     /// HONEST LIVENESS (Fix B) — the honest copy for an `offline` (was live,
     /// now stale) or `comingUp` (registered, awaiting first heartbeat) box.
@@ -474,7 +474,7 @@ public struct ServerDetailScreen: View {
     private func overview(d: ServerDetailResponse, c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                FSPill("Online", kind: .online)
+                FSPill(String(localized: "Online"), kind: .online)
                 Text(d.serverFqdn)
                     .font(FS.font.mono())
                     .foregroundColor(c.text)
@@ -492,13 +492,13 @@ public struct ServerDetailScreen: View {
 
     @ViewBuilder
     private func overviewStats(_ d: ServerDetailResponse, c: FSColors) -> some View {
-        stat("Apps", "\(d.serviceCount)", c: c)
-        stat("Sessions", "\(d.pairedSessionCount)", c: c)
-        stat("Daemon", d.daemonVersion, c: c)
+        stat(String(localized: "Apps"), "\(d.serviceCount)", c: c)
+        stat(String(localized: "Sessions"), "\(d.pairedSessionCount)", c: c)
+        stat(String(localized: "Daemon"), d.daemonVersion, c: c)
         // The box-reported running commit (short) — the version the
         // update card orders away from. Hidden until the box reports.
         if let short = Self.shortCommit(d.currentCommit) {
-            stat("Version", short, c: c)
+            stat(String(localized: "Version"), short, c: c)
         }
     }
 
@@ -531,8 +531,8 @@ public struct ServerDetailScreen: View {
         let days = seconds / 86400
         let hours = (seconds % 86400) / 3600
         if days > 0 { return "\(days) days" }
-        if hours > 0 { return "\(hours) hours" }
-        return "\((seconds % 3600) / 60) minutes"
+        if hours > 0 { return String(localized: "\(hours) hours") }
+        return String(localized: "\((seconds % 3600) / 60) minutes")
     }
 
     private func relative(ms: Int64) -> String {
@@ -541,10 +541,10 @@ public struct ServerDetailScreen: View {
 
     private func verb(_ kind: String) -> String {
         switch kind {
-        case "installed":     return "Deployed"
-        case "uninstalled":   return "Removed"
-        case "deploy":        return "Redeployed"
-        case "update-pulled": return "Updated"
+        case "installed":     return String(localized: "Deployed")
+        case "uninstalled":   return String(localized: "Removed")
+        case "deploy":        return String(localized: "Redeployed")
+        case "update-pulled": return String(localized: "Updated")
         default:              return kind
         }
     }
@@ -571,7 +571,7 @@ struct BootUnlockCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            FSSectionLabel("Boot unlock")
+            FSSectionLabel(String(localized: "Boot unlock"))
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     switch mode {
@@ -584,7 +584,7 @@ struct BootUnlockCard: View {
                                 .font(FS.font.caption())
                                 .foregroundColor(c.textMuted)
                             FSDangerButton(
-                                revoking ? "Disabling…" : "Require my phone each boot",
+                                revoking ? String(localized: "Disabling…") : String(localized: "Require my phone each boot"),
                                 block: true
                             ) {
                                 Task { await revoke() }
@@ -621,7 +621,7 @@ struct BootUnlockCard: View {
         let coord = SecretRequestCoordinator(
             mailbox: mailbox,
             username: username,
-            irkProvider: { try await Keystore.deriveIRK(reason: "Disable auto-unlock for \(serverDomain)") },
+            irkProvider: { try await Keystore.deriveIRK(reason: String(localized: "Disable auto-unlock for \(serverDomain)")) },
             // revoke never unseals — no candidate seeds needed.
             unsealSeedProvider: { _ in [] }
         )
@@ -629,9 +629,9 @@ struct BootUnlockCard: View {
             try await coord.revokeAutoUnlockLease(serverDomain: serverDomain, leaseId: leaseId)
             store.setLeaseId(nil, for: serverDomain)
             self.leaseId = nil
-            toasts.success("Auto-unlock disabled. This server will ask your phone on its next reboot.")
+            toasts.success(String(localized: "Auto-unlock disabled. This server will ask your phone on its next reboot."))
         } catch {
-            toasts.error("Couldn't disable auto-unlock: \(UserErrorText.of(error))")
+            toasts.error(String(localized: "Couldn't disable auto-unlock: \(UserErrorText.of(error))"))
         }
     }
 }
@@ -670,18 +670,18 @@ struct BootUnlockApprovalCard: View {
 
     private var isEntitlement: Bool { purpose == .entitlement }
     private var headline: String {
-        isEntitlement ? "Your server is waiting for authorization to serve"
-                      : "Your server is waiting for your approval to unlock"
+        isEntitlement ? String(localized: "Your server is waiting for authorization to serve")
+                      : String(localized: "Your server is waiting for your approval to unlock")
     }
     private var bodyCopy: String {
         isEntitlement
-            ? "Authorize this server to serve your account so it can come online. Your phone will ask you to unlock once to approve."
-            : "If you just powered it on, release its disk key to bring it online. Your phone will ask you to unlock once to approve."
+            ? String(localized: "Authorize this server to serve your account so it can come online. Your phone will ask you to unlock once to approve.")
+            : String(localized: "If you just powered it on, release its disk key to bring it online. Your phone will ask you to unlock once to approve.")
     }
-    private var ctaLabel: String { isEntitlement ? "Authorize" : "Approve unlock" }
+    private var ctaLabel: String { isEntitlement ? String(localized: "Authorize") : String(localized: "Approve unlock") }
     private var approvedCopy: String {
-        isEntitlement ? "Authorized — your server should come online shortly."
-                      : "Unlock approved — your server should come online shortly."
+        isEntitlement ? String(localized: "Authorized — your server should come online shortly.")
+                      : String(localized: "Unlock approved — your server should come online shortly.")
     }
 
     var body: some View {
@@ -731,7 +731,7 @@ struct BootUnlockApprovalCard: View {
             statusCard(c: c) {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     Text(msg).font(FS.font.caption()).foregroundColor(c.danger)
-                    FSGhostButton("Retry", block: true) { vm.retry() }
+                    FSGhostButton(String(localized: "Retry"), block: true) { vm.retry() }
                         .accessibilityIdentifier("sd-approve-unlock-retry")
                 }
             }
@@ -742,7 +742,7 @@ struct BootUnlockApprovalCard: View {
     /// Deny DIRECTLY. No biometric has fired; Face ID fires once, only when
     /// they tap Approve (and covers the whole ceremony via memoized keys).
     private func requestCard(vm: BootUnlockApprovalViewModel, c: FSColors) -> some View {
-        sectionWrap("Server waiting", c: c) {
+        sectionWrap(String(localized: "Server waiting"), c: c) {
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     Text(headline)
@@ -758,7 +758,7 @@ struct BootUnlockApprovalCard: View {
                     }
                     .accessibilityIdentifier("sd-approve-unlock")
                     .padding(.top, FS.space.s2)
-                    FSGhostButton("Deny", block: true) { vm.deny() }
+                    FSGhostButton(String(localized: "Deny"), block: true) { vm.deny() }
                         .accessibilityIdentifier("sd-deny-unlock")
                 }
             }
@@ -766,7 +766,7 @@ struct BootUnlockApprovalCard: View {
     }
 
     private func statusCard<C: View>(c: FSColors, @ViewBuilder content: @escaping () -> C) -> some View {
-        sectionWrap("Boot unlock", c: c) {
+        sectionWrap(String(localized: "Boot unlock"), c: c) {
             FSCard { content() }
         }
     }
@@ -816,7 +816,7 @@ private actor ApprovalKeyCache {
         // admin-root signature adds no second Face ID to the approve ceremony.
         let k = try await Keystore.deriveApprovalKeysWithAdminRoot(
             serverId: serverDomain,
-            reason: "Approve your server's boot unlock"
+            reason: String(localized: "Approve your server's boot unlock")
         )
         cached = k
         return k
@@ -846,7 +846,7 @@ struct TransferButton: View {
     @State private var showSheet = false
 
     var body: some View {
-        FSDangerButton("Transfer to another account", block: true) {
+        FSDangerButton(String(localized: "Transfer to another account"), block: true) {
             showSheet = true
         }
         .accessibilityIdentifier("sd-transfer-server")
@@ -889,7 +889,7 @@ struct MigrateServerButton: View {
     @State private var showSheet = false
 
     var body: some View {
-        FSSecondaryButton("Migrate to a new server", block: true) {
+        FSSecondaryButton(String(localized: "Migrate to a new server"), block: true) {
             showSheet = true
         }
         .accessibilityIdentifier("sd-migrate-server")
@@ -963,7 +963,7 @@ struct UpdateServerCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            FSSectionLabel("Software update")
+            FSSectionLabel(String(localized: "Software update"))
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     if let short = ServerDetailScreen.shortCommit(currentCommit) {
@@ -996,7 +996,7 @@ struct UpdateServerCard: View {
                             onForget: { forget() }
                         )
                     } else {
-                        FSPrimaryButton(latestTag == nil ? "Update this server" : "Update to latest", block: true) {
+                        FSPrimaryButton(latestTag == nil ? String(localized: "Update this server") : String(localized: "Update to latest"), block: true) {
                             showSheet = true
                         }
                         .disabled(!reported)
@@ -1101,9 +1101,9 @@ struct PendingUpdateNotice: View {
                         .foregroundColor(c.text)
                         .accessibilityIdentifier("sd-update-stale")
                     HStack(spacing: FS.space.s2) {
-                        FSPrimaryButton(working ? "Working…" : "Send again", enabled: !working, block: true, action: onSendAgain)
+                        FSPrimaryButton(working ? String(localized: "Working…") : String(localized: "Send again"), enabled: !working, block: true, action: onSendAgain)
                             .accessibilityIdentifier("sd-update-send-again")
-                        FSSecondaryButton("Forget it", block: true, action: onForget)
+                        FSSecondaryButton(String(localized: "Forget it"), block: true, action: onForget)
                             .disabled(working)
                             .accessibilityIdentifier("sd-update-forget")
                     }
@@ -1143,7 +1143,7 @@ struct UpdateServerSheet: View {
     /// the sheet is open (Forget it returns to the picker).
     @State private var openedPending = false
 
-    static let downgradeWarning = "Older releases don't have the fixes made since, and may not understand changes made to this server after them, such as a rotated admin key. In the worst case the server stops accepting updates and has to be reinstalled. Only go back if a newer release broke something."
+    static let downgradeWarning = String(localized: "Older releases don't have the fixes made since, and may not understand changes made to this server after them, such as a rotated admin key. In the worst case the server stops accepting updates and has to be reinstalled. Only go back if a newer release broke something.")
 
     private var working: Bool { vm.isWorking }
 
@@ -1184,7 +1184,7 @@ struct UpdateServerSheet: View {
                             }
                         )
                     } else {
-                        Text(lastUpdate?.summary ?? "The server has picked up the update.")
+                        Text(lastUpdate?.summary ?? String(localized: "The server has picked up the update."))
                             .font(FS.font.body()).foregroundColor(c.text)
                     }
                 } else {
@@ -1212,7 +1212,7 @@ struct UpdateServerSheet: View {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     Text("Latest release").font(FS.font.caption()).foregroundColor(c.textMuted)
                     Text(latest.tag).font(FS.font.mono()).foregroundColor(c.text)
-                    FSPrimaryButton(working ? "Working…" : "Update to latest", enabled: vm.canUpdate && !working, block: true) {
+                    FSPrimaryButton(working ? String(localized: "Working…") : String(localized: "Update to latest"), enabled: vm.canUpdate && !working, block: true) {
                         order(latest.commit)
                     }
                     .accessibilityIdentifier("update-latest-btn")
@@ -1249,7 +1249,7 @@ struct UpdateServerSheet: View {
         if !others.isEmpty {
             Text("Other new releases").font(FS.font.caption()).foregroundColor(c.textMuted)
             ForEach(others) { r in
-                releaseRow(r, actionLabel: "Update", c: c) { order(r.commit) }
+                releaseRow(r, actionLabel: String(localized: "Update"), c: c) { order(r.commit) }
             }
         }
     }
@@ -1262,7 +1262,7 @@ struct UpdateServerSheet: View {
                     Text(Self.downgradeWarning).font(FS.font.caption()).foregroundColor(c.textMuted)
                 }
                 ForEach((catalog?.releases ?? []).filter { $0.relation == "older" }) { r in
-                    releaseRow(r, actionLabel: "Go back", c: c) { order(r.commit) }
+                    releaseRow(r, actionLabel: String(localized: "Go back"), c: c) { order(r.commit) }
                 }
                 Text("Or enter any release (full commit)").font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 TextField("40-character commit hash", text: $target)
@@ -1274,7 +1274,7 @@ struct UpdateServerSheet: View {
                 if let problem = vm.targetProblem(target) {
                     Text(problem).font(FS.font.caption()).foregroundColor(c.textMuted)
                 }
-                FSDangerButton(working ? "Working…" : "Order update", block: true) {
+                FSDangerButton(working ? String(localized: "Working…") : String(localized: "Order update"), block: true) {
                     guard vm.canOrder(target), !working else { return }
                     order(target.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
                 }
@@ -1370,7 +1370,7 @@ struct DangerZoneCard: View {
         let appState = app
         let fqdn = serverDomain
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            FSSectionLabel("Danger zone")
+            FSSectionLabel(String(localized: "Danger zone"))
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     if canTransfer && admin {
@@ -1379,19 +1379,19 @@ struct DangerZoneCard: View {
                     if !admin {
                         EmptyView()
                     } else if revoked {
-                        FSPrimaryButton(unrevoking ? "Restoring…" : "Un-revoke server", block: true) {
+                        FSPrimaryButton(unrevoking ? String(localized: "Restoring…") : String(localized: "Un-revoke server"), block: true) {
                             Task { await unrevoke(toasts: toastCenter, app: appState) }
                         }
                         .disabled(unrevoking)
                         .accessibilityIdentifier("sd-unrevoke-server")
                     } else {
-                        FSDangerButton("Revoke server (reversible)", block: true) {
+                        FSDangerButton(String(localized: "Revoke server (reversible)"), block: true) {
                             showRevoke = true
                         }
                         .accessibilityIdentifier("sd-revoke-server")
                     }
                     if admin {
-                        FSDangerButton("Delete and wipe this server", block: true) {
+                        FSDangerButton(String(localized: "Delete and wipe this server"), block: true) {
                             showDelete = true
                         }
                         .accessibilityIdentifier("sd-delete-server")
@@ -1415,9 +1415,9 @@ struct DangerZoneCard: View {
                         revokedAt: Int64(Date().timeIntervalSince1970 * 1000),
                         reason: reason.rawValue
                     )
-                    toastCenter.success("Server revoked. It can't connect or unlock until you un-revoke it.")
+                    toastCenter.success(String(localized: "Server revoked. It can't connect or unlock until you un-revoke it."))
                 },
-                onFailed: { msg in toastCenter.error("Revoke failed: \(msg)") }
+                onFailed: { msg in toastCenter.error(String(localized: "Revoke failed: \(msg)")) }
             )
         }
         .sheet(isPresented: $showDelete) {
@@ -1487,7 +1487,7 @@ struct RevokeServerSheet: View {
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
 
-                FSSectionLabel("Reason")
+                FSSectionLabel(String(localized: "Reason"))
                     .padding(.top, FS.space.s2)
 
                 Picker("Reason", selection: $reason) {
@@ -1536,7 +1536,7 @@ struct RevokeServerSheet: View {
                 )
                 .disabled(isPosting)
 
-                FSGhostButton("Cancel", block: true) { dismiss() }
+                FSGhostButton(String(localized: "Cancel"), block: true) { dismiss() }
                     .padding(.bottom, FS.space.s2)
             }
             .padding(FS.space.s4)
@@ -1550,9 +1550,9 @@ struct RevokeServerSheet: View {
     }
 
     private var buttonLabel: String {
-        if isPosting { return "Revoking…" }
-        if holding { return "Hold to confirm…" }
-        return "Hold to revoke"
+        if isPosting { return String(localized: "Revoking…") }
+        if holding { return String(localized: "Hold to confirm…") }
+        return String(localized: "Hold to revoke")
     }
 
     @MainActor
@@ -1613,18 +1613,18 @@ struct DeleteServerSheet: View {
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
-                FSField(value: $typed, label: "Type \(label) to confirm", placeholder: label)
+                FSField(value: $typed, label: String(localized: "Type \(label) to confirm"), placeholder: label)
                     .accessibilityIdentifier("delete-server-name-field")
                 Spacer()
                 if let vm, case .failed(let msg) = vm.phase {
                     Text(msg).font(FS.font.caption()).foregroundColor(c.danger)
                 }
-                FSDangerButton(working ? "Deleting…" : "Delete server", muted: !armed, block: true, large: true) {
+                FSDangerButton(working ? String(localized: "Deleting…") : String(localized: "Delete server"), muted: !armed, block: true, large: true) {
                     Task { await fire() }
                 }
                 .disabled(!armed || working)
                 .accessibilityIdentifier("delete-server-confirm")
-                FSGhostButton("Cancel", block: true) { dismiss() }
+                FSGhostButton(String(localized: "Cancel"), block: true) { dismiss() }
                     .disabled(working)
                     .padding(.bottom, FS.space.s2)
             }

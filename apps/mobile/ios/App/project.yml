@@ -51,6 +51,9 @@ settings:
   base:
     CURRENT_PROJECT_VERSION: "5"
     MARKETING_VERSION: "1.1"
+    # The string catalogs are generated from i18n/ (scripts/i18n-ios.mjs build) and must not be rewritten by
+    # Xcode's own extraction. `scripts/i18n-ios.mjs harvest` turns it on from the command line to read the keys.
+    SWIFT_EMIT_LOC_STRINGS: NO
 
 # Explicit shared scheme for the iPhone app, so `xcodegen generate` always
 # emits a runnable FlagshipApp scheme (Debug run on device, Release archive).

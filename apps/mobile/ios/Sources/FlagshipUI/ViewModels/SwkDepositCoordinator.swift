@@ -135,7 +135,7 @@ public struct SwkDepositCoordinator {
             guard swkOwed || pairingOrderJson != nil || cgkOwed else { return }
         }
         do {
-            let (irk, swkHex) = try await deriveIrkAndSwk(swkServerId, "Authorize \(serverDomain) to run apps")
+            let (irk, swkHex) = try await deriveIrkAndSwk(swkServerId, String(localized: "Authorize \(serverDomain) to run apps"))
 
             if swkOwed, let swk = HexUtil.decode(swkHex), swk.count == 32 {
                 let body = try SwkDelivery.buildDeposit(
@@ -167,7 +167,7 @@ public struct SwkDepositCoordinator {
             // serverId), sealed to THIS box's registered identity. Best-effort:
             // a box without a CGK just doesn't gossip yet (never bricked).
             if cgkOwed {
-                let cgkHex = try await deriveCgkHex("Authorize \(serverDomain) to join your cloud")
+                let cgkHex = try await deriveCgkHex(String(localized: "Authorize \(serverDomain) to join your cloud"))
                 if let cgk = HexUtil.decode(cgkHex), cgk.count == 32 {
                     let body = try CgkDelivery.buildDeposit(
                         username: username,

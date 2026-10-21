@@ -12,7 +12,7 @@ import Foundation
 /// / `gatedWebSocketTask` below: that is the one gate. A test scans the
 /// sources so a new client cannot skip it.
 public struct UpdateRequiredError: Error, LocalizedError, Equatable, Sendable {
-    public static let sentence = "Update required. Flagship is paused on this device until you update."
+    public static let sentence = String(localized: "Update required. Flagship is paused on this device until you update.")
     public init() {}
     public var errorDescription: String? { Self.sentence }
 }

@@ -74,11 +74,11 @@ public final class RecoveryViewModel {
     public func setup(umkSeed: SymmetricKey, passphrase: String) async {
         phase = .settingUp
         guard let user = username(), !user.isEmpty else {
-            phase = .failed("No active account on this device.")
+            phase = .failed(String(localized: "No active account on this device."))
             return
         }
         guard passphrase.count >= 8 else {
-            phase = .failed("Passphrase must be 8+ characters.")
+            phase = .failed(String(localized: "Passphrase must be 8+ characters."))
             return
         }
         do {
@@ -99,7 +99,7 @@ public final class RecoveryViewModel {
             // bytes to put into the signed canonical.
             let wrappedUmk = try Recovery.wrap(umkSeed: umkSeed, prfSecret: prfSecret)
             guard let wrappedUmkBytes = Data(base64Encoded: wrappedUmk) else {
-                phase = .failed("Local base64 round-trip failed")
+                phase = .failed(String(localized: "Local base64 round-trip failed"))
                 return
             }
             _ = wrappedUmkBytes
@@ -131,7 +131,7 @@ public final class RecoveryViewModel {
             var wrappedAdminRoot: String? = nil
             if Keystore.hasAdminRoot {
                 do {
-                    let adminKey = try await Keystore.adminRootKey(reason: "Back up your admin key")
+                    let adminKey = try await Keystore.adminRootKey(reason: String(localized: "Back up your admin key"))
                     wrappedAdminRoot = try AdminRootEscrow.wrapForEscrow(
                         seed: adminKey.rawRepresentation,
                         prfSecret: prfSecret
@@ -189,11 +189,11 @@ public final class RecoveryViewModel {
         phase = .recovering
         let normalizedUser = user.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalizedUser.isEmpty else {
-            phase = .failed("Enter your account name.")
+            phase = .failed(String(localized: "Enter your account name."))
             return nil
         }
         guard passphrase.count >= 8 else {
-            phase = .failed("Passphrase must be 8+ characters.")
+            phase = .failed(String(localized: "Passphrase must be 8+ characters."))
             return nil
         }
         do {
@@ -217,7 +217,7 @@ public final class RecoveryViewModel {
             if let serverPrfSaltHash = fetched.prfSaltHash {
                 let localPrfSaltHash = RecoveryDerivation.sha256Hex(secrets.prfSalt)
                 guard localPrfSaltHash == serverPrfSaltHash.lowercased() else {
-                    phase = .failed("Server returned a stale prfSaltHash — refusing to proceed.")
+                    phase = .failed(String(localized: "Server returned a stale prfSaltHash — refusing to proceed."))
                     return nil
                 }
             }
@@ -284,7 +284,7 @@ public final class RecoveryViewModel {
                     )
                     _ = try await Keystore.importAdminRoot(
                         seed: adminSeed,
-                        reason: "Restore your admin key"
+                        reason: String(localized: "Restore your admin key")
                     )
                 } catch {
                     // Non-fatal: the UMK is recovered; the admin root can be

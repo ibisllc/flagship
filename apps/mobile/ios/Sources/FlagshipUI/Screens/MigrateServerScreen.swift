@@ -83,12 +83,12 @@ public struct MigrateServerScreen: View {
             if vm.backupMissing {
                 MigrateCallout(
                     kind: .warning,
-                    text: "No backup is enrolled for this server. The migration moves data through backup — enable backup first."
+                    text: String(localized: "No backup is enrolled for this server. The migration moves data through backup — enable backup first.")
                 )
             } else {
                 MigrateCallout(
                     kind: .info,
-                    text: "Peer-backup is enrolled — the new server restores from it while this one keeps serving."
+                    text: String(localized: "Peer-backup is enrolled — the new server restores from it while this one keeps serving.")
                 )
             }
 
@@ -104,7 +104,7 @@ public struct MigrateServerScreen: View {
                 MigrateCallout(kind: .danger, text: err)
             }
 
-            FSPrimaryButton(vm.working ? "Signing…" : "Start migration", block: true, large: true) {
+            FSPrimaryButton(vm.working ? String(localized: "Signing…") : String(localized: "Start migration"), block: true, large: true) {
                 if !vm.working && !vm.startBlocked { Task { await vm.start() } }
             }
             .disabled(vm.working || vm.startBlocked)
@@ -154,13 +154,13 @@ public struct MigrateServerScreen: View {
             }
 
             if vm.session?.phase == "pre-seeded" {
-                FSPrimaryButton(vm.working ? "Signing…" : "Hand off to the new server now", block: true, large: true) {
+                FSPrimaryButton(vm.working ? String(localized: "Signing…") : String(localized: "Hand off to the new server now"), block: true, large: true) {
                     if !vm.working { Task { await vm.handOff() } }
                 }
                 .disabled(vm.working)
                 .accessibilityIdentifier("migrate-hand-off")
             } else if vm.session?.phase == "ready" {
-                FSPrimaryButton(vm.working ? "Signing…" : "Freeze old server and hand off", block: true, large: true) {
+                FSPrimaryButton(vm.working ? String(localized: "Signing…") : String(localized: "Freeze old server and hand off"), block: true, large: true) {
                     if !vm.working { Task { await vm.handOff() } }
                 }
                 .disabled(vm.working)
@@ -168,15 +168,15 @@ public struct MigrateServerScreen: View {
             }
 
             if vm.session?.abortedAt != nil {
-                MigrateCallout(kind: .warning, text: "Migration aborted — your old server stays active with all its data.")
+                MigrateCallout(kind: .warning, text: String(localized: "Migration aborted — your old server stays active with all its data."))
             } else if vm.session?.done == true {
-                MigrateCallout(kind: .success, text: "Migration complete — \(vm.serverFqdn) now runs on the new server.")
+                MigrateCallout(kind: .success, text: String(localized: "Migration complete — \(vm.serverFqdn) now runs on the new server."))
             }
 
             if vm.canAbort {
                 // Secondary, not danger — aborting is the SAFE exit (mirrors
                 // the webapp): the old server stays active with all its data.
-                FSSecondaryButton(vm.working ? "Working…" : "Abort migration", block: true) {
+                FSSecondaryButton(vm.working ? String(localized: "Working…") : String(localized: "Abort migration"), block: true) {
                     if !vm.working { Task { await vm.abort() } }
                 }
                 .disabled(vm.working)

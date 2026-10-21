@@ -69,7 +69,7 @@ public struct ProvisionTimelineView: View {
                     .font(row.state == .current ? FS.font.h4() : FS.font.body())
                     .foregroundColor(labelColor(row.state, c))
                 if let detail = row.detail {
-                    Text(row.state == .error ? "Failed — \(detail)" : detail)
+                    Text(row.state == .error ? String(localized: "Failed — \(detail)") : detail)
                         .font(FS.font.bodySm())
                         .foregroundColor(row.state == .error ? c.danger : c.textMuted)
                 }

@@ -12,9 +12,9 @@ import CryptoKit
 /// unit tests.
 public final class ShareAcceptMockWorld: ServerShareTransport, @unchecked Sendable {
     public static let notAdminSentence =
-        "Only an admin device of their account can accept a co-manage invitation. Cancel this link and send a new one for them to open on an admin device."
+        String(localized: "Only an admin device of their account can accept a co-manage invitation. Cancel this link and send a new one for them to open on an admin device.")
     public static let badSignatureSentence =
-        "Their acceptance isn't signed by their account's admin key, so this server can't trust it. Cancel this link and send a new one."
+        String(localized: "Their acceptance isn't signed by their account's admin key, so this server can't trust it. Cancel this link and send a new one.")
 
     private let lock = NSLock()
     public let shareId: String

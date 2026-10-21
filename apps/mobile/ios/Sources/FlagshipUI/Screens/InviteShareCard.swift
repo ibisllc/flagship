@@ -61,7 +61,7 @@ struct InviteShareCard: View {
                 }
                 Button {
                     UIPasteboard.general.string = link
-                    toasts.success("Link copied.")
+                    toasts.success(String(localized: "Link copied."))
                 } label: {
                     Label("Copy link", systemImage: "doc.on.doc")
                 }

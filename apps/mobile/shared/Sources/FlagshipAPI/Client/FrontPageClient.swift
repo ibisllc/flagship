@@ -67,7 +67,7 @@ public final class LiveFrontPageClient: FrontPageClient, @unchecked Sendable {
             throw error
         }
         guard let http = resp as? HTTPURLResponse else {
-            throw ScreensClientError.http(status: 0, message: "no response")
+            throw ScreensClientError.http(status: 0, message: String(localized: "no response"))
         }
         if !(200..<300).contains(http.statusCode) {
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -78,7 +78,7 @@ public final class LiveFrontPageClient: FrontPageClient, @unchecked Sendable {
 
     private func get(serverDomain: String, path: String) async throws -> Data {
         guard let url = URL(string: Self.baseUrl(serverDomain) + path) else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
         return try await send(URLRequest(url: url))
     }
@@ -103,7 +103,7 @@ public final class LiveFrontPageClient: FrontPageClient, @unchecked Sendable {
 
     public func setFrontPage(serverDomain: String, request: [String: Any], signatureHex: String) async throws {
         guard let url = URL(string: Self.baseUrl(serverDomain) + "/api/front-page") else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"

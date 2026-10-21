@@ -219,10 +219,10 @@ public struct HomeScreen: View {
 
     static func emptyState(canAddServers: Bool) -> EmptyState {
         canAddServers
-            ? EmptyState(headline: "Your account is ready",
-                         hint: "Add your first server to start running your own services.",
+            ? EmptyState(headline: String(localized: "Your account is ready"),
+                         hint: String(localized: "Add your first server to start running your own services."),
                          showsAddServer: true)
-            : EmptyState(headline: "No servers yet", hint: addServersAdminOnly, showsAddServer: false)
+            : EmptyState(headline: String(localized: "No servers yet"), hint: addServersAdminOnly, showsAddServer: false)
     }
 
     /// The Home dashboard NEVER renders a "couldn't load" card. When there's
@@ -255,7 +255,7 @@ public struct HomeScreen: View {
                             .font(FS.font.caption())
                             .foregroundColor(c.textMuted)
                         Spacer()
-                        Button(unlocking ? "Unlocking…" : "Unlock") { showMyServers() }
+                        Button(unlocking ? String(localized: "Unlocking…") : "Unlock") { showMyServers() }
                             .font(FS.font.caption())
                             .disabled(unlocking)
                             .accessibilityIdentifier("status-paused-unlock")
@@ -313,9 +313,9 @@ public struct HomeScreen: View {
         if accountWasReset {
             FSAnnouncementCard(
                 icon: "exclamationmark.shield.fill",
-                title: "This device was removed from your account",
-                message: "Another device on this account ran Disconnect, Replace, or Wipe. Sign in again with your recovery passkey to get back in.",
-                ctaLabel: "Sign in again",
+                title: String(localized: "This device was removed from your account"),
+                message: String(localized: "Another device on this account ran Disconnect, Replace, or Wipe. Sign in again with your recovery passkey to get back in."),
+                ctaLabel: String(localized: "Sign in again"),
                 tint: c.danger,
                 onCta: onSignInAgain
             )
@@ -323,9 +323,9 @@ public struct HomeScreen: View {
         } else if showRecoveryBackupBanner {
             FSAnnouncementCard(
                 icon: "key.horizontal.fill",
-                title: "Your account isn't backed up yet",
-                message: "If you lose access to this device, you may lose access to your Flagship cloud.",
-                ctaLabel: "Secure my account",
+                title: String(localized: "Your account isn't backed up yet"),
+                message: String(localized: "If you lose access to this device, you may lose access to your Flagship cloud."),
+                ctaLabel: String(localized: "Secure my account"),
                 onCta: onSetUpRecovery,
                 onDismiss: onDismissRecoveryBackupBanner
             )
@@ -333,9 +333,9 @@ public struct HomeScreen: View {
         } else if showRecoveryNudge {
             FSAnnouncementCard(
                 icon: "key.horizontal.fill",
-                title: "Set up recovery",
-                message: "Save a passkey so you can recover your account if you get a new device.",
-                ctaLabel: "Set it up",
+                title: String(localized: "Set up recovery"),
+                message: String(localized: "Save a passkey so you can recover your account if you get a new device."),
+                ctaLabel: String(localized: "Set it up"),
                 onCta: onSetUpRecovery,
                 onDismiss: onDismissRecoveryNudge
             )
@@ -409,7 +409,7 @@ public struct HomeScreen: View {
     private func deviceChip(_ cap: DeviceCapabilityBlock, c: FSColors) -> some View {
         let summary = (cap.scopes == [.browse])
             ? "browse-only"
-            : "\(cap.scopes.count) scopes"
+            : String(localized: "\(cap.scopes.count) scopes")
         return HStack(spacing: FS.space.s2) {
             Image(systemName: "lock.shield")
                 .foregroundColor(c.textMuted)
@@ -436,13 +436,13 @@ public struct HomeScreen: View {
         // regular-width screens into 280pt columns and left this card in one.
         return VStack(spacing: FS.space.s3) {
             actionRow(
-                title: "Build a service",
-                subtitle: "Describe it in plain English. Your server builds and runs it.",
+                title: String(localized: "Build a service"),
+                subtitle: String(localized: "Describe it in plain English. Your server builds and runs it."),
                 systemImage: "sparkles",
                 accent: c.primary,
                 action: onVibeCode,
                 enabled: canVibeCode,
-                disabledReason: "This device cannot build new services. Use a primary device.",
+                disabledReason: String(localized: "This device cannot build new services. Use a primary device."),
                 accessibilityId: "quick-action-vibe-code",
                 c: c
             )
@@ -519,7 +519,7 @@ public struct HomeScreen: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                FSPrimaryButton(unlocking ? "Unlocking…" : "Show my servers", enabled: !unlocking, block: true) {
+                FSPrimaryButton(unlocking ? String(localized: "Unlocking…") : String(localized: "Show my servers"), enabled: !unlocking, block: true) {
                     showMyServers()
                 }
                 .accessibilityIdentifier("home-show-my-servers")
@@ -584,7 +584,7 @@ public struct HomeScreen: View {
                 .accessibilityIdentifier("home-empty-state")
             } else {
                 HStack {
-                    FSSectionLabel("Your servers")
+                    FSSectionLabel(String(localized: "Your servers"))
                     Spacer()
                     Text("\(pods.count)").font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
                 }
@@ -799,7 +799,7 @@ public struct HomeScreen: View {
                                 }
                             }
                             if let backupWait {
-                                FSPill(backupWait.state == "restoring" ? "Restoring its backup" : "Waiting for its backup", kind: .provisioning)
+                                FSPill(backupWait.state == "restoring" ? String(localized: "Restoring its backup") : String(localized: "Waiting for its backup"), kind: .provisioning)
                                     .accessibilityIdentifier("pod-card-awaiting-backup")
                             } else {
                                 FSPill(
@@ -895,7 +895,7 @@ public struct HomeScreen: View {
 
     private func recentActivity(events: [RecentInstallEvent], c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            FSSectionLabel("Recent activity")
+            FSSectionLabel(String(localized: "Recent activity"))
             if events.isEmpty {
                 FSCard { Text("No recent activity.").foregroundColor(c.textMuted) }
             } else {
@@ -947,10 +947,10 @@ public struct HomeScreen: View {
     }
     private func verb(for kind: String) -> String {
         switch kind {
-        case "installed":     return "Deployed"
-        case "uninstalled":   return "Removed"
-        case "deploy":        return "Redeployed"
-        case "update-pulled": return "Updated"
+        case "installed":     return String(localized: "Deployed")
+        case "uninstalled":   return String(localized: "Removed")
+        case "deploy":        return String(localized: "Redeployed")
+        case "update-pulled": return String(localized: "Updated")
         default:              return "Event:"
         }
     }
@@ -1053,18 +1053,18 @@ public struct PodCard: View {
 public enum PodStatusStyle {
     public static func label(liveness: PodInfo.LivenessState, status: PodInfo.Status) -> String {
         switch liveness {
-        case .revoked:            return "Revoked"
-        case .dead:               return "Never came online"
-        case .offline:            return "Offline"
-        case .waitingForApproval: return "Waiting for approval"
+        case .revoked:            return String(localized: "Revoked")
+        case .dead:               return String(localized: "Never came online")
+        case .offline:            return String(localized: "Offline")
+        case .waitingForApproval: return String(localized: "Waiting for approval")
         case .comingOnline:
-            return status == .pending ? "Pending" : "Coming online…"
+            return status == .pending ? String(localized: "Pending") : String(localized: "Coming online…")
         case .online:
             switch status {
-            case .online:  return "Online"
-            case .offline: return "Offline"
-            case .unknown: return "Checking"
-            case .pending: return "Pending"
+            case .online:  return String(localized: "Online")
+            case .offline: return String(localized: "Offline")
+            case .unknown: return String(localized: "Checking")
+            case .pending: return String(localized: "Pending")
             }
         }
     }
@@ -1181,7 +1181,7 @@ public struct LeaderBadge: View {
         .background(tint.opacity(0.12))
         .clipShape(Capsule())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(confirmed ? "Leader" : "Leader, waiting for the server to confirm")
+        .accessibilityLabel(confirmed ? String(localized: "Leader") : "Leader, waiting for the server to confirm")
         .accessibilityIdentifier(confirmed ? "leader-badge" : "leader-badge-pending")
     }
 }

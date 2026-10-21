@@ -111,12 +111,12 @@ public struct AccountSecurityScreen: View {
                     .imageScale(.large)
                     .foregroundColor(viewModel.isMultiDevice ? c.success : c.primary)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(viewModel.isMultiDevice ? "Code protection is on" : "Single-device account")
+                    Text(viewModel.isMultiDevice ? String(localized: "Code protection is on") : "Single-device account")
                         .font(FS.font.scaled(16, weight: .semibold))
                         .foregroundColor(c.text)
                         .accessibilityIdentifier("account-security-badge")
                     Text(viewModel.isMultiDevice
-                         ? "Recovering this account needs a 6-digit code from your authenticator app (or a recovery code) and a 24-hour wait."
+                         ? String(localized: "Recovering this account needs a 6-digit code from your authenticator app (or a recovery code) and a 24-hour wait.")
                          : "Account recovery needs a recovery credential and then waits 3 days. Your other devices are alerted during the wait, but can't cancel it.")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
@@ -129,9 +129,9 @@ public struct AccountSecurityScreen: View {
     @ViewBuilder
     private func explainer(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            FSSectionLabel(viewModel.isMultiDevice ? "Currently enabled" : "Why turn it on?")
+            FSSectionLabel(viewModel.isMultiDevice ? String(localized: "Currently enabled") : String(localized: "Why turn it on?"))
             Text(viewModel.isMultiDevice
-                 ? "Your authenticator was set up on this device on \(formattedDate(viewModel.totpEnrolledAt)). Store your recovery codes somewhere safe — they're the only way back in if your authenticator app is lost."
+                 ? String(localized: "Your authenticator was set up on this device on \(formattedDate(viewModel.totpEnrolledAt)). Store your recovery codes somewhere safe — they're the only way back in if your authenticator app is lost.")
                  : "A second check outside Apple's iCloud Keychain. If your iCloud password is ever stolen, the attacker still needs a live 6-digit code from your authenticator app to take over your account.")
                 .font(FS.font.bodySm())
                 .foregroundColor(c.text)
@@ -142,12 +142,12 @@ public struct AccountSecurityScreen: View {
     private func actions(c: FSColors) -> some View {
         VStack(spacing: FS.space.s3) {
             if viewModel.isMultiDevice {
-                FSDangerButton("Turn off code protection", block: true) {
+                FSDangerButton(String(localized: "Turn off code protection"), block: true) {
                     showDisableSheet = true
                 }
                 .accessibilityIdentifier("account-security-disable-btn")
             } else {
-                FSPrimaryButton("Turn on code protection", block: true, large: true) {
+                FSPrimaryButton(String(localized: "Turn on code protection"), block: true, large: true) {
                     showEnableSheet = true
                 }
                 .accessibilityIdentifier("account-security-enable-btn")
@@ -261,7 +261,7 @@ public struct AccountSecurityScreen: View {
                     EmptyView()
                 }
 
-                FSDangerButton("Rotate admin key", block: true) {
+                FSDangerButton(String(localized: "Rotate admin key"), block: true) {
                     showRotateConfirm = true
                 }
                 .accessibilityIdentifier("rotate-admin-btn")
@@ -309,7 +309,7 @@ public struct AccountSecurityScreen: View {
             }
 
             FSPrimaryButton(
-                "Update recovery backup",
+                String(localized: "Update recovery backup"),
                 enabled: !reEscrowPassphrase.isEmpty && !vm.isUpdatingRecoveryBackup,
                 block: true
             ) {
@@ -320,7 +320,7 @@ public struct AccountSecurityScreen: View {
             }
             .accessibilityIdentifier("rotate-admin-reescrow-btn")
 
-            FSGhostButton("Skip for now", block: true) {
+            FSGhostButton(String(localized: "Skip for now"), block: true) {
                 vm.skipRecoveryUpdate()
                 reEscrowPassphrase = ""
             }
@@ -390,13 +390,13 @@ struct AccountSecurityEnableSheet: View {
     @ViewBuilder
     private func step1(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            FSSectionLabel("Step 1 of 4")
+            FSSectionLabel(String(localized: "Step 1 of 4"))
             Text("You'll need an authenticator app like 1Password, Google Authenticator, or Authy. We'll show a QR code and a manual key — scan or paste either one.")
                 .foregroundColor(c.text)
             Text("With code protection on, recovery needs your 6-digit code (or a recovery code) and a 24-hour wait instead of the 3-day wait.")
                 .font(FS.font.bodySm())
                 .foregroundColor(c.textMuted)
-            FSPrimaryButton("Continue", block: true, large: true) {
+            FSPrimaryButton(String(localized: "Continue"), block: true, large: true) {
                 Task { await viewModel.beginEnrollment() }
             }
             .accessibilityIdentifier("account-security-step1-continue")
@@ -409,7 +409,7 @@ struct AccountSecurityEnableSheet: View {
     @ViewBuilder
     private func step2(c: FSColors, staged: AccountSecurityViewModel.StagedSecret) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            FSSectionLabel("Step 2 of 4 — scan or paste")
+            FSSectionLabel(String(localized: "Step 2 of 4 — scan or paste"))
             FSCard {
                 if let image = pngImage(fromBase64: staged.qrPngBase64) {
                     image
@@ -452,7 +452,7 @@ struct AccountSecurityEnableSheet: View {
                 .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
                 .accessibilityIdentifier("account-security-sample-code")
             FSPrimaryButton(
-                "Verify code",
+                String(localized: "Verify code"),
                 enabled: sampleCode.trimmingCharacters(in: .whitespaces).count == 6,
                 block: true,
                 large: true
@@ -499,7 +499,7 @@ struct AccountSecurityEnableSheet: View {
             }
             .accessibilityIdentifier("account-security-saved-toggle")
             FSPrimaryButton(
-                "Done",
+                String(localized: "Done"),
                 enabled: savedRecoveryCodes,
                 block: true,
                 large: true
@@ -521,11 +521,11 @@ struct AccountSecurityEnableSheet: View {
             }
             Text(message).foregroundColor(c.text)
                 .accessibilityIdentifier("account-security-failed-msg")
-            FSSecondaryButton("Start over", block: true) {
+            FSSecondaryButton(String(localized: "Start over"), block: true) {
                 viewModel.dismissEnrollment()
                 sampleCode = ""
             }
-            FSGhostButton("Close", block: true) {
+            FSGhostButton(String(localized: "Close"), block: true) {
                 viewModel.dismissEnrollment()
                 onClose()
             }

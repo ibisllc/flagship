@@ -105,20 +105,20 @@ public final class DeleteServerViewModel {
 
     public static func completionMessage(name: String, eraseRequested: Bool?) -> String {
         switch eraseRequested {
-        case .some(true):  return "Deleted \(name). If it's online it will erase itself and power off."
-        case .some(false): return "Deleted \(name). It couldn't be asked to erase itself."
-        case .none:        return "Deleted \(name)."
+        case .some(true):  return String(localized: "Deleted \(name). If it's online it will erase itself and power off.")
+        case .some(false): return String(localized: "Deleted \(name). It couldn't be asked to erase itself.")
+        case .none:        return String(localized: "Deleted \(name).")
         }
     }
 
     public func run(typedName: String) async {
         if case .working = phase { return }
         guard confirmationMatches(typedName) else {
-            phase = .failed("Type \(serverLabel) to confirm.")
+            phase = .failed(String(localized: "Type \(serverLabel) to confirm."))
             return
         }
         guard let user = username(), !user.isEmpty else {
-            phase = .failed("No active account on this device.")
+            phase = .failed(String(localized: "No active account on this device."))
             return
         }
         // A row that names no `<server>.<user>` (an old ghost) holds no name on
@@ -131,9 +131,9 @@ public final class DeleteServerViewModel {
         phase = .working
         let k: Keys
         do {
-            k = try await keys("Delete server \(serverLabel)")
+            k = try await keys(String(localized: "Delete server \(serverLabel)"))
         } catch {
-            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't access your account key: \(UserErrorText.of(error))"))
             return
         }
 
@@ -154,7 +154,7 @@ public final class DeleteServerViewModel {
         } catch {
             // The real reason, in words: a refusal `.com` sent and a dropped
             // connection must not read the same.
-            phase = .failed("Couldn't delete it, so the name is still reserved. \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't delete it, so the name is still reserved. \(UserErrorText.of(error))"))
             return
         }
 

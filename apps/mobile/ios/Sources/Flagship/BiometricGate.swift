@@ -29,17 +29,17 @@ public struct BiometricGate {
         public var errorDescription: String? {
             switch self {
             case .notAvailable:
-                return "This device has no screen lock set up."
+                return String(localized: "This device has no screen lock set up.")
             case .userCancelled:
-                return "Unlock was cancelled."
+                return String(localized: "Unlock was cancelled.")
             case .interrupted:
-                return "Unlock was interrupted. Try again."
+                return String(localized: "Unlock was interrupted. Try again.")
             case .lockedOut:
-                return "Too many failed attempts. Unlock your device with its passcode, then try again."
+                return String(localized: "Too many failed attempts. Unlock your device with its passcode, then try again.")
             case .failed:
-                return "That didn't match. Try again."
+                return String(localized: "That didn't match. Try again.")
             case .other:
-                return "Unlock didn't work. Try again."
+                return String(localized: "Unlock didn't work. Try again.")
             }
         }
 

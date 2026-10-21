@@ -268,14 +268,14 @@ public enum ServerMigrationTimeline {
     public static func steps(for s: MigrationSession) -> [Step] {
         let aborted = s.abortedAt != nil
         let rows: [(String, String, Int64?)] = [
-            ("initiate", "Migration authorized", s.initiatedAt),
-            ("provision", "New server online and attached", s.attachedAt),
-            ("pre-seed", "Data restored to the new server", s.preSeededAt),
-            ("ready", "Confirmed ready to take over", s.readyAt),
-            ("freeze", "Old server frozen — final backup", s.freezeAt),
-            ("final-delta", "Final backup flushed", s.finalDeltaAt),
-            ("take-over", "New server took over the name", s.takenOverAt),
-            ("close-out", "Old server closed out", s.oldClosedOutAt),
+            ("initiate", String(localized: "Migration authorized"), s.initiatedAt),
+            ("provision", String(localized: "New server online and attached"), s.attachedAt),
+            ("pre-seed", String(localized: "Data restored to the new server"), s.preSeededAt),
+            ("ready", String(localized: "Confirmed ready to take over"), s.readyAt),
+            ("freeze", String(localized: "Old server frozen — final backup"), s.freezeAt),
+            ("final-delta", String(localized: "Final backup flushed"), s.finalDeltaAt),
+            ("take-over", String(localized: "New server took over the name"), s.takenOverAt),
+            ("close-out", String(localized: "Old server closed out"), s.oldClosedOutAt),
         ]
         var activeSeen = false
         return rows.map { key, label, at in
@@ -295,27 +295,27 @@ public enum ServerMigrationTimeline {
     /// Honest waiting copy for the CURRENT wait, plus the stuck-pre-seed hint.
     public static func waitCopy(for s: MigrationSession, nowMs: Int64) -> String {
         if s.abortedAt != nil {
-            return "Migration aborted — your old server stays active with all its data."
+            return String(localized: "Migration aborted — your old server stays active with all its data.")
         }
-        if s.done { return "Migration complete — the server now runs on the new server." }
+        if s.done { return String(localized: "Migration complete — the server now runs on the new server.") }
         switch s.phase {
         case "initiated":
-            return "Waiting for the new server to come online. Apply the recipe on it; it will attach itself here."
+            return String(localized: "Waiting for the new server to come online. Apply the recipe on it; it will attach itself here.")
         case "provisioned":
             if let attachedAt = s.attachedAt, nowMs - attachedAt > preSeedStuckMs {
-                return "The new server attached but hasn't restored any data yet. If this server has no backup enabled, enable backup first — the migration restores from it."
+                return String(localized: "The new server attached but hasn't restored any data yet. If this server has no backup enabled, enable backup first — the migration restores from it.")
             }
-            return "New server attached — restoring this server's data from backup. The old server keeps serving meanwhile."
+            return String(localized: "New server attached — restoring this server's data from backup. The old server keeps serving meanwhile.")
         case "pre-seeded":
-            return "Data restored. Confirm the hand-off when you're ready — the old server will briefly freeze writes while the name moves."
+            return String(localized: "Data restored. Confirm the hand-off when you're ready — the old server will briefly freeze writes while the name moves.")
         case "ready":
-            return "Ready — freeze the old server to flush the final backup and hand the name over."
+            return String(localized: "Ready — freeze the old server to flush the final backup and hand the name over.")
         case "freezing":
             return s.finalDeltaAt == nil
-                ? "Old server is frozen and flushing its final backup…"
-                : "Final backup flushed — the new server is applying it and claiming the name…"
+                ? String(localized: "Old server is frozen and flushing its final backup…")
+                : String(localized: "Final backup flushed — the new server is applying it and claiming the name…")
         case "taken-over":
-            return "The new server is serving the name. Waiting for the old server to close out."
+            return String(localized: "The new server is serving the name. Waiting for the old server to close out.")
         default:
             return ""
         }

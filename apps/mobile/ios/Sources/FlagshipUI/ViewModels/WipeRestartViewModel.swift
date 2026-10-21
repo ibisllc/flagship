@@ -70,7 +70,7 @@ public final class WipeRestartViewModel {
     /// to skip the fence (the rate limit + signature gate still apply).
     public func run(currentEtag: String?) async {
         guard let user = username(), !user.isEmpty else {
-            phase = .failed("No active account on this device.")
+            phase = .failed(String(localized: "No active account on this device."))
             return
         }
 
@@ -80,9 +80,9 @@ public final class WipeRestartViewModel {
         // wrapping key from the fresh PRF secret.
         phase = .preparingKeys
         do {
-            _ = try await Keystore.currentUMK(reason: "Wipe & restart")
+            _ = try await Keystore.currentUMK(reason: String(localized: "Wipe & restart"))
         } catch {
-            phase = .failed("Couldn't access your current account key: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't access your current account key: \(UserErrorText.of(error))"))
             return
         }
         let newUmk = SymmetricKey(size: .bits256)
@@ -93,7 +93,7 @@ public final class WipeRestartViewModel {
         do {
             registration = try await webAuthn.register()
         } catch {
-            phase = .failed("Passkey registration failed: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Passkey registration failed: \(UserErrorText.of(error))"))
             return
         }
         // 3 — PRF assert against the new credential.
@@ -101,7 +101,7 @@ public final class WipeRestartViewModel {
         do {
             prfSecret = try await webAuthn.prfAssert(credentialId: registration.credentialId)
         } catch {
-            phase = .failed("PRF assertion failed: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "PRF assertion failed: \(UserErrorText.of(error))"))
             return
         }
 
@@ -113,13 +113,13 @@ public final class WipeRestartViewModel {
         do {
             newWrappedUmkB64 = try Recovery.wrap(umkSeed: newUmk, prfSecret: prfSecret)
         } catch {
-            phase = .failed("Couldn't wrap new key: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't wrap new key: \(UserErrorText.of(error))"))
             return
         }
         // The Worker's canonical bytes SHA-256 the DECODED ciphertext bytes
         // (NOT base64 chars), so we hash the raw bytes of the same blob.
         guard let combined = Data(base64Encoded: newWrappedUmkB64) else {
-            phase = .failed("Local base64 round-trip failed")
+            phase = .failed(String(localized: "Local base64 round-trip failed"))
             return
         }
         let wrappedHashHex = sha256Hex(combined)
@@ -130,7 +130,7 @@ public final class WipeRestartViewModel {
         let newIrkPubHex: String
         do {
             oldIrk = try await Keystore.deriveIRK(
-                reason: "Authorize wipe",
+                reason: String(localized: "Authorize wipe"),
                 version: Keystore.currentIrkVersion()
             )
             // The NEW IRK derives from the NEW UMK at v1. We don't
@@ -146,7 +146,7 @@ public final class WipeRestartViewModel {
             )
             newIrkPubHex = HexUtil.encode(newIrkKey.publicKey.rawRepresentation)
         } catch {
-            phase = .failed("Couldn't derive identity keys: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't derive identity keys: \(UserErrorText.of(error))"))
             return
         }
         let oldIrkPubHex = HexUtil.encode(oldIrk.publicKey.rawRepresentation)
@@ -163,7 +163,7 @@ public final class WipeRestartViewModel {
         do {
             signature = try oldIrk.signature(for: canonical)
         } catch {
-            phase = .failed("Couldn't sign: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't sign: \(UserErrorText.of(error))"))
             return
         }
 
@@ -188,13 +188,13 @@ public final class WipeRestartViewModel {
                 ifMatch: currentEtag,
             )
         } catch ScreensClientError.http(let status, _) where status == 412 {
-            phase = .failed("Your device list changed in the background. Refresh and try again.")
+            phase = .failed(String(localized: "Your device list changed in the background. Refresh and try again."))
             return
         } catch ScreensClientError.http(let status, _) where status == 429 {
-            phase = .failed("Wipe rate-limited (1 per hour). Try again later.")
+            phase = .failed(String(localized: "Wipe rate-limited (1 per hour). Try again later."))
             return
         } catch ScreensClientError.http(let status, _) where status == 409 {
-            phase = .failed("Another rotation completed first. Your account is fine — refresh and check Activity for the audit trail.")
+            phase = .failed(String(localized: "Another rotation completed first. Your account is fine — refresh and check Activity for the audit trail."))
             return
         } catch {
             phase = .failed(UserErrorText.of(error))
@@ -205,14 +205,14 @@ public final class WipeRestartViewModel {
         // Keystore matches what .com just committed.
         phase = .installingLocally
         do {
-            try await Keystore.installUMK(newUmk, reason: "Activate new account key")
+            try await Keystore.installUMK(newUmk, reason: String(localized: "Activate new account key"))
         } catch {
             // Worst case here: server committed but local install
             // failed. The peer-detection mechanism (E7) will catch
             // it on next foreground via /api/users/:u/devices, and
             // the user will be prompted to sign in again — which
             // is the right recovery path.
-            phase = .failed("Server committed but local install failed: \(UserErrorText.of(error)). Open the app fresh to recover.")
+            phase = .failed(String(localized: "Server committed but local install failed: \(UserErrorText.of(error)). Open the app fresh to recover."))
             return
         }
         // Bonus on success: forget OUR push token so we don't try

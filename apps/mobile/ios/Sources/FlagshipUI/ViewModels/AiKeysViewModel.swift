@@ -51,7 +51,7 @@ public final class AiKeysViewModel {
         errorMessage = nil
         let key = formApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else {
-            errorMessage = "Enter an API key."
+            errorMessage = String(localized: "Enter an API key.")
             return false
         }
         let label = formLabel.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -91,7 +91,7 @@ public final class JoinAccountViewModel {
             try await Keystore.installUMK(seed, reason: reason)
         },
         importAdminRoot: @escaping @MainActor (Data) async throws -> Void = { seed in
-            _ = try await Keystore.importAdminRoot(seed: seed, reason: "Set up your admin key on this device")
+            _ = try await Keystore.importAdminRoot(seed: seed, reason: String(localized: "Set up your admin key on this device"))
         }
     ) {
         self.relay = relay
@@ -130,7 +130,7 @@ public final class JoinAccountViewModel {
         do {
             session = try PairingQr.parseJoinUrl(joinUrl)
         } catch {
-            phase = .failed("This invite link is invalid. Ask the admin to show a new code.")
+            phase = .failed(String(localized: "This invite link is invalid. Ask the admin to show a new code."))
             return
         }
 
@@ -143,7 +143,7 @@ public final class JoinAccountViewModel {
         let handshakeSk = Curve25519.KeyAgreement.PrivateKey()
         guard let deviceId = try? AccountMetadata.generateDeviceId(),
               let deviceIdBytes = HexUtil.decode(deviceId) else {
-            phase = .failed("Couldn't create a device identity. Try again.")
+            phase = .failed(String(localized: "Couldn't create a device identity. Try again."))
             return
         }
         let pushSigningKey = Curve25519.Signing.PrivateKey()
@@ -156,7 +156,7 @@ public final class JoinAccountViewModel {
                 browserPublicKey: session.adminPublicKey
             )
         } catch {
-            phase = .failed("Couldn't establish a secure channel. \(HumanError.humanize(error))")
+            phase = .failed(String(localized: "Couldn't establish a secure channel. \(HumanError.humanize(error))"))
             return
         }
 
@@ -188,7 +188,7 @@ public final class JoinAccountViewModel {
             phase = .failed(PairingRelayError.joinAccountUnavailable)
         } catch is PairingRelayError {
             if ttlInvalidated { return }
-            phase = .failed("Pairing didn't complete. Ask the admin to show a new code.")
+            phase = .failed(String(localized: "Pairing didn't complete. Ask the admin to show a new code."))
         } catch {
             phase = .failed(HumanError.humanize(error))
         }
@@ -213,13 +213,13 @@ public final class JoinAccountViewModel {
         do {
             guard let ct = Base64URL.decode(frame.ciphertextBase64Url),
                   let nonceData = Base64URL.decode(frame.nonceBase64Url) else {
-                phase = .failed("The pairing data was malformed.")
+                phase = .failed(String(localized: "The pairing data was malformed."))
                 return
             }
             let plaintext = try Self.aeadOpen(ciphertextAndTag: ct, nonce: nonceData, key: aeadKey)
             bundle = try PairingBundle.decode(plaintext)
         } catch {
-            phase = .failed("Couldn't decrypt the pairing data — the codes may not have matched.")
+            phase = .failed(String(localized: "Couldn't decrypt the pairing data — the codes may not have matched."))
             return
         }
 
@@ -228,7 +228,7 @@ public final class JoinAccountViewModel {
         // depth — .com also binds it server-side).
         guard bundle.admit.newDevicePubHex.lowercased() == devicePubHex.lowercased(),
               bundle.admit.deviceId == deviceId else {
-            phase = .failed("This pairing was for a different device. Try again.")
+            phase = .failed(String(localized: "This pairing was for a different device. Try again."))
             return
         }
 
@@ -237,7 +237,7 @@ public final class JoinAccountViewModel {
         // (a forged carried pubkey can't actually admit a device).
         guard let irkPub = HexUtil.decode(bundle.irkPubHex),
               let admitSig = HexUtil.decode(bundle.admitSig) else {
-            phase = .failed("The pairing proof was malformed.")
+            phase = .failed(String(localized: "The pairing proof was malformed."))
             return
         }
         let admit = DeviceAdmit(
@@ -247,7 +247,7 @@ public final class JoinAccountViewModel {
             issuedAt: bundle.admit.issuedAt
         )
         guard admit.verify(signature: admitSig, irkPub: irkPub) else {
-            phase = .failed("The admin's authorization couldn't be verified. Don't continue.")
+            phase = .failed(String(localized: "The admin's authorization couldn't be verified. Don't continue."))
             return
         }
 
@@ -258,7 +258,7 @@ public final class JoinAccountViewModel {
               grant.scopes.contains("view-directory"),
               let grantSig = HexUtil.decode(bundle.grantSignature)
         else {
-            phase = .failed("The device permission grant was malformed.")
+            phase = .failed(String(localized: "The device permission grant was malformed."))
             return
         }
         let grantAuthority: Data?
@@ -287,7 +287,7 @@ public final class JoinAccountViewModel {
         )
         guard let grantAuthority,
               grantEnvelope.verify(signature: grantSig, irkPub: grantAuthority) else {
-            phase = .failed("The device permission grant couldn't be verified. Don't continue.")
+            phase = .failed(String(localized: "The device permission grant couldn't be verified. Don't continue."))
             return
         }
 
@@ -295,20 +295,20 @@ public final class JoinAccountViewModel {
         // keystore at THIS account's slot FIRST so the install never
         // clobbers an existing profile's UMK.
         guard let umkData = HexUtil.decode(bundle.umkSeedHex), umkData.count == 32 else {
-            phase = .failed("The account key was malformed.")
+            phase = .failed(String(localized: "The account key was malformed."))
             return
         }
         let account = bundle.admit.username
         Keystore.setActiveProfile(account)
         do {
-            try await installUMK(SymmetricKey(data: umkData), "Join \(account) on this device")
+            try await installUMK(SymmetricKey(data: umkData), String(localized: "Join \(account) on this device"))
             try Keystore.storeAccountDeviceSigningKey(
                 pushSigningKey,
                 accountId: account,
                 deviceId: deviceId
             )
         } catch {
-            phase = .failed("Couldn't install the account key. \(HumanError.humanize(error))")
+            phase = .failed(String(localized: "Couldn't install the account key. \(HumanError.humanize(error))"))
             return
         }
 
@@ -344,7 +344,7 @@ public final class JoinAccountViewModel {
                 deviceDisplayName: deviceDisplayName
             )
         } catch {
-            phase = .failed("Couldn't complete joining \(account). \(HumanError.humanize(error))")
+            phase = .failed(String(localized: "Couldn't complete joining \(account). \(HumanError.humanize(error))"))
             return
         }
 
@@ -457,7 +457,7 @@ public final class JoinAccountViewModel {
     }
 
     /// Safeguard #1 — invalidate the pairing session (screenshot / cancel).
-    public func invalidate(reason: String = "For your security this pairing was cancelled. Scan the admin's code again to join.") {
+    public func invalidate(reason: String = String(localized: "For your security this pairing was cancelled. Scan the admin's code again to join.")) {
         ttlInvalidated = true
         if case .joined = phase { return }
         phase = .invalidated(reason)

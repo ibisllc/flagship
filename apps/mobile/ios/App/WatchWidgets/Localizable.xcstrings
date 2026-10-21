@@ -1,0 +1,30 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "ProvisionPhaseComplication": {
+      "extractionState": "manual"
+    },
+    "Flagship servers": {
+      "extractionState": "manual"
+    },
+    "Shows a server's install while one is under way, else how your servers are doing.": {
+      "extractionState": "manual"
+    },
+    "Flagship": {
+      "extractionState": "manual"
+    },
+    "Install failed": {
+      "extractionState": "manual"
+    },
+    "Server is live": {
+      "extractionState": "manual"
+    },
+    "No install in flight": {
+      "extractionState": "manual"
+    },
+    "%lld servers": {
+      "extractionState": "manual"
+    }
+  },
+  "version": "1.0"
+}

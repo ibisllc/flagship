@@ -320,7 +320,7 @@ struct FlagshipApp: App {
             operations.upsertBuild(
                 id: "build:gym-smoke",
                 subject: "blog",
-                onServer: "Home",
+                onServer: String(localized: "Home"),
                 target: server.map { .vibeCodeChatOnServer(sessionId: "gym-smoke", serverFqdn: $0) }
                     ?? .vibeCodeChat(sessionId: "gym-smoke")
             )
@@ -411,7 +411,7 @@ struct FlagshipApp: App {
         b.onStart = { serial, podName in
             InstallProgressLiveActivityCenter.shared.start(
                 serial: serial,
-                podName: podName ?? "New server"
+                podName: podName ?? String(localized: "New server")
             )
         }
         b.onStep = { serial, phase in
@@ -461,7 +461,7 @@ struct FlagshipApp: App {
                 phase: event.phase,
                 serial: event.serial,
                 detail: event.detail,
-                podName: progress.nameForKey?(event.serial) ?? "Provisioning"
+                podName: progress.nameForKey?(event.serial) ?? String(localized: "Provisioning")
             )
         }
     }

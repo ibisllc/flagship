@@ -111,11 +111,11 @@ public final class SettingsViewModel {
             return
         }
         guard let profile = currentProfile(), profile.deviceId.count == 32 else {
-            trustedDevices = .failed("This device has no account-scoped identity.")
+            trustedDevices = .failed(String(localized: "This device has no account-scoped identity."))
             return
         }
         do {
-            let umk = try await Keystore.currentUMK(reason: "View trusted devices")
+            let umk = try await Keystore.currentUMK(reason: String(localized: "View trusted devices"))
             let umkData = umk.withUnsafeBytes { Data($0) }
             let deviceKey = try Keystore.accountDeviceSigningKey(
                 umk: umkData,
@@ -270,7 +270,7 @@ public final class SettingsViewModel {
         guard let username = currentUsername(), !device.isCurrent else { return false }
         let path = "/api/accounts/\(username.lowercased())/devices/\(device.deviceId)"
         do {
-            let context = try await directoryContext(method: "DELETE", path: path, reason: "Revoke this device")
+            let context = try await directoryContext(method: "DELETE", path: path, reason: String(localized: "Revoke this device"))
             try await server.revokeAccountDevice(
                 accountId: username,
                 deviceId: device.deviceId,
@@ -290,8 +290,8 @@ public final class SettingsViewModel {
         let revision = expected + 1
         let path = "/api/accounts/\(username.lowercased())/profile"
         do {
-            let context = try await directoryContext(method: "PUT", path: path, reason: "Rename this account")
-            let admin = try await Keystore.adminRootKey(reason: "Rename this account")
+            let context = try await directoryContext(method: "PUT", path: path, reason: String(localized: "Rename this account"))
+            let admin = try await Keystore.adminRootKey(reason: String(localized: "Rename this account"))
             let signerPub = HexUtil.encode(admin.publicKey.rawRepresentation)
             let ciphertext = try AccountMetadata.encrypt(
                 displayName: displayName,
@@ -325,7 +325,7 @@ public final class SettingsViewModel {
         let revision = expected + 1
         let path = "/api/accounts/\(username.lowercased())/devices/\(profile.deviceId)/profile"
         do {
-            let context = try await directoryContext(method: "PUT", path: path, reason: "Rename this device")
+            let context = try await directoryContext(method: "PUT", path: path, reason: String(localized: "Rename this device"))
             let deviceKey = try Keystore.accountDeviceSigningKey(umk: context.umk, accountId: username, deviceId: profile.deviceId)
             let signerPub = HexUtil.encode(deviceKey.publicKey.rawRepresentation)
             let ciphertext = try AccountMetadata.encrypt(
@@ -360,8 +360,8 @@ public final class SettingsViewModel {
         let revision = expected + 1
         let path = "/api/accounts/\(username.lowercased())/devices/\(deviceId)/managed-profile"
         do {
-            let context = try await directoryContext(method: "PUT", path: path, reason: "Manage this device name")
-            let admin = try await Keystore.adminRootKey(reason: "Manage this device name")
+            let context = try await directoryContext(method: "PUT", path: path, reason: String(localized: "Manage this device name"))
+            let admin = try await Keystore.adminRootKey(reason: String(localized: "Manage this device name"))
             let signerPub = HexUtil.encode(admin.publicKey.rawRepresentation)
             let ciphertext = try AccountMetadata.encrypt(
                 displayName: displayName,
@@ -395,8 +395,8 @@ public final class SettingsViewModel {
         else { return false }
         let path = "/api/accounts/\(username.lowercased())/devices/\(deviceId)/managed-profile"
         do {
-            _ = try await Keystore.adminRootKey(reason: "Remove the managed device name")
-            let context = try await directoryContext(method: "DELETE", path: path, reason: "Remove the managed device name")
+            _ = try await Keystore.adminRootKey(reason: String(localized: "Remove the managed device name"))
+            let context = try await directoryContext(method: "DELETE", path: path, reason: String(localized: "Remove the managed device name"))
             try await server.deleteDeviceManagedProfile(
                 accountId: username, deviceId: deviceId,
                 authorization: context.authorization, expectedRevision: expected

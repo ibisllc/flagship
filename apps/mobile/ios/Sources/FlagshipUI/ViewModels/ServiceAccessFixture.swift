@@ -100,23 +100,23 @@ public enum ServiceAccessFixture {
                                         creatorTier: by?.tier, creatorDeviceId: by?.device)
             }
             rows += [
-                row("sam", "Sam", bound: sam, by: ("member", thisDeviceId)),
-                row("priya", "Priya", bound: priya, manual: true, by: ("admin", ipadDeviceId)),
-                row("family", "Family", bound: nil, group: [sam, guest], max: 5, by: ("admin", unnamedDeviceId)),
-                row("jordan", "Jordan", bound: nil),
+                row("sam", String(localized: "Sam"), bound: sam, by: ("member", thisDeviceId)),
+                row("priya", String(localized: "Priya"), bound: priya, manual: true, by: ("admin", ipadDeviceId)),
+                row("family", String(localized: "Family"), bound: nil, group: [sam, guest], max: 5, by: ("admin", unnamedDeviceId)),
+                row("jordan", String(localized: "Jordan"), bound: nil),
             ]
             let id = { (s: String) in "\(s)-\(ref)" }
             screens.mockMembers[ref] = AppMembersResponse(
                 serviceId: ref, mode: "open", defaultRole: "member",
-                descriptions: ["member": "Adds and edits their own plants",
-                               "manager": "Also waters and edits anyone's plants",
-                               "master": "Also changes the garden's settings"],
+                descriptions: ["member": String(localized: "Adds and edits their own plants"),
+                               "manager": String(localized: "Also waters and edits anyone's plants"),
+                               "master": String(localized: "Also changes the garden's settings")],
                 accountMembers: [
                     .device(id: thisDeviceId, pub: pub(device), admin: isAdmin,
                             rank: memberRank ? "member" : (isAdmin ? "master" : "manager"), set: memberRank),
                     .device(id: ipadDeviceId, pub: pub(key(0x1a)), admin: true, rank: "master"),
                     .device(id: unnamedDeviceId, pub: pub(key(0x2b)), admin: false, rank: nil, set: true, refused: true),
-                    .coManager(shareId: mumShareId, label: "Mum", rank: "manager"),
+                    .coManager(shareId: mumShareId, label: String(localized: "Mum"), rank: "manager"),
                 ],
                 members: [
                     AppMember(aid: sam, role: "manager", grants: [AppMemberGrant(inviteId: id("sam"), role: "manager"),
@@ -142,7 +142,7 @@ public enum ServiceAccessFixture {
             isAdminDevice: isAdmin,
             deviceId: thisDeviceId,
             deviceKey: device,
-            deviceNames: [ipadDeviceId: "Harry's iPad", thisDeviceId: "Harry's iPhone"])
+            deviceNames: [ipadDeviceId: String(localized: "Harry's iPad"), thisDeviceId: String(localized: "Harry's iPhone")])
     }
 }
 #endif

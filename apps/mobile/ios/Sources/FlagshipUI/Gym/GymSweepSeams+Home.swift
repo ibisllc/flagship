@@ -7,7 +7,7 @@ import FlagshipCore
 
 extension GymSweepSeams {
     /// The pending server `-smoke-pending-pod` adds to Home.
-    public static let pendingPodName = "Shed"
+    public static let pendingPodName = String(localized: "Shed")
     static let pendingSerial = "GYMPENDING0001"
 
     /// Home seams for GymSweepHomeTests.
@@ -78,7 +78,7 @@ extension GymSweepSeams {
         // An ordered server that hasn't booted yet, as `.com` lists it.
         if args.contains("-smoke-pending-pod") {
             let fqdn = "shed.\(user).flagship.services"
-            _ = app.upsertPendingPod(name: pendingPodName, description: "Ordered, not booted yet", fqdn: fqdn,
+            _ = app.upsertPendingPod(name: pendingPodName, description: String(localized: "Ordered, not booted yet"), fqdn: fqdn,
                                      serial: pendingSerial)
             mocks.mailbox.directoryPending = [PendingPodEntry(
                 orderRef: OrderRef.compute(serial: pendingSerial), serverName: pendingPodName, fqdn: fqdn,
@@ -99,7 +99,7 @@ extension GymSweepSeams {
                     mocks.mailbox.pending = [PendingSecretRequest(
                         serverDomain: home.fqdn, requestNonceHex: HexUtil.encode(nonce), stkPub: HexUtil.encode(pub),
                         purpose: SecretPurpose.entitlement.rawValue, issuedAt: now, requestSignature: HexUtil.encode(sig),
-                        deviceInfo: DeviceInfoHint(ip: "203.0.113.7", region: "fsn1", os: "Debian 13"),
+                        deviceInfo: DeviceInfoHint(ip: "203.0.113.7", region: "fsn1", os: String(localized: "Debian 13")),
                         postedAt: now, expiresAt: now + 300_000)]
                     mocks.mailbox.directory = [PodDirectoryEntry(
                         serverDomain: home.fqdn, identityPubKey: HexUtil.encode(pub), lastReported: now,
@@ -113,7 +113,7 @@ extension GymSweepSeams {
         if args.contains("-smoke-install-stopped") {
             mocks.server?.provisionStatusScripts[pendingSerial] = [
                 (phase: .installing, detail: nil),
-                (phase: .error, detail: "Setup stopped while Expanding the disk to 68 GB (line 66)"),
+                (phase: .error, detail: String(localized: "Setup stopped while Expanding the disk to 68 GB (line 66)")),
             ]
         }
 
@@ -144,11 +144,11 @@ extension GymSweepSeams {
             let now = Int64(Date().timeIntervalSince1970 * 1000)
             mocks.screens.mockBoxActivity = [
                 BoxActivityEntry(seq: 4, ts: now - 60_000, action: "server.backup.created", kind: "server.backup.created",
-                                 detail: "1.2 GB, 3 apps"),
-                BoxActivityEntry(seq: 3, ts: now - 120_000, actor: .init(kind: "share", label: "Sam"),
+                                 detail: String(localized: "1.2 GB, 3 apps")),
+                BoxActivityEntry(seq: 3, ts: now - 120_000, actor: .init(kind: "share", label: String(localized: "Sam")),
                                  action: "app.installed", kind: "app.installed", target: "bright-maple--plants"),
                 BoxActivityEntry(seq: 2, ts: now - 180_000, action: "server.update.refused", kind: "server.update.refused",
-                                 detail: "Not endorsed", ok: false),
+                                 detail: String(localized: "Not endorsed"), ok: false),
                 BoxActivityEntry(seq: 1, ts: now - 240_000, action: "post /api/screens/services", kind: nil),
             ]
             // 35 account events: the feed shows the newest 20, the audit log
@@ -156,7 +156,7 @@ extension GymSweepSeams {
             var events: [AuditEvent] = []
             for seq in 1...35 {
                 let kind = seq == 1 ? "server-transfer-claimed" : (seq.isMultiple(of: 2) ? "server-online" : "server-created")
-                events.append(AuditEvent(seq: seq, eventKind: kind, detail: "home.\(user).flagship.services",
+                events.append(AuditEvent(seq: seq, eventKind: kind, detail: String(localized: "home.\(user).flagship.services"),
                                          devicePrefix: "d0d0", postedAt: now - Int64(36 - seq) * 3_600_000))
             }
             mocks.server?.auditEventsByUser[user.lowercased()] = events

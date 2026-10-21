@@ -43,7 +43,7 @@ public extension EnvironmentValues {
 @MainActor public func keystoreVibeCodeEnvelopeSigner() -> VibeCodeEnvelopeSigner {
     return { change in
         let bytes = try change.canonicalBytes()
-        let irk = try await Keystore.deriveIRK(reason: "Sign service configuration")
+        let irk = try await Keystore.deriveIRK(reason: String(localized: "Sign service configuration"))
         let sig = try irk.signature(for: bytes)
         return HexUtil.encode(sig)
     }

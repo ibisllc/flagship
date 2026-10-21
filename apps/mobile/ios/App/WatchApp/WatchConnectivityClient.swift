@@ -103,14 +103,14 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
                 ]
             )
             servers = .init(servers: [
-                .init(name: "Home", fqdn: "home.bright-maple.flagship.services", state: "waiting", isLeader: true),
-                .init(name: "Office", fqdn: "office.bright-maple.flagship.services", state: "online", isLeader: false),
+                .init(name: String(localized: "Home"), fqdn: "home.bright-maple.flagship.services", state: "waiting", isLeader: true),
+                .init(name: String(localized: "Office"), fqdn: "office.bright-maple.flagship.services", state: "online", isLeader: false),
             ])
         }
         if args.contains("-watch-showcase-install") {
             let phases = ["booting", "partitioning", "installing", "downloading", "registering"]
             provisionTimeline = .init(
-                serial: "showcase", podName: "Office", serverDomain: "office.bright-maple.flagship.services",
+                serial: "showcase", podName: String(localized: "Office"), serverDomain: "office.bright-maple.flagship.services",
                 phase: "registering", detail: nil,
                 history: phases.enumerated().map { i, p in .init(phase: p, detail: nil, ts: now - Int64(5 - i) * 120_000) },
                 updatedAt: Date(), active: true
@@ -161,10 +161,10 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
                 lastApprovedId = reply.requestId
                 lastError = nil
             } else {
-                lastError = reply.errorMessage ?? "Approval failed."
+                lastError = reply.errorMessage ?? String(localized: "Approval failed.")
             }
         } catch {
-            lastError = "Couldn't reach iPhone: \(error.localizedDescription)"
+            lastError = String(localized: "Couldn't reach iPhone: \(error.localizedDescription)")
         }
     }
 

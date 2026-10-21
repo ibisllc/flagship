@@ -88,7 +88,7 @@ public final class KeyfileExportViewModel {
         guard canCreate else { return }
         phase = .working
         do {
-            let umk = try await readUMK("Back up your Flagship account key")
+            let umk = try await readUMK(String(localized: "Back up your Flagship account key"))
             let meta = Keyfile.Meta(
                 username: username,
                 accountId: accountId,
@@ -97,7 +97,7 @@ public final class KeyfileExportViewModel {
             let text = try Keyfile.wrap(umkSeed: umk, passphrase: passphrase, meta: meta)
             phase = .ready(text: text)
         } catch {
-            phase = .failed("Couldn't create the backup file: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't create the backup file: \(UserErrorText.of(error))"))
         }
     }
 

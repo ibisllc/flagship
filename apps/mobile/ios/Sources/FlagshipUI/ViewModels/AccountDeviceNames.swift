@@ -18,7 +18,7 @@ public enum AccountDeviceNames {
         directoryKey: Data
     ) -> String {
         decryptedName(of: device.deviceId, in: directory, accountId: accountId, directoryKey: directoryKey)
-            ?? "\(platformDisplay(device.platformClass)) · Device \(device.supportCode)"
+            ?? String(localized: "\(platformDisplay(device.platformClass)) · Device \(device.supportCode)")
     }
 
     /// Every device the directory lists (revoked ones too: an invite outlives
@@ -53,9 +53,9 @@ public enum AccountDeviceNames {
         switch value {
         case "ios": return "iPhone"
         case "android": return "Android"
-        case "web": return "Web browser"
-        case "macos": return "Mac"
-        default: return "Device"
+        case "web": return String(localized: "Web browser")
+        case "macos": return String(localized: "Mac")
+        default: return String(localized: "Device")
         }
     }
 

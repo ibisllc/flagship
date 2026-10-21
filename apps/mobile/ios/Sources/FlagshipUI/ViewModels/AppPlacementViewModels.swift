@@ -9,39 +9,39 @@ import FlagshipCore
 // list of apps, and an app page's "Runs on" (docs/app-placement.md §2–5).
 
 public enum AppPlacementCopy {
-    public static let runsOn = "Runs on"
-    public static let runsOnSection = "Runs on"
-    public static let runsOnNote = "Tick a server to copy this app there: its code, data and files as they are now. Each copy then runs on its own. Untick a server to remove the app from it."
-    public static let runsOnReadOnly = "Only the account owner's phone can copy or remove apps."
-    public static let pickerNote = "New apps go to your preferred server unless you pick another."
-    public static let pinnedNote = "Made on this server."
-    public static let serverAppsSection = "Apps"
-    public static let noAppsHere = "No apps on this server yet."
-    public static let createHere = "Create app here"
-    public static let needsUpdate = "This server needs an update to receive copies."
-    public static let unknown = "Can't reach this server right now"
-    public static let notPaired = "This device isn't paired with this server"
-    public static let checking = "Checking…"
-    public static let noSource = "No server has a finished copy of this app to copy from."
+    public static let runsOn = String(localized: "Runs on")
+    public static let runsOnSection = String(localized: "Runs on")
+    public static let runsOnNote = String(localized: "Tick a server to copy this app there: its code, data and files as they are now. Each copy then runs on its own. Untick a server to remove the app from it.")
+    public static let runsOnReadOnly = String(localized: "Only the account owner's phone can copy or remove apps.")
+    public static let pickerNote = String(localized: "New apps go to your preferred server unless you pick another.")
+    public static let pinnedNote = String(localized: "Made on this server.")
+    public static let serverAppsSection = String(localized: "Apps")
+    public static let noAppsHere = String(localized: "No apps on this server yet.")
+    public static let createHere = String(localized: "Create app here")
+    public static let needsUpdate = String(localized: "This server needs an update to receive copies.")
+    public static let unknown = String(localized: "Can't reach this server right now")
+    public static let notPaired = String(localized: "This device isn't paired with this server")
+    public static let checking = String(localized: "Checking…")
+    public static let noSource = String(localized: "No server has a finished copy of this app to copy from.")
     public static let adminOnlyRemove = AdminOrderGate.removeApp
 
     /// "Copying… 40%", "Installing…".
     public static func copying(state: String, progress: Double?) -> String {
-        let word = state == "installing" ? "Installing…" : "Copying…"
+        let word = state == "installing" ? String(localized: "Installing…") : String(localized: "Copying…")
         guard let pct = AppCopyProgress.percent(progress) else { return word }
         return "\(word) \(pct)%"
     }
 
     public static func lastCopy(_ app: String) -> String {
-        "This is the only copy of \(app). To delete it, use Remove app."
+        String(localized: "This is the only copy of \(app). To delete it, use Remove app.")
     }
 
     public static func confirmRemoveTitle(_ app: String, _ server: String) -> String {
-        "Remove \(app) from \(server)?"
+        String(localized: "Remove \(app) from \(server)?")
     }
 
     public static func confirmRemoveMessage(_ server: String) -> String {
-        "The app and its data on \(server) are deleted. The other copies keep running."
+        String(localized: "The app and its data on \(server) are deleted. The other copies keep running.")
     }
 
     /// The box saw this exact signed order before: sign a fresh one.
@@ -52,12 +52,12 @@ public enum AppPlacementCopy {
 
     /// A copy landed but some env values couldn't come along.
     public static func pendingEnv(_ app: String, _ server: String, _ names: [String]) -> String {
-        "\(app) is on \(server). Set \(names.count == 1 ? "this value" : "these values") there under Configure environment: \(names.joined(separator: ", "))."
+        String(localized: "\(app) is on \(server). Set \(names.count == 1 ? "this value" : "these values") there under Configure environment: \(names.joined(separator: ", ")).")
     }
 
     public static func copyFailed(_ app: String, _ server: String, _ reason: String?) -> String {
-        guard let reason, !reason.isEmpty else { return "Couldn't copy \(app) to \(server)." }
-        return "Couldn't copy \(app) to \(server): \(reason)"
+        guard let reason, !reason.isEmpty else { return String(localized: "Couldn't copy \(app) to \(server).") }
+        return String(localized: "Couldn't copy \(app) to \(server): \(reason)")
     }
 
     /// The target box's refusal of a copy, in plain words.
@@ -72,24 +72,24 @@ public enum AppPlacementCopy {
         case 404:
             return needsUpdate
         case 409:
-            return "\(app) is already on \(server), or a copy there is already underway."
+            return String(localized: "\(app) is already on \(server), or a copy there is already underway.")
         case 403:
             let r = reason?.lowercased() ?? ""
             if r.contains("stale") {
-                return "Your phone's clock is too far off from the server's. Check the date and time, then try again."
+                return String(localized: "Your phone's clock is too far off from the server's. Check the date and time, then try again.")
             }
             if r.contains("different server") {
-                return "This copy was signed for a different server. Reload the page and try again."
+                return String(localized: "This copy was signed for a different server. Reload the page and try again.")
             }
             if r.contains("isn't one of this account's servers") {
-                return "The server to copy from isn't one of your servers any more. Reload the page and try again."
+                return String(localized: "The server to copy from isn't one of your servers any more. Reload the page and try again.")
             }
             if r.contains("companion") {
-                return "Only the account owner's phone can copy apps."
+                return String(localized: "Only the account owner's phone can copy apps.")
             }
-            return "\(server) didn't accept your signature. Only the account owner's phone can copy apps."
+            return String(localized: "\(server) didn't accept your signature. Only the account owner's phone can copy apps.")
         case 400:
-            return reason.map { "\(server) refused the copy: \($0)." } ?? "\(server) couldn't read the copy request."
+            return reason.map { String(localized: "\(server) refused the copy: \($0).") } ?? String(localized: "\(server) couldn't read the copy request.")
         default:
             return ScreensClientError.plainLanguage(forStatus: status)
         }
@@ -149,7 +149,7 @@ public final class CreationTarget {
 
     public var selectedName: String {
         if let selected { return AppPlacementCopy.serverName(selected) }
-        return selectedFqdn?.split(separator: ".").first.map(String.init) ?? "No server"
+        return selectedFqdn?.split(separator: ".").first.map(String.init) ?? String(localized: "No server")
     }
 
     public func select(_ pod: PodInfo) {
@@ -471,7 +471,7 @@ public final class AppRunsOnController {
         do {
             let key: Curve25519.Signing.PrivateKey
             do {
-                key = try await signer("Copy \(appName) to \(target.name)")
+                key = try await signer(String(localized: "Copy \(appName) to \(target.name)"))
             } catch {
                 throw AppCopyOrder.Failure(message: "Couldn't access your account key: \(UserErrorText.of(error))")
             }
@@ -502,7 +502,7 @@ public final class AppRunsOnController {
             return false
         }
         guard let delim = serviceId.range(of: "--") else {
-            message = "Couldn't identify the app to remove."
+            message = String(localized: "Couldn't identify the app to remove.")
             return false
         }
         let creator = String(serviceId[..<delim.lowerBound])
@@ -512,9 +512,9 @@ public final class AppRunsOnController {
         message = nil
         let key: Curve25519.Signing.PrivateKey
         do {
-            key = try await irkSigner("Remove \(appName) from \(target.name)")
+            key = try await irkSigner(String(localized: "Remove \(appName) from \(target.name)"))
         } catch {
-            message = "Couldn't access your account key: \(UserErrorText.of(error))"
+            message = String(localized: "Couldn't access your account key: \(UserErrorText.of(error))")
             return false
         }
         let order = UninstallServiceOrder(serverId: target.fqdn, creator: creator, slug: slug,
@@ -525,10 +525,10 @@ public final class AppRunsOnController {
                 serverDomain: target.fqdn, serviceId: serviceId,
                 request: env["request"] as! [String: Any], signatureHex: env["signature"] as! String)
         } catch let e as ScreensClientError {
-            message = e.errorDescription ?? "That didn't work. Try again in a moment."
+            message = e.errorDescription ?? String(localized: "That didn't work. Try again in a moment.")
             return false
         } catch {
-            message = "Couldn't reach \(target.name). Check your connection and try again."
+            message = String(localized: "Couldn't reach \(target.name). Check your connection and try again.")
             return false
         }
         set(target.fqdn, .absent)

@@ -90,7 +90,7 @@ public final class VibeCodeStreamViewModel {
         case .manifestEmit(let json):
             manifestJson = json
         case .repoCreate:
-            appendBuildLog("Created git repo.")
+            appendBuildLog(String(localized: "Created git repo."))
         case .buildStart:
             status = .building
             appendBuildLog("── BUILD START ──")

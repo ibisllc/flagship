@@ -38,7 +38,7 @@ public enum CancelPendingOrder {
         now: () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
     ) async -> Outcome {
         if !Endpoints.isWellFormedServerFqdn(pod.fqdn) { return .cancelled(releasedName: false) }
-        let reason = "Cancel server \(pod.name)"
+        let reason = String(localized: "Cancel server \(pod.name)")
         do {
             let issuedAt = now()
             let orderKey = try await releaseKey(reason)
@@ -72,9 +72,9 @@ public enum CancelPendingOrder {
 
     /// What the person reads when the cancel didn't go through.
     public static func failureSentence(_ error: Error) -> String {
-        "Couldn't cancel this order. \(UserErrorText.of(error)) The name stays reserved until it is cancelled."
+        String(localized: "Couldn't cancel this order. \(UserErrorText.of(error)) The name stays reserved until it is cancelled.")
     }
 
     /// The button's label once a cancel has failed.
-    public static let retryLabel = "Try cancelling again"
+    public static let retryLabel = String(localized: "Try cancelling again")
 }

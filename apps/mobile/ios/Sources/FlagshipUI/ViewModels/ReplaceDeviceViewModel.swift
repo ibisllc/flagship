@@ -92,7 +92,7 @@ public final class ReplaceDeviceViewModel {
     /// fence (less safe but tolerated by the Worker).
     public func initiate(currentEtag: String?) async {
         guard let user = username(), !user.isEmpty else {
-            phase = .failed("No active account on this device.")
+            phase = .failed(String(localized: "No active account on this device."))
             return
         }
         phase = .signing
@@ -105,10 +105,10 @@ public final class ReplaceDeviceViewModel {
         let oldKey: Curve25519.Signing.PrivateKey
         let newKey: Curve25519.Signing.PrivateKey
         do {
-            oldKey = try await Keystore.deriveIRK(reason: "Confirm replace device", version: oldVersion)
-            newKey = try await Keystore.deriveIRK(reason: "Authorize replace device", version: newVersion)
+            oldKey = try await Keystore.deriveIRK(reason: String(localized: "Confirm replace device"), version: oldVersion)
+            newKey = try await Keystore.deriveIRK(reason: String(localized: "Authorize replace device"), version: newVersion)
         } catch {
-            phase = .failed("Couldn't access your account keys: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't access your account keys: \(UserErrorText.of(error))"))
             return
         }
         let oldPubHex = HexUtil.encode(oldKey.publicKey.rawRepresentation)
@@ -131,7 +131,7 @@ public final class ReplaceDeviceViewModel {
             // Without it .com refuses the rotation.
             oldSignature = try oldKey.signature(for: canonical)
         } catch {
-            phase = .failed("Couldn't sign the rotation request: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't sign the rotation request: \(UserErrorText.of(error))"))
             return
         }
 
@@ -162,9 +162,9 @@ public final class ReplaceDeviceViewModel {
             }
             phase = .pending(completesAt: resp.completesAt)
         } catch ScreensClientError.http(let status, _) where status == 412 {
-            phase = .failed("Your device list changed in the background. Refresh and try again.")
+            phase = .failed(String(localized: "Your device list changed in the background. Refresh and try again."))
         } catch ScreensClientError.http(let status, _) where status == 409 {
-            phase = .failed("A device replacement is already pending on this account.")
+            phase = .failed(String(localized: "A device replacement is already pending on this account."))
         } catch {
             if let r = RateLimitedRefusal.from(error) {
                 phase = .failed(r.message)
@@ -178,11 +178,11 @@ public final class ReplaceDeviceViewModel {
     /// 425 if it's too early; surfaces as a stay-in-pending state.
     public func complete() async {
         guard let user = username(), !user.isEmpty else {
-            phase = .failed("No active account on this device.")
+            phase = .failed(String(localized: "No active account on this device."))
             return
         }
         guard let pending = Keystore.pendingIrkRotationVersion() else {
-            phase = .failed("No pending rotation found on this device.")
+            phase = .failed(String(localized: "No pending rotation found on this device."))
             return
         }
         phase = .completing
@@ -191,7 +191,7 @@ public final class ReplaceDeviceViewModel {
             // not the one this device is still signing with. `.com`
             // refuses an unsigned finalization.
             let newKey = try await Keystore.deriveIRK(
-                reason: "Finish replacing this device",
+                reason: String(localized: "Finish replacing this device"),
                 version: pending
             )
             let newPubHex = HexUtil.encode(newKey.publicKey.rawRepresentation)
@@ -222,12 +222,12 @@ public final class ReplaceDeviceViewModel {
         } catch ScreensClientError.http(let status, _) where status == 425 {
             // Grace not elapsed yet — surface as still-pending so the
             // UI re-shows the timer.
-            phase = .failed("The 24-hour grace hasn't ended yet. Try again later.")
+            phase = .failed(String(localized: "The 24-hour grace hasn't ended yet. Try again later."))
         } catch ScreensClientError.http(let status, _) where status == 409 {
-            phase = .failed("This replacement was cancelled. Local state stays unchanged.")
+            phase = .failed(String(localized: "This replacement was cancelled. Local state stays unchanged."))
             try? Keystore.setPendingIrkRotationVersion(nil)
         } catch {
-            phase = .failed("Couldn't complete: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't complete: \(UserErrorText.of(error))"))
         }
     }
 }

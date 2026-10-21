@@ -70,7 +70,7 @@ public struct ActivityScreen: View {
                 currentPodId: currentPodId,
                 leaderPodId: leaderPodId,
                 onPick: onPickPod,
-                allLabel: "All servers",
+                allLabel: String(localized: "All servers"),
                 onPickAll: onPickAll
             )
         }
@@ -90,17 +90,17 @@ public struct ActivityScreen: View {
     /// thus this feed) can't load, so gating the approvals entry behind
     /// `.loaded` hid it precisely when needed.
     private var sectionInfos: [SectionInfo] {
-        var out = [SectionInfo(id: .approvals, icon: "lock.open", title: "Server approvals",
-                               hint: "Servers waiting for you to start them", count: approvals?.pendingCount)]
+        var out = [SectionInfo(id: .approvals, icon: "lock.open", title: String(localized: "Server approvals"),
+                               hint: String(localized: "Servers waiting for you to start them"), count: approvals?.pendingCount)]
         guard case .loaded(let feed) = state else { return out }
         if let snap = feed.postRecovery, snap.lastReissue != nil || snap.state.lastSeen != nil {
-            out.append(SectionInfo(id: .recovery, icon: "arrow.triangle.2.circlepath", title: "Post-recovery", hint: postRecoveryHeadline(snap)))
+            out.append(SectionInfo(id: .recovery, icon: "arrow.triangle.2.circlepath", title: String(localized: "Post-recovery"), hint: postRecoveryHeadline(snap)))
         }
-        out.append(SectionInfo(id: .account, icon: "person.crop.circle", title: "Your account",
-                               hint: "Devices, recovery and servers, across all your servers", count: feed.auditEvents.count))
+        out.append(SectionInfo(id: .account, icon: "person.crop.circle", title: String(localized: "Your account"),
+                               hint: String(localized: "Devices, recovery and servers, across all your servers"), count: feed.auditEvents.count))
         let n = feed.boxEvents.filter { BoxEventLabels.title($0) != nil }.count
         out.append(SectionInfo(id: .server, icon: "server.rack", title: serverTitle,
-                               hint: showsAllServers ? "Updates, backups, apps and shares across all servers" : "Updates, backups, apps and shares on this server", count: n))
+                               hint: showsAllServers ? String(localized: "Updates, backups, apps and shares across all servers") : String(localized: "Updates, backups, apps and shares on this server"), count: n))
         return out
     }
 
@@ -114,7 +114,7 @@ public struct ActivityScreen: View {
         case .account:
             if case .loaded(let feed) = state {
                 eventList(
-                    empty: "Nothing has happened on your account yet.",
+                    empty: String(localized: "Nothing has happened on your account yet."),
                     rows: feed.auditEvents.indices.map { i in AnyView(auditRow(event: feed.auditEvents[i], c: c)) },
                     more: feed.moreAudit, onMore: onLoadMoreAudit, bounded: bounded, c: c)
             }
@@ -122,7 +122,7 @@ public struct ActivityScreen: View {
             if case .loaded(let feed) = state {
                 let rows = feed.boxEvents.filter { BoxEventLabels.title($0) != nil }
                 eventList(
-                    empty: showsAllServers ? "Nothing has happened on your servers yet." : "Nothing has happened on this server yet.",
+                    empty: showsAllServers ? String(localized: "Nothing has happened on your servers yet.") : String(localized: "Nothing has happened on this server yet."),
                     rows: rows.indices.map { i in AnyView(boxRow(entry: rows[i], c: c)) },
                     more: feed.moreBoxEvents, onMore: onLoadMoreBox, bounded: bounded, c: c)
             }
@@ -271,13 +271,13 @@ public struct ActivityScreen: View {
                         .font(FS.font.bodySm())
                         .foregroundColor(c.textMuted)
                 }
-                FSPrimaryButton("View report", block: true, action: onOpenPostRecovery)
+                FSPrimaryButton(String(localized: "View report"), block: true, action: onOpenPostRecovery)
             }
         }
     }
 
     private func postRecoveryHeadline(_ snap: PostRecoverySnapshot) -> String {
-        snap.lastReissue != nil ? "Re-attach finished." : "Re-attach in progress."
+        snap.lastReissue != nil ? String(localized: "Re-attach finished.") : String(localized: "Re-attach in progress.")
     }
 
     /// Account-level audit event row. Mirrors webapp activity.js'
@@ -348,10 +348,10 @@ public struct ActivityScreen: View {
     }
 
     private var serverTitle: String {
-        if showsAllServers { return "All servers" }
+        if showsAllServers { return String(localized: "All servers") }
         let pod = pods.first { $0.podId == currentPodId } ?? (pods.count == 1 ? pods.first : nil)
-        guard let name = pod?.name, !name.isEmpty else { return "This server" }
-        return "Server · \(name)"
+        guard let name = pod?.name, !name.isEmpty else { return String(localized: "This server") }
+        return String(localized: "Server · \(name)")
     }
 
     private func accordion<C: View>(_ info: SectionInfo, c: FSColors, @ViewBuilder content: () -> C) -> some View {
@@ -421,7 +421,7 @@ public struct ActivityScreen: View {
                         if i < rows.count - 1 { Divider().background(c.border) }
                     }
                     if more {
-                        FSSecondaryButton(loadingMore ? "Loading…" : "Load more", block: true) {
+                        FSSecondaryButton(loadingMore ? String(localized: "Loading…") : String(localized: "Load more"), block: true) {
                             guard !loadingMore else { return }
                             loadingMore = true
                             Task { await onMore(); loadingMore = false }
@@ -452,7 +452,7 @@ public struct ActivityScreen: View {
         let d = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
         let sameYear = Calendar.current.component(.year, from: d) == Calendar.current.component(.year, from: Date())
         let f = DateFormatter()
-        f.setLocalizedDateFormatFromTemplate(sameYear ? "MMMdjmm" : "MMMdyjmm")
+        f.setLocalizedDateFormatFromTemplate(sameYear ? String(localized: "MMMdjmm") : String(localized: "MMMdyjmm"))
         return f.string(from: d)
     }
 }

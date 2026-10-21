@@ -60,7 +60,7 @@ public final class FrontPageViewModel {
             options = o
             phase = .ready
         } catch {
-            phase = .failed("Couldn't reach the server to load front-page settings.")
+            phase = .failed(String(localized: "Couldn't reach the server to load front-page settings."))
         }
     }
 
@@ -70,11 +70,11 @@ public final class FrontPageViewModel {
         let key: Curve25519.Signing.PrivateKey
         do {
             let reason = label.isEmpty
-                ? "Reset the front page of \(serverDomain)"
-                : "Set the front page of \(serverDomain) to \(label)"
+                ? String(localized: "Reset the front page of \(serverDomain)")
+                : String(localized: "Set the front page of \(serverDomain) to \(label)")
             key = try await signer(reason)
         } catch {
-            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't access your account key: \(UserErrorText.of(error))"))
             return
         }
 
@@ -83,7 +83,7 @@ public final class FrontPageViewModel {
         do {
             signature = try order.sign(with: key)
         } catch {
-            phase = .failed("Couldn't sign: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't sign: \(UserErrorText.of(error))"))
             return
         }
 
@@ -96,10 +96,10 @@ public final class FrontPageViewModel {
                 signatureHex: env["signature"] as! String
             )
         } catch let e as ScreensClientError {
-            phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
+            phase = .failed(e.errorDescription ?? String(localized: "That didn't work. Try again in a moment."))
             return
         } catch {
-            phase = .failed("Couldn't reach the server. Check your connection and try again.")
+            phase = .failed(String(localized: "Couldn't reach the server. Check your connection and try again."))
             return
         }
         current = label.isEmpty ? nil : label

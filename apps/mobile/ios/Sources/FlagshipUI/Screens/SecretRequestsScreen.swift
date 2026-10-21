@@ -68,7 +68,7 @@ struct SecretRequestsPanel: View {
 
     private func approve(_ req: SecretRequestCoordinator.VerifiedRequest) async {
         switch await model.approve(req) {
-        case .approved(let domain): toasts.success("Approved \(domain). Your server will pick it up.")
+        case .approved(let domain): toasts.success(String(localized: "Approved \(domain). Your server will pick it up."))
         case .alreadyAnswered: break
         case .failed(let msg): toasts.error(msg)
         }
@@ -94,8 +94,8 @@ struct SecretRequestCard: View {
         switch request.purpose {
         case .unlockKey:
             return isFirstBoot
-                ? "Unlock device and authorize it to join your cloud"
-                : "Unlock device"
+                ? String(localized: "Unlock device and authorize it to join your cloud")
+                : String(localized: "Unlock device")
         case .entitlement:  return "Authorize device to join your cloud"
         case .none:         return "Boot secret"
         }
@@ -111,7 +111,7 @@ struct SecretRequestCard: View {
                 if let info = request.deviceInfo {
                     VStack(alignment: .leading, spacing: 2) {
                         if let ip = info.ip { infoRow("IP", ip, c) }
-                        if let region = info.region { infoRow("Region", region, c) }
+                        if let region = info.region { infoRow(String(localized: "Region"), region, c) }
                         if let os = info.os { infoRow("OS", os, c) }
                         if let host = info.hostname { infoRow("Host", host, c) }
                     }
@@ -124,7 +124,7 @@ struct SecretRequestCard: View {
                     .padding(.top, FS.space.s1)
 
                 FSPrimaryButton(
-                    isInFlight ? "Signing…" : "Yes, this is my server",
+                    isInFlight ? String(localized: "Signing…") : String(localized: "Yes, this is my server"),
                     enabled: !isInFlight,
                     block: true,
                     large: true

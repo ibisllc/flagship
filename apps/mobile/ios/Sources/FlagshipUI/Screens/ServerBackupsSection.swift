@@ -24,21 +24,21 @@ struct BackupPolicyOptions: View {
     var idPrefix = "backup-policy"
     var freeBytes: Int64 = DeviceStorage.freeBytes()
 
-    static let pickHint = "Pick one to continue. You can change it any time in the server's Backups section."
-    static let noneText = "Nothing is copied. You can turn backups on later."
-    static let phoneText = "An encrypted copy is kept on this phone."
-    static let peerText = "Encrypted pieces are kept on other Flagship servers, and yours keeps theirs."
+    static let pickHint = String(localized: "Pick one to continue. You can change it any time in the server's Backups section.")
+    static let noneText = String(localized: "Nothing is copied. You can turn backups on later.")
+    static let phoneText = String(localized: "An encrypted copy is kept on this phone.")
+    static let peerText = String(localized: "Encrypted pieces are kept on other Flagship servers, and yours keeps theirs.")
 
     private static let gb: Int64 = 1 << 30
 
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            option(.none, "No backup", Self.noneText, c: c)
-            option(.phoneOnly, "On my phone", Self.phoneText, c: c)
+            option(.none, String(localized: "No backup"), Self.noneText, c: c)
+            option(.phoneOnly, String(localized: "On my phone"), Self.phoneText, c: c)
             if policy == .phoneOnly { reservePicker(c) }
             if BackupFeatures.peerBackup || policy == .peer {
-                option(.peer, "On other servers", Self.peerText, c: c)
+                option(.peer, String(localized: "On other servers"), Self.peerText, c: c)
             }
         }
     }
@@ -110,7 +110,7 @@ struct ServerBackupsSection: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            FSSectionLabel("Backups")
+            FSSectionLabel(String(localized: "Backups"))
             if let vm {
                 ServerBackupsCard(vm: vm)
             }
@@ -203,7 +203,7 @@ struct ServerBackupsCard: View {
                     .foregroundColor(c.text)
                     .accessibilityIdentifier("sd-backups-policy")
                 Spacer()
-                Button(vm.policyKind == "unset" ? "Choose" : "Change") { editingPolicy = true }
+                Button(vm.policyKind == "unset" ? String(localized: "Choose") : "Change") { editingPolicy = true }
                     .font(FS.font.bodySm())
                     .disabled(!vm.isAdminDevice)
                     .accessibilityIdentifier("sd-backups-policy-change")
@@ -257,7 +257,7 @@ struct ServerBackupsCard: View {
                     .accessibilityIdentifier("sd-backups-next")
             }
             if vm.needsApproval {
-                FSPrimaryButton(vm.approving ? "Approving…" : "Approve backups for this server", block: true) {
+                FSPrimaryButton(vm.approving ? String(localized: "Approving…") : String(localized: "Approve backups for this server"), block: true) {
                     Task { await vm.depositKeys() }
                 }
                 .disabled(vm.approving)
@@ -289,7 +289,7 @@ struct ServerBackupsCard: View {
     }
 
     private func runBlock(_ c: FSColors) -> some View {
-        FSSecondaryButton(vm.startingRun ? "Starting…" : "Back up now", block: true) {
+        FSSecondaryButton(vm.startingRun ? String(localized: "Starting…") : String(localized: "Back up now"), block: true) {
             Task { await vm.backUpNow() }
         }
         .disabled(!vm.canRun)
@@ -302,7 +302,7 @@ struct ServerBackupsCard: View {
     private func listBlock(_ c: FSColors) -> some View {
         if let backups = vm.saved?.backups, !backups.isEmpty {
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                FSSectionLabel("On this server")
+                FSSectionLabel(String(localized: "On this server"))
                 ForEach(backups) { b in row(b, c) }
                 Text(ServerBackupsViewModel.oneFileNote)
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
@@ -400,7 +400,7 @@ struct BackupScheduleEditor: View {
                             }
                             .accessibilityIdentifier("backup-schedule-weekday")
                         }
-                        DatePicker("Time", selection: timeBinding(binding.minute), displayedComponents: .hourAndMinute)
+                        DatePicker(String(localized: "Time"), selection: timeBinding(binding.minute), displayedComponents: .hourAndMinute)
                             .accessibilityIdentifier("backup-schedule-time")
                     }
                 } footer: {
@@ -422,7 +422,7 @@ struct BackupScheduleEditor: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { onDone() } }
             ToolbarItem(placement: .confirmationAction) {
-                Button(vm.savingSchedule ? "Saving…" : "Save") {
+                Button(vm.savingSchedule ? String(localized: "Saving…") : "Save") {
                     guard let d = draft else { return }
                     Task { if await vm.saveSchedule(d) { onDone() } }
                 }
@@ -468,7 +468,7 @@ struct BackupPolicyEditor: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("backup-policy-error")
                 }
-                FSPrimaryButton(vm.savingPolicy ? "Saving…" : "Save", block: true) {
+                FSPrimaryButton(vm.savingPolicy ? String(localized: "Saving…") : String(localized: "Save"), block: true) {
                     guard let policy else { return }
                     Task { if await vm.changePolicy(to: policy, reserveBytes: reserve) { onDone() } }
                 }

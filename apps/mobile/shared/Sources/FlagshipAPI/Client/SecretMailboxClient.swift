@@ -928,7 +928,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         // caller's loop falls back to /pods on a real error). String-concat the
         // URL so the `?cursor=` query lands verbatim.
         guard let url = URL(string: baseUrl.absoluteString + path) else {
-            throw ScreensClientError.http(status: 0, message: "bad stream URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad stream URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
@@ -997,7 +997,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         // control-plane path lands verbatim — mirrors `sendBoot`. The deposit is
         // on `.com` (identity plane), not the boot worker.
         guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/pairing-deposit") else {
-            throw ScreensClientError.http(status: 0, message: "bad pairing-deposit URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad pairing-deposit URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -1012,7 +1012,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public func depositEntitlement(serverDomain: String, body: PairingDepositBody) async throws {
         let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
         guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/entitlement-deposit") else {
-            throw ScreensClientError.http(status: 0, message: "bad entitlement-deposit URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad entitlement-deposit URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -1027,7 +1027,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public func depositSwk(serverDomain: String, body: PairingDepositBody) async throws {
         let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
         guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/swk-deposit") else {
-            throw ScreensClientError.http(status: 0, message: "bad swk-deposit URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad swk-deposit URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -1042,7 +1042,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public func depositCgk(serverDomain: String, body: PairingDepositBody) async throws {
         let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
         guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/cgk-deposit") else {
-            throw ScreensClientError.http(status: 0, message: "bad cgk-deposit URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad cgk-deposit URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -1057,7 +1057,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public func postServerOrder(username: String, body: SignedServerOrderWire) async throws {
         let encoded = username.lowercased().addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
         guard let url = URL(string: baseUrl.absoluteString + "/api/accounts/\(encoded)/server-order") else {
-            throw ScreensClientError.http(status: 0, message: "bad server-order URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad server-order URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -1072,7 +1072,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public func depositUpdate(serverDomain: String, body: UpdateDepositBody) async throws {
         let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
         guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/update") else {
-            throw ScreensClientError.http(status: 0, message: "bad update URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad update URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -1087,7 +1087,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public func fetchReleaseCatalog(currentCommit: String, refresh: Bool) async throws -> ReleaseCatalogResponse {
         let q = currentCommit.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? currentCommit
         guard let url = URL(string: baseUrl.absoluteString + "/api/releases?current=\(q)" + (refresh ? "&refresh=1" : "")) else {
-            throw ScreensClientError.http(status: 0, message: "bad releases URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad releases URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
@@ -1107,7 +1107,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public func depositDecommission(serverDomain: String, body: DecommissionDepositBody) async throws {
         let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
         guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/decommission") else {
-            throw ScreensClientError.http(status: 0, message: "bad decommission URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad decommission URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -1143,7 +1143,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
 
     private func sendBoot(_ method: String, _ path: String, body: Data, bootAuth: String, acceptStatuses: Set<Int>) async throws {
         guard let url = URL(string: bootBaseUrl.absoluteString + path) else {
-            throw ScreensClientError.http(status: 0, message: "bad boot URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad boot URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = method
@@ -1240,7 +1240,7 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     }
     public func fetchSealedLuksKey(serverDomain: String) async throws -> SealedLuksKeyResponse {
         guard let hex = sealedLuksKeyHex else {
-            throw ScreensClientError.http(status: 404, message: "no sealed key on file")
+            throw ScreensClientError.http(status: 404, message: String(localized: "no sealed key on file"))
         }
         return SealedLuksKeyResponse(serverDomain: serverDomain, sealedKey: hex, sealedAt: 1)
     }

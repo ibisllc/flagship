@@ -127,7 +127,7 @@ private struct TrustSliverLine: View {
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("global-trust-bar")
         .accessibilityLabel(Text(failure.label))
-        .accessibilityHint(Text(overridden ? "Already continuing despite this" : "Review and choose whether to continue"))
+        .accessibilityHint(Text(overridden ? String(localized: "Already continuing despite this") : "Review and choose whether to continue"))
     }
 }
 
@@ -152,7 +152,7 @@ private struct TrustOverrideSheet: View {
                     .font(.title3.weight(.bold))
             }
             Text(failure.certClass == .control
-                 ? "We couldn't verify the Flagship control server's certificate (\(failure.slug)). Connecting is paused. If you understand the risk, you can continue — this stays flagged."
+                 ? String(localized: "We couldn't verify the Flagship control server's certificate (\(failure.slug)). Connecting is paused. If you understand the risk, you can continue — this stays flagged.")
                  : "We couldn't verify the relay's certificate (\(failure.slug)). If you understand the risk, you can continue — this stays flagged.")
                 .font(.body)
                 .foregroundColor(c.textMuted)
@@ -164,7 +164,7 @@ private struct TrustOverrideSheet: View {
             Spacer()
 
             FSDangerButton(
-                vm?.phase == .signing ? "Continuing…" : "Continue anyway",
+                vm?.phase == .signing ? String(localized: "Continuing…") : String(localized: "Continue anyway"),
                 block: true
             ) {
                 Task {

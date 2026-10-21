@@ -41,7 +41,7 @@ struct WatchWaitingPrompt: ViewModifier {
 
     private func unlock() async {
         guard let context = try? await BiometricGate().evaluateReturningContext(
-            reason: "Let your Apple Watch approve"
+            reason: String(localized: "Let your Apple Watch approve")
         ) else { return }
         Keystore.cacheSessionUMK(authenticatedBy: context)
         if Keystore.hasSessionKey() { toasts.success(WatchApprovalPrompt.afterUnlock) }

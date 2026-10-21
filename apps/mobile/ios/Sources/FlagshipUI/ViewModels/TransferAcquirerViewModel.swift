@@ -76,7 +76,7 @@ public final class TransferAcquirerViewModel {
             parsed = try ServerTransferFlow.parseScanned(qrText)
         } catch {
             offer = nil
-            phase = .failed("That isn't a Flagship transfer code.")
+            phase = .failed(String(localized: "That isn't a Flagship transfer code."))
             return false
         }
         // SECURITY (Slice C) — verify BEFORE surfacing the confirm / building a claim.
@@ -84,11 +84,11 @@ public final class TransferAcquirerViewModel {
             try ServerTransferFlow.verifyOffer(parsed, now: now())
         } catch ServerTransferFlow.TransferError.expired {
             offer = nil
-            phase = .failed("This transfer code has expired. Ask the owner for a new one.")
+            phase = .failed(String(localized: "This transfer code has expired. Ask the owner for a new one."))
             return false
         } catch {
             offer = nil
-            phase = .failed("This transfer code couldn't be verified. Ask the current owner for a fresh one.")
+            phase = .failed(String(localized: "This transfer code couldn't be verified. Ask the current owner for a fresh one."))
             return false
         }
         offer = parsed
@@ -99,7 +99,7 @@ public final class TransferAcquirerViewModel {
     /// Sign + POST the claim (biometric). Advances to `.claimed` on success.
     public func confirm() async {
         guard let parsed = offer else {
-            phase = .failed("Scan a transfer code first.")
+            phase = .failed(String(localized: "Scan a transfer code first."))
             return
         }
         // Re-verify the signature + expiry RIGHT before the claim biometric — the
@@ -108,18 +108,18 @@ public final class TransferAcquirerViewModel {
         do {
             try ServerTransferFlow.verifyOffer(parsed, now: now())
         } catch ServerTransferFlow.TransferError.expired {
-            phase = .failed("This transfer code has expired. Ask the owner for a new one.")
+            phase = .failed(String(localized: "This transfer code has expired. Ask the owner for a new one."))
             return
         } catch {
-            phase = .failed("This transfer code couldn't be verified. Ask the current owner for a fresh one.")
+            phase = .failed(String(localized: "This transfer code couldn't be verified. Ask the current owner for a fresh one."))
             return
         }
         phase = .signing
         let key: Curve25519.Signing.PrivateKey
         do {
-            key = try await signer("Take over \(parsed.serverDomain)")
+            key = try await signer(String(localized: "Take over \(parsed.serverDomain)"))
         } catch {
-            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't access your account key: \(UserErrorText.of(error))"))
             return
         }
         do {
@@ -130,7 +130,7 @@ public final class TransferAcquirerViewModel {
             // ("" when none) — the box re-pins that anchor at re-home, so it
             // rides inside the signed canonical, never as a `.com`-editable field.
             let orderKey = Keystore.hasAdminRoot
-                ? try await Keystore.adminRootKey(reason: "Take over \(parsed.serverDomain)")
+                ? try await Keystore.adminRootKey(reason: String(localized: "Take over \(parsed.serverDomain)"))
                 : nil
             let body = try ServerTransferFlow.buildClaim(
                 offer: parsed, acquirerUsername: username, acquirerIrk: key, orderKey: orderKey,
@@ -140,11 +140,11 @@ public final class TransferAcquirerViewModel {
             let result = try await client.postClaim(serverDomain: parsed.serverDomain, body: body)
             phase = .claimed(newServerDomain: result.newServerDomain)
         } catch ServerTransferFlow.TransferError.expired {
-            phase = .failed("This transfer code has expired. Ask the owner for a new one.")
+            phase = .failed(String(localized: "This transfer code has expired. Ask the owner for a new one."))
         } catch let e as ScreensClientError {
-            phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
+            phase = .failed(e.errorDescription ?? String(localized: "That didn't work. Try again in a moment."))
         } catch {
-            phase = .failed("Couldn't reach the broker. Check your connection and try again.")
+            phase = .failed(String(localized: "Couldn't reach the broker. Check your connection and try again."))
         }
     }
 }

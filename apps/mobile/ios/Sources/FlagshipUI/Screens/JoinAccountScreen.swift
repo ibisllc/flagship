@@ -28,7 +28,7 @@ public struct JoinAccountScreen: View {
     let onJoined: (JoinAccountViewModel.AdmittedProfile) -> Void
 
     @State private var scanError: String?
-    @State private var deviceDisplayName = "This iPhone"
+    @State private var deviceDisplayName = String(localized: "This iPhone")
     @State private var deviceNameError: String?
 
     public init(
@@ -55,7 +55,7 @@ public struct JoinAccountScreen: View {
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Join an account")
         .navigationBarTitleDisplayMode(.inline)
-        .captureProtected { vm.invalidate(reason: "We cancelled this for your security because a screenshot was taken. Scan the admin's code again to join.") }
+        .captureProtected { vm.invalidate(reason: String(localized: "We cancelled this for your security because a screenshot was taken. Scan the admin's code again to join.")) }
         .task {
             if let url = initialJoinUrl {
                 await vm.connect(joinUrl: url, provideRawPubkeyToRelay: provideRawPubkeyToRelay)
@@ -83,19 +83,19 @@ public struct JoinAccountScreen: View {
             // In-app scanner entry: no pre-filled URL → show the camera.
             scannerCard(c)
         case .connecting:
-            statusCard(c, system: "antenna.radiowaves.left.and.right", title: "Connecting…", detail: "Setting up a secure channel with the admin's device.")
+            statusCard(c, system: "antenna.radiowaves.left.and.right", title: String(localized: "Connecting…"), detail: String(localized: "Setting up a secure channel with the admin's device."))
         case .awaitingBundle(let matchCode):
             confirmCard(c, matchCode: matchCode)
         case .admitting:
-            statusCard(c, system: "lock.shield", title: "Joining…", detail: "Verifying the admin's authorization and installing your account key.")
+            statusCard(c, system: "lock.shield", title: String(localized: "Joining…"), detail: String(localized: "Verifying the admin's authorization and installing your account key."))
         case .joined(let account, let quarantineUntil):
             joinedCard(c, account: account, quarantineUntil: quarantineUntil)
         case .failed(let msg):
-            statusCard(c, system: "xmark.octagon", title: "Couldn't join", detail: msg)
-            FSSecondaryButton("Try again", block: true) { dismiss() }
+            statusCard(c, system: "xmark.octagon", title: String(localized: "Couldn't join"), detail: msg)
+            FSSecondaryButton(String(localized: "Try again"), block: true) { dismiss() }
         case .invalidated(let msg):
-            statusCard(c, system: "eye.slash", title: "Cancelled", detail: msg)
-            FSSecondaryButton("Close", block: true) { dismiss() }
+            statusCard(c, system: "eye.slash", title: String(localized: "Cancelled"), detail: msg)
+            FSSecondaryButton(String(localized: "Close"), block: true) { dismiss() }
         }
     }
 
@@ -146,7 +146,7 @@ public struct JoinAccountScreen: View {
                 if let deviceNameError {
                     Text(deviceNameError).font(FS.font.caption()).foregroundColor(c.danger)
                 }
-                FSPrimaryButton("Confirm name and join", enabled: !deviceDisplayName.isEmpty, block: true) {
+                FSPrimaryButton(String(localized: "Confirm name and join"), enabled: !deviceDisplayName.isEmpty, block: true) {
                     do {
                         try vm.confirmDeviceDisplayName(deviceDisplayName)
                         deviceNameError = nil
@@ -183,7 +183,7 @@ public struct JoinAccountScreen: View {
                     }
                 }
             }
-            FSPrimaryButton("Continue", block: true) { dismiss() }
+            FSPrimaryButton(String(localized: "Continue"), block: true) { dismiss() }
         }
     }
 

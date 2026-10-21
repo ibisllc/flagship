@@ -2,8 +2,8 @@ import Foundation
 import FlagshipAPI
 
 public enum PushPreferenceCopy {
-    public static let title = "Push notifications"
-    public static let detail = "When this is off, nothing from Flagship is pushed to this device, so Apple and Google never see when your servers need you. You'll have to open Flagship to approve unlocks and see requests."
+    public static let title = String(localized: "Push notifications")
+    public static let detail = String(localized: "When this is off, nothing from Flagship is pushed to this device, so Apple and Google never see when your servers need you. You'll have to open Flagship to approve unlocks and see requests.")
 }
 
 /// The owner's one push switch (Settings → Privacy → "Push notifications",

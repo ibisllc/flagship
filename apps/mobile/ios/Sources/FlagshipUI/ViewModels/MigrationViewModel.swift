@@ -132,7 +132,7 @@ public final class MigrationViewModel {
         do {
             existing = try await migration.fetchMigration(serverDomain: serverFqdn)
         } catch {
-            mode = .failed("Couldn't check for a migration in progress. Check your connection and try again.")
+            mode = .failed(String(localized: "Couldn't check for a migration in progress. Check your connection and try again."))
             return
         }
         if let existing, existing.abortedAt == nil {
@@ -148,12 +148,12 @@ public final class MigrationViewModel {
         do {
             let pods = try await mailbox.fetchPods(username: username)
             guard let stk = pods.identityPubKey(forServerDomain: serverFqdn) else {
-                mode = .failed("Couldn't read this server's current key from the directory — is it online? It must be reachable to migrate.")
+                mode = .failed(String(localized: "Couldn't read this server's current key from the directory — is it online? It must be reachable to migrate."))
                 return
             }
             oldStkPubHex = stk
         } catch {
-            mode = .failed("Couldn't reach your account directory. Check your connection and try again.")
+            mode = .failed(String(localized: "Couldn't reach your account directory. Check your connection and try again."))
             return
         }
         do {
@@ -198,17 +198,17 @@ public final class MigrationViewModel {
     public func start() async {
         errorMessage = nil
         guard let oldStk = oldStkPubHex else {
-            errorMessage = "Couldn't read this server's current key — refresh and try again."
+            errorMessage = String(localized: "Couldn't read this server's current key — refresh and try again.")
             return
         }
         if backupMissing {
-            errorMessage = "This server has no backup yet — enable backup first."
+            errorMessage = String(localized: "This server has no backup yet — enable backup first.")
             return
         }
         working = true
         defer { working = false }
         do {
-            let (irk, orderKey) = try await signer("Migrate \(serverFqdn) to a new server")
+            let (irk, orderKey) = try await signer(String(localized: "Migrate \(serverFqdn) to a new server"))
             let body = try ServerMigrationFlow.buildStartDeposit(
                 serverFqdn: serverFqdn,
                 username: username,
@@ -222,10 +222,10 @@ public final class MigrationViewModel {
             )
             try await migration.startMigration(serverDomain: serverFqdn, body: body)
         } catch let e as ScreensClientError {
-            errorMessage = e.errorDescription ?? "That didn't work. Try again in a moment."
+            errorMessage = e.errorDescription ?? String(localized: "That didn't work. Try again in a moment.")
             return
         } catch {
-            errorMessage = "Couldn't start the migration: \(UserErrorText.of(error))"
+            errorMessage = String(localized: "Couldn't start the migration: \(UserErrorText.of(error))")
             return
         }
         // The SWK hold makes the NEXT added pod's SWK deposit migration-aware
@@ -250,7 +250,7 @@ public final class MigrationViewModel {
         working = true
         defer { working = false }
         do {
-            let (irk, orderKey) = try await signer("Hand \(serverFqdn) off to the new server")
+            let (irk, orderKey) = try await signer(String(localized: "Hand \(serverFqdn) off to the new server"))
             if s.phase == "pre-seeded" {
                 let confirm = try ServerMigrationFlow.buildControlDeposit(
                     action: "confirm-ready",
@@ -277,9 +277,9 @@ public final class MigrationViewModel {
             )
             try await migration.freeze(serverDomain: serverFqdn, body: freeze)
         } catch let e as ScreensClientError {
-            errorMessage = e.errorDescription ?? "That didn't work. Try again in a moment."
+            errorMessage = e.errorDescription ?? String(localized: "That didn't work. Try again in a moment.")
         } catch {
-            errorMessage = "Couldn't hand off: \(UserErrorText.of(error))"
+            errorMessage = String(localized: "Couldn't hand off: \(UserErrorText.of(error))")
         }
         // CUTOVER (client side of phase 6/7): after `takenOverAt` there is NO
         // client RCK re-point — no surface persists the RCK private key
@@ -302,7 +302,7 @@ public final class MigrationViewModel {
         working = true
         defer { working = false }
         do {
-            let (irk, orderKey) = try await signer("Abort migrating \(serverFqdn)")
+            let (irk, orderKey) = try await signer(String(localized: "Abort migrating \(serverFqdn)"))
             let body = try ServerMigrationFlow.buildControlDeposit(
                 action: "abort",
                 serverFqdn: serverFqdn,
@@ -316,9 +316,9 @@ public final class MigrationViewModel {
             try await migration.abortMigration(serverDomain: serverFqdn, body: body)
             holdStore.clearHold(for: serverFqdn)
         } catch let e as ScreensClientError {
-            errorMessage = e.errorDescription ?? "That didn't work. Try again in a moment."
+            errorMessage = e.errorDescription ?? String(localized: "That didn't work. Try again in a moment.")
         } catch {
-            errorMessage = "Couldn't abort: \(UserErrorText.of(error))"
+            errorMessage = String(localized: "Couldn't abort: \(UserErrorText.of(error))")
         }
         await refresh()
     }

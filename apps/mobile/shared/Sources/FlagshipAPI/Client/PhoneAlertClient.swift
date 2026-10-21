@@ -49,7 +49,7 @@ public final class LivePhoneAlertClient: PhoneAlertClient, @unchecked Sendable {
         guard let base = await store.podBaseUrl else { throw ScreensClientError.notPaired }
         guard let token = await store.sessionToken else { throw ScreensClientError.noSessionToken }
         guard let url = URL(string: base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + path) else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
 
         var req = URLRequest(url: url)
@@ -62,7 +62,7 @@ public final class LivePhoneAlertClient: PhoneAlertClient, @unchecked Sendable {
 
         let (data, resp) = try await urlSession.gatedData(for: req)
         guard let http = resp as? HTTPURLResponse else {
-            throw ScreensClientError.http(status: 0, message: "no response")
+            throw ScreensClientError.http(status: 0, message: String(localized: "no response"))
         }
         if !(200..<300).contains(http.statusCode) {
             throw ScreensClientError.http(status: http.statusCode, message: String(data: data, encoding: .utf8) ?? "")

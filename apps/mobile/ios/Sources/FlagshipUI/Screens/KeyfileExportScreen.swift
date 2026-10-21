@@ -33,7 +33,7 @@ public struct KeyfileExportScreen: View {
                 }
 
                 FSPrimaryButton(
-                    "Create backup file",
+                    String(localized: "Create backup file"),
                     enabled: vm.canCreate && !isWorking,
                     block: true,
                     large: true
@@ -95,20 +95,20 @@ public struct KeyfileExportScreen: View {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 FSField(
                     value: $vm.passphrase,
-                    label: "Passphrase",
-                    helper: "At least 12 characters.",
+                    label: String(localized: "Passphrase"),
+                    helper: String(localized: "At least 12 characters."),
                     error: vm.passphrase.isEmpty || vm.passphraseStrong
                         ? nil
-                        : "Too short. At least 12 characters.",
+                        : String(localized: "Too short. At least 12 characters."),
                     secure: true
                 )
                 .accessibilityIdentifier("keyfile-export-passphrase")
                 FSField(
                     value: $vm.confirmPassphrase,
-                    label: "Confirm Passphrase",
+                    label: String(localized: "Confirm Passphrase"),
                     error: vm.confirmPassphrase.isEmpty || vm.passphrasesMatch
                         ? nil
-                        : "Passphrases don't match.",
+                        : String(localized: "Passphrases don't match."),
                     secure: true
                 )
                 .accessibilityIdentifier("keyfile-export-confirm")
@@ -121,7 +121,7 @@ public struct KeyfileExportScreen: View {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 checkbox(
                     isOn: $vm.ackControl,
-                    text: "I understand anyone with this file and passphrase controls my entire account.",
+                    text: String(localized: "I understand anyone with this file and passphrase controls my entire account."),
                     id: "keyfile-export-ack-control",
                     c: c
                 )

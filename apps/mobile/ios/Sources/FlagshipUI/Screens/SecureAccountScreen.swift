@@ -79,7 +79,7 @@ public struct SecureAccountScreen: View {
                     Spacer().frame(height: FS.space.s4)
 
                     FSPrimaryButton(
-                        cloudWorking ? "Backing up…" : "Continue",
+                        cloudWorking ? String(localized: "Backing up…") : String(localized: "Continue"),
                         enabled: vm.canContinue && !cloudWorking,
                         block: true,
                         large: true
@@ -189,9 +189,9 @@ public struct SecureAccountScreen: View {
             selected: vm.selected == .cloud,
             enabled: vm.canSelectCloud,
             icon: "icloud.fill",
-            title: "Back up to iCloud",
+            title: String(localized: "Back up to iCloud"),
             subtitle: vm.iCloudAvailable
-                ? "Syncs securely with your other Apple devices."
+                ? String(localized: "Syncs securely with your other Apple devices.")
                 : "iCloud is off — turn it on in Settings, or use a backup file.",
             id: "secure-account-option-cloud",
             c: c
@@ -205,8 +205,8 @@ public struct SecureAccountScreen: View {
             selected: vm.selected == .file,
             enabled: true,
             icon: "doc.badge.arrow.up.fill",
-            title: "Save a backup file",
-            subtitle: "An encrypted .flagshipkey you keep yourself.",
+            title: String(localized: "Save a backup file"),
+            subtitle: String(localized: "An encrypted .flagshipkey you keep yourself."),
             id: "secure-account-option-file",
             c: c
         ) {
@@ -285,18 +285,18 @@ public struct SecureAccountScreen: View {
         // enroll). The Argon2id derivation + envelope upload happen inside
         // RecoveryViewModel.setup.
         guard cloudPassphrase.count >= 8 else {
-            cloudError = "Passphrase must be 8+ characters."
+            cloudError = String(localized: "Passphrase must be 8+ characters.")
             return
         }
         guard cloudPassphrase == cloudPassphrase2 else {
-            cloudError = "Passphrases do not match."
+            cloudError = String(localized: "Passphrases do not match.")
             return
         }
         cloudError = nil
         cloudWorking = true
         defer { cloudWorking = false }
         do {
-            let umk = try await Keystore.currentUMK(reason: "Back up your Flagship account to iCloud")
+            let umk = try await Keystore.currentUMK(reason: String(localized: "Back up your Flagship account to iCloud"))
             await recoveryVm.setup(umkSeed: umk, passphrase: cloudPassphrase)
             if case .registered = recoveryVm.phase {
                 onSecured()
@@ -304,7 +304,7 @@ public struct SecureAccountScreen: View {
                 cloudError = msg
             }
         } catch {
-            cloudError = "Couldn't back up to iCloud: \(UserErrorText.of(error))"
+            cloudError = String(localized: "Couldn't back up to iCloud: \(UserErrorText.of(error))")
         }
     }
 }

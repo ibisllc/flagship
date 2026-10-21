@@ -176,21 +176,21 @@ public enum WatchProtocol {
         /// string.
         public static func label(for kind: String) -> String {
             switch kind {
-            case "device-disconnected": return "Disconnected device"
-            case "device-replaced":     return "Replaced device"
-            case "device-added":        return "Added device"
-            case "wipe-restart":        return "Wiped & restarted"
-            case "recovery-set-up":     return "Set up recovery"
-            case "recovery-rotated":    return "Rotated recovery passkey"
-            case "app-renamed":         return "Renamed app URL"
-            case "server-created":      return "Created server"
-            case "server-online":       return "Server came online"
-            case "server-revoked":      return "Revoked server"
-            case "server-unrevoked":    return "Restored server"
-            case "demo-vps-provisioned": return "Demo server provisioned"
-            case "totp-enrolled":       return "Turned on authenticator codes"
-            case "totp-disabled":       return "Turned off authenticator codes"
-            case "re-pair-initiated":   return "Started device replacement"
+            case "device-disconnected": return String(localized: "Disconnected device")
+            case "device-replaced":     return String(localized: "Replaced device")
+            case "device-added":        return String(localized: "Added device")
+            case "wipe-restart":        return String(localized: "Wiped & restarted")
+            case "recovery-set-up":     return String(localized: "Set up recovery")
+            case "recovery-rotated":    return String(localized: "Rotated recovery passkey")
+            case "app-renamed":         return String(localized: "Renamed app URL")
+            case "server-created":      return String(localized: "Created server")
+            case "server-online":       return String(localized: "Server came online")
+            case "server-revoked":      return String(localized: "Revoked server")
+            case "server-unrevoked":    return String(localized: "Restored server")
+            case "demo-vps-provisioned": return String(localized: "Demo server provisioned")
+            case "totp-enrolled":       return String(localized: "Turned on authenticator codes")
+            case "totp-disabled":       return String(localized: "Turned off authenticator codes")
+            case "re-pair-initiated":   return String(localized: "Started device replacement")
             default:
                 let words = kind.replacingOccurrences(of: "-", with: " ")
                 return words.prefix(1).uppercased() + words.dropFirst()
@@ -268,18 +268,18 @@ public enum WatchProtocol {
 
         /// "1 waiting", "2 of 3 online", "All 3 online", "No servers".
         public static func line(_ s: Summary) -> String {
-            if s.total == 0 { return "No servers" }
-            if s.waiting > 0 { return "\(s.waiting) waiting" }
-            if s.online == s.total { return s.total == 1 ? "Online" : "All \(s.total) online" }
-            return "\(s.online) of \(s.total) online"
+            if s.total == 0 { return String(localized: "No servers") }
+            if s.waiting > 0 { return String(localized: "\(s.waiting) waiting") }
+            if s.online == s.total { return s.total == 1 ? "Online" : String(localized: "All \(s.total) online") }
+            return String(localized: "\(s.online) of \(s.total) online")
         }
 
         public static func label(for state: String) -> String {
             switch state {
             case "online":  return "Online"
             case "offline": return "Offline"
-            case "waiting": return "Waiting to start"
-            case "pending": return "Setting up"
+            case "waiting": return String(localized: "Waiting to start")
+            case "pending": return String(localized: "Setting up")
             default:        return "Unknown"
             }
         }

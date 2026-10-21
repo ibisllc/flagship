@@ -22,10 +22,10 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             try? await Task.sleep(nanoseconds: UInt64(simulatedLatency * 1_000_000_000))
         }
         if let status = simulatedFailureStatus {
-            throw ScreensClientError.http(status: status, message: "simulated failure")
+            throw ScreensClientError.http(status: status, message: String(localized: "simulated failure"))
         }
         if shouldFail {
-            throw ScreensClientError.http(status: 503, message: "simulated failure")
+            throw ScreensClientError.http(status: 503, message: String(localized: "simulated failure"))
         }
     }
 
@@ -97,9 +97,9 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             serviceCount: serviceCount,
             pairedSessionCount: 2,
             recentInstallEvents: [
-                RecentInstallEvent(at: now - 60_000 * 30, kind: "installed", serviceId: "bright-maple--plants", detail: "via vibe-code"),
+                RecentInstallEvent(at: now - 60_000 * 30, kind: "installed", serviceId: "bright-maple--plants", detail: String(localized: "via vibe-code")),
                 RecentInstallEvent(at: now - 60_000 * 60 * 6, kind: "deploy", serviceId: "bright-maple--wiki", detail: "v1.4.0"),
-                RecentInstallEvent(at: now - 60_000 * 60 * 26, kind: "installed", serviceId: "bright-maple--wiki", detail: "via vibe-code"),
+                RecentInstallEvent(at: now - 60_000 * 60 * 26, kind: "installed", serviceId: "bright-maple--wiki", detail: String(localized: "via vibe-code")),
             ],
             lastUpdate: LastUpdate(outcome: "applied", at: now - 2 * oneDay,
                                    targetCommit: "9f2c1ab3de4567890abcdef1234567890abcdef1",
@@ -200,22 +200,22 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         debugAccessBodies.append(body)
         guard let obj = (try? JSONSerialization.jsonObject(with: Data(body.utf8))) as? [String: Any],
               let g = obj["grant"] as? [String: Any] else {
-            throw Self.refuse(400, "That debug access grant can't be read.")
+            throw Self.refuse(400, String(localized: "That debug access grant can't be read."))
         }
         if g["sshAuthorizedKey"] != nil {
-            throw Self.refuse(422, "This debug access grant is from an older app. Update the app and turn debug access on again.")
+            throw Self.refuse(422, String(localized: "This debug access grant is from an older app. Update the app and turn debug access on again."))
         }
         guard let domain = g["serverDomain"] as? String, let key = g["sshPublicKey"] as? String,
               let issued = (g["issuedAt"] as? NSNumber)?.int64Value,
               let expires = (g["expiresAt"] as? NSNumber)?.int64Value else {
-            throw Self.refuse(400, "That debug access grant can't be read.")
+            throw Self.refuse(400, String(localized: "That debug access grant can't be read."))
         }
-        if key.isEmpty { throw Self.refuse(422, "Debug access needs an SSH public key.") }
-        guard let fp = Self.mockFingerprint(key) else { throw Self.refuse(422, "That isn't an SSH public key this server can use.") }
-        if expires - issued > 7 * 24 * 3600 * 1000 { throw Self.refuse(422, "Debug access can be on for at most 7 days at a time.") }
-        if domain.lowercased() != mockFqdn { throw Self.refuse(422, "That debug access grant is for another server.") }
+        if key.isEmpty { throw Self.refuse(422, String(localized: "Debug access needs an SSH public key.")) }
+        guard let fp = Self.mockFingerprint(key) else { throw Self.refuse(422, String(localized: "That isn't an SSH public key this server can use.")) }
+        if expires - issued > 7 * 24 * 3600 * 1000 { throw Self.refuse(422, String(localized: "Debug access can be on for at most 7 days at a time.")) }
+        if domain.lowercased() != mockFqdn { throw Self.refuse(422, String(localized: "That debug access grant is for another server.")) }
         guard let sig = obj["signatureHex"] as? String, sig.count == 128 else {
-            throw Self.refuse(403, "This server takes debug access only from an admin device of this account.")
+            throw Self.refuse(403, String(localized: "This server takes debug access only from an admin device of this account."))
         }
         let wasOn = debugAccessView(now: issued).on
         let v = DebugAccessView(on: true, expiresAt: expires, keyFingerprint: fp, grantedBy: "admin")
@@ -229,11 +229,11 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         guard let obj = (try? JSONSerialization.jsonObject(with: Data(body.utf8))) as? [String: Any],
               let r = obj["revoke"] as? [String: Any], let domain = r["serverDomain"] as? String,
               let issued = (r["issuedAt"] as? NSNumber)?.int64Value else {
-            throw Self.refuse(400, "That request to turn off debug access can't be read.")
+            throw Self.refuse(400, String(localized: "That request to turn off debug access can't be read."))
         }
-        if domain.lowercased() != mockFqdn { throw Self.refuse(422, "That request is for another server.") }
+        if domain.lowercased() != mockFqdn { throw Self.refuse(422, String(localized: "That request is for another server.")) }
         guard let sig = obj["signatureHex"] as? String, sig.count == 128 else {
-            throw Self.refuse(403, "This server takes debug access only from an admin device of this account.")
+            throw Self.refuse(403, String(localized: "This server takes debug access only from an admin device of this account."))
         }
         let wasOn = debugAccessView(now: issued).on
         let v = DebugAccessView(on: false, lastEnded: wasOn ? .init(at: issued, why: "revoked") : debugAccessByPod[podContext]?.lastEnded)
@@ -282,7 +282,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 creator: "bright-maple",
                 slug: "plants",
                 urlLabel: "plants",
-                summary: "Houseplant watering tracker",
+                summary: String(localized: "Houseplant watering tracker"),
                 url: "https://plants.\(fqdn)/",
                 status: "running",
                 version: "0.0.3",
@@ -295,7 +295,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 creator: "bright-maple",
                 slug: "wiki",
                 urlLabel: "wiki",
-                summary: "Personal notes + recipes",
+                summary: String(localized: "Personal notes + recipes"),
                 url: "https://wiki.\(fqdn)/",
                 status: "running",
                 version: "1.4.0",
@@ -308,7 +308,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 creator: "trent",
                 slug: "scratchpad",
                 urlLabel: "scratchpad--trent",
-                summary: "Markdown scratchpad",
+                summary: String(localized: "Markdown scratchpad"),
                 url: "https://scratchpad-trent.\(fqdn)/",
                 status: "stopped",
                 version: "0.7.1",
@@ -351,19 +351,19 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             guard let pub = try? Curve25519.Signing.PublicKey(rawRepresentation: key),
                   let sig = Self.hexBytes(req.signature),
                   pub.isValidSignature(sig, for: req.grant.canonicalBytes()) else {
-                throw ScreensClientError.http(status: 403, message: #"{"error":"invalid signature"}"#)
+                throw ScreensClientError.http(status: 403, message: String(localized: #"{"error":"invalid signature"}"#))
             }
         } else {
             try MockOrderSigners.shared.require(.sensitive, kind: "app-copy", signatureHex: req.signature, over: req.grant.canonicalBytes())
         }
         let me = await boxDomain()
         guard req.grant.targetServer.lowercased() == me?.lowercased() else {
-            throw ScreensClientError.http(status: 403, message: #"{"error":"the order is for a different server"}"#)
+            throw ScreensClientError.http(status: 403, message: String(localized: #"{"error":"the order is for a different server"}"#))
         }
         let here = (try? await appsList().apps.map(\.serviceId)) ?? []
         if here.contains(req.grant.serviceId)
             || mockCopies.contains(where: { $0.serviceId == req.grant.serviceId && $0.isUnderway }) {
-            throw ScreensClientError.http(status: 409, message: #"{"error":"the app is already on this server"}"#)
+            throw ScreensClientError.http(status: 409, message: String(localized: #"{"error":"the app is already on this server"}"#))
         }
         let copyId = "cp-\(UUID().uuidString.prefix(8).lowercased())"
         mockCopies.append(AppCopyEntry(
@@ -398,13 +398,13 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         if let e = serviceEgressSetError { throw e }
         try MockOrderSigners.shared.require(.sensitive, kind: "app-egress", signatureHex: req.signature, over: req.grant.canonicalBytes())
         guard let current = mockEgress[serviceId] else {
-            throw ScreensClientError.http(status: 404, message: #"{"error":"no such service"}"#)
+            throw ScreensClientError.http(status: 404, message: String(localized: #"{"error":"no such service"}"#))
         }
         let undeclared = req.grant.hosts.filter { !current.declared.contains($0) }
         if !undeclared.isEmpty {
             throw ScreensClientError.http(
                 status: 422,
-                message: #"{"error":"not declared in the app's network.egress: \#(undeclared.joined(separator: ", "))"}"#)
+                message: String(localized: #"{"error":"not declared in the app's network.egress: \#(undeclared.joined(separator: ", "))"}"#))
         }
         let next = AppEgress(declared: current.declared, approved: req.grant.hosts)
         mockEgress[serviceId] = next
@@ -460,7 +460,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func serviceAccess(serviceId: String) async throws -> AppAccessState {
         try await tick()
         guard let a = mockAccess[serviceId] else {
-            throw ScreensClientError.http(status: 404, message: #"{"error":"no such service"}"#)
+            throw ScreensClientError.http(status: 404, message: String(localized: #"{"error":"no such service"}"#))
         }
         return AppAccessState(list: a.list, listSha256: AppAccessList.sha256Hex(a.list), pending: a.pending,
                               draft: mockAccessDrafts[serviceId])
@@ -473,20 +473,20 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         serviceAccessSetCalls.append((serviceId, req))
         if let e = serviceAccessSetError { serviceAccessSetError = nil; throw e }
         guard let current = mockAccess[serviceId] else {
-            throw ScreensClientError.http(status: 404, message: #"{"error":"no such service"}"#)
+            throw ScreensClientError.http(status: 404, message: String(localized: #"{"error":"no such service"}"#))
         }
         func refuse(_ status: Int, _ reason: String) -> ScreensClientError {
-            .http(status: status, message: #"{"error":"\#(reason)"}"#)
+            .http(status: status, message: String(localized: #"{"error":"\#(reason)"}"#))
         }
         guard req.grant.serviceId == serviceId else { throw refuse(400, "grant is for a different service") }
         guard AppAccessList.isNormalized(req.list) else {
-            throw ScreensClientError.http(status: 400, message: #"{"error":"the list is not normalized","errors":[]}"#)
+            throw ScreensClientError.http(status: 400, message: String(localized: #"{"error":"the list is not normalized","errors":[]}"#))
         }
         let parsed = AppAccessList.parse(req.list)
         if !parsed.isValid {
             let errors = parsed.errors.map { #"{"line":\#($0.line),"message":"\#($0.message.replacingOccurrences(of: "\"", with: "\\\""))"}"# }
             throw ScreensClientError.http(status: 400,
-                                          message: #"{"error":"the list has errors","errors":[\#(errors.joined(separator: ","))]}"#)
+                                          message: String(localized: #"{"error":"the list has errors","errors":[\#(errors.joined(separator: ","))]}"#))
         }
         guard req.grant.listSha256 == AppAccessList.sha256Hex(req.list) else {
             throw refuse(403, "the list is not the one that was signed")
@@ -532,7 +532,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         serviceAccessDismissCalls.append((serviceId, host))
         GymProbe.note("ignored \(host) for \(serviceId)")
         guard let current = mockAccess[serviceId] else {
-            throw ScreensClientError.http(status: 404, message: #"{"error":"no such service"}"#)
+            throw ScreensClientError.http(status: 404, message: String(localized: #"{"error":"no such service"}"#))
         }
         let next = AppAccessState(list: current.list, listSha256: current.listSha256,
                                   pending: current.pending.filter { $0.host != host })
@@ -547,7 +547,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         serviceAccessDraftDismissCalls.append(serviceId)
         GymProbe.note("dismissed draft for \(serviceId)")
         guard let current = mockAccess[serviceId] else {
-            throw ScreensClientError.http(status: 404, message: #"{"error":"no such service"}"#)
+            throw ScreensClientError.http(status: 404, message: String(localized: #"{"error":"no such service"}"#))
         }
         mockAccessDrafts[serviceId] = nil
         return AppAccessState(list: current.list, listSha256: AppAccessList.sha256Hex(current.list),
@@ -579,7 +579,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         var plantRows: [[AppDbValue]] = []
         for i in 1...240 {
             let room: AppDbValue = i % 7 == 0 ? .null : .string(rooms[i % 3])
-            plantRows.append([.int(Int64(i)), .string("Plant \(i)"), room, .bool(i % 2 == 0)])
+            plantRows.append([.int(Int64(i)), .string(String(localized: "Plant \(i)")), room, .bool(i % 2 == 0)])
         }
         let plants = MockDbTable(
             columns: [AppDbColumn(name: "id", type: "int4"), AppDbColumn(name: "name", type: "text"),
@@ -615,7 +615,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try MockOrderSigners.shared.require(.sensitive, kind: "app-rank", signatureHex: req.signature, over: try? req.order.canonicalBytes())
         if let status = mockMemberRoleStatus {
             mockMemberRoleStatus = nil
-            throw ScreensClientError.http(status: status, message: #"{"error":"refused"}"#)
+            throw ScreensClientError.http(status: status, message: String(localized: #"{"error":"refused"}"#))
         }
         let cur = try await appMembers(serviceId: serviceId)
         let t = req.order.target
@@ -784,9 +784,9 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     /// Per-service keys; a missing entry is a box without API keys (404).
     public var mockApiKeys: [String: [AppApiKey]] = [
         "bright-maple--plants": [
-            AppApiKey(keyId: "3f9a0c2e7b1d4a68", label: "Garden sensor", scope: .write,
+            AppApiKey(keyId: "3f9a0c2e7b1d4a68", label: String(localized: "Garden sensor"), scope: .write,
                       createdAt: 1_760_000_000_000, lastUsedAt: 1_760_100_000_000, expiresAt: nil),
-            AppApiKey(keyId: "a1b2c3d4e5f60718", label: "Dashboard", scope: .read,
+            AppApiKey(keyId: "a1b2c3d4e5f60718", label: String(localized: "Dashboard"), scope: .read,
                       createdAt: 1_760_000_500_000, lastUsedAt: nil, expiresAt: nil),
         ],
         "bright-maple--wiki": [],
@@ -801,7 +801,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func serviceApiKeys(serviceId: String) async throws -> AppApiKeysResponse {
         try await tick()
         guard let keys = mockApiKeys[serviceId] else {
-            throw ScreensClientError.http(status: 404, message: #"{"error":"not found"}"#)
+            throw ScreensClientError.http(status: 404, message: String(localized: #"{"error":"not found"}"#))
         }
         return AppApiKeysResponse(keys: keys)
     }
@@ -813,7 +813,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         serviceApiKeyCreateCalls.append((serviceId, req))
         if let e = serviceApiKeyCreateError { serviceApiKeyCreateError = nil; throw e }
         func refuse(_ status: Int, _ reason: String) -> ScreensClientError {
-            .http(status: status, message: #"{"error":"\#(reason)"}"#)
+            .http(status: status, message: String(localized: #"{"error":"\#(reason)"}"#))
         }
         guard var keys = mockApiKeys[serviceId] else { throw refuse(404, "not found") }
         let g = req.grant
@@ -846,7 +846,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         serviceApiKeyRevokeCalls.append((serviceId, keyId))
         guard var keys = mockApiKeys[serviceId], keys.contains(where: { $0.keyId == keyId }) else {
-            throw ScreensClientError.http(status: 404, message: #"{"error":"not found"}"#)
+            throw ScreensClientError.http(status: 404, message: String(localized: #"{"error":"not found"}"#))
         }
         keys.removeAll { $0.keyId == keyId }
         mockApiKeys[serviceId] = keys
@@ -887,7 +887,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         accessAlertsSettingCalls += 1
         guard let enabled = mockAccessAlertsEnabled else {
-            throw ScreensClientError.http(status: 404, message: #"{"error":"not found"}"#)
+            throw ScreensClientError.http(status: 404, message: String(localized: #"{"error":"not found"}"#))
         }
         return AccessAlertsSetting(enabled: enabled)
     }
@@ -897,7 +897,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         setAccessAlertsCalls.append(enabled)
         guard mockAccessAlertsEnabled != nil else {
-            throw ScreensClientError.http(status: 404, message: #"{"error":"not found"}"#)
+            throw ScreensClientError.http(status: 404, message: String(localized: #"{"error":"not found"}"#))
         }
         mockAccessAlertsEnabled = enabled
         return AccessAlertsSetting(enabled: enabled, ok: true)
@@ -925,7 +925,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         let list = try await appsList()
         guard let app = list.apps.first(where: { $0.serviceId == serviceId }) else {
-            throw ScreensClientError.http(status: 404, message: "no such app")
+            throw ScreensClientError.http(status: 404, message: String(localized: "no such app"))
         }
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         var detail = AppDetailResponse(
@@ -1003,8 +1003,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return VibeCodeStatusResponse(
             status: "streaming",
             transcript: [
-                .init(role: "user", content: "Build a habit tracker."),
-                .init(role: "assistant", content: "Sketching schema for habits + check-ins…")
+                .init(role: "user", content: String(localized: "Build a habit tracker.")),
+                .init(role: "assistant", content: String(localized: "Sketching schema for habits + check-ins…"))
             ],
             files: [:],
             deployedUrl: nil,
@@ -1018,7 +1018,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func browserTabsList(serviceId: String) async throws -> BrowserTabsListResponse {
         try await tick()
         return BrowserTabsListResponse(tabs: (mockBrowserTabIds[serviceId] ?? []).map {
-            BrowserTab(tabId: $0, serviceId: serviceId, currentUrl: "https://example.com/\($0)", title: "Tab \($0)",
+            BrowserTab(tabId: $0, serviceId: serviceId, currentUrl: "https://example.com/\($0)", title: String(localized: "Tab \($0)"),
                        screenshotKey: nil, needsField: nil)
         })
     }
@@ -1187,11 +1187,11 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return AsyncStream { continuation in
             let task = Task {
                 let tokens = [
-                    "Sketching ", "schema. ", "Two tables: ", "habits, ", "check_ins.\n",
-                    "Building manifest…\n",
-                    "Creating Docker image…\n",
-                    "Deploying to ", "home pod…\n",
-                    "Live. 🎉"
+                    String(localized: "Sketching "), "schema. ", String(localized: "Two tables: "), "habits, ", "check_ins.\n",
+                    String(localized: "Building manifest…\n"),
+                    String(localized: "Creating Docker image…\n"),
+                    String(localized: "Deploying to "), "home pod…\n",
+                    String(localized: "Live. 🎉")
                 ]
                 for t in tokens {
                     if Task.isCancelled { break }
@@ -1202,7 +1202,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                     continuation.yield(.manifestEmit(manifestJson: "{\"name\":\"habits\",\"datastore\":\"postgres\"}"))
                     try? await Task.sleep(nanoseconds: 500_000_000)
                     continuation.yield(.buildStart)
-                    for log in ["FROM node:20-alpine", "RUN apk add postgresql-client", "COPY . /app", "Build ok in 8.4s"] {
+                    for log in [String(localized: "FROM node:20-alpine"), String(localized: "RUN apk add postgresql-client"), String(localized: "COPY . /app"), String(localized: "Build ok in 8.4s")] {
                         if Task.isCancelled { break }
                         continuation.yield(.buildLog(line: log))
                         try? await Task.sleep(nanoseconds: 300_000_000)
@@ -1269,7 +1269,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     /// hash, and a nonce not spent before. Same refusal words as the box.
     private func acceptEnvChange(appId: String, op: String, _ c: ServiceEnvChange, value: String?) throws {
         func refuse(_ reason: String) -> ScreensClientError {
-            .http(status: 400, message: #"{"error":"\#(reason)"}"#)
+            .http(status: 400, message: String(localized: #"{"error":"\#(reason)"}"#))
         }
         guard c.serviceId == appId else { throw refuse("the change names another app") }
         guard c.op == op else { throw refuse("the change is not an \(op)") }
@@ -1330,13 +1330,13 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             appId: "bright-maple--plants",
             status: "awaiting-tool-response",
             messages: [
-                VibeCodeSessionMessage(role: "user", text: "Build me a plants tracker", timestamp: now - 30_000),
-                VibeCodeSessionMessage(role: "assistant", text: "Sure — I need a weather API key to send notifications when a plant has been thirsty too long.", timestamp: now - 5_000)
+                VibeCodeSessionMessage(role: "user", text: String(localized: "Build me a plants tracker"), timestamp: now - 30_000),
+                VibeCodeSessionMessage(role: "assistant", text: String(localized: "Sure — I need a weather API key to send notifications when a plant has been thirsty too long."), timestamp: now - 5_000)
             ],
             pendingRequest: .requestEnvVar(
                 toolUseId: "tu_mock_42",
                 name: "WEATHER_API_KEY",
-                description: "OpenWeather API key",
+                description: String(localized: "OpenWeather API key"),
                 why: "to look up today's high temperature for the dehydration warning",
                 example: "abc123…",
                 secret: true
@@ -1467,7 +1467,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public private(set) var restoreStarts: [ServerRestoreStartRequest] = []
     public private(set) var restoreChunks: [(offset: Int64, count: Int)] = []
     public private(set) var restoreCommits: [ServerRestoreCommitRequest] = []
-    public var restoreApps: [ServerRestoreApp] = [ServerRestoreApp(serviceId: "alice--wiki", name: "Wiki", state: "done")]
+    public var restoreApps: [ServerRestoreApp] = [ServerRestoreApp(serviceId: "alice--wiki", name: String(localized: "Wiki"), state: "done")]
     public var restoreFinalState = "done"
     public var restoreFailure: String?
     /// The backup this (mock) server waits for; nil ⇒ it isn't waiting.
@@ -1490,7 +1490,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         let bundle = archiveBundle
         return ServerArchiveStatus(archiveId: id, state: "ready", startedAt: 1, bytes: Int64(archiveBytes.count), sha256: sha,
                                    backupFileName: "home-1970-01-01.flagship-backup", dataFileName: "home-1970-01-01.flagship-data",
-                                   apps: [ServerArchiveApp(serviceId: "alice--wiki", name: "Wiki")],
+                                   apps: [ServerArchiveApp(serviceId: "alice--wiki", name: String(localized: "Wiki"))],
                                    bundleFileName: "home-1970-01-01.flagship", bundleBytes: Int64(bundle.count),
                                    bundleSha256: Self.sha(bundle))
     }
@@ -1642,8 +1642,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return SavedBackup(archiveId: archiveId, createdAt: createdAt, trigger: trigger, bytes: Int64(archiveBytes.count),
                            sha256: Self.sha(archiveBytes), backupBytes: Int64(archiveBackupFile.count),
                            backupFileName: "\(stem).flagship-backup", dataFileName: "\(stem).flagship-data",
-                           apps: [ServerArchiveApp(serviceId: "bright-maple--plants", name: "Plants"),
-                                  ServerArchiveApp(serviceId: "bright-maple--wiki", name: "Wiki")],
+                           apps: [ServerArchiveApp(serviceId: "bright-maple--plants", name: String(localized: "Plants")),
+                                  ServerArchiveApp(serviceId: "bright-maple--wiki", name: String(localized: "Wiki"))],
                            bundleFileName: "\(stem).flagship", bundleBytes: Int64(bundle.count), bundleSha256: Self.sha(bundle))
     }
 
@@ -1804,7 +1804,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             ? "the space your device keeps for its backup"
             : "a third of its disk, so other servers can keep their backups on it"
         let reason = over
-            ? "This server holds \(Self.formatGb(policyUsedBytes)) of app data, over its backup limit of \(Self.formatGb(limit ?? 0)) (\(why)). Remove apps or data, or change the backup policy on the server page."
+            ? String(localized: "This server holds \(Self.formatGb(policyUsedBytes)) of app data, over its backup limit of \(Self.formatGb(limit ?? 0)) (\(why)). Remove apps or data, or change the backup policy on the server page.")
             : nil
         return BackupPolicyView(
             policy: policyCurrent,
@@ -1831,8 +1831,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         if valid, let limit = limitBytes(BackupPolicyCurrent(policy: o.policy, phoneReserveBytes: o.phoneReserveBytes)),
            policyUsedBytes > limit {
             let sentence = o.policy == "phone"
-                ? "This server holds \(Self.formatGb(policyUsedBytes)) of app data, more than the \(Self.formatGb(limit)) your device would keep. Reserve at least \(Self.formatGb(policyUsedBytes)) on that device, or remove apps or data first."
-                : "This server holds \(Self.formatGb(policyUsedBytes)) of app data, more than a third of its disk (\(Self.formatGb(limit))), which is all a server may use with peer backups. Remove apps or data first, or choose another policy."
+                ? String(localized: "This server holds \(Self.formatGb(policyUsedBytes)) of app data, more than the \(Self.formatGb(limit)) your device would keep. Reserve at least \(Self.formatGb(policyUsedBytes)) on that device, or remove apps or data first.")
+                : String(localized: "This server holds \(Self.formatGb(policyUsedBytes)) of app data, more than a third of its disk (\(Self.formatGb(limit))), which is all a server may use with peer backups. Remove apps or data first, or choose another policy.")
             GymProbe.note("refused backup-policy over limit")
             throw Self.refusal(409, sentence, code: "over-backup-limit")
         }
@@ -2080,16 +2080,16 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         }
         let ideConfig = servers(["type": "http", "url": url, "headers": headers])
         let ideConfigs = [
-            McpIdeConfig(id: "claude-code", name: "Claude Code",
-                         where: "Run the command in a terminal, or pass the JSON with --mcp-config", config: ideConfig,
+            McpIdeConfig(id: "claude-code", name: String(localized: "Claude Code"),
+                         where: String(localized: "Run the command in a terminal, or pass the JSON with --mcp-config"), config: ideConfig,
                          command: "claude mcp add --scope user --transport http \(name) \(url) --header \"Authorization: Bearer \(key)\""),
-            McpIdeConfig(id: "cursor", name: "Cursor",
+            McpIdeConfig(id: "cursor", name: String(localized: "Cursor"),
                          where: "~/.cursor/mcp.json (Cursor Settings → MCP → Add new global MCP server)",
                          config: servers(["url": url, "headers": headers])),
-            McpIdeConfig(id: "vscode", name: "VS Code",
-                         where: "Your user mcp.json (Command Palette → MCP: Open User Configuration)",
+            McpIdeConfig(id: "vscode", name: String(localized: "VS Code"),
+                         where: String(localized: "Your user mcp.json (Command Palette → MCP: Open User Configuration)"),
                          config: servers(["type": "http", "url": url, "headers": headers], key: "servers")),
-            McpIdeConfig(id: "cline", name: "Cline", where: "Cline → MCP Servers → Configure MCP Servers",
+            McpIdeConfig(id: "cline", name: String(localized: "Cline"), where: String(localized: "Cline → MCP Servers → Configure MCP Servers"),
                          config: servers(["type": "streamableHttp", "url": url, "headers": headers])),
         ]
         return BuildMcpConnection(url: url, key: key, ideConfig: ideConfig,
@@ -2111,7 +2111,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             return BuildGitResponse(
                 buildId: buildId,
                 fit: true,
-                reason: "Found flagship.app.json",
+                reason: String(localized: "Found flagship.app.json"),
                 manifestName: "imported-app",
                 fileCount: 14
             )
@@ -2119,7 +2119,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return BuildGitResponse(
             buildId: buildId,
             fit: false,
-            reason: "no flagship.app.json — repo isn't a Flagship app yet; the AI can adapt it",
+            reason: String(localized: "no flagship.app.json — repo isn't a Flagship app yet; the AI can adapt it"),
             manifestName: nil,
             fileCount: 23
         )
@@ -2129,7 +2129,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         buildAdaptCalls.append((buildId, req))
         if buildAdaptUnavailable {
-            throw ScreensClientError.http(status: 503, message: "AI adapt not configured")
+            throw ScreensClientError.http(status: 503, message: String(localized: "AI adapt not configured"))
         }
         return BuildAdaptResponse(ok: true, fileCount: 16)
     }
@@ -2148,7 +2148,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         GymProbe.note("adapt started share=\(req.share.map { String($0) } ?? "-") provider=\(req.credential?.provider ?? "none")")
         if let e = buildAdaptStartError { throw e }
         if buildAdaptUnavailable {
-            throw ScreensClientError.http(status: 503, message: "AI adapt not configured")
+            throw ScreensClientError.http(status: 503, message: String(localized: "AI adapt not configured"))
         }
         return BuildAdaptReply(ok: true, started: true)
     }
@@ -2280,17 +2280,17 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             BuildJournalEntry(
                 seq: 1, ts: now - 60_000 * 60, buildId: buildId,
                 mode: "scratch", kind: "session-started", actor: "owner",
-                summary: "Build a houseplant watering tracker"
+                summary: String(localized: "Build a houseplant watering tracker")
             ),
             BuildJournalEntry(
                 seq: 2, ts: now - 60_000 * 59, buildId: buildId,
                 mode: "scratch", kind: "file-written", actor: "ai",
-                summary: "wrote flagship.app.json", detail: "name: plants"
+                summary: String(localized: "wrote flagship.app.json"), detail: "name: plants"
             ),
             BuildJournalEntry(
                 seq: 3, ts: now - 60_000 * 58, buildId: buildId,
                 mode: "scratch", kind: "deployed", actor: "system",
-                summary: "deployed to home pod", serviceId: "bright-maple--plants"
+                summary: String(localized: "deployed to home pod"), serviceId: "bright-maple--plants"
             ),
         ])
     }

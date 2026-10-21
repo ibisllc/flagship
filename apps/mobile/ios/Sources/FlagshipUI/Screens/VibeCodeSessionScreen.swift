@@ -206,7 +206,7 @@ public struct VibeCodeSessionScreen: View {
     }
 
     private var title: String {
-        if deploying { return "Deploying" }
+        if deploying { return String(localized: "Deploying") }
         switch status {
         case "streaming": return stream.status == .building ? "Building" : "Generating"
         case "awaiting-tool-response": return "Your turn"
@@ -215,7 +215,7 @@ public struct VibeCodeSessionScreen: View {
         case "deployed": return "Live"
         case "failed": return "Failed"
         case "cancelled": return "Stopped"
-        default: return "Vibe code"
+        default: return String(localized: "Vibe code")
         }
     }
 
@@ -344,7 +344,7 @@ public struct VibeCodeSessionScreen: View {
                             .fsInputBox()
                     }
                     HStack(spacing: FS.space.s3) {
-                        FSPrimaryButton(submitting ? "Sending…" : "Send value",
+                        FSPrimaryButton(submitting ? String(localized: "Sending…") : String(localized: "Send value"),
                                         enabled: !submitting && !envValueDraft.isEmpty && state?.appId != nil) {
                             Task { await submitEnvVar(name: name) }
                         }
@@ -362,7 +362,7 @@ public struct VibeCodeSessionScreen: View {
                 HStack(spacing: FS.space.s3) {
                     Text(url).font(FS.font.mono()).foregroundColor(c.text).lineLimit(1).truncationMode(.middle)
                     Spacer(minLength: 0)
-                    FSPrimaryButton("Open") {
+                    FSPrimaryButton(String(localized: "Open")) {
                         if let u = URL(string: url.hasPrefix("http") ? url : "https://\(url)") { openURL(u) }
                     }
                 }
@@ -377,7 +377,7 @@ public struct VibeCodeSessionScreen: View {
                 let mins = deployStartedAt.map { Int(context.date.timeIntervalSince($0)) / 60 } ?? 0
                 HStack(spacing: FS.space.s2) {
                     ProgressView()
-                    Text("\(VibeCodeDeployRun.phaseText(deployPhase ?? state?.deployPhase)) \(mins > 0 ? "\(mins) min, " : "")this can take a few minutes")
+                    Text("\(VibeCodeDeployRun.phaseText(deployPhase ?? state?.deployPhase)) \(mins > 0 ? String(localized: "\(mins) min, ") : "")this can take a few minutes")
                         .font(FS.font.mono()).foregroundColor(c.textMuted)
                     Spacer(minLength: 0)
                 }
@@ -391,14 +391,14 @@ public struct VibeCodeSessionScreen: View {
                 if let placeholder = VibeCodeComposer.placeholder(status: status, canContinue: state?.canContinue == true) {
                     composer(placeholder: placeholder, c: c)
                 }
-                FSPrimaryButton("Deploy", enabled: true, block: true) {
+                FSPrimaryButton(String(localized: "Deploy"), enabled: true, block: true) {
                     Task { await deploy() }
                 }
                 .accessibilityIdentifier("vibecode-deploy-btn")
             }
         } else if status == "failed" || status == "cancelled" {
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("✗ \(errorMessage ?? state?.failureReason ?? stream.errorMessage ?? "Session stopped.")")
+                Text("✗ \(errorMessage ?? state?.failureReason ?? stream.errorMessage ?? String(localized: "Session stopped."))")
                     .font(FS.font.mono()).foregroundColor(c.danger)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
@@ -407,7 +407,7 @@ public struct VibeCodeSessionScreen: View {
                     composer(placeholder: placeholder, c: c)
                 }
                 if status == "failed", state?.appId != nil {
-                    FSPrimaryButton("Try deploying again", enabled: true, block: true) {
+                    FSPrimaryButton(String(localized: "Try deploying again"), enabled: true, block: true) {
                         Task { await deploy() }
                     }
                     .accessibilityIdentifier("vibecode-redeploy-btn")
@@ -416,7 +416,7 @@ public struct VibeCodeSessionScreen: View {
         } else {
             HStack(spacing: FS.space.s2) {
                 ProgressView()
-                Text(stream.status == .building ? "Building your app…" : "The AI is writing your app…")
+                Text(stream.status == .building ? String(localized: "Building your app…") : "The AI is writing your app…")
                     .font(FS.font.mono()).foregroundColor(c.textMuted)
                 Spacer(minLength: 0)
             }
@@ -627,7 +627,7 @@ public struct VibeCodeSessionScreen: View {
         // appId = "<creator>--<slug>"; both halves may carry single dashes
         // (docs/service-addressing-double-dash.md).
         guard let appId = state?.appId, appId.contains("--") else {
-            errorMessage = "The app has no id yet. Wait for the AI to name it."
+            errorMessage = String(localized: "The app has no id yet. Wait for the AI to name it.")
             return
         }
         submitting = true
@@ -741,9 +741,9 @@ enum VibeCodeReplyCredential {
 
 /// The build chat's message field. MIRRORS the webapp `views/vibe-code.js`.
 enum VibeCodeComposer {
-    static let replyPlaceholder = "Reply to the AI"
-    static let changePlaceholder = "Ask for a change…"
-    static let retryPlaceholder = "Tell the AI what to try next…"
+    static let replyPlaceholder = String(localized: "Reply to the AI")
+    static let changePlaceholder = String(localized: "Ask for a change…")
+    static let retryPlaceholder = String(localized: "Tell the AI what to try next…")
 
     /// The placeholder for a chat that takes a new message, nil when it takes none.
     static func placeholder(status: String, canContinue: Bool) -> String? {

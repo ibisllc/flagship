@@ -80,7 +80,7 @@ public struct TransferGiverScreen: View {
                 .autocorrectionDisabled()
                 .fsInputBox()
                 .accessibilityIdentifier("transfer-confirm-field")
-            FSDangerButton(working ? "Working…" : "Transfer this server", block: true) {
+            FSDangerButton(working ? String(localized: "Working…") : String(localized: "Transfer this server"), block: true) {
                 if confirmed && !working { Task { await vm.start() } }
             }
             .opacity(confirmed ? 1 : 0.4)
@@ -98,7 +98,7 @@ public struct TransferGiverScreen: View {
                 HStack { Spacer(); PairingQRView(text: text, size: 240); Spacer() }
             }
             if case .resealing = vm.phase {
-                TransferCallout(kind: .info, text: "They claimed it — handing off the disk key…")
+                TransferCallout(kind: .info, text: String(localized: "They claimed it — handing off the disk key…"))
             } else {
                 ProgressView("Waiting for the new owner…")
             }
@@ -113,7 +113,7 @@ public struct TransferGiverScreen: View {
 
     @ViewBuilder private func completed(_ c: FSColors, _ newDomain: String?) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            TransferCallout(kind: .success, text: "Transfer complete. \(serverDomain) now belongs to the new owner\(newDomain.map { " (now \($0))" } ?? "").")
+            TransferCallout(kind: .success, text: String(localized: "Transfer complete. \(serverDomain) now belongs to the new owner\(newDomain.map { " (now \($0))" } ?? "")."))
             Text("It's no longer in your fleet.").font(FS.font.body()).foregroundColor(c.textMuted)
         }
     }
@@ -143,10 +143,10 @@ public struct TransferAcquirerScreen: View {
                 case .signing, .posting:
                     ProgressView("Claiming the server…")
                 case .claimed(let newDomain):
-                    TransferCallout(kind: .success, text: "You now own \(newDomain ?? "this box"). It will come online under your account shortly.")
+                    TransferCallout(kind: .success, text: String(localized: "You now own \(newDomain ?? "this box"). It will come online under your account shortly."))
                 case .failed(let msg):
                     TransferCallout(kind: .danger, text: msg)
-                    FSSecondaryButton("Scan again") { vm.resetForRescan(); scanning = true }
+                    FSSecondaryButton(String(localized: "Scan again")) { vm.resetForRescan(); scanning = true }
                 }
             }
             .padding(FS.space.s6)
@@ -187,11 +187,11 @@ public struct TransferAcquirerScreen: View {
             Text("Take over this server?").font(FS.font.h2()).foregroundColor(c.text)
             TieredConfirmationSheet(
                 severity: .severe,
-                title: "You will become the owner of \(domain)",
-                message: "You'll own \(domain) and everything on it. The current owner loses control of it. This cannot be undone.",
+                title: String(localized: "You will become the owner of \(domain)"),
+                message: String(localized: "You'll own \(domain) and everything on it. The current owner loses control of it. This cannot be undone."),
                 confirmPhrase: domain,
-                confirmFieldLabel: "Type the server's address to confirm:",
-                actionTitle: "Take ownership",
+                confirmFieldLabel: String(localized: "Type the server's address to confirm:"),
+                actionTitle: String(localized: "Take ownership"),
                 busy: claiming
             ) {
                 Task { await vm.confirm() }

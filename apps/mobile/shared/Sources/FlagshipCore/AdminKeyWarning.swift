@@ -17,23 +17,23 @@ import FlagshipAPI
 /// backup of the account key.
 public enum AdminKeyCopy {
     /// Removing the account's keys from this device.
-    public static let removeTitle = "Remove this account from this device?"
+    public static let removeTitle = String(localized: "Remove this account from this device?")
     public static let removeMessage =
-        "This also removes this device's admin key, which you need to sign in to your servers. Save a backup of your account key first, or remove anyway."
-    public static let saveFirst = "Save my account key first"
-    public static let removeAnyway = "Remove anyway"
+        String(localized: "This also removes this device's admin key, which you need to sign in to your servers. Save a backup of your account key first, or remove anyway.")
+    public static let saveFirst = String(localized: "Save my account key first")
+    public static let removeAnyway = String(localized: "Remove anyway")
     /// Settings, Sign out, on an admin device.
-    public static let signOutTitle = "Sign out?"
+    public static let signOutTitle = String(localized: "Sign out?")
     public static let signOutMessage =
-        "Signing out removes this device's admin key. Save a backup of your account key first, or sign out anyway."
-    public static let signOutAnyway = "Sign out anyway"
+        String(localized: "Signing out removes this device's admin key. Save a backup of your account key first, or sign out anyway.")
+    public static let signOutAnyway = String(localized: "Sign out anyway")
     /// The same, once this device has written an account-key file.
     public static let signOutBackedUpMessage =
-        "Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe."
-    public static let signOutBackedUpOk = "Sign out"
+        String(localized: "Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe.")
+    public static let signOutBackedUpOk = String(localized: "Sign out")
     public static let cancel = "Cancel"
     /// Shown when a save-first path needs the key unlocked.
-    public static let unlockFirst = "Unlock first to save your key."
+    public static let unlockFirst = String(localized: "Unlock first to save your key.")
 }
 
 public struct AdminKeyWarning: Equatable, Sendable {

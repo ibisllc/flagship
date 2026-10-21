@@ -212,7 +212,7 @@ public final class LiveBuilderPairClient: BuilderPairClient, @unchecked Sendable
 
     private static func describe(_ error: Error) -> String {
         let ns = error as NSError
-        return "Connection lost (\(ns.domain) \(ns.code)): \(ns.localizedDescription)"
+        return String(localized: "Connection lost (\(ns.domain) \(ns.code)): \(ns.localizedDescription)")
     }
 
     private static func decode(_ message: URLSessionWebSocketTask.Message) -> BuilderInbound? {

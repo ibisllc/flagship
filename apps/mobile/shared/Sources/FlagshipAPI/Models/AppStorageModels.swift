@@ -68,8 +68,8 @@ public struct ServerStorage: Codable, Equatable, Sendable {
 /// AppStorageText, word for word.
 public enum AppStorageText {
     public static let fullSentence = "Full: new data is refused until you free space or raise the limit."
-    public static let stoppedSentence = "Its database is closed until it is under its limit again."
-    public static let alert = "An app on this server is full"
+    public static let stoppedSentence = String(localized: "Its database is closed until it is under its limit again.")
+    public static let alert = String(localized: "An app on this server is full")
 
     public struct Line: Equatable, Sendable {
         public let label: String
@@ -87,8 +87,8 @@ public enum AppStorageText {
 
     static func size(_ n: Int64) -> String {
         if n >= gib { return gb(n) }
-        if n >= 1024 * 1024 { return "\(Int((Double(n) / (1024 * 1024)).rounded())) MB" }
-        return "\(max(0, Int((Double(n) / 1024).rounded()))) KB"
+        if n >= 1024 * 1024 { return String(localized: "\(Int((Double(n) / (1024 * 1024)).rounded())) MB") }
+        return String(localized: "\(max(0, Int((Double(n) / 1024).rounded()))) KB")
     }
 
     private static func line(_ label: String, _ s: StoreUsage?) -> Line? {
@@ -109,13 +109,13 @@ public enum AppStorageText {
         guard let storage else { return [] }
         var out: [String] = []
         switch storage.brake {
-        case "hard": out.append("The server's disk is full: apps' folders are read-only until there's room.")
-        case "on": out.append("The server's disk is nearly full: apps can't save more until there's room.")
+        case "hard": out.append(String(localized: "The server's disk is full: apps' folders are read-only until there's room."))
+        case "on": out.append(String(localized: "The server's disk is nearly full: apps can't save more until there's room."))
         default: break
         }
         for a in storage.apps {
             let full = a.files?.full == true || (a.postgres.map { $0.full || $0.writesBlocked } ?? false)
-            if full { out.append("\(nameOf(a.serviceId)) is full: new data is refused until you free space or raise the limit.") }
+            if full { out.append(String(localized: "\(nameOf(a.serviceId)) is full: new data is refused until you free space or raise the limit.")) }
         }
         return out
     }

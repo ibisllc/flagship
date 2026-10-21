@@ -64,7 +64,7 @@ public struct CompanionDockScreen: View {
             )
         }
         .confirmationDialog(
-            pendingRevoke.map { "Disconnect \(displayLabel(for: $0))?" } ?? "Disconnect this browser?",
+            pendingRevoke.map { String(localized: "Disconnect \(displayLabel(for: $0))?") } ?? String(localized: "Disconnect this browser?"),
             isPresented: Binding(
                 get: { pendingRevoke != nil },
                 set: { if !$0 { pendingRevoke = nil } }
@@ -90,7 +90,7 @@ public struct CompanionDockScreen: View {
                 Text("Connect a browser")
                     .font(FS.font.scaled(15, weight: .semibold))
                     .foregroundColor(c.text)
-                FSPrimaryButton("Scan the computer's code", block: true) {
+                FSPrimaryButton(String(localized: "Scan the computer's code"), block: true) {
                     scanError = nil
                     showScanner = true
                 }
@@ -101,7 +101,7 @@ public struct CompanionDockScreen: View {
                     .lineLimit(2...4)
                     .fsInputBox()
                     .accessibilityIdentifier("companion-dock-link")
-                FSSecondaryButton("Use pasted link", block: true) {
+                FSSecondaryButton(String(localized: "Use pasted link"), block: true) {
                     Task { await vm.begin(link: pastedLink) }
                 }
                 .disabled(pastedLink.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -182,13 +182,13 @@ public struct CompanionDockScreen: View {
                 Text("It gets a keyless, read-only session for four hours. Protected actions still need this phone.")
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
-                FSPrimaryButton(approving ? "Approving…" : "Approve",
+                FSPrimaryButton(approving ? String(localized: "Approving…") : String(localized: "Approve"),
                                 enabled: gateExpired && !approving && vm.selectedServer != nil,
                                 block: true) {
                     Task { await vm.approve() }
                 }
                 .accessibilityIdentifier("companion-dock-approve")
-                FSGhostButton("Cancel", block: true) { Task { await vm.cancel() } }
+                FSGhostButton(String(localized: "Cancel"), block: true) { Task { await vm.cancel() } }
                     .disabled(approving)
             }
         }
@@ -197,7 +197,7 @@ public struct CompanionDockScreen: View {
     @ViewBuilder
     private func activeList(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            FSSectionLabel("Connected browsers")
+            FSSectionLabel(String(localized: "Connected browsers"))
             switch vm.state {
             case .idle, .loading:
                 FSCard {
@@ -272,7 +272,7 @@ public struct CompanionDockScreen: View {
     }
 
     private func displayLabel(for c: CompanionSummary) -> String {
-        return "Session \(c.tokenPrefix)"
+        return String(localized: "Session \(c.tokenPrefix)")
     }
 
     private func expiresLabel(for c: CompanionSummary) -> String {

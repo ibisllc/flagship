@@ -195,7 +195,7 @@ public final class RealAccountLoginViewModel {
     /// mismatch and running a real re-pair (3-day grace) against the live key.
     private func startSingleDeviceRecovery() async {
         guard passphraseInput.count >= 8 else {
-            phase = .failed("Enter your recovery passphrase (at least 8 characters).")
+            phase = .failed(String(localized: "Enter your recovery passphrase (at least 8 characters)."))
             return
         }
         phase = .working
@@ -213,7 +213,7 @@ public final class RealAccountLoginViewModel {
             if case .failed(let msg) = recoveryVM.phase {
                 phase = .failed(humanizedRecoveryMessage(msg))
             } else {
-                phase = .failed("Recovery was cancelled.")
+                phase = .failed(String(localized: "Recovery was cancelled."))
             }
             return
         }
@@ -223,9 +223,9 @@ public final class RealAccountLoginViewModel {
         // exactly the IRK the server still has registered.
         Keystore.setActiveProfile(username)
         do {
-            try await installUMK(seed, "Bring this device into your Flagship account")
+            try await installUMK(seed, String(localized: "Bring this device into your Flagship account"))
         } catch {
-            phase = .failed("Couldn't install your recovered account key: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't install your recovered account key: \(UserErrorText.of(error))"))
             return
         }
 
@@ -250,10 +250,10 @@ public final class RealAccountLoginViewModel {
         //     out the grace window (.completed → countdown → completeTakeover).
         let recoveredIrkPubHex: String
         do {
-            let irk = try await Keystore.deriveIRK(reason: "Verify recovered account key")
+            let irk = try await Keystore.deriveIRK(reason: String(localized: "Verify recovered account key"))
             recoveredIrkPubHex = HexUtil.encode(irk.publicKey.rawRepresentation)
         } catch {
-            phase = .failed("Couldn't verify your recovered account key: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't verify your recovered account key: \(UserErrorText.of(error))"))
             return
         }
 
@@ -281,7 +281,7 @@ public final class RealAccountLoginViewModel {
                                     oldIrkPubHex: recoveryVM.registeredIrkPubHex ?? recoveredIrkPubHex)
             phase = .needsSecondFactor(error: nil)
         } catch {
-            phase = .failed("Couldn't restore access: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't restore access: \(UserErrorText.of(error))"))
         }
     }
 
@@ -299,7 +299,7 @@ public final class RealAccountLoginViewModel {
         guard let pending = pendingRotatedRePair else { return }
         let code = secondFactorInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty else {
-            phase = .needsSecondFactor(error: "Enter your recovery code or the 6-digit code from your authenticator app.")
+            phase = .needsSecondFactor(error: String(localized: "Enter your recovery code or the 6-digit code from your authenticator app."))
             return
         }
         phase = .working
@@ -315,9 +315,9 @@ public final class RealAccountLoginViewModel {
             pendingRotatedRePair = nil
             phase = .completed(username: pending.username, completesAt: resp.completesAt)
         } catch ScreensClientError.http(let status, _) where status == 401 {
-            phase = .needsSecondFactor(error: "That recovery code or authenticator code wasn't accepted. Check it and try again.")
+            phase = .needsSecondFactor(error: String(localized: "That recovery code or authenticator code wasn't accepted. Check it and try again."))
         } catch {
-            phase = .failed("Couldn't restore access: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't restore access: \(UserErrorText.of(error))"))
         }
     }
 
@@ -333,7 +333,7 @@ public final class RealAccountLoginViewModel {
         proof: RePairInitiateRequest.TotpProof? = nil,
         recoveryProofToken: String? = nil
     ) async throws -> RePairInitiateResponse {
-        let newKey = try await Keystore.deriveIRK(reason: "Authorize takeover")
+        let newKey = try await Keystore.deriveIRK(reason: String(localized: "Authorize takeover"))
         let newPubHex = HexUtil.encode(newKey.publicKey.rawRepresentation)
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
         let canonical = RePairInitiate.canonicalBytes(
@@ -374,7 +374,7 @@ public final class RealAccountLoginViewModel {
     /// recovery proof the gated fetch minted. Mirrors Android LoginViewModel.
     private func startMultiDeviceTakeover(ifMatch: String?) async {
         guard canStartMultiTakeover else {
-            phase = .failed("Enter your recovery passphrase and your recovery or authenticator code.")
+            phase = .failed(String(localized: "Enter your recovery passphrase and your recovery or authenticator code."))
             return
         }
 
@@ -387,16 +387,16 @@ public final class RealAccountLoginViewModel {
             if case .failed(let msg) = recoveryVM.phase {
                 phase = .failed(humanizedRecoveryMessage(msg))
             } else {
-                phase = .failed("Recovery was cancelled.")
+                phase = .failed(String(localized: "Recovery was cancelled."))
             }
             return
         }
 
         Keystore.setActiveProfile(username)
         do {
-            try await installUMK(seed, "Bring this device into your Flagship account")
+            try await installUMK(seed, String(localized: "Bring this device into your Flagship account"))
         } catch {
-            phase = .failed("Couldn't install your recovered account key: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't install your recovered account key: \(UserErrorText.of(error))"))
             return
         }
 
@@ -409,9 +409,9 @@ public final class RealAccountLoginViewModel {
             )
             phase = .completed(username: username, completesAt: resp.completesAt)
         } catch ScreensClientError.http(let status, _) where status == 401 {
-            phase = .failed("That recovery code or authenticator code wasn't accepted. Check it and try again.")
+            phase = .failed(String(localized: "That recovery code or authenticator code wasn't accepted. Check it and try again."))
         } catch {
-            phase = .failed("Couldn't restore access: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't restore access: \(UserErrorText.of(error))"))
         }
     }
 
@@ -429,7 +429,7 @@ public final class RealAccountLoginViewModel {
             // staged rotation version on a multi-device takeover, otherwise
             // this device's current IRK.
             let version = Keystore.pendingIrkRotationVersion() ?? Keystore.currentIrkVersion()
-            let key = try await Keystore.deriveIRK(reason: "Finish restoring access", version: version)
+            let key = try await Keystore.deriveIRK(reason: String(localized: "Finish restoring access"), version: version)
             let pubHex = HexUtil.encode(key.publicKey.rawRepresentation)
             let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
             let completeSig = try key.signature(
@@ -454,14 +454,14 @@ public final class RealAccountLoginViewModel {
         } catch ScreensClientError.http(let status, _) where status == 425 {
             phase = .completed(username: username, completesAt: completesAt)
         } catch ScreensClientError.http(let status, _) where status == 403 || status == 409 {
-            phase = .failed("This was cancelled from another device on your account. If it's still you, start again.")
+            phase = .failed(String(localized: "This was cancelled from another device on your account. If it's still you, start again."))
         } catch ScreensClientError.http(let status, _) where status == 410 {
             // #52 — the completion window (7d past the grace deadline)
             // elapsed; the cloud swept the stale row. Unlike 404 this
             // is NOT "already done" — the recovery must be restarted.
-            phase = .failed("This recovery expired before it was completed. Start again.")
+            phase = .failed(String(localized: "This recovery expired before it was completed. Start again."))
         } catch {
-            phase = .failed("Couldn't finalize the takeover: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't finalize the takeover: \(UserErrorText.of(error))"))
         }
     }
 
@@ -487,10 +487,10 @@ public final class RealAccountLoginViewModel {
         if let registered = registeredIrkPubHex, !registered.isEmpty {
             oldPubHex = registered
         } else {
-            let oldKey = try await Keystore.deriveIRK(reason: "Authorize takeover", version: oldVersion)
+            let oldKey = try await Keystore.deriveIRK(reason: String(localized: "Authorize takeover"), version: oldVersion)
             oldPubHex = HexUtil.encode(oldKey.publicKey.rawRepresentation)
         }
-        let newKey = try await Keystore.deriveIRK(reason: "Authorize takeover", version: newVersion)
+        let newKey = try await Keystore.deriveIRK(reason: String(localized: "Authorize takeover"), version: newVersion)
         let newPubHex = HexUtil.encode(newKey.publicKey.rawRepresentation)
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
         let canonical = RePairInitiate.canonicalBytes(
@@ -538,15 +538,15 @@ public final class RealAccountLoginViewModel {
         // User dismissed the system passkey sheet (ASAuthorizationError.canceled
         // is code 1001). Don't claim their passkey is missing — it isn't.
         if lower.contains("cancel") || lower.contains("1001") {
-            return "Passkey sign-in was cancelled. Tap Restore access to try again, or use Import backup file below."
+            return String(localized: "Passkey sign-in was cancelled. Tap Restore access to try again, or use Import backup file below.")
         }
         if lower.contains("not allowed") || lower.contains("no credentials")
             || lower.contains("nomatchingcredential") || lower.contains("interrupted")
             || lower.contains("no envelope") || lower.contains("404")
         {
-            return "We couldn't find your recovery passkey on this device. Make sure you're signed in to the same iCloud account with iCloud Keychain turned on. If you have your backup key file, use Import backup file below instead."
+            return String(localized: "We couldn't find your recovery passkey on this device. Make sure you're signed in to the same iCloud account with iCloud Keychain turned on. If you have your backup key file, use Import backup file below instead.")
         }
-        return "Recovery failed. \(HumanError.humanize(error))"
+        return String(localized: "Recovery failed. \(HumanError.humanize(error))")
     }
 
     /// String-form humanizer for the single-device path, where the failure
@@ -556,16 +556,16 @@ public final class RealAccountLoginViewModel {
     private func humanizedRecoveryMessage(_ raw: String) -> String {
         let lower = raw.lowercased()
         if lower.contains("cancel") || lower.contains("1001") {
-            return "Passkey sign-in was cancelled. Tap Restore access to try again, or use Import backup file below."
+            return String(localized: "Passkey sign-in was cancelled. Tap Restore access to try again, or use Import backup file below.")
         }
         if lower.contains("invalid fetch token") || lower.contains("wrong passphrase")
             || lower.contains("403") {
-            return "That passphrase didn't match. Check it and try again."
+            return String(localized: "That passphrase didn't match. Check it and try again.")
         }
         if lower.contains("not allowed") || lower.contains("no credentials")
             || lower.contains("nomatchingcredential") || lower.contains("interrupted")
             || lower.contains("no envelope") || lower.contains("404") {
-            return "We couldn't find your recovery passkey on this device. Make sure you're signed in to the same iCloud account with iCloud Keychain on, or use Import backup file below."
+            return String(localized: "We couldn't find your recovery passkey on this device. Make sure you're signed in to the same iCloud account with iCloud Keychain on, or use Import backup file below.")
         }
         return raw
     }
