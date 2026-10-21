@@ -1,0 +1,34 @@
+{
+  "ProvisionPhaseComplication": {
+    "en": "ProvisionPhaseComplication",
+    "ctx": "apps/mobile/ios/App/WatchWidgets/ProvisionPhaseComplication.swift:24"
+  },
+  "Flagship servers": {
+    "en": "Flagship servers",
+    "ctx": "apps/mobile/ios/App/WatchWidgets/ProvisionPhaseComplication.swift:31"
+  },
+  "Shows a server's install while one is under way, else how your servers are doing.": {
+    "en": "Shows a server's install while one is under way, else how your servers are doing.",
+    "ctx": "apps/mobile/ios/App/WatchWidgets/ProvisionPhaseComplication.swift:32"
+  },
+  "Flagship": {
+    "en": "Flagship",
+    "ctx": "apps/mobile/ios/App/WatchWidgets/ProvisionPhaseComplication.swift:125"
+  },
+  "Install failed": {
+    "en": "Install failed",
+    "ctx": "apps/mobile/ios/App/WatchWidgets/ProvisionPhaseComplication.swift:161"
+  },
+  "Server is live": {
+    "en": "Server is live",
+    "ctx": "apps/mobile/ios/App/WatchWidgets/ProvisionPhaseComplication.swift:162"
+  },
+  "No install in flight": {
+    "en": "No install in flight",
+    "ctx": "apps/mobile/ios/App/WatchWidgets/ProvisionPhaseComplication.swift:160"
+  },
+  "%lld servers": {
+    "en": "%lld servers",
+    "ctx": "apps/mobile/ios/App/WatchWidgets/ProvisionPhaseComplication.swift:171"
+  }
+}

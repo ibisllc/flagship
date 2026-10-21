@@ -173,7 +173,7 @@ public struct HomeTab: View {
                         // it. With none, nudge the user to add one. The
                         // full build flow lives on the Services tab.
                         if app.pods.isEmpty {
-                            toasts.warning("Please add your first server.")
+                            toasts.warning(String(localized: "Please add your first server."))
                         } else {
                             linker.pending = .startVibeCode
                         }
@@ -188,7 +188,7 @@ public struct HomeTab: View {
                         // account keys for a fresh read token: this is the
                         // user's own gesture, so the prompt belongs here.
                         if app.accountStatusPaused, !app.isDemoAccount {
-                            _ = try? await Keystore.currentUMK(reason: "Refresh your servers' status")
+                            _ = try? await Keystore.currentUMK(reason: String(localized: "Refresh your servers' status"))
                             await app.retryAccountRead?()
                         }
                         await reconcileServerTruth()
@@ -478,7 +478,7 @@ public struct HomeTab: View {
         case .saved, .local:
             break
         case .superseded:
-            toasts.warning("Another device changed the order. Showing the latest one.")
+            toasts.warning(String(localized: "Another device changed the order. Showing the latest one."))
             await reconcileServerTruth()
         case .failed(let reason):
             toasts.warning(reason)
@@ -489,7 +489,7 @@ public struct HomeTab: View {
     /// the account key with one prompt, which also keeps this device's key
     /// for later, then mint and load.
     private func showMyServers() async {
-        guard let context = try? await BiometricGate().evaluateReturningContext(reason: "Show your servers") else { return }
+        guard let context = try? await BiometricGate().evaluateReturningContext(reason: String(localized: "Show your servers")) else { return }
         Keystore.cacheSessionUMK(authenticatedBy: context)
         await app.retryAccountRead?()
         await reconcileServerTruth()
@@ -497,7 +497,7 @@ public struct HomeTab: View {
         await approvalWatcher?.pollOnce()
         await vm?.load()
         if app.accountStatusPaused {
-            toasts.warning("Couldn't load your servers. Pull down to try again.")
+            toasts.warning(String(localized: "Couldn't load your servers. Pull down to try again."))
         }
     }
 
@@ -810,7 +810,7 @@ func cancelPendingServer(
     switch await CancelPendingOrder.run(pod: pod, username: username, server: server) {
     case .cancelled(let releasedName):
         if releasedName {
-            toasts.success("Server \"\(pod.name)\" cancelled — the name is free again.")
+            toasts.success(String(localized: "Server \"\(pod.name)\" cancelled — the name is free again."))
         }
         app.removePod(pod.podId)
         PendingServerStore().remove(username: username, podId: pod.podId)
@@ -994,7 +994,7 @@ struct ServerDetailContainer: View {
                 ProgressView()
             }
         }
-        .navigationTitle(shownPod.map { $0.name.isEmpty ? DeleteServerViewModel.serverLabel(forFqdn: $0.fqdn) : $0.name } ?? "Server")
+        .navigationTitle(shownPod.map { $0.name.isEmpty ? DeleteServerViewModel.serverLabel(forFqdn: $0.fqdn) : $0.name } ?? String(localized: "Server"))
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: pod, initial: true) { _, p in if let p { lastPod = p } }
         // `.task` cancels the closure automatically on view removal —
@@ -1089,7 +1089,7 @@ struct ServerDetailContainer: View {
         // current unlocked session already holds the UMK. Background refreshes
         // with a cold session remain biometric-free.
         if allowAuthentication || Keystore.hasSessionKey(),
-           let umk = try? await Keystore.currentUMK(reason: "Verify your servers") {
+           let umk = try? await Keystore.currentUMK(reason: String(localized: "Verify your servers")) {
             let seed = umk.withUnsafeBytes { Data($0) }
             CertPinRegistry.shared.update(pods: directory.pods, umkSeed: seed)
         } else {
@@ -1137,7 +1137,7 @@ struct ServerDetailContainer: View {
                 await bindToBox()
                 await detailVm?.load()
             } catch {
-                toasts.error("The demo server is online, but this device couldn't create a paired session. Try again.")
+                toasts.error(String(localized: "The demo server is online, but this device couldn't create a paired session. Try again."))
             }
             return
         }
@@ -1213,7 +1213,7 @@ struct PairedSessionRow: View {
                         .foregroundColor(c.textMuted)
                 }
                 Spacer()
-                if session.current { FSPill("This device", kind: .online) }
+                if session.current { FSPill(String(localized: "This device"), kind: .online) }
             }
         }
     }

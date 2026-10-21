@@ -41,12 +41,12 @@ public struct BuilderPairScreen: View {
                 case .scan:       scanPage(c: c)
                 case .enterCode:  enterCodePage(c: c)
                 case .connecting:
-                    header("Connecting", "Opening the secure channel to the builder…", c: c)
+                    header(String(localized: "Connecting"), String(localized: "Opening the secure channel to the builder…"), c: c)
                     spinner(c: c)
                 case .matching(let code, let gate):
                     matchPage(code: code, gateOpen: gate, c: c)
                 case .delivering:
-                    header("Sending", "Minting your recipe and sending it to the builder…", c: c)
+                    header(String(localized: "Sending"), String(localized: "Minting your recipe and sending it to the builder…"), c: c)
                     spinner(c: c)
                 case .delivered(let domain):
                     deliveredPage(domain: domain, c: c)
@@ -84,7 +84,7 @@ public struct BuilderPairScreen: View {
 
     private func scanPage(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            header("Pair with the builder", "On your computer, open the Flagship Studio — it shows a QR code and a short code. Point your camera at it.", c: c)
+            header(String(localized: "Pair with the builder"), String(localized: "On your computer, open the Flagship Studio — it shows a QR code and a short code. Point your camera at it."), c: c)
 
             FSCard(padding: 0) {
                 QRScannerView(
@@ -106,13 +106,13 @@ public struct BuilderPairScreen: View {
 
     private func enterCodePage(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            header("Enter the builder code", "Type the short code shown under the QR on your computer (like ABCD-EFGH).", c: c)
+            header(String(localized: "Enter the builder code"), String(localized: "Type the short code shown under the QR on your computer (like ABCD-EFGH)."), c: c)
             FSCard {
-                FSField(value: $vm.typedCode, label: "Builder code", placeholder: "ABCD-EFGH")
+                FSField(value: $vm.typedCode, label: String(localized: "Builder code"), placeholder: String(localized: "ABCD-EFGH"))
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
             }
-            FSPrimaryButton("Connect", enabled: vm.canSubmitCode, block: true, large: true) {
+            FSPrimaryButton(String(localized: "Connect"), enabled: vm.canSubmitCode, block: true, large: true) {
                 Task { await vm.submitCode() }
             }
             Button("Scan the QR instead") { vm.switchToScan() }
@@ -139,7 +139,7 @@ public struct BuilderPairScreen: View {
 
     private func matchPage(code: String, gateOpen: Bool, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            header("Confirm the security code", "Check that this matches the code on your computer. Only confirm if they're the same.", c: c)
+            header(String(localized: "Confirm the security code"), String(localized: "Check that this matches the code on your computer. Only confirm if they're the same."), c: c)
             FSCard {
                 VStack(spacing: FS.space.s3) {
                     Text(BuilderPairing_format(code))
@@ -149,10 +149,10 @@ public struct BuilderPairScreen: View {
                 }
                 .padding(.vertical, FS.space.s4)
             }
-            FSPrimaryButton("They match — pair & send", enabled: gateOpen, block: true, large: true) {
+            FSPrimaryButton(String(localized: "They match — pair & send"), enabled: gateOpen, block: true, large: true) {
                 Task { await vm.confirmAndDeliver() }
             }
-            FSGhostButton("Cancel", block: true) {
+            FSGhostButton(String(localized: "Cancel"), block: true) {
                 Task { await vm.cancel(); onCancel() }
             }
         }
@@ -162,13 +162,13 @@ public struct BuilderPairScreen: View {
 
     private func deliveredPage(domain: String, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            header("Sent — you can close this screen", "Your computer's builder has the recipe. Pick the USB drive and any Advanced options on the computer; nothing more is needed from your phone.", c: c)
+            header(String(localized: "Sent — you can close this screen"), String(localized: "Your computer's builder has the recipe. Pick the USB drive and any Advanced options on the computer; nothing more is needed from your phone."), c: c)
             FSCard {
                 Label(domain, systemImage: "checkmark.seal.fill")
                     .font(FS.font.h4())
                     .foregroundColor(c.success)
             }
-            FSPrimaryButton("Done", block: true, large: true) {
+            FSPrimaryButton(String(localized: "Done"), block: true, large: true) {
                 onClose()
             }
         }
@@ -176,9 +176,9 @@ public struct BuilderPairScreen: View {
 
     private func failurePage(_ msg: String, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            header("Pairing failed", msg, c: c)
-            FSPrimaryButton("Try again", block: true, large: true) { vm.switchToScan() }
-            FSGhostButton("Cancel", block: true) { Task { await vm.cancel(); onCancel() } }
+            header(String(localized: "Pairing failed"), msg, c: c)
+            FSPrimaryButton(String(localized: "Try again"), block: true, large: true) { vm.switchToScan() }
+            FSGhostButton(String(localized: "Cancel"), block: true) { Task { await vm.cancel(); onCancel() } }
         }
     }
 

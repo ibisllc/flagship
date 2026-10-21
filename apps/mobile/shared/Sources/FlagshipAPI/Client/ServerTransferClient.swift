@@ -231,7 +231,7 @@ public final class LiveServerTransferClient: ServerTransferClient, @unchecked Se
     private func urlFor(_ serverDomain: String, _ suffix: String) throws -> URL {
         let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
         guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/\(suffix)") else {
-            throw ScreensClientError.http(status: 0, message: "bad transfer URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad transfer URL"))
         }
         return url
     }
@@ -250,7 +250,7 @@ public final class LiveServerTransferClient: ServerTransferClient, @unchecked Se
 
     private func postReturning<Resp: Decodable>(_ serverDomain: String, _ suffix: String, body: Data) async throws -> Resp {
         let (data, status) = try await rawPost(serverDomain, suffix, body: body)
-        if status == 404 { throw ScreensClientError.http(status: 404, message: "not found") }
+        if status == 404 { throw ScreensClientError.http(status: 404, message: String(localized: "not found")) }
         return try JSONDecoder().decode(Resp.self, from: data)
     }
 

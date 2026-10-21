@@ -178,7 +178,7 @@ public struct RealAccountLoginScreen: View {
             }
 
             FSPrimaryButton(
-                "Restore access",
+                String(localized: "Restore access"),
                 enabled: vm.passphraseInput.count >= 8,
                 block: true,
                 large: true
@@ -189,7 +189,7 @@ public struct RealAccountLoginScreen: View {
 
             importBackupOption(c: c)
 
-            FSGhostButton("Back", block: true, action: onBack)
+            FSGhostButton(String(localized: "Back"), block: true, action: onBack)
         }
     }
 
@@ -210,9 +210,9 @@ public struct RealAccountLoginScreen: View {
 
         FSField(
             value: $vm.secondFactorInput,
-            label: "Recovery code or authenticator code",
-            placeholder: "123456 or ABCD-EFGH-IJ",
-            helper: "6-digit code from your authenticator app, or one of your recovery codes.",
+            label: String(localized: "Recovery code or authenticator code"),
+            placeholder: String(localized: "123456 or ABCD-EFGH-IJ"),
+            helper: String(localized: "6-digit code from your authenticator app, or one of your recovery codes."),
             keyboard: .asciiCapable
         )
         .accessibilityIdentifier("login-second-factor")
@@ -225,7 +225,7 @@ public struct RealAccountLoginScreen: View {
         }
 
         FSPrimaryButton(
-            "Continue",
+            String(localized: "Continue"),
             enabled: !vm.secondFactorInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             block: true,
             large: true
@@ -234,7 +234,7 @@ public struct RealAccountLoginScreen: View {
         }
         .accessibilityIdentifier("login-second-factor-continue")
 
-        FSGhostButton("Back", block: true, action: onBack)
+        FSGhostButton(String(localized: "Back"), block: true, action: onBack)
     }
 
     // MARK: - No-recovery STATE (never a 404)
@@ -249,12 +249,12 @@ public struct RealAccountLoginScreen: View {
                     .foregroundColor(c.textMuted)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(multi
-                         ? "Use another device, or one of your recovery codes."
+                         ? String(localized: "Use another device, or one of your recovery codes.")
                          : "No cloud backup on this account. Use a device that still has access.")
                         .font(FS.font.bodySm())
                         .foregroundColor(c.text)
                     Text(multi
-                         ? "This account is multi-device. Sign in on a device that's already paired, or recover with a recovery code from a device that has one."
+                         ? String(localized: "This account is multi-device. Sign in on a device that's already paired, or recover with a recovery code from a device that has one.")
                          : "Cloud backup is opt-in and this account never enabled it. There's no cloud recovery path — sign in on a device that's still in the account.")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
@@ -263,7 +263,7 @@ public struct RealAccountLoginScreen: View {
         }
         .accessibilityIdentifier("login-no-recovery")
         importBackupOption(c: c)
-        FSGhostButton("Back", block: true, action: onBack)
+        FSGhostButton(String(localized: "Back"), block: true, action: onBack)
     }
 
     // MARK: - Takeover (single 3-day / multi 24h)
@@ -282,7 +282,7 @@ public struct RealAccountLoginScreen: View {
             Text("Welcome back")
                 .font(FS.font.h2()).foregroundColor(c.text)
             Text(multi
-                 ? "Enter your recovery passphrase, verify your passkey, and add your recovery code to restore access on this device. For your security it becomes active after a 24-hour hold, and your other devices are notified."
+                 ? String(localized: "Enter your recovery passphrase, verify your passkey, and add your recovery code to restore access on this device. For your security it becomes active after a 24-hour hold, and your other devices are notified.")
                  : "Sign in with your recovery passkey to restore access on this device. For your security, access becomes active after a 3-day hold, and any other signed-in device is notified.")
                 .font(FS.font.body())
                 .foregroundColor(c.textMuted)
@@ -298,9 +298,9 @@ public struct RealAccountLoginScreen: View {
                     .accessibilityIdentifier("login-takeover-passphrase")
                 FSField(
                     value: $vm.secondFactorInput,
-                    label: "Recovery code or authenticator code",
-                    placeholder: "123456 or ABCD-EFGH-IJ",
-                    helper: "6-digit code from your authenticator app, or one of your recovery codes.",
+                    label: String(localized: "Recovery code or authenticator code"),
+                    placeholder: String(localized: "123456 or ABCD-EFGH-IJ"),
+                    helper: String(localized: "6-digit code from your authenticator app, or one of your recovery codes."),
                     keyboard: .asciiCapable
                 )
                 .accessibilityIdentifier("login-second-factor")
@@ -314,7 +314,7 @@ public struct RealAccountLoginScreen: View {
             }
 
             FSPrimaryButton(
-                multi ? "Restore access (24-hour hold)" : "Restore access (3-day hold)",
+                multi ? String(localized: "Restore access (24-hour hold)") : String(localized: "Restore access (3-day hold)"),
                 enabled: multi ? vm.canStartMultiTakeover : true,
                 block: true,
                 large: true
@@ -325,7 +325,7 @@ public struct RealAccountLoginScreen: View {
 
             importBackupOption(c: c)
 
-            FSGhostButton("Back", block: true, action: onBack)
+            FSGhostButton(String(localized: "Back"), block: true, action: onBack)
         }
     }
 
@@ -338,7 +338,7 @@ public struct RealAccountLoginScreen: View {
                     Text(multi ? "24-hour security hold" : "3-day security hold")
                         .font(FS.font.bodySm()).foregroundColor(c.text)
                     Text(multi
-                         ? "Because your account has more than one device, restoring access here needs your recovery code as well as your passkey. After a 24-hour hold this device becomes the primary one; your other devices are notified in the meantime."
+                         ? String(localized: "Because your account has more than one device, restoring access here needs your recovery code as well as your passkey. After a 24-hour hold this device becomes the primary one; your other devices are notified in the meantime.")
                          : "This hold is the safety delay for a single-device account: after 3 days, this device has full access. If another device is signed in, it's alerted throughout.")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
@@ -363,19 +363,19 @@ public struct RealAccountLoginScreen: View {
                         Image(systemName: "clock.badge.exclamationmark")
                             .foregroundColor(c.accent)
                         Text(elapsed
-                             ? "The security hold is complete — you can finish restoring access now."
+                             ? String(localized: "The security hold is complete — you can finish restoring access now.")
                              : "Access becomes active in \(Self.formatRemaining(remaining)). Any other device on your account has been notified.")
                             .font(FS.font.bodySm()).foregroundColor(c.text)
                     }
                 }
-                FSPrimaryButton("Finish restoring access", enabled: elapsed, block: true, large: true) {
+                FSPrimaryButton(String(localized: "Finish restoring access"), enabled: elapsed, block: true, large: true) {
                     Task { await vm.completeTakeover() }
                 }
                 .accessibilityIdentifier("login-take-over-now")
             }
         }
         .accessibilityIdentifier("login-grace-countdown")
-        FSGhostButton("Back", block: true, action: onBack)
+        FSGhostButton(String(localized: "Back"), block: true, action: onBack)
     }
 
     /// `Nd Nh` / `Nh Nm` / `Nm Ns` / `Ns` — coarse, stable countdown copy.

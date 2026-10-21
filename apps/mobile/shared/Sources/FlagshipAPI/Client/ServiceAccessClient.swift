@@ -236,7 +236,7 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
             throw error
         }
         guard let http = resp as? HTTPURLResponse else {
-            throw ScreensClientError.http(status: 0, message: "no response")
+            throw ScreensClientError.http(status: 0, message: String(localized: "no response"))
         }
         return (data, http.statusCode)
     }
@@ -253,7 +253,7 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
     public func getAccessState(serverDomain: String, serviceRef: String) async throws -> ServiceAccessState {
         let enc = serviceRef.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serviceRef
         guard let url = URL(string: Self.boxBase(serverDomain) + "/api/service-access/" + enc) else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
         let (data, status) = try await send(URLRequest(url: url), on: boxSession)
         let body = try ok(data, status)
@@ -265,7 +265,7 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
 
     public func setAccessMode(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> String {
         guard let url = URL(string: Self.boxBase(serverDomain) + "/api/service-access") else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -279,7 +279,7 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
 
     public func removeServiceAllow(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> RemoveAllowResult {
         guard let url = URL(string: Self.boxBase(serverDomain) + "/api/service-access/allow-remove") else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -296,7 +296,7 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
 
     public func withdrawInvite(serverDomain: String, revoke: [String: Any], signatureHex: String) async throws -> Int {
         guard let url = URL(string: Self.boxBase(serverDomain) + "/api/service-access/invite-withdraw") else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -310,7 +310,7 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
 
     public func redeemInvite(serverDomain: String, secretHex: String, visitorAidHex: String, aidSigHex: String, redeemedAt: Int64) async throws -> RedeemResult {
         guard let url = URL(string: Self.boxBase(serverDomain) + "/api/service-invites/redeem") else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -340,7 +340,7 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
 
     public func acceptInvite(serverDomain: String, accept: [String: Any], acceptSigHex: String) async throws -> AcceptResult {
         guard let url = URL(string: Self.boxBase(serverDomain) + "/api/service-access/accept") else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -364,7 +364,7 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
 
     public func authorizeKnock(serverDomain: String, authorization: [String: Any], signatureHex: String) async throws -> AuthorizeKnockResult {
         guard let url = URL(string: Self.boxBase(serverDomain) + "/api/service-access/knock/authorize") else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -388,7 +388,7 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
 
     public func sessionStatus(serverDomain: String, secretId: String) async throws -> SecuredSessionStatus {
         guard let url = URL(string: Self.boxBase(serverDomain) + "/api/service-access/session/status") else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -403,7 +403,7 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
 
     public func closeSession(serverDomain: String, secretId: String) async throws {
         guard let url = URL(string: Self.boxBase(serverDomain) + "/api/service-access/session/close") else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -426,7 +426,7 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
 
     public func createInvite(controlBase: URL, username: String, request: [String: Any], signatureHex: String) async throws {
         guard let url = Self.comUrl(controlBase, username, "") else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -445,7 +445,7 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
         }
         qp.append("sig=\(signatureHex.lowercased())")
         guard let url = Self.comUrl(controlBase, username, "", query: qp.joined(separator: "&")) else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
         var req = URLRequest(url: url)
         req.cachePolicy = .reloadIgnoringLocalCacheData
@@ -481,7 +481,7 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
 
     public func revokeInvite(controlBase: URL, username: String, inviteId: String, request: [String: Any], signatureHex: String) async throws {
         guard let url = Self.comUrl(controlBase, username, "/revoke") else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -547,15 +547,15 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
         let who = visitorLabels[hex.lowercased()] ?? "an unknown key"
         if let verify = verifyVisitorSignature, !verify(kind, fields, signatureHex) {
             GymProbe.note("refused \(kind) on \(server): bad signature by \(who)")
-            throw ScreensClientError.http(status: 403, message: #"{"error":"invalid signature"}"#)
+            throw ScreensClientError.http(status: 403, message: String(localized: #"{"error":"invalid signature"}"#))
         }
-        GymProbe.note("\(kind) on \(server) by \(who)")
+        GymProbe.note(String(localized: "\(kind) on \(server) by \(who)"))
     }
     public var acceptResult = AcceptResult(bound: true, serviceRef: "alice--notes", boundAidHex: "00")
     public var authorizeKnockResult = AuthorizeKnockResult(
         secretId: String(repeating: "ab", count: 32),
         serviceRef: "alice--notes",
-        browserAgent: "Mozilla/5.0 (Macintosh)",
+        browserAgent: String(localized: "Mozilla/5.0 (Macintosh)"),
         startedAt: 1_700_000_000_000,
         expiresAt: 1_700_000_000_000 + 12 * 60 * 60_000
     )

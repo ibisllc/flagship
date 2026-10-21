@@ -238,7 +238,7 @@ private struct AddEnvVarSheet: View {
                         ErrorCard(message: msg)
                     }
                     FSPrimaryButton(
-                        submitting ? "Sending…" : "Save",
+                        submitting ? String(localized: "Sending…") : String(localized: "Save"),
                         enabled: !submitting && !name.isEmpty && !value.isEmpty,
                         block: true
                     ) {

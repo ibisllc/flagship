@@ -38,7 +38,7 @@ public enum ServerLabel {
             return .invalid("lowercase letters, digits, and hyphens (not at the start or end)")
         }
         if reserved.contains(norm) {
-            return .invalid("\"\(norm)\" is reserved — pick another")
+            return .invalid(String(localized: "\"\(norm)\" is reserved — pick another"))
         }
         return .ok(norm)
     }

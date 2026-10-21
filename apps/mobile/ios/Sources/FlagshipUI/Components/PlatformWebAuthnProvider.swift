@@ -69,11 +69,11 @@ public final class PlatformWebAuthnProvider: NSObject, WebAuthnProvider {
         public var errorDescription: String? {
             switch self {
             case .prfUnsupported:
-                return "This authenticator did not return a PRF (hmac-secret) output."
+                return String(localized: "This authenticator did not return a PRF (hmac-secret) output.")
             case .unexpectedCredential:
-                return "Unexpected credential type returned by AuthenticationServices."
+                return String(localized: "Unexpected credential type returned by AuthenticationServices.")
             case .invalidCredentialId:
-                return "Credential identifier is not valid hex."
+                return String(localized: "Credential identifier is not valid hex.")
             }
         }
     }

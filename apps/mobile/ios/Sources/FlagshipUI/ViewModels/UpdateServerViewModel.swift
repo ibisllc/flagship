@@ -100,10 +100,10 @@ public final class UpdateServerViewModel {
         let t = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if t.isEmpty { return nil }
         if !ServerUpdateFlow.isValidCommit(t) {
-            return "Enter the full 40-character commit hash of the blessed release."
+            return String(localized: "Enter the full 40-character commit hash of the blessed release.")
         }
         if t == currentCommit {
-            return "The server is already running this release."
+            return String(localized: "The server is already running this release.")
         }
         return nil
     }
@@ -120,16 +120,16 @@ public final class UpdateServerViewModel {
     @discardableResult
     public func update(targetCommit raw: String, targetTag: String? = nil) async -> Bool {
         guard let from = currentCommit, ServerUpdateFlow.isValidCommit(from) else {
-            phase = .failed("This server hasn't reported its current version yet.")
+            phase = .failed(String(localized: "This server hasn't reported its current version yet."))
             return false
         }
         let target = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard ServerUpdateFlow.isValidCommit(target) else {
-            phase = .failed("Enter the full 40-character commit hash of the blessed release.")
+            phase = .failed(String(localized: "Enter the full 40-character commit hash of the blessed release."))
             return false
         }
         guard target != from else {
-            phase = .failed("The server is already running this release.")
+            phase = .failed(String(localized: "The server is already running this release."))
             return false
         }
 
@@ -137,7 +137,7 @@ public final class UpdateServerViewModel {
         let body: UpdateDepositBody
         let issuedAt = now()
         do {
-            let reason = "Update \(serverFqdn)"
+            let reason = String(localized: "Update \(serverFqdn)")
             let irk = try await signer(reason)
             let orderKey = try await adminRootKey(reason)
             body = try ServerUpdateFlow.buildDeposit(
@@ -150,7 +150,7 @@ public final class UpdateServerViewModel {
                 issuedAt: issuedAt
             )
         } catch {
-            phase = .failed("Couldn't sign the update order: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't sign the update order: \(UserErrorText.of(error))"))
             return false
         }
 
@@ -158,10 +158,10 @@ public final class UpdateServerViewModel {
         do {
             try await mailbox.depositUpdate(serverDomain: serverFqdn, body: body)
         } catch let e as ScreensClientError {
-            phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
+            phase = .failed(e.errorDescription ?? String(localized: "That didn't work. Try again in a moment."))
             return false
         } catch {
-            phase = .failed("Couldn't reach the server directory. Check your connection and try again.")
+            phase = .failed(String(localized: "Couldn't reach the server directory. Check your connection and try again."))
             return false
         }
         pendingStore.save(

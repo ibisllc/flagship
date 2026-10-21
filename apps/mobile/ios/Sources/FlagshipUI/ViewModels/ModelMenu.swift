@@ -29,7 +29,7 @@ public enum ModelMenuText {
     /// An effort level in the provider's words, capitalised ("xhigh" → "Extra high").
     public static func effort(_ e: String) -> String {
         switch e.lowercased() {
-        case "xhigh": return "Extra high"
+        case "xhigh": return String(localized: "Extra high")
         default: return e.prefix(1).uppercased() + e.dropFirst().lowercased()
         }
     }
@@ -41,12 +41,12 @@ public enum ModelMenuText {
         return "used \(n) credit\(n == "1" ? "" : "s")"
     }
 
-    public static let flagshipInference = "Flagship Inference"
-    public static let contextNotice = "Older messages will be summarised to fit this model."
+    public static let flagshipInference = String(localized: "Flagship Inference")
+    public static let contextNotice = String(localized: "Older messages will be summarised to fit this model.")
     public static let capabilitiesUnknown = "capabilities unknown"
-    public static let keyRefused = "The key was refused"
-    public static let boxPicks = "Your server picks the model."
-    public static let summarised = "Earlier conversation summarised"
+    public static let keyRefused = String(localized: "The key was refused")
+    public static let boxPicks = String(localized: "Your server picks the model.")
+    public static let summarised = String(localized: "Earlier conversation summarised")
 }
 
 /// What the owner picked: the wire `model` and `effort`.
@@ -246,13 +246,13 @@ public final class ModelMenuModel {
     public var shortName: String {
         switch source {
         case .idle, .loading:
-            return "Model"
+            return String(localized: "Model")
         case .flagship:
             return catalogModel.map(ModelMenuText.short) ?? ModelMenuText.flagshipInference
         case .own:
             if let o = ownOption { return o.label }
             let typed = customModel.trimmingCharacters(in: .whitespaces)
-            return typed.isEmpty ? (selectedId ?? "Model") : typed
+            return typed.isEmpty ? (selectedId ?? String(localized: "Model")) : typed
         }
     }
 
@@ -376,17 +376,17 @@ public enum VisionDecision: Equatable, Sendable {
         if m.seesImages { return .send }
         if let altId = m.visionAlternative, let alt = catalog.models.first(where: { $0.id == altId }) {
             return .offerSwitch(to: alt.id,
-                                message: "I'll have to switch to \(alt.model) (\(ModelMenuText.multiplier(alt.multiplier))) for this.")
+                                message: String(localized: "I'll have to switch to \(alt.model) (\(ModelMenuText.multiplier(alt.multiplier))) for this."))
         }
-        return .cannot(message: "\(m.model) can't see images. Remove them or pick another model.")
+        return .cannot(message: String(localized: "\(m.model) can't see images. Remove them or pick another model."))
     }
 
     public static func own(option o: ModelOption, options: [ModelOption]) -> VisionDecision {
         guard o.vision == false else { return .send }
         if let altId = o.visionAlternative, let alt = options.first(where: { $0.id == altId }) {
-            return .offerSwitch(to: alt.id, message: "I'll have to switch to \(alt.label) for this.")
+            return .offerSwitch(to: alt.id, message: String(localized: "I'll have to switch to \(alt.label) for this."))
         }
-        return .cannot(message: "\(o.label) can't see images. Remove them or pick another model.")
+        return .cannot(message: String(localized: "\(o.label) can't see images. Remove them or pick another model."))
     }
 
     public var message: String? {

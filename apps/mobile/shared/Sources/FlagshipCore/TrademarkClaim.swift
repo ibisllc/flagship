@@ -13,7 +13,7 @@ public enum TrademarkClaim {
 
     /// Subject line for a trademark claim on `username`.
     public static func subject(username: String) -> String {
-        "Trademark claim for the name \"\(username)\""
+        String(localized: "Trademark claim for the name \"\(username)\"")
     }
 
     /// Plain-text body template. Leaves bracketed placeholders for the
@@ -22,18 +22,18 @@ public enum TrademarkClaim {
         [
             "Hello,",
             "",
-            "I'm requesting the Flagship account name \"\(username)\" on the basis",
+            String(localized: "I'm requesting the Flagship account name \"\(username)\" on the basis"),
             "that I hold a registered trademark covering it.",
             "",
-            "Trademark holder / company: [your name or company]",
-            "Trademark registration number: [registration number]",
-            "Jurisdiction / registry: [e.g. USPTO, EUIPO]",
-            "Goods/services class(es): [class numbers]",
-            "Link or attachment to the registration: [URL or note that it's attached]",
+            String(localized: "Trademark holder / company: [your name or company]"),
+            String(localized: "Trademark registration number: [registration number]"),
+            String(localized: "Jurisdiction / registry: [e.g. USPTO, EUIPO]"),
+            String(localized: "Goods/services class(es): [class numbers]"),
+            String(localized: "Link or attachment to the registration: [URL or note that it's attached]"),
             "",
-            "Requested name: \(username)",
+            String(localized: "Requested name: \(username)"),
             "",
-            "Thank you.",
+            String(localized: "Thank you."),
         ].joined(separator: "\n")
     }
 

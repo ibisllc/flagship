@@ -13,11 +13,11 @@ public enum ConnectInput: Equatable, Sendable {
     /// A link, but not a pairing link (or one missing its session).
     case badLink
 
-    public static let routedToJoin = "That's a pairing link, so we're joining with it."
-    public static let notACode = "That isn't a pairing code. Paste the whole link from the other device, or scan its code."
-    public static let nameInCode = "That looks like an account name. Type it under Sign in with your account name."
-    public static let badLinkMessage = "That link isn't a pairing link. Ask the other device to show a new code."
-    public static let emptyCode = "Paste the pairing link, or scan the code."
+    public static let routedToJoin = String(localized: "That's a pairing link, so we're joining with it.")
+    public static let notACode = String(localized: "That isn't a pairing code. Paste the whole link from the other device, or scan its code.")
+    public static let nameInCode = String(localized: "That looks like an account name. Type it under Sign in with your account name.")
+    public static let badLinkMessage = String(localized: "That link isn't a pairing link. Ask the other device to show a new code.")
+    public static let emptyCode = String(localized: "Paste the pairing link, or scan the code.")
 
     public static func classify(_ text: String) -> ConnectInput {
         let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -134,7 +134,7 @@ struct CoInviteSection: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            FSSectionLabel("Invite people")
+            FSSectionLabel(String(localized: "Invite people"))
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     FSSecondaryButton(ShareCoInviteCopy.open, block: true) {
@@ -186,7 +186,7 @@ struct CoInviteSection: View {
             }
             if let kind = controller.adding { form(kind, c: c) }
             if let link = controller.lastLink {
-                InviteShareCard(title: "Invite link", subtitle: ShareCoInviteCopy.linkLine, link: link, idPrefix: "co-invite-share")
+                InviteShareCard(title: String(localized: "Invite link"), subtitle: ShareCoInviteCopy.linkLine, link: link, idPrefix: "co-invite-share")
             }
         } else {
             Text(state.whyText).font(FS.font.bodySm()).foregroundColor(c.textMuted)
@@ -238,7 +238,7 @@ struct CoInviteSection: View {
                     .accessibilityIdentifier("co-invite-days")
             }
             Text(ShareCoInviteCopy.rankLine).font(FS.font.caption()).foregroundColor(c.textMuted)
-            FSPrimaryButton(controller.busy ? "Creating…" : ShareCoInviteCopy.create, enabled: !controller.busy, block: true) {
+            FSPrimaryButton(controller.busy ? String(localized: "Creating…") : ShareCoInviteCopy.create, enabled: !controller.busy, block: true) {
                 Task {
                     if await controller.create(name: name, maxUses: maxUses, days: days) {
                         name = ""

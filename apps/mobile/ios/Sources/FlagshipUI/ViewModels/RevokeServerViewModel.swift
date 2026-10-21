@@ -64,15 +64,15 @@ public final class RevokeServerViewModel {
 
     public func run(reason: Reason) async {
         guard let user = username(), !user.isEmpty else {
-            phase = .failed("No active account on this device.")
+            phase = .failed(String(localized: "No active account on this device."))
             return
         }
         phase = .signing
         let irk: Curve25519.Signing.PrivateKey
         do {
-            irk = try await signer("Revoke server \(serverDomain)")
+            irk = try await signer(String(localized: "Revoke server \(serverDomain)"))
         } catch {
-            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't access your account key: \(UserErrorText.of(error))"))
             return
         }
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
@@ -86,7 +86,7 @@ public final class RevokeServerViewModel {
         do {
             signature = try irk.signature(for: canonical)
         } catch {
-            phase = .failed("Couldn't sign: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't sign: \(UserErrorText.of(error))"))
             return
         }
 
@@ -104,18 +104,18 @@ public final class RevokeServerViewModel {
                 )
             )
         } catch ScreensClientError.http(let status, _) where status == 403 {
-            phase = .failed("The server rejected the request. Sign in again and retry.")
+            phase = .failed(String(localized: "The server rejected the request. Sign in again and retry."))
             return
         } catch ScreensClientError.http(let status, _) where status == 404 {
-            phase = .failed("That server is already gone — nothing to revoke.")
+            phase = .failed(String(localized: "That server is already gone — nothing to revoke."))
             return
         } catch let error as ScreensClientError {
             // UX-B — plain language, no raw status code or server message;
             // UX-A — a cert-pin mismatch reads as "someone may be intercepting".
-            phase = .failed(error.errorDescription ?? "That didn't work. Try again in a moment.")
+            phase = .failed(error.errorDescription ?? String(localized: "That didn't work. Try again in a moment."))
             return
         } catch {
-            phase = .failed("Couldn't reach the server. Check your connection and try again.")
+            phase = .failed(String(localized: "Couldn't reach the server. Check your connection and try again."))
             return
         }
         phase = .completed

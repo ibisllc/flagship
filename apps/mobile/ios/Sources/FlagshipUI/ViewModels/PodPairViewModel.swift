@@ -84,9 +84,9 @@ public final class PodPairViewModel {
         phase = .signing
         let key: Curve25519.Signing.PrivateKey
         do {
-            key = try await signer("Pair this device with \(serverDomain)")
+            key = try await signer(String(localized: "Pair this device with \(serverDomain)"))
         } catch {
-            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't access your account key: \(UserErrorText.of(error))"))
             return
         }
 
@@ -100,7 +100,7 @@ public final class PodPairViewModel {
         do {
             signature = try order.sign(with: key)
         } catch {
-            phase = .failed("Couldn't sign: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't sign: \(UserErrorText.of(error))"))
             return
         }
 
@@ -113,10 +113,10 @@ public final class PodPairViewModel {
                 signatureHex: env["signature"] as! String
             )
         } catch let e as ScreensClientError {
-            phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
+            phase = .failed(e.errorDescription ?? String(localized: "That didn't work. Try again in a moment."))
             return
         } catch {
-            phase = .failed("Couldn't reach the server. Check your connection and try again.")
+            phase = .failed(String(localized: "Couldn't reach the server. Check your connection and try again."))
             return
         }
 

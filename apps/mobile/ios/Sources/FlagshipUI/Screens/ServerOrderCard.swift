@@ -27,7 +27,7 @@ struct ServerOrderCard: View {
         let c = FSColors.scheme(scheme)
         if ranked.count > 1, let pod, let position = ranked.firstIndex(where: { $0.podId == pod.podId }) {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                FSSectionLabel("Server order")
+                FSSectionLabel(String(localized: "Server order"))
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s2) {
                         if app.leaderPodId == pod.podId && pod.status == .online {
@@ -48,7 +48,7 @@ struct ServerOrderCard: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         if position > 0 && AdminOrderGate.allows(app) {
-                            FSPrimaryButton(working ? "Saving…" : "Make leader", enabled: !working, block: true) {
+                            FSPrimaryButton(working ? String(localized: "Saving…") : String(localized: "Make leader"), enabled: !working, block: true) {
                                 Task { await makeLeader(pod) }
                             }
                             .accessibilityIdentifier("sd-make-leader")
@@ -63,10 +63,10 @@ struct ServerOrderCard: View {
     /// takes over from.
     static func successionLine(above: [String]) -> String {
         switch above.count {
-        case 0: return "First in line to lead"
-        case 1: return "Takes over while \(above[0]) is down"
+        case 0: return String(localized: "First in line to lead")
+        case 1: return String(localized: "Takes over while \(above[0]) is down")
         default:
-            return "Takes over while \(above.dropLast().joined(separator: ", ")) and \(above.last!) are down"
+            return String(localized: "Takes over while \(above.dropLast().joined(separator: ", ")) and \(above.last!) are down")
         }
     }
 
@@ -76,9 +76,9 @@ struct ServerOrderCard: View {
         defer { working = false }
         switch await ServerOrderSaver(app: app, mailbox: mailbox, clients: podClients).makeLeader(podId: pod.podId) {
         case .saved, .local:
-            toasts.success("\(pod.name) is now first in your order.")
+            toasts.success(String(localized: "\(pod.name) is now first in your order."))
         case .superseded:
-            toasts.warning("Another device changed the order. Pull down on Home to see it.")
+            toasts.warning(String(localized: "Another device changed the order. Pull down on Home to see it."))
         case .failed(let reason):
             toasts.warning(reason)
         }

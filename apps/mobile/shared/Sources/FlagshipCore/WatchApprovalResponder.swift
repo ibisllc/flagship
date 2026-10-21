@@ -29,15 +29,15 @@ extension SecretRequestCoordinator: WatchApprovalSource {}
 /// the watch is waiting.
 @MainActor
 public struct WatchApprovalResponder {
-    public static let notEnrolled = "Turn on Quick approve from Apple Watch in Flagship on your iPhone first."
+    public static let notEnrolled = String(localized: "Turn on Quick approve from Apple Watch in Flagship on your iPhone first.")
     /// The app is in front on the iPhone but hasn't used Face ID this session.
-    public static let unlockOnce = "Unlock Flagship on your iPhone once, then approve again."
+    public static let unlockOnce = String(localized: "Unlock Flagship on your iPhone once, then approve again.")
     /// The app is closed or in the background.
-    public static let openAndUnlock = "Open Flagship on your iPhone and unlock it once, then approve again."
-    public static let signedOut = "Sign in to Flagship on your iPhone first."
-    public static let gone = "This server isn't waiting any more."
+    public static let openAndUnlock = String(localized: "Open Flagship on your iPhone and unlock it once, then approve again.")
+    public static let signedOut = String(localized: "Sign in to Flagship on your iPhone first.")
+    public static let gone = String(localized: "This server isn't waiting any more.")
     /// The iPhone's app is locked behind a required update (docs/security-notices.md 6.3).
-    public static let updateRequired = "Update Flagship on your iPhone first. Approving is paused until you do."
+    public static let updateRequired = String(localized: "Update Flagship on your iPhone first. Approving is paused until you do.")
 
     let delegateEnrolled: () -> Bool
     let hasSessionKey: () -> Bool
@@ -67,7 +67,7 @@ public struct WatchApprovalResponder {
             WatchProtocol.ApproveReply(requestId: cmd.requestId, ok: false, errorMessage: message)
         }
         if isPaused() { return fail(Self.updateRequired) }
-        guard cmd.kind == "approve-unlock" else { return fail("The watch asked for something this iPhone can't do.") }
+        guard cmd.kind == "approve-unlock" else { return fail(String(localized: "The watch asked for something this iPhone can't do.")) }
         guard delegateEnrolled() else { return fail(Self.notEnrolled) }
         guard hasSessionKey() else {
             onNeedsUnlock(cmd.requestId)
@@ -87,7 +87,7 @@ public struct WatchApprovalResponder {
             try await source.confirmAndRespond(req, depositAutoLease: false)
             return WatchProtocol.ApproveReply(requestId: cmd.requestId, ok: true)
         } catch {
-            return fail("Approval failed: \(error.localizedDescription)")
+            return fail(String(localized: "Approval failed: \(error.localizedDescription)"))
         }
     }
 }
