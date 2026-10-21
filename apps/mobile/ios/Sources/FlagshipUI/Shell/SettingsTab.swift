@@ -23,6 +23,9 @@ public struct SettingsTab: View {
     @State private var showDemoDeleteNotice = false
     @State private var companionRequestsVm: CompanionRequestsViewModel?
     @State private var pendingCompanionCount: Int = 0
+    @Environment(\.nameDibsClient) private var nameDibs
+    /// Whether the name-dibs window is open (drives the "Claim your .com name" row).
+    @State private var dibsWindowOpen = false
 
     public init() {}
 
@@ -166,6 +169,8 @@ public struct SettingsTab: View {
                     onOpenKeyfileBackup: { path.append(.keyfileBackup) },
                     onOpenAccountSecurity: { path.append(.accountSecurity) },
                     onOpenProfiles: { path.append(.profiles) },
+                    nameDibsOpen: dibsWindowOpen,
+                    onOpenNameDibs: { path.append(.nameDibs) },
                     onOpenPeerBackup: { path.append(.peerBackup) },
                     onOpenCompanionDock: { path.append(.companionDock) },
                     onOpenSecuredSessions: { path.append(.securedSessions) },
@@ -346,6 +351,9 @@ public struct SettingsTab: View {
         .task {
             await refreshCompanionPendingCount()
         }
+        .task {
+            dibsWindowOpen = (try? await nameDibs.window().open) ?? false
+        }
     }
 
     /// One-shot fetch of the pending companion-write count so the
@@ -397,6 +405,8 @@ public struct SettingsTab: View {
                 freeAiService: FreeAiCreditsService(client: server, username: { [app] in app.currentUser }),
                 catalog: { [server] in await ModelMenuCache.catalog { try await server.inferenceModels() } }
             )
+        case .nameDibs:
+            NameDibsScreen(vm: NameDibsViewModel(client: nameDibs, username: app.currentUser ?? ""))
         case .recovery:
             RecoveryContainer(onShowPostRecoveryProgress: { path.append(.postRecoveryProgress) })
         case .accountSecurity:

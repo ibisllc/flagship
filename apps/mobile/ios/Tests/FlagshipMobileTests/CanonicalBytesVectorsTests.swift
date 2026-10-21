@@ -69,6 +69,7 @@ final class CanonicalBytesVectorsTests: XCTestCase {
         case "stk": return unhex(meta["stkPubHex"] as! String)
         case "rck": return unhex(meta["rckPubHex"] as! String)
         case "identity": return unhex(meta["identityPubHex"] as! String)
+        case "admin-root": return unhex(meta["adminRootPubHex"] as! String)
         default: return Data()
         }
     }
@@ -178,6 +179,27 @@ final class CanonicalBytesVectorsTests: XCTestCase {
                 oldIrkPubHex: i["oldIrkPub"] as! String,
                 issuedAt: i64(i, "issuedAt")
             )
+        case "name-dibs-initiate":
+            return NameDibsInitiate.canonicalBytes(
+                username: i["username"] as! String,
+                name: i["name"] as! String,
+                irkPubHex: i["irkPubHex"] as! String,
+                issuedAt: i64(i, "issuedAt")
+            )
+        case "name-dibs-verify":
+            return NameDibsVerify.canonicalBytes(
+                username: i["username"] as! String,
+                name: i["name"] as! String,
+                nonce: i["nonce"] as! String,
+                issuedAt: i64(i, "issuedAt")
+            )
+        case "name-change":
+            return NameChangeEnvelope.canonicalBytes(
+                aidPubHex: i["aidPubHex"] as! String,
+                oldUsername: i["oldUsername"] as! String,
+                newUsername: i["newUsername"] as! String,
+                issuedAt: i64(i, "issuedAt")
+            )
         case "daemon-status", "daemon-status-liveness":
             let report = DaemonStatusReport(
                 serverDomain: i["serverDomain"] as! String,
@@ -201,6 +223,7 @@ final class CanonicalBytesVectorsTests: XCTestCase {
         "order-power-off-off", "order-power-off-restart", "journal-read",
         "watch-delegate-key", "device-capability-grant", "push-token-revoke",
         "re-pair-initiate", "daemon-status", "daemon-status-liveness",
+        "name-dibs-initiate", "name-dibs-verify", "name-change",
     ]
 
     func testEveryIosImplementedVectorMatchesTheSharedFixture() throws {
