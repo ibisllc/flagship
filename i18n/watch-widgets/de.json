@@ -1,0 +1,8 @@
+{
+  "Flagship servers": "Flagship-Server",
+  "Shows a server's install while one is under way, else how your servers are doing.": "Zeigt die Installation eines Servers, solange eine läuft, sonst den Zustand deiner Server.",
+  "Install failed": "Installation fehlgeschlagen",
+  "Server is live": "Server ist live",
+  "No install in flight": "Keine Installation läuft",
+  "%lld servers": "%lld Server"
+}
