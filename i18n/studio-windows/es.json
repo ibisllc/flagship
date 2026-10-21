@@ -53,7 +53,6 @@
   "notAValidRecipeMissingInvalid": "Receta no válida: falta el campo «{0}» o no es válido.",
   "flashToUsb": "Grabar en USB",
   "assembleAndFlash": "Montar y grabar",
-  "beta": "Beta",
   "openFlagshipStudio": "Abrir Flagship Studio",
   "noServersHostedYet": "Aún no hay servidores alojados",
   "stopAllRunningServers": "Detener todos los servidores en ejecución",
