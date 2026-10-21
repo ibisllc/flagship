@@ -15,6 +15,7 @@
 import { activeOperations, operationLabel } from "./activeOperations.js";
 import { chevronRightIcon } from "./icons.js";
 
+import { tr } from "./i18n.js";
 let barEl = null;
 let unlockedFn = () => true;
 
@@ -73,7 +74,7 @@ function ensureBar() {
   barEl.className = "ops-bar";
   barEl.setAttribute("role", "button");
   barEl.setAttribute("tabindex", "0");
-  barEl.setAttribute("aria-label", "Active operation");
+  barEl.setAttribute("aria-label", tr("Active operation"));
   // Pin it as the FIRST child of <body> so it sits above the sticky header;
   // the header tucks below it via the --ops-bar-h var set in render().
   document.body.insertBefore(barEl, document.body.firstChild);

@@ -25,6 +25,7 @@ import {
   turnOnDebugAccess,
 } from "../lib/debugAccess.js";
 
+import { tr } from "../lib/i18n.js";
 const KEY_STORE = "flagship.debugKey.";
 
 function rememberedKey(fqdn) {
@@ -54,8 +55,8 @@ function endedLine(view, now) {
   const e = view?.lastEnded;
   if (!e || typeof e.at !== "number") return "";
   return e.why === "revoked"
-    ? `Last turned off ${formatDateTime(e.at, now)}.`
-    : `Last ended ${formatDateTime(e.at, now)}.`;
+    ? tr("Last turned off {0}.", formatDateTime(e.at, now))
+    : tr("Last ended {0}.", formatDateTime(e.at, now));
 }
 
 /** The "Debug access" section; "" when the box doesn't report it. */
@@ -64,30 +65,30 @@ export function debugAccessCardHtml(view, { isAdmin, fqdn = "", now = Date.now()
   const on = view.on === true;
   const state = `
     <div class="row">
-      <span class="label">Status</span>
+      <span class="label">${tr("Status")}</span>
       <span class="pill${on ? " warn" : ""}" id="debug-access-pill">${on ? "On" : "Off"}</span>
     </div>
-    ${on ? `<div class="row"><span class="label">Until</span><span class="value" id="debug-access-until">${escapeHtml(formatDateTime(view.expiresAt, now))}</span></div>` : ""}
-    ${on && view.keyFingerprint ? `<div class="row"><span class="label">Key</span><span class="value mono small" id="debug-access-key">${escapeHtml(view.keyFingerprint)}</span></div>` : ""}
+    ${on ? `<div class="row"><span class="label">${tr("Until")}</span><span class="value" id="debug-access-until">${escapeHtml(formatDateTime(view.expiresAt, now))}</span></div>` : ""}
+    ${on && view.keyFingerprint ? `<div class="row"><span class="label">${tr("Key")}</span><span class="value mono small" id="debug-access-key">${escapeHtml(view.keyFingerprint)}</span></div>` : ""}
     ${!on && endedLine(view, now) ? `<p class="note small" id="debug-access-ended">${escapeHtml(endedLine(view, now))}</p>` : ""}`;
   const controls = isAdmin
     ? `
-      <label class="caption mt-2" for="debug-access-ssh-key">SSH public key</label>
+      <label class="caption mt-2" for="debug-access-ssh-key">${tr("SSH public key")}</label>
       <textarea id="debug-access-ssh-key" class="full-width" rows="2" spellcheck="false" autocomplete="off" placeholder="ssh-ed25519 AAAA… you@computer">${escapeHtml(rememberedKey(fqdn))}</textarea>
-      <label class="caption mt-2" for="debug-access-duration">For</label>
+      <label class="caption mt-2" for="debug-access-duration">${tr("For")}</label>
       <select id="debug-access-duration" class="full-width">
         ${DEBUG_DURATIONS.map((d) => `<option value="${d.id}"${d.id === DEBUG_DEFAULT_DURATION ? " selected" : ""}>${escapeHtml(d.label)}</option>`).join("")}
       </select>
       <p class="warn-text small mt-2" id="debug-access-warning">${escapeHtml(DEBUG_WARNING)}</p>
       <p class="err-text small hidden" id="debug-access-error"></p>
-      <button id="debug-access-on-btn" class="full-width mt-2">${on ? "Renew" : "Turn on"}</button>
-      ${on ? `<button id="debug-access-off-btn" class="danger full-width mt-2">Turn off</button>` : ""}`
+      <button id="debug-access-on-btn" class="full-width mt-2">${on ? "Renew" : tr("Turn on")}</button>
+      ${on ? `<button id="debug-access-off-btn" class="danger full-width mt-2">${tr("Turn off")}</button>` : ""}`
     : `<p class="note small mt-2" id="debug-access-admin-only">${escapeHtml(DEBUG_ADMIN_ONLY)}</p>`;
   return `
     <div id="debug-access-section">
-      <h2 class="mt-4">Debug access</h2>
+      <h2 class="mt-4">${tr("Debug access")}</h2>
       <div class="card" id="debug-access-card">
-        <p class="note">Let your own SSH key in as <code>debug</code> on this server's network, for a while. Key only, no password.</p>
+        <p class="note">${tr("Let your own SSH key in as <code>debug</code> on this server's network, for a while. Key only, no password.")}</p>
         ${state}
         ${controls}
       </div>
@@ -118,7 +119,7 @@ function showError(msg) {
 
 function gate(session) {
   if (!isAdminDevice(session)) return DEBUG_ADMIN_ONLY;
-  if (!session?.umk) return "Unlock the webapp first.";
+  if (!session?.umk) return tr("Unlock the webapp first.");
   return null;
 }
 
@@ -132,16 +133,16 @@ export async function submitDebugOn({ fqdn, rawKey, durationId, renewing }, deps
   const refused = gate(session);
   if (refused) return { ok: false, error: refused };
   const raw = String(rawKey ?? "").trim();
-  if (!raw) return { ok: false, error: "Debug access needs an SSH public key." };
+  if (!raw) return { ok: false, error: tr("Debug access needs an SSH public key.") };
   const key = normalizeSshPublicKey(raw);
-  if (!key) return { ok: false, error: "That isn't an SSH public key this server can use." };
+  if (!key) return { ok: false, error: tr("That isn't an SSH public key this server can use.") };
   const dur = DEBUG_DURATIONS.find((d) => d.id === durationId) ?? DEBUG_DURATIONS.find((d) => d.id === DEBUG_DEFAULT_DURATION);
   // One fresh unlock per grant, like an admin invite: an open tab alone can't sign it.
   const unlocked = await (deps.freshUnlock ?? confirmFreshUnlock)(
     {
-      title: renewing ? "Renew debug access?" : "Turn on debug access?",
-      message: `${DEBUG_WARNING} It stays on for ${dur.label}.`,
-      okLabel: renewing ? "Renew" : "Turn on",
+      title: renewing ? tr("Renew debug access?") : tr("Turn on debug access?"),
+      message: tr("{0} It stays on for {1}.", DEBUG_WARNING, dur.label),
+      okLabel: renewing ? tr("Renew") : tr("Turn on"),
     },
     { session },
   );
@@ -162,9 +163,9 @@ export async function submitDebugOff({ fqdn }, deps = {}) {
   const refused = gate(session);
   if (refused) return { ok: false, error: refused };
   const ok = await (deps.confirm ?? inlineConfirm)({
-    title: "Turn off debug access?",
-    message: "The key stops working now and anyone signed in with it is disconnected.",
-    okLabel: "Turn off",
+    title: tr("Turn off debug access?"),
+    message: tr("The key stops working now and anyone signed in with it is disconnected."),
+    okLabel: tr("Turn off"),
     danger: true,
   });
   if (!ok) return { ok: false, cancelled: true };
@@ -177,7 +178,7 @@ export async function submitDebugOff({ fqdn }, deps = {}) {
   }
 }
 
-const DONE = { granted: "Debug access is on.", renewed: "Debug access renewed.", revoked: "Debug access is off.", unchanged: "Debug access is off." };
+const DONE = { granted: tr("Debug access is on."), renewed: tr("Debug access renewed."), revoked: tr("Debug access is off."), unchanged: tr("Debug access is off.") };
 
 /** Wire the section's buttons. */
 export function wireDebugAccess(body) {
@@ -188,7 +189,7 @@ export function wireDebugAccess(body) {
     try {
       const r = await go();
       if (r.ok) {
-        toast(DONE[r.change] ?? "Done.", "ok");
+        toast(DONE[r.change] ?? tr("Done."), "ok");
         if (r.view) repaint(fqdn, r.view);
       } else if (r.error) {
         showError(r.error);

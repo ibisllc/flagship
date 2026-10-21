@@ -11,25 +11,26 @@
 
 import { isAdminDevice } from "./memberRoles.js";
 
+import { tr } from "./i18n.js";
 export const ADMIN_KEY_COPY = Object.freeze({
   /** Removing the account's keys from this browser (account-gone screen, Remove this device). */
-  removeTitle: "Remove this account from this browser?",
+  removeTitle: tr("Remove this account from this browser?"),
   removeMessage:
-    "This also removes this device's admin key, which you need to sign in to your servers. Save a backup of your account key first, or remove anyway.",
-  saveFirst: "Save my account key first",
-  removeAnyway: "Remove anyway",
+    tr("This also removes this device's admin key, which you need to sign in to your servers. Save a backup of your account key first, or remove anyway."),
+  saveFirst: tr("Save my account key first"),
+  removeAnyway: tr("Remove anyway"),
   /** Settings, Sign out, on an admin device. */
-  signOutTitle: "Sign out?",
+  signOutTitle: tr("Sign out?"),
   signOutMessage:
-    "Signing out removes this device's admin key. Save a backup of your account key first, or sign out anyway.",
-  signOutAnyway: "Sign out anyway",
+    tr("Signing out removes this device's admin key. Save a backup of your account key first, or sign out anyway."),
+  signOutAnyway: tr("Sign out anyway"),
   /** The same, once this device has written an account-key file. */
   signOutBackedUpMessage:
-    "Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe.",
-  signOutBackedUpOk: "Sign out",
+    tr("Signing out removes this device's admin key. You backed up your account key, so keep that file and its passphrase safe."),
+  signOutBackedUpOk: tr("Sign out"),
   cancel: "Cancel",
   /** Shown when a save-first path needs the key unlocked. */
-  unlockFirst: "Unlock first to save your key.",
+  unlockFirst: tr("Unlock first to save your key."),
 });
 
 /**

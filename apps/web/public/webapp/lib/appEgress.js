@@ -9,16 +9,17 @@
 
 import { requireOwnerProfile } from "./companionGuard.js";
 
+import { tr } from "./i18n.js";
 export const TAG_APP_EGRESS = "flagship/app-egress/v1";
 
-export const EGRESS_TITLE = "This app wants to reach the internet";
+export const EGRESS_TITLE = tr("This app wants to reach the internet");
 export const EGRESS_NOTE =
-  "Until you allow them, the app can't reach any of these. Only allow hosts you expect this app to need.";
+  tr("Until you allow them, the app can't reach any of these. Only allow hosts you expect this app to need.");
 export const EGRESS_ALLOW = "Allow";
-export const EGRESS_APPROVED_TITLE = "Allowed to reach the internet";
-export const EGRESS_STOP = "Stop access";
-export const EGRESS_PENDING_BADGE = "Wants internet";
-export const EGRESS_COMPANION_NOTE = "Approve this from your owner app.";
+export const EGRESS_APPROVED_TITLE = tr("Allowed to reach the internet");
+export const EGRESS_STOP = tr("Stop access");
+export const EGRESS_PENDING_BADGE = tr("Wants internet");
+export const EGRESS_COMPANION_NOTE = tr("Approve this from your owner app.");
 
 /** Distinct, lowercase, sorted by UTF-16 code unit (the box's order). */
 export function normalizeEgressHosts(hosts) {
@@ -80,16 +81,16 @@ export function egressCardState(app, { companion = false } = {}) {
 export function egressErrorMessage(e) {
   const status = e?.status;
   const raw = typeof e?.body?.error === "string" && e.body.error ? e.body.error : String(e?.message ?? "");
-  if (status === 404) return "This app isn't installed on this server anymore.";
-  if (status === 409) return "A newer approval is already in place. Refresh and try again.";
-  if (status === 422) return `This app no longer asks for some of these hosts (${raw}). Refresh and try again.`;
+  if (status === 404) return tr("This app isn't installed on this server anymore.");
+  if (status === 409) return tr("A newer approval is already in place. Refresh and try again.");
+  if (status === 422) return tr("This app no longer asks for some of these hosts ({0}). Refresh and try again.", raw);
   if (status === 403) {
-    if (/stale/i.test(raw)) return "This device's clock is more than 10 minutes off. Fix the clock and try again.";
-    if (/different server/i.test(raw)) return "This approval was for a different server.";
-    if (/signature/i.test(raw)) return "Your server didn't accept this approval's signature.";
-    return raw || "Your server refused this approval.";
+    if (/stale/i.test(raw)) return tr("This device's clock is more than 10 minutes off. Fix the clock and try again.");
+    if (/different server/i.test(raw)) return tr("This approval was for a different server.");
+    if (/signature/i.test(raw)) return tr("Your server didn't accept this approval's signature.");
+    return raw || tr("Your server refused this approval.");
   }
-  return raw || "Couldn't update this app's internet access.";
+  return raw || tr("Couldn't update this app's internet access.");
 }
 
 /**
@@ -110,7 +111,7 @@ export function egressErrorMessage(e) {
 export async function sendEgressGrant(args, deps = {}) {
   const { serverDomain, serviceId, hosts, umk, signWithIrk, fetchJson, bytesToHex } = args;
   (deps.requireOwnerProfile ?? requireOwnerProfile)();
-  if (!umk || typeof signWithIrk !== "function") throw new Error("Unlock the webapp first");
+  if (!umk || typeof signWithIrk !== "function") throw new Error(tr("Unlock the webapp first"));
   const grant = {
     serverDomain,
     serviceId,

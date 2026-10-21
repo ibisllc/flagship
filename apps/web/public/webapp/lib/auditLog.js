@@ -19,6 +19,7 @@
 import { controlApex } from "./apex.js";
 import { accountReadFetch } from "./accountRead.js";
 
+import { tr } from "./i18n.js";
 /** Server-side per-request cap — mirror of MAX_LIMIT in
  *  packages/control-plane/src/auditEvents.ts. */
 export const AUDIT_MAX_LIMIT = 50;
@@ -39,7 +40,7 @@ export function auditKindLabel(kind) {
   const label = AUDIT_KIND_LABELS[kind];
   if (label) return label;
   const words = String(kind ?? "").replace(/[._-]+/g, " ").trim();
-  return words ? words.charAt(0).toUpperCase() + words.slice(1) : "Account event";
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : tr("Account event");
 }
 
 export const AUDIT_KIND_LABELS = Object.freeze({

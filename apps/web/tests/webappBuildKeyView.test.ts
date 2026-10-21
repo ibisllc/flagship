@@ -66,8 +66,8 @@ describe("webapp AI-key step", () => {
     const body = await asset("/webapp/views/build-key.js");
     expect(body).toContain("Saved keys");
     expect(body).toContain("Last used");
-    expect(body).toContain(">Use this<");
-    expect(body).toContain('okLabel: "Delete key"');
+    expect(body).toContain('>${tr("Use this")}<');
+    expect(body).toContain('okLabel: tr("Delete key")');
     const { orderedEntries, deleteMessage, DELETE_TITLE } = await import(
       pathToFileURL(resolve(__dirname, "..", "public", "webapp", "views", "build-key.js")).href
     );

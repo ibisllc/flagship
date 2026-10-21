@@ -43,14 +43,15 @@ import {
 } from "../keystore.js";
 import { setSubtitle, show } from "./router.js";
 
+import { tr } from "./i18n.js";
 export const ACCOUNT_GONE_COPY = Object.freeze({
-  title: "This account was removed",
-  body: "This account no longer exists on Flagship. This can happen after a reset.",
-  restoreHint: "If you saved a backup of your servers, you can restore it into a new account.",
-  create: "Create a new account",
-  remove: "Remove it from this browser",
-  account: (name) => `Account: ${name}`,
-  failed: "Couldn't remove it yet. Reload the page and try again.",
+  title: tr("This account was removed"),
+  body: tr("This account no longer exists on Flagship. This can happen after a reset."),
+  restoreHint: tr("If you saved a backup of your servers, you can restore it into a new account."),
+  create: tr("Create a new account"),
+  remove: tr("Remove it from this browser"),
+  account: (name) => tr("Account: {0}", name),
+  failed: tr("Couldn't remove it yet. Reload the page and try again."),
 });
 
 const SLOTS = ["sessionId", "sessionToken", "podBaseUrl", "username"];

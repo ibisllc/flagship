@@ -22,6 +22,7 @@ import {
 } from "./profilesStore.js";
 import { controlApex } from "./apex.js";
 
+import { tr } from "./i18n.js";
 // ── Legacy per-profile single-slot API (kept for backward compatibility) ──
 
 export function setPodBaseUrl(url) {
@@ -127,7 +128,7 @@ export class ScreensError extends Error {
 // Do NOT use on session-scoped 404s (a specific build id that's genuinely gone).
 export function buildEntryError(e) {
   if (e instanceof ScreensError && e.status === 404) {
-    return "This server isn't set up to build services yet. Building services needs the services feature enabled on this box.";
+    return tr("This server isn't set up to build services yet. Building services needs the services feature enabled on this box.");
   }
   return e instanceof ScreensError ? e.message : String(e);
 }

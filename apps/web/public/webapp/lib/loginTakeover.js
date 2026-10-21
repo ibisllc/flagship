@@ -57,6 +57,7 @@ export const TAKEOVER_IRK_VERSION = 2;
 import { generateDeviceId } from "./accountMetadata.js";
 import { askLocalPassphrase, isLocalPassphrase } from "./localPassphrase.js";
 
+import { tr } from "./i18n.js";
 /** Canonical-bytes tag for the re-pair initiate envelope. MUST match
  *  packages/protocol/src/auth.ts TAG_RE_PAIR_INITIATE and the Worker. */
 export const TAG_RE_PAIR_INITIATE = "flagship/re-pair-initiate/v1";
@@ -99,10 +100,10 @@ export function classifyRealAccount(resolution) {
 export function noRecoveryState(resolution) {
   const single = resolution?.kind !== "multi";
   return {
-    title: "No cloud backup on this account",
+    title: tr("No cloud backup on this account"),
     message: single
-      ? "No cloud backup on this account. Use a device that still has access."
-      : "Use another device, or one of your recovery codes.",
+      ? tr("No cloud backup on this account. Use a device that still has access.")
+      : tr("Use another device, or one of your recovery codes."),
   };
 }
 
@@ -130,9 +131,9 @@ export function parseRecoveryFactor(raw) {
  */
 export async function collectRecoveryFactor(inlinePrompt) {
   const raw = await inlinePrompt({
-    title: "Recovery code",
+    title: tr("Recovery code"),
     message:
-      "This account requires a second factor. Enter your 6-digit recovery TOTP, or one of your recovery codes.",
+      tr("This account requires a second factor. Enter your 6-digit recovery TOTP, or one of your recovery codes."),
     placeholder: "123456",
     validate: (v) => (parseRecoveryFactor(v) ? null : "enter a 6-digit code or a recovery code"),
   });
@@ -457,12 +458,12 @@ export async function loginRealAccount(resolution, deps) {
   // Grace explainer — single is 3-day, multi is 24h + a second factor.
   const single = branch === "single";
   const confirmed = await deps.confirm({
-    title: single ? "Take over this account" : "Take over this account (2FA)",
+    title: single ? tr("Take over this account") : tr("Take over this account (2FA)"),
     message: single
-      ? "This becomes the admin device for the account after a 3-day grace period. Your other devices are alerted during that window; only this device can cancel it."
-      : "This becomes the admin device after a 24-hour grace period. You'll need a recovery code. Your other devices are alerted during that window; only this device can cancel it.",
-    okLabel: "Take over",
-    cancelLabel: "Cancel",
+      ? tr("This becomes the admin device for the account after a 3-day grace period. Your other devices are alerted during that window; only this device can cancel it.")
+      : tr("This becomes the admin device after a 24-hour grace period. You'll need a recovery code. Your other devices are alerted during that window; only this device can cancel it."),
+    okLabel: tr("Take over"),
+    cancelLabel: tr("Cancel"),
   });
   if (!confirmed) return { outcome: "cancelled" };
 
@@ -549,8 +550,8 @@ export function graceTimeline(rePair, now = Date.now()) {
   const remainingMs = Math.max(0, completesAt - now);
   const ready = now >= completesAt;
   const label = ready
-    ? "The grace period has elapsed — you can take over now."
-    : `This device takes over in ${formatRemaining(remainingMs)} — your other devices are being alerted.`;
+    ? tr("The grace period has elapsed — you can take over now.")
+    : tr("This device takes over in {0} — your other devices are being alerted.", formatRemaining(remainingMs));
   return {
     ready,
     remainingMs,
@@ -655,7 +656,7 @@ export async function completeRePair(args) {
       message:
         typeof body?.error === "string"
           ? body.error
-          : "This recovery was stopped or has already been claimed by another device.",
+          : tr("This recovery was stopped or has already been claimed by another device."),
     };
   }
   if (resp.status === 425) {
@@ -677,7 +678,7 @@ export async function completeRePair(args) {
       message:
         typeof body?.error === "string"
           ? body.error
-          : "This recovery expired before it was completed. Start again.",
+          : tr("This recovery expired before it was completed. Start again."),
     };
   }
   const txt = await safeText(resp);
@@ -749,7 +750,7 @@ export async function finishTakeover(takeover, deps = {}) {
     return {
       outcome: "needs-key",
       message:
-        "This device can't finish the takeover — it no longer holds the recovered key. Start the recovery again.",
+        tr("This device can't finish the takeover — it no longer holds the recovered key. Start the recovery again."),
     };
   }
   const result = await completeRePair({

@@ -12,6 +12,7 @@ import { appLinkUrl, controlHost, dataApex } from "./apex.js";
 import { redeemCompanionAndPersist } from "./companionReceiver.js";
 import { aeadOpen, deriveMaterial, freshKeypair, freshSid } from "./pairingRelay.js";
 
+import { tr } from "./i18n.js";
 export const REMOTE_TICKET_KIND = "flagship/remote-ticket/v1";
 
 export function buildRemoteApprovalUrl({ sid, pkB64u }) {
@@ -23,19 +24,19 @@ export function buildRemoteApprovalUrl({ sid, pkB64u }) {
 export function parseRemoteTicket(text, { apex = dataApex() } = {}) {
   let obj;
   try { obj = JSON.parse(text); } catch { obj = null; }
-  if (!obj || obj.kind !== REMOTE_TICKET_KIND) throw new Error("The phone sent something this page can't read");
+  if (!obj || obj.kind !== REMOTE_TICKET_KIND) throw new Error(tr("The phone sent something this page can't read"));
   const ticketId = String(obj.ticketId ?? "").toLowerCase();
   const ticketSecret = String(obj.ticketSecret ?? "").toLowerCase();
   const username = String(obj.username ?? "").toLowerCase();
   if (!/^[0-9a-f]{32}$/.test(ticketId) || !/^[0-9a-f]{64}$/.test(ticketSecret)) {
-    throw new Error("The phone sent an invalid ticket");
+    throw new Error(tr("The phone sent an invalid ticket"));
   }
-  if (!/^[a-z0-9](?:-?[a-z0-9]){0,31}$/.test(username)) throw new Error("The phone sent an invalid account");
+  if (!/^[a-z0-9](?:-?[a-z0-9]){0,31}$/.test(username)) throw new Error(tr("The phone sent an invalid account"));
   let url;
   try { url = new URL(String(obj.podBaseUrl ?? "")); } catch { url = null; }
   if (!url || url.protocol !== "https:" || url.pathname !== "/" || url.search || url.port
       || !url.hostname.endsWith(`.${apex}`)) {
-    throw new Error("The phone named a server this page won't connect to");
+    throw new Error(tr("The phone named a server this page won't connect to"));
   }
   return { ticketId, ticketSecret, podBaseUrl: `https://${url.hostname}`, username };
 }
@@ -92,14 +93,14 @@ export async function openRemoteRequest({
         finish(rejectDelivered, error instanceof Error ? error : new Error(String(error)));
       }
     } else if (m.kind === "rebind" || m.kind === "expired") {
-      finish(rejectDelivered, restart("This code expired"));
+      finish(rejectDelivered, restart(tr("This code expired")));
     } else if (m.kind === "error") {
-      finish(rejectDelivered, new Error(`Relay: ${m.reason ?? "error"}`));
+      finish(rejectDelivered, new Error(tr("Relay: {0}", m.reason ?? "error")));
     }
   });
   ws.addEventListener("close", () => finish(rejectDelivered, accepted
-    ? restart("Connection to the relay closed")
-    : new Error("Couldn't reach Flagship. Check your connection and start again.")));
+    ? restart(tr("Connection to the relay closed"))
+    : new Error(tr("Couldn't reach Flagship. Check your connection and start again."))));
   return {
     approvalUrl: buildRemoteApprovalUrl({ sid, pkB64u }),
     delivered,

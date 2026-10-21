@@ -18,6 +18,7 @@
 // in the key order the spec lists); a non-string value is JSON.stringify'd.
 //
 // Must pass packages/protocol/test-vectors/server-share/vectors.json.
+import { tr } from "./i18n.js";
 
 export const TAG_SERVER_SHARE = "flagship/server-share/v1";
 export const TAG_SERVER_SHARE_REVOKE = "flagship/server-share-revoke/v1";
@@ -105,7 +106,7 @@ async function importSeed(seed, extractable) {
   const pkcs8 = new Uint8Array(PKCS8_ED25519.length + 32);
   pkcs8.set(PKCS8_ED25519, 0);
   pkcs8.set(seed, PKCS8_ED25519.length);
-  return crypto.subtle.importKey("pkcs8", pkcs8, { name: "Ed25519" }, extractable, ["sign"]);
+  return crypto.subtle.importKey("pkcs8", pkcs8, { name: tr("Ed25519") }, extractable, ["sign"]);
 }
 
 function b64urlToBytes(s) {
@@ -124,13 +125,13 @@ export async function ed25519PublicKey(seed) {
 }
 
 async function edSign(seed, msg) {
-  return new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, await importSeed(seed, false), msg));
+  return new Uint8Array(await crypto.subtle.sign({ name: tr("Ed25519") }, await importSeed(seed, false), msg));
 }
 
 async function edVerify(sig, msg, pub) {
   try {
-    const key = await crypto.subtle.importKey("raw", pub, { name: "Ed25519" }, false, ["verify"]);
-    return await crypto.subtle.verify({ name: "Ed25519" }, key, sig, msg);
+    const key = await crypto.subtle.importKey("raw", pub, { name: tr("Ed25519") }, false, ["verify"]);
+    return await crypto.subtle.verify({ name: tr("Ed25519") }, key, sig, msg);
   } catch {
     return false;
   }
@@ -225,7 +226,7 @@ export function shareAad(prefix, id) {
 
 async function gcmKey(key) {
   if (!(key instanceof Uint8Array) || key.length !== 32) throw new Error("server-share: key must be 32 bytes");
-  return crypto.subtle.importKey("raw", key, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+  return crypto.subtle.importKey("raw", key, { name: tr("AES-GCM") }, false, ["encrypt", "decrypt"]);
 }
 
 /**
@@ -238,7 +239,7 @@ export async function sealShareJson(key, aad, plaintext, nonce) {
   if (!(n instanceof Uint8Array) || n.length !== 12) throw new Error("server-share: nonce must be 12 bytes");
   const text = typeof plaintext === "string" ? plaintext : JSON.stringify(plaintext);
   const ct = new Uint8Array(
-    await crypto.subtle.encrypt({ name: "AES-GCM", iv: n, additionalData: aad }, k, enc.encode(text)),
+    await crypto.subtle.encrypt({ name: tr("AES-GCM"), iv: n, additionalData: aad }, k, enc.encode(text)),
   );
   const out = new Uint8Array(12 + ct.length);
   out.set(n, 0);
@@ -255,7 +256,7 @@ export async function openShareJson(key, aad, sealedHex) {
   const buf = fromHex(sealedHex);
   if (buf.length < 12 + 16) throw new Error("server-share: sealed payload too short");
   const plain = new Uint8Array(
-    await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf.slice(0, 12), additionalData: aad }, k, buf.slice(12)),
+    await crypto.subtle.decrypt({ name: tr("AES-GCM"), iv: buf.slice(0, 12), additionalData: aad }, k, buf.slice(12)),
   );
   return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(plain));
 }

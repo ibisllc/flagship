@@ -41,6 +41,7 @@ import { createServerForRestore, isValidServerName } from "./create-server.js";
 import { canAddServers, refuseAddServer } from "../lib/addServerGate.js";
 import { describePeerRoot, startPeerRestore, waitForPeerData, rootLines } from "../lib/peerBackup.js";
 
+import { tr } from "../lib/i18n.js";
 export const ADD_IMPORT_LABEL = "+ Add/Restore server";
 
 function openDialog(label, html) {
@@ -60,13 +61,13 @@ function openDialog(label, html) {
 /** The menu Home's button opens. */
 export function openAddOrRestore({ onAdd, onCoManage }) {
   const { dlg, close } = openDialog(
-    "Add or restore a server",
+    tr("Add or restore a server"),
     `
-    <h3 class="modal-title">Add/Restore server</h3>
-    <button class="full-width" data-choice-add>Create a server</button>
-    <button class="secondary full-width mt-2" data-choice-co-manage>Co-manage a running server</button>
-    <button class="secondary full-width mt-2" data-choice-restore>Restore from backup</button>
-    <div class="row-2 mt-3"><button class="secondary" data-choice-cancel>Cancel</button></div>
+    <h3 class="modal-title">${tr("Add/Restore server")}</h3>
+    <button class="full-width" data-choice-add>${tr("Create a server")}</button>
+    <button class="secondary full-width mt-2" data-choice-co-manage>${tr("Co-manage a running server")}</button>
+    <button class="secondary full-width mt-2" data-choice-restore>${tr("Restore from backup")}</button>
+    <div class="row-2 mt-3"><button class="secondary" data-choice-cancel>${tr("Cancel")}</button></div>
   `,
   );
   dlg.querySelector("[data-choice-cancel]").addEventListener("click", close);
@@ -85,8 +86,8 @@ export function openAddOrRestore({ onAdd, onCoManage }) {
 }
 
 export const RESTORE_SOURCES = Object.freeze({
-  file: { title: "From a file", description: "Pick a .flagship backup file." },
-  peers: { title: "From other servers", description: "Rebuild a lost server from pieces other servers keep." },
+  file: { title: tr("From a file"), description: tr("Pick a .flagship backup file.") },
+  peers: { title: tr("From other servers"), description: tr("Rebuild a lost server from pieces other servers keep.") },
 });
 
 /** Restore from backup: where the backup comes from. */
@@ -97,12 +98,12 @@ export function openRestoreChooser() {
       <span class="choice-source-desc">${escapeHtml(RESTORE_SOURCES[key].description)}</span>
     </button>`;
   const { dlg, close } = openDialog(
-    "Restore from backup",
+    tr("Restore from backup"),
     `
-    <h3 class="modal-title">Restore from backup</h3>
+    <h3 class="modal-title">${tr("Restore from backup")}</h3>
     ${source("file")}
     ${source("peers")}
-    <div class="row-2 mt-3"><button class="secondary" data-restore-cancel>Cancel</button></div>
+    <div class="row-2 mt-3"><button class="secondary" data-restore-cancel>${tr("Cancel")}</button></div>
   `,
   );
   const fail = (e) => {
@@ -125,9 +126,7 @@ export function openRestoreChooser() {
 // ---------------------------------------------------------------------------
 
 export const IMPORT_INTRO =
-  "Pick the backup (its .flagship file) from wherever you keep it. " +
-  "You choose a name; everything else comes from the backup. Then set up the new server as usual, " +
-  "and this page sends it the backup as soon as it comes online.";
+  tr("Pick the backup (its .flagship file) from wherever you keep it. You choose a name; everything else comes from the backup. Then set up the new server as usual, and this page sends it the backup as soon as it comes online.");
 
 /** Every name the account already uses: its servers (revoked ones still hold
  *  their name) and the servers still being created. */
@@ -154,9 +153,9 @@ export function restoreNameFor(savedName, taken) {
 /** Why `name` can't be used for the new server, or null. */
 export function restoreNameProblem(name, taken) {
   const n = String(name ?? "").trim().toLowerCase();
-  if (!n) return "Pick a name for the new server.";
-  if (!isValidServerName(n)) return "Lowercase letters, digits and hyphens (not at the start or end), up to 63.";
-  if (taken.has(n)) return `You already have a server called "${n}".`;
+  if (!n) return tr("Pick a name for the new server.");
+  if (!isValidServerName(n)) return tr("Lowercase letters, digits and hyphens (not at the start or end), up to 63.");
+  if (taken.has(n)) return tr("You already have a server called \"{0}\".", n);
   return null;
 }
 
@@ -171,7 +170,7 @@ export function serverWaitingFor(pods, archiveId) {
 export function savedSettingsLine(server) {
   const unlock = server.bootUnlockMode === "approve" ? "asks your phone at every start" : "unlocks on its own after the first start";
   const disk = server.diskEncryption === "none" ? "disk not encrypted" : "disk encrypted";
-  return `Copied from the backup: ${unlock}, ${disk}.`;
+  return tr("Copied from the backup: {0}, {1}.", unlock, disk);
 }
 
 async function loadInventory(username) {
@@ -187,44 +186,44 @@ async function loadInventory(username) {
 export async function openImportBackup({ targetFqdn = null } = {}) {
   const session = getSession();
   if (!session.umk) {
-    toast("Unlock the webapp first", "err");
+    toast(tr("Unlock the webapp first"), "err");
     return;
   }
   // Importing a backup adds a server to the account: admin devices only.
   if (!canAddServers(session)) return refuseAddServer();
   const { dlg, close } = openDialog(
-    "Import a backup",
+    tr("Import a backup"),
     `
-    <h3 class="modal-title">Import a backup</h3>
+    <h3 class="modal-title">${tr("Import a backup")}</h3>
     <p class="note" data-imp-intro>${escapeHtml(targetFqdn ? `${podShortName(targetFqdn) || targetFqdn} is waiting for its backup. Pick the backup's .flagship file and this page sends it.` : IMPORT_INTRO)}</p>
     <div data-imp-pick>
       <input type="file" class="full-width" data-imp-file accept="${BACKUP_BUNDLE_EXTENSION},application/octet-stream" />
       <p class="note small" data-imp-files></p>
     </div>
     <div class="hidden" data-imp-pass>
-      <label class="caption mt-2" for="imp-passcode">This backup was made on another account. Enter its passcode to open it.</label>
+      <label class="caption mt-2" for="imp-passcode">${tr("This backup was made on another account. Enter its passcode to open it.")}</label>
       <input id="imp-passcode" type="password" class="full-width" autocomplete="off" autocapitalize="off" spellcheck="false" data-imp-passcode />
-      <button class="full-width mt-2" data-imp-unlock>Open the backup</button>
+      <button class="full-width mt-2" data-imp-unlock>${tr("Open the backup")}</button>
     </div>
     <p class="note hidden" data-imp-summary></p>
     <div class="hidden" data-imp-name>
-      <label class="caption mt-2" for="imp-server-name">Name of the new server</label>
+      <label class="caption mt-2" for="imp-server-name">${tr("Name of the new server")}</label>
       <input id="imp-server-name" class="full-width" autocomplete="off" autocapitalize="off" spellcheck="false" data-imp-server-name />
       <p class="note small err-text hidden" data-imp-name-error></p>
       <p class="note small" data-imp-address></p>
       <p class="note small" data-imp-settings></p>
-      <button class="full-width mt-2" data-imp-create>Create the server</button>
+      <button class="full-width mt-2" data-imp-create>${tr("Create the server")}</button>
     </div>
     <div class="hidden" data-imp-waiting-choice>
       <button class="full-width mt-2" data-imp-send-existing></button>
-      <button class="secondary full-width mt-2" data-imp-new-instead>Create a new server instead</button>
+      <button class="secondary full-width mt-2" data-imp-new-instead>${tr("Create a new server instead")}</button>
     </div>
     <progress class="full-width hidden" data-imp-bar max="100" value="0"></progress>
     <p class="note" data-imp-status></p>
     <ul class="hidden" data-imp-apps style="list-style:none;padding-left:0"></ul>
     <p class="modal-error err-text hidden" data-imp-error></p>
     <div class="row-2 mt-3">
-      <button class="secondary" data-imp-close>Close</button>
+      <button class="secondary" data-imp-close>${tr("Close")}</button>
     </div>
   `,
   );
@@ -301,8 +300,8 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
     const { body } = state.opened;
     const names = body.apps.map((a) => a.name).join(", ") || "no apps";
     ui.summaryEl.textContent =
-      `From ${body.server.domain}, saved ${new Date(body.createdAt).toLocaleString()}: ${names}.` +
-      (body.left.length ? ` Not in this backup: ${body.left.map((a) => a.name).join(", ")}.` : "");
+      tr("From {0}, saved {1}: {2}.", body.server.domain, new Date(body.createdAt).toLocaleString(), names) +
+      (body.left.length ? tr(" Not in this backup: {0}.", body.left.map((a) => a.name).join(", ")) : "");
     show(ui.summaryEl);
     describeFiles();
     await checkData();
@@ -310,14 +309,14 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
 
   async function checkData() {
     if (!state.opened || !state.dataFile || state.checked) return;
-    status("Checking the backup…");
+    status(tr("Checking the backup…"));
     bar(0, state.dataFile.size);
     await checkDataFile(state.dataFile, state.opened.body.data, { onProgress: (n, t) => bar(n, t), isCancelled });
     state.checked = true;
     bar(0, null);
     show(ui.barEl, false);
     show(ui.pickEl, false);
-    status("The backup checks out.");
+    status(tr("The backup checks out."));
     await chooseTarget();
   }
 
@@ -325,7 +324,7 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
     const inv = await loadInventory(session.username).catch(() => ({ pods: [], pending: [] }));
     const waitingFqdn = targetFqdn || serverWaitingFor(inv.pods, state.parsed.archiveId);
     if (waitingFqdn) {
-      ui.sendExistingBtn.textContent = `Send it to ${podShortName(waitingFqdn) || waitingFqdn} (waiting for this backup)`;
+      ui.sendExistingBtn.textContent = tr("Send it to {0} (waiting for this backup)", podShortName(waitingFqdn) || waitingFqdn);
       show(ui.choiceEl);
       ui.sendExistingBtn.onclick = () => {
         show(ui.choiceEl, false);
@@ -350,13 +349,13 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
       ui.nameErr.textContent = problem ?? "";
       show(ui.nameErr, !!problem);
       const n = ui.nameInput.value.trim().toLowerCase();
-      ui.addressEl.textContent = n && !problem ? `Its address: ${serverFqdn(n, session.username)}` : "";
+      ui.addressEl.textContent = n && !problem ? tr("Its address: {0}", serverFqdn(n, session.username)) : "";
       ui.createBtn.disabled = !n || !!problem;
     };
     ui.nameInput.addEventListener("input", update);
     update();
     if (!ui.nameInput.value && saved.name) {
-      ui.nameErr.textContent = `You already have a server called "${saved.name}": pick another name.`;
+      ui.nameErr.textContent = tr("You already have a server called \"{0}\": pick another name.", saved.name);
       show(ui.nameErr);
     }
     show(ui.nameEl);
@@ -368,7 +367,7 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
       ui.createBtn.disabled = true;
       ui.nameInput.disabled = true;
       try {
-        status("Creating the server…");
+        status(tr("Creating the server…"));
         const { serverDomain } = await createServerForRestore({
           serverName: name,
           bootUnlockMode: saved.bootUnlockMode,
@@ -377,8 +376,7 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
         });
         show(ui.nameEl, false);
         ui.summaryEl.innerHTML =
-          `${escapeHtml(`The recipe for ${serverDomain} is downloaded. Open it in Flagship Studio to host the server on this computer, or to write a USB stick for another one.`)} ` +
-          `<a href="https://flagshipserver.com/studio" target="_blank" rel="noopener">Get Flagship Studio</a>.`;
+          tr("{0}<a href=\"https://flagshipserver.com/studio\" target=\"_blank\" rel=\"noopener\">Get Flagship Studio</a>.", `${escapeHtml(`The recipe for ${serverDomain} is downloaded. Open it in Flagship Studio to host the server on this computer, or to write a USB stick for another one.`)} `);
         await sendTo(serverDomain);
       } catch (e) {
         ui.createBtn.disabled = false;
@@ -401,7 +399,7 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
           const st = await restoreStatus({ client }).catch(() => null);
           if (st?.waiting?.archiveId === state.parsed.archiveId) {
             if (st.restore && ["checking", "restoring"].includes(st.restore.state)) break;
-            status(`Sending the backup to ${name}…`);
+            status(tr("Sending the backup to {0}…", name));
             await uploadDataFile({
               client,
               blob: state.dataFile,
@@ -418,12 +416,12 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
           }
         }
         status(
-          `Waiting for ${name} to come online… Set it up with the recipe if you haven't yet. Keep this page open: ` +
+          tr("Waiting for {0} to come online… Set it up with the recipe if you haven't yet. Keep this page open: ", name) +
             `the backup goes as soon as the server is up. If you leave, ${name} keeps waiting and shows on Home with Send the backup.`,
         );
         await sleep(5000);
       }
-      status("Restoring the apps…");
+      status(tr("Restoring the apps…"));
       bar(0, null);
       const done = await waitForRestore({
         client,
@@ -437,11 +435,11 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
       show(ui.appsEl);
       ui.appsEl.innerHTML = done.apps.map((a) => `<li>${escapeHtml(describeRestoreApp(a))}</li>`).join("");
       status(`${name}: ${restoreSummary(done.apps)}`);
-      toast("Backup restored", "ok");
+      toast(tr("Backup restored"), "ok");
     } catch (e) {
       show(ui.barEl, false);
       if (e?.code === "cancelled") return;
-      status("The server keeps waiting for its backup. Pick the backup again from Home to send it, or delete the server there.");
+      status(tr("The server keeps waiting for its backup. Pick the backup again from Home to send it, or delete the server there."));
       fail(e);
     }
   }
@@ -473,7 +471,7 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
   ui.unlockBtn.addEventListener("click", async () => {
     clearError();
     ui.unlockBtn.disabled = true;
-    status("Opening the backup…");
+    status(tr("Opening the backup…"));
     try {
       state.opened = await openWithPasscode(state.parsed, ui.passInput.value);
       ui.passInput.value = "";
@@ -490,7 +488,7 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export const PEERS_INTRO =
-  "Your lost server's latest backup is kept in pieces on other Flagship servers. Pick the lost server, this page gets the pieces back, and you name the new server.";
+  tr("Your lost server's latest backup is kept in pieces on other Flagship servers. Pick the lost server, this page gets the pieces back, and you name the new server.");
 
 /** A running server of the account this browser can talk to (it reads the lost server's record), or null. */
 export function helperServer(pods, lost, hasSession = (fqdn) => boxClient(fqdn).hasSession()) {
@@ -521,39 +519,39 @@ export function lostServerChoices(pods) {
 export async function openRestoreFromPeers() {
   const session = getSession();
   if (!session.umk) {
-    toast("Unlock the webapp first", "err");
+    toast(tr("Unlock the webapp first"), "err");
     return;
   }
   if (!canAddServers(session)) return refuseAddServer();
   const { dlg, close } = openDialog(
-    "Restore from other servers",
+    tr("Restore from other servers"),
     `
-    <h3 class="modal-title">Restore from other servers</h3>
+    <h3 class="modal-title">${tr("Restore from other servers")}</h3>
     <p class="note">${escapeHtml(PEERS_INTRO)}</p>
     <div data-pr-pick>
-      <label class="caption mt-2" for="pr-lost">The lost server</label>
+      <label class="caption mt-2" for="pr-lost">${tr("The lost server")}</label>
       <input id="pr-lost" class="full-width" list="pr-lost-list" autocomplete="off" autocapitalize="off" spellcheck="false" data-pr-lost />
       <datalist id="pr-lost-list" data-pr-list></datalist>
-      <button class="full-width mt-2" data-pr-find>Find its backup</button>
+      <button class="full-width mt-2" data-pr-find>${tr("Find its backup")}</button>
     </div>
     <p class="note hidden" data-pr-summary></p>
     <div class="hidden" data-pr-name>
-      <label class="caption mt-2" for="pr-server-name">Name of the new server</label>
+      <label class="caption mt-2" for="pr-server-name">${tr("Name of the new server")}</label>
       <input id="pr-server-name" class="full-width" autocomplete="off" autocapitalize="off" spellcheck="false" data-pr-server-name />
       <p class="note small err-text hidden" data-pr-name-error></p>
       <p class="note small" data-pr-address></p>
       <p class="note small" data-pr-settings></p>
-      <button class="full-width mt-2" data-pr-create>Create the server</button>
+      <button class="full-width mt-2" data-pr-create>${tr("Create the server")}</button>
     </div>
     <div class="hidden" data-pr-waiting-choice>
       <button class="full-width mt-2" data-pr-send-existing></button>
-      <button class="secondary full-width mt-2" data-pr-new-instead>Create a new server instead</button>
+      <button class="secondary full-width mt-2" data-pr-new-instead>${tr("Create a new server instead")}</button>
     </div>
     <progress class="full-width hidden" data-pr-bar max="100" value="0"></progress>
     <p class="note" data-pr-status></p>
     <ul class="hidden" data-pr-apps style="list-style:none;padding-left:0"></ul>
     <p class="modal-error err-text hidden" data-pr-error></p>
-    <div class="row-2 mt-3"><button class="secondary" data-pr-close>Close</button></div>
+    <div class="row-2 mt-3"><button class="secondary" data-pr-close>${tr("Close")}</button></div>
   `,
   );
   const q = (s) => dlg.querySelector(s);
@@ -599,9 +597,9 @@ export async function openRestoreFromPeers() {
   el.find.addEventListener("click", async () => {
     show(el.err, false);
     const lost = el.lost.value.trim().toLowerCase();
-    if (!lost) return fail(userError("Pick the lost server."));
+    if (!lost) return fail(userError(tr("Pick the lost server.")));
     el.find.disabled = true;
-    status("Looking for the backup…");
+    status(tr("Looking for the backup…"));
     try {
       const helper = helperServer(pods, lost);
       state.lost = lost;
@@ -609,15 +607,15 @@ export async function openRestoreFromPeers() {
       const file = parseBackupFile(state.root.archive.backupFile);
       const kek = await deriveServerArchiveKeyFromSeed(session.umk, file.archiveId);
       state.opened = await openWithAccountKey(file, kek);
-      if (!state.opened) throw userError("This backup can't be opened with this account's key.");
+      if (!state.opened) throw userError(tr("This backup can't be opened with this account's key."));
       const a = state.root.archive;
       const d = state.opened.body.data;
       if (file.archiveId !== a.archiveId || d.bytes !== a.bytes || d.sha256 !== a.sha256) {
-        throw userError("The backup record doesn't match its file. Nothing was restored.");
+        throw userError(tr("The backup record doesn't match its file. Nothing was restored."));
       }
       const body = state.opened.body;
       el.summary.textContent =
-        rootLines(state.root).join(" ") + ` Apps: ${body.apps.map((x) => x.name).join(", ") || "none"}.`;
+        rootLines(state.root).join(" ") + tr(" Apps: {0}.", body.apps.map((x) => x.name).join(", ") || "none");
       show(el.summary);
       show(el.pick, false);
       status("");
@@ -634,7 +632,7 @@ export async function openRestoreFromPeers() {
     const inv = await loadInventory(session.username).catch(() => ({ pods: [], pending: [] }));
     const waiting = serverWaitingFor(inv.pods, archive.archiveId);
     if (waiting) {
-      el.sendExisting.textContent = `Get it onto ${podShortName(waiting) || waiting} (waiting for this backup)`;
+      el.sendExisting.textContent = tr("Get it onto {0} (waiting for this backup)", podShortName(waiting) || waiting);
       show(el.choice);
       el.sendExisting.onclick = () => {
         show(el.choice, false);
@@ -659,7 +657,7 @@ export async function openRestoreFromPeers() {
       el.nameErr.textContent = problem ?? "";
       show(el.nameErr, !!problem);
       const n = el.nameInput.value.trim().toLowerCase();
-      el.address.textContent = n && !problem ? `Its address: ${serverFqdn(n, session.username)}` : "";
+      el.address.textContent = n && !problem ? tr("Its address: {0}", serverFqdn(n, session.username)) : "";
       el.create.disabled = !n || !!problem;
     };
     el.nameInput.addEventListener("input", update);
@@ -672,7 +670,7 @@ export async function openRestoreFromPeers() {
       el.create.disabled = true;
       el.nameInput.disabled = true;
       try {
-        status("Creating the server…");
+        status(tr("Creating the server…"));
         const a = state.root.archive;
         const { serverDomain } = await createServerForRestore({
           serverName: name,
@@ -682,8 +680,7 @@ export async function openRestoreFromPeers() {
         });
         show(el.name, false);
         el.summary.innerHTML =
-          `${escapeHtml(`The recipe for ${serverDomain} is downloaded. Open it in Flagship Studio to host the server on this computer, or to write a USB stick for another one.`)} ` +
-          `<a href="https://flagshipserver.com/studio" target="_blank" rel="noopener">Get Flagship Studio</a>.`;
+          tr("{0}<a href=\"https://flagshipserver.com/studio\" target=\"_blank\" rel=\"noopener\">Get Flagship Studio</a>.", `${escapeHtml(`The recipe for ${serverDomain} is downloaded. Open it in Flagship Studio to host the server on this computer, or to write a USB stick for another one.`)} `);
         await fetchInto(serverDomain);
       } catch (e) {
         el.create.disabled = false;
@@ -722,12 +719,12 @@ export async function openRestoreFromPeers() {
           if (st?.waiting && st.waiting.archiveId !== a.archiveId) throw userError(`${name} is waiting for a different backup.`);
         }
         status(
-          `Waiting for ${name} to come online… Set it up with the recipe if you haven't yet. Keep this page open: ` +
+          tr("Waiting for {0} to come online… Set it up with the recipe if you haven't yet. Keep this page open: ", name) +
             `it gets the backup as soon as the server is up. If you leave, ${name} keeps waiting and shows on Home.`,
         );
         await sleep(5000);
       }
-      status("Restoring the apps…");
+      status(tr("Restoring the apps…"));
       bar(0, null);
       const done = await waitForRestore({
         client,
@@ -741,11 +738,11 @@ export async function openRestoreFromPeers() {
       show(el.apps);
       el.apps.innerHTML = done.apps.map((x) => `<li>${escapeHtml(describeRestoreApp(x))}</li>`).join("");
       status(`${name}: ${restoreSummary(done.apps)}`);
-      toast("Backup restored", "ok");
+      toast(tr("Backup restored"), "ok");
     } catch (e) {
       show(el.bar, false);
       if (e?.code === "cancelled") return;
-      status("The server keeps waiting for its backup. Start again from Add/Restore server, or delete the server on Home.");
+      status(tr("The server keeps waiting for its backup. Start again from Add/Restore server, or delete the server on Home."));
       fail(e);
     }
   }
