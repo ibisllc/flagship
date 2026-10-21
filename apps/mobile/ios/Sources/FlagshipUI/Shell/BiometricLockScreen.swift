@@ -84,7 +84,7 @@ struct BiometricLockScreen: View {
                     secondaryId: "lock-sign-out-btn",
                     secondaryHint: String(localized: "Erases this device's account key and returns to the start."),
                     onPrimary: { Task { await tryUnlock() } },
-                    onSecondary: { showStartOver = true }
+                    onSecondary: { Task { await authenticateForSignOut() } }
                 )
                 .padding(.horizontal, FS.space.s6)
                 .fsReadingColumn()
@@ -104,10 +104,10 @@ struct BiometricLockScreen: View {
                 // profiles (the locked user can't choose one) — the wrapped
                 // UMK / IRK that survive an app reinstall — then drop to
                 // Welcome. No server-side revoke; the same key returns via
-                // passkey recovery. Face ID or the device passcode first: a
-                // deleted app leaves this key in the Keychain, so without the
-                // check anyone holding the phone could destroy it.
-                Task { await confirmSignOut() }
+                // passkey recovery. Already authenticated by
+                // `authenticateForSignOut` before this dialog opened.
+                Keystore.wipeAllProfiles()
+                app.signOut()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -148,7 +148,10 @@ struct BiometricLockScreen: View {
         }
     }
 
-    private func confirmSignOut() async {
+    /// Face ID or the device passcode before the sign-out dialog opens: a
+    /// deleted app leaves the account key in the Keychain, so without this
+    /// anyone holding the phone could destroy it.
+    private func authenticateForSignOut() async {
         do {
             try await BiometricGate().evaluate(reason: "Sign out of Flagship")
         } catch {
@@ -158,8 +161,7 @@ struct BiometricLockScreen: View {
                 return
             }
         }
-        Keystore.wipeAllProfiles()
-        app.signOut()
+        showStartOver = true
     }
 
     private func tryUnlock() async {
