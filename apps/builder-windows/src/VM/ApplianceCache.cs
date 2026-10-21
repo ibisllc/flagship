@@ -128,7 +128,7 @@ public sealed class ApplianceCache
     public string ManifestUrl => $"{_origin}/downloads/FlagshipVMAppliance-{_arch}.json";
 
     internal static ApplianceCacheException Invalid() =>
-        new("invalid-manifest", "The prebuilt server image's manifest is malformed.");
+        new("invalid-manifest", Strings.T("thePrebuiltServerImagesManifestIs"));
 
     /// <summary>A verified base (qcow2) with its runtime manifest beside it
     /// (`&lt;base&gt;.json`). progress(phase, fraction): "download" | "verify" | "ready".</summary>
@@ -152,16 +152,16 @@ public sealed class ApplianceCache
                 progress("ready", null);
                 return cached;
             }
-            throw new ApplianceCacheException("offline", $"Couldn't download the prebuilt server image: {e.Message}");
+            throw new ApplianceCacheException("offline", Strings.F("couldntDownloadThePrebuiltServerImage", e.Message));
         }
         if (status == 404)
-            throw new ApplianceCacheException("unavailable", $"No prebuilt {_arch} server image is published yet.");
+            throw new ApplianceCacheException("unavailable", Strings.F("noPrebuiltServerImageIsPublished", _arch));
         if (status is < 200 or > 299) throw Http(status);
         var dist = ApplianceDistribution.Parse(body);
         if (dist.Arch != _arch) throw Invalid();
         if (dist.InstallerGitRef != installerGitRef)
             throw new ApplianceCacheException("ref-mismatch",
-                $"The prebuilt server image is for {dist.InstallerGitRef}, but this recipe installs {installerGitRef}.");
+                Strings.F("thePrebuiltServerImageIsFor", dist.InstallerGitRef, installerGitRef));
 
         var dir = Path.Combine(ArchRoot, dist.Sha256[..16]);
         var basePath = Path.Combine(dir, "base.qcow2");
@@ -179,7 +179,7 @@ public sealed class ApplianceCache
         var needed = dist.SizeBytes - have + HeadroomBytes;
         if (_freeBytes(dir) is long free && free < needed)
             throw new ApplianceCacheException("insufficient-space",
-                $"Not enough free disk space for the server image: needs {needed / 1e9:0.0} GB, {free / 1e9:0.0} GB free.");
+                Strings.F("notEnoughFreeDiskSpaceFor", needed / 1e9, free / 1e9));
 
         long offset = 0;
         using (File.Open(partial, FileMode.OpenOrCreate)) { }
@@ -205,7 +205,7 @@ public sealed class ApplianceCache
                 file.Dispose();
                 Truncate(partial, offset);
                 if (e is HttpRequestException or IOException || (e is TaskCanceledException && !ct.IsCancellationRequested))
-                    throw new ApplianceCacheException("offline", $"Couldn't download the prebuilt server image: {e.Message}");
+                    throw new ApplianceCacheException("offline", Strings.F("couldntDownloadThePrebuiltServerImage", e.Message));
                 throw;
             }
             var got = sink.HexDigest();
@@ -243,10 +243,10 @@ public sealed class ApplianceCache
     }
 
     private static ApplianceCacheException Http(int code) =>
-        new("http-status", $"The server returned HTTP {code} for the prebuilt server image.");
+        new("http-status", Strings.F("theServerReturnedHttpForThe", code));
 
     private static ApplianceCacheException Checksum(string what) =>
-        new("checksum", $"The prebuilt server image failed its integrity check ({what}).");
+        new("checksum", Strings.F("thePrebuiltServerImageFailedIts", what));
 
     // ---- helpers ----
 
