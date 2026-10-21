@@ -5,6 +5,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.userFacing
 import com.flagshipserver.app.core.ServerShareClient
 import com.flagshipserver.app.core.ShareCoInviteCreated
@@ -115,7 +117,7 @@ class CoInviteViewModel(
 }
 
 private fun Throwable.inviteMessage(): String = when (this) {
-    is ShareInviteRefusal -> message ?: "Something went wrong. Try again."
-    is ShareException -> message ?: "Something went wrong. Try again."
+    is ShareInviteRefusal -> message ?: FSStrings.get(R.string.something_went_wrong_try_again)
+    is ShareException -> message ?: FSStrings.get(R.string.something_went_wrong_try_again)
     else -> userFacing()
 }

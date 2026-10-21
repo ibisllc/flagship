@@ -6,6 +6,8 @@
 
 package com.flagshipserver.app.companion
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -154,12 +156,12 @@ private fun PodStatusContent(context: Context, snapshot: PodStatusSnapshot) {
 private fun EmptyState(modifier: GlanceModifier) {
     Column(modifier = modifier) {
         Text(
-            "No servers yet",
+            FSStrings.get(R.string.no_servers_yet),
             style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 15.sp, fontWeight = FontWeight.Bold),
         )
         Spacer(GlanceModifier.height(4.dp))
         Text(
-            "Pair a server to see status here.",
+            FSStrings.get(R.string.pair_a_server_to_see_status),
             style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 12.sp),
         )
     }
@@ -174,7 +176,7 @@ private fun LeaderBadge() {
             .padding(horizontal = 4.dp, vertical = 1.dp),
     ) {
         Text(
-            "Leader",
+            FSStrings.get(R.string.leader),
             style = TextStyle(color = GlanceTheme.colors.onPrimaryContainer, fontSize = 9.sp, fontWeight = FontWeight.Bold),
         )
     }

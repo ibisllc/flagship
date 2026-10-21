@@ -1,0 +1,69 @@
+{
+  "app_name": {
+    "en": "Flagship",
+    "ctx": "watch launcher label",
+    "translatable": false
+  },
+  "tile_label": {
+    "en": "Flagship servers",
+    "ctx": "watch tile picker"
+  },
+  "complication_label": {
+    "en": "Flagship",
+    "ctx": "watch complication picker",
+    "translatable": false
+  },
+  "phone_not_reachable_bring_it_nearby": {
+    "en": "Phone not reachable. Bring it nearby and try again.",
+    "ctx": "com/flagshipserver/wear/PhoneApprover.kt:17 (prose)"
+  },
+  "couldnt_read_your_phones_answer": {
+    "en": "Couldn't read your phone's answer.",
+    "ctx": "com/flagshipserver/wear/PhoneApprover.kt:28 (prose)"
+  },
+  "couldnt_reach_your_phone": {
+    "en": "Couldn't reach your phone: %1$s",
+    "ctx": "com/flagshipserver/wear/PhoneApprover.kt:30 (prose)",
+    "args": 1
+  },
+  "new_server": {
+    "en": "New server",
+    "ctx": "com/flagshipserver/wear/WearMainActivity.kt:109 (prose)"
+  },
+  "waiting_for_you": {
+    "en": "Waiting for you",
+    "ctx": "com/flagshipserver/wear/WearMainActivity.kt:117 (arg of Text)"
+  },
+  "waiting_to_unlock": {
+    "en": "Waiting to unlock",
+    "ctx": "com/flagshipserver/wear/WearMainActivity.kt:122 (arg of Text)"
+  },
+  "servers": {
+    "en": "Servers",
+    "ctx": "com/flagshipserver/wear/WearMainActivity.kt:129 (arg of Text)"
+  },
+  "recent_activity": {
+    "en": "Recent activity",
+    "ctx": "com/flagshipserver/wear/WearMainActivity.kt:144 (arg of Text)"
+  },
+  "open_flagship_on_your_phone_to": {
+    "en": "Open Flagship on your phone to see your servers here.",
+    "ctx": "com/flagshipserver/wear/WearMainActivity.kt:156 (arg of Text)"
+  },
+  "approved": {
+    "en": "Approved",
+    "ctx": "com/flagshipserver/wear/WearMainActivity.kt:200 (arg of Text)"
+  },
+  "approval_failed": {
+    "en": "Approval failed.",
+    "ctx": "com/flagshipserver/wear/WearMainActivity.kt:208 (prose)"
+  },
+  "approve": {
+    "en": "Approve",
+    "ctx": "com/flagshipserver/wear/WearMainActivity.kt:212 (arg of Text)"
+  },
+  "this_server_isnt_waiting_any_more": {
+    "en": "This server isn't waiting any more.",
+    "ctx": "com/flagshipserver/wear/WearMainActivity.kt:226 (arg of Text)"
+  }
+}

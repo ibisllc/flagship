@@ -6,6 +6,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.BuildClient
 import com.flagshipserver.app.api.BuildEnvRequest
@@ -38,7 +40,7 @@ import kotlinx.serialization.json.JsonPrimitive
 private fun friendly(t: Throwable): String {
     if (t is ScreensError.Http) return NetworkErrorHumanizer.humanize(t, "build")
     com.flagshipserver.app.core.ErrorLog.caught("build", t, NetworkErrorHumanizer.errorCode(t))
-    return UserErrorText.of(t, "Something went wrong.")
+    return UserErrorText.of(t, FSStrings.get(R.string.something_went_wrong_2))
 }
 
 /**
@@ -52,8 +54,7 @@ private fun friendly(t: Throwable): String {
  */
 private fun friendlyBuildEntry(t: Throwable): String =
     if (t is ScreensError.Http && t.status == 404) {
-        "This server isn't set up to build services yet. " +
-            "Building services needs the services feature enabled on this server."
+        FSStrings.get(R.string.this_server_isnt_set_up_to)
     } else {
         friendly(t)
     }
@@ -225,7 +226,7 @@ class BuildGitViewModel(
 
     private suspend fun followAdaptWithLimit(id: String) {
         if (withTimeoutOrNull(pollLimitMs) { followAdapt(id) } == null) {
-            failAdapt("The AI is taking unusually long. Check Build sessions later to see how it went.")
+            failAdapt(FSStrings.get(R.string.the_ai_is_taking_unusually_long))
         }
     }
 
@@ -251,7 +252,7 @@ class BuildGitViewModel(
                 }
                 "failed" -> {
                     if (state.sealed == true) buildSealed = true
-                    failAdapt(status.reason ?: "The AI couldn't adapt this repo.")
+                    failAdapt(status.reason ?: FSStrings.get(R.string.the_ai_couldnt_adapt_this_repo))
                     return
                 }
                 else -> {
@@ -400,18 +401,18 @@ class BuildGitViewModel(
 
     companion object {
         const val ADAPTER_FILE_NAME = "flagship.app.json"
-        const val NOT_READY_MISSING = "This repo is not yet adapted for Flagship."
-        const val ADAPT_BUTTON = "Use AI to adapt and deploy"
-        const val ADAPTING_DEFAULT = "The AI is adapting the repo…"
-        const val ADAPTING_STAGING = "The AI is adapting and testing the app on a private copy with sample data…"
-        const val ADAPTING_GOING_LIVE = "Installing the tested app…"
-        const val NOT_LIVE_TITLE = "The app didn't go live"
-        const val RETRY_ADAPT = "Try again with AI"
-        const val SEALED_TEXT = "This build is closed to the AI. Check the repo again to start a new build."
-        const val SHARE_LABEL = "Anonymously share your adaptation"
-        const val SHARE_NOTE = "Others can then install this repo without AI. Nothing about you or your server is included."
-        const val CHECK_AGAIN = "Check again"
-        const val RUN_AI_AGAIN = "Run the AI again"
+        val NOT_READY_MISSING get() = FSStrings.get(R.string.this_repo_is_not_yet_adapted)
+        val ADAPT_BUTTON get() = FSStrings.get(R.string.use_ai_to_adapt_and_deploy)
+        val ADAPTING_DEFAULT get() = FSStrings.get(R.string.the_ai_is_adapting_the_repo)
+        val ADAPTING_STAGING get() = FSStrings.get(R.string.the_ai_is_adapting_and_testing)
+        val ADAPTING_GOING_LIVE get() = FSStrings.get(R.string.installing_the_tested_app)
+        val NOT_LIVE_TITLE get() = FSStrings.get(R.string.the_app_didnt_go_live)
+        val RETRY_ADAPT get() = FSStrings.get(R.string.try_again_with_ai)
+        val SEALED_TEXT get() = FSStrings.get(R.string.this_build_is_closed_to_the)
+        val SHARE_LABEL get() = FSStrings.get(R.string.anonymously_share_your_adaptation)
+        val SHARE_NOTE get() = FSStrings.get(R.string.others_can_then_install_this_repo)
+        val CHECK_AGAIN get() = FSStrings.get(R.string.check_again)
+        val RUN_AI_AGAIN get() = FSStrings.get(R.string.run_the_ai_again)
         const val DEPLOY = "Deploy"
 
         /** A box restart cut the AI's work (or the box putting the build
@@ -462,7 +463,7 @@ class BuildGitViewModel(
 
         /** The muted hint under a blank name. */
         fun blankNameHint(ref: String): String =
-            "Leave it blank to name it after the repo${if (ref.isBlank()) "" else " and branch"}."
+            FSStrings.get(R.string.leave_it_blank_to_name_it, if (ref.isBlank()) "" else " and branch")
     }
 }
 
@@ -544,7 +545,7 @@ class BuildMcpViewModel(
         _deployStatus.value = "deploying…"
         try {
             val r = client.deploy(id)
-            _deployStatus.value = "Deployed → ${r.url}"
+            _deployStatus.value = FSStrings.get(R.string.deployed_2, r.url)
         } catch (t: Throwable) {
             _deployStatus.value = friendly(t)
         }
@@ -694,7 +695,7 @@ class BuildJournalViewModel(
     /** Put the build live as it is (its files survived the restart). */
     fun deployAgain(buildId: String): Job = scope.launch {
         val before = _detailAdapt.value
-        _detailAdapt.value = DetailAdapt.Working("Installing…")
+        _detailAdapt.value = DetailAdapt.Working(FSStrings.get(R.string.installing))
         try {
             _detailAdapt.value = DetailAdapt.Deployed(client.deploy(buildId).url)
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -731,7 +732,7 @@ class BuildJournalViewModel(
                         return@launch
                     }
                     "failed" -> {
-                        _detailAdapt.value = DetailAdapt.Failed(a.reason ?: "The AI couldn't adapt this repo.", canRunAi = st.sealed != true)
+                        _detailAdapt.value = DetailAdapt.Failed(a.reason ?: FSStrings.get(R.string.the_ai_couldnt_adapt_this_repo), canRunAi = st.sealed != true)
                         return@launch
                     }
                     else -> _detailAdapt.value = DetailAdapt.Working(BuildGitViewModel.adaptingHeadline(a?.phase))
@@ -801,7 +802,7 @@ object BuildSessions {
 
     /** The line under the list naming servers whose builds couldn't be read. */
     fun unreadServersLine(names: List<String>): String =
-        "Couldn't read builds on ${names.joinToString(", ")}."
+        FSStrings.get(R.string.couldnt_read_builds_on, names.joinToString(", "))
 
     /** Past builds the box no longer holds a session for. */
     fun endedBuilds(builds: List<BuildSummary>, sessions: List<VibeCodeSessionMeta>): List<BuildSummary> {
@@ -821,26 +822,26 @@ object BuildSessions {
         session.name
             ?: builds.firstOrNull { it.buildId == session.sessionId }?.displayName
             ?: session.serviceId?.substringAfterLast("--")
-            ?: "Unnamed build"
+            ?: FSStrings.get(R.string.unnamed_build)
 
     /** "Started <time> · N step(s)" under a past build's name. */
     fun pastBuildSubtitle(build: BuildSummary, started: String): String =
-        "Started $started · ${build.entryCount} step${if (build.entryCount == 1) "" else "s"}"
+        FSStrings.plural(R.plurals.started_steps, build.entryCount, started, build.entryCount)
 
-    const val DISCARD_TITLE = "Discard this build?"
+    val DISCARD_TITLE get() = FSStrings.get(R.string.discard_this_build)
 
     fun discardBuildMessage(build: BuildSummary): String =
-        "This deletes what was imported or written on your server. Its name, \"${build.displayName}\", becomes free again."
+        FSStrings.get(R.string.this_deletes_what_was_imported_or, build.displayName)
 
     fun discardMessage(session: VibeCodeSessionMeta): String {
         val freed = session.name?.let { " Its name, \"$it\", becomes free again." } ?: ""
-        return "This stops the AI and deletes what it has written on your server.$freed"
+        return FSStrings.get(R.string.this_stops_the_ai_and_deletes, freed)
     }
 
     fun label(status: String): String = when (status) {
-        "streaming" -> "AI is working"
-        "awaiting-tool-response" -> "Waiting for you"
-        "ready-to-deploy" -> "Ready to deploy"
+        "streaming" -> FSStrings.get(R.string.ai_is_working)
+        "awaiting-tool-response" -> FSStrings.get(R.string.waiting_for_you)
+        "ready-to-deploy" -> FSStrings.get(R.string.ready_to_deploy)
         "deploying" -> "Deploying"
         "deployed" -> "Deployed"
         "failed" -> "Failed"

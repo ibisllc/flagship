@@ -4,6 +4,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
 import com.flagshipserver.app.api.AuditEvent
 import com.flagshipserver.app.api.BoxActivityEntry
@@ -55,7 +57,7 @@ sealed interface ActivityItem {
                 ?: 0L,
         override val title: String = "Recovery: ${snapshot.lastReissue?.status ?: "snapshot"}",
         override val subtitle: String? =
-            snapshot.lastReissue?.let { "${it.totalRewritten} rewrites · ${it.reattachedCount} reattached" },
+            snapshot.lastReissue?.let { FSStrings.get(R.string.rewrites_reattached, it.totalRewritten, it.reattachedCount) },
     ) : ActivityItem
 
     /** Account-level audit event — surfaced alongside install events
@@ -202,7 +204,7 @@ class ActivityViewModel(
                 )
             },
             onFailure = { t ->
-                _state.value = LoadingState.Failed(UserErrorText.of(t, "Couldn't load activity. Try again."))
+                _state.value = LoadingState.Failed(UserErrorText.of(t, FSStrings.get(R.string.couldnt_load_activity_try_again)))
             },
         )
     }

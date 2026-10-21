@@ -11,6 +11,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import okhttp3.Interceptor
@@ -103,7 +104,7 @@ class AccountGoneInterceptor : Interceptor {
         val onApex = req.url.host.equals(Endpoints.controlHost, ignoreCase = true)
         if (onApex && AccountGone.answersLocally(req.url.encodedPath)) {
             return Response.Builder()
-                .request(req).protocol(Protocol.HTTP_1_1).code(404).message("Not Found")
+                .request(req).protocol(Protocol.HTTP_1_1).code(404).message(FSStrings.get(R.string.not_found))
                 .header("cache-control", "no-store")
                 .body(AccountGone.responseBody().toResponseBody("application/json".toMediaType()))
                 .build()
@@ -118,11 +119,11 @@ class AccountGoneInterceptor : Interceptor {
 
 /** The screen's words (docs/account-gone.md "The admin key is the way out: exact strings", phone variants). */
 object AccountGoneCopy {
-    const val TITLE = "This account was removed"
-    const val BODY = "This account no longer exists on Flagship. This can happen after a reset."
-    const val RESTORE_HINT = "If you saved a backup of your servers, you can restore it into a new account."
-    const val CREATE = "Create a new account"
-    const val REMOVE = "Remove it from this device"
+    val TITLE get() = FSStrings.get(R.string.this_account_was_removed)
+    val BODY get() = FSStrings.get(R.string.this_account_no_longer_exists_on)
+    val RESTORE_HINT get() = FSStrings.get(R.string.if_you_saved_a_backup_of)
+    val CREATE get() = FSStrings.get(R.string.create_a_new_account)
+    val REMOVE get() = FSStrings.get(R.string.remove_it_from_this_device)
     fun account(name: String) = "Account: $name"
 }
 
@@ -132,20 +133,18 @@ object AccountGoneCopy {
  * removes it) says so first and offers to save a backup of the account key.
  */
 object AdminKeyWarning {
-    const val REMOVE_TITLE = "Remove this account from this device?"
-    const val REMOVE_MESSAGE =
-        "This also removes this device's admin key, which you need to sign in to your servers. " +
-            "Save a backup of your account key first, or remove anyway."
-    const val SAVE_FIRST = "Save my account key first"
-    const val REMOVE_ANYWAY = "Remove anyway"
+    val REMOVE_TITLE get() = FSStrings.get(R.string.remove_this_account_from_this_device)
+    val REMOVE_MESSAGE get() =
+        FSStrings.get(R.string.this_also_removes_this_devices_admin)
+    val SAVE_FIRST get() = FSStrings.get(R.string.save_my_account_key_first)
+    val REMOVE_ANYWAY get() = FSStrings.get(R.string.remove_anyway)
 
-    const val SIGN_OUT_TITLE = "Sign out?"
-    const val SIGN_OUT_NOT_BACKED_UP =
-        "Signing out removes this device's admin key. Save a backup of your account key first, or sign out anyway."
-    const val SIGN_OUT_BACKED_UP =
-        "Signing out removes this device's admin key. You backed up your account key, so keep that file and " +
-            "its passphrase safe."
-    const val SIGN_OUT_ANYWAY = "Sign out anyway"
+    val SIGN_OUT_TITLE get() = FSStrings.get(R.string.sign_out)
+    val SIGN_OUT_NOT_BACKED_UP get() =
+        FSStrings.get(R.string.signing_out_removes_this_devices_admin)
+    val SIGN_OUT_BACKED_UP get() =
+        FSStrings.get(R.string.signing_out_removes_this_devices_admin_2)
+    val SIGN_OUT_ANYWAY get() = FSStrings.get(R.string.sign_out_anyway)
 
     /** Who is warned before a removal: a device that holds the admin root or a session for any server. */
     fun needsRemovalWarning(holdsAdminRoot: Boolean, holdsServerSession: Boolean) = holdsAdminRoot || holdsServerSession
