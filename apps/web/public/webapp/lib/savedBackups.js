@@ -13,12 +13,13 @@
 import { deriveServerArchiveKeyFromSeed } from "../keystore.js";
 import { approveArchiveDownload, newArchiveId, startBrowserDownload } from "./serverArchive.js";
 
+import { tr, trn } from "./i18n.js";
 export const SAVED_PATH = "/api/screens/server-archive/backups";
 export const TAG_SERVER_ARCHIVE_KEYS = "flagship/server-archive-keys/v1";
 export const MAX_KEYS_PER_DEPOSIT = 400;
 export const SAVED_FILES_NOTE =
-  "Each backup is one .flagship file. Import a backup on Home restores it. It opens on your own devices without a passcode.";
-export const DELETE_CONFIRM = "Delete this backup from the server?";
+  tr("Each backup is one .flagship file. Import a backup on Home restores it. It opens on your own devices without a passcode.");
+export const DELETE_CONFIRM = tr("Delete this backup from the server?");
 
 const toHex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 
@@ -127,9 +128,9 @@ function timeText(hour, minute) {
 
 /** "Daily at 3:00 AM · keeps 7 daily and 4 weekly" */
 export function scheduleLine(s, ref = new Date()) {
-  if (!s || s.frequency === "off") return "Scheduled backups are off.";
+  if (!s || s.frequency === "off") return tr("Scheduled backups are off.");
   const l = utcToLocal(s, ref);
-  const when = s.frequency === "weekly" ? `Weekly on ${WEEKDAYS[l.weekday]} at ${timeText(l.hour, l.minute)}` : `Daily at ${timeText(l.hour, l.minute)}`;
+  const when = s.frequency === "weekly" ? tr("Weekly on {0} at {1}", WEEKDAYS[l.weekday], timeText(l.hour, l.minute)) : tr("Daily at {0}", timeText(l.hour, l.minute));
   return `${when} · keeps ${s.keepDaily} daily and ${s.keepWeekly} weekly`;
 }
 
@@ -143,13 +144,13 @@ export function statusLines(view, { formatBytes, formatTime = (t) => new Date(t)
     out.status = `Backing up… ${p.app || ""}${p.total ? ` (${p.done}/${p.total})` : ""}`.trim();
   } else if (view?.backups?.[0]) {
     const b = view.backups[0];
-    out.status = `Last backup: ${formatTime(b.createdAt)} · ${formatBytes(b.bundleBytes ?? b.bytes + b.backupBytes)}`;
+    out.status = tr("Last backup: {0} · {1}", formatTime(b.createdAt), formatBytes(b.bundleBytes ?? b.bytes + b.backupBytes));
   } else {
-    out.status = "No backups yet.";
+    out.status = tr("No backups yet.");
   }
-  if (view?.lastRun && view.lastRun.ok === false) out.failed = `The last backup failed: ${trimStop(view.lastRun.reason) || "the backup couldn't be made"}.`;
-  if (view?.scheduleActive === false || view?.schedule?.frequency === "off") out.next = "Scheduled backups are off.";
-  else if (view?.nextRunAt) out.next = `Next backup: ${formatTime(view.nextRunAt)}`;
+  if (view?.lastRun && view.lastRun.ok === false) out.failed = tr("The last backup failed: {0}.", trimStop(view.lastRun.reason) || "the backup couldn't be made");
+  if (view?.scheduleActive === false || view?.schedule?.frequency === "off") out.next = tr("Scheduled backups are off.");
+  else if (view?.nextRunAt) out.next = tr("Next backup: {0}", formatTime(view.nextRunAt));
   else if (view?.waitingReason) out.next = `${trimStop(view.waitingReason).replace(/^./, (c) => c.toUpperCase())}.`;
   return out;
 }
@@ -157,7 +158,7 @@ export function statusLines(view, { formatBytes, formatTime = (t) => new Date(t)
 /** One row of the list: "Oct 16, 3:00 AM · 1.2 GB · Scheduled · 3 apps" and a left-out line. */
 export function rowText(b, { formatBytes, formatTime = (t) => new Date(t).toLocaleString() }) {
   const n = b.apps?.length ?? 0;
-  const main = `${formatTime(b.createdAt)} · ${formatBytes(b.bundleBytes ?? b.bytes + b.backupBytes)} · ${b.trigger === "schedule" ? "Scheduled" : "Back up now"} · ${n} app${n === 1 ? "" : "s"}`;
-  const left = b.left?.length ? `Left out: ${b.left.map((x) => x.name).join(", ")}` : "";
+  const main = trn(n, "{1} · {2} · {3} · {0} app", "{1} · {2} · {3} · {0} apps", formatTime(b.createdAt), formatBytes(b.bundleBytes ?? b.bytes + b.backupBytes), b.trigger === "schedule" ? "Scheduled" : tr("Back up now"));
+  const left = b.left?.length ? tr("Left out: {0}", b.left.map((x) => x.name).join(", ")) : "";
   return { main, left };
 }

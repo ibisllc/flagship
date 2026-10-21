@@ -29,6 +29,6 @@ describe("app page — Recent logs", () => {
   it("sits on the app page before Backup", () => {
     const at = VIEW.indexOf("${renderRecentLogs(body.recentLogs)}");
     expect(at).toBeGreaterThan(-1);
-    expect(at).toBeLessThan(VIEW.indexOf('<h2 class="mt-4">Backup</h2>'));
+    expect(at).toBeLessThan(VIEW.indexOf('<h2 class="mt-4">${tr("Backup")}</h2>'));
   });
 });

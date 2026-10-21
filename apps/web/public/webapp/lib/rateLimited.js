@@ -7,8 +7,9 @@
 // username-suggest cooldown, wipe-restart) keep their own shapes.
 //
 // MIRRORS: iOS + Android "rate-limited-message" (parity/features.json).
+import { tr, trn } from "./i18n.js";
 
-export const RATE_LIMITED_FALLBACK = "Too many tries. Try again later.";
+export const RATE_LIMITED_FALLBACK = tr("Too many tries. Try again later.");
 
 const WHO = {
   ip: "from your network",
@@ -20,9 +21,9 @@ const WHO = {
 export function retryAfterPhrase(sec) {
   if (sec < 60) return "in a minute";
   const min = Math.ceil(sec / 60);
-  if (min < 60) return `in about ${min} minute${min === 1 ? "" : "s"}`;
+  if (min < 60) return trn(min, "in about {0} minute", "in about {0} minutes");
   const h = Math.max(1, Math.round(min / 60));
-  return `in about ${h} hour${h === 1 ? "" : "s"}`;
+  return trn(h, "in about {0} hour", "in about {0} hours");
 }
 
 /** The sentence for a limit axis and wait, or null when either is unusable. */
@@ -30,7 +31,7 @@ export function rateLimitedMessage(limit, retryAfterSec) {
   const who = typeof limit === "string" && Object.hasOwn(WHO, limit) ? WHO[limit] : null;
   const sec = seconds(retryAfterSec);
   if (!who || sec === null) return null;
-  return `Too many tries ${who}. Try again ${retryAfterPhrase(sec)}.`;
+  return tr("Too many tries {0}. Try again {1}.", who, retryAfterPhrase(sec));
 }
 
 function seconds(v) {

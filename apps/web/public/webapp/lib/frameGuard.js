@@ -3,6 +3,7 @@
 // already refuses framing with CSP frame-ancestors and X-Frame-Options; this
 // is the second guard, for a copy served without those headers. It is app.js's
 // first import, so a throw here stops the app before anything else boots.
+import { tr } from "./i18n.js";
 
 export function isFramed(win = globalThis) {
   try {
@@ -15,7 +16,7 @@ export function isFramed(win = globalThis) {
 
 if (isFramed()) {
   const p = document.createElement("p");
-  p.textContent = `Flagship can't open inside another page. Go to ${location.origin} directly.`;
+  p.textContent = tr("Flagship can't open inside another page. Go to {0} directly.", location.origin);
   document.body.replaceChildren(p);
-  throw new Error("Flagship refuses to run in a frame");
+  throw new Error(tr("Flagship refuses to run in a frame"));
 }

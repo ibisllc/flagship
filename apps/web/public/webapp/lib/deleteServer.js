@@ -18,6 +18,7 @@ import { releaseServerName } from "./releaseServer.js";
 import { REVOCATION_REASONS } from "./revokeServer.js";
 import { escapeHtml } from "./util.js";
 
+import { tr } from "./i18n.js";
 const HEX64 = /^[0-9a-f]{64}$/i;
 
 /** The `<server>` label of `<server>.<user>.flagship.services`. */
@@ -69,9 +70,9 @@ export function isRecentlyDeleted(serverDomain, now = Date.now()) {
 /** The success toast. `depositOk` is null when the server never registered a
  *  box key, so there was nothing to ask. */
 export function deleteToastCopy(serverDomain, depositOk) {
-  const base = `Deleted ${serverLabelOf(serverDomain)}.`;
-  if (depositOk === true) return `${base} If it's online it will erase itself and power off.`;
-  if (depositOk === false) return `${base} It couldn't be asked to erase itself.`;
+  const base = tr("Deleted {0}.", serverLabelOf(serverDomain));
+  if (depositOk === true) return tr("{0} If it's online it will erase itself and power off.", base);
+  if (depositOk === false) return tr("{0} It couldn't be asked to erase itself.", base);
   return base;
 }
 
@@ -154,20 +155,18 @@ export function openDeleteServerDialog(target, env) {
   const label = serverLabelOf(serverDomain);
   const dlg = document.createElement("dialog");
   dlg.className = "modal-card";
-  dlg.setAttribute("aria-label", "Delete server");
+  dlg.setAttribute("aria-label", tr("Delete server"));
   dlg.innerHTML = `
-    <h3 class="modal-title">Delete ${escapeHtml(label)}?</h3>
+    <h3 class="modal-title">${tr("Delete {0}?", escapeHtml(label))}</h3>
     <p class="modal-message">
-      Deletes <strong>${escapeHtml(label)}</strong> for good. If the box is
-      online it erases its data and powers off; if it's offline it can never
-      come back online. The name becomes free to reuse.
+      ${tr("Deletes <strong>{0}</strong> for good. If the box is online it erases its data and powers off; if it's offline it can never come back online. The name becomes free to reuse.", escapeHtml(label))}
     </p>
-    <label class="caption mt-2">Type <strong>${escapeHtml(label)}</strong> to confirm</label>
+    <label class="caption mt-2">${tr("Type <strong>{0}</strong> to confirm", escapeHtml(label))}</label>
     <input class="full-width mt-1" data-delete-input placeholder="${escapeHtml(label)}" autocomplete="off" autocapitalize="off" spellcheck="false" />
     <p class="modal-error err-text hidden" data-delete-error></p>
     <div class="row-2 mt-3">
-      <button class="secondary" data-delete-cancel>Cancel</button>
-      <button class="danger" data-delete-go disabled>Delete server</button>
+      <button class="secondary" data-delete-cancel>${tr("Cancel")}</button>
+      <button class="danger" data-delete-go disabled>${tr("Delete server")}</button>
     </div>
   `;
   document.body.appendChild(dlg);
@@ -202,7 +201,7 @@ export function openDeleteServerDialog(target, env) {
       cancelBtn.disabled = true;
       input.disabled = true;
       errEl.classList.add("hidden");
-      goBtn.textContent = "Deleting…";
+      goBtn.textContent = tr("Deleting…");
       try {
         const out = await deleteServer({
           serverDomain,
@@ -235,9 +234,9 @@ export function openDeleteServerDialog(target, env) {
         busy = false;
         cancelBtn.disabled = false;
         input.disabled = false;
-        goBtn.textContent = "Delete server";
+        goBtn.textContent = tr("Delete server");
         goBtn.disabled = !deleteNameMatches(input.value, serverDomain);
-        errEl.textContent = `Delete failed: ${env.humanError(e)}`;
+        errEl.textContent = tr("Delete failed: {0}", env.humanError(e));
         errEl.classList.remove("hidden");
       }
     });

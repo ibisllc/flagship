@@ -25,6 +25,7 @@
 
 import * as profilesStore from "./lib/profilesStore.js";
 
+import { tr } from "./lib/i18n.js";
 const DB_NAME = "flagship-webapp";
 const DB_STORE = "keystore";
 const RECORD_KEY = "wrappedUmk";
@@ -226,7 +227,7 @@ async function deriveKek(passphrase, salt) {
       iterations: PBKDF2_ITERS,
     },
     baseKey,
-    { name: "AES-GCM", length: 256 },
+    { name: tr("AES-GCM"), length: 256 },
     false,
     ["encrypt", "decrypt"],
   );
@@ -237,7 +238,7 @@ async function wrapUmk(passphrase, umkSeed) {
   const nonce = randomBytes(AES_NONCE_BYTES);
   const kek = await deriveKek(passphrase, salt);
   const ciphertext = new Uint8Array(
-    await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, kek, umkSeed),
+    await crypto.subtle.encrypt({ name: tr("AES-GCM"), iv: nonce }, kek, umkSeed),
   );
   return {
     version: 1,
@@ -253,7 +254,7 @@ async function unwrapUmk(passphrase, blob) {
   const ciphertext = hexToBytes(blob.ciphertext);
   const kek = await deriveKek(passphrase, salt);
   return new Uint8Array(
-    await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, kek, ciphertext),
+    await crypto.subtle.decrypt({ name: tr("AES-GCM"), iv: nonce }, kek, ciphertext),
   );
 }
 
@@ -297,7 +298,7 @@ async function irkFromInfoSeed(umkSeed, info) {
   const privateKey = await crypto.subtle.importKey(
     "pkcs8",
     pkcs8,
-    { name: "Ed25519" },
+    { name: tr("Ed25519") },
     false,
     ["sign"],
   );
@@ -461,7 +462,7 @@ function accountDeviceSeedRecordKey(accountId, deviceId) {
 
 async function accountDeviceSeedWrapKey(umkSeed) {
   const raw = await hkdf32(umkSeed, ACCOUNT_DEVICE_SEED_WRAP_INFO);
-  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+  return crypto.subtle.importKey("raw", raw, { name: tr("AES-GCM") }, false, ["encrypt", "decrypt"]);
 }
 
 /** Keep a device key picked before the account key was known (a pairing-code
@@ -473,7 +474,7 @@ export async function persistAccountDeviceSeed(umkSeed, accountId, deviceId, dev
   const recordKey = accountDeviceSeedRecordKey(accountId, deviceId);
   const kek = await accountDeviceSeedWrapKey(umkSeed);
   const nonce = randomBytes(AES_NONCE_BYTES);
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, kek, deviceSeed));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: tr("AES-GCM"), iv: nonce }, kek, deviceSeed));
   await dbPut(recordKey, { version: 1, nonce: bytesToHex(nonce), ciphertext: bytesToHex(ct) });
   accountDeviceSeedCache.set(recordKey, { umkHex: bytesToHex(umkSeed), seed: deviceSeed.slice() });
 }
@@ -492,7 +493,7 @@ async function loadAccountDeviceSeed(umkSeed, accountId, deviceId) {
     }
     const kek = await accountDeviceSeedWrapKey(umkSeed);
     const seed = new Uint8Array(await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: hexToBytes(blob.nonce) }, kek, hexToBytes(blob.ciphertext),
+      { name: tr("AES-GCM"), iv: hexToBytes(blob.nonce) }, kek, hexToBytes(blob.ciphertext),
     ));
     accountDeviceSeedCache.set(recordKey, { umkHex, seed: seed.slice() });
     return seed;
@@ -504,7 +505,7 @@ async function loadAccountDeviceSeed(umkSeed, accountId, deviceId) {
 /** Sign canonical-bytes with this device's account device key. */
 export async function signWithAccountDeviceKey(umkSeed, accountId, deviceId, canonicalBytes) {
   const key = await deriveAccountDeviceKeyFromSeed(umkSeed, accountId, deviceId);
-  return new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, key.privateKey, canonicalBytes));
+  return new Uint8Array(await crypto.subtle.sign({ name: tr("Ed25519") }, key.privateKey, canonicalBytes));
 }
 
 function accountDeviceInfo(accountId, deviceId) {
@@ -533,7 +534,7 @@ export async function deriveAppAccountIdFromSeed(umkSeed, appRef) {
 /** Sign canonical-bytes with the visitor's id for one app ({@link deriveAppAccountIdFromSeed}). */
 export async function signWithAppAccountId(umkSeed, appRef, canonicalBytes) {
   const app = await deriveAppAccountIdFromSeed(umkSeed, appRef);
-  return new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, app.privateKey, canonicalBytes));
+  return new Uint8Array(await crypto.subtle.sign({ name: tr("Ed25519") }, app.privateKey, canonicalBytes));
 }
 
 /**
@@ -572,7 +573,7 @@ export async function deriveServerArchiveKeyFromSeed(umkSeed, archiveIdHex) {
 export async function signWithAccountId(umkSeed, canonicalBytes) {
   const aid = await deriveAccountIdFromSeed(umkSeed);
   return new Uint8Array(
-    await crypto.subtle.sign({ name: "Ed25519" }, aid.privateKey, canonicalBytes),
+    await crypto.subtle.sign({ name: tr("Ed25519") }, aid.privateKey, canonicalBytes),
   );
 }
 
@@ -605,7 +606,7 @@ export async function deriveBakFromSeed(umkSeed, serverId) {
   const privateKey = await crypto.subtle.importKey(
     "pkcs8",
     pkcs8,
-    { name: "Ed25519" },
+    { name: tr("Ed25519") },
     false,
     ["sign"],
   );
@@ -623,13 +624,13 @@ async function jwkPubFromSeed(seed) {
   const kp = await crypto.subtle.importKey(
     "pkcs8",
     pkcs8FromSeed(seed),
-    { name: "Ed25519" },
+    { name: tr("Ed25519") },
     true,
     ["sign"],
   );
   const jwk = await crypto.subtle.exportKey("jwk", kp);
   // The jwk.x is base64url of the public 32 bytes.
-  if (typeof jwk.x !== "string") throw new Error("Ed25519 export missing x");
+  if (typeof jwk.x !== "string") throw new Error(tr("Ed25519 export missing x"));
   return base64urlToBytes(jwk.x);
 }
 
@@ -649,7 +650,7 @@ function base64urlToBytes(s) {
 export async function signWithIrk(umkSeed, canonicalBytes) {
   const irk = await deriveIrkFromSeed(umkSeed);
   const sig = new Uint8Array(
-    await crypto.subtle.sign({ name: "Ed25519" }, irk.privateKey, canonicalBytes),
+    await crypto.subtle.sign({ name: tr("Ed25519") }, irk.privateKey, canonicalBytes),
   );
   return sig;
 }
@@ -660,7 +661,7 @@ export async function signWithIrk(umkSeed, canonicalBytes) {
 export async function signWithIrkVersioned(umkSeed, version, canonicalBytes) {
   const irk = await deriveIrkVersioned(umkSeed, version);
   return new Uint8Array(
-    await crypto.subtle.sign({ name: "Ed25519" }, irk.privateKey, canonicalBytes),
+    await crypto.subtle.sign({ name: tr("Ed25519") }, irk.privateKey, canonicalBytes),
   );
 }
 
@@ -681,11 +682,11 @@ export async function verifyWithEd25519Pub(pub, signature, canonicalBytes) {
     const key = await crypto.subtle.importKey(
       "raw",
       pub,
-      { name: "Ed25519" },
+      { name: tr("Ed25519") },
       false,
       ["verify"],
     );
-    return await crypto.subtle.verify({ name: "Ed25519" }, key, signature, canonicalBytes);
+    return await crypto.subtle.verify({ name: tr("Ed25519") }, key, signature, canonicalBytes);
   } catch {
     return false;
   }
@@ -740,7 +741,7 @@ export function adminRootRecordKey(profileId = activeProfileId()) {
  *  encrypt/decrypt the device-local seed at rest; it is NOT the admin root. */
 async function adminRootWrapKey(umkSeed) {
   const raw = await hkdf32(umkSeed, ADMIN_ROOT_WRAP_INFO);
-  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, [
+  return crypto.subtle.importKey("raw", raw, { name: tr("AES-GCM") }, false, [
     "encrypt",
     "decrypt",
   ]);
@@ -759,7 +760,7 @@ export async function persistAdminRootSeed(umkSeed, adminSeed, profileId = activ
   const kek = await adminRootWrapKey(umkSeed);
   const nonce = randomBytes(AES_NONCE_BYTES);
   const ct = new Uint8Array(
-    await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, kek, adminSeed),
+    await crypto.subtle.encrypt({ name: tr("AES-GCM"), iv: nonce }, kek, adminSeed),
   );
   await dbPut(adminRootRecordKey(profileId), {
     version: 1,
@@ -785,7 +786,7 @@ export async function loadAdminRootSeed(umkSeed, profileId = activeProfileId()) 
   const nonce = hexToBytes(blob.nonce);
   const ct = hexToBytes(blob.ciphertext);
   const pt = new Uint8Array(
-    await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, kek, ct),
+    await crypto.subtle.decrypt({ name: tr("AES-GCM"), iv: nonce }, kek, ct),
   );
   return pt;
 }
@@ -802,7 +803,7 @@ export async function deriveAdminRootFromSeed(adminSeed) {
   const privateKey = await crypto.subtle.importKey(
     "pkcs8",
     pkcs8,
-    { name: "Ed25519" },
+    { name: tr("Ed25519") },
     false,
     ["sign"],
   );
@@ -824,7 +825,7 @@ export async function adminRootPubHex(adminSeed) {
 export async function signWithAdminRoot(adminSeed, canonicalBytes) {
   const kp = await deriveAdminRootFromSeed(adminSeed);
   return new Uint8Array(
-    await crypto.subtle.sign({ name: "Ed25519" }, kp.privateKey, canonicalBytes),
+    await crypto.subtle.sign({ name: tr("Ed25519") }, kp.privateKey, canonicalBytes),
   );
 }
 

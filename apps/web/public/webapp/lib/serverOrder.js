@@ -23,6 +23,7 @@ import { getActiveProfile } from "./profiles.js";
 import { isDemoProfile } from "./demoAccount.js";
 import { boxClient } from "./api.js";
 
+import { tr } from "./i18n.js";
 export const TAG_SERVER_ORDER = "flagship/server-order/v1";
 export const SERVER_ORDER_MAX = 64;
 const STORAGE_PREFIX = "flagship.serverOrder.";
@@ -321,7 +322,7 @@ export class ServerOrderError extends Error {
 /** The server order is a sensitive order (admin root, docs/server-order.md):
  *  `.com` refuses it from a device that doesn't hold the admin root, so such a
  *  device sees the order without the controls to change it. */
-export const SERVER_ORDER_ADMIN_ONLY = "Only an admin device can change the server order.";
+export const SERVER_ORDER_ADMIN_ONLY = tr("Only an admin device can change the server order.");
 
 /** The toast for a failed save: a newer order saved on another device says
  *  so in its own words; anything else gets the caller's usual copy. */
@@ -364,7 +365,7 @@ export async function saveServerOrder({ stks }, deps = {}) {
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
       const reason = r.status === 409
-        ? "Another device changed the order. Showing the latest one."
+        ? tr("Another device changed the order. Showing the latest one.")
         : String(body?.error ?? `HTTP ${r.status}`);
       throw new ServerOrderError(reason, r.status);
     }

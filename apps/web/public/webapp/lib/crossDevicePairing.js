@@ -58,6 +58,7 @@ import {
   persistAdminRootSeed as ksPersistAdminRootSeed,
 } from "../keystore.js";
 
+import { tr } from "./i18n.js";
 const APEX = controlApex();
 
 /** Canonical-bytes tag for the device-admit envelope. MUST match
@@ -84,7 +85,7 @@ export const DEVICE_GRANT_TTL_MS = 90 * 24 * 3_600_000;
 
 /** Shown in place of Add device on a device without the admin root (the
  *  `add-device` scope is an admin's; docs/v2-device-addressing-and-real-ticket.md §2). */
-export const ADD_DEVICE_ADMIN_ONLY = "Only an admin device of this account can add devices.";
+export const ADD_DEVICE_ADMIN_ONLY = tr("Only an admin device of this account can add devices.");
 
 /** The relay session's single-use TTL. Short by design (Safeguard 1):
  *  a leaked screenshot of the QR is useless once the session expires.
@@ -101,11 +102,11 @@ export const QUARANTINE_MS = 14 * 86_400_000;
 /** Risk-warning copy carried on BOTH screens (Safeguard 4). Pure exports
  *  so tests pin the exact wording and the iOS/Android surfaces can match. */
 export const ADMIN_RISK_WARNING =
-  "This shares your account keys with the new device. Anyone who scans this code can join your account, so only use it for your own devices. To give another person access, use Share this server on the server's page.";
+  tr("This shares your account keys with the new device. Anyone who scans this code can join your account, so only use it for your own devices. To give another person access, use Share this server on the server's page.");
 export const INCOMING_RISK_WARNING =
-  "Scanning this links this device to someone else's Flagship account and copies their account keys here. Only continue if you trust the person showing the code.";
+  tr("Scanning this links this device to someone else's Flagship account and copies their account keys here. Only continue if you trust the person showing the code.");
 export const NO_SCREENSHOT_WARNING =
-  "Don't screenshot this code. A captured still can be used to join the account. The code also expires shortly.";
+  tr("Don't screenshot this code. A captured still can be used to join the account. The code also expires shortly.");
 
 /** `|`-joined, UTF-8 — same as every signed message. */
 function canonical(parts) {
@@ -419,8 +420,8 @@ export function quarantineTimeline(admitResponse, now = Date.now()) {
   const quarantined = until > now;
   const remainingMs = Math.max(0, until - now);
   const label = quarantined
-    ? `This device is under review for ${formatRemaining(remainingMs)} — it can't manage other devices until then, and the account owner is being asked to confirm it.`
-    : "This device's review window has elapsed.";
+    ? tr("This device is under review for {0} — it can't manage other devices until then, and the account owner is being asked to confirm it.", formatRemaining(remainingMs))
+    : tr("This device's review window has elapsed.");
   return { quarantined, until, remainingMs, label };
 }
 
@@ -622,7 +623,7 @@ export function parseSealedBundle(plaintext, opts = {}) {
 
 /** A bundle from an app that predates device grants: `.com` would refuse it. */
 export const BUNDLE_OUT_OF_DATE =
-  "The device showing the code needs an update before it can add devices. Update its Flagship app and try again.";
+  tr("The device showing the code needs an update before it can add devices. Update its Flagship app and try again.");
 
 /** Run the incoming side end-to-end once the relay has delivered the
  *  sealed bundle.
@@ -685,7 +686,7 @@ export async function runIncomingJoin(deps) {
   const fetchPub = deps.fetchAccountIrkPubHex || fetchAccountIrkPubHex;
   const verify = deps.verifyAdmit || verifyAdmit;
   const post = deps.postDeviceAdmit || postDeviceAdmit;
-  const deviceDisplayName = validateProfileDisplayName(deps.deviceDisplayName ?? "This browser");
+  const deviceDisplayName = validateProfileDisplayName(deps.deviceDisplayName ?? tr("This browser"));
 
   // 1 — parse the sealed bundle (carries the OPTIONAL sealed admin root when
   // the admin promoted this device, Slice D D-4).
