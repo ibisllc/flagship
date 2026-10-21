@@ -7210,7 +7210,8 @@
   },
   "Kitchen display": {
     "en": "Kitchen display",
-    "ctx": "webapp/views/service-detail.js:625"
+    "ctx": "webapp/views/service-detail.js:625",
+    "translatable": false
   },
   "Access": {
     "en": "Access",
