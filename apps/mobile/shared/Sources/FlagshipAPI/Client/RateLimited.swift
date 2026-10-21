@@ -52,9 +52,9 @@ public struct RateLimitedRefusal: Equatable, Sendable {
     public static func retryAfterPhrase(_ sec: Int) -> String {
         if sec < 60 { return "in a minute" }
         let min = (sec + 59) / 60
-        if min < 60 { return "in about \(min) minute\(min == 1 ? "" : "s")" }
+        if min < 60 { return (min == 1 ? String(localized: "in about \(min) minute") : String(localized: "in about \(min) minutes")) }
         let h = max(1, Int((Double(min) / 60).rounded()))
-        return "in about \(h) hour\(h == 1 ? "" : "s")"
+        return (h == 1 ? String(localized: "in about \(h) hour") : String(localized: "in about \(h) hours"))
     }
 
     /// The refusal in a 429 body, or nil for any other answer (including the

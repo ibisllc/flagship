@@ -385,7 +385,7 @@ public struct ServiceDetailScreen: View {
                             Image(systemName: "rectangle.on.rectangle").foregroundColor(c.accent)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Open browser viewer").foregroundColor(c.text)
-                                Text("\(d.browserTabs.count) tab\(d.browserTabs.count == 1 ? "" : "s") running server-side")
+                                Text(d.browserTabs.count == 1 ? String(localized: "\(d.browserTabs.count) tab running server-side") : String(localized: "\(d.browserTabs.count) tabs running server-side"))
                                     .font(FS.font.caption())
                                     .foregroundColor(c.textMuted)
                             }

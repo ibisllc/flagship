@@ -1,0 +1,121 @@
+{
+  "_about": "Edits scripts/i18n-ios.mjs cannot make by itself: a sentence built by appending an s becomes two whole sentences (one / other), each a key of its own. Works without a catalog (tests, previews) and needs no plural variations. `wrap` applies them; each is skipped when its `find` text is absent.",
+  "edits": [
+    {
+      "file": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift",
+      "find": "String(localized: \"Kept on \\(n) other server\\(n == 1 ? \"\" : \"s\")\")",
+      "replace": "(n == 1 ? String(localized: \"Kept on \\(n) other server\") : String(localized: \"Kept on \\(n) other servers\"))"
+    },
+    {
+      "file": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerArchiveViewModels.swift",
+      "find": "String(localized: \"Restored \\(n) app\\(n == 1 ? \"\" : \"s\")\")",
+      "replace": "(n == 1 ? String(localized: \"Restored \\(n) app\") : String(localized: \"Restored \\(n) apps\"))"
+    },
+    {
+      "file": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift",
+      "find": "Text(\"… \\(hiddenMessages) earlier message\\(hiddenMessages == 1 ? \"\" : \"s\") not shown\")",
+      "replace": "Text(hiddenMessages == 1 ? String(localized: \"… \\(hiddenMessages) earlier message not shown\") : String(localized: \"… \\(hiddenMessages) earlier messages not shown\"))"
+    },
+    {
+      "file": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceDetailScreen.swift",
+      "find": "Text(\"\\(d.browserTabs.count) tab\\(d.browserTabs.count == 1 ? \"\" : \"s\") running server-side\")",
+      "replace": "Text(d.browserTabs.count == 1 ? String(localized: \"\\(d.browserTabs.count) tab running server-side\") : String(localized: \"\\(d.browserTabs.count) tabs running server-side\"))"
+    },
+    {
+      "file": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift",
+      "find": "String(localized: \"\\(Int(hours)) hour\\(hours == 1 ? \"\" : \"s\")\")",
+      "replace": "(hours == 1 ? String(localized: \"\\(Int(hours)) hour\") : String(localized: \"\\(Int(hours)) hours\"))"
+    },
+    {
+      "file": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift",
+      "find": "Text(\"\\(r.totalRewritten) row\\(r.totalRewritten == 1 ? \"\" : \"s\") rewritten · \\(r.reattachedCount) app\\(r.reattachedCount == 1 ? \"\" : \"s\")\")",
+      "replace": "Text([r.totalRewritten == 1 ? String(localized: \"\\(r.totalRewritten) row rewritten\") : String(localized: \"\\(r.totalRewritten) rows rewritten\"), r.reattachedCount == 1 ? String(localized: \"\\(r.reattachedCount) app\") : String(localized: \"\\(r.reattachedCount) apps\")].joined(separator: \" · \"))"
+    },
+    {
+      "file": "apps/mobile/ios/Sources/FlagshipUI/Screens/PostRecoveryScreen.swift",
+      "find": "Text(\"Re-anchored \\(r.totalRewritten) membership rows across \\(r.reattachedCount) app\\(r.reattachedCount == 1 ? \"\" : \"s\").\")",
+      "replace": "Text(\"Membership rows re-anchored: \\(r.totalRewritten). Apps affected: \\(r.reattachedCount).\")"
+    },
+    {
+      "file": "apps/mobile/ios/Sources/FlagshipUI/Screens/PostRecoveryScreen.swift",
+      "find": "Text(\"\\(app.rewrittenCount) row\\(app.rewrittenCount == 1 ? \"\" : \"s\") re-anchored\")",
+      "replace": "Text(app.rewrittenCount == 1 ? String(localized: \"\\(app.rewrittenCount) row re-anchored\") : String(localized: \"\\(app.rewrittenCount) rows re-anchored\"))"
+    },
+    {
+      "file": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift",
+      "find": "Text(\"\\(r.reason) — \\(r.fileCount) file\\(r.fileCount == 1 ? \"\" : \"s\").\")",
+      "replace": "Text(r.fileCount == 1 ? String(localized: \"\\(r.reason) — \\(r.fileCount) file.\") : String(localized: \"\\(r.reason) — \\(r.fileCount) files.\"))"
+    },
+    {
+      "file": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift",
+      "find": "Text(\"The AI rewrote this repo into a Flagship service\\(n > 0 ? \" (\\(n) file\\(n == 1 ? \"\" : \"s\"))\" : \"\").\")",
+      "replace": "Text(n == 0 ? String(localized: \"The AI rewrote this repo into a Flagship service.\") : n == 1 ? String(localized: \"The AI rewrote this repo into a Flagship service (\\(n) file).\") : String(localized: \"The AI rewrote this repo into a Flagship service (\\(n) files).\"))"
+    },
+    {
+      "file": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift",
+      "find": "String(localized: \"Started \\(Self.timeString(b.startedAt)) · \\(b.entryCount) step\\(b.entryCount == 1 ? \"\" : \"s\")\")",
+      "replace": "(b.entryCount == 1 ? String(localized: \"Started \\(Self.timeString(b.startedAt)) · \\(b.entryCount) step\") : String(localized: \"Started \\(Self.timeString(b.startedAt)) · \\(b.entryCount) steps\"))"
+    },
+    {
+      "file": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift",
+      "find": "String(localized: \"\\(h.bricks) piece\\(h.bricks == 1 ? \"\" : \"s\")\")",
+      "replace": "(h.bricks == 1 ? String(localized: \"\\(h.bricks) piece\") : String(localized: \"\\(h.bricks) pieces\"))"
+    },
+    {
+      "file": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift",
+      "find": "String(localized: \"Restore by \\(formatTime(keepUntil)) (\\(days) day\\(days == 1 ? \"\" : \"s\") left).\")",
+      "replace": "(days == 1 ? String(localized: \"Restore by \\(formatTime(keepUntil)) (\\(days) day left).\") : String(localized: \"Restore by \\(formatTime(keepUntil)) (\\(days) days left).\"))"
+    },
+    {
+      "file": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift",
+      "find": "String(localized: \"\\(s.holders) server\\(s.holders == 1 ? \"\" : \"s\") hold its pieces; \\(s.needed) bring it back.\")",
+      "replace": "String(localized: \"Servers holding its pieces: \\(s.holders). Needed to bring it back: \\(s.needed).\")"
+    },
+    {
+      "file": "apps/mobile/shared/Sources/FlagshipCore/AppState.swift",
+      "find": "String(localized: \"\\(min) minute\\(min == 1 ? \"\" : \"s\") ago\")",
+      "replace": "(min == 1 ? String(localized: \"\\(min) minute ago\") : String(localized: \"\\(min) minutes ago\"))"
+    },
+    {
+      "file": "apps/mobile/shared/Sources/FlagshipCore/AppState.swift",
+      "find": "String(localized: \"\\(hr) hour\\(hr == 1 ? \"\" : \"s\") ago\")",
+      "replace": "(hr == 1 ? String(localized: \"\\(hr) hour ago\") : String(localized: \"\\(hr) hours ago\"))"
+    },
+    {
+      "file": "apps/mobile/shared/Sources/FlagshipCore/AppState.swift",
+      "find": "String(localized: \"\\(day) day\\(day == 1 ? \"\" : \"s\") ago\")",
+      "replace": "(day == 1 ? String(localized: \"\\(day) day ago\") : String(localized: \"\\(day) days ago\"))"
+    },
+    {
+      "file": "apps/mobile/shared/Sources/FlagshipAPI/Client/RateLimited.swift",
+      "find": "\"in about \\(min) minute\\(min == 1 ? \"\" : \"s\")\"",
+      "replace": "(min == 1 ? String(localized: \"in about \\(min) minute\") : String(localized: \"in about \\(min) minutes\"))"
+    },
+    {
+      "file": "apps/mobile/shared/Sources/FlagshipAPI/Client/RateLimited.swift",
+      "find": "\"in about \\(h) hour\\(h == 1 ? \"\" : \"s\")\"",
+      "replace": "(h == 1 ? String(localized: \"in about \\(h) hour\") : String(localized: \"in about \\(h) hours\"))"
+    },
+    {
+      "file": "apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift",
+      "find": "String(localized: \"This Mac is at its hosting limit (\\(cap) server\\(cap == 1 ? \"\" : \"s\")). Remove one first, or burn to USB.\")",
+      "replace": "(cap == 1 ? String(localized: \"This Mac is at its hosting limit (\\(cap) server). Remove one first, or burn to USB.\") : String(localized: \"This Mac is at its hosting limit (\\(cap) servers). Remove one first, or burn to USB.\"))"
+    },
+    {
+      "file": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift",
+      "find": "return String(localized: \"\\(observation.summary). Last guest checkpoint \\(relativeAge(observation.updatedAt, now: now)); \\(elapsed) minute\\(elapsed == 1 ? \"\" : \"s\") total.\")",
+      "replace": "return elapsed == 1 ? String(localized: \"\\(observation.summary). Last guest checkpoint \\(relativeAge(observation.updatedAt, now: now)); \\(elapsed) minute total.\") : String(localized: \"\\(observation.summary). Last guest checkpoint \\(relativeAge(observation.updatedAt, now: now)); \\(elapsed) minutes total.\")"
+    },
+    {
+      "file": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift",
+      "find": "return String(localized: \"\\(server.record.config.firstBootSummary); \\(elapsed) minute\\(elapsed == 1 ? \"\" : \"s\") so far. Progress appears here once the server checks in.\")",
+      "replace": "return elapsed == 1 ? String(localized: \"\\(server.record.config.firstBootSummary); \\(elapsed) minute so far. Progress appears here once the server checks in.\") : String(localized: \"\\(server.record.config.firstBootSummary); \\(elapsed) minutes so far. Progress appears here once the server checks in.\")"
+    },
+    {
+      "file": "apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift",
+      "find": "return String(localized: \"\\(minutes) minute\\(minutes == 1 ? \"\" : \"s\") ago\")",
+      "replace": "return minutes == 1 ? String(localized: \"\\(minutes) minute ago\") : String(localized: \"\\(minutes) minutes ago\")"
+    }
+  ],
+  "plurals": {}
+}

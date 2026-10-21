@@ -1169,11 +1169,11 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         let sec = ms / 1000
         if sec < 60 { return "just now" }
         let min = sec / 60
-        if min < 60 { return String(localized: "\(min) minute\(min == 1 ? "" : "s") ago") }
+        if min < 60 { return (min == 1 ? String(localized: "\(min) minute ago") : String(localized: "\(min) minutes ago")) }
         let hr = min / 60
-        if hr < 24 { return String(localized: "\(hr) hour\(hr == 1 ? "" : "s") ago") }
+        if hr < 24 { return (hr == 1 ? String(localized: "\(hr) hour ago") : String(localized: "\(hr) hours ago")) }
         let day = hr / 24
-        return String(localized: "\(day) day\(day == 1 ? "" : "s") ago")
+        return (day == 1 ? String(localized: "\(day) day ago") : String(localized: "\(day) days ago"))
     }
 }
 

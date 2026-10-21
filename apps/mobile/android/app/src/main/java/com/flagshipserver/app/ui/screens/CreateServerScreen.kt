@@ -827,7 +827,7 @@ private fun RecipeTtlPicker(
 
 private fun ttlLabel(hours: Double): String = when {
     hours < 1.0 -> FSStrings.get(R.string.min, (hours * 60).toInt())
-    hours == hours.toInt().toDouble() -> FSStrings.get(R.string.hour, hours.toInt(), if (hours == 1.0) "" else "s")
+    hours == hours.toInt().toDouble() -> FSStrings.plural(R.plurals.hours_count, hours.toInt(), hours.toInt())
     else -> String.format("%.1f hours", hours)
 }
 

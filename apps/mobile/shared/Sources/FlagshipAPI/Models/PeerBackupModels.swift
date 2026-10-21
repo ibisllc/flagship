@@ -127,7 +127,7 @@ public enum PeerBackupText {
         [
             holderState(h.state),
             (h.lastProofAt ?? 0) > 0 ? "last proof \(formatTime(h.lastProofAt!))" : "no proof yet",
-            String(localized: "\(h.bricks) piece\(h.bricks == 1 ? "" : "s")"),
+            (h.bricks == 1 ? String(localized: "\(h.bricks) piece") : String(localized: "\(h.bricks) pieces")),
         ].joined(separator: " · ")
     }
 
@@ -136,7 +136,7 @@ public enum PeerBackupText {
         guard let keepUntil, keepUntil > 0 else { return "" }
         if keepUntil <= now { return String(localized: "The pieces of this backup are no longer kept.") }
         let days = Int((Double(keepUntil - now) / 86_400_000).rounded(.up))
-        return String(localized: "Restore by \(formatTime(keepUntil)) (\(days) day\(days == 1 ? "" : "s") left).")
+        return (days == 1 ? String(localized: "Restore by \(formatTime(keepUntil)) (\(days) day left).") : String(localized: "Restore by \(formatTime(keepUntil)) (\(days) days left)."))
     }
 
     /// What this server keeps for others.
@@ -153,7 +153,7 @@ public enum PeerBackupText {
     /// The card a restore shows once a lost server's record is found.
     public static func rootLines(_ s: PeerRootSummary, now: Int64, formatTime: (Int64) -> String) -> [String] {
         var out = [String(localized: "Backup of \(s.serverId), saved \(formatTime(s.archive.createdAt)) (\(formatSize(s.archive.bytes))).")]
-        out.append(String(localized: "\(s.holders) server\(s.holders == 1 ? "" : "s") hold its pieces; \(s.needed) bring it back."))
+        out.append(String(localized: "Servers holding its pieces: \(s.holders). Needed to bring it back: \(s.needed)."))
         let by = restoreByLine(keepUntil: s.keepUntil, now: now, formatTime: formatTime)
         if !by.isEmpty { out.append(by) }
         return out

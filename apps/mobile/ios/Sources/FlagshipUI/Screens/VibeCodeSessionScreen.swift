@@ -231,7 +231,7 @@ public struct VibeCodeSessionScreen: View {
     private func transcript(c: FSColors) -> some View {
         Text("session \(sessionId)").font(FS.font.caption()).foregroundColor(c.textMuted)
         if hiddenMessages > 0 {
-            Text("… \(hiddenMessages) earlier message\(hiddenMessages == 1 ? "" : "s") not shown")
+            Text(hiddenMessages == 1 ? String(localized: "… \(hiddenMessages) earlier message not shown") : String(localized: "… \(hiddenMessages) earlier messages not shown"))
                 .font(FS.font.caption()).foregroundColor(c.textMuted)
         }
         if state?.summarised == true {
