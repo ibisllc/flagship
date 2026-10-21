@@ -9,15 +9,15 @@ import SwiftUI
 /// main app publishes whenever AppState.pods changes. No network
 /// fetch from the widget itself.
 struct PodStatusWidget: Widget {
-    let kind = "PodStatusWidget"
+    let kind = String(localized: "PodStatusWidget")
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: PodStatusProvider()) { entry in
             PodStatusWidgetView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
-        .configurationDisplayName("Servers")
-        .description("Online/offline status for your Flagship servers.")
+        .configurationDisplayName(String(localized: "Servers"))
+        .description(String(localized: "Online/offline status for your Flagship servers."))
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
@@ -32,8 +32,8 @@ private struct PodStatusProvider: TimelineProvider {
         let demo = PodStatusSnapshot(
             username: "bright-maple",
             pods: [
-                .init(podId: "home", name: "Home", fqdn: "home.bright-maple.flagship.services", statusRaw: "online", isLeader: true),
-                .init(podId: "office", name: "Office", fqdn: "office.bright-maple.flagship.services", statusRaw: "online", isLeader: false),
+                .init(podId: "home", name: String(localized: "Home"), fqdn: "home.bright-maple.flagship.services", statusRaw: "online", isLeader: true),
+                .init(podId: "office", name: String(localized: "Office"), fqdn: "office.bright-maple.flagship.services", statusRaw: "online", isLeader: false),
             ]
         )
         return PodStatusEntry(date: .now, snapshot: demo)
@@ -141,10 +141,10 @@ private struct PodStatusWidgetView: View {
 
     private func statusLabel(_ raw: String) -> String {
         switch raw {
-        case "online":  return "Online"
-        case "offline": return "Offline"
-        case "pending": return "Pending"
-        default:        return "Unknown"
+        case "online":  return String(localized: "Online")
+        case "offline": return String(localized: "Offline")
+        case "pending": return String(localized: "Pending")
+        default:        return String(localized: "Unknown")
         }
     }
 }

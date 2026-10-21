@@ -10,29 +10,29 @@ import FlagshipCore
 public typealias AppAccessSigner = @MainActor (_ reason: String) async throws -> Curve25519.Signing.PrivateKey
 
 public enum AppAccessCopy {
-    public static let sectionTitle = "Internet access"
-    public static let viewList = "View access list"
-    public static let editorTitle = "Access list"
-    public static let editorHelp = "One rule per line: allow or deny, then a host, *.host or all. The first rule that matches decides; anything no rule matches is blocked."
+    public static let sectionTitle = String(localized: "Internet access")
+    public static let viewList = String(localized: "View access list")
+    public static let editorTitle = String(localized: "Access list")
+    public static let editorHelp = String(localized: "One rule per line: allow or deny, then a host, *.host or all. The first rule that matches decides; anything no rule matches is blocked.")
 
     public static func ruleCount(_ n: Int) -> String {
         switch n {
-        case 0: return "No rules: this app can't reach the internet"
+        case 0: return String(localized: "No rules: this app can't reach the internet")
         case 1: return "1 rule"
-        default: return "\(n) rules"
+        default: return String(localized: "\(n) rules")
         }
     }
 
-    public static func wantsToReach(app: String, host: String) -> String { "\(app) wants to reach \(host)" }
+    public static func wantsToReach(app: String, host: String) -> String { String(localized: "\(app) wants to reach \(host)") }
 
     // Suggested lists (drafts).
-    public static let draftTitle = "This app suggests letting it reach these hosts"
-    public static let draftNote = "Nothing opens until you review the list and save it."
-    public static let review = "Review"
-    public static let dismissDraft = "Dismiss"
-    public static let draftEditorNote = "Suggested by the app. Change anything you like; nothing opens until you save."
-    public static let draftGone = "This suggestion was already answered."
-    public static func suggestsList(app: String) -> String { "\(app) suggests an access list" }
+    public static let draftTitle = String(localized: "This app suggests letting it reach these hosts")
+    public static let draftNote = String(localized: "Nothing opens until you review the list and save it.")
+    public static let review = String(localized: "Review")
+    public static let dismissDraft = String(localized: "Dismiss")
+    public static let draftEditorNote = String(localized: "Suggested by the app. Change anything you like; nothing opens until you save.")
+    public static let draftGone = String(localized: "This suggestion was already answered.")
+    public static func suggestsList(app: String) -> String { String(localized: "\(app) suggests an access list") }
 
     /// The marker on the app list: a suggested list waits, or hosts do.
     public enum ListBadge: Equatable, Sendable {
@@ -49,15 +49,15 @@ public enum AppAccessCopy {
     /// Where the request came from: the gateway saw a connection, or the app
     /// declared the host at install.
     public static func source(_ source: String, attempts: Int) -> String {
-        if source == "app" { return "Asked at install" }
-        return attempts > 1 ? "Tried to connect \(attempts) times" : "Tried to connect"
+        if source == "app" { return String(localized: "Asked at install") }
+        return attempts > 1 ? String(localized: "Tried to connect \(attempts) times") : String(localized: "Tried to connect")
     }
 
     public static func answered(app: String, host: String, action: AppAccessAction) -> String {
-        action == .allow ? "\(app) can now reach \(host)" : "\(app) won't reach \(host)"
+        action == .allow ? String(localized: "\(app) can now reach \(host)") : String(localized: "\(app) won't reach \(host)")
     }
 
-    public static func lineError(_ e: AppAccessLineError) -> String { "Line \(e.line): \(e.message)" }
+    public static func lineError(_ e: AppAccessLineError) -> String { String(localized: "Line \(e.line): \(e.message)") }
 
     /// The box's refusal in plain words.
     public static func message(for error: Error) -> String {
@@ -69,19 +69,19 @@ public enum AppAccessCopy {
         switch status {
         case 400:
             if let refusal = AppAccessRefusal.decode(body), let errors = refusal.errors, !errors.isEmpty {
-                return "The server found mistakes in the list: " + errors.map(lineError).joined(separator: "; ")
+                return String(localized: "The server found mistakes in the list: ") + errors.map(lineError).joined(separator: "; ")
             }
-            return reason.map { "The server refused the list: \($0)." } ?? ScreensClientError.plainLanguage(forStatus: status)
+            return reason.map { String(localized: "The server refused the list: \($0).") } ?? ScreensClientError.plainLanguage(forStatus: status)
         case 403:
             if reason?.contains("different server") == true {
-                return "This change was signed for a different server. Reload the page and try again."
+                return String(localized: "This change was signed for a different server. Reload the page and try again.")
             }
             if reason?.contains("stale") == true || reason?.contains("issuedAt") == true || reason?.contains("clock") == true {
-                return "Your phone's clock is too far off from the server's. Check the date and time, then try again."
+                return String(localized: "Your phone's clock is too far off from the server's. Check the date and time, then try again.")
             }
-            return "The server didn't accept your signature. Only the account owner's phone can change this."
-        case 404: return "This app isn't installed on the server any more."
-        case 409: return "A newer access list is already on the server. Reload and try again."
+            return String(localized: "The server didn't accept your signature. Only the account owner's phone can change this.")
+        case 404: return String(localized: "This app isn't installed on the server any more.")
+        case 409: return String(localized: "A newer access list is already on the server. Reload and try again.")
         default: return ScreensClientError.plainLanguage(forStatus: status)
         }
     }
@@ -117,7 +117,7 @@ public enum AppAccessOrder {
         }
         let boxDomain = await client.boxDomain()
         guard let domain = boxDomain ?? fallbackServerDomain, !domain.isEmpty else {
-            throw Failure(message: "No server to send this to.")
+            throw Failure(message: String(localized: "No server to send this to."))
         }
         let key: Curve25519.Signing.PrivateKey
         do {
@@ -151,7 +151,7 @@ public enum AppAccessOrder {
         fallbackServerDomain: String?,
         signer: AppAccessSigner
     ) async throws -> AppAccessState {
-        let reason = action == .allow ? "Allow \(appName) to reach \(host)" : "Stop \(appName) reaching \(host)"
+        let reason = action == .allow ? String(localized: "Allow \(appName) to reach \(host)") : String(localized: "Stop \(appName) reaching \(host)")
         var base: String
         if let currentList { base = currentList } else { base = try await client.serviceAccess(serviceId: serviceId).list }
         do {
@@ -301,11 +301,11 @@ public final class AppAccessController {
     private func makeEditor(initialList: String, note: String?) -> AppAccessEditorModel {
         AppAccessEditorModel(appName: appName, initialList: initialList, note: note,
                              canSave: canChange) { [weak self] list in
-            guard let self else { throw AppAccessOrder.Failure(message: "This page was closed.") }
+            guard let self else { throw AppAccessOrder.Failure(message: String(localized: "This page was closed.")) }
             let next = try await AppAccessOrder.send(
                 list: list, serviceId: self.serviceId, client: self.client,
                 fallbackServerDomain: self.fallbackServerDomain, signer: self.signer,
-                reason: "Change \(self.appName)'s access list")
+                reason: String(localized: "Change \(self.appName)'s access list"))
             self.apply(next, answered: nil, dropDraft: true)
             return next
         }

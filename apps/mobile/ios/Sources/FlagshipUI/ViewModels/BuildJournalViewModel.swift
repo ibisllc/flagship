@@ -169,7 +169,7 @@ public final class BuildJournalViewModel {
         if let st = try? await c.buildState(buildId: buildId).state, openedBuildId == buildId {
             openedMode = st.mode
             openedSealed = st.sealed == true
-            if st.adapt?.status == "failed" { openedFailure = st.adapt?.reason ?? "The AI couldn't finish this build." }
+            if st.adapt?.status == "failed" { openedFailure = st.adapt?.reason ?? String(localized: "The AI couldn't finish this build.") }
         }
     }
 
@@ -188,7 +188,7 @@ public final class BuildJournalViewModel {
     /// The journal's service name for a live session, once it has one.
     public func name(for session: VibeCodeSessionMeta, builds: [BuildSummary]) -> String {
         session.name ?? builds.first { $0.buildId == session.sessionId }?.displayName
-            ?? session.serviceId?.components(separatedBy: "--").last ?? "Unnamed build"
+            ?? session.serviceId?.components(separatedBy: "--").last ?? String(localized: "Unnamed build")
     }
 
     public private(set) var discardError: String?

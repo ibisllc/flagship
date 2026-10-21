@@ -218,7 +218,7 @@ public enum PhoneBackupFetcher {
             return .downloaded(archiveId: newest.archiveId)
         } catch is CancellationError {
             // The parts already in stay for the next run.
-            return .failed("Stopped; it goes on next time.")
+            return .failed(String(localized: "Stopped; it goes on next time."))
         } catch {
             store.prune(fqdn, reserveBytes: reserve, keepingDownload: newest.archiveId)
             if let e = error as? LocalizedError, let d = e.errorDescription, !(error is ScreensClientError) { return .failed(d) }

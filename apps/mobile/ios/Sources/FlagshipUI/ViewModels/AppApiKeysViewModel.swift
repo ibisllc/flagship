@@ -6,29 +6,29 @@ import FlagshipAPI
 import FlagshipCore
 
 public enum AppApiKeysCopy {
-    public static let sectionTitle = "Api keys"
-    public static let intro = "Let scripts, devices and other servers call this app. Each key works until you revoke it."
-    public static let empty = "No API keys yet."
-    public static let create = "Create key"
-    public static let createTitle = "New API key"
-    public static let labelPlaceholder = "What it's for, e.g. Garden sensor"
-    public static let shownOnceWarning = "Copy it now. Flagship can't show it again."
-    public static let readOnlyNote = "Create and revoke keys from your owner app."
-    public static let noKeyReturned = "Your server didn't return the new key."
+    public static let sectionTitle = String(localized: "Api keys")
+    public static let intro = String(localized: "Let scripts, devices and other servers call this app. Each key works until you revoke it.")
+    public static let empty = String(localized: "No API keys yet.")
+    public static let create = String(localized: "Create key")
+    public static let createTitle = String(localized: "New API key")
+    public static let labelPlaceholder = String(localized: "What it's for, e.g. Garden sensor")
+    public static let shownOnceWarning = String(localized: "Copy it now. Flagship can't show it again.")
+    public static let readOnlyNote = String(localized: "Create and revoke keys from your owner app.")
+    public static let noKeyReturned = String(localized: "Your server didn't return the new key.")
     public static let maxLabelLength = 64
 
     public static func usage(_ key: String) -> String { "Authorization: Bearer \(key)" }
 
-    public static func revokeTitle(_ label: String) -> String { "Revoke \"\(label)\"?" }
-    public static let revokeMessage = "Anything using this key loses access to the app right away. This can't be undone."
+    public static func revokeTitle(_ label: String) -> String { String(localized: "Revoke \"\(label)\"?") }
+    public static let revokeMessage = String(localized: "Anything using this key loses access to the app right away. This can't be undone.")
 
     /// "Read · Created Oct 1 · Last used 2h ago". Keys don't expire; a past
     /// `expiresAt` from a box still shows as "Expired …".
     public static func details(_ key: AppApiKey, now: Date = Date()) -> String {
         func date(_ ms: Int64) -> String { Date.flagshipFormatted(epochMs: ms, now: now) }
-        var parts = [key.scope.label, "Created \(date(key.createdAt))"]
-        parts.append(key.lastUsedAt.map { "Last used \(date($0))" } ?? "Never used")
-        if let exp = key.expiresAt, key.isExpired(now: now) { parts.append("Expired \(date(exp))") }
+        var parts = [key.scope.label, String(localized: "Created \(date(key.createdAt))")]
+        parts.append(key.lastUsedAt.map { String(localized: "Last used \(date($0))") } ?? String(localized: "Never used"))
+        if let exp = key.expiresAt, key.isExpired(now: now) { parts.append(String(localized: "Expired \(date(exp))")) }
         return parts.joined(separator: " · ")
     }
 
@@ -41,20 +41,20 @@ public enum AppApiKeysCopy {
         let reason = ScreensClientError.boxReason(error)
         switch status {
         case 400:
-            return reason.map { "Your server didn't accept this key: \($0)" } ?? "Your server didn't accept this key."
+            return reason.map { String(localized: "Your server didn't accept this key: \($0)") } ?? String(localized: "Your server didn't accept this key.")
         case 403:
             let r = reason?.lowercased() ?? ""
             if r.contains("companion") || r.contains("read-only") { return readOnlyNote }
             if r.contains("stale") || r.contains("issuedat") || r.contains("clock") {
-                return "Your phone's clock is more than 10 minutes off. Check the date and time, then try again."
+                return String(localized: "Your phone's clock is more than 10 minutes off. Check the date and time, then try again.")
             }
             if r.contains("different server") || r.contains("serverdomain") {
-                return "This key was signed for a different server. Reload the page and try again."
+                return String(localized: "This key was signed for a different server. Reload the page and try again.")
             }
-            if r.contains("signature") { return "Your server didn't accept this key's signature." }
-            return reason ?? "Your server refused this key."
-        case 404: return "This app isn't installed on this server anymore."
-        case 409: return "A key with that id already exists. Try again."
+            if r.contains("signature") { return String(localized: "Your server didn't accept this key's signature.") }
+            return reason ?? String(localized: "Your server refused this key.")
+        case 404: return String(localized: "This app isn't installed on this server anymore.")
+        case 409: return String(localized: "A key with that id already exists. Try again.")
         default: return ScreensClientError.plainLanguage(forStatus: status)
         }
     }
@@ -80,18 +80,18 @@ public enum AppApiKeyOrder {
         keyId: () -> String = AppApiKeyId.random
     ) async throws -> String {
         let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { throw Failure(message: "Give the key a name, so you know what uses it.") }
+        guard !trimmed.isEmpty else { throw Failure(message: String(localized: "Give the key a name, so you know what uses it.")) }
         // UTF-16 length, as the box and the webapp count it.
         guard trimmed.utf16.count <= AppApiKeysCopy.maxLabelLength else {
-            throw Failure(message: "Keep the name under \(AppApiKeysCopy.maxLabelLength + 1) characters.")
+            throw Failure(message: String(localized: "Keep the name under \(AppApiKeysCopy.maxLabelLength + 1) characters."))
         }
         let boxDomain = await client.boxDomain()
         guard let domain = boxDomain ?? fallbackServerDomain, !domain.isEmpty else {
-            throw Failure(message: "No server to send this to.")
+            throw Failure(message: String(localized: "No server to send this to."))
         }
         let key: Curve25519.Signing.PrivateKey
         do {
-            key = try await signer("Create an API key for \(appName)")
+            key = try await signer(String(localized: "Create an API key for \(appName)"))
         } catch {
             throw Failure(message: "Couldn't access your account key: \(UserErrorText.of(error))")
         }

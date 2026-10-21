@@ -156,7 +156,7 @@ public final class AuditLogViewModel {
         case "ct-unexpected-cert":  return "Unexpected certificate observed"
         default:
             let words = kind.replacingOccurrences(of: "[._-]+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
-            if words.isEmpty { return "Account event" }
+            if words.isEmpty { return String(localized: "Account event") }
             return words.prefix(1).uppercased() + words.dropFirst()
         }
     }

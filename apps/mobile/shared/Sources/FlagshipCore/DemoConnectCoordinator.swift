@@ -67,13 +67,13 @@ public final class DemoConnectCoordinator {
             // (rate-limited) from a generic 5xx.
             switch err {
             case .http(let status, let message):
-                state = .failed(reason: "connect failed (HTTP \(status)): \(message)")
+                state = .failed(reason: String(localized: "connect failed (HTTP \(status)): \(message)"))
             default:
-                state = .failed(reason: "connect failed: \(err)")
+                state = .failed(reason: String(localized: "connect failed: \(err)"))
             }
             return
         } catch {
-            state = .failed(reason: "connect failed: \(error)")
+            state = .failed(reason: String(localized: "connect failed: \(error)"))
             return
         }
         state = .polling(lastStatus: "provisioning")
@@ -87,11 +87,11 @@ public final class DemoConnectCoordinator {
             state = .up(fqdn: block.fqdn)
             updatePod(appState, fqdn: block.fqdn, status: .online, demoServer: block)
         } catch DemoConnectError.timedOut(let last) {
-            state = .failed(reason: "Still booting (last status: \(last)). Try again in a minute.")
+            state = .failed(reason: String(localized: "Still booting (last status: \(last)). Try again in a minute."))
         } catch DemoConnectError.demoServerWentAway {
-            state = .failed(reason: "This demo was removed. Sign out and try a different username.")
+            state = .failed(reason: String(localized: "This demo was removed. Sign out and try a different username."))
         } catch {
-            state = .failed(reason: "poll failed: \(error)")
+            state = .failed(reason: String(localized: "poll failed: \(error)"))
         }
     }
 
@@ -159,7 +159,7 @@ public final class DemoConnectCoordinator {
         do {
             try await demoConnect.cancel(username: username)
         } catch {
-            state = .failed(reason: "cancel failed: \(error)")
+            state = .failed(reason: String(localized: "cancel failed: \(error)"))
             return false
         }
         // Remove the demo pod(s) — matched on the synthetic podId prefix

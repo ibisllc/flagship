@@ -25,9 +25,9 @@ public final class SecretRequestsModel {
         case failed(String)
     }
 
-    public static let emptyText = "Nothing waiting for you"
-    public static let introText = "Your server is finishing setup. Confirm it's yours to release its boot secret. Only your phone can."
-    public static let signInText = "Sign in to approve a server."
+    public static let emptyText = String(localized: "Nothing waiting for you")
+    public static let introText = String(localized: "Your server is finishing setup. Confirm it's yours to release its boot secret. Only your phone can.")
+    public static let signInText = String(localized: "Sign in to approve a server.")
 
     public private(set) var state: LoadingState<[Request]> = .idle
     public private(set) var inFlightId: String?
@@ -104,7 +104,7 @@ public final class SecretRequestsModel {
                 await reload()
                 return .alreadyAnswered
             }
-            return .failed("Approval failed: \(UserErrorText.of(error))")
+            return .failed(String(localized: "Approval failed: \(UserErrorText.of(error))"))
         }
     }
 

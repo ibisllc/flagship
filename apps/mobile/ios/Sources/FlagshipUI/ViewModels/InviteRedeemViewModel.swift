@@ -80,14 +80,14 @@ public final class InviteRedeemViewModel {
     }
 
     /// Shown for a link made before per-app ids (no `s=`).
-    public static let oldLinkMessage = "This invite link is from an older version of Flagship. Ask the owner for a new link."
+    public static let oldLinkMessage = String(localized: "This invite link is from an older version of Flagship. Ask the owner for a new link.")
 
     public var serverHost: String { serverDomain }
 
     public func redeem() async {
         if case .redeeming = phase { return }
         guard secretHex.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else {
-            phase = .failed("This invite link is missing or malformed.")
+            phase = .failed(String(localized: "This invite link is missing or malformed."))
             return
         }
         guard let serviceRef else {
@@ -99,7 +99,7 @@ public final class InviteRedeemViewModel {
             let key = try await redeemAid(serviceRef, "Accept this invite")
             let aidPub = key.publicKey.rawRepresentation
             guard let secret = HexUtil.decode(secretHex) else {
-                phase = .failed("This invite link is malformed."); return
+                phase = .failed(String(localized: "This invite link is malformed.")); return
             }
             let secretHash = ServiceInvite.secretHash(secret: secret)
             let ts = now()
@@ -120,17 +120,17 @@ public final class InviteRedeemViewModel {
                 phase = .done(serviceRef: result.serviceRef, firstBind: result.firstBind)
             }
         } catch ServiceAccessError.inviteUnknown {
-            phase = .failed("This invite link is unknown or was withdrawn.")
+            phase = .failed(String(localized: "This invite link is unknown or was withdrawn."))
         } catch ServiceAccessError.inviteAlreadyBound {
-            phase = .failed("This invite is already linked to another account.")
+            phase = .failed(String(localized: "This invite is already linked to another account."))
         } catch ServiceAccessError.inviteRevoked {
-            phase = .failed("This invite has been revoked.")
+            phase = .failed(String(localized: "This invite has been revoked."))
         } catch ServiceAccessError.inviteExpiredOrFull {
-            phase = .failed("This invite has expired or is full.")
+            phase = .failed(String(localized: "This invite has expired or is full."))
         } catch let e as ScreensClientError {
-            phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
+            phase = .failed(e.errorDescription ?? String(localized: "That didn't work. Try again in a moment."))
         } catch {
-            phase = .failed("Couldn't reach the server. Check your connection and try again.")
+            phase = .failed(String(localized: "Couldn't reach the server. Check your connection and try again."))
         }
     }
 
@@ -139,7 +139,7 @@ public final class InviteRedeemViewModel {
     private func handlePending(serviceRef: String, contactAid: Curve25519.Signing.PrivateKey) async {
         guard let inviteId, !inviteId.isEmpty else {
             // A manual invite whose link omitted the inviteId can't be accepted.
-            phase = .failed("This invite needs the owner's approval, but the link is missing information. Ask them to resend it.")
+            phase = .failed(String(localized: "This invite needs the owner's approval, but the link is missing information. Ask them to resend it."))
             return
         }
         do {
@@ -152,12 +152,12 @@ public final class InviteRedeemViewModel {
                 serverDomain: serverDomain, inviteId: inviteId, serviceRef: serviceRef,
                 contactAidHex: HexUtil.encode(contactPub), acceptSigHex: HexUtil.encode(sig),
                 acceptedAt: acceptedAt) else {
-                phase = .failed("Couldn't prepare the approval reply.")
+                phase = .failed(String(localized: "Couldn't prepare the approval reply."))
                 return
             }
             phase = .pendingApproval(serviceRef: serviceRef, replyLink: reply)
         } catch {
-            phase = .failed("Couldn't prepare the approval reply.")
+            phase = .failed(String(localized: "Couldn't prepare the approval reply."))
         }
     }
 }

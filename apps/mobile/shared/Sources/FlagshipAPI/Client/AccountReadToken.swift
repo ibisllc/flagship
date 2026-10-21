@@ -52,7 +52,7 @@ public final class LiveAccountReadTokenMinter: AccountReadTokenMinting, @uncheck
     public func mintAccountReadToken(username: String, credential: AccountReadTokenCredential) async throws -> AccountReadTokenResponse {
         guard let url = URL(string: baseUrl.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             + AccountReadTokenCredential.path(username: username)) else {
-            throw ScreensClientError.http(status: 0, message: "bad read-token URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad read-token URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"

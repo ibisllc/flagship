@@ -14,35 +14,32 @@ import Foundation
 /// `UserErrorText`.
 public enum UserErrorText {
 
-    public static let offline = "Couldn't reach the server. Check your connection and try again."
-    public static let dropped = "The connection dropped. Try again."
-    public static let timeout = "That took too long. Check your connection and try again."
-    public static let serverProblem = "Service temporarily unavailable. Try again in a few minutes."
+    public static let offline = String(localized: "Couldn't reach the server. Check your connection and try again.")
+    public static let dropped = String(localized: "The connection dropped. Try again.")
+    public static let timeout = String(localized: "That took too long. Check your connection and try again.")
+    public static let serverProblem = String(localized: "Service temporarily unavailable. Try again in a few minutes.")
     /// The phone could not look up the server's address. It is not "can't reach
     /// the server": the connection is fine, a router has just cached the miss.
     public static let nameLookup =
-        "Your phone can't find this server's address yet. This usually clears within a few minutes. Try again."
-    public static let refused = "We couldn't complete that. Try again."
-    public static let generic = "Something went wrong. Try again."
+        String(localized: "Your phone can't find this server's address yet. This usually clears within a few minutes. Try again.")
+    public static let refused = String(localized: "We couldn't complete that. Try again.")
+    public static let generic = String(localized: "Something went wrong. Try again.")
 
     /// `.com` reasons written for developers, and what to say instead.
     private static let knownReasons: [(pattern: String, sentence: String)] = [
         ("subdomain already controlled by a different rck",
-         "That name is still held by an earlier, unfinished order. Cancel that order from Home, or choose another name."),
+         String(localized: "That name is still held by an earlier, unfinished order. Cancel that order from Home, or choose another name.")),
         ("^stale request",
-         "This phone's clock looks off. Check the date and time, then try again."),
+         String(localized: "This phone's clock looks off. Check the date and time, then try again.")),
         ("^invalid signature",
-         "Your account key didn't match. Try again, or sign in again."),
+         String(localized: "Your account key didn't match. Try again, or sign in again.")),
         ("^not authorized",
-         "This device isn't allowed to do that."),
+         String(localized: "This device isn't allowed to do that.")),
     ]
 
     /// Text that is a runtime artefact rather than a sentence.
     private static let rawMarkers =
-        "(^HTTP\\s*\\d{3}|\\bexception\\b|nsurlerrordomain|nsposixerrordomain|kcferror|error domain=|\\buserinfo=|" +
-        "\\bcode=-?\\d+|\\bswift\\.|\\boptional\\(|\\bhandshake|\\berrno|\\beconn|\\bsocket\\b|unexpected end of stream|" +
-        "\\bEOF\\b|broken pipe|error code:? ?\\d+|^[\\[{<]|unexpected json|could not parse|stacktrace|\\bnil\\b|" +
-        "\\(null\\)|couldn.t be completed|\\bdecodingerror|\\bkeynotfound)"
+        String(localized: "(^HTTP\\s*\\d{3}|\\bexception\\b|nsurlerrordomain|nsposixerrordomain|kcferror|error domain=|\\buserinfo=|\\bcode=-?\\d+|\\bswift\\.|\\boptional\\(|\\bhandshake|\\berrno|\\beconn|\\bsocket\\b|unexpected end of stream|\\bEOF\\b|broken pipe|error code:? ?\\d+|^[\\[{<]|unexpected json|could not parse|stacktrace|\\bnil\\b|\\(null\\)|couldn.t be completed|\\bdecodingerror|\\bkeynotfound)")
 
     // MARK: - Public
 
@@ -53,7 +50,7 @@ public enum UserErrorText {
         if let e = error as? FreeAiError, let d = e.errorDescription { return d }
         if error is CancellationError { return dropped }
         if let u = error as? URLError { return forURLError(u) }
-        if error is DecodingError { return "Something came back we couldn't read. Try again in a moment." }
+        if error is DecodingError { return String(localized: "Something came back we couldn't read. Try again in a moment.") }
         let ns = error as NSError
         if ns.domain == NSURLErrorDomain {
             return forURLError(URLError(URLError.Code(rawValue: ns.code)))
@@ -159,9 +156,9 @@ public enum UserErrorText {
         case .timedOut: return timeout
         case .networkConnectionLost: return dropped
         case .badServerResponse, .zeroByteResource, .cannotParseResponse:
-            return "The server had a temporary problem. Please try again in a moment."
+            return String(localized: "The server had a temporary problem. Please try again in a moment.")
         case .notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff:
-            return "You're offline. Check your connection and try again."
+            return String(localized: "You're offline. Check your connection and try again.")
         case .cannotFindHost, .dnsLookupFailed:
             return nameLookup
         default: return offline

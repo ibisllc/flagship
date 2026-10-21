@@ -43,7 +43,7 @@ struct DebugAccessCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            FSSectionLabel("Debug access")
+            FSSectionLabel(String(localized: "Debug access"))
             FSCard {
                 if let vm {
                     content(vm, c: c)
@@ -85,7 +85,7 @@ struct DebugAccessCard: View {
                         .truncationMode(.middle)
                         .accessibilityIdentifier("sd-debug-access-key")
                 }
-                Text(vm.view.grantedBy == "owner-key" ? "Turned on with this account's key." : "Turned on by an admin device.")
+                Text(vm.view.grantedBy == "owner-key" ? String(localized: "Turned on with this account's key.") : "Turned on by an admin device.")
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
             } else {
@@ -105,10 +105,10 @@ struct DebugAccessCard: View {
                 form(vm, c: c)
             } else {
                 HStack(spacing: FS.space.s2) {
-                    FSPrimaryButton(vm.isOn ? "Renew" : "Turn on") { editing = true }
+                    FSPrimaryButton(vm.isOn ? String(localized: "Renew") : String(localized: "Turn on")) { editing = true }
                         .accessibilityIdentifier(vm.isOn ? "sd-debug-access-renew" : "sd-debug-access-on")
                     if vm.isOn {
-                        FSDangerButton("Turn off") { confirmOff = true }
+                        FSDangerButton(String(localized: "Turn off")) { confirmOff = true }
                             .disabled(vm.busy)
                             .accessibilityIdentifier("sd-debug-access-off")
                     }
@@ -153,14 +153,14 @@ struct DebugAccessCard: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("sd-debug-access-warning")
             HStack(spacing: FS.space.s2) {
-                FSPrimaryButton(vm.busy ? "Signing…" : (vm.isOn ? "Renew" : "Turn on"), enabled: !vm.busy) {
+                FSPrimaryButton(vm.busy ? String(localized: "Signing…") : (vm.isOn ? String(localized: "Renew") : String(localized: "Turn on")), enabled: !vm.busy) {
                     Task {
                         await vm.turnOn()
                         if vm.error == nil { editing = false }
                     }
                 }
                 .accessibilityIdentifier("sd-debug-access-submit")
-                FSGhostButton("Cancel") { editing = false }
+                FSGhostButton(String(localized: "Cancel")) { editing = false }
                     .accessibilityIdentifier("sd-debug-access-cancel")
             }
         }

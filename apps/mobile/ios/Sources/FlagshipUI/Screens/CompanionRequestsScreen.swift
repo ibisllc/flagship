@@ -120,7 +120,7 @@ public struct CompanionRequestsScreen: View {
                 }
                 HStack(spacing: FS.space.s3) {
                     HoldToApproveButton(
-                        label: pending ? "Approving…" : "Hold to approve",
+                        label: pending ? String(localized: "Approving…") : String(localized: "Hold to approve"),
                         enabled: supported && !pending,
                         onConfirm: { Task { await vm.approve(row) } }
                     )
@@ -128,7 +128,7 @@ public struct CompanionRequestsScreen: View {
                     Button {
                         Task { await vm.deny(row) }
                     } label: {
-                        Text(pending ? "Denying…" : "Deny")
+                        Text(pending ? String(localized: "Denying…") : "Deny")
                             .font(FS.font.scaled(14, weight: .semibold))
                             .frame(maxWidth: .infinity)
                             .frame(minHeight: 44)
@@ -156,20 +156,20 @@ public struct CompanionRequestsScreen: View {
     private func title(for row: CompanionPendingWrite) -> String {
         let who = row.companionTokenPrefix
         switch row.kind {
-        case "release-server": return "Release server name — from \(who)"
-        case "revoke-server":  return "Revoke server — from \(who)"
-        default:               return "Request from \(who)"
+        case "release-server": return String(localized: "Release server name — from \(who)")
+        case "revoke-server":  return String(localized: "Revoke server — from \(who)")
+        default:               return String(localized: "Request from \(who)")
         }
     }
 
     private func subtitle(for row: CompanionPendingWrite) -> String {
         switch row.kind {
         case "release-server":
-            return string(from: row.intent["serverDomain"]) ?? "(missing serverDomain)"
+            return string(from: row.intent["serverDomain"]) ?? String(localized: "(missing serverDomain)")
         case "revoke-server":
-            let id = string(from: row.intent["revokedServerId"]) ?? "(missing serverId)"
-            let reason = string(from: row.intent["reason"]) ?? "(missing reason)"
-            return "\(id) · reason: \(reason)"
+            let id = string(from: row.intent["revokedServerId"]) ?? String(localized: "(missing serverId)")
+            let reason = string(from: row.intent["reason"]) ?? String(localized: "(missing reason)")
+            return String(localized: "\(id) · reason: \(reason)")
         default:
             return row.kind
         }
@@ -209,7 +209,7 @@ struct HoldToApproveButton: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         Button(action: {}) {
-            Text(holding ? "Hold to confirm…" : label)
+            Text(holding ? String(localized: "Hold to confirm…") : label)
                 .font(FS.font.scaled(16, weight: .semibold))
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
