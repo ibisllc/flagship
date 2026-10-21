@@ -56,6 +56,21 @@ final class GymAccountGoneTests: XCTestCase {
         XCTAssertTrue(any(app, "account-gone-title").waitForExistence(timeout: 40), "This account was removed should show.")
     }
 
+    // 0. removing a key that can still save a server's data asks the owner first
+    func test_removingTheKeyAsksTheOwnerFirstAndDoesNothingWithoutThem() throws {
+        // Every prompt dismissed (`-smoke-refuse-biometric`): the account counts
+        // as not open, so "Remove anyway" changes nothing.
+        let app = launch(["-smoke-admin-root", "-gym-account-gone", "10", "-smoke-refuse-biometric"])
+        screenShows(app)
+        app.buttons["account-gone-remove"].tap()
+        XCTAssertTrue(app.buttons["account-gone-remove-anyway"].waitForExistence(timeout: 10), "The warning asks first.")
+        app.buttons["account-gone-remove-anyway"].tap()
+        sleep(3)
+        gymShot(app, "account-gone-remove-refused")
+        XCTAssertTrue(any(app, "account-gone-title").exists, "The screen stays: nothing was removed.")
+        XCTAssertFalse(app.buttons["Create your account"].exists, "Not signed out.")
+    }
+
     // 1. the screen takes over and stops the asking
     func test_removedAccountShowsTheScreenAndClosesWhatWasOpen() throws {
         let app = launch(["-smoke-admin-root", "-gym-account-gone", "10"])

@@ -72,6 +72,7 @@ import com.flagshipserver.app.ui.components.TextButton
 import com.flagshipserver.app.ui.components.openStoreListing
 import com.flagshipserver.app.ui.screens.KeyfileExportScreen
 import com.flagshipserver.app.ui.theme.FS
+import kotlinx.coroutines.launch
 
 /**
  * @param unlocked the account is open on this device (its key can be exported).
@@ -121,6 +122,8 @@ private fun LockCard(notice: SecurityNotice, unlocked: Boolean, onBackup: () -> 
     val profiles by app.profiles.collectAsState()
     val activeCloud by app.activeCloudName.collectAsState()
     var confirmSignOut by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val activity = ctx as? androidx.fragment.app.FragmentActivity
     val model = remember(notice, unlocked) { SecurityNoticeModels.lock(notice, unlocked) }
 
     Box(Modifier.fillMaxSize().padding(horizontal = FS.space.s6), contentAlignment = Alignment.Center) {
@@ -188,8 +191,24 @@ private fun LockCard(notice: SecurityNotice, unlocked: Boolean, onBackup: () -> 
                             hasCloudRecovery = hasRecovery,
                             isDemoAccount = Variant.usesMockClients || AppState.isDemoAccount(profiles.firstOrNull { it.cloudName == activeCloud }, pods),
                         )
-                        if (policy == SignOutPolicy.ALLOWED) confirmSignOut = true
-                        else toasts.info(FSStrings.get(R.string.set_up_account_recovery_to_use))
+                        if (policy != SignOutPolicy.ALLOWED) {
+                            toasts.info(FSStrings.get(R.string.set_up_account_recovery_to_use))
+                        } else if (unlocked || activity == null) {
+                            // `activity == null` cannot ask; the account is only
+                            // let through when it is already open this session.
+                            if (unlocked) confirmSignOut = true
+                            else toasts.error(FSStrings.get(R.string.lost_activity_context_restart_the_app))
+                        } else {
+                            // This screen sits above the app lock: prove it is
+                            // the owner before the sign-out question.
+                            scope.launch {
+                                when (val r = authenticateForSignOut(activity)) {
+                                    SignOutAuth.Ok -> confirmSignOut = true
+                                    SignOutAuth.Cancelled -> {}
+                                    is SignOutAuth.Failed -> toasts.error(r.message)
+                                }
+                            }
+                        }
                     },
                     block = true,
                     large = true,
