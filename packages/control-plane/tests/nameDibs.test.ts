@@ -157,12 +157,24 @@ describe("POST /api/name-dibs/initiate", () => {
     expect((await handleNameDibsInitiate(deps, initiate("fresh-poppy", "acme", alice))).status).toBe(503);
   });
 
-  it("rate-limits claim starts per account", async () => {
+  it("re-initiating a pending claim returns the same nonce, so a published record stays valid", async () => {
     const { deps } = await setup({ registered: ["acme.com"] });
+    const a = (await handleNameDibsInitiate(deps, initiate("fresh-poppy", "acme", alice))).body as { nonce: string };
+    const b = (await handleNameDibsInitiate(deps, initiate("fresh-poppy", "acme", alice))).body as { nonce: string };
+    expect(b.nonce).toBe(a.nonce);
+    // …until it expires.
+    deps.now = () => NOW + 8 * 24 * 60 * 60_000;
+    const c = (await handleNameDibsInitiate(deps, initiate("fresh-poppy", "acme", alice, NOW + 8 * 24 * 60 * 60_000))).body as { nonce: string };
+    expect(c.nonce).not.toBe(a.nonce);
+  });
+
+  it("rate-limits fresh claim starts per account", async () => {
+    const registered = Array.from({ length: 11 }, (_, i) => `brand${i}.com`);
+    const { deps } = await setup({ registered });
     for (let i = 0; i < 10; i++) {
-      expect((await handleNameDibsInitiate(deps, initiate("fresh-poppy", "acme", alice))).status).toBe(200);
+      expect((await handleNameDibsInitiate(deps, initiate("fresh-poppy", `brand${i}`, alice))).status).toBe(200);
     }
-    expect((await handleNameDibsInitiate(deps, initiate("fresh-poppy", "acme", alice))).status).toBe(429);
+    expect((await handleNameDibsInitiate(deps, initiate("fresh-poppy", "brand10", alice))).status).toBe(429);
   });
 });
 
