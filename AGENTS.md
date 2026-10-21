@@ -988,6 +988,22 @@ allowances (1M / 5M / 20M a month) are placeholders.
 
 ### Built, waiting on deploys or rebuilds
 
+- **Key-erasing sign-outs above the app lock ask the owner first (2026-10-21, branch
+  `fix/lock-screen-sign-out-auth`, not merged).** On iOS an app delete leaves the account key in
+  the Keychain, so a lock-screen "Sign out" was the one way a stranger holding the phone could
+  destroy it. Now the lock screen's Sign out (iOS, Android), the security-notice "Update required"
+  Sign out when the account is not open (iOS, Android) and iOS's "Remove it from this device" on a
+  gone account (the warned case) ask Face ID / biometric / device PIN first, then show the
+  existing question; a phone with no screen lock goes straight to the question. Android shows its
+  gone-account screen only after unlock, so it needed nothing. Audited and fine: Settings and
+  Home sign-outs (behind the lock), Siri intents, Wear. Gym seam
+  `-smoke-refuse-biometric` / `refuseBiometrics` (Debug only) dismisses every prompt; new cases
+  `GymSweepHomeTests.test_lockScreenSignOutDoesNothingWithoutTheOwner`,
+  `GymNoticeTests.test_updateLockSignOutAsksTheOwnerFirst…`,
+  `GymAccountGoneTests.test_removingTheKeyAsksTheOwnerFirst…`, `GymAppLockTest` (2) and
+  `GymNoticesTest.theUpdateLockSignOutDoesNothing…`. Not compiled or run: Android's emulator must
+  report no device credential as BiometricPrompt error 14/11/12 for the no-screen-lock case.
+  Needs iOS/Android store builds.
 - **iOS device-pairing transport (2026-10-19, branch `fix/ios-device-pairing`, not
   merged):** Add a device and Join an account on the iPhone/iPad no longer refuse
   in Release builds. `LivePairingRelayClient` speaks the web's two-leg `/qr-pipe`

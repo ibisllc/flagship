@@ -28,13 +28,13 @@ final class GymNoticeTests: XCTestCase {
         add(attachment)
     }
 
-    private func launch(_ notices: String, now: Int64, every: Int = 1, build: Int? = nil) -> XCUIApplication {
+    private func launch(_ notices: String, now: Int64, every: Int = 1, build: Int? = nil, extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.terminate()
         var args = ["-smoke-mode", "-smoke-tab", "home", "-smoke-admin-root",
                     "-gym-notice", notices, "-gym-notice-now", String(now), "-gym-notice-every", String(every)]
         if let build { args += ["-gym-notice-build", String(build), "-gym-notice-protocol", "2"] }
-        app.launchArguments = args
+        app.launchArguments = args + extra
         app.launch()
         return app
     }
@@ -106,6 +106,26 @@ final class GymNoticeTests: XCTestCase {
                       "Back up my account key opens the account backup above the lock.")
         app.buttons["update-lock-backup-done"].tap()
         XCTAssertTrue(app.buttons["update-lock-update"].waitForExistence(timeout: 10), "The lock is still there.")
+    }
+
+    // 2b. Sign out above the lock asks the owner first when the account is not open
+    func test_updateLockSignOutAsksTheOwnerFirstAndDoesNothingWithoutThem() throws {
+        // Every prompt dismissed (`-smoke-refuse-biometric`): the account counts
+        // as not open, so no question opens and the lock stays.
+        var app = launch("lock", now: lockFrom + 3_600_000, extra: ["-smoke-refuse-biometric"])
+        XCTAssertTrue(any(app, "update-lock-title").waitForExistence(timeout: 40), "The lock should show.")
+        app.buttons["update-lock-signout"].tap()
+        XCTAssertFalse(app.buttons["Cancel"].waitForExistence(timeout: 4), "A dismissed prompt must not open the question.")
+        gymShot(app, "update-lock-sign-out-refused")
+        XCTAssertTrue(any(app, "update-lock-title").exists, "The lock stays.")
+
+        // An account already open this session is not asked again.
+        app = launch("lock", now: lockFrom + 3_600_000)
+        XCTAssertTrue(any(app, "update-lock-title").waitForExistence(timeout: 40))
+        app.buttons["update-lock-signout"].tap()
+        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 10), "The question opens at once.")
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(any(app, "update-lock-title").exists, "Cancel keeps the lock.")
     }
 
     // 3. the lock lifts when the build is updated or the notice ends, and an older notice cannot bring it back

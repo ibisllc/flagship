@@ -135,13 +135,7 @@ struct UpdateLockScreen: View {
     @State private var confirmSignOut = false
     @State private var failure: String?
 
-    private var accountUnlocked: Bool {
-        #if DEBUG
-        // The mock gym has no enrolled biometric: its consent prompts are bypassed.
-        if GymSeams.bypassBiometricGates { return true }
-        #endif
-        return app.isDemoAccount || Keystore.hasSessionKey()
-    }
+    private var accountUnlocked: Bool { DestructiveAuth.accountUnlocked(app) }
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -183,7 +177,7 @@ struct UpdateLockScreen: View {
                         if app.isPaired {
                             FSSecondaryButton(m.backup, block: true, large: true) { Task { await backupKey() } }
                                 .accessibilityIdentifier("update-lock-backup")
-                            FSSecondaryButton(m.signOut, block: true, large: true) { confirmSignOut = true }
+                            FSSecondaryButton(m.signOut, block: true, large: true) { Task { await askToSignOut() } }
                                 .accessibilityIdentifier("update-lock-signout")
                         }
                     }
@@ -235,6 +229,19 @@ struct UpdateLockScreen: View {
             Text(app.hasCloudRecovery || app.isDemoAccount
                 ? String(localized: "This erases this device's account key and returns you to the start. Sign back in with your recovery passkey to restore it. Your account and servers stay put.")
                 : "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in. Back up your account key first.")
+        }
+    }
+
+    /// This screen sits above the app lock: an account not yet opened this
+    /// session proves it is the owner before the sign-out question.
+    @MainActor
+    private func askToSignOut() async {
+        failure = nil
+        if accountUnlocked { confirmSignOut = true; return }
+        switch await DestructiveAuth.ask(reason: "Sign out of Flagship") {
+        case .allowed: confirmSignOut = true
+        case .declined: break
+        case let .failed(message): failure = message
         }
     }
 

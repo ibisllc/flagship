@@ -163,7 +163,7 @@ struct AccountGoneScreen: View {
                 .accessibilityIdentifier("account-gone-warning-message")
             FSSecondaryButton(AdminKeyCopy.saveFirst, block: true, large: true) { Task { await saveFirst() } }
                 .accessibilityIdentifier("account-gone-save-first")
-            FSDangerButton(AdminKeyCopy.removeAnyway, block: true, large: true) { remove(pending) }
+            FSDangerButton(AdminKeyCopy.removeAnyway, block: true, large: true) { Task { await authenticateThenRemove(pending) } }
                 .accessibilityIdentifier("account-gone-remove-anyway")
         }
     }
@@ -172,6 +172,22 @@ struct AccountGoneScreen: View {
         note = nil
         failure = nil
         if RescueKeyCheck.holdsRescueKey(app) { pending = p } else { remove(p) }
+    }
+
+    /// This screen sits above the app lock and the removal erases a key that
+    /// can still save a server's data (only then is the warning up), so an
+    /// account not yet opened this session proves it is the owner first.
+    @MainActor
+    private func authenticateThenRemove(_ p: Pending) async {
+        failure = nil
+        if !DestructiveAuth.accountUnlocked(app) {
+            switch await DestructiveAuth.ask(reason: "Remove this account from the device") {
+            case .allowed: break
+            case .declined: return
+            case let .failed(message): failure = message; return
+            }
+        }
+        remove(p)
     }
 
     private func remove(_ p: Pending) {

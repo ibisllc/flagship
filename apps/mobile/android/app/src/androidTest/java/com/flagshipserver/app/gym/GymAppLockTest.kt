@@ -10,9 +10,13 @@ package com.flagshipserver.app.gym
 
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onAllNodes
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -72,5 +76,57 @@ class GymAppLockTest : GymBase() {
         gymShot("lock-after-wake")
         composeRule.onNodeWithTag("biometric-unlock-btn").assertExists()
         assertTrue(unlockLabel()!!.contains("Unlock"))
+    }
+
+    private fun signOutQuestionShown(): Boolean =
+        composeRule.onAllNodes(hasText("Sign out of this device?") or hasText("Sign out without recovery?"))
+            .fetchSemanticsNodes().isNotEmpty()
+
+    /** Screen off then on: the app locks (lock on background). */
+    private fun lockTheApp() {
+        shell("input keyevent KEYCODE_SLEEP")
+        Thread.sleep(2_000)
+        shell("input keyevent KEYCODE_WAKEUP")
+        shell("wm dismiss-keyguard")
+        waitUntilExists("biometric-lock-screen", timeoutMs = 15_000)
+    }
+
+    /** The lock screen's Sign out erases the account key, so it asks the owner
+     *  first. Every prompt is dismissed here (GymSeams.refuseBiometricGates):
+     *  no question opens, the lock stays, and the key is still on the device. */
+    @Test
+    fun signOutOnTheLockScreenDoesNothingWithoutTheOwner() {
+        launch(tab = "home", realBiometrics = true, refuseBiometrics = true, persistSession = true, username = "gym-lock")
+        waitUntilExists("home-title")
+        try {
+            assertTrue("the device holds an account key", com.flagshipserver.app.keystore.Keystore.hasUmkSeed())
+            lockTheApp()
+            tap("lock-sign-out-btn")
+            Thread.sleep(3_000)
+            gymShot("lock-sign-out-refused")
+            assertFalse("a dismissed prompt must not open the sign-out question", signOutQuestionShown())
+            assertEquals("still on the lock screen", 1, tagCount("biometric-lock-screen"))
+            assertTrue("the account key is untouched", com.flagshipserver.app.keystore.Keystore.hasUmkSeed())
+        } finally {
+            com.flagshipserver.app.keystore.Keystore.wipeAllProfiles()
+        }
+    }
+
+    /** A phone with no screen lock has nothing to ask with (this emulator),
+     *  so the question opens: Sign out is then the only way off the screen. */
+    @Test
+    fun signOutOnTheLockScreenOpensItsQuestionWhenThePhoneHasNoScreenLock() {
+        launch(tab = "home", realBiometrics = true, persistSession = true, username = "gym-lock")
+        waitUntilExists("home-title")
+        try {
+            lockTheApp()
+            tap("lock-sign-out-btn")
+            composeRule.waitUntil(15_000) { signOutQuestionShown() }
+            gymShot("lock-sign-out-ask")
+            tapText("Cancel")
+            assertTrue("Cancel keeps the account key", com.flagshipserver.app.keystore.Keystore.hasUmkSeed())
+        } finally {
+            com.flagshipserver.app.keystore.Keystore.wipeAllProfiles()
+        }
     }
 }

@@ -79,6 +79,7 @@ public struct BiometricGate {
         // load-bearing ceremonies (keychain unseal / SE ECDH) still require
         // the real thing. Production never sets the flag.
         #if DEBUG
+        if GymSeams.refuseBiometricGates { throw GateError.userCancelled }
         if GymSeams.bypassBiometricGates { return LAContext() }
         #endif
         let context = LAContext()

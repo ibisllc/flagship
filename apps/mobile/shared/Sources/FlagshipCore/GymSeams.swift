@@ -33,6 +33,13 @@ public enum GymSeams {
     /// launch seam.
     public nonisolated(unsafe) static var bypassBiometricGates = false
 
+    /// Make every `BiometricGate.evaluate` end as if the person dismissed the
+    /// prompt, so the gym can prove the destructive screens above the app lock
+    /// (lock-screen Sign out, the update-required Sign out, removing a gone
+    /// account) change nothing without the owner. Wins over the bypass. Set
+    /// ONLY by `-smoke-refuse-biometric`.
+    public nonisolated(unsafe) static var refuseBiometricGates = false
+
     /// Keep the app-wide "<App> wants to reach <host>" sheet from opening.
     /// The mock box always has a request waiting (Plants →
     /// tile.openstreetmap.org), so without this the sheet covers every smoke

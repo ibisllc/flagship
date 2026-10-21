@@ -53,6 +53,9 @@ interface AppVariant {
     /** Gym: pass the biometric prompts (an emulator has no screen lock). */
     val bypassBiometricGates: Boolean
 
+    /** Gym: end every biometric prompt as if the person dismissed it. */
+    val refuseBiometricGates: Boolean
+
     /** Clients for composables that run without a provider (previews and
      *  JVM tests). The app always provides the live ones. */
     fun defaultScreens(): ScreensClient
