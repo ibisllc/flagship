@@ -19,6 +19,7 @@
 
 import { pollUntilResolved } from "./companionWriteRelay.js";
 
+import { tr } from "./i18n.js";
 function fmtMmSs(ms) {
   if (!Number.isFinite(ms) || ms <= 0) return "0:00";
   const total = Math.floor(ms / 1000);
@@ -59,17 +60,15 @@ export async function showCompanionPendingSheet(pending, deps = {}) {
   overlay.id = "companion-pending-sheet";
   overlay.innerHTML = `
     <div class="modal-card">
-      <h3 class="modal-title">Forwarded to owner</h3>
+      <h3 class="modal-title">${tr("Forwarded to owner")}</h3>
       <p class="modal-message">
-        Companion sessions can't sign on their own. Waiting for the
-        account owner to approve the
-        ${escapeHtml(pending.kind || "request")}.
+        ${tr("Companion sessions can't sign on their own. Waiting for the account owner to approve the {0}.", escapeHtml(pending.kind || "request"))}
       </p>
       <div class="row mt-2">
-        <span class="label">Time left</span>
+        <span class="label">${tr("Time left")}</span>
         <span class="value" data-pending-countdown>${escapeHtml(fmtMmSs(pending.expiresAt - now()))}</span>
       </div>
-      <p class="note mt-2" data-pending-status>waiting…</p>
+      <p class="note mt-2" data-pending-status>${tr("waiting…")}</p>
     </div>
   `;
   doc.body.appendChild(overlay);
@@ -100,10 +99,10 @@ export async function showCompanionPendingSheet(pending, deps = {}) {
   // Surface the terminal copy briefly so the user reads it.
   const statusEl = overlay.querySelector("[data-pending-status]");
   if (statusEl) {
-    if (outcome.outcome === "approved") statusEl.textContent = "Approved — applying…";
-    else if (outcome.outcome === "denied") statusEl.textContent = "Owner denied this request.";
-    else if (outcome.outcome === "expired") statusEl.textContent = "No response in 10 minutes — request expired.";
-    else statusEl.textContent = `Error: ${outcome.error ?? "unknown"}`;
+    if (outcome.outcome === "approved") statusEl.textContent = tr("Approved — applying…");
+    else if (outcome.outcome === "denied") statusEl.textContent = tr("Owner denied this request.");
+    else if (outcome.outcome === "expired") statusEl.textContent = tr("No response in 10 minutes — request expired.");
+    else statusEl.textContent = tr("Error: {0}", outcome.error ?? "unknown");
   }
 
   await new Promise((r) => setTimeout(r, 1200));
@@ -114,8 +113,8 @@ export async function showCompanionPendingSheet(pending, deps = {}) {
 
 /** Toast-friendly copy for each terminal outcome. */
 export function outcomeToastCopy(outcome) {
-  if (outcome === "approved") return { text: "Owner approved — done", kind: "ok" };
-  if (outcome === "denied") return { text: "Owner denied this request.", kind: "err" };
-  if (outcome === "expired") return { text: "No response in 10 minutes — request expired.", kind: "err" };
-  return { text: `Request failed: ${outcome}`, kind: "err" };
+  if (outcome === "approved") return { text: tr("Owner approved — done"), kind: "ok" };
+  if (outcome === "denied") return { text: tr("Owner denied this request."), kind: "err" };
+  if (outcome === "expired") return { text: tr("No response in 10 minutes — request expired."), kind: "err" };
+  return { text: tr("Request failed: {0}", outcome), kind: "err" };
 }

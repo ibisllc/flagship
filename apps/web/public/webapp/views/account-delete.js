@@ -24,6 +24,7 @@ import { runDeletionCeremony } from "../lib/accountDeletion.js";
 import { removeProfile as forgetProfileRow, getActiveProfile } from "../lib/profiles.js";
 import { confirmAndRemoveDemo, isDemoProfile } from "../lib/demoAccount.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-account-delete");
 
 let ceremonyUsername = "";
@@ -40,14 +41,14 @@ function refreshConfirmGate() {
 async function runDelete() {
   const session = getSession();
   if (!session.umk) {
-    toast("Unlock first", "err");
+    toast(tr("Unlock first"), "err");
     return;
   }
   const includeServers = !!$("account-delete-wipe-content")?.checked;
   const btn = $("account-delete-go");
   if (btn) {
     btn.disabled = true;
-    btn.textContent = "Deleting…";
+    btn.textContent = tr("Deleting…");
   }
   try {
     await runDeletionCeremony({
@@ -65,14 +66,14 @@ async function runDelete() {
       show,
       setSubtitle,
     });
-    toast("Account deleted");
+    toast(tr("Account deleted"));
   } catch (e) {
     // 403 "not the last device", stale request, etc. — surface and leave the
     // device intact (nothing local was touched: the wipe runs only after 200).
     console.error("account deletion failed", e);
     toast(humanError(e), "err");
     if (btn) {
-      btn.textContent = "Delete my account";
+      btn.textContent = tr("Delete my account");
       refreshConfirmGate();
     }
   }
@@ -130,7 +131,7 @@ export function enterAccountDelete() {
   if (wipe) wipe.checked = false;
   const btn = $("account-delete-go");
   if (btn) {
-    btn.textContent = "Delete my account";
+    btn.textContent = tr("Delete my account");
     btn.disabled = true;
   }
   show("view-account-delete");

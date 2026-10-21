@@ -13,12 +13,13 @@
 import { controlApex } from "./apex.js";
 import { escapeHtml } from "./util.js";
 
-export const FLAGSHIP_TITLE = "Flagship Inference";
+import { tr, trn } from "./i18n.js";
+export const FLAGSHIP_TITLE = tr("Flagship Inference");
 export const UNKNOWN_NOTE = "capabilities unknown";
-export const REFUSED_NOTE = "The key was refused";
-export const PROVIDER_DEFAULT = "Provider default";
-export const ATTACH_NOTICE = "The AI will see what you attach.";
-export const SAMPLE_DATA_NOTICE = "Sample data goes only to the private test copy.";
+export const REFUSED_NOTE = tr("The key was refused");
+export const PROVIDER_DEFAULT = tr("Provider default");
+export const ATTACH_NOTICE = tr("The AI will see what you attach.");
+export const SAMPLE_DATA_NOTICE = tr("Sample data goes only to the private test copy.");
 
 const CATALOG_TTL_MS = 5 * 60 * 1000;
 let catalogCache = null;
@@ -115,7 +116,7 @@ export function shortName(menu, id) {
 /** A provider's effort word as a menu shows it: "xhigh" → "Extra high". */
 export function effortLabel(e) {
   const s = String(e ?? "");
-  if (s === "xhigh") return "Extra high";
+  if (s === "xhigh") return tr("Extra high");
   return s ? s[0].toUpperCase() + s.slice(1) : s;
 }
 
@@ -127,7 +128,7 @@ export function multiplierText(n) {
 /** The muted line under a reply: "used 2.8 credits", "used 1 credit". */
 export function creditsUsedText(credits) {
   const n = Math.round(Number(credits) * 10) / 10;
-  return `used ${String(n)} credit${n === 1 ? "" : "s"}`;
+  return trn(n, "used {1} credit", "used {1} credits", String(n));
 }
 
 export function effortFor(opt, wanted) {
@@ -189,16 +190,16 @@ export function visionCheck(menu, choice, attachments) {
     if ((opt.modalities || []).includes("image")) return ok;
     const alt = optionFor(menu, opt.visionAlternative);
     if (alt) {
-      return { kind: "switch", to: alt.id, message: `I'll have to switch to ${alt.model} (${multiplierText(alt.multiplier)}) for this.` };
+      return { kind: "switch", to: alt.id, message: tr("I'll have to switch to {0} ({1}) for this.", alt.model, multiplierText(alt.multiplier)) };
     }
-    return { kind: "blocked", message: `${opt.model} can't see images. Remove them or pick another model.` };
+    return { kind: "blocked", message: tr("{0} can't see images. Remove them or pick another model.", opt.model) };
   }
   if (opt.vision !== false) return ok;
   if (opt.visionAlternative) {
     const alt = optionFor(menu, opt.visionAlternative);
-    return { kind: "switch", to: opt.visionAlternative, message: `I'll have to switch to ${alt?.label || opt.visionAlternative} for this.` };
+    return { kind: "switch", to: opt.visionAlternative, message: tr("I'll have to switch to {0} for this.", alt?.label || opt.visionAlternative) };
   }
-  return { kind: "blocked", message: `${opt.label || opt.id} can't see images. Remove them or pick another model.` };
+  return { kind: "blocked", message: tr("{0} can't see images. Remove them or pick another model.", opt.label || opt.id) };
 }
 
 // ---- attachments (mirror packages/server-daemon/src/llm/vibeCodeAttachments.ts) ----
@@ -206,10 +207,10 @@ export function visionCheck(menu, choice, attachments) {
 export const MAX_ATTACHMENTS = 6;
 const MB = 1024 * 1024;
 export const ATTACHMENT_LIMITS = {
-  image: { bytes: 4 * MB, text: "4 MB", noun: "images" },
-  text: { bytes: 256 * 1024, text: "256 KB", noun: "text files" },
-  data: { bytes: 2 * MB, text: "2 MB", noun: "CSV and JSON files" },
-  document: { bytes: 10 * MB, text: "10 MB", noun: "PDFs" },
+  image: { bytes: 4 * MB, text: tr("4 MB"), noun: "images" },
+  text: { bytes: 256 * 1024, text: tr("256 KB"), noun: "text files" },
+  data: { bytes: 2 * MB, text: tr("2 MB"), noun: tr("CSV and JSON files") },
+  document: { bytes: 10 * MB, text: tr("10 MB"), noun: "PDFs" },
 };
 
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"]);
@@ -258,11 +259,11 @@ export function classifyFile({ name, type, size }) {
     kind = "text";
   }
   if (!kind) {
-    return { error: `"${name}" can't be attached. Try an image, a text or code file, CSV, JSON or a PDF.` };
+    return { error: tr("\"{0}\" can't be attached. Try an image, a text or code file, CSV, JSON or a PDF.", name) };
   }
   const limit = ATTACHMENT_LIMITS[kind];
   if (Number(size) > limit.bytes) {
-    return { error: `"${name}" is too big: ${limit.noun} can be up to ${limit.text}.` };
+    return { error: tr("\"{0}\" is too big: {1} can be up to {2}.", name, limit.noun, limit.text) };
   }
   return mediaType ? { kind, mediaType } : { kind };
 }
@@ -274,7 +275,7 @@ export function dataTextError(name, mediaType, text) {
     JSON.parse(text);
     return null;
   } catch {
-    return `"${name}" isn't valid JSON.`;
+    return tr("\"{0}\" isn't valid JSON.", name);
   }
 }
 
@@ -312,7 +313,7 @@ export function triggerText(menu, choice, { fallback = PROVIDER_DEFAULT } = {}) 
 
 /** The open panel's markup. Exported for tests. */
 export function menuPanelHtml(menu, choice) {
-  if (!menu) return `<div class="mm-loading note">Loading models…</div>`;
+  if (!menu) return `<div class="mm-loading note">${tr("Loading models…")}</div>`;
   if (menu.kind === "flagship") {
     if (!menu.catalog) return `<div class="mm-head">${escapeHtml(FLAGSHIP_TITLE)}</div>`;
     return `<div class="mm-head">${escapeHtml(FLAGSHIP_TITLE)}</div>${menu.catalog.models.map((m) => rowHtml(menu, m, choice)).join("")}`;
@@ -320,7 +321,7 @@ export function menuPanelHtml(menu, choice) {
   if (!menu.listed) {
     return `
       <label class="mm-free">
-        <span class="field-label">Model</span>
+        <span class="field-label">${tr("Model")}</span>
         <input type="text" data-mm-free autocapitalize="none" autocorrect="off" spellcheck="false"
                value="${escapeHtml(choice?.model || menu.defaultModel || "")}" placeholder="model id">
       </label>
@@ -343,7 +344,7 @@ export function rowHtml(menu, m, choice, attrs = "") {
 export function effortPickerHtml(menu, choice) {
   const opt = optionFor(menu, choice?.model);
   if (!opt?.efforts?.length) return "";
-  return `<select class="mm-effort" data-mm-effort aria-label="Effort">${opt.efforts
+  return `<select class="mm-effort" data-mm-effort aria-label="${tr("Effort")}">${opt.efforts
     .map((e) => `<option value="${escapeHtml(e)}"${e === choice?.effort ? " selected" : ""}>${escapeHtml(effortLabel(e))}</option>`)
     .join("")}</select>`;
 }

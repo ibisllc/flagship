@@ -18,6 +18,7 @@ import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import { formatWhen } from "../lib/dateFormat.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-post-recovery");
 
 const POLL_MS = 1500;
@@ -60,25 +61,24 @@ function renderReport(report) {
     : "—";
   root.innerHTML = `
     <div class="card">
-      <div class="row"><span class="label">status</span><span class="value">${statusPill}</span></div>
-      <div class="row"><span class="label">apps reattached</span><span class="value">${report.reattachedCount}</span></div>
-      <div class="row"><span class="label">apps unchanged</span><span class="value">${report.unchangedCount}</span></div>
-      <div class="row"><span class="label">total rows rewritten</span><span class="value">${report.totalRewritten}</span></div>
-      <div class="row"><span class="label">old account key</span><span class="value text-xs">${escapeHtml(report.oldIrkPrefix ?? "")}…</span></div>
-      <div class="row"><span class="label">new account key</span><span class="value text-xs">${escapeHtml(report.newIrkPrefix ?? "")}…</span></div>
-      <div class="row"><span class="label">undo available until</span><span class="value text-xs">${escapeHtml(undoText)}</span></div>
+      <div class="row"><span class="label">${tr("status")}</span><span class="value">${statusPill}</span></div>
+      <div class="row"><span class="label">${tr("apps reattached")}</span><span class="value">${report.reattachedCount}</span></div>
+      <div class="row"><span class="label">${tr("apps unchanged")}</span><span class="value">${report.unchangedCount}</span></div>
+      <div class="row"><span class="label">${tr("total rows rewritten")}</span><span class="value">${report.totalRewritten}</span></div>
+      <div class="row"><span class="label">${tr("old account key")}</span><span class="value text-xs">${escapeHtml(report.oldIrkPrefix ?? "")}…</span></div>
+      <div class="row"><span class="label">${tr("new account key")}</span><span class="value text-xs">${escapeHtml(report.newIrkPrefix ?? "")}…</span></div>
+      <div class="row"><span class="label">${tr("undo available until")}</span><span class="value text-xs">${escapeHtml(undoText)}</span></div>
     </div>
-    <h3 class="mt-4">Per-app</h3>
+    <h3 class="mt-4">${tr("Per-app")}</h3>
     ${(report.apps ?? []).length === 0
       ? '<div class="card placeholder">no apps walked</div>'
       : (report.apps ?? []).map((a) => `
         <div class="card">
           <div class="row"><span class="label">${escapeHtml(a.slug ?? a.serviceId)}</span><span class="value text-xs">${escapeHtml(a.serviceId)}</span></div>
-          <div class="row"><span class="value">${a.rewrittenCount} reattached</span><span class="value">${a.unchangedCount} unchanged</span></div>
+          <div class="row"><span class="value">${tr("{0} reattached", a.rewrittenCount)}</span><span class="value">${tr("{0} unchanged", a.unchangedCount)}</span></div>
           ${a.error ? `<div class="row"><span class="value err-text">${escapeHtml(a.error)}</span></div>` : ""}
         </div>
-      `).join("")
-    }
+      `).join("")}
   `;
 }
 
