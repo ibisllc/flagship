@@ -226,10 +226,6 @@ The VM and its encrypted disk image are removed from this PC. </value>
     <value>Assemble and flash</value>
     <comment>Recipe.cs:311 (prose)</comment>
   </data>
-  <data name="beta" xml:space="preserve">
-    <value>Beta</value>
-    <comment>StudioVersion.cs:12 (label)</comment>
-  </data>
   <data name="openFlagshipStudio" xml:space="preserve">
     <value>Open Flagship Studio</value>
     <comment>TrayIcon.cs:55 (prose)</comment>
