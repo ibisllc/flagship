@@ -1,6 +1,7 @@
 // The server page's health summary, from the box's latest health report as
 // relayed on /pods (`pod.health`, control-plane serverHealth.ts). Copy is
 // shared word for word with iOS and Android.
+import { tr } from "./i18n.js";
 
 export const HEALTH_STALE_AFTER_MIN = 5;
 
@@ -29,7 +30,7 @@ export function serverHealthVerdict(h, now) {
     // The rest of the report is as old as this, so it isn't shown.
     return {
       ok: false,
-      lines: [`No health report for ${staleMin} min. The server itself may be off or frozen.`],
+      lines: [tr("No health report for {0} min. The server itself may be off or frozen.", staleMin)],
     };
   }
   const memAvail = num(h.memAvailMB);
@@ -57,7 +58,7 @@ export function serverHealthVerdict(h, now) {
   return {
     ok: true,
     lines: [
-      `Healthy · ${memAvail} MB free of ${memTotal} MB · disk ${disk}% · up ${formatHealthUptime(h.uptimeS)}`,
+      tr("Healthy · {0} MB free of {1} MB · disk {2}% · up {3}", memAvail, memTotal, disk, formatHealthUptime(h.uptimeS)),
     ],
   };
 }

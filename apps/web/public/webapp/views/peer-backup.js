@@ -16,6 +16,7 @@ import { escapeHtml } from "../lib/util.js";
 import { formatWhen } from "../lib/dateFormat.js";
 import { PEER_STATUS_PATH, stateTitle, stateNote, holderRows, hostingLines, restoreByLine } from "../lib/peerBackup.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-peer-backup");
 
 const PILL = { protected: "ok", "at-risk": "err", "waiting-for-peers": "warn", filling: "warn", placing: "warn", leaving: "warn", off: "" };
@@ -29,10 +30,10 @@ export function renderStatus(body, { formatTime = formatWhen, now = Date.now() }
   const reason = body.reason ? `<div class="muted-sm">${escapeHtml(String(body.reason))}</div>` : "";
   const total = Number(body.totalBricks) || 0;
   const pieces = total > 0
-    ? `<div class="row"><span class="label">pieces safe</span><span class="value">${escapeHtml(String(body.healthyBricks ?? 0))} of ${escapeHtml(String(total))}</span></div>`
+    ? `<div class="row"><span class="label">${tr("pieces safe")}</span><span class="value">${tr("{0} of {1}", escapeHtml(String(body.healthyBricks ?? 0)), escapeHtml(String(total)))}</span></div>`
     : "";
   const placed = Number.isFinite(body.lastPlacedAt) && body.lastPlacedAt > 0
-    ? `<div class="row"><span class="label">last placed</span><span class="value">${escapeHtml(formatTime(body.lastPlacedAt))}</span></div>`
+    ? `<div class="row"><span class="label">${tr("last placed")}</span><span class="value">${escapeHtml(formatTime(body.lastPlacedAt))}</span></div>`
     : "";
   const by = restoreByLine(body.keepUntil, { now, formatTime });
   const stateCard = `
@@ -45,7 +46,7 @@ export function renderStatus(body, { formatTime = formatWhen, now = Date.now() }
     </div>`;
   const rows = holderRows(body, { formatTime });
   const holdersCard = `
-    <h3 class="mt-4">Servers holding your pieces</h3>
+    <h3 class="mt-4">${tr("Servers holding your pieces")}</h3>
     ${rows.length === 0
       ? '<div class="card placeholder">None yet. Pieces are placed once your newest backup is ready and enough other servers can hold it.</div>'
       : rows.map((r) => `
@@ -56,29 +57,28 @@ export function renderStatus(body, { formatTime = formatWhen, now = Date.now() }
   const host = hostingLines(body);
   const hostingCard = host.length === 0
     ? ""
-    : `<h3 class="mt-4">Kept for other servers</h3><div class="card">${host.map((l) => `<div class="muted-sm">${escapeHtml(l)}</div>`).join("")}${
-        body.hosting?.reliability != null ? `<div class="faint-sm">Reliability score: ${escapeHtml(String(body.hosting.reliability))} of 100</div>` : ""}</div>`;
+    : `<h3 class="mt-4">${tr("Kept for other servers")}</h3><div class="card">${host.map((l) => `<div class="muted-sm">${escapeHtml(l)}</div>`).join("")}${body.hosting?.reliability != null ? `<div class="faint-sm">${tr("Reliability score: {0} of 100", escapeHtml(String(body.hosting.reliability)))}</div>` : ""}</div>`;
   return stateCard + holdersCard + hostingCard;
 }
 
 export async function renderPeerBackup() {
   const root = $("peer-backup-content");
   if (!root) return;
-  placeholder(root, "Loading peer backup status…");
+  placeholder(root, tr("Loading peer backup status…"));
   let body;
   try {
     body = await screensFetch(PEER_STATUS_PATH);
   } catch (e) {
     if (e instanceof ScreensError) {
-      if (e.status === 404) return placeholder(root, "Peer backup isn't available on this server yet. Update the server to get it.");
-      if (e.status === 503) return placeholder(root, "Peer backup isn't set up on this server yet.");
+      if (e.status === 404) return placeholder(root, tr("Peer backup isn't available on this server yet. Update the server to get it."));
+      if (e.status === 503) return placeholder(root, tr("Peer backup isn't set up on this server yet."));
       root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
       return;
     }
     throw e;
   }
   if (body?.v !== 2) {
-    return placeholder(root, "This server runs an older peer backup. Update the server to see its new status here.");
+    return placeholder(root, tr("This server runs an older peer backup. Update the server to see its new status here."));
   }
   root.innerHTML = renderStatus(body);
 }

@@ -16,6 +16,7 @@
 
 import { _internal, bytesToHex, hexToBytes } from "./keystore.js";
 
+import { tr } from "./lib/i18n.js";
 const DB_NAME = "flagship-webapp";
 const DB_STORE = "keystore";
 const RECORD_KEY = "providers";
@@ -88,7 +89,7 @@ async function wrapList(umkSeed, list) {
   crypto.getRandomValues(nonce);
   const plain = new TextEncoder().encode(JSON.stringify(list));
   const ciphertext = new Uint8Array(
-    await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, key, plain),
+    await crypto.subtle.encrypt({ name: tr("AES-GCM"), iv: nonce }, key, plain),
   );
   return { version: 1, nonce: bytesToHex(nonce), ciphertext: bytesToHex(ciphertext) };
 }
@@ -97,7 +98,7 @@ async function unwrapList(umkSeed, blob) {
   const key = await deriveProvidersKey(umkSeed);
   const plain = new Uint8Array(
     await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: hexToBytes(blob.nonce) },
+      { name: tr("AES-GCM"), iv: hexToBytes(blob.nonce) },
       key,
       hexToBytes(blob.ciphertext),
     ),

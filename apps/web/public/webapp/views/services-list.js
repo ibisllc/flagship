@@ -21,6 +21,7 @@ import { fetchPodInventory } from "./home.js";
 import { appServerState, appStatusPillHtml, combineAppStatus, leaderOf, mergeAppsAcrossServers } from "../lib/appPlacement.js";
 import { accountReadFetch } from "../lib/accountRead.js";
 
+import { tr } from "../lib/i18n.js";
 const COM_BASE = controlApex();
 
 registerView("view-services-list");
@@ -31,9 +32,9 @@ registerView("view-services-list");
  * user; "Shared" = installed from another creator. Pure presentation.
  */
 export const APPS_FILTERS = [
-  { value: "all", label: "All" },
-  { value: "yours", label: "Yours" },
-  { value: "shared", label: "Shared" },
+  { value: "all", label: tr("All") },
+  { value: "yours", label: tr("Yours") },
+  { value: "shared", label: tr("Shared") },
 ];
 
 /** Which bucket an app belongs to, given the signed-in username. */
@@ -85,7 +86,7 @@ function podSwitcherHtml() {
   const buttons = model.options
     .map((o) => {
       const flag = o.isLeader
-        ? `<span class="icon pod-switcher-leader" aria-label="Main server" title="Main server">${flagIcon}</span>`
+        ? `<span class="icon pod-switcher-leader" aria-label="${tr("Main server")}" title="${tr("Main server")}">${flagIcon}</span>`
         : "";
       return (
         `<button type="button" class="fs-chip pod-switcher-chip${o.selected ? " is-selected" : ""}" ` +
@@ -96,7 +97,7 @@ function podSwitcherHtml() {
     })
     .join("");
   return `
-    <div class="fs-chip-row pod-switcher mt-1" role="group" aria-label="Switch server">
+    <div class="fs-chip-row pod-switcher mt-1" role="group" aria-label="${tr("Switch server")}">
       ${buttons}
     </div>
   `;
@@ -145,8 +146,8 @@ function urlRowHtml(service, links) {
           ? `<a class="weight-600 mono text-xs truncate" href="${escapeHtml(short)}" target="_blank" rel="noopener" style="min-width:0;">
                 ${escapeHtml(stripScheme(short))}
              </a>
-             <button class="ghost mini" data-copy="${escapeHtml(short)}" aria-label="Copy short link">📋</button>`
-          : `<span class="muted-sm mono text-xs">voi.ci/…</span>`
+             <button class="ghost mini" data-copy="${escapeHtml(short)}" aria-label="${tr("Copy short link")}">📋</button>`
+          : `<span class="muted-sm mono text-xs">${tr("voi.ci/…")}</span>`
         }
       </div>
       <div class="muted-sm mono text-xs truncate">${escapeHtml(stripScheme(canonical))}</div>
@@ -174,7 +175,7 @@ function appCardHtml(s) {
           </div>
           <div data-url-slot="${escapeHtml(s.serviceId)}">${urlRowHtml(s, null)}</div>
         </div>
-        <button class="secondary" data-action="open" data-id="${escapeHtml(s.serviceId)}" data-server="${escapeHtml(s.listedBy ?? "")}">open</button>
+        <button class="secondary" data-action="open" data-id="${escapeHtml(s.serviceId)}" data-server="${escapeHtml(s.listedBy ?? "")}">${tr("open")}</button>
       </div>
     </div>
   `;
@@ -197,16 +198,16 @@ function renderAppCards() {
   const cardsHtml = visible.length
     ? visible.map((e) => appCardHtml(e.app)).join("")
     : `<div class="card placeholder">${
-        appsQuery || appsFilter !== "all" ? "No services match this filter." : "No services installed yet."
+        appsQuery || appsFilter !== "all" ? tr("No services match this filter.") : tr("No services installed yet.")
       }</div>`;
 
   root.innerHTML = `
-    <div class="fs-hero-compact" data-apps-compact aria-hidden="true">Services</div>
+    <div class="fs-hero-compact" data-apps-compact aria-hidden="true">${tr("Services")}</div>
     <div class="fs-hero">
-      <h2 class="fs-hero-title" data-apps-title>Services</h2>
+      <h2 class="fs-hero-title" data-apps-title>${tr("Services")}</h2>
       ${podSwitcherHtml()}
-      ${searchField({ value: appsQuery, placeholder: "Search services", id: "apps-search" })}
-      ${chipRow({ items: chips, selected: appsFilter, ariaLabel: "Filter services" })}
+      ${searchField({ value: appsQuery, placeholder: tr("Search services"), id: "apps-search" })}
+      ${chipRow({ items: chips, selected: appsFilter, ariaLabel: tr("Filter services") })}
     </div>
     <div data-app-cards>${cardsHtml}</div>
   `;
@@ -326,9 +327,9 @@ function bindServicesListHandlers() {
       const url = ev.currentTarget.getAttribute("data-copy");
       try {
         await navigator.clipboard.writeText(url);
-        toast("Copied.");
+        toast(tr("Copied."));
       } catch (e) {
-        toast("Couldn't copy.", "err");
+        toast(tr("Couldn't copy."), "err");
       }
     });
   });
@@ -354,9 +355,9 @@ async function hydrateServiceLinks(services) {
             const url = ev.currentTarget.getAttribute("data-copy");
             try {
               await navigator.clipboard.writeText(url);
-              toast("Copied.");
+              toast(tr("Copied."));
             } catch {
-              toast("Couldn't copy.", "err");
+              toast(tr("Couldn't copy."), "err");
             }
           });
         });

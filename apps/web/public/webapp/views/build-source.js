@@ -18,6 +18,7 @@ import { enterBuildJournal } from "./build-journal.js";
 import { enterBuildKey } from "./build-key.js";
 import { loadAccountPods, sessionServers, startCreation } from "../lib/appPlacement.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-build-source");
 
 // Where Back goes: the services list, or the server page a "Create app here"
@@ -25,14 +26,14 @@ registerView("view-build-source");
 let backView = "view-services-list";
 
 const HELP_ITEMS = [
-  ["Resume or view past builds",
-    "Builds still open on your server can be picked up where you left off: answer the AI, deploy, or retry a failed deploy. Older builds keep a timeline of what happened. A build stays open until your server restarts."],
-  ["Start from scratch with AI",
-    "Describe the app you want in plain English. An AI model writes the code on your server, asks you questions when it needs to, and you deploy it with one tap. You need a key from an AI provider (OpenAI, Anthropic, OpenRouter…); it is sent only to your server."],
-  ["Import from a Git repo",
-    "Paste the address of a code repository, for example on GitHub. If it is already set up for Flagship it installs as-is; otherwise the AI can adapt it for you."],
-  ["Connect your IDE",
-    "For developers: work in your own IDE (Claude Code, Cursor, VS Code or Cline) with your own AI, connected to your server over MCP. No AI key is stored on the server."],
+  [tr("Resume or view past builds"),
+    tr("Builds still open on your server can be picked up where you left off: answer the AI, deploy, or retry a failed deploy. Older builds keep a timeline of what happened. A build stays open until your server restarts.")],
+  [tr("Start from scratch with AI"),
+    tr("Describe the app you want in plain English. An AI model writes the code on your server, asks you questions when it needs to, and you deploy it with one tap. You need a key from an AI provider (OpenAI, Anthropic, OpenRouter…); it is sent only to your server.")],
+  [tr("Import from a Git repo"),
+    tr("Paste the address of a code repository, for example on GitHub. If it is already set up for Flagship it installs as-is; otherwise the AI can adapt it for you.")],
+  [tr("Connect your IDE"),
+    tr("For developers: work in your own IDE (Claude Code, Cursor, VS Code or Cline) with your own AI, connected to your server over MCP. No AI key is stored on the server.")],
 ];
 
 export function initBuildSourceView() {
@@ -40,7 +41,7 @@ export function initBuildSourceView() {
   // AI key, then opens the chat seeded with the in-memory credential.
   $("build-src-scratch").addEventListener("click", () =>
     enterBuildKey({
-      contextLabel: "Start from scratch with AI",
+      contextLabel: tr("Start from scratch with AI"),
       onChosen: (credential) => enterVibeCode({ credential }),
     }),
   );
@@ -82,14 +83,14 @@ async function refreshActiveCount() {
 function openBuildHelp() {
   const dlg = document.createElement("dialog");
   dlg.className = "modal-card";
-  dlg.setAttribute("aria-label", "How building works");
+  dlg.setAttribute("aria-label", tr("How building works"));
   dlg.innerHTML = `
-    <h3 class="modal-title">How building works</h3>
-    <p class="modal-message">Every option ends the same way: the app is installed and running on your own server, at its own web address.</p>
+    <h3 class="modal-title">${tr("How building works")}</h3>
+    <p class="modal-message">${tr("Every option ends the same way: the app is installed and running on your own server, at its own web address.")}</p>
     <div class="build-help-list">
       ${HELP_ITEMS.map(([title, body]) => `<div><h4>${escapeHtml(title)}</h4><p>${escapeHtml(body)}</p></div>`).join("")}
     </div>
-    <button class="full-width" data-help-done>Done</button>
+    <button class="full-width" data-help-done>${tr("Done")}</button>
   `;
   document.body.appendChild(dlg);
   const close = () => {

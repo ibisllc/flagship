@@ -39,6 +39,7 @@ import { openVibeCodeSession } from "./vibe-code.js";
 import { DEPLOY_BUTTON, failedBuild } from "../lib/gitImport.js";
 import { resumeBuildGit } from "./build-git.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-build-journal");
 
 export function initBuildJournalView() {
@@ -81,26 +82,26 @@ async function renderList() {
   const open = openBuilds(builds, sessions);
   const list = $("build-journal-list");
   if (sessions.length === 0 && builds.length === 0) {
-    list.innerHTML = `<div class="card placeholder">No builds yet.</div>`;
+    list.innerHTML = `<div class="card placeholder">${tr("No builds yet.")}</div>`;
     return;
   }
   let html = "";
   if (sessions.length > 0 || open.length > 0) {
-    html += `<p class="note build-section-caption">Open on your server${many ? "s" : ""}</p>`;
+    html += `<p class="note build-section-caption">${tr("Open on your server{0}", many ? "s" : "")}</p>`;
     html += open
       .map(
         (b) => `
         <button class="card full-width build-session-row" data-build="${escapeHtml(b.buildId)}" data-server="${escapeHtml(b.server ?? "")}">
           <span class="build-session-body">
             <strong>${escapeHtml(buildDisplayName(b))}</strong>
-            <span class="note">Started ${escapeHtml(formatDateTime(b.startedAt))}</span>
+            <span class="note">${tr("Started {0}", escapeHtml(formatDateTime(b.startedAt)))}</span>
             <span class="build-session-pills">
               <span class="pill">${escapeHtml(buildMethodLabel(b.mode))}</span>
               ${serverPill(b, many)}
             </span>
           </span>
-          <span class="build-session-action">Open</span>
-        </button><div class="build-session-discard"><button class="linklike" data-discard-build="${escapeHtml(b.buildId)}" data-server="${escapeHtml(b.server ?? "")}">Discard…</button></div>`,
+          <span class="build-session-action">${tr("Open")}</span>
+        </button><div class="build-session-discard"><button class="linklike" data-discard-build="${escapeHtml(b.buildId)}" data-server="${escapeHtml(b.server ?? "")}">${tr("Discard…")}</button></div>`,
       )
       .join("");
     html += sessions
@@ -108,13 +109,13 @@ async function renderList() {
         const active = isActiveSession(s);
         const pill = sessionPillClass(s.status);
         const discard = canDiscard(s)
-          ? `<div class="build-session-discard"><button class="linklike" data-discard="${escapeHtml(s.sessionId)}" data-server="${escapeHtml(s.server ?? "")}">Discard…</button></div>`
+          ? `<div class="build-session-discard"><button class="linklike" data-discard="${escapeHtml(s.sessionId)}" data-server="${escapeHtml(s.server ?? "")}">${tr("Discard…")}</button></div>`
           : "";
         return `
         <button class="card full-width build-session-row${active ? " is-active" : ""}" data-session="${escapeHtml(s.sessionId)}" data-server="${escapeHtml(s.server ?? "")}">
           <span class="build-session-body">
             <strong>${escapeHtml(sessionTitle(s, builds))}</strong>
-            <span class="note">Started ${escapeHtml(formatDateTime(s.startedAt))}</span>
+            <span class="note">${tr("Started {0}", escapeHtml(formatDateTime(s.startedAt)))}</span>
             <span class="build-session-pills">
               <span class="pill${pill ? ` ${pill}` : ""}">${escapeHtml(sessionStatusLabel(s.status))}</span>
               <span class="pill">${escapeHtml(buildMethodLabel("scratch"))}</span>
@@ -127,7 +128,7 @@ async function renderList() {
       .join("");
   }
   if (ended.length > 0) {
-    html += `<p class="note build-section-caption">Past builds</p>`;
+    html += `<p class="note build-section-caption">${tr("Past builds")}</p>`;
     html += ended
       .map(
         (b) => `
@@ -165,7 +166,7 @@ async function confirmDiscardBuild(build) {
   const ok = await inlineConfirm({
     title: DISCARD_TITLE,
     message: discardBuildMessage(build),
-    okLabel: "Discard build",
+    okLabel: tr("Discard build"),
     danger: true,
   });
   if (!ok) return;
@@ -183,7 +184,7 @@ async function confirmDiscard(session) {
   const ok = await inlineConfirm({
     title: DISCARD_TITLE,
     message: discardMessage(session),
-    okLabel: "Discard build",
+    okLabel: tr("Discard build"),
     danger: true,
   });
   if (!ok) return;
@@ -233,7 +234,7 @@ async function renderDetail(buildId, server = "", { open = false } = {}) {
         <button id="build-journal-deploy" class="full-width mt-2">${escapeHtml(DEPLOY_BUTTON)}</button>
       </div>` : ""}
       <div class="card">
-        <h3>Build ${escapeHtml(buildId)}</h3>
+        <h3>${tr("Build {0}", escapeHtml(buildId))}</h3>
         <ol class="build-journal-timeline">
           ${entries
             .map(
@@ -260,7 +261,7 @@ async function deployHeld(buildId, c) {
   if (btn) btn.disabled = true;
   try {
     const r = await c.fetch(`/api/build/sessions/${encodeURIComponent(buildId)}/deploy`, { method: "POST" });
-    toast(`Deployed → ${r.url}`, "ok");
+    toast(tr("Deployed → {0}", r.url), "ok");
     await renderList();
   } catch (e) {
     toast(e instanceof ScreensError ? e.message : String(e), "err");

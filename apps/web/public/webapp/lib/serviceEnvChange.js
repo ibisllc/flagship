@@ -6,6 +6,7 @@
 // The signed bytes name the one variable that changes and carry a fresh
 // nonce the box spends once, so a captured order can't be replayed or pointed
 // at another variable. A set signs the SHA-256 of its value, never the value.
+import { tr } from "./i18n.js";
 
 export const TAG_SERVICE_ENV_CHANGE = "flagship/service-env-change/v1";
 export const SERVICE_ENV_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
@@ -20,9 +21,9 @@ function hex(bytes) {
 /** Why a variable name can't be used, or null. */
 export function envNameError(name) {
   if (!SERVICE_ENV_NAME_RE.test(name ?? "")) {
-    return "Use letters, digits and _ only, not starting with a digit (like API_KEY).";
+    return tr("Use letters, digits and _ only, not starting with a digit (like API_KEY).");
   }
-  if (name.startsWith(RESERVED_PREFIX)) return "Names starting with FLAGSHIP_ are set by your server.";
+  if (name.startsWith(RESERVED_PREFIX)) return tr("Names starting with FLAGSHIP_ are set by your server.");
   return null;
 }
 
