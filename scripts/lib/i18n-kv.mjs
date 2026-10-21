@@ -46,7 +46,7 @@ export const tokensOf = (s) => [...s.matchAll(TOKEN)].map((m) => m[0].replace(/^
 
 const hasTerm = (str, term) =>
   new RegExp(`(?<![A-Za-z0-9\\u00C0-\\u024F])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:s)?(?![A-Za-z0-9\\u00C0-\\u024F])`, "u")
-    .test(str.replace(/-/g, " ")) || str.includes(term);
+    .test(str.replace(/-/g, " "));
 
 /** Problems with one translation of one entry (empty list when fine). */
 export function lintEntry(key, en, text, code) {
@@ -97,10 +97,31 @@ export function dump(surface, from = 0, n = 80) {
   const trs = targets.map((l) => readTr(surface, l.code));
   const todo = Object.entries(en).filter(([k, v]) => translatable(v) && trs.some((t) => t[k] == null));
   console.error(`${todo.length} entries of ${surface} still need at least one language`);
-  for (const [k, v] of todo.slice(from, from + n)) {
+  const batch = {};
+  todo.slice(from, from + n).forEach(([k, v], i) => {
     const text = typeof v.en === "string" ? v.en : JSON.stringify(v.en);
-    console.log(`${k}\t${v.ctx ?? ""}\t${text.replace(/\n/g, "\\n")}`);
+    batch[i + 1] = k;
+    console.log(`${i + 1}\t${(v.ctx ?? "").replace(/^apps\//, "").replace(/ \(.*\)$/, "")}\t${text.replace(/\n/g, "\\n")}`);
+  });
+  fs.writeFileSync(`/tmp/i18n-batch-${surface}.json`, JSON.stringify(batch));
+}
+
+/** midx <surface> <file>: [[n, es, fr, de, pt-BR, ja, zh-Hans], ...] where n is the number dump printed. Plural entries: a language cell may be {one, other}. */
+export function midx(surface, file) {
+  const batch = JSON.parse(fs.readFileSync(`/tmp/i18n-batch-${surface}.json`, "utf8"));
+  const rows = JSON.parse(fs.readFileSync(file, "utf8"));
+  const order = targets.map((l) => l.code);
+  const incoming = {};
+  for (const row of rows) {
+    const key = batch[row[0]];
+    if (key === undefined) { console.error(`row ${row[0]} is not in the batch`); process.exitCode = 1; continue; }
+    incoming[key] = Object.fromEntries(order.map((code, i) => [code, row[i + 1]]).filter(([, t]) => t != null && t !== ""));
   }
+  const tmp = `/tmp/i18n-midx-${surface}.json`;
+  fs.writeFileSync(tmp, JSON.stringify(incoming));
+  merge(surface, tmp);
+  const missing = Object.keys(batch).filter((n) => !rows.some((r) => String(r[0]) === n));
+  if (missing.length) console.error(`not translated in this file: ${missing.join(", ")}`);
 }
 
 /** merge <surface> <file>: { "<key>": { "es": "...", "pt-BR": "..." } } into i18n/<surface>/<lang>.json. */
@@ -131,6 +152,7 @@ export function runCommon(surface, argv) {
   const [cmd, a, b] = argv;
   if (cmd === "dump") { dump(surface, Number(a || 0), Number(b || 80)); return true; }
   if (cmd === "merge") { merge(surface, a); return true; }
+  if (cmd === "midx") { midx(surface, a); return true; }
   if (cmd === "status") { console.log(statusLines(surface).join("\n")); return true; }
   if (cmd === "lint") {
     const p = lintSurface(surface);
