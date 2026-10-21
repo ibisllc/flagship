@@ -104,10 +104,10 @@ public partial class MainWindow : Window
         if (live > 0)
         {
             var answer = MessageBox.Show(this,
-                $"Restarting as administrator first shuts down the {(live == 1 ? "server" : $"{live} servers")} running on this PC. " +
-                "Each powers off gracefully, which can take up to a minute; an installation in progress starts over later. " +
-                "Start them again after the restart.",
-                "Restart as administrator?", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+                Strings.F("restartingAsAdministratorFirstShutsDown", (live == 1 ? "server" : Strings.F("servers", live))) +
+                Strings.T("eachPowersOffGracefullyWhichCan") +
+                Strings.T("startThemAgainAfterTheRestart"),
+                Strings.T("restartAsAdministrator"), MessageBoxButton.OKCancel, MessageBoxImage.Warning);
             if (answer != MessageBoxResult.OK) return;
             await ShutDownServersAsync();
         }
@@ -131,7 +131,7 @@ public partial class MainWindow : Window
         catch (Exception error)
         {
             RestoreAfterShutdown();
-            MessageBox.Show(this, error.Message, "Could not restart as administrator",
+            MessageBox.Show(this, error.Message, Strings.T("couldNotRestartAsAdministrator"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -139,7 +139,7 @@ public partial class MainWindow : Window
     private void RestoreAfterShutdown()
     {
         _wizard.Vm.CancelQuit();
-        Title = "Flagship Studio (Experimental)";
+        Title = Strings.T("flagshipStudioExperimental");
         IsEnabled = true;
         _trayIcon.SetStatus(null);
     }
@@ -147,9 +147,9 @@ public partial class MainWindow : Window
 
     private async Task ShutDownServersAsync()
     {
-        const string status = "Shutting down your servers…";
+        string status = Strings.T("shuttingDownYourServers");
         CloseConsole();
-        Title = $"Flagship Studio — {status}";
+        Title = Strings.F("flagshipStudio", status);
         IsEnabled = false;
         _trayIcon.SetStatus(status);
         await _wizard.Vm.ShutDownAllAsync();
@@ -163,8 +163,8 @@ public partial class MainWindow : Window
 
     private void MenuAbout_Click(object sender, RoutedEventArgs e)
         => MessageBox.Show(this,
-            $"Flagship Studio {StudioVersion.CurrentDisplay}\n\nBuild and host your own Flagship server.\nhttps://flagshipserver.com",
-            "About Flagship Studio", MessageBoxButton.OK, MessageBoxImage.Information);
+            Strings.F("flagshipStudioBuildAndHostYour", StudioVersion.CurrentDisplay),
+            Strings.T("aboutFlagshipStudio"), MessageBoxButton.OK, MessageBoxImage.Information);
 
     private static void OpenUrl(string url)
         => Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
@@ -204,7 +204,7 @@ public partial class MainWindow : Window
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Pick recipe (.json)",
+            Title = Strings.T("pickRecipeJson"),
             Filter = "Recipe (*.json)|*.json|All files|*.*",
             CheckFileExists = true,
         };
@@ -227,7 +227,7 @@ public partial class MainWindow : Window
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Pick a Debian installer ISO",
+            Title = Strings.T("pickADebianInstallerIso"),
             Filter = "ISO image (*.iso)|*.iso|All files|*.*",
             CheckFileExists = true,
         };
@@ -330,10 +330,10 @@ public partial class MainWindow : Window
         var fqdn = _wizard.SelectedServer?.Fqdn ?? name;
         var choice = MessageBox.Show(
             this,
-            $"Delete {fqdn}?\n\nThe VM and its encrypted disk image are removed from this PC. " +
-            "The server's identity stays with your account. Backups stored on this server are deleted with it; " +
+            Strings.F("deleteTheVmAndItsEncrypted", fqdn) +
+            Strings.T("theServersIdentityStaysWithYour") +
             "copies kept on your phone or with peers (depending on its backup policy) are not.",
-            "Delete this server",
+            Strings.T("deleteThisServer"),
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);
         if (choice != MessageBoxResult.Yes) return;
@@ -508,8 +508,8 @@ public partial class MainWindow : Window
         if (host is null || host.SshPort == 0)
         {
             MessageBox.Show(this,
-                "SSH is available once the server is running (a debug-enabled VM forwards a local port to the guest).",
-                "Open in SSH", MessageBoxButton.OK, MessageBoxImage.Information);
+                Strings.T("sshIsAvailableOnceTheServer"),
+                Strings.T("openInSsh"), MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         try
@@ -523,8 +523,8 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"Couldn't launch SSH: {ex.Message}",
-                "Open in SSH", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, Strings.F("couldntLaunchSsh", ex.Message),
+                Strings.T("openInSsh"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -675,7 +675,7 @@ public sealed class NotNullToVisibilityConverter : IValueConverter
 public sealed class ModeToggleLabelConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        => value is BuilderMode m && m == BuilderMode.Simple ? "Advanced…" : "Simple…";
+        => value is BuilderMode m && m == BuilderMode.Simple ? Strings.T("advanced") : Strings.T("simple");
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotImplementedException();
 }

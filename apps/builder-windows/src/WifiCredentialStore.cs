@@ -102,7 +102,7 @@ public sealed class WifiCredentialStore
             {
                 var input = new Blob { Size = data.Length, Data = handle.AddrOfPinnedObject() };
                 var ok = protect
-                    ? CryptProtectData(ref input, "Flagship Studio Wi-Fi", IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, UiForbidden, out var output)
+                    ? CryptProtectData(ref input, Strings.T("flagshipStudioWiFi"), IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, UiForbidden, out var output)
                     : CryptUnprotectData(ref input, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, UiForbidden, out output);
                 if (!ok) throw new InvalidOperationException($"DPAPI failed ({Marshal.GetLastWin32Error()}).");
                 try
