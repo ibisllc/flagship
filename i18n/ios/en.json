@@ -4,88 +4,6 @@
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:441",
     "translatable": false
   },
-  "Home": {
-    "en": "Home",
-    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:320"
-  },
-  "New server": {
-    "en": "New server",
-    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:411"
-  },
-  "Provisioning": {
-    "en": "Provisioning",
-    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:461"
-  },
-  "Account no longer listed": {
-    "en": "Account no longer listed",
-    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:722"
-  },
-  "Keep on This iPhone": {
-    "en": "Keep on This iPhone",
-    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:730"
-  },
-  "Erase Local Keys and Data": {
-    "en": "Erase Local Keys and Data",
-    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:733"
-  },
-  "Flagship.com no longer lists this account. Nothing on this iPhone has been deleted. You can keep using the local account, or erase its local keys and data to start over.": {
-    "en": "Flagship.com no longer lists this account. Nothing on this iPhone has been deleted. You can keep using the local account, or erase its local keys and data to start over.",
-    "ctx": "apps/mobile/ios/App/Sources/FlagshipApp.swift:741"
-  },
-  "Approve unlock": {
-    "en": "Approve unlock",
-    "ctx": "apps/mobile/ios/App/Sources/Intents/FlagshipAppIntents.swift:24"
-  },
-  "Open Flagship at the list of boxes waiting for you to release their disk key.": {
-    "en": "Open Flagship at the list of boxes waiting for you to release their disk key.",
-    "ctx": "apps/mobile/ios/App/Sources/Intents/FlagshipAppIntents.swift:26"
-  },
-  "Show server": {
-    "en": "Show server",
-    "ctx": "apps/mobile/ios/App/Sources/Intents/FlagshipAppIntents.swift:46"
-  },
-  "Open the detail page for a specific Flagship server.": {
-    "en": "Open the detail page for a specific Flagship server.",
-    "ctx": "apps/mobile/ios/App/Sources/Intents/FlagshipAppIntents.swift:48"
-  },
-  "Server": {
-    "en": "Server",
-    "ctx": "apps/mobile/ios/App/Sources/Intents/FlagshipAppIntents.swift:53"
-  },
-  "Flagship Server": {
-    "en": "Flagship Server",
-    "ctx": "apps/mobile/ios/App/Sources/Intents/FlagshipAppIntents.swift:68"
-  },
-  "%@": {
-    "en": "%@",
-    "ctx": "apps/mobile/ios/App/Sources/Intents/FlagshipAppIntents.swift:78",
-    "translatable": false
-  },
-  "%@ — %@": {
-    "en": "%@ — %@",
-    "ctx": "apps/mobile/ios/App/Sources/Intents/FlagshipAppIntents.swift:79",
-    "translatable": false
-  },
-  "Server status": {
-    "en": "Server status",
-    "ctx": "apps/mobile/ios/App/Sources/Intents/FlagshipAppIntents.swift:115"
-  },
-  "Speak the current online/offline state of your Flagship servers.": {
-    "en": "Speak the current online/offline state of your Flagship servers.",
-    "ctx": "apps/mobile/ios/App/Sources/Intents/FlagshipAppIntents.swift:117"
-  },
-  "You don't have any Flagship servers yet.": {
-    "en": "You don't have any Flagship servers yet.",
-    "ctx": "apps/mobile/ios/App/Sources/Intents/FlagshipAppIntents.swift:125"
-  },
-  "Approve your box's boot unlock": {
-    "en": "Approve your box's boot unlock",
-    "ctx": "apps/mobile/ios/App/Sources/WatchBridge.swift:72"
-  },
-  "Unseal the disk key": {
-    "en": "Unseal the disk key",
-    "ctx": "apps/mobile/ios/App/Sources/WatchBridge.swift:75"
-  },
   "This device has no screen lock set up.": {
     "en": "This device has no screen lock set up.",
     "ctx": "apps/mobile/ios/Sources/Flagship/BiometricGate.swift:32"
@@ -587,10 +505,21 @@
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift:238",
     "translatable": false
   },
-  "%lld row%@ rewritten · %lld app%@": {
-    "en": "%lld row%@ rewritten · %lld app%@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift:270",
-    "translatable": false
+  "%lld row rewritten": {
+    "en": "%lld row rewritten",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift:270"
+  },
+  "%lld rows rewritten": {
+    "en": "%lld rows rewritten",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift:270"
+  },
+  "%lld app": {
+    "en": "%lld app",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift:270"
+  },
+  "%lld apps": {
+    "en": "%lld apps",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift:270"
   },
   "View report": {
     "en": "View report",
@@ -634,9 +563,17 @@
     "en": "Unseal the disk key for %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/ActivityTab.swift:154"
   },
+  "Unseal the disk key": {
+    "en": "Unseal the disk key",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/ActivityTab.swift:158"
+  },
   "Authorize your server to serve": {
     "en": "Authorize your server to serve",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/ActivityTab.swift:168"
+  },
+  "Provisioning": {
+    "en": "Provisioning",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/ActivityTab.swift:186"
   },
   "Watching %@…": {
     "en": "Watching %@…",
@@ -2308,10 +2245,13 @@
     "en": "Check again",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:374"
   },
-  "%@ — %lld file%@.": {
-    "en": "%@ — %lld file%@.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:402",
-    "translatable": false
+  "%@ — %lld file.": {
+    "en": "%@ — %lld file.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:402"
+  },
+  "%@ — %lld files.": {
+    "en": "%@ — %lld files.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:402"
   },
   "Install it": {
     "en": "Install it",
@@ -2325,8 +2265,16 @@
     "en": "This can take several minutes. You can leave this screen; Build sessions shows how it went.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:467"
   },
-  "The AI rewrote this repo into a Flagship service%@.": {
-    "en": "The AI rewrote this repo into a Flagship service%@.",
+  "The AI rewrote this repo into a Flagship service.": {
+    "en": "The AI rewrote this repo into a Flagship service.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:477"
+  },
+  "The AI rewrote this repo into a Flagship service (%lld file).": {
+    "en": "The AI rewrote this repo into a Flagship service (%lld file).",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:477"
+  },
+  "The AI rewrote this repo into a Flagship service (%lld files).": {
+    "en": "The AI rewrote this repo into a Flagship service (%lld files).",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:477"
   },
   "Adapted": {
@@ -2545,10 +2493,13 @@
     "en": "No builds yet.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:937"
   },
-  "Started %@ · %lld step%@": {
-    "en": "Started %@ · %lld step%@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:945",
-    "translatable": false
+  "Started %@ · %lld step": {
+    "en": "Started %@ · %lld step",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:945"
+  },
+  "Started %@ · %lld steps": {
+    "en": "Started %@ · %lld steps",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift:945"
   },
   "Deploy it again": {
     "en": "Deploy it again",
@@ -2807,6 +2758,10 @@
   "Approve": {
     "en": "Approve",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:185"
+  },
+  "Server": {
+    "en": "Server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift:166"
   },
   "Connected browsers": {
     "en": "Connected browsers",
@@ -3108,10 +3063,13 @@
     "en": "%lld min",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:369"
   },
-  "%lld hour%@": {
-    "en": "%lld hour%@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:372",
-    "translatable": false
+  "%lld hour": {
+    "en": "%lld hour",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:372"
+  },
+  "%lld hours": {
+    "en": "%lld hours",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift:372"
   },
   "Reboots on its own": {
     "en": "Reboots on its own",
@@ -3525,6 +3483,11 @@
     "en": "%@ (no longer installed)",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/FrontPageViews.swift:64"
   },
+  "%@ — %@": {
+    "en": "%@ — %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/FrontPageViews.swift:59",
+    "translatable": false
+  },
   "Front page reset to default": {
     "en": "Front page reset to default",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/FrontPageViews.swift:106"
@@ -3581,6 +3544,10 @@
   "No servers yet": {
     "en": "No servers yet",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:225"
+  },
+  "Home": {
+    "en": "Home",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:293"
   },
   "This device was removed from your account": {
     "en": "This device was removed from your account",
@@ -4961,19 +4928,21 @@
     "en": "Grace window — this takes effect at %@.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PostRecoveryScreen.swift:133"
   },
-  "Re-anchored %lld membership rows across %lld app%@.": {
-    "en": "Re-anchored %lld membership rows across %lld app%@.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PostRecoveryScreen.swift:139",
-    "translatable": false
+  "Membership rows re-anchored: %lld. Apps affected: %lld.": {
+    "en": "Membership rows re-anchored: %lld. Apps affected: %lld.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PostRecoveryScreen.swift:139"
   },
   "Per-app results": {
     "en": "Per-app results",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PostRecoveryScreen.swift:153"
   },
-  "%lld row%@ re-anchored": {
-    "en": "%lld row%@ re-anchored",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PostRecoveryScreen.swift:165",
-    "translatable": false
+  "%lld row re-anchored": {
+    "en": "%lld row re-anchored",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PostRecoveryScreen.swift:165"
+  },
+  "%lld rows re-anchored": {
+    "en": "%lld rows re-anchored",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/PostRecoveryScreen.swift:165"
   },
   "Undo window": {
     "en": "Undo window",
@@ -5978,10 +5947,13 @@
     "en": "%@: waiting",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerArchiveViewModels.swift:705"
   },
-  "Restored %lld app%@": {
-    "en": "Restored %lld app%@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerArchiveViewModels.swift:712",
-    "translatable": false
+  "Restored %lld app": {
+    "en": "Restored %lld app",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerArchiveViewModels.swift:712"
+  },
+  "Restored %lld apps": {
+    "en": "Restored %lld apps",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerArchiveViewModels.swift:712"
   },
   "Couldn't restore: %@: %@": {
     "en": "Couldn't restore: %@: %@",
@@ -6187,10 +6159,13 @@
     "en": "%lld of %lld pieces safe",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:380"
   },
-  "Kept on %lld other server%@": {
-    "en": "Kept on %lld other server%@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:381",
-    "translatable": false
+  "Kept on %lld other server": {
+    "en": "Kept on %lld other server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:381"
+  },
+  "Kept on %lld other servers": {
+    "en": "Kept on %lld other servers",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:381"
   },
   "Last placed %@": {
     "en": "Last placed %@",
@@ -6313,10 +6288,6 @@
     "en": "Version",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:501"
   },
-  "%lld hours": {
-    "en": "%lld hours",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:534"
-  },
   "%lld minutes": {
     "en": "%lld minutes",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:535"
@@ -6371,6 +6342,10 @@
   },
   "Authorize": {
     "en": "Authorize",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:681"
+  },
+  "Approve unlock": {
+    "en": "Approve unlock",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift:681"
   },
   "Authorized — your server should come online shortly.": {
@@ -7215,10 +7190,13 @@
     "en": "Open browser viewer",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceDetailScreen.swift:386"
   },
-  "%lld tab%@ running server-side": {
-    "en": "%lld tab%@ running server-side",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceDetailScreen.swift:387",
-    "translatable": false
+  "%lld tab running server-side": {
+    "en": "%lld tab running server-side",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceDetailScreen.swift:387"
+  },
+  "%lld tabs running server-side": {
+    "en": "%lld tabs running server-side",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceDetailScreen.swift:387"
   },
   "Report a problem with this adaptation": {
     "en": "Report a problem with this adaptation",
@@ -8533,10 +8511,13 @@
     "en": "session %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:232"
   },
-  "… %lld earlier message%@ not shown": {
-    "en": "… %lld earlier message%@ not shown",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:234",
-    "translatable": false
+  "… %lld earlier message not shown": {
+    "en": "… %lld earlier message not shown",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:234"
+  },
+  "… %lld earlier messages not shown": {
+    "en": "… %lld earlier messages not shown",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift:234"
   },
   "Live at %@": {
     "en": "Live at %@",
@@ -9505,19 +9486,25 @@
     "en": "Not answering",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift:111"
   },
-  "%lld piece%@": {
-    "en": "%lld piece%@",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift:130",
-    "translatable": false
+  "%lld piece": {
+    "en": "%lld piece",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift:130"
+  },
+  "%lld pieces": {
+    "en": "%lld pieces",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift:130"
   },
   "The pieces of this backup are no longer kept.": {
     "en": "The pieces of this backup are no longer kept.",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift:137"
   },
-  "Restore by %@ (%lld day%@ left).": {
-    "en": "Restore by %@ (%lld day%@ left).",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift:139",
-    "translatable": false
+  "Restore by %@ (%lld day left).": {
+    "en": "Restore by %@ (%lld day left).",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift:139"
+  },
+  "Restore by %@ (%lld days left).": {
+    "en": "Restore by %@ (%lld days left).",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift:139"
   },
   "Proven so far: %@.": {
     "en": "Proven so far: %@.",
@@ -9531,10 +9518,9 @@
     "en": "Backup of %@, saved %@ (%@).",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift:155"
   },
-  "%lld server%@ hold its pieces; %lld bring it back.": {
-    "en": "%lld server%@ hold its pieces; %lld bring it back.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift:156",
-    "translatable": false
+  "Servers holding its pieces: %lld. Needed to bring it back: %lld.": {
+    "en": "Servers holding its pieces: %lld. Needed to bring it back: %lld.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/PeerBackupModels.swift:156"
   },
   "Too many tries. Try again later.": {
     "en": "Too many tries. Try again later.",
@@ -9543,6 +9529,22 @@
   "Too many tries %@. Try again %@.": {
     "en": "Too many tries %@. Try again %@.",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RateLimited.swift:49"
+  },
+  "in about %lld minute": {
+    "en": "in about %lld minute",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RateLimited.swift:55"
+  },
+  "in about %lld minutes": {
+    "en": "in about %lld minutes",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RateLimited.swift:55"
+  },
+  "in about %lld hour": {
+    "en": "in about %lld hour",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RateLimited.swift:57"
+  },
+  "in about %lld hours": {
+    "en": "in about %lld hours",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/RateLimited.swift:57"
   },
   "HTTP/1.": {
     "en": "HTTP/1.",
@@ -9799,20 +9801,17 @@
     "en": "Unlock first to save your key.",
     "ctx": "apps/mobile/shared/Sources/FlagshipCore/AdminKeyWarning.swift:36"
   },
-  "%lld minute%@ ago": {
-    "en": "%lld minute%@ ago",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/AppState.swift:1172",
-    "translatable": false
+  "%lld minute ago": {
+    "en": "%lld minute ago",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/AppState.swift:1172"
   },
-  "%lld hour%@ ago": {
-    "en": "%lld hour%@ ago",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/AppState.swift:1174",
-    "translatable": false
+  "%lld hour ago": {
+    "en": "%lld hour ago",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/AppState.swift:1174"
   },
-  "%lld day%@ ago": {
-    "en": "%lld day%@ ago",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/AppState.swift:1176",
-    "translatable": false
+  "%lld day ago": {
+    "en": "%lld day ago",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/AppState.swift:1176"
   },
   "%lldm ago": {
     "en": "%lldm ago",
