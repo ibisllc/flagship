@@ -8926,19 +8926,23 @@
   },
   "Anthropic": {
     "en": "Anthropic",
-    "ctx": "webapp/index.html"
+    "ctx": "webapp/index.html",
+    "translatable": false
   },
   "OpenAI": {
     "en": "OpenAI",
-    "ctx": "webapp/index.html"
+    "ctx": "webapp/index.html",
+    "translatable": false
   },
   "Google Gemini": {
     "en": "Google Gemini",
-    "ctx": "webapp/index.html"
+    "ctx": "webapp/index.html",
+    "translatable": false
   },
   "OpenRouter": {
     "en": "OpenRouter",
-    "ctx": "webapp/index.html"
+    "ctx": "webapp/index.html",
+    "translatable": false
   },
   "Base URL": {
     "en": "Base URL",
