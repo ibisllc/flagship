@@ -12,6 +12,7 @@ import { deriveSwkFromSeed, hexToBytes, bytesToHex, hkdf32 } from "../keystore.j
 import { userError } from "./humanError.js";
 import { RESTORE_PATH } from "./serverArchive.js";
 
+import { tr, trn } from "./i18n.js";
 export const PEER_STATUS_PATH = "/api/screens/peer-backup/status";
 export const PEER_ROOT_PATH = "/api/screens/peer-backup/root";
 export const FROM_PEERS_PATH = `${RESTORE_PATH}/from-peers`;
@@ -22,7 +23,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** PBK (lowercase hex) of `serverId`'s peer backups, from the account key. */
 export async function derivePbkHex(umkSeed, serverId) {
   const id = String(serverId ?? "").trim().toLowerCase();
-  if (!/^[a-z0-9.-]{1,253}$/.test(id)) throw userError("That isn't a server address.");
+  if (!/^[a-z0-9.-]{1,253}$/.test(id)) throw userError(tr("That isn't a server address."));
   const swk = hexToBytes(await deriveSwkFromSeed(umkSeed, id));
   try {
     return bytesToHex(await hkdf32(swk, INFO_PBK));
@@ -39,15 +40,15 @@ export async function openSealedRoot(sealed, pbkHex, serverId) {
   let plain;
   try {
     plain = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: hexToBytes(sealed.nonceHex), additionalData: enc.encode(`${INFO_ROOT}|${serverId}`) },
+      { name: tr("AES-GCM"), iv: hexToBytes(sealed.nonceHex), additionalData: enc.encode(`${INFO_ROOT}|${serverId}`) },
       key,
       hexToBytes(sealed.ciphertextHex),
     );
   } catch {
-    throw userError("The peer backup record doesn't open with this account's key.");
+    throw userError(tr("The peer backup record doesn't open with this account's key."));
   }
   const root = JSON.parse(new TextDecoder().decode(plain));
-  if (root?.v !== 1 || root.serverId !== serverId) throw userError("That peer backup record is for another server.");
+  if (root?.v !== 1 || root.serverId !== serverId) throw userError(tr("That peer backup record is for another server."));
   return root;
 }
 
@@ -77,15 +78,15 @@ export async function describePeerRoot({ client = null, umkSeed, serverId, fetch
   const pbkHex = await derivePbkHex(umkSeed, id);
   if (client) {
     const r = await client.fetch(PEER_ROOT_PATH, { method: "POST", body: JSON.stringify({ serverId: id, pbkHex }) });
-    if (!r?.archive) throw userError("No peer backup of that server was found.");
+    if (!r?.archive) throw userError(tr("No peer backup of that server was found."));
     return r;
   }
   const f = fetchImpl ?? (await import("./comFetch.js")).comFetch;
   const url = fetchImpl ? `${comBase}/api/peer-backup/root/${encodeURIComponent(id)}` : `/api/peer-backup/root/${encodeURIComponent(id)}`;
   const res = await f(url);
-  if (res.status === 404) throw userError("No peer backup of that server was found.");
-  if (res.status === 503) throw userError("Peer backup between accounts isn't set up on this server yet.");
-  if (!res.ok) throw userError("Couldn't reach the peer backup record. Try again in a moment.");
+  if (res.status === 404) throw userError(tr("No peer backup of that server was found."));
+  if (res.status === 503) throw userError(tr("Peer backup between accounts isn't set up on this server yet."));
+  if (!res.ok) throw userError(tr("Couldn't reach the peer backup record. Try again in a moment."));
   return summaryOfRoot(await openSealedRoot(await res.json(), pbkHex, id));
 }
 
@@ -106,13 +107,13 @@ export async function waitForPeerData({ client, onProgress, isCancelled = () => 
     if (isCancelled()) throw Object.assign(new Error("cancelled"), { code: "cancelled" });
     const r = await client.fetch(RESTORE_PATH);
     const job = r?.restore ?? null;
-    if (!job) throw userError("The restore disappeared from the server.");
+    if (!job) throw userError(tr("The restore disappeared from the server."));
     if (job.reason && ["uploading", "failed"].includes(job.state)) {
       throw userError(`${String(job.reason).replace(/[.\s]+$/, "")}.`);
     }
     if (["ready", "checking", "restoring", "done"].includes(job.state)) return job;
     onProgress?.(job);
-    if (now() > deadline) throw userError("Getting the backup from other servers is taking too long.");
+    if (now() > deadline) throw userError(tr("Getting the backup from other servers is taking too long."));
     await sleep(pollMs);
   }
 }
@@ -122,24 +123,24 @@ export async function waitForPeerData({ client, onProgress, isCancelled = () => 
 // ---------------------------------------------------------------------------
 
 const STATE_TITLE = {
-  "waiting-for-peers": "Looking for servers to keep pieces",
-  filling: "Getting ready",
-  placing: "Sending pieces to other servers",
+  "waiting-for-peers": tr("Looking for servers to keep pieces"),
+  filling: tr("Getting ready"),
+  placing: tr("Sending pieces to other servers"),
   protected: "Protected",
-  "at-risk": "At risk",
-  leaving: "Leaving peer backups",
+  "at-risk": tr("At risk"),
+  leaving: tr("Leaving peer backups"),
   off: "Off",
 };
 const STATE_NOTE = {
-  "waiting-for-peers": "Peer backup starts once enough other servers can hold it.",
-  filling: "This server is setting aside space for other servers' pieces first.",
-  placing: "Your newest backup is being spread over other servers.",
-  protected: "Enough of the servers holding your pieces answer to bring your backup back.",
-  "at-risk": "Too few pieces are safe. Your server is moving them to other servers.",
-  leaving: "This server stops taking new pieces and frees its space in two weeks.",
-  off: "Choose Peer-distributed backups in this server's Backups to turn it on.",
+  "waiting-for-peers": tr("Peer backup starts once enough other servers can hold it."),
+  filling: tr("This server is setting aside space for other servers' pieces first."),
+  placing: tr("Your newest backup is being spread over other servers."),
+  protected: tr("Enough of the servers holding your pieces answer to bring your backup back."),
+  "at-risk": tr("Too few pieces are safe. Your server is moving them to other servers."),
+  leaving: tr("This server stops taking new pieces and frees its space in two weeks."),
+  off: tr("Choose Peer-distributed backups in this server's Backups to turn it on."),
 };
-const HOLDER_STATE = { ok: "Answering", checking: "Checking", failing: "Not answering", offline: "Offline" };
+const HOLDER_STATE = { ok: "Answering", checking: "Checking", failing: tr("Not answering"), offline: "Offline" };
 
 export const stateTitle = (s) => STATE_TITLE[s] ?? String(s ?? "");
 export const stateNote = (s) => STATE_NOTE[s] ?? "";
@@ -160,7 +161,7 @@ export function holderRows(status, { formatTime = (t) => new Date(t).toLocaleStr
     line: [
       HOLDER_STATE[h.state] ?? String(h.state ?? ""),
       Number.isFinite(h.lastProofAt) && h.lastProofAt > 0 ? `last proof ${formatTime(h.lastProofAt)}` : "no proof yet",
-      `${h.bricks ?? 0} piece${h.bricks === 1 ? "" : "s"}`,
+      trn(h.bricks, "{1} piece", "{1} pieces", h.bricks ?? 0),
     ].join(" · "),
   }));
 }
@@ -168,9 +169,9 @@ export function holderRows(status, { formatTime = (t) => new Date(t).toLocaleStr
 /** The date by which a lost server's backup must be restored, or "". */
 export function restoreByLine(keepUntil, { now = Date.now(), formatTime = (t) => new Date(t).toLocaleDateString() } = {}) {
   if (!Number.isFinite(keepUntil) || keepUntil <= 0) return "";
-  if (keepUntil <= now) return "The pieces of this backup are no longer kept.";
+  if (keepUntil <= now) return tr("The pieces of this backup are no longer kept.");
   const days = Math.ceil((keepUntil - now) / DAY_MS);
-  return `Restore by ${formatTime(keepUntil)} (${days} day${days === 1 ? "" : "s"} left).`;
+  return trn(days, "Restore by {1} ({0} day left).", "Restore by {1} ({0} days left).", formatTime(keepUntil));
 }
 
 /** What this server keeps for others. */
@@ -178,8 +179,8 @@ export function hostingLines(status) {
   const h = status?.hosting;
   if (!h || !(h.poolBytes > 0)) return [];
   const out = [
-    `Pool: ${formatSize(h.poolBytes)}, of which ${formatSize(h.realBytes)} holds other servers' pieces and ${formatSize(h.fillerBytes)} is proof filler.`,
-    `Proven so far: ${formatSize(h.provenBytes)}.`,
+    tr("Pool: {0}, of which {1} holds other servers' pieces and {2} is proof filler.", formatSize(h.poolBytes), formatSize(h.realBytes), formatSize(h.fillerBytes)),
+    tr("Proven so far: {0}.", formatSize(h.provenBytes)),
   ];
   if (h.leaving) out.push("This server is leaving peer backups.");
   return out;
@@ -188,7 +189,7 @@ export function hostingLines(status) {
 /** The card a restore shows once a lost server's record is found. */
 export function rootLines(summary, opts = {}) {
   const a = summary?.archive ?? {};
-  const out = [`Backup of ${summary.serverId}, saved ${new Date(a.createdAt).toLocaleString()} (${formatSize(a.bytes)}).`];
+  const out = [tr("Backup of {0}, saved {1} ({2}).", summary.serverId, new Date(a.createdAt).toLocaleString(), formatSize(a.bytes))];
   out.push(`${summary.holders} server${summary.holders === 1 ? "" : "s"} hold its pieces; ${summary.needed} bring it back.`);
   const by = restoreByLine(summary.keepUntil, opts);
   if (by) out.push(by);

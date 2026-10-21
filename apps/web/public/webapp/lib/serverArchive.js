@@ -17,16 +17,17 @@ import {
   wrapPasscodeSlot,
 } from "./serverBackupFormat.js";
 
+import { tr, trn } from "./i18n.js";
 export const ARCHIVE_PATH = "/api/screens/server-archive";
 export const RESTORE_PATH = "/api/screens/server-restore";
 export { BACKUP_FILE_EXTENSION, BACKUP_DATA_EXTENSION };
 export const UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
 
-export const BACKUP_TITLE = "Back up this server";
+export const BACKUP_TITLE = tr("Back up this server");
 export const BACKUP_EXCLUDES_NOTE =
-  "Holds your apps' source, data and settings, never system images: the new server rebuilds each app, so any Flagship server can restore it. Not included: the server's keys and certificate, peer backups, and the Git host.";
+  tr("Holds your apps' source, data and settings, never system images: the new server rebuilds each app, so any Flagship server can restore it. Not included: the server's keys and certificate, peer backups, and the Git host.");
 export const PASSCODE_NOTE =
-  "You'll need this passcode to import the backup into an account that isn't yours. Your own account opens it without the passcode. Anyone with the file and the passcode can restore it, so keep the passcode apart from the file. It can't be reset.";
+  tr("You'll need this passcode to import the backup into an account that isn't yours. Your own account opens it without the passcode. Anyone with the file and the passcode can restore it, so keep the passcode apart from the file. It can't be reset.");
 
 /** What a backup or restore step's failure says to the owner: this device's own
  *  sentence, the box's reason (e.g. "needs about 12 GB"), else humanError. */
@@ -68,12 +69,12 @@ export function backupFileNames(sourceServer, createdAt) {
  * made (the dialog was closed and reopened) is followed instead.
  */
 export async function startServerBackup({ client, umk, passcode, rng = random, argonParams }) {
-  if (!umk) throw userError("Unlock the webapp first.");
+  if (!umk) throw userError(tr("Unlock the webapp first."));
   const current = await backupStatus({ client }).catch(() => null);
   if (current?.state === "building") return current.archiveId;
   // Reopening the dialog on a finished backup (no new passcode) shows it again.
   if (current?.state === "ready" && !passcode) return current.archiveId;
-  if (!passcode) throw userError("Choose a passcode first.");
+  if (!passcode) throw userError(tr("Choose a passcode first."));
   const archiveId = newArchiveId(rng);
   const contentKey = rng(32);
   try {
@@ -102,11 +103,11 @@ export async function waitForBackup({ client, onProgress, sleep = (ms) => new Pr
   const deadline = now() + timeoutMs;
   for (;;) {
     const a = await backupStatus({ client });
-    if (!a) throw userError("The backup disappeared from the server.");
-    if (a.state === "failed") throw userError(`The backup failed: ${trimStop(a.reason) || "the backup couldn't be made"}.`);
+    if (!a) throw userError(tr("The backup disappeared from the server."));
+    if (a.state === "failed") throw userError(tr("The backup failed: {0}.", trimStop(a.reason) || "the backup couldn't be made"));
     if (a.state === "ready") return a;
     onProgress?.(a);
-    if (now() > deadline) throw userError("The backup is taking too long.");
+    if (now() > deadline) throw userError(tr("The backup is taking too long."));
     await sleep(pollMs);
   }
 }
@@ -148,7 +149,7 @@ export function archiveDownloadCode(requestId) {
  * the server, which checks it before serving the files to that request.
  */
 export async function approveArchiveDownload({ client, serverDomain, archiveId, requestId, umk, signWithIrk, now = Date.now }) {
-  if (!umk) throw userError("Unlock the webapp first.");
+  if (!umk) throw userError(tr("Unlock the webapp first."));
   const approval = { serverDomain: serverDomain.toLowerCase(), archiveId, requestId, issuedAt: now() };
   const sig = await signWithIrk(umk, archiveDownloadCanonicalBytes(approval));
   await client.fetch(`${ARCHIVE_PATH}/approve`, {
@@ -213,7 +214,7 @@ export async function uploadDataFile({ client, blob, archiveId, onBytes, fetchIm
     try {
       chunk = new Uint8Array(await blob.slice(offset, offset + chunkBytes).arrayBuffer());
     } catch {
-      throw userError("The data file can't be read any more (was its drive removed?). The server keeps waiting: pick the backup again to carry on.");
+      throw userError(tr("The data file can't be read any more (was its drive removed?). The server keeps waiting: pick the backup again to carry on."));
     }
     const res = await fetchImpl(`${client.baseUrl.replace(/\/+$/, "")}${RESTORE_PATH}/chunk?offset=${offset}`, {
       method: "POST",
@@ -253,11 +254,11 @@ export async function waitForRestore({ client, onProgress, sleep = (ms) => new P
   for (;;) {
     if (isCancelled()) throw Object.assign(new Error("cancelled"), { code: "cancelled" });
     const { restore } = await restoreStatus({ client });
-    if (!restore) throw userError("The restore disappeared from the server.");
-    if (restore.state === "failed") throw userError(`The restore failed: ${trimStop(restore.reason) || "unknown reason"}.`);
+    if (!restore) throw userError(tr("The restore disappeared from the server."));
+    if (restore.state === "failed") throw userError(tr("The restore failed: {0}.", trimStop(restore.reason) || "unknown reason"));
     if (restore.state === "done") return restore;
     onProgress?.(restore);
-    if (now() > deadline) throw userError("The restore is taking too long.");
+    if (now() > deadline) throw userError(tr("The restore is taking too long."));
     await sleep(pollMs);
   }
 }
@@ -267,13 +268,13 @@ export async function waitForRestore({ client, onProgress, sleep = (ms) => new P
 export function restoreSummary(apps = []) {
   const ok = apps.filter((a) => a.state === "done").length;
   const failed = apps.filter((a) => a.state === "failed").length;
-  return `Restored ${ok} app${ok === 1 ? "" : "s"}.` + (failed ? ` ${failed} couldn't be restored; the server works with the rest.` : "");
+  return trn(ok, "Restored {0} app.", "Restored {0} apps.") + (failed ? ` ${failed} couldn't be restored; the server works with the rest.` : "");
 }
 
 export function describeRestoreApp(a) {
   if (a.state === "done") return `${a.name}: restored`;
   if (a.state === "skipped") return `${a.name}: skipped (${a.reason || "already here"})`;
-  if (a.state === "failed") return `Couldn't restore ${a.name}: ${trimStop(a.reason) || "it couldn't be restored"}.`;
+  if (a.state === "failed") return tr("Couldn't restore {0}: {1}.", a.name, trimStop(a.reason) || "it couldn't be restored");
   if (a.state === "restoring") return `${a.name}: restoring…`;
   return `${a.name}: waiting`;
 }

@@ -8,6 +8,7 @@
 //
 // Detection comes from the account (the `demoServer` block persisted on the
 // profile by activateDemoAccount), never from a developer toggle.
+import { tr } from "./i18n.js";
 
 /** @param {{ demoServer?: unknown } | null | undefined} profile */
 export function isDemoProfile(profile) {
@@ -29,10 +30,10 @@ export function applyDemoSettingsRestrictions(isDemo, doc = globalThis.document)
 }
 
 export const DEMO_REMOVE_COPY = Object.freeze({
-  title: "Demo account",
+  title: tr("Demo account"),
   message:
-    "This demo account is managed by Flagship, so it can't be deleted from the app — you can remove it from this browser instead. Accounts you create yourself are permanently deleted from here.",
-  okLabel: "Remove from this browser",
+    tr("This demo account is managed by Flagship, so it can't be deleted from the app — you can remove it from this browser instead. Accounts you create yourself are permanently deleted from here."),
+  okLabel: tr("Remove from this browser"),
   danger: true,
 });
 

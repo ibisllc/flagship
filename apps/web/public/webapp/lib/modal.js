@@ -11,6 +11,7 @@
 // and respect Escape / backdrop-click to cancel. They never touch the
 // DOM if the user is mid-IME composition (composition events are
 // passed through).
+import { tr } from "./i18n.js";
 
 const HOST_ID = "flagship-modal-host";
 
@@ -260,14 +261,14 @@ export function inlineSuggestUsername({ initialName, retryAfterMs = 0, fetchNext
     const overlay = buildOverlay();
     overlay.innerHTML = `
       <div class="modal-card" role="document">
-        <h3 class="modal-title">Your handle</h3>
+        <h3 class="modal-title">${tr("Your handle")}</h3>
         <p class="modal-suggest-name" data-suggest-name></p>
-        <button class="secondary full-width" data-suggest-regen>↻ Try another</button>
+        <button class="secondary full-width" data-suggest-regen>${tr("↻ Try another")}</button>
         <p class="warn-text mt-2" data-suggest-error role="alert" hidden></p>
-        <p class="note modal-suggest-note">You can change your username later.</p>
+        <p class="note modal-suggest-note">${tr("You can change your username later.")}</p>
         <div class="row-2 mt-3">
-          <button class="secondary" data-modal-cancel>Cancel</button>
-          <button data-modal-ok>Continue</button>
+          <button class="secondary" data-modal-cancel>${tr("Cancel")}</button>
+          <button data-modal-ok>${tr("Continue")}</button>
         </div>
       </div>
     `;
@@ -283,7 +284,7 @@ export function inlineSuggestUsername({ initialName, retryAfterMs = 0, fetchNext
     const errorEl = overlay.querySelector("[data-suggest-error]");
 
     const stopTimer = () => { if (timer) { clearInterval(timer); clearTimeout(timer); timer = null; } };
-    const idle = () => { regenBtn.disabled = false; regenBtn.textContent = "↻ Try another"; };
+    const idle = () => { regenBtn.disabled = false; regenBtn.textContent = tr("↻ Try another"); };
     const armCooldown = (ms) => {
       stopTimer();
       let remain = Math.ceil((Number(ms) || 0) / 1000);
@@ -291,7 +292,7 @@ export function inlineSuggestUsername({ initialName, retryAfterMs = 0, fetchNext
       regenBtn.disabled = true;
       const tick = () => {
         if (remain <= 0) { stopTimer(); return idle(); }
-        regenBtn.textContent = `Try again in ${remain}s`;
+        regenBtn.textContent = tr("Try again in {0}s", remain);
         remain -= 1;
       };
       tick();
@@ -320,7 +321,7 @@ export function inlineSuggestUsername({ initialName, retryAfterMs = 0, fetchNext
         errorEl.textContent = e.message;
         errorEl.hidden = false;
         stopTimer();
-        regenBtn.textContent = "↻ Try another";
+        regenBtn.textContent = tr("↻ Try another");
         timer = setTimeout(() => { timer = null; errorEl.hidden = true; idle(); }, (Number(e.retryAfterSec) || 60) * 1000);
         return;
       }

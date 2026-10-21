@@ -35,6 +35,7 @@ import { get as profileGet, set as profileSet } from "../lib/profilesStore.js";
 import { screensFetch } from "../lib/api.js";
 import { wrappedUmkRecordKey } from "../keystore.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-recovery");
 
 // The active profile's row, as keystore.js keys it (`wrappedUmk` for the
@@ -52,7 +53,7 @@ async function exportWrapped() {
     const tx = db.transaction("keystore", "readonly");
     const store = tx.objectStore("keystore");
     const wrapped = await reqToPromise(store.get(WRAPPED_UMK_KEY()));
-    if (!wrapped) return toast("No wrapped UMK on this device yet", "err");
+    if (!wrapped) return toast(tr("No wrapped UMK on this device yet"), "err");
     const json = JSON.stringify(wrapped, (_, v) => {
       if (v instanceof ArrayBuffer) {
         return { __ab: Array.from(new Uint8Array(v)) };
@@ -69,9 +70,9 @@ async function exportWrapped() {
     a.download = `flagship-wrapped-umk-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast("Downloaded wrapped UMK — store it like a passport");
+    toast(tr("Downloaded wrapped UMK — store it like a passport"));
   } catch (e) {
-    toast(`Export failed: ${e.message}`, "err");
+    toast(tr("Export failed: {0}", e.message), "err");
   }
 }
 
@@ -91,9 +92,9 @@ async function importWrapped(file) {
     const tx = db.transaction("keystore", "readwrite");
     tx.objectStore("keystore").put(parsed, WRAPPED_UMK_KEY());
     await txDone(tx);
-    toast("Imported — refresh, then unlock with your passphrase");
+    toast(tr("Imported — refresh, then unlock with your passphrase"));
   } catch (e) {
-    toast(`Import failed: ${e.message}`, "err");
+    toast(tr("Import failed: {0}", e.message), "err");
   }
 }
 
@@ -139,14 +140,14 @@ async function refreshCloudStatus() {
   const username = (await import("../lib/state.js")).getSession().username;
   if (!username) {
     pill.textContent = "no username yet";
-    setupBtn.textContent = "Set up cloud recovery";
+    setupBtn.textContent = tr("Set up cloud recovery");
     removeBtn.style.display = "none";
     return;
   }
-  pill.textContent = "checking…";
+  pill.textContent = tr("checking…");
   const exists = await hasCloudRecovery(username);
   pill.textContent = exists ? "on" : "off";
-  setupBtn.textContent = exists ? "Re-register passkey" : "Set up cloud recovery";
+  setupBtn.textContent = exists ? tr("Re-register passkey") : tr("Set up cloud recovery");
   removeBtn.style.display = exists ? "" : "none";
 }
 
@@ -168,14 +169,14 @@ async function runSetupCloud() {
   const btn = $("recovery-cloud-setup");
   if (btn) {
     btn.disabled = true;
-    btn.textContent = "Waiting for passkey…";
+    btn.textContent = tr("Waiting for passkey…");
   }
   try {
     const username = await ensureUsername();
     await setupCloudRecovery(username);
-    toast(`Cloud recovery on for ${username}`, "ok");
+    toast(tr("Cloud recovery on for {0}", username), "ok");
   } catch (e) {
-    toast(`Setup failed: ${e.message ?? e}`, "err");
+    toast(tr("Setup failed: {0}", e.message ?? e), "err");
   } finally {
     if (btn) btn.disabled = false;
     void refreshCloudStatus();
@@ -188,25 +189,25 @@ async function runRemoveCloud() {
   if (!username) return;
   const { inlineConfirm } = await import("../lib/modal.js");
   const ok = await inlineConfirm({
-    title: `Remove cloud recovery for ${username}?`,
-    message: "You'll lose the ability to recover this account from a new browser unless you have a manual export.",
-    okLabel: "Remove",
+    title: tr("Remove cloud recovery for {0}?", username),
+    message: tr("You'll lose the ability to recover this account from a new browser unless you have a manual export."),
+    okLabel: tr("Remove"),
     danger: true,
   });
   if (!ok) return;
   if (btn) {
     btn.disabled = true;
-    btn.textContent = "Removing…";
+    btn.textContent = tr("Removing…");
   }
   try {
     await deleteCloudRecovery(username);
-    toast("Cloud recovery removed", "ok");
+    toast(tr("Cloud recovery removed"), "ok");
   } catch (e) {
-    toast(failureText(e, "Remove failed: "), "err");
+    toast(failureText(e, tr("Remove failed: ")), "err");
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = "Remove cloud recovery";
+      btn.textContent = tr("Remove cloud recovery");
     }
     void refreshCloudStatus();
   }
@@ -239,15 +240,15 @@ function openExportCeremony() {
       .join("");
     overlay.innerHTML = `
       <div class="modal-card" role="document">
-        <p class="fs-detail-label">ACCOUNT BACKUP</p>
+        <p class="fs-detail-label">${tr("ACCOUNT BACKUP")}</p>
         <p class="modal-message err-text"><strong>${escapeHtml(KEYFILE_COPY.danger)}</strong></p>
-        <input type="password" class="modal-input" data-pass1 placeholder="Passphrase" autocomplete="new-password" />
-        <input type="password" class="modal-input mt-2" data-pass2 placeholder="Confirm Passphrase" autocomplete="new-password" />
+        <input type="password" class="modal-input" data-pass1 placeholder="${tr("Passphrase")}" autocomplete="new-password" />
+        <input type="password" class="modal-input mt-2" data-pass2 placeholder="${tr("Confirm Passphrase")}" autocomplete="new-password" />
         <p class="faint-sm mt-2">${escapeHtml(KEYFILE_COPY.passphrase)}</p>
         <p class="modal-error err-text hidden" data-err></p>
         <div class="modal-acks mt-3">${ackHtml}</div>
         <div class="row-2 mt-3">
-          <button class="secondary" data-cancel>Cancel</button>
+          <button class="secondary" data-cancel>${tr("Cancel")}</button>
           <button data-ok disabled>${escapeHtml(KEYFILE_COPY.createButton)}</button>
         </div>
       </div>
@@ -318,7 +319,7 @@ function openExportCeremony() {
 export async function runKeyfileExportCeremony() {
   const session = getSession();
   if (!session.umk) {
-    toast("Unlock first", "err");
+    toast(tr("Unlock first"), "err");
     return false;
   }
   const username =
@@ -337,7 +338,7 @@ export async function runKeyfileExportCeremony() {
     toast(KEYFILE_COPY.afterSave, "ok");
     return true;
   } catch (e) {
-    toast(`Backup failed: ${e?.message ?? e}`, "err");
+    toast(tr("Backup failed: {0}", e?.message ?? e), "err");
     return false;
   }
 }
@@ -350,21 +351,21 @@ async function runKeyfileImport(file) {
   const { inlinePrompt } = await import("../lib/modal.js");
   const fileText = await file.text();
   const passphrase = await inlinePrompt({
-    title: "Open backup file",
-    message: "Enter the passphrase you set when you created this backup.",
-    placeholder: "Passphrase",
+    title: tr("Open backup file"),
+    message: tr("Enter the passphrase you set when you created this backup."),
+    placeholder: tr("Passphrase"),
     type: "password",
-    okLabel: "Restore",
-    validate: (v) => (v ? null : "Passphrase required"),
+    okLabel: tr("Restore"),
+    validate: (v) => (v ? null : tr("Passphrase required")),
   });
   if (!passphrase) return;
   const localPassphrase = await inlinePrompt({
-    title: "Lock this browser",
-    message: "Set a passphrase to unlock this account on this browser from now on (8+ characters).",
-    placeholder: "New device passphrase",
+    title: tr("Lock this browser"),
+    message: tr("Set a passphrase to unlock this account on this browser from now on (8+ characters)."),
+    placeholder: tr("New device passphrase"),
     type: "password",
-    okLabel: "Restore account",
-    validate: (v) => (v && v.length >= 8 ? null : "Use at least 8 characters"),
+    okLabel: tr("Restore account"),
+    validate: (v) => (v && v.length >= 8 ? null : tr("Use at least 8 characters")),
   });
   if (!localPassphrase) return;
   try {
@@ -428,7 +429,7 @@ async function runKeyfileImport(file) {
       throw e;
     }
 
-    toast(`Bringing this device into ${username}`, "ok");
+    toast(tr("Bringing this device into {0}", username), "ok");
     // Finish now signs the completion with the rotated key, derived from the
     // restored account key.
     await runImportGraceCountdown({ ...takeover, seed: session.umk }, keystore);
@@ -464,10 +465,10 @@ async function runImportGraceCountdown(takeover, keystore) {
   overlay.setAttribute("aria-modal", "true");
   overlay.innerHTML = `
     <div class="modal-card" role="document">
-      <h3 class="modal-title">Bringing this device in</h3>
+      <h3 class="modal-title">${tr("Bringing this device in")}</h3>
       <p class="modal-message" data-grace-line></p>
       <div class="row-2 mt-3">
-        <button data-grace-finish disabled>Finish now</button>
+        <button data-grace-finish disabled>${tr("Finish now")}</button>
       </div>
     </div>
   `;
@@ -495,7 +496,7 @@ async function runImportGraceCountdown(takeover, keystore) {
     if (finishing) return;
     finishing = true;
     finishBtn.disabled = true;
-    finishBtn.textContent = "Finishing…";
+    finishBtn.textContent = tr("Finishing…");
     try {
       const result = await finishTakeover(takeover, {
         signWithIrkVersioned: keystore.signWithIrkVersioned,
@@ -527,13 +528,13 @@ async function runImportGraceCountdown(takeover, keystore) {
       } else if (result.outcome === "too-early") {
         // The button shouldn't be reachable before the deadline; re-arm.
         finishing = false;
-        finishBtn.textContent = "Finish now";
+        finishBtn.textContent = tr("Finish now");
         paint();
       }
     } catch (e) {
       toast(humanError(e), "err");
       finishing = false;
-      finishBtn.textContent = "Finish now";
+      finishBtn.textContent = tr("Finish now");
       paint();
     }
   });

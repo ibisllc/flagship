@@ -12,7 +12,8 @@ import { getSession } from "./state.js";
 import { getActiveProfile } from "./profiles.js";
 import { isAdminDevice } from "./memberRoles.js";
 
-export const ADD_SERVERS_ADMIN_ONLY = "Only an admin device of this account can add servers.";
+import { tr } from "./i18n.js";
+export const ADD_SERVERS_ADMIN_ONLY = tr("Only an admin device of this account can add servers.");
 
 export function canAddServers(session = getSession(), profile = getActiveProfile()) {
   return canSignAdminOrders(session, profile);
@@ -29,14 +30,14 @@ export function canSignAdminOrders(session = getSession(), profile = getActivePr
   return isAdminDevice(session) || !!profile?.demoServer;
 }
 
-export const REMOVE_APP_ADMIN_ONLY = "Only an admin device can remove an app.";
-export const ACCESS_ADMIN_ONLY = "Only an admin device can change this app's internet access.";
-export const API_KEYS_ADMIN_ONLY = "Only an admin device can create or revoke API keys.";
-export const DB_WRITE_ADMIN_ONLY = "Only an admin device can change this app's data.";
+export const REMOVE_APP_ADMIN_ONLY = tr("Only an admin device can remove an app.");
+export const ACCESS_ADMIN_ONLY = tr("Only an admin device can change this app's internet access.");
+export const API_KEYS_ADMIN_ONLY = tr("Only an admin device can create or revoke API keys.");
+export const DB_WRITE_ADMIN_ONLY = tr("Only an admin device can change this app's data.");
 /** The server page's orders (update, power, dead-man, front page, backup,
  *  migrate, share, transfer, revoke, delete) all sign under the admin root. */
-export const SERVER_ADMIN_ONLY = "Only an admin device can change this server. This device can see it.";
-export const SHARE_ADMIN_ONLY = "Only an admin device can share this server.";
+export const SERVER_ADMIN_ONLY = tr("Only an admin device can change this server. This device can see it.");
+export const SHARE_ADMIN_ONLY = tr("Only an admin device can share this server.");
 
 export class AddServerRefusedError extends Error {
   constructor() {
@@ -67,7 +68,7 @@ export async function refuseAddServer({ home = false } = {}) {
     await enterHome();
   }
   const { inlineAlert } = await import("./modal.js");
-  void inlineAlert({ title: "Admin devices only", message: ADD_SERVERS_ADMIN_ONLY });
+  void inlineAlert({ title: tr("Admin devices only"), message: ADD_SERVERS_ADMIN_ONLY });
 }
 
 /** `.com` enforces the rule too (owner rule 2026-10-16): a non-admin

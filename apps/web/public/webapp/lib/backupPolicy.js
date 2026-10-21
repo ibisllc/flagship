@@ -6,6 +6,7 @@
 //   flagship/backup-policy/v1|<serverDomain>|<phone|peer|none>|<phoneReserveBytes>|<issuedAt>
 //
 // Must pass packages/protocol/test-vectors/backup-policy/vectors.json.
+import { tr, trn } from "./i18n.js";
 
 export const TAG_BACKUP_POLICY = "flagship/backup-policy/v1";
 export const BACKUP_POLICY_PATH = "/api/screens/backup-policy";
@@ -22,20 +23,20 @@ const GB = 1024 ** 3;
 export const DEFAULT_WEB_RESERVE_GB = 16;
 
 export const POLICY_LABEL = {
-  phone: "On my devices",
-  peer: "Peer-distributed backups",
-  none: "No backups",
-  unset: "Not chosen yet",
+  phone: tr("On my devices"),
+  peer: tr("Peer-distributed backups"),
+  none: tr("No backups"),
+  unset: tr("Not chosen yet"),
 };
 
 export const POLICY_TEXT = {
   phone:
-    "Your server makes an encrypted backup every night, and the Flagship app on one of your devices keeps a copy over Wi-Fi while charging. Your server's apps can hold up to the space you keep for it there, so its data can't grow larger than that device's free space.",
+    tr("Your server makes an encrypted backup every night, and the Flagship app on one of your devices keeps a copy over Wi-Fi while charging. Your server's apps can hold up to the space you keep for it there, so its data can't grow larger than that device's free space."),
   peer:
-    "Encrypted pieces of your backup are kept on other Flagship servers, and yours keeps theirs. Your apps can use up to a third of this server's disk; the rest holds other servers' pieces.",
-  none: "Nothing is backed up. If this server's disk fails, its apps and data are gone. You can still use Back up now on the server page.",
+    tr("Encrypted pieces of your backup are kept on other Flagship servers, and yours keeps theirs. Your apps can use up to a third of this server's disk; the rest holds other servers' pieces."),
+  none: tr("Nothing is backed up. If this server's disk fails, its apps and data are gone. You can still use Back up now on the server page."),
 };
-export const WEB_RESERVE_NOTE = "Keep this much free on that device for the backup.";
+export const WEB_RESERVE_NOTE = tr("Keep this much free on that device for the backup.");
 
 /** The draft store's values ("phone-only" | "peer" | "none") → the wire's. */
 export function policyFromDraft(v) {
@@ -104,9 +105,9 @@ export function usageLine(view) {
   const cap = view?.cap ?? {};
   if (cap.usedBytes == null) return "";
   const used = formatGb(cap.usedBytes);
-  if (cap.limitBytes == null) return `Apps use ${used}`;
-  const of = `Apps use ${used} of ${formatGb(cap.limitBytes)}`;
-  return view?.policy?.policy === "peer" ? `${of} (a third of this server's disk)` : of;
+  if (cap.limitBytes == null) return tr("Apps use {0}", used);
+  const of = tr("Apps use {0} of {1}", used, formatGb(cap.limitBytes));
+  return view?.policy?.policy === "peer" ? tr("{0} (a third of this server's disk)", of) : of;
 }
 
 /** 0..1 for the usage bar, null when there is no limit. */
@@ -117,12 +118,12 @@ export function usageFraction(view) {
 }
 
 const PEER_STATE = {
-  "waiting-for-peers": "Looking for servers to keep pieces",
-  filling: "Getting ready",
-  placing: "Sending pieces to other servers",
+  "waiting-for-peers": tr("Looking for servers to keep pieces"),
+  filling: tr("Getting ready"),
+  placing: tr("Sending pieces to other servers"),
   protected: "Protected",
-  "at-risk": "At risk",
-  leaving: "Leaving peer backups",
+  "at-risk": tr("At risk"),
+  leaving: tr("Leaving peer backups"),
   off: "Off",
 };
 
@@ -133,7 +134,7 @@ export function peerLines(peer, { formatTime = (t) => new Date(t).toLocaleString
   const state = PEER_STATE[peer.state] ?? String(peer.state ?? "");
   out.push(peer.reason ? `${state}: ${String(peer.reason).replace(/[.\s]+$/, "")}.` : state);
   if (Number.isFinite(peer.totalBricks) && peer.totalBricks > 0) {
-    out.push(`${peer.healthyBricks ?? 0} of ${peer.totalBricks} pieces safe${Number.isFinite(peer.holders) ? ` on ${peer.holders} server${peer.holders === 1 ? "" : "s"}` : ""}`);
+    out.push(`${peer.healthyBricks ?? 0} of ${peer.totalBricks} pieces safe${Number.isFinite(peer.holders) ? trn(peer.holders, " on {0} server", " on {0} servers") : ""}`);
   }
   if (Number.isFinite(peer.lastPlacedAt) && peer.lastPlacedAt > 0) out.push(`Last placed: ${formatTime(peer.lastPlacedAt)}`);
   if (Number.isFinite(peer.hostingBytes) && peer.hostingBytes > 0) out.push(`Holds ${formatGb(peer.hostingBytes)} for other servers`);

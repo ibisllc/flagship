@@ -17,22 +17,23 @@ import { controlApex } from "./apex.js";
 import { rateLimitedError } from "./rateLimited.js";
 import { ensureUsername, getSession } from "./state.js";
 
+import { tr } from "./i18n.js";
 export const FREE_AI_TAG = "flagship/llm-promo-issue/v1";
 
 export const USED_UP_MESSAGE =
-  "You've used this week's Flagship Inference credits. More arrive on Monday, or add your own AI key to keep building.";
-export const UNAVAILABLE_MESSAGE = "Flagship Inference isn't available right now. You can add your own AI key.";
-export const BUSY_TODAY_MESSAGE = "Flagship Inference is busy today. Try again tomorrow, or use your own AI key.";
-export const NO_SERVER_MESSAGE = "Flagship Inference starts once one of your servers is running.";
-export const ENDED_MESSAGE = "The free building period has ended — use your own AI key.";
-export const CARD_NOTE = "Used automatically when you build with AI and haven't added your own key.";
+  tr("You've used this week's Flagship Inference credits. More arrive on Monday, or add your own AI key to keep building.");
+export const UNAVAILABLE_MESSAGE = tr("Flagship Inference isn't available right now. You can add your own AI key.");
+export const BUSY_TODAY_MESSAGE = tr("Flagship Inference is busy today. Try again tomorrow, or use your own AI key.");
+export const NO_SERVER_MESSAGE = tr("Flagship Inference starts once one of your servers is running.");
+export const ENDED_MESSAGE = tr("The free building period has ended — use your own AI key.");
+export const CARD_NOTE = tr("Used automatically when you build with AI and haven't added your own key.");
 export const TOO_LONG_MESSAGE =
-  "This build is too big for Flagship Inference. Try a smaller change, or use your own AI key.";
+  tr("This build is too big for Flagship Inference. Try a smaller change, or use your own AI key.");
 
 // Free AI is listed as a built-in provider: always first, never removable.
-export const PROVIDER_TITLE = "Flagship Inference";
-export const PROVIDER_SUBTITLE = "We use third-party providers and anonymize your requests.";
-export const BUILT_IN_LABEL = "Flagship Inference, built-in provider. It can't be removed.";
+export const PROVIDER_TITLE = tr("Flagship Inference");
+export const PROVIDER_SUBTITLE = tr("We use third-party providers and anonymize your requests.");
+export const BUILT_IN_LABEL = tr("Flagship Inference, built-in provider. It can't be removed.");
 
 const MESSAGE_BY_CODE = {
   "free-ai-used-up": USED_UP_MESSAGE,
@@ -120,9 +121,9 @@ export function canonicalFor(request) {
 
 async function signedBody(serverFqdn, { askForUsername = true } = {}) {
   const session = getSession();
-  if (!session.umk) throw Object.assign(new Error("Unlock first"), { code: "locked" });
+  if (!session.umk) throw Object.assign(new Error(tr("Unlock first")), { code: "locked" });
   const username = askForUsername ? await ensureUsername() : session.username;
-  if (!username) throw Object.assign(new Error("No username yet"), { code: "no-username" });
+  if (!username) throw Object.assign(new Error(tr("No username yet")), { code: "no-username" });
   const request = {
     username,
     serverFqdn: serverFqdn || "",
