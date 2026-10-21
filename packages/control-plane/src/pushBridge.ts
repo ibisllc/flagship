@@ -269,6 +269,18 @@ export function apnsAlertFor(category: string, kind?: string): { title: string; 
 }
 
 /**
+ * The same alert with `loc-key` set to the English sentence. iOS looks that key up in the app's own
+ * Localizable.strings, so the notification appears in the language the phone uses (the strings are
+ * entries of i18n/ios, kept in step by scripts/i18n-server.mjs); an app build that lacks the key, or a
+ * language with no translation yet, shows the key itself, which is this same English sentence. The
+ * server never learns the phone's language.
+ */
+export function apnsLocalizedAlertFor(category: string, kind?: string): { title: string; body: string; "loc-key": string } {
+  const a = apnsAlertFor(category, kind);
+  return { ...a, "loc-key": a.body };
+}
+
+/**
  * What a boot/unlock approval wake carries to APNs and FCM besides its
  * category: a fixed `kind` and the app link of the approvals list. Nothing
  * names the server, the account or what it asks for; the phone fetches and
@@ -295,7 +307,7 @@ async function sendApns(args: {
   }
   const url = `https://${cfg.host ?? "api.push.apple.com"}/3/device/${args.providerToken}`;
   const apsBody: Record<string, unknown> = {
-    alert: apnsAlertFor(args.category, args.displayData?.kind),
+    alert: apnsLocalizedAlertFor(args.category, args.displayData?.kind),
     "mutable-content": 1,
     category: args.category,
     "thread-id": args.category,
