@@ -6230,7 +6230,8 @@
   },
   "%@ · %@ · %@ · %lld app%@": {
     "en": "%@ · %@ · %@ · %lld app%@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:434"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift:434",
+    "translatable": false
   },
   "Left out: %@": {
     "en": "Left out: %@",
@@ -6734,15 +6735,18 @@
   },
   "Garage": {
     "en": "Garage",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerShareViewModel.swift:179"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerShareViewModel.swift:179",
+    "translatable": false
   },
   "Photos": {
     "en": "Photos",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerShareViewModel.swift:182"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerShareViewModel.swift:182",
+    "translatable": false
   },
   "Alex": {
     "en": "Alex",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerShareViewModel.swift:157"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerShareViewModel.swift:157",
+    "translatable": false
   },
   "Sam": {
     "en": "Sam",
@@ -6750,7 +6754,8 @@
   },
   "Cabin": {
     "en": "Cabin",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerShareViewModel.swift:197"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerShareViewModel.swift:197",
+    "translatable": false
   },
   "Check who answered your invitations": {
     "en": "Check who answered your invitations",
@@ -6778,39 +6783,48 @@
   },
   "Priya": {
     "en": "Priya",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceAccessFixture.swift:104"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceAccessFixture.swift:104",
+    "translatable": false
   },
   "Family": {
     "en": "Family",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceAccessFixture.swift:105"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceAccessFixture.swift:105",
+    "translatable": false
   },
   "Jordan": {
     "en": "Jordan",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceAccessFixture.swift:106"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceAccessFixture.swift:106",
+    "translatable": false
   },
   "Adds and edits their own plants": {
     "en": "Adds and edits their own plants",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceAccessFixture.swift:111"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceAccessFixture.swift:111",
+    "translatable": false
   },
   "Also waters and edits anyone's plants": {
     "en": "Also waters and edits anyone's plants",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceAccessFixture.swift:112"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceAccessFixture.swift:112",
+    "translatable": false
   },
   "Also changes the garden's settings": {
     "en": "Also changes the garden's settings",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceAccessFixture.swift:113"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceAccessFixture.swift:113",
+    "translatable": false
   },
   "Mum": {
     "en": "Mum",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceAccessFixture.swift:119"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceAccessFixture.swift:119",
+    "translatable": false
   },
   "Harry's iPad": {
     "en": "Harry's iPad",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceAccessFixture.swift:145"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceAccessFixture.swift:145",
+    "translatable": false
   },
   "Harry's iPhone": {
     "en": "Harry's iPhone",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceAccessFixture.swift:145"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceAccessFixture.swift:145",
+    "translatable": false
   },
   "Open to all": {
     "en": "Open to all",
@@ -7203,7 +7217,8 @@
   },
   "%lld tab%@ running server-side": {
     "en": "%lld tab%@ running server-side",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceDetailScreen.swift:387"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceDetailScreen.swift:387",
+    "translatable": false
   },
   "Report a problem with this adaptation": {
     "en": "Report a problem with this adaptation",
@@ -7837,7 +7852,8 @@
   },
   "AppIcon-Legacy": {
     "en": "AppIcon-Legacy",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:945"
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:945",
+    "translatable": false
   },
   "Legacy": {
     "en": "Legacy",
