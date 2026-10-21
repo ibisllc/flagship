@@ -10,7 +10,8 @@
   },
   "PodStatusWidget": {
     "en": "PodStatusWidget",
-    "ctx": "apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift:12"
+    "ctx": "apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift:12",
+    "translatable": false
   },
   "Servers": {
     "en": "Servers",
@@ -22,11 +23,13 @@
   },
   "Home": {
     "en": "Home",
-    "ctx": "apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift:35"
+    "ctx": "apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift:35",
+    "translatable": false
   },
   "Office": {
     "en": "Office",
-    "ctx": "apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift:36"
+    "ctx": "apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift:36",
+    "translatable": false
   },
   "Online": {
     "en": "Online",
