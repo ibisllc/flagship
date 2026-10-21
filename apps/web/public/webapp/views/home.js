@@ -16,6 +16,9 @@ import { escapeHtml } from "../lib/util.js";
 import { formatDuration as formatAge, formatDays } from "../lib/dateFormat.js";
 import { toast } from "../lib/toast.js";
 import { releaseServerName } from "../lib/releaseServer.js";
+import { renderDibsBanner } from "../lib/nameDibs.js";
+import { isDemoProfile } from "../lib/demoAccount.js";
+import { enterNameDibs } from "./name-dibs.js";
 import { getActiveProfile } from "../lib/profiles.js";
 import { demoLifecycle, ensureDemoServerPairing } from "../lib/usersCheck.js";
 import {
@@ -1474,6 +1477,12 @@ export async function renderHome() {
   renderRecoveryBanner();
 
   void renderSharedWithMe();
+  // Name dibs — while the window is open, tell .com holders they can claim the
+  // matching name. Dismissible; fetches the window itself. Not for a demo,
+  // whose operator-managed name can't change.
+  if (!isDemoProfile(getActiveProfile())) {
+    renderDibsBanner({ onClaim: () => enterNameDibs() }).catch(() => {});
+  }
 
   const sid = recoveryStoreGet("sessionId");
   const serverSource = homeServerSource(sid, getActiveProfile(), Date.now(), {
