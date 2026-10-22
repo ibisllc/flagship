@@ -20,6 +20,7 @@
  */
 import { parseInstallBlob } from "./installBlobParse.js";
 import type { LoadedBlob } from "./loadBlob.js";
+import { readProxySiblings } from "./proxySiblings.js";
 import { buildDebianPreseed } from "./preseed.js";
 import {
   buildBootstrapScript,
@@ -65,6 +66,7 @@ export function optionsFromRecipeJson(recipeJson: string, burn: EngineBurnOption
     ...(siblings.pairingOrder ? { pairingOrder: siblings.pairingOrder } : {}),
     ...(siblings.swkHex ? { swkHex: siblings.swkHex } : {}),
     ...(siblings.debugGrant ? { debugGrant: siblings.debugGrant } : {}),
+    ...readProxySiblings(parsed),
     ...(burn.encryptRoot !== undefined ? { encryptRoot: burn.encryptRoot } : {}),
     ...(burn.wifiSSID ? { wifiSSID: burn.wifiSSID } : {}),
     ...(burn.wifiPassword ? { wifiPassword: burn.wifiPassword } : {}),
@@ -118,7 +120,10 @@ export function buildBootstrapFromRecipe(recipeJson: string, burnOptsJson?: stri
 export function buildInstallBlobJsonFromRecipe(recipeJson: string): string {
   const opts = optionsFromRecipeJson(recipeJson);
   return JSON.stringify(
-    installBlobToJson(opts.blob, opts.blobSignatureHex, opts.pairingOrder, opts.swkHex, opts.debugGrant),
+    installBlobToJson(opts.blob, opts.blobSignatureHex, opts.pairingOrder, opts.swkHex, opts.debugGrant, {
+      outboundProxy: opts.outboundProxy,
+      outboundProxyCredentials: opts.outboundProxyCredentials,
+    }),
   );
 }
 

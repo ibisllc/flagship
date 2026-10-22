@@ -454,6 +454,9 @@ data class ServerDetailResponse(
     val debugAccess: DebugAccessView? = null,
     /** Disk use and each app's limits (docs/app-runtimes.md 5.3). Absent from older daemons. */
     val storage: ServerStorage? = null,
+    /** The box's outbound proxy and whether it works (docs/outbound-proxy.md).
+     *  Absent from older daemons: the server page hides the section. */
+    val outboundProxy: OutboundProxySummary? = null,
 )
 
 /** One store's use and limit (`limitBytes` null: no limit but the disk). */
@@ -511,6 +514,68 @@ data class DebugAccessChangeResponse(
     val ok: Boolean = true,
     val change: String? = null,
     val debugAccess: DebugAccessView? = null,
+)
+
+/** `GET /api/screens/outbound-proxy` and server-detail's `outboundProxy`. The password is never sent. */
+@Serializable
+data class OutboundProxySummary(
+    val proxy: OutboundProxySetting? = null,
+    val hasCredentials: Boolean = false,
+    val status: OutboundProxyStatus = OutboundProxyStatus(),
+    /** False once .com has told the box the account is on Free: the proxy is
+     *  part of Pro, so the box takes no new one (turning it off still works).
+     *  Absent from older boxes. */
+    val available: Boolean? = null,
+) {
+    /** "Off", or "SOCKS5 · host:port" (+ " · needs a password"). */
+    val label: String
+        get() {
+            val p = proxy ?: return "Off"
+            val host = if (p.host.contains(':')) "[${p.host}]" else p.host
+            val base = "${com.flagshipserver.app.core.BoxProxyProtocol.kindLabel(p.kind)} · $host:${p.port}"
+            return if (p.auth) "$base · needs a password" else base
+        }
+
+    /** The status line, or null when there's nothing to say. */
+    val statusLine: String?
+        get() = when (status.state) {
+            "ok" -> if (proxy != null) "Working" else null
+            "failing" -> "Not working: ${status.lastError ?: "the proxy isn't answering."}"
+            "fallback" -> "Using a direct connection: the proxy isn't answering"
+            else -> null
+        }
+}
+
+@Serializable
+data class OutboundProxySetting(
+    val kind: String,
+    val host: String,
+    val port: Int,
+    val auth: Boolean = false,
+    val fallbackDirect: Boolean = false,
+    val issuedAt: Long = 0,
+)
+
+@Serializable
+data class OutboundProxyStatus(
+    /** "direct" | "ok" | "failing" | "fallback". */
+    val state: String = "direct",
+    val since: Long = 0,
+    val lastError: String? = null,
+)
+
+/** `POST /api/screens/outbound-proxy`. */
+@Serializable
+data class OutboundProxySetRequest(
+    val proxy: com.flagshipserver.app.core.BoxProxy,
+    val signature: String,
+    val credentials: com.flagshipserver.app.core.BoxProxyCredentials? = null,
+)
+
+@Serializable
+data class OutboundProxySetResponse(
+    val ok: Boolean = false,
+    val outboundProxy: OutboundProxySummary? = null,
 )
 
 /** The box's app sandbox (docs/app-runtimes.md §5.1): `off`, `starting`,

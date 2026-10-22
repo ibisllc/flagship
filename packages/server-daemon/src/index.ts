@@ -250,6 +250,7 @@ import {
   resolvePinnedAdminRoot,
 } from "./adminRootRotationConsumer.js";
 import { buildServerOrderHolder, type ServerOrderHolder } from "./serverOrderHolder.js";
+import { setUpOutboundProxy, type OutboundProxyRuntime } from "./outboundProxy/index.js";
 import {
   readAuthCodeBirthDate,
   wireGossip,
@@ -600,6 +601,17 @@ export async function persistCgkHex(path: string, cgkHex: string): Promise<void>
   }
 }
 
+/** The box's outbound proxy (docs/outbound-proxy.md); null without an owner config. */
+let outboundProxy: OutboundProxyRuntime | null = null;
+let resolvedTunnelHub = "wss://flagship-services.fly.dev:8443/tunnel";
+
+/** Host and port of a ws(s) URL, for the proxy's reachability test. */
+function hostPortOf(url: string): { host: string; port: number } {
+  const u = new URL(url);
+  const port = Number(u.port) || (u.protocol === "ws:" || u.protocol === "http:" ? 80 : 443);
+  return { host: u.hostname.replace(/^\[|\]$/g, ""), port };
+}
+
 async function main(): Promise<void> {
   let cfg = await tryLoadConfig();
   const env = envFromProcess();
@@ -740,6 +752,26 @@ async function main(): Promise<void> {
     }
   }
 
+  // ---- Outbound proxy (docs/outbound-proxy.md) ----
+  // Before the first network call (endpoint discovery, right below): a box
+  // whose recipe or owner set a proxy never reaches anything directly.
+  if (cfg) {
+    try {
+      outboundProxy = await setUpOutboundProxy({
+        dataDir,
+        installBlobPath: process.env.FLAGSHIP_INSTALL_BLOB ?? "/var/flagship/install-blob.json",
+        authority: {
+          serverDomain: env.serverFqdn,
+          username: cfg.userId,
+          ownerIrkPub: cfg.irkPublicKey,
+          ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+        },
+      });
+    } catch (e) {
+      console.error(`[outbound-proxy] setup failed: ${(e as Error).message}`);
+    }
+  }
+
   const endpoints = await resolveServicesEndpoints({
     controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
     cachePath: defaultEndpointsCachePath(dataDir),
@@ -748,6 +780,7 @@ async function main(): Promise<void> {
   console.log(
     `[daemon] services endpoints (${endpoints.source}): tunnelHub=${endpoints.endpoints.tunnelHub}`,
   );
+  resolvedTunnelHub = endpoints.endpoints.tunnelHub;
 
   // ---- Self-update boot health-gate (docs/server-update-mechanism.md) ----
   // Runs FIRST on every boot (fire-and-forget so bring-up is never blocked; the
@@ -800,6 +833,7 @@ async function main(): Promise<void> {
     void installHealthReporter({
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       serverDomain: env.serverFqdn,
+      proxyCurlrcPath: `${dataDir}/outbound-proxy.curlrc`,
       run: (cmd, args) => realUpdateCommandRunner(cmd, args),
       onLog: (m) => console.log(m),
     }).catch((e) => console.log(`[health] reporter not installed: ${(e as Error).message}`));
@@ -1266,6 +1300,7 @@ async function main(): Promise<void> {
           readOrderIssuedAt: () => serverOrder.current()?.order.issuedAt ?? 0,
         }
       : {}),
+    onAccountTier: (tier: string) => outboundProxy?.setAccountTier(tier),
     readLeads: () => gossipLoopRef.current?.currentLeads() ?? [],
     readRuns: () => servicePlatformRefForServer.current?.list().map((a) => a.slug),
     readTrustStatus: () => relayLockdownRef.current?.trustStatus() ?? null,
@@ -1521,6 +1556,7 @@ async function main(): Promise<void> {
     // the caller's STK envelope against the .com directory and owner-scopes
     // reads. 503s until wirePeerBackup had identity + .com reachability.
     runtime.addHandler(pbFramesHandler);
+    outboundProxy?.onChange(() => runtime.reconnectTunnel());
     // startDaemonRuntime now resolves once the tunnel is connected and the
     // local API + TLS server are serving — BEFORE the first ACME attempt
     // (cert acquisition is async + retried so a transient ACME failure can't
@@ -3350,6 +3386,12 @@ async function wireRuntimeSurfaces(deps: {
   const screensHandle = buildScreensHttp({
     debugAccess,
     gate: sharesBundle?.gate ?? pairedSessions,
+    outboundProxy: outboundProxy
+      ? {
+          handle: outboundProxy.http(() => hostPortOf(resolvedTunnelHub)),
+          summary: () => outboundProxy!.summary(),
+        }
+      : null,
     shares: sharesBundle?.shares ?? null,
     // An unreadable access state leaves every app members-only (the store's own default).
     accessMode: (serviceId) => {

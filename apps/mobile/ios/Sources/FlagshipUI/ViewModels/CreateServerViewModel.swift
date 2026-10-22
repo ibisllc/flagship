@@ -88,8 +88,48 @@ public final class CreateServerViewModel {
     /// to the secret-free default.
     public var advancedMode: Bool = false {
         didSet {
-            if !advancedMode { embedSecrets = false; debugFriendly = false }
+            if !advancedMode { embedSecrets = false; debugFriendly = false; proxyKind = .none }
         }
+    }
+    /// ADVANCED — an outbound proxy for the new server (docs/outbound-proxy.md).
+    /// The order is signed at mint with the sensitive-order key and rides the
+    /// recipe as the unsigned `outboundProxy` sibling, so the box uses the
+    /// proxy from its first connection. Snaps back to none when Advanced is off.
+    public var proxyKind: BoxProxy.Kind = .none {
+        didSet {
+            guard proxyKind != oldValue else { return }
+            let defaults = BoxProxy.Kind.allCases.compactMap { $0.defaultPort.map(String.init) }
+            if proxyPort.isEmpty || defaults.contains(proxyPort) {
+                proxyPort = proxyKind.defaultPort.map(String.init) ?? ""
+            }
+        }
+    }
+    /// The account's plan, read when the screen opens: the proxy is part of
+    /// Pro. nil while unknown, which shows the fields.
+    public var accountTier: String?
+    public var proxyAllowed: Bool { OutboundProxyCopy.allowed(tier: accountTier) }
+
+    public func loadAccountTier() async {
+        accountTier = (try? await server.accountTier(username: username)) ?? nil
+    }
+
+    public var proxyHost: String = ""
+    public var proxyPort: String = ""
+    public var proxyUsername: String = ""
+    public var proxyPassword: String = ""
+    public var proxyFallbackDirect: Bool = false
+
+    /// What's wrong with the proxy fields, or nil (also nil when there's no proxy).
+    public var proxyError: String? {
+        guard proxyAllowed else { return nil }
+        return OutboundProxyForm.error(kind: proxyKind, host: proxyHost, port: proxyPort,
+                                username: proxyUsername, password: proxyPassword)
+    }
+
+    /// The typed credentials, when there are any.
+    var proxyCredentials: BoxProxyCredentials? {
+        proxyUsername.isEmpty && proxyPassword.isEmpty
+            ? nil : BoxProxyCredentials(username: proxyUsername, password: proxyPassword)
     }
     /// Whether the recipe EMBEDS the box's SWK (the offline path). Default OFF:
     /// the recipe is secret-free of the SWK and the phone DEPOSITS it after the
@@ -246,7 +286,7 @@ public final class CreateServerViewModel {
     /// types IS the subdomain (no slugify), so an invalid entry blocks Next
     /// rather than being silently rewritten.
     public var canAdvanceFromDesign: Bool {
-        ServerLabel.isValid(name)
+        ServerLabel.isValid(name) && proxyError == nil
     }
 
     /// The last design step (Backups) needs a pick before Continue.
@@ -619,12 +659,34 @@ public final class CreateServerViewModel {
             debugGrantSibling = try Self.debugGrantEnvelope(debugGrant, key: debugKey)
         }
 
+        // Outbound proxy (Advanced): the order is a sensitive order, so it's
+        // signed with the same key as register-rck above (admin root when
+        // pinned, else the IRK), with no extra prompt.
+        var proxySibling: SignedBoxProxyWire?
+        var proxyCredentialsSibling: BoxProxyCredentials?
+        if proxyKind != .none && proxyAllowed {
+            if let why = proxyError { throw OutboundProxyForm.Failure(message: why) }
+            let creds = proxyCredentials
+            let order = BoxProxy.make(
+                serverDomain: serverDomain,
+                kind: proxyKind,
+                host: proxyHost,
+                port: Int(proxyPort) ?? 0,
+                auth: creds != nil,
+                fallbackDirect: proxyFallbackDirect
+            )
+            proxySibling = SignedBoxProxyWire(proxy: order.fields, signature: try order.sign(with: adminKey ?? irk))
+            proxyCredentialsSibling = creds
+        }
+
         return SignedInstallBlob(
             blob: blob,
             signatureHex: HexUtil.encode(blobSig),
             pairingOrder: embeddedPairingOrder,
             swkHex: embeddedSwkHex,
-            debugGrant: debugGrantSibling
+            debugGrant: debugGrantSibling,
+            outboundProxy: proxySibling,
+            outboundProxyCredentials: proxyCredentialsSibling
         )
     }
 
@@ -667,13 +729,22 @@ public struct SignedInstallBlob: Sendable {
     /// the config-pinned owner IRK + this box's FQDN before enabling the debug
     /// console user. nil for the production default (no debug grant).
     public let debugGrant: String?
+    /// The owner-signed outbound proxy order (docs/outbound-proxy.md). An
+    /// UNSIGNED recipe sibling carrying its own signature, which the box
+    /// verifies; nil when the owner set no proxy.
+    public let outboundProxy: SignedBoxProxyWire?
+    /// The proxy's credentials, only when the owner typed them into the recipe.
+    public let outboundProxyCredentials: BoxProxyCredentials?
 
-    public init(blob: InstallBlob, signatureHex: String, pairingOrder: String? = nil, swkHex: String? = nil, debugGrant: String? = nil) {
+    public init(blob: InstallBlob, signatureHex: String, pairingOrder: String? = nil, swkHex: String? = nil, debugGrant: String? = nil,
+                outboundProxy: SignedBoxProxyWire? = nil, outboundProxyCredentials: BoxProxyCredentials? = nil) {
         self.blob = blob
         self.signatureHex = signatureHex
         self.pairingOrder = pairingOrder
         self.swkHex = swkHex
         self.debugGrant = debugGrant
+        self.outboundProxy = outboundProxy
+        self.outboundProxyCredentials = outboundProxyCredentials
     }
 
     public struct OnWire: Codable, Sendable {
@@ -692,6 +763,9 @@ public struct SignedInstallBlob: Sendable {
         /// install-blob.json as the `debugGrant` sibling. Omitted from JSON when
         /// nil so a non-debug recipe is byte-identical to before.
         public let debugGrant: String?
+        /// Top-level recipe siblings for the outbound proxy; omitted when nil.
+        public var outboundProxy: SignedBoxProxyWire? = nil
+        public var outboundProxyCredentials: BoxProxyCredentials? = nil
     }
     public struct OnWireBlob: Codable, Sendable {
         public let version: Int
@@ -763,7 +837,9 @@ public struct SignedInstallBlob: Sendable {
             // when nil, so a non-pairing recipe serializes byte-identically.
             pairingOrder: pairingOrder,
             swkHex: swkHex,
-            debugGrant: debugGrant
+            debugGrant: debugGrant,
+            outboundProxy: outboundProxy,
+            outboundProxyCredentials: outboundProxy == nil ? nil : outboundProxyCredentials
         )
     }
 }

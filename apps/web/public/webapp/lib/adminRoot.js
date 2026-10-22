@@ -62,6 +62,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/debug-access/v2", //           let an SSH key in as `debug` until a set time
   "flagship/debug-access-revoke/v1", //    turn debug access off at once
   "flagship/app-list-scope/v1", //         a separate access list on each server (Pro, feat/marketplace)
+  "flagship/box-proxy/v1", //              a server's outbound proxy
   // `.com`-side (authorizeSensitiveComOp)
   "flagship/server-update/v1", //          in-place server update (2-of-2)
   "flagship/account-self-delete/v1", //    account deletion

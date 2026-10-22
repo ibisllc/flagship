@@ -50,6 +50,8 @@ interface RecipeOpts {
   pairingOrder?: string;
   debugGrant?: string;
   adminRoot?: boolean;
+  outboundProxy?: unknown;
+  outboundProxyCredentials?: unknown;
 }
 
 function buildSignedRecipe(o: RecipeOpts = {}): string {
@@ -115,6 +117,8 @@ function buildSignedRecipe(o: RecipeOpts = {}): string {
     ...(o.swkHex ? { swkHex: o.swkHex } : {}),
     ...(o.pairingOrder ? { pairingOrder: o.pairingOrder } : {}),
     ...(o.debugGrant ? { debugGrant: o.debugGrant } : {}),
+    ...(o.outboundProxy ? { outboundProxy: o.outboundProxy } : {}),
+    ...(o.outboundProxyCredentials ? { outboundProxyCredentials: o.outboundProxyCredentials } : {}),
   });
 }
 
@@ -194,6 +198,29 @@ describe("preseed engine bundle", () => {
     expect(match).not.toBeNull();
     const embedded = JSON.parse(Buffer.from(match![1]!, "base64").toString("utf8"));
     expect(embedded.authCode.adminRootPubKey).toBe(hex(kp(10).publicKey));
+  });
+
+  it("passes the outbound proxy siblings through to install-blob.json", () => {
+    const order = { proxy: { serverDomain: "home.harry.flagship.services", kind: "socks5" }, signature: "ab" };
+    const creds = { username: "alice", password: "pw" };
+    const seeded = JSON.parse(
+      engine.buildInstallBlobJson(buildSignedRecipe({ outboundProxy: order, outboundProxyCredentials: creds })),
+    );
+    expect(JSON.parse(seeded.outboundProxy)).toEqual(order);
+    expect(JSON.parse(seeded.outboundProxyCredentials)).toEqual(creds);
+    const preseed = engine.buildPreseed(buildSignedRecipe({ outboundProxy: JSON.stringify(order) }), "{}");
+    const embedded = JSON.parse(
+      Buffer.from(/echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/var\/flagship\/install-blob\.json/.exec(preseed)![1]!, "base64").toString("utf8"),
+    );
+    expect(JSON.parse(embedded.outboundProxy)).toEqual(order);
+    expect(embedded.outboundProxyCredentials).toBeUndefined();
+    // d-i's busybox wget can't use the private relay, so a proxy recipe's
+    // installer never reports to .com directly (docs/outbound-proxy.md).
+    expect(preseed).not.toContain("flagshipserver.com/api/");
+    expect(preseed).not.toMatch(/wget[^\n]*api\/order/);
+    expect(engine.buildPreseed(buildSignedRecipe({}), "{}")).toMatch(/wget[^\n]*api\/order/);
+    // Credentials without an order are dropped.
+    expect(JSON.parse(engine.buildInstallBlobJson(buildSignedRecipe({ outboundProxyCredentials: creds }))).outboundProxyCredentials).toBeUndefined();
   });
 
   it("reproduces every committed golden vector (the cross-engine contract)", () => {

@@ -149,6 +149,8 @@ export async function runWriteCommand(opts: WriteCommandOpts): Promise<WriteComm
     // verified the grant; nothing here bakes that key into the image.
     debugGrant: loaded.debugGrant,
     bootHost: bootHostForControlHost(process.env.FLAGSHIP_CONTROL_HOST),
+    outboundProxy: loaded.outboundProxy,
+    outboundProxyCredentials: loaded.outboundProxyCredentials,
   };
   const preseedCfg = buildDebianPreseed(genOpts);
   const remaster =

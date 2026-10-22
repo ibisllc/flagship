@@ -95,6 +95,9 @@ public struct ServerDetailResponse: Codable, Equatable, Sendable {
     public var debugAccess: DebugAccessView? = nil
     /// Each app's disk use against its limits and the disk brake (docs/app-runtimes.md 5.3). Absent from older daemons.
     public var storage: ServerStorage? = nil
+    /// The box's outbound proxy and whether it works (docs/outbound-proxy.md).
+    /// Absent from older daemons: the page then hides the section.
+    public var outboundProxy: OutboundProxySummary? = nil
 }
 
 /// Owner debug access as the box reports it (docs/recipe-delivery-and-remote-install.md

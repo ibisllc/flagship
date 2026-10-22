@@ -15,6 +15,7 @@
  *                                    users, so every user in turn)
  *                    odd ticks       one of two small groups, each every 40 minutes
  *                    00:30 UTC       the daily adapter publish (alone)
+ *                    00:40 UTC       the daily private-relay probe (alone; feat/outbound-proxy)
  *                    Monday 01:30    the weekly adapter insight (alone)
  *
  * Cadence changes against the single big invocation this replaced: the CT scan
@@ -40,7 +41,8 @@ export type CronJobId =
   | "legacy-dns-sweep"
   | "adapter-publish"
   | "adapter-insights"
-  | "voici-names";
+  | "voici-names"
+  | "relay-probe";
 
 export interface CronPlan {
   jobs: CronJobId[];
@@ -76,6 +78,7 @@ export function cronPlan(cron: string, scheduledTime: number): CronPlan {
     const hour = d.getUTCHours();
     const minute = d.getUTCMinutes();
     if (hour === 0 && minute >= 30 && minute < 40) return { jobs: ["adapter-publish"] };
+    if (hour === 0 && minute >= 40 && minute < 50) return { jobs: ["relay-probe"] };
     if (hour === 1 && minute >= 30 && minute < 40 && d.getUTCDay() === 1) return { jobs: ["adapter-insights"] };
     const tick = Math.floor(scheduledTime / TEN_MIN_MS);
     const pair = Math.floor(tick / 2);

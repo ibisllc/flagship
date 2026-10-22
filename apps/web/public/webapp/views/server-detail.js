@@ -58,8 +58,6 @@ import {
   serverOrderOf,
 } from "../lib/serverOrder.js";
 import { podShortName } from "../lib/podSwitcher.js";
-import { getActiveProfile } from "../lib/profiles.js";
-import { isDemoProfile } from "../lib/demoAccount.js";
 import {
   clearPendingUpdate,
   describeLastUpdate,
@@ -138,6 +136,19 @@ import { accountReadFetch } from "../lib/accountRead.js";
 import { SERVER_ADMIN_ONLY, canSignAdminOrders } from "../lib/addServerGate.js";
 import { isAdminDevice } from "../lib/memberRoles.js";
 import { debugAccessBannerHtml, debugAccessCardHtml, wireDebugAccess } from "./debug-access.js";
+import { getActiveProfile } from "../lib/profiles.js";
+import { isDemoProfile } from "../lib/demoAccount.js";
+import {
+  PROXY_EXPLAINER,
+  proxyFieldsHtml,
+  proxyProHtml,
+  proxyStatusText,
+  proxySummaryText,
+  readProxyFields,
+  readProxyForm,
+  sendBoxProxy,
+  wireProxyFields,
+} from "../lib/boxProxy.js";
 
 import { tr, trn, dateLocale } from "../lib/i18n.js";
 registerView("view-server-detail");
@@ -593,6 +604,7 @@ export async function renderServerDetail() {
         <button id="make-leader-btn" class="full-width mt-2">${tr("Make leader")}</button>
         ${canSignAdminOrders() ? "" : `<p class="note small mt-1" data-leader-admin-only>${escapeHtml(SERVER_ORDER_ADMIN_ONLY)}</p>`}
       </div>
+      ${outboundProxyHtml(body)}
       ${serverSharingHtml(body)}
 
       ${backupsSectionHtml(body)}
@@ -631,6 +643,7 @@ export async function renderServerDetail() {
     wireJournal(body);
     wireDebugAccess(body);
     wireMakeLeader(body);
+    wireOutboundProxy(body);
     wireServerSharing(body);
     wireServerApps(body.serverFqdn);
     wireTransfer(body);
@@ -818,6 +831,140 @@ function wireMakeLeader(body) {
     } finally {
       btn.textContent = tr("Make leader");
       void paint();
+    }
+  });
+}
+
+// ---- Outbound proxy (docs/outbound-proxy.md) ----------------------------
+
+/** Owners with keys may change it; companions and demo accounts only see it. */
+function canEditProxy() {
+  return !isCompanionProfile() && !isDemoProfile(getActiveProfile());
+}
+
+/** The section, or "" for a box too old to report it. Exported for tests. */
+export function outboundProxyHtml(body, { canEdit = canEditProxy() } = {}) {
+  const summary = body?.outboundProxy;
+  if (!summary || typeof summary !== "object") return "";
+  const status = proxyStatusText(summary);
+  const on = !!summary.proxy;
+  // The box says `available: false` once .com has told it the account is on
+  // Free: no new proxy, but one already set can still be turned off.
+  const pro = summary.available !== false;
+  return `
+      <h2 class="mt-4">Outbound proxy</h2>
+      <div class="card" id="outbound-proxy-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
+        <p class="note">${escapeHtml(PROXY_EXPLAINER)}</p>
+        <div class="row mt-2">
+          <span class="label">Proxy</span>
+          <span class="value" id="outbound-proxy-summary">${escapeHtml(proxySummaryText(summary))}</span>
+        </div>
+        ${status
+          ? `<p class="note small mt-1${summary.status?.state === "failing" ? " err-text" : ""}" id="outbound-proxy-status">${escapeHtml(status)}</p>`
+          : ""}
+        ${pro ? "" : proxyProHtml()}
+        ${canEdit && (pro || on)
+          ? `<div class="row-2 mt-2">
+          ${pro ? `<button id="outbound-proxy-change" class="full-width">Change</button>` : ""}
+          ${on ? `<button id="outbound-proxy-off" class="secondary full-width">Turn off</button>` : ""}
+        </div>`
+          : ""}
+      </div>`;
+}
+
+function wireOutboundProxy(body) {
+  const summary = body?.outboundProxy;
+  if (!summary) return;
+  $("outbound-proxy-change")?.addEventListener("click", () => void openProxyEditor(body));
+  $("outbound-proxy-off")?.addEventListener("click", async (ev) => {
+    const btn = ev.currentTarget;
+    btn.disabled = true;
+    try {
+      await saveProxy(body, { kind: "none" });
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+/** Sign (sensitive-order key) and send; true when the box took it. */
+async function saveProxy(body, value) {
+  const session = getSession();
+  if (!session.umk) {
+    toast("Unlock the webapp first", "err");
+    return false;
+  }
+  try {
+    await sendBoxProxy(
+      {
+        serverDomain: body.serverFqdn,
+        value,
+        current: body.outboundProxy,
+        fetchJson: fetchOn(body.serverFqdn),
+      },
+      { umk: session.umk, sign: sensitiveSigner() },
+    );
+    toast(
+      value.kind === "none"
+        ? "Saved. The server now connects directly."
+        : "Saved. The server is reconnecting through the proxy.",
+      "ok",
+    );
+    void renderServerDetail();
+    return true;
+  } catch (e) {
+    toast(e instanceof ScreensError ? e.message : humanError(e), "err");
+    return false;
+  }
+}
+
+function openProxyEditor(body) {
+  const p = body.outboundProxy?.proxy ?? null;
+  const dlg = document.createElement("dialog");
+  dlg.className = "modal-card";
+  dlg.setAttribute("aria-label", "Outbound proxy");
+  dlg.innerHTML = `
+    <h3 class="modal-title">Outbound proxy</h3>
+    <p class="modal-message">${escapeHtml(PROXY_EXPLAINER)}</p>
+    ${proxyFieldsHtml("sd-proxy", {
+      kind: p?.kind ?? "none",
+      host: p?.host ?? "",
+      port: p?.port,
+      fallbackDirect: !!p?.fallbackDirect,
+      hasCredentials: !!body.outboundProxy?.hasCredentials,
+    })}
+    <div class="row-2 mt-3">
+      <button class="secondary" data-proxy-cancel>Cancel</button>
+      <button data-proxy-save>Save</button>
+    </div>
+  `;
+  document.body.appendChild(dlg);
+  wireProxyFields("sd-proxy", { credentialsNote: false });
+  dlg.showModal();
+  const close = () => {
+    if (dlg.open) dlg.close();
+    dlg.remove();
+  };
+  dlg.addEventListener("close", () => dlg.remove(), { once: true });
+  dlg.querySelector("[data-proxy-cancel]")?.addEventListener("click", close);
+  const saveBtn = dlg.querySelector("[data-proxy-save]");
+  saveBtn?.addEventListener("click", async () => {
+    const r = readProxyForm(readProxyFields("sd-proxy"));
+    const err = document.getElementById("sd-proxy-error");
+    if (!r.ok) {
+      if (err) {
+        err.textContent = r.error;
+        err.classList.remove("hidden");
+      }
+      return;
+    }
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving…";
+    const ok = await saveProxy(body, r.value);
+    if (ok) close();
+    else {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save";
     }
   });
 }

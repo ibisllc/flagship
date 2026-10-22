@@ -38,6 +38,16 @@ import { DEFAULT_WEB_RESERVE_GB, attachBackupPolicy, policyFromDraft } from "../
 import { throwIfRateLimited } from "../lib/rateLimited.js";
 import { confirmFreshUnlock } from "../lib/freshUnlock.js";
 import { enterPendingServer, rememberPendingOrder } from "./pending-server.js";
+import {
+  proxyAllowedForTier,
+  proxyFieldsHtml,
+  proxyProHtml,
+  readProxyFields,
+  readProxyForm,
+  recipeProxySiblings,
+  wireProxyFields,
+} from "../lib/boxProxy.js";
+import { fetchAllowance } from "../lib/allowance.js";
 
 import { tr } from "../lib/i18n.js";
 registerView("view-create-server");
@@ -337,6 +347,18 @@ export function readDebugSshKey() {
   return key;
 }
 
+// Read the outbound proxy (docs/outbound-proxy.md). Only honored when Advanced
+// mode is on. Kept out of readInputs so a typed password never lands in a
+// saved draft. Throws with the field's message when the input is unusable.
+// Exported for the unit test.
+export function readOutboundProxy() {
+  const adv = $("cs-advanced");
+  if (!adv || !adv.checked || !$("cs-proxy-kind")) return { kind: "none" };
+  const r = readProxyForm(readProxyFields("cs-proxy"));
+  if (!r.ok) throw new Error(`Outbound proxy: ${r.error}`);
+  return r.value;
+}
+
 // Read the embed-secrets choice. Only honored when Advanced mode is on; the
 // checkbox lives inside the (hidden-by-default) advanced section. Absent control
 // or Advanced off ⇒ false (the secret-free default). Exported for the unit test.
@@ -476,6 +498,10 @@ export function downloadRecipe(blobBundle) {
   // writes it to install-blob.json and the box-side gate can verify it. Absent
   // (the production default) ⇒ recipe is byte-identical + carries no grant.
   if (blobBundle.debugGrant) recipe.debugGrant = blobBundle.debugGrant;
+  // Outbound proxy: the owner-signed order (and the credentials only when the
+  // owner typed them) as unsigned siblings; the box verifies the order.
+  if (blobBundle.outboundProxy) recipe.outboundProxy = blobBundle.outboundProxy;
+  if (blobBundle.outboundProxyCredentials) recipe.outboundProxyCredentials = blobBundle.outboundProxyCredentials;
   const json = JSON.stringify(recipe, null, 2);
   const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -513,8 +539,11 @@ async function handleRecipeDownload() {
     return toast(tr("Unlock the webapp first"), "err");
   }
   let inputs;
-  try { inputs = readInputs(); }
-  catch (e) { console.error(e); return toast(humanError(e), "err"); }
+  let outboundProxy;
+  try {
+    inputs = readInputs();
+    outboundProxy = readOutboundProxy();
+  } catch (e) { console.error(e); return toast(humanError(e), "err"); }
   // A debug grant takes one fresh unlock, like the server page's Turn on.
   if (inputs.debugFriendly) {
     const unlocked = await confirmFreshUnlock({
@@ -543,7 +572,7 @@ async function handleRecipeDownload() {
   setStatus("active", tr("creating signed recipe…"));
   let blobBundle;
   try {
-    blobBundle = await mintInstallBlobBundle(session, username, inputs, { skipClaim: alreadyOpened });
+    blobBundle = await mintInstallBlobBundle(session, username, { ...inputs, outboundProxy }, { skipClaim: alreadyOpened });
   } catch (e) {
     setStatus("error", String(e.message || e));
     creating = false;
@@ -884,6 +913,17 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
       umk: session.umk,
     });
   }
+  // Outbound proxy (docs/outbound-proxy.md): a sensitive order signed for the
+  // new server's domain, so the box uses the proxy from its first connection.
+  if (inputs.outboundProxy && inputs.outboundProxy.kind !== "none") {
+    Object.assign(
+      bundle,
+      await recipeProxySiblings(
+        { serverDomain: blob.serverDomain, value: inputs.outboundProxy },
+        { umk: session.umk, sign: sensitiveSigner() },
+      ),
+    );
+  }
   return bundle;
 }
 
@@ -957,6 +997,7 @@ function syncAdvancedVisibility() {
     if (embed) embed.checked = false;
     const dbg = $("cs-debug-friendly");
     if (dbg) dbg.checked = false;
+    resetProxyFields();
   }
   syncDebugKeyVisibility();
 }
@@ -968,9 +1009,34 @@ function syncDebugKeyVisibility() {
   row.classList.toggle("hidden", !$("cs-debug-friendly")?.checked);
 }
 
+// The account's plan, read when the view opens: the proxy is part of Pro.
+// null until known (or when the read fails), which shows the fields.
+let accountTier = null;
+
+function resetProxyFields() {
+  const block = $("cs-proxy-block");
+  if (!block) return;
+  if (!proxyAllowedForTier(accountTier)) {
+    block.innerHTML = proxyProHtml();
+    return;
+  }
+  block.innerHTML = proxyFieldsHtml("cs-proxy");
+  wireProxyFields("cs-proxy");
+}
+
+async function refreshAccountTier() {
+  const username = getSession().username;
+  const a = username ? await fetchAllowance(username) : null;
+  const tier = a?.tier ?? null;
+  if (tier === accountTier) return;
+  accountTier = tier;
+  resetProxyFields();
+}
+
 export function initCreateServerView() {
   wireServerNameValidation();
   $("cs-debug-friendly")?.addEventListener("change", syncDebugKeyVisibility);
+  resetProxyFields();
   $("cs-advanced")?.addEventListener("change", syncAdvancedVisibility);
   syncAdvancedVisibility();
   for (const el of document.querySelectorAll('input[name="cs-backup-policy"]')) el.addEventListener("change", syncReserveVisibility);
@@ -986,6 +1052,7 @@ export function initCreateServerView() {
     $("cs-server-name").value = "";
     setBackupPolicyChoice(null);
     restoreDiskEncryption(null);
+    resetProxyFields();
     setStatus("idle", "idle");
   });
   $("create-server-back")?.addEventListener("click", () => {
@@ -997,5 +1064,6 @@ export async function enterCreateServer() {
   if (!canAddServers()) return refuseAddServer();
   hideFollowSetup();
   show("view-create-server");
+  void refreshAccountTier();
   await refreshDrafts();
 }

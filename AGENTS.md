@@ -1492,6 +1492,23 @@ Not compiled since the rebase: the iOS and Android code on any branch.
   relay (Oblivious Network first) and set the relay secrets.
 - **`feat/phone-usb-burn`:** validate the OTG write on a real phone + stick,
   publish the seed and set `FLAGSHIP_ISO_SEED`.
+- **`feat/outbound-proxy`** (2026-10-14/15, `docs/outbound-proxy.md`; a
+  **Pro** feature, off `feat/marketplace` since 2026-10-15; the box refuses
+  new proxies once `.com`'s heartbeat reply says Free, the apps show a
+  "part of Pro" row). Optional SOCKS5 / HTTP
+  CONNECT proxy for a box, set in the create flow (signed
+  `flagship/box-proxy/v1` recipe sibling) or on the server page (Face ID,
+  `POST /api/screens/outbound-proxy`, tested before it applies). The daemon
+  (tunnel, `.com`, gossip, ACME, AI, update git/npm, app egress) and the
+  health timer use the proxy. Before the daemon, a proxy box's setup POSTs go
+  through OHTTP (RFC 9458): third-party relay (Oblivious Network planned, not
+  Cloudflare), our own gateway in the `.com` Worker
+  (`/.well-known/ohttp-keys`, `/api/ohttp/gateway`), direct fallback marked
+  and counted (migration 0099; `main` skips it), /status/ warns "Private relay down", daily
+  probe opens an issue. The Go unseal helper can seal/open unlock calls
+  (`ohttp-seal`/`ohttp-open`); wiring it into the initramfs is design only,
+  so unlock still goes direct. Owner to provision the relay + `OHTTP_GATEWAY_KEYS`. Webapp
+  shell v120 on the branch.
 - **`feat/other-os-installers`** (owner, 2026-10-18): `main` + the Ubuntu
   subiquity autoinstall generator/remaster (TS, Swift, C#, the engine API
   `buildUserDataFromRecipe`) and `packages/installer-netboot` +

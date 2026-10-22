@@ -39,6 +39,10 @@ class MockFlagshipServerClient(
      *  progression by mutating this map. */
     var provisionStatuses: MutableMap<String, ProvisionStatusRecord> = mutableMapOf(),
 ) : FlagshipServerClient {
+    /** The plan [accountTier] answers (null = unknown). */
+    var accountTierAnswer: String? = null
+    override suspend fun accountTier(username: String): String? = accountTierAnswer
+
     private val recoveryStore = mutableMapOf<String, RecoveryEnvelope>()
 
     /** Mirror of the Worker's webauthn_recovery row, keyed by lowercased

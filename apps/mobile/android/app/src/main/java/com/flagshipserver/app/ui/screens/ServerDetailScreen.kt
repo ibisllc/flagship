@@ -415,6 +415,17 @@ fun ServerDetailScreen(
         (detail as? LoadingState.Loaded)?.let { d ->
             BootUnlockCard(serverDomain = d.value.serverFqdn)
             LeaderCard(serverDomain = d.value.serverFqdn)
+            Spacer(Modifier.height(FS.space.s6))
+            // Older daemons don't report a proxy: no section (docs/outbound-proxy.md).
+            d.value.outboundProxy?.let { summary ->
+                OutboundProxyCard(
+                    serverDomain = d.value.serverFqdn,
+                    summary = summary,
+                    client = client,
+                    onSaved = { detailVm?.load() },
+                )
+                Spacer(Modifier.height(FS.space.s6))
+            }
             ShareServerCard(serverDomain = d.value.serverFqdn, podId = podId)
             FrontPageCard(serverDomain = d.value.serverFqdn)
             PowerCard(serverDomain = d.value.serverFqdn)
