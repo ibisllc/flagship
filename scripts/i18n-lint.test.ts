@@ -33,3 +33,29 @@ describe("i18n lint", () => {
     expect(lint("Save", "Enregistrer toutes les modifications maintenant")).toEqual([expect.stringContaining("much longer")]);
   });
 });
+
+describe("translations of changed English (name-keyed surfaces)", () => {
+  it("flags a key whose English changed after it was translated, until it is accepted", async () => {
+    const { mkdirSync, writeFileSync, rmSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    // @ts-expect-error plain .mjs
+    const { ROOT, targets, staleSources, acceptEnglish } = await import("./lib/i18n-kv.mjs");
+    const surface = `zz-test-${process.pid}`;
+    const dir = join(ROOT, "i18n", surface);
+    const write = (f: string, v: unknown) => writeFileSync(join(dir, f), JSON.stringify(v));
+    mkdirSync(dir, { recursive: true });
+    try {
+      write("en.json", { save_button: { en: "Save" } });
+      for (const l of targets as Array<{ code: string }>) write(`${l.code}.json`, { save_button: "Enregistrer" });
+      expect(staleSources(surface)).toEqual([expect.stringContaining("translated-from.json is missing")]);
+      acceptEnglish(surface);
+      expect(staleSources(surface)).toEqual([]);
+      write("en.json", { save_button: { en: "Save changes" } });
+      expect(staleSources(surface)).toEqual([expect.stringContaining("save_button: the English changed")]);
+      acceptEnglish(surface, ["save_button"]);
+      expect(staleSources(surface)).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

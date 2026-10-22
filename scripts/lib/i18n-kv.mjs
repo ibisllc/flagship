@@ -8,6 +8,7 @@
 // A surface script owns extraction (reading the code) and emission (writing native files); this
 // module owns dump / merge / status / lint, which are identical for every surface.
 
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -73,9 +74,44 @@ export function lintEntry(key, en, text, code) {
   return out;
 }
 
+// Surfaces keyed by the English sentence (webapp, iOS, box …) notice an English edit by themselves: the old key is gone.
+// Surfaces keyed by a resource name (Android, Wear, Windows Studio, Info.plist) would keep the old translations of a
+// changed sentence, so i18n/<surface>/translated-from.json records which English each key was translated from.
+const SOURCES = "translated-from.json";
+export const enHash = (v) => crypto.createHash("sha256").update(JSON.stringify(v.en)).digest("hex").slice(0, 12);
+const keyedByName = (en) => Object.entries(en).some(([k, v]) => typeof v.en !== "string" || v.en !== k);
+export function readSources(surface) {
+  const f = path.join(surfaceDir(surface), SOURCES);
+  return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, "utf8")) : null;
+}
+export function writeSources(surface, sources) {
+  const sorted = Object.fromEntries(Object.keys(readEn(surface)).filter((k) => sources[k]).map((k) => [k, sources[k]]));
+  fs.writeFileSync(path.join(surfaceDir(surface), SOURCES), JSON.stringify(sorted, null, 2) + "\n");
+}
+/** Record that the current English of `keys` (all translated keys when omitted) is what the translations say. */
+export function acceptEnglish(surface, keys) {
+  const en = readEn(surface);
+  const sources = readSources(surface) ?? {};
+  const trs = targets.map((l) => readTr(surface, l.code));
+  for (const k of keys ?? Object.keys(en)) if (en[k] && trs.some((t) => t[k] != null)) sources[k] = enHash(en[k]);
+  writeSources(surface, sources);
+}
+
+/** Translations of an English sentence that changed after they were written (name-keyed surfaces only). */
+export function staleSources(surface) {
+  const en = readEn(surface);
+  if (!keyedByName(en)) return [];
+  const sources = readSources(surface);
+  if (!sources) return [`i18n/${surface}/${SOURCES} is missing: run the surface's \`accept --all\` once`];
+  const trs = targets.map((l) => readTr(surface, l.code));
+  return Object.entries(en)
+    .filter(([k, v]) => v.translatable !== false && trs.some((t) => t[k] != null) && sources[k] !== enHash(v))
+    .map(([k]) => `${k}: the English changed after it was translated; translate it again in every language, then \`accept ${k}\``);
+}
+
 export function lintSurface(surface, { onlyKeys } = {}) {
   const en = readEn(surface);
-  const problems = [];
+  const problems = onlyKeys ? [] : staleSources(surface);
   for (const loc of targets) {
     const tr = readTr(surface, loc.code);
     for (const [k, t] of Object.entries(tr)) {
@@ -151,6 +187,7 @@ export function merge(surface, file) {
     }
   }
   for (const [code, tr] of Object.entries(by)) writeTr(surface, code, tr, order);
+  if (keyedByName(en)) acceptEnglish(surface, [...touched]);
   console.log(`merged ${n} translations into ${surface}`);
   const problems = lintSurface(surface, { onlyKeys: touched });
   if (problems.length) { console.error(problems.join("\n")); process.exitCode = 1; }
@@ -162,6 +199,13 @@ export function runCommon(surface, argv) {
   if (cmd === "merge") { merge(surface, a); return true; }
   if (cmd === "midx") { midx(surface, a); return true; }
   if (cmd === "status") { console.log(statusLines(surface).join("\n")); return true; }
+  if (cmd === "accept") {
+    const keys = argv.slice(1).filter((k, i, all) => k === "--all" || (!k.startsWith("--") && !(all[i - 1]?.startsWith("--") && all[i - 1] !== "--all")));
+    if (!keys.length) { console.error("accept <key…> | accept --all   (after translating the key's new English in every language)"); process.exit(2); }
+    acceptEnglish(surface, keys[0] === "--all" ? undefined : keys);
+    console.log(`${surface}: recorded the English of ${keys[0] === "--all" ? "every translated key" : keys.join(", ")}`);
+    return true;
+  }
   if (cmd === "lint") {
     const p = lintSurface(surface);
     if (p.length) { console.error(p.join("\n") + `\n\n${p.length} problem(s)`); process.exit(1); }
