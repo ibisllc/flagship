@@ -68,6 +68,13 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
   // only the serial (URL) + a canonical PHASE name — no secrets — and is
   // best-effort. ONE channel: POST /api/order/<serial>/status.
   const beaconSerial = beaconSafe(opts.blob.authCode.serial);
+  // A recipe with an outbound proxy (docs/outbound-proxy.md): d-i's busybox
+  // wget can't use the private relay, so the installer stays silent toward
+  // .com instead of reporting directly; the first-boot bootstrap reports
+  // through the relay once Node is installed.
+  const quiet = !!opts.outboundProxy;
+  const debianBeaconCommand = (phase: ProvisionStatusPhase, serial: string) =>
+    quiet ? "true" : debianBeaconCommandFor(phase, serial);
   // Beacon A — earliest hook (early_command, before partman): the box has
   // booted the installer. Canonical phase `booting`.
   const earlyBeacon = debianBeaconCommand("booting", beaconSerial);
@@ -89,7 +96,7 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
   // window (partman/early_command is before partitioning, late_command after the
   // base install), so partman/early_command drops a tiny executable into
   // /usr/lib/base-installer.d/ which base-installer runs as that window opens.
-  const installingDrop = debianBaseInstallerBeaconDrop(beaconSerial);
+  const installingDrop = quiet ? "true" : debianBaseInstallerBeaconDrop(beaconSerial);
   // Final SUCCESS beacon — emitted at the END of late_command, AFTER the
   // first-boot bootstrap succeeds, but BEFORE the box powers off (this preseed
   // sets debian-installer/exit/poweroff). It is NOT success: the install
@@ -670,7 +677,7 @@ function beaconSafe(s: string): string {
  * BYTE-IDENTICAL CONTRACT: this exact string is mirrored by the Swift twin
  * (apps/builder-mac UserData.debianBeaconCommand). Keep both in lockstep.
  */
-function debianBeaconCommand(phase: ProvisionStatusPhase, serial: string): string {
+function debianBeaconCommandFor(phase: ProvisionStatusPhase, serial: string): string {
   return (
     `( echo '{"phase":"${phase}"}' > /tmp/flagship-beacon.json; ` +
     `wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 ` +

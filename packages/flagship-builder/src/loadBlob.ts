@@ -22,6 +22,7 @@
  */
 import { verifyInstallBlob, verifyOfflineSecrets, type InstallBlob } from "@flagship/protocol";
 import { readFile } from "node:fs/promises";
+import { readProxySiblings } from "./proxySiblings.js";
 import { hexToBytes, parseInstallBlob } from "./installBlobParse.js";
 
 // Re-exported for back-compat: parseInstallBlob now lives in the pure
@@ -74,6 +75,14 @@ export interface LoadedBlob {
    * sibling like {@link swkHex}; the box removes it after the phone's blessing.
    */
   enrollmentKeyHex?: string;
+   * The owner-signed outbound proxy order (`{proxy, signature}` JSON,
+   * docs/outbound-proxy.md) and, only when the owner typed them into the
+   * recipe, its credentials (`{username, password}` JSON). Unsigned siblings
+   * like {@link debugGrant}: the order carries its own signature, which the
+   * box verifies. Passed through to install-blob.json untouched.
+   */
+  outboundProxy?: string;
+  outboundProxyCredentials?: string;
   /** Where the blob came from — useful for the auto-shred step. */
   source: { kind: "file"; path: string } | { kind: "stdin" };
 }
@@ -170,6 +179,7 @@ export function loadBlobFromString(
       : rawDebugGrant && typeof rawDebugGrant === "object"
         ? JSON.stringify(rawDebugGrant)
         : undefined;
+  const { outboundProxy, outboundProxyCredentials } = readProxySiblings(parsed as Record<string, unknown>);
   // Accept both the flattened recipe and the issued envelope that .com / the
   // website hand out: { blob: {...}, blobSignature: "..." }.
   let obj = parsed as Record<string, unknown>;
@@ -233,5 +243,5 @@ export function loadBlobFromString(
   }
   const rawEnrollment = (parsed as Record<string, unknown>).enrollmentKeyHex;
   const enrollmentKeyHex = typeof rawEnrollment === "string" && /^[0-9a-f]{64}$/i.test(rawEnrollment) ? rawEnrollment.toLowerCase() : undefined;
-  return { blob, blobSignatureHex: sigHex, pairingOrder, swkHex, offlineSecrets, debugGrant, ...(enrollmentKeyHex ? { enrollmentKeyHex } : {}), source };
+  return { blob, blobSignatureHex: sigHex, pairingOrder, swkHex, offlineSecrets, debugGrant, ...(enrollmentKeyHex ? { enrollmentKeyHex } : {}), ...(outboundProxy ? { outboundProxy } : {}), ...(outboundProxyCredentials ? { outboundProxyCredentials } : {}), source };
 }

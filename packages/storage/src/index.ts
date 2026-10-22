@@ -5,3 +5,4 @@ export * from "./schema.js";
 export * from "./serverShares.js";
 export * from "./serverOrders.js";
 export * from "./requestD1.js";
+export * from "./relayHealth.js";

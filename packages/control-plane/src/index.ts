@@ -76,6 +76,8 @@ export * from "./accountReadToken.js";
 export * from "./boxDoorbell.js";
 export * from "./accountGone.js";
 export * from "./serverOrder.js";
+export * from "./ohttpGateway.js";
+export * from "./relayHealth.js";
 export * from "./accountBootstrap.js";
 export * from "./watchDelegates.js";
 export * from "./acmeAccountKeys.js";

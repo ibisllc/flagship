@@ -328,3 +328,43 @@ describe("install-helper", () => {
     expect(ok).toBe(true);
   });
 });
+
+describe("ohttp-post (setup calls from a box with an outbound proxy)", () => {
+  it("sends directly, marked, when no relay is configured, and exits like curl -f", async () => {
+    const { createServer } = await import("node:http");
+    const { execFile } = await import("node:child_process");
+    const seen: Array<{ url?: string; fallback?: string | string[]; body: string }> = [];
+    const server = createServer((req, res) => {
+      let body = "";
+      req.on("data", (d) => (body += d));
+      req.on("end", () => {
+        seen.push({ url: req.url, fallback: req.headers["x-flagship-relay-fallback"], body });
+        res.writeHead(req.url === "/fail" ? 500 : 200, { "content-type": "application/json" });
+        res.end('{"ok":true}');
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
+    const port = (server.address() as { port: number }).port;
+    const env = { ...process.env, FLAGSHIP_OHTTP_RELAY_URL: "", FLAGSHIP_OHTTP_KEY_CONFIG: "" };
+    const call = (path: string) =>
+      new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
+        execFile(
+          "npx",
+          ["tsx", HELPER, "ohttp-post", "--url", `http://127.0.0.1:${port}${path}`, "--data", '{"phase":"registering"}'],
+          { env },
+          (err, stdout, stderr) => resolve({ code: err ? ((err as { code?: number }).code ?? 1) : 0, stdout, stderr }),
+        );
+      });
+    try {
+      const ok = await call("/api/order/01ABC/status");
+      expect(ok.code).toBe(0);
+      expect(ok.stdout).toBe('{"ok":true}');
+      expect(ok.stderr).toContain("sent directly (unconfigured): 200");
+      const bad = await call("/fail");
+      expect(bad.code).toBe(22);
+      expect(seen[0]).toEqual({ url: "/api/order/01ABC/status", fallback: "unconfigured", body: '{"phase":"registering"}' });
+    } finally {
+      server.close();
+    }
+  }, 60_000);
+});

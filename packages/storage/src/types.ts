@@ -12,6 +12,7 @@ import type { MeterBatchEntry, MeterBatchResult, MeterCounter, MeterStore } from
 import type { BootSuspensionOrder, BootSuspensionState, SuspensionOutcome } from "@flagship/protocol";
 import type { ServerShareStorage } from "./serverShares.js";
 import type { ServerOrderStorage } from "./serverOrders.js";
+import type { RelayHealthStorage } from "./relayHealth.js";
 
 /**
  * v1.2 security cascade — account-type discriminator. See
@@ -1906,6 +1907,8 @@ export interface Storage {
   serverShares: ServerShareStorage;
   /** The owner's server order (docs/server-order.md). */
   serverOrders: ServerOrderStorage;
+  /** How proxy boxes' setup calls arrived: private relay or direct fallback (docs/outbound-proxy.md). */
+  relayHealth: RelayHealthStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────

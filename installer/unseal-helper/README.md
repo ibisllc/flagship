@@ -152,3 +152,14 @@ Run it:
 # from repo root
 npx vitest run tools/unseal-crosscheck
 ```
+
+## OHTTP mode (boxes with an outbound proxy)
+
+`flagship-unseal ohttp-seal` and `ohttp-open` seal one boot-unlock call for
+the private relay (Oblivious HTTP, RFC 9458) and open its answer, so a box
+behind an outbound proxy can unlock without showing `boot.flagshipserver.com`
+its address (docs/outbound-proxy.md). Networking stays in the initramfs's
+curl. `internal/ohttp` reproduces RFC 9458 Appendix A like the TS port, and
+`packages/control-plane/tests/ohttpGoInterop.test.ts` runs this binary
+against `.com`'s TS gateway. Not yet called by the initramfs script (design
+only).

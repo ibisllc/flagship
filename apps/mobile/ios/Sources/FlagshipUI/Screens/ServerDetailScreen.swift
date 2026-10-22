@@ -268,6 +268,9 @@ public struct ServerDetailScreen: View {
                     }
                     ServerOrderCard(serverDomain: d.serverFqdn)
                     ShareServerCard(serverDomain: d.serverFqdn)
+                    if let proxy = d.outboundProxy {
+                        OutboundProxyCard(serverDomain: d.serverFqdn, summary: proxy, onRefreshDetail: onRefreshDetail)
+                    }
                     FrontPageCard(serverDomain: d.serverFqdn)
                     if AdminOrderGate.allows(app) {
                         LockPowerCard(serverDomain: d.serverFqdn)

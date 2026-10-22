@@ -13,6 +13,7 @@ import type { AuthorityHub } from "./authority/hub.js";
 import { LedgerError } from "./authority/operationLedger.js";
 import { digestOf, runOrderOperation, type OrderOperationContext } from "./authority/orderOperation.js";
 import { refusalRecord, type UpdateOutcomeStore } from "./updateOutcome.js";
+import { outboundNet } from "./outboundProxy/outboundNet.js";
 
 const execFileP = promisify(execFile);
 
@@ -79,6 +80,7 @@ export type UpdateCommandRunner = (
 export const realUpdateCommandRunner: UpdateCommandRunner = async (cmd, args, opts) => {
   const { stdout } = await execFileP(cmd, args, {
     ...(opts?.cwd ? { cwd: opts.cwd } : {}),
+    env: outboundNet.childEnv(),
     timeout: 20 * 60_000,
     maxBuffer: 64 * 1024 * 1024,
   });
