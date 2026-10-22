@@ -1,0 +1,134 @@
+{
+  "about": "Custom voi.ci names (docs/named-links.md). Every platform must build `set.canonical` and `clear.canonical` from `set.fields` / `clear.fields` byte for byte and verify the signatures under keys.pubHex (Ed25519 over the canonical bytes); `reject` must NOT verify. `names` pins the rules a client checks before asking .com: `problem` is voiciNameProblem(typed) (null = fine) and `key` is voiciNameKey(typed) for a valid name (null otherwise).",
+  "keys": {
+    "seedHex": "2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b",
+    "pubHex": "4508a07aa941707f3eb2db94c8897a80b2c1197476b6de213ac273df7d86c4ff"
+  },
+  "set": {
+    "fields": {
+      "user": "plucky-avocet",
+      "serviceId": "plucky-avocet--halloween-party",
+      "name": "halloweenparty",
+      "op": "set",
+      "issuedAt": 1760000000000,
+      "nonce": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
+    },
+    "canonical": "flagship/voici-name/v1|plucky-avocet|plucky-avocet--halloween-party|halloweenparty|set|1760000000000|0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+    "signatureHex": "e9ba946c72be53662caccfcd22d62ca229b581589aa904ca92aaee763a73515841db3bf05e658317062f3471032fb241d53568044f02fa90c9275fcdb31f6e0e"
+  },
+  "clear": {
+    "fields": {
+      "user": "plucky-avocet",
+      "serviceId": "plucky-avocet--halloween-party",
+      "name": "",
+      "op": "clear",
+      "issuedAt": 1760000000000,
+      "nonce": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
+    },
+    "canonical": "flagship/voici-name/v1|plucky-avocet|plucky-avocet--halloween-party||clear|1760000000000|0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+    "signatureHex": "331dc9cb474aeb57db0e11477f6fc6a54d7b44d8585f360fd620de0a74a27b54b6b22ff7076dee648a57ffe8354ab2965f634010ec9edfd93c54532cef028e01"
+  },
+  "reject": [
+    {
+      "why": "name changed after signing",
+      "order": {
+        "user": "plucky-avocet",
+        "serviceId": "plucky-avocet--halloween-party",
+        "name": "halloweenpartz",
+        "op": "set",
+        "issuedAt": 1760000000000,
+        "nonce": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
+      },
+      "signatureHex": "e9ba946c72be53662caccfcd22d62ca229b581589aa904ca92aaee763a73515841db3bf05e658317062f3471032fb241d53568044f02fa90c9275fcdb31f6e0e"
+    },
+    {
+      "why": "op changed after signing",
+      "order": {
+        "user": "plucky-avocet",
+        "serviceId": "plucky-avocet--halloween-party",
+        "name": "",
+        "op": "clear",
+        "issuedAt": 1760000000000,
+        "nonce": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
+      },
+      "signatureHex": "e9ba946c72be53662caccfcd22d62ca229b581589aa904ca92aaee763a73515841db3bf05e658317062f3471032fb241d53568044f02fa90c9275fcdb31f6e0e"
+    }
+  ],
+  "names": [
+    {
+      "typed": "halloweenparty",
+      "problem": null,
+      "key": "halloweenparty"
+    },
+    {
+      "typed": "Halloween-Party",
+      "problem": null,
+      "key": "halloweenparty"
+    },
+    {
+      "typed": "abc",
+      "problem": "too-short",
+      "key": null
+    },
+    {
+      "typed": "a-b-c-d",
+      "problem": null,
+      "key": "abcd"
+    },
+    {
+      "typed": "ab",
+      "problem": "too-short",
+      "key": null
+    },
+    {
+      "typed": "-party",
+      "problem": "characters",
+      "key": null
+    },
+    {
+      "typed": "party-",
+      "problem": "characters",
+      "key": null
+    },
+    {
+      "typed": "my--party",
+      "problem": "characters",
+      "key": null
+    },
+    {
+      "typed": "my party",
+      "problem": "characters",
+      "key": null
+    },
+    {
+      "typed": "party!",
+      "problem": "characters",
+      "key": null
+    },
+    {
+      "typed": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "problem": "too-long",
+      "key": null
+    },
+    {
+      "typed": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "problem": null,
+      "key": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "typed": "café",
+      "problem": "characters",
+      "key": null
+    },
+    {
+      "typed": "1234",
+      "problem": null,
+      "key": "1234"
+    },
+    {
+      "typed": "k3x9qa",
+      "problem": null,
+      "key": "k3x9qa"
+    }
+  ]
+}

@@ -57,3 +57,4 @@ export * from "./peerBackupNet.js";
 export * from "./peerBackupMail.js";
 export * from "./securityNotice.js";
 export * from "./nameDibs.js";
+export * from "./voiciName.js";
