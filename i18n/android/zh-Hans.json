@@ -97,7 +97,7 @@
   "is_full_new_data_is_refused": "%1$s 已满：在你释放空间或提高上限之前，新数据会被拒绝。",
   "adding_a_device_from_this_phone": "暂不支持从这部手机添加设备。请使用网页版。",
   "joining_an_account_from_this_phone": "暂不支持从这部手机加入账户。请使用网页版。",
-  "the_server_sent_a_short_piece": "服务器发来的备份分片不完整。请重试，下载会继续。",
+  "the_server_sent_a_short_piece": "服务器发来的备份数据不完整。请重试，下载会从中断处继续。",
   "the_downloaded_backup_doesnt_match_the": "下载的备份与服务器上的副本不一致。请重新下载。",
   "phone_side_backups": "手机端备份",
   "your_server_makes_an_encrypted_backup": "你的服务器每晚都会生成加密备份，这部手机会在连接 Wi-Fi 且充电时保存一份副本。服务器上的应用最多可使用你在此处预留的空间。",
