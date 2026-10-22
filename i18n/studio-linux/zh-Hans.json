@@ -71,7 +71,7 @@
   "Bring this USB to the machine you're installing on.": "把这个 U 盘带到要安装的机器上。",
   "Recipe verified — choose where this server should live.": "配方已验证：请选择此服务器的运行位置。",
   "Burn to USB": "刻录到 U 盘",
-  "Build a dedicated hardware appliance — the gold standard. Boot any spare box from the USB stick.": "构建专用硬件设备，这是最理想的方式。用 U 盘启动任意闲置的机器。",
+  "Build a dedicated hardware appliance — the gold standard. Boot any spare box from the USB stick.": "构建专用硬件主机，这是最理想的方式。用 U 盘启动任意闲置的机器。",
   "Host on this PC": "在这台电脑上托管",
   "Run the same encrypted, phone-gated appliance as a managed VM inside this app. Same recipe, same unlock — your phone still holds the keys.": "在此应用内以受管虚拟机的形式运行同样的加密、由手机把关的设备。同样的配方、同样的解锁，密钥仍由你的手机持有。",
   "‹ Choose destination": "‹ 选择目标位置",

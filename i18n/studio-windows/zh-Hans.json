@@ -188,7 +188,7 @@
   "readyToBoot": "可以启动了",
   "recipeVerifiedChooseWhereThisServer": "配方已验证：请选择此服务器的运行位置。",
   "burnToUsb": "刻录到 U 盘",
-  "buildADedicatedHardwareApplianceThe": "构建专用硬件设备，这是最理想的方式。用 U 盘启动任意闲置的机器。",
+  "buildADedicatedHardwareApplianceThe": "构建专用硬件主机，这是最理想的方式。用 U 盘启动任意闲置的机器。",
   "hostOnThisPc": "在这台电脑上托管",
   "runTheSameEncryptedPhoneGated": "在此应用内以受管虚拟机的形式运行同样的加密、由手机把关的设备。同样的配方、同样的解锁，密钥仍由你的手机持有。",
   "theVmInstallsUnattendedFromThe": "虚拟机会从与 U 盘刻录相同的镜像无人值守安装，然后以加密状态启动，等待你的手机解锁。此应用永远看不到磁盘密钥。",

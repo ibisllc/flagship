@@ -156,7 +156,7 @@
 "The server operation is continuing in the background. You can follow it from Servers on this Mac." = "服务器操作仍在后台继续。你可以在“此 Mac 上的服务器”中查看进度。";
 "Returning home in %lld…" = "%lld 秒后返回首页…";
 "Burn to USB" = "刻录到 U 盘";
-"Build a dedicated hardware appliance — the gold standard. Boot any spare box from the USB stick." = "构建专用硬件设备，这是最理想的方式。用 U 盘启动任意闲置的机器。";
+"Build a dedicated hardware appliance — the gold standard. Boot any spare box from the USB stick." = "构建专用硬件主机，这是最理想的方式。用 U 盘启动任意闲置的机器。";
 "Run the same encrypted, phone-gated appliance as a managed VM inside this app. Same recipe, same unlock — your phone still holds the keys." = "在此应用内以受管虚拟机的形式运行同样的加密、由手机把关的设备。同样的配方、同样的解锁，密钥仍由你的手机持有。";
 "Recipe verified — choose where this server should live." = "配方已验证：请选择此服务器的运行位置。";
 "This Mac doesn't have enough free memory to host a server." = "这台 Mac 的可用内存不足，无法托管服务器。";

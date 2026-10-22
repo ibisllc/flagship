@@ -61,7 +61,7 @@
         <h3>一段话讲清威胁模型</h3>
         <p>你的手机持有用户主密钥（UMK），由其安全硬件中的密钥包裹（iPhone 上是 Secure Enclave，Android 上是硬件支持的 Keystore）；应用处于解锁状态时，它保存在手机内存中。它绝不会以未包裹的形式离开手机。派生密钥各司其职：<strong>BAK</strong> 控制服务器启动，<strong>IRK</strong> 签署账户级操作（如镜像重建和吊销），<strong>SWK</strong> 被配置到服务器上，让备份无需保持手机唤醒即可自主运行。保存你备份分片的对等主机只能看到不透明的密文。<code>flagshipserver.com</code> 控制平面只是投递渠道和撮合方，它从不接触明文形式的秘密。</p>
 
-        <div class="callout"><strong>三类设备。</strong>原生 iOS 应用和 Android 应用使用 Secure Enclave / StrongBox：强力的密钥存储。可安装的网页应用使用纯软件的“IndexedDB＋口令短语”：安全性较弱，适合测试或无障碍使用。我们有意不在不同类别之间共享密钥：网页版身份和 iOS 身份是相互独立的账户，就像 Apple Pay 永远不会转到 Google Pay 一样。</div>
+        <div class="callout"><strong>三类设备。</strong>原生 iOS 应用和 Android 应用使用 Secure Enclave / StrongBox：强力的密钥存储。可安装的网页应用使用纯软件的“IndexedDB＋密码短语”：安全性较弱，适合测试或无障碍使用。我们有意不在不同类别之间共享密钥：网页版身份和 iOS 身份是相互独立的账户，就像 Apple Pay 永远不会转到 Google Pay 一样。</div>
 
         <h3>我们的承诺</h3>
         <ul class="bullets">

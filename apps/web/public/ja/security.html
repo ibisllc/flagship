@@ -91,7 +91,7 @@
                 <td>
                   <ul>
                     <li><code>flagshipserver.com</code>：Cloudflare Worker、すべての <code>/api/*</code> ルート、静的サイト、ドメイン設定／Cookie のスコープ。</li>
-                    <li><code>webapp.flagshipserver.com</code>：Web アプリの PWA。WebAuthn／IRK 署名／リース預託／復旧アップロードの各経路。</li>
+                    <li><code>webapp.flagshipserver.com</code>：Web アプリの PWA。WebAuthn／IRK 署名／リース預託／リカバリーのアップロードの各経路。</li>
                     <li><code>remote.flagshipserver.com</code>：ブラウザーリモートの画面。スマートフォンでの承認手順と、それによって発行される鍵なしセッション。</li>
                     <li><code>*.flagship.services</code>：Fly 上の SNI パススルー基盤、トンネルハブ、各 Flagship サーバーからのトンネル伝送。</li>
                     <li>Debian ベースのブートイメージ上で Flagship Studio が配布する Flagship デーモン。ACME、ローカル TLS サーバー、データ層（<code>/var/flagship/data/</code> 配下の Postgres／Forgejo／Chromium と、各アプリのファイルボリューム）を含みます。</li>
