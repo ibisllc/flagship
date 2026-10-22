@@ -263,8 +263,8 @@ fun BuildSourceChooserScreen(nav: NavController) {
                 testTag = "build-src-mcp",
             )
             SourceTile(
-                title = "Get from the marketplace",
-                body = "Install something your neighbours already built. One tap onto any of your boxes.",
+                title = stringResource(R.string.get_from_the_marketplace),
+                body = stringResource(R.string.install_something_your_neighbours_already),
                 onClick = { nav.navigate("marketplace") },
             )
         }

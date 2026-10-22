@@ -39,7 +39,7 @@ object BoxEventLabels {
         "server.bootchain.refreshed" to FSStrings.get(R.string.activity_bootchain_refreshed),
         "server.bootchain.rolled-back" to FSStrings.get(R.string.activity_bootchain_rolled_back),
         "server.sandbox.removed" to FSStrings.get(R.string.activity_sandbox_removed),
-        "access.lists.merged" to "Back to one access list",
+        "access.lists.merged" to FSStrings.get(R.string.back_to_one_access_list),
         "server.debug-access.granted" to FSStrings.get(R.string.debug_access_turned_on),
         "server.debug-access.renewed" to FSStrings.get(R.string.debug_access_renewed),
         "server.debug-access.expired" to FSStrings.get(R.string.debug_access_ended),

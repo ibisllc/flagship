@@ -13,6 +13,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.google.crypto.tink.subtle.Ed25519Sign
 
 object AppListScope {
@@ -34,14 +35,14 @@ object AppListScope {
 
     fun signHex(key: Ed25519Sign, o: Order): String = HexUtil.encode(key.sign(canonicalBytes(o)))
 
-    const val TITLE = "Separate list on each server"
-    const val NOTE = "Each server keeps its own members and invites."
-    const val PRO_LINE = "Comes with Pro."
-    const val PENDING_LINE = "Waiting for this server to confirm Pro."
-    const val READ_ONLY_ON = "Each server has its own list."
-    const val ON_TITLE = "A separate list on each server?"
-    const val ON_CONFIRM = "Each server keeps its current list. Changes you make on one server stay on it."
-    const val OFF_TITLE = "One list on every server?"
+    val TITLE get() = FSStrings.get(R.string.separate_list_on_each_server)
+    val NOTE get() = FSStrings.get(R.string.each_server_keeps_its_own_members)
+    val PRO_LINE get() = FSStrings.get(R.string.comes_with_pro)
+    val PENDING_LINE get() = FSStrings.get(R.string.waiting_for_this_server_to_confirm)
+    val READ_ONLY_ON get() = FSStrings.get(R.string.each_server_has_its_own_list)
+    val ON_TITLE get() = FSStrings.get(R.string.a_separate_list_on_each_server)
+    val ON_CONFIRM get() = FSStrings.get(R.string.each_server_keeps_its_current_list)
+    val OFF_TITLE get() = FSStrings.get(R.string.one_list_on_every_server)
 
     /** A server's name when the phone doesn't know it: its first DNS label. */
     fun firstLabel(fqdn: String): String {
@@ -50,7 +51,7 @@ object AppListScope {
     }
 
     fun offConfirm(leaderName: String): String =
-        "Every server will use $leaderName's list. People who joined on other servers since lose access."
+        FSStrings.get(R.string.every_server_will_use_s_list, leaderName)
 
     /** The plan screen's warning before Pro ends; null when there is nothing to warn about. */
     fun separateListsWarning(plan: String, separateApps: Int, leaders: List<String>, nameOf: (String) -> String): String? {
@@ -63,9 +64,9 @@ object AppListScope {
             separateApps == 1 ->
                 "1 app has a separate access list on each server. When Pro ends it will use its lead server's list."
             one != null ->
-                "$separateApps apps have a separate access list on each server. When Pro ends they'll all use ${nameOf(one)}'s list."
+                FSStrings.get(R.string.apps_have_a_separate_access_list, separateApps, nameOf(one))
             else ->
-                "$separateApps apps have a separate access list on each server. When Pro ends each will use its lead server's list."
+                FSStrings.get(R.string.apps_have_a_separate_access_list_2, separateApps)
         }
     }
 }

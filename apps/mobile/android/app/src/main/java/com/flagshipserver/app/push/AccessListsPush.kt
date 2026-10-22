@@ -5,12 +5,14 @@
 
 package com.flagshipserver.app.push
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.Endpoints
 
 object AccessListsPush {
     const val CATEGORY = "access-lists"
     const val TITLE = "Flagship"
-    const val BODY = "Pro ended, so your apps use one access list on all your servers again."
+    val BODY get() = FSStrings.get(R.string.pro_ended_so_your_apps_use)
 
     fun matches(data: Map<String, String>): Boolean =
         data["category"] == CATEGORY || data["kind"] == CATEGORY
