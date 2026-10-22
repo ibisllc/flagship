@@ -88,6 +88,7 @@ export const SLOT_FIELDS = Object.freeze([
   { slot: "keyBackupAt",             legacy: "flagship.keyBackupAt.v1" },
   { slot: "dibsBannerDismissed",     legacy: "flagship.dibs.banner.dismissed.v1" },
   { slot: "voiciWelcomeDismissed",   legacy: "flagship.voici.welcome.dismissed.v1" },
+  { slot: "proBannerDismissed",      legacy: "flagship.pro.banner.dismissed.v1" },
   { slot: "peerBackupChoice",        legacy: "flagship.peerBackup.choice.v1" },
   { slot: "pushTokenId",             legacy: "flagship.pushTokenId" },
   { slot: "sessionId",               legacy: "flagship.sessionId" },

@@ -1,0 +1,79 @@
+{
+  "about": "CA-signed plan attestation the box checks before honouring a separate access list per server (docs/service-access-gating.md, Separate lists per server (Pro)). flagship/plan-attestation/v1|<username>|<tier>|<paidUntil>|<issuedAt>|<expiresAt>. Signer: a raw Ed25519 seed standing in for the CA hot key. Only TypeScript signs (.com) and verifies (the box).",
+  "caSeedHex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+  "caPub": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+  "cases": [
+    {
+      "username": "harry",
+      "tier": "hobby",
+      "paidUntil": 1762600000000,
+      "issuedAt": 1760000000000,
+      "expiresAt": 1760093600000,
+      "canonical": "flagship/plan-attestation/v1|harry|hobby|1762600000000|1760000000000|1760093600000",
+      "attestation": {
+        "kind": "PlanAttestation",
+        "version": 1,
+        "username": "harry",
+        "tier": "hobby",
+        "paidUntil": 1762600000000,
+        "issuedAt": 1760000000000,
+        "expiresAt": 1760093600000,
+        "signedBy": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+        "signatures": [
+          {
+            "pubkey": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+            "sig": "18487ba91b5d9f56e97cc10dc038a16786595f47c4929806f3b122842971fd0a6bb0ba12d8533b2acbb9c0d753b51f8a3f39235d0ac6bfc03e32fb992f6b8105"
+          }
+        ]
+      }
+    },
+    {
+      "username": "harry",
+      "tier": "free",
+      "paidUntil": 0,
+      "issuedAt": 1760000000000,
+      "expiresAt": 1760093600000,
+      "canonical": "flagship/plan-attestation/v1|harry|free|0|1760000000000|1760093600000",
+      "attestation": {
+        "kind": "PlanAttestation",
+        "version": 1,
+        "username": "harry",
+        "tier": "free",
+        "paidUntil": 0,
+        "issuedAt": 1760000000000,
+        "expiresAt": 1760093600000,
+        "signedBy": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+        "signatures": [
+          {
+            "pubkey": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+            "sig": "bce038e0879bddfb11a509cbcaadb3d0cfee2b4d44798dc30cf413c6b3150ffba8b189a70f7eef2cbae65309719eb1bf9987d20da2289336c95538872d489b08"
+          }
+        ]
+      }
+    },
+    {
+      "username": "playstore-test-0725",
+      "tier": "maker",
+      "paidUntil": 1790000000000,
+      "issuedAt": 1760000000000,
+      "expiresAt": 1760093600000,
+      "canonical": "flagship/plan-attestation/v1|playstore-test-0725|maker|1790000000000|1760000000000|1760093600000",
+      "attestation": {
+        "kind": "PlanAttestation",
+        "version": 1,
+        "username": "playstore-test-0725",
+        "tier": "maker",
+        "paidUntil": 1790000000000,
+        "issuedAt": 1760000000000,
+        "expiresAt": 1760093600000,
+        "signedBy": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+        "signatures": [
+          {
+            "pubkey": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+            "sig": "c5614e191800b1fa038f9a145482bcd3cf4b6069107b7ce203b002137a70bc8f35e8fe469e6b4920b7113a0c6501a65ca29f2f6b6fcc2a4941a72693cb10420d"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -261,6 +261,7 @@ const APNS_ALERTS: Record<string, { title: string; body: string }> = {
   "page-drafts": { title: "Flagship", body: "A device on your account has changes waiting to be published on your page." },
   // An operator's notice or a suspension (docs/abuse-handling.md): names no app, page or reason.
   "abuse-notice": { title: "Flagship", body: "There is a notice about your Flagship account. Open Flagship to read it." },
+  "access-lists": { title: "Flagship", body: "Pro ended, so your apps use one access list on all your servers again." },
 };
 const APNS_ALERT_DEFAULT = { title: "Flagship", body: "Open Flagship to see what's new." };
 

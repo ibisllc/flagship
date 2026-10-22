@@ -49,6 +49,8 @@ export const BOX_EVENT_LABELS = Object.freeze({
   // The relay mesh (relay-mesh.md §9.3, §9.4): the detail is the box's own sentence (which relays, and why).
   "server.relay.moved": { label: tr("Moved to another Flagship relay"), icon: "📡" },
   "server.relay.move-refused": { label: tr("Stayed on its current relay"), icon: "⚠️" },
+  // feat/marketplace: Pro ended and apps with separate lists went back to one.
+  "access.lists.merged": { label: tr("Back to one access list"), icon: "👥" },
 });
 
 function humanize(s) {

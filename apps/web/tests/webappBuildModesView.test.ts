@@ -20,9 +20,8 @@ describe("webapp build-modes views", () => {
     expect(body).toContain("enterBuildGit");
     expect(body).toContain("enterBuildMcp");
     expect(body).toContain("enterBuildJournal");
-    // The marketplace tile is gated to feat/marketplace — main ships clean.
-    expect(body).not.toMatch(/marketplace/i);
-    expect(body).not.toContain("build-src-market");
+    // feat/marketplace: the tile opens the live marketplace catalog.
+    expect(body).toContain("enterMarketplace");
   });
 
   it("scratch routes through the AI-key step before opening the chat", async () => {
