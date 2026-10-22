@@ -1327,7 +1327,7 @@
     <string name="google_ai">Google AI</string>
     <string name="ollama_local">Ollama（ローカル）</string>
     <string name="ai_providers">AI プロバイダ</string>
-    <string name="plug_in_your_own_keys_flagship">ご自身のキーを接続してください。Flagship が LLM の通信を中継することはなく、呼び出しはサーバーから選んだプロバイダへ直接送られます。</string>
+    <string name="plug_in_your_own_keys_flagship">ご自身のキーを接続してください。サーバーは選んだプロバイダをエンドツーエンドの暗号化で呼び出します。既定では呼び出しは Flagship のリレーを経由するため、プロバイダに見えるのはあなたのアドレスではなく Flagship のアドレスです。</string>
     <string name="viewfinder">ファインダー</string>
     <string name="camera_permission_required_to_scan">スキャンにはカメラの許可が必要です。</string>
     <string name="cloud_recovery">クラウドリカバリー</string>
