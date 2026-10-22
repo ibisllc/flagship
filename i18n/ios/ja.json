@@ -2381,5 +2381,10 @@
   "A server shared with you is asking you to unlock it.": "あなたと共有されているサーバーが、ロック解除を求めています。",
   "Couldn't sign the change: %@": "変更に署名できませんでした：%@",
   "Couldn't sign the key: %@": "キーに署名できませんでした：%@",
-  "Couldn't sign the copy: %@": "コピーに署名できませんでした：%@"
+  "Couldn't sign the copy: %@": "コピーに署名できませんでした：%@",
+  "Sign out of Flagship": "Flagshipからサインアウト",
+  "Remove this account from the device": "このアカウントをデバイスから削除",
+  "Sign out without recovery?": "リカバリーなしでサインアウトしますか？",
+  "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good.": "クラウドリカバリーが設定されていません。バックアップなしでこのデバイスのキーを消去すると、再びサインインする手段がなくなり、アカウントへのアクセスは完全に失われます。",
+  "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in. Back up your account key first.": "クラウドリカバリーが設定されていません。バックアップなしでこのデバイスのキーを消去すると、再びサインインする手段がなくなります。先にアカウントキーをバックアップしてください。"
 }
