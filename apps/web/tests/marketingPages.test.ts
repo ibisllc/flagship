@@ -387,10 +387,11 @@ describe("public claims match what the product does (GA review, B7)", () => {
     }
     expect(page("faq.html")).toContain("metadata");
   });
-  it("the FAQ sells nothing and promises nothing we have not built", () => {
+  it("the FAQ promises nothing we have not built", () => {
     const t = page("faq.html");
-    expect(t).not.toMatch(/Stripe|refund|prorate|peer-backup pool|pre-built box|self-hosting playbook|escrow/i);
-    expect(t).not.toMatch(/id="money"|Money &amp; subscriptions/);
+    // feat/marketplace carries the money and hardware answers on purpose; main's FAQ sells nothing
+    // and its version of this test also bans Stripe, refund, prorate, pre-built box and the money section.
+    expect(t).not.toMatch(/peer-backup pool|self-hosting playbook|escrow/i);
   });
   it("privacy names the metadata we see, the relay's AI path, and no longer says BYOK goes directly", () => {
     const t = page("privacy.html");
