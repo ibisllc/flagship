@@ -2606,5 +2606,7 @@
   "changed_an_apps_link": "アプリのリンクを変更しました",
   "went_back_to_an_apps_default_link": "アプリのリンクをデフォルトに戻しました",
   "released_an_apps_link": "アプリのリンクを解放しました",
-  "an_apps_link_will_be_released_soon": "アプリのリンクはまもなく解放されます"
+  "an_apps_link_will_be_released_soon": "アプリのリンクはまもなく解放されます",
+  "sign_out_of_flagship": "Flagshipからサインアウト",
+  "confirm_its_you": "ご本人であることを確認してください"
 }

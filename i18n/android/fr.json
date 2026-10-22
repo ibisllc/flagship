@@ -2606,5 +2606,7 @@
   "changed_an_apps_link": "A modifié le lien d'une application",
   "went_back_to_an_apps_default_link": "Est revenu au lien par défaut d'une application",
   "released_an_apps_link": "Le lien d'une application a été libéré",
-  "an_apps_link_will_be_released_soon": "Le lien d'une application sera bientôt libéré"
+  "an_apps_link_will_be_released_soon": "Le lien d'une application sera bientôt libéré",
+  "sign_out_of_flagship": "Se déconnecter de Flagship",
+  "confirm_its_you": "Confirmez que c’est bien vous"
 }
