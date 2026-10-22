@@ -23,6 +23,15 @@ object GymSeams {
     @Volatile
     var deviceRank: String? = null
 
+    /** The account's plan as the mock box sees it ("pro" | "free"; null =
+     *  "free"), so the gym reaches the Pro-only separate access lists. */
+    @Volatile
+    var listsPlan: String? = null
+
+    /** The mock box gives Plants a separate access list on each server. */
+    @Volatile
+    var separateLists: Boolean = false
+
     /** Pass the biometric / device-credential prompts (twin of iOS
      *  `GymSeams.bypassBiometricGates`). An emulator has no screen lock, so
      *  every signed order in the no-backend gym would stop at a prompt that

@@ -45,6 +45,10 @@ export const PUSH_RELAY_CATEGORIES = [
   // sends it to the admin devices itself (inviteNotice.ts); listed so every
   // client handles it as a known, content-free category.
   "invite-created",
+  // Pro ended, so apps that had a separate access list on each server went back
+  // to one list (feat/marketplace). Sent by the app's lead server; says nothing
+  // about which apps or people.
+  "access-lists",
 ] as const;
 
 export type PushRelayCategory = (typeof PUSH_RELAY_CATEGORIES)[number];

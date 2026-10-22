@@ -17,7 +17,7 @@
  *   5. Add your first server  (jumps to create-server.js — optional,
  *                              repeatable; the account is already open)
  *   6. Peer-backup opt-in     (#95 — yes/no/maybe-later, persisted)
- *   7. Finish / explore       (optional — add services any time)
+ *   7. Finish / explore       (optional — add services any time; a link to the marketplace)
  *
  * Phase 2 (docs/login-and-account-redesign.md) decouples account
  * creation from server provisioning: step 2 OPENS the account (standalone
@@ -364,6 +364,7 @@ async function renderStepBody(state, step) {
         <p class="note">${tr("You're all set. Explore your server, or finish here — you can add services any time.")}</p>
         <div class="btn-row-sm">
           <button id="wizard-skip-demo" class="pill primary">${tr("Finish")}</button>
+          <button id="wizard-go-demo" class="pill">Browse marketplace</button>
         </div>
       `;
     default:
@@ -527,6 +528,13 @@ function wireStepHandlers(state, step) {
       });
       break;
     case "demo-app":
+      document.getElementById("wizard-go-demo")?.addEventListener("click", async () => {
+        markCompleteAndAdvance(state, "demo-app");
+        try {
+          const { enterMarketplace } = await import("./marketplace.js");
+          if (typeof enterMarketplace === "function") await enterMarketplace();
+        } catch { /* not present */ }
+      });
       document.getElementById("wizard-skip-demo")?.addEventListener("click", () => {
         markCompleteAndAdvance(state, "demo-app");
       });

@@ -358,6 +358,7 @@
 //       every fourth round once it has failed too (lib/liveSync.js).
 //  v154: a server's Home row no longer lists "leads <app>"; only the leader is marked.
 //  v155: finishing the first-run wizard enters Home (it showed the pre-sign-in panel until a reload).
+//  v172: feat/marketplace only: feat/UX's shell (v171) plus the marketplace, tier status, allowance, install, developer views and the Pro "Separate list on each server" switch (lib/listScope.js); a version above its parent's, bump past the parent's on rebase.
 //  v171: app chat requests from other owners' apps wait under Activity and ask in a sheet (Allow,
 //       Always allow, Deny, each owner-signed; Ask me each time ends an Always allow: lib/chatAlerts.js),
 //       and an AI adapt that spends a key or credits shows its estimate first and runs only on a signed
@@ -415,6 +416,7 @@ const OPTIONAL_SHELL = [
   "/qrScanner.js",
   "/lib/util.js",
   "/lib/podPair.js",
+  "/lib/installService.js",
   "/lib/leases.js",
   "/lib/recovery.js",
   "/lib/keyfile.js",
@@ -472,6 +474,7 @@ const OPTIONAL_SHELL = [
   "/lib/appPlacement.js",
   "/lib/serverMonitoring.js",
   "/lib/memberRoles.js",
+  "/lib/listScope.js",
   "/lib/serverShare.js",
   "/lib/serverShares.js",
   "/lib/serviceEnvChange.js",
@@ -573,6 +576,9 @@ const OPTIONAL_SHELL = [
   "/lib/uikit.js",
   "/lib/usersCheck.js",
   "/lib/wipeRestartCeremony.js",
+  "/lib/allowance.js",
+  "/lib/marketplaceLlmKey.js",
+  "/lib/proBanner.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
@@ -591,6 +597,9 @@ const OPTIONAL_SHELL = [
   "/views/app-access.js",
   "/views/app-db.js",
   "/views/paired-sessions.js",
+  "/views/tier-status.js",
+  "/views/marketplace.js",
+  "/views/developer.js",
   "/views/vibe-code.js",
   "/views/edit-service.js",
   "/views/service-env.js",
@@ -924,6 +933,23 @@ self.addEventListener("push", (event) => {
         requireInteraction: false,
         icon: "/icon.svg",
         data: { kind: "invite-created", deepLink: "/?view=account-audit" },
+      }),
+    );
+    return;
+  }
+
+  // Pro ended, so apps with a separate access list on each server went back to
+  // one list (feat/marketplace). The push names no app or person; the
+  // activity view shows the box's row.
+  if (data && (data.category === "access-lists" || data.kind === "access-lists")) {
+    event.waitUntil(
+      self.registration.showNotification("Flagship", {
+        body: "Pro ended, so your apps use one access list on all your servers again.",
+        tag: "flagship-access-lists",
+        renotify: true,
+        requireInteraction: false,
+        icon: "/icon.svg",
+        data: { kind: "access-lists", deepLink: "/?view=account-audit" },
       }),
     );
     return;
