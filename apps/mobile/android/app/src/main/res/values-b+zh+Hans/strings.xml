@@ -1827,6 +1827,7 @@
     <string name="only_you_and_this_server_see">只有你和此服务器能看到这个名字。</string>
     <string name="use_up_to_64_characters_without">最多 64 个字符，不能包含 |。</string>
     <string name="what_can_do">%1$s 可以做什么？</string>
+    <string name="share_person_fallback">此人</string>
     <string name="both_are_off_unless_you_turn">除非你开启，否则两项都是关闭的。你以后可以更改。</string>
     <string name="creating_link">正在创建链接…</string>
     <string name="create_link">创建链接</string>
@@ -1865,7 +1866,8 @@
     <string name="leave_3">退出</string>
     <string name="stay">留下</string>
     <string name="is_starting">%1$s 正在启动</string>
-    <string name="its_waiting_for_its_disk_to">它正在等待磁盘被解锁。只有在你预期它会启动时才批准%1$s。</string>
+    <string name="its_waiting_for_its_disk_to">它正在等待磁盘被解锁。只有在你预期它会启动时才批准。</string>
+    <string name="its_waiting_for_its_disk_to_asked">它正在等待磁盘被解锁（请求于 %1$s）。只有在你预期它会启动时才批准。</string>
     <string name="unlocking">正在解锁…</string>
     <string name="unlock_it">解锁</string>
     <string name="no_readings_yet">暂无读数。</string>
