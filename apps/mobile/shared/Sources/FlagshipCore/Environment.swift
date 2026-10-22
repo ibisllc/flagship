@@ -241,6 +241,24 @@ public extension EnvironmentValues {
     }
 }
 
+/// Custom voi.ci name client (`.com`): the availability check, the "Free one
+/// up" list and the signed set/clear (docs/named-links.md). Defaults to the
+/// inert Mock for previews/tests (debug only).
+private struct VoiciNameClientKey: EnvironmentKey {
+#if DEBUG
+    static let defaultValue: any VoiciNameClient = MockVoiciNameClient()
+#else
+    static let defaultValue: any VoiciNameClient = LiveVoiciNameClient()
+#endif
+}
+
+public extension EnvironmentValues {
+    var voiciNameClient: any VoiciNameClient {
+        get { self[VoiciNameClientKey.self] }
+        set { self[VoiciNameClientKey.self] = newValue }
+    }
+}
+
 /// Server-migration lane client (`.com`): deposits the admin-signed initiate /
 /// confirm-ready / freeze / abort and polls the public phase state
 /// (docs/server-migration.md). Hits `.com` (the migration orchestration lane),
