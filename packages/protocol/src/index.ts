@@ -72,3 +72,4 @@ export * from "./manifestCapabilities.js";
 export * from "./adapterAttestation.js";
 export * from "./appRelease.js";
 export * from "./nameDibs.js";
+export * from "./voiciName.js";
