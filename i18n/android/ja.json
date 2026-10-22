@@ -2669,5 +2669,17 @@
   "give_a_separate_list_on_each": "%1$s にサーバーごとの別リストを与える",
   "use_one_list_for_on_every": "%1$s をすべてのサーバーで 1 つのリストにする",
   "this_phone_isnt_set_up_on": "このスマートフォンは %1$s で設定されていません。",
-  "couldnt_change_the_list_try_again": "リストを変更できませんでした。しばらくしてからもう一度お試しください。"
+  "couldnt_change_the_list_try_again": "リストを変更できませんでした。しばらくしてからもう一度お試しください。",
+  "custom_domain": "カスタムドメイン",
+  "set_custom_domain": "カスタムドメインを設定",
+  "add": "追加",
+  "custom_domains_come_with_pro_one": "カスタムドメインは Pro（1 つ）と Pro Max（無制限）に含まれます。追加するには、まずそのドメインから %1$s へ CNAME レコードを向けてください — これでドメインを管理していることが証明されます。",
+  "subdomains_only": "サブドメインのみ",
+  "this_only_supports_subdomains_an_apex": "サブドメインのみ対応しています。%1$s のようなルートドメインには CNAME を設定できません。%2$s を使いますか？",
+  "use": "%1$s を使う",
+  "replace_custom_domain": "カスタムドメインを置き換えますか？",
+  "this_will_permanently_replace_the_current": "現在のカスタムドメイン（%1$s）が完全に置き換えられます。新しいドメインの確認に失敗しても、元には戻せません。",
+  "couldnt_request_custom_domain": "カスタムドメインを申請できませんでした",
+  "attach_custom_domain": "カスタムドメインを関連付ける",
+  "couldnt_request_custom_domain_2": "カスタムドメインを申請できませんでした。"
 }

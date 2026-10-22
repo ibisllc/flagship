@@ -2689,5 +2689,17 @@
   "Developer": "Développeur",
   "Developer console": "Console développeur",
   "Get from the marketplace": "Obtenir depuis la place de marché",
-  "Install something a neighbour already built.": "Installez quelque chose qu'un voisin a déjà créé."
+  "Install something a neighbour already built.": "Installez quelque chose qu'un voisin a déjà créé.",
+  "CUSTOM DOMAIN": "DOMAINE PERSONNALISÉ",
+  "Copy custom domain": "Copier le domaine personnalisé",
+  "Set custom domain": "Définir un domaine personnalisé",
+  "SET CUSTOM DOMAIN": "DÉFINIR UN DOMAINE PERSONNALISÉ",
+  "Add": "Ajouter",
+  "Custom domains come with <a href=\"/pro\">Pro</a> (one) and Pro Max (unlimited). To add one, first point a CNAME record from it to": "Les domaines personnalisés sont inclus avec <a href=\"/pro\">Pro</a> (un) et Pro Max (illimités). Pour en ajouter un, faites d'abord pointer un enregistrement CNAME depuis celui-ci vers",
+  "— that proves you control it.": "— cela prouve que vous le contrôlez.",
+  "Subdomains only": "Sous-domaines uniquement",
+  "This only supports subdomains — an apex like {0} can't take a CNAME. Use {1}?": "Seuls les sous-domaines sont pris en charge : un domaine racine comme {0} ne peut pas avoir de CNAME. Utiliser {1} ?",
+  "Replace custom domain?": "Remplacer le domaine personnalisé ?",
+  "This will permanently replace the current custom domain ({0}). It can't be undone, even if the new one fails to verify.": "Cela remplacera définitivement le domaine personnalisé actuel ({0}). Impossible d'annuler, même si le nouveau n'est pas vérifié.",
+  "Couldn't request custom domain: {0}": "Impossible de demander le domaine personnalisé : {0}"
 }

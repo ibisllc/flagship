@@ -2689,5 +2689,17 @@
   "Developer": "Desenvolvedor",
   "Developer console": "Console do desenvolvedor",
   "Get from the marketplace": "Obter do marketplace",
-  "Install something a neighbour already built.": "Instale algo que um vizinho já criou."
+  "Install something a neighbour already built.": "Instale algo que um vizinho já criou.",
+  "CUSTOM DOMAIN": "DOMÍNIO PERSONALIZADO",
+  "Copy custom domain": "Copiar domínio personalizado",
+  "Set custom domain": "Definir domínio personalizado",
+  "SET CUSTOM DOMAIN": "DEFINIR DOMÍNIO PERSONALIZADO",
+  "Add": "Adicionar",
+  "Custom domains come with <a href=\"/pro\">Pro</a> (one) and Pro Max (unlimited). To add one, first point a CNAME record from it to": "Domínios personalizados vêm com o <a href=\"/pro\">Pro</a> (um) e o Pro Max (ilimitados). Para adicionar um, primeiro aponte um registro CNAME dele para",
+  "— that proves you control it.": "— isso prova que você o controla.",
+  "Subdomains only": "Somente subdomínios",
+  "This only supports subdomains — an apex like {0} can't take a CNAME. Use {1}?": "Só há suporte para subdomínios: um domínio raiz como {0} não pode ter CNAME. Usar {1}?",
+  "Replace custom domain?": "Substituir o domínio personalizado?",
+  "This will permanently replace the current custom domain ({0}). It can't be undone, even if the new one fails to verify.": "Isso substituirá permanentemente o domínio personalizado atual ({0}). Não pode ser desfeito, mesmo que o novo não seja verificado.",
+  "Couldn't request custom domain: {0}": "Não foi possível solicitar o domínio personalizado: {0}"
 }

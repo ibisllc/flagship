@@ -2689,5 +2689,17 @@
   "Developer": "开发者",
   "Developer console": "开发者控制台",
   "Get from the marketplace": "从市场获取",
-  "Install something a neighbour already built.": "安装邻居已经做好的东西。"
+  "Install something a neighbour already built.": "安装邻居已经做好的东西。",
+  "CUSTOM DOMAIN": "自定义域名",
+  "Copy custom domain": "复制自定义域名",
+  "Set custom domain": "设置自定义域名",
+  "SET CUSTOM DOMAIN": "设置自定义域名",
+  "Add": "添加",
+  "Custom domains come with <a href=\"/pro\">Pro</a> (one) and Pro Max (unlimited). To add one, first point a CNAME record from it to": "自定义域名包含在 <a href=\"/pro\">Pro</a>（1 个）和 Pro Max（不限）中。要添加一个，请先把它的 CNAME 记录指向",
+  "— that proves you control it.": "——这能证明你控制该域名。",
+  "Subdomains only": "仅支持子域名",
+  "This only supports subdomains — an apex like {0} can't take a CNAME. Use {1}?": "仅支持子域名——像 {0} 这样的根域名不能设置 CNAME。改用 {1}？",
+  "Replace custom domain?": "要替换自定义域名吗？",
+  "This will permanently replace the current custom domain ({0}). It can't be undone, even if the new one fails to verify.": "这会永久替换当前的自定义域名（{0}）。即使新域名验证失败，也无法撤销。",
+  "Couldn't request custom domain: {0}": "无法申请自定义域名：{0}"
 }

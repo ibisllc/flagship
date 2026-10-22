@@ -2689,5 +2689,17 @@
   "Developer": "開発者",
   "Developer console": "開発者コンソール",
   "Get from the marketplace": "マーケットプレイスから入手",
-  "Install something a neighbour already built.": "近所の人がすでに作ったものをインストールします。"
+  "Install something a neighbour already built.": "近所の人がすでに作ったものをインストールします。",
+  "CUSTOM DOMAIN": "カスタムドメイン",
+  "Copy custom domain": "カスタムドメインをコピー",
+  "Set custom domain": "カスタムドメインを設定",
+  "SET CUSTOM DOMAIN": "カスタムドメインを設定",
+  "Add": "追加",
+  "Custom domains come with <a href=\"/pro\">Pro</a> (one) and Pro Max (unlimited). To add one, first point a CNAME record from it to": "カスタムドメインは <a href=\"/pro\">Pro</a>（1 つ）と Pro Max（無制限）に含まれます。追加するには、まずそのドメインから次の宛先へ CNAME レコードを向けてください：",
+  "— that proves you control it.": "— これでドメインを管理していることが証明されます。",
+  "Subdomains only": "サブドメインのみ",
+  "This only supports subdomains — an apex like {0} can't take a CNAME. Use {1}?": "サブドメインのみ対応しています。{0} のようなルートドメインには CNAME を設定できません。{1} を使いますか？",
+  "Replace custom domain?": "カスタムドメインを置き換えますか？",
+  "This will permanently replace the current custom domain ({0}). It can't be undone, even if the new one fails to verify.": "現在のカスタムドメイン（{0}）が完全に置き換えられます。新しいドメインの確認に失敗しても、元には戻せません。",
+  "Couldn't request custom domain: {0}": "カスタムドメインを申請できませんでした：{0}"
 }

@@ -2669,5 +2669,17 @@
   "give_a_separate_list_on_each": "%1$s eine eigene Liste auf jedem Server geben",
   "use_one_list_for_on_every": "Eine Liste für %1$s auf allen Servern verwenden",
   "this_phone_isnt_set_up_on": "Dieses Telefon ist auf %1$s nicht eingerichtet.",
-  "couldnt_change_the_list_try_again": "Die Liste konnte nicht geändert werden. Versuche es gleich noch einmal."
+  "couldnt_change_the_list_try_again": "Die Liste konnte nicht geändert werden. Versuche es gleich noch einmal.",
+  "custom_domain": "EIGENE DOMAIN",
+  "set_custom_domain": "EIGENE DOMAIN FESTLEGEN",
+  "add": "Hinzufügen",
+  "custom_domains_come_with_pro_one": "Eigene Domains gehören zu Pro (eine) und Pro Max (unbegrenzt). Um eine hinzuzufügen, richte zuerst einen CNAME-Eintrag von ihr auf %1$s – das beweist, dass du sie kontrollierst.",
+  "subdomains_only": "Nur Subdomains",
+  "this_only_supports_subdomains_an_apex": "Es werden nur Subdomains unterstützt – eine Apex-Domain wie %1$s kann keinen CNAME haben. %2$s verwenden?",
+  "use": "%1$s verwenden",
+  "replace_custom_domain": "Eigene Domain ersetzen?",
+  "this_will_permanently_replace_the_current": "Dadurch wird die aktuelle eigene Domain (%1$s) dauerhaft ersetzt. Das lässt sich nicht rückgängig machen, auch wenn die neue nicht verifiziert wird.",
+  "couldnt_request_custom_domain": "Eigene Domain konnte nicht angefordert werden",
+  "attach_custom_domain": "Eigene Domain verbinden",
+  "couldnt_request_custom_domain_2": "Eigene Domain konnte nicht angefordert werden."
 }

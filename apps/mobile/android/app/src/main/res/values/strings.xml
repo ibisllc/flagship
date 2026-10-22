@@ -2676,4 +2676,16 @@
     <string name="use_one_list_for_on_every">Use one list for %1$s on every server</string>
     <string name="this_phone_isnt_set_up_on">This phone isn\'t set up on %1$s.</string>
     <string name="couldnt_change_the_list_try_again">Couldn\'t change the list. Try again in a moment.</string>
+    <string name="custom_domain">CUSTOM DOMAIN</string>
+    <string name="set_custom_domain">SET CUSTOM DOMAIN</string>
+    <string name="add">Add</string>
+    <string name="custom_domains_come_with_pro_one">Custom domains come with Pro (one) and Pro Max (unlimited). To add one, first point a CNAME record from it to %1$s — that proves you control it.</string>
+    <string name="subdomains_only">Subdomains only</string>
+    <string name="this_only_supports_subdomains_an_apex">This only supports subdomains — an apex like %1$s can\'t take a CNAME. Use %2$s?</string>
+    <string name="use">Use %1$s</string>
+    <string name="replace_custom_domain">Replace custom domain?</string>
+    <string name="this_will_permanently_replace_the_current">This will permanently replace the current custom domain (%1$s). It can\'t be undone, even if the new one fails to verify.</string>
+    <string name="couldnt_request_custom_domain">Couldn\'t request custom domain</string>
+    <string name="attach_custom_domain">Attach custom domain</string>
+    <string name="couldnt_request_custom_domain_2">Couldn\'t request custom domain.</string>
 </resources>

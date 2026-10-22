@@ -2672,4 +2672,16 @@
     <string name="use_one_list_for_on_every">Usar uma única lista para %1$s em todos os servidores</string>
     <string name="this_phone_isnt_set_up_on">Este celular não está configurado em %1$s.</string>
     <string name="couldnt_change_the_list_try_again">Não foi possível mudar a lista. Tente novamente em instantes.</string>
+    <string name="custom_domain">DOMÍNIO PERSONALIZADO</string>
+    <string name="set_custom_domain">DEFINIR DOMÍNIO PERSONALIZADO</string>
+    <string name="add">Adicionar</string>
+    <string name="custom_domains_come_with_pro_one">Domínios personalizados vêm com o Pro (um) e o Pro Max (ilimitados). Para adicionar um, primeiro aponte um registro CNAME dele para %1$s — isso prova que você o controla.</string>
+    <string name="subdomains_only">Somente subdomínios</string>
+    <string name="this_only_supports_subdomains_an_apex">Só há suporte para subdomínios: um domínio raiz como %1$s não pode ter CNAME. Usar %2$s?</string>
+    <string name="use">Usar %1$s</string>
+    <string name="replace_custom_domain">Substituir o domínio personalizado?</string>
+    <string name="this_will_permanently_replace_the_current">Isso substituirá permanentemente o domínio personalizado atual (%1$s). Não pode ser desfeito, mesmo que o novo não seja verificado.</string>
+    <string name="couldnt_request_custom_domain">Não foi possível solicitar o domínio personalizado</string>
+    <string name="attach_custom_domain">Associar domínio personalizado</string>
+    <string name="couldnt_request_custom_domain_2">Não foi possível solicitar o domínio personalizado.</string>
 </resources>

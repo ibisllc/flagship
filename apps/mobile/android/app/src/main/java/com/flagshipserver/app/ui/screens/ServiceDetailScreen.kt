@@ -923,7 +923,7 @@ private fun WebDomainsSection(
                 val cd = links?.customDomain
                 if (!cd.isNullOrEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-                        UrlGroupLabel("CUSTOM DOMAIN")
+                        UrlGroupLabel(stringResource(R.string.custom_domain))
                         UrlRow(url = "https://$cd", prominent = true)
                     }
                     FSCardDivider()
@@ -980,7 +980,7 @@ private fun SetCustomDomainSection(
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                UrlGroupLabel("SET CUSTOM DOMAIN")
+                UrlGroupLabel(stringResource(R.string.set_custom_domain))
                 Spacer(Modifier.weight(1f))
                 if (cooling) {
                     Text(
@@ -1000,7 +1000,7 @@ private fun SetCustomDomainSection(
                 )
                 Spacer(Modifier.padding(start = FS.space.s2))
                 FSGhostButton(
-                    label = "Add",
+                    label = stringResource(R.string.add),
                     enabled = !cooling,
                     onClick = {
                         val v = draft
@@ -1010,8 +1010,7 @@ private fun SetCustomDomainSection(
                 )
             }
             Text(
-                text = "Custom domains come with Pro (one) and Pro Max (unlimited). To add one, first " +
-                    "point a CNAME record from it to $rootDomain — that proves you control it.",
+                text = fsString(R.string.custom_domains_come_with_pro_one, rootDomain),
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 11.sp),
             )
@@ -1058,7 +1057,7 @@ private fun CustomDomainPromptDialog(
         },
         dismissButton = {
             if (prompt.confirmLabel != null) {
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
             }
         },
     )

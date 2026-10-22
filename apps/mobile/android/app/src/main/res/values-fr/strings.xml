@@ -2672,4 +2672,16 @@
     <string name="use_one_list_for_on_every">Utiliser une seule liste pour %1$s sur tous les serveurs</string>
     <string name="this_phone_isnt_set_up_on">Ce téléphone n\'est pas configuré sur %1$s.</string>
     <string name="couldnt_change_the_list_try_again">Impossible de modifier la liste. Réessayez dans un instant.</string>
+    <string name="custom_domain">DOMAINE PERSONNALISÉ</string>
+    <string name="set_custom_domain">DÉFINIR UN DOMAINE PERSONNALISÉ</string>
+    <string name="add">Ajouter</string>
+    <string name="custom_domains_come_with_pro_one">Les domaines personnalisés sont inclus avec Pro (un) et Pro Max (illimités). Pour en ajouter un, faites d\'abord pointer un enregistrement CNAME depuis celui-ci vers %1$s — cela prouve que vous le contrôlez.</string>
+    <string name="subdomains_only">Sous-domaines uniquement</string>
+    <string name="this_only_supports_subdomains_an_apex">Seuls les sous-domaines sont pris en charge : un domaine racine comme %1$s ne peut pas avoir de CNAME. Utiliser %2$s ?</string>
+    <string name="use">Utiliser %1$s</string>
+    <string name="replace_custom_domain">Remplacer le domaine personnalisé ?</string>
+    <string name="this_will_permanently_replace_the_current">Cela remplacera définitivement le domaine personnalisé actuel (%1$s). Impossible d\'annuler, même si le nouveau n\'est pas vérifié.</string>
+    <string name="couldnt_request_custom_domain">Impossible de demander le domaine personnalisé</string>
+    <string name="attach_custom_domain">Associer un domaine personnalisé</string>
+    <string name="couldnt_request_custom_domain_2">Impossible de demander le domaine personnalisé.</string>
 </resources>

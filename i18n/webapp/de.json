@@ -2689,5 +2689,17 @@
   "Developer": "Entwickler",
   "Developer console": "Entwicklerkonsole",
   "Get from the marketplace": "Aus dem Marktplatz holen",
-  "Install something a neighbour already built.": "Installiere etwas, das ein Nachbar schon gebaut hat."
+  "Install something a neighbour already built.": "Installiere etwas, das ein Nachbar schon gebaut hat.",
+  "CUSTOM DOMAIN": "EIGENE DOMAIN",
+  "Copy custom domain": "Eigene Domain kopieren",
+  "Set custom domain": "Eigene Domain festlegen",
+  "SET CUSTOM DOMAIN": "EIGENE DOMAIN FESTLEGEN",
+  "Add": "Hinzufügen",
+  "Custom domains come with <a href=\"/pro\">Pro</a> (one) and Pro Max (unlimited). To add one, first point a CNAME record from it to": "Eigene Domains gehören zu <a href=\"/pro\">Pro</a> (eine) und Pro Max (unbegrenzt). Um eine hinzuzufügen, richte zuerst einen CNAME-Eintrag von ihr auf",
+  "— that proves you control it.": "— das beweist, dass du sie kontrollierst.",
+  "Subdomains only": "Nur Subdomains",
+  "This only supports subdomains — an apex like {0} can't take a CNAME. Use {1}?": "Es werden nur Subdomains unterstützt – eine Apex-Domain wie {0} kann keinen CNAME haben. {1} verwenden?",
+  "Replace custom domain?": "Eigene Domain ersetzen?",
+  "This will permanently replace the current custom domain ({0}). It can't be undone, even if the new one fails to verify.": "Dadurch wird die aktuelle eigene Domain ({0}) dauerhaft ersetzt. Das lässt sich nicht rückgängig machen, auch wenn die neue nicht verifiziert wird.",
+  "Couldn't request custom domain: {0}": "Eigene Domain konnte nicht angefordert werden: {0}"
 }

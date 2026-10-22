@@ -11057,5 +11057,53 @@
   "Install something a neighbour already built.": {
     "en": "Install something a neighbour already built.",
     "ctx": "webapp/index.html"
+  },
+  "CUSTOM DOMAIN": {
+    "en": "CUSTOM DOMAIN",
+    "ctx": "webapp/views/service-detail.js:1115"
+  },
+  "Copy custom domain": {
+    "en": "Copy custom domain",
+    "ctx": "webapp/views/service-detail.js:1120"
+  },
+  "Set custom domain": {
+    "en": "Set custom domain",
+    "ctx": "webapp/views/service-detail.js:1239"
+  },
+  "SET CUSTOM DOMAIN": {
+    "en": "SET CUSTOM DOMAIN",
+    "ctx": "webapp/views/service-detail.js:1242"
+  },
+  "Add": {
+    "en": "Add",
+    "ctx": "webapp/views/service-detail.js:1247"
+  },
+  "Custom domains come with <a href=\"/pro\">Pro</a> (one) and Pro Max (unlimited). To add one, first point a CNAME record from it to": {
+    "en": "Custom domains come with <a href=\"/pro\">Pro</a> (one) and Pro Max (unlimited). To add one, first point a CNAME record from it to",
+    "ctx": "webapp/views/service-detail.js:1250"
+  },
+  "— that proves you control it.": {
+    "en": "— that proves you control it.",
+    "ctx": "webapp/views/service-detail.js:1251"
+  },
+  "Subdomains only": {
+    "en": "Subdomains only",
+    "ctx": "webapp/views/service-detail.js:1321"
+  },
+  "This only supports subdomains — an apex like {0} can't take a CNAME. Use {1}?": {
+    "en": "This only supports subdomains — an apex like {0} can't take a CNAME. Use {1}?",
+    "ctx": "webapp/views/service-detail.js:1322"
+  },
+  "Replace custom domain?": {
+    "en": "Replace custom domain?",
+    "ctx": "webapp/views/service-detail.js:1341"
+  },
+  "This will permanently replace the current custom domain ({0}). It can't be undone, even if the new one fails to verify.": {
+    "en": "This will permanently replace the current custom domain ({0}). It can't be undone, even if the new one fails to verify.",
+    "ctx": "webapp/views/service-detail.js:1342"
+  },
+  "Couldn't request custom domain: {0}": {
+    "en": "Couldn't request custom domain: {0}",
+    "ctx": "webapp/views/service-detail.js:1416"
   }
 }

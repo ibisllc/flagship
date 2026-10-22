@@ -11063,5 +11063,57 @@
   "couldnt_change_the_list_try_again": {
     "en": "Couldn't change the list. Try again in a moment.",
     "ctx": "viewmodels/ServiceAccessViewModel.kt:804 (prose)"
+  },
+  "custom_domain": {
+    "en": "CUSTOM DOMAIN",
+    "ctx": "ui/screens/ServiceDetailScreen.kt:926 (arg of UrlGroupLabel)"
+  },
+  "set_custom_domain": {
+    "en": "SET CUSTOM DOMAIN",
+    "ctx": "ui/screens/ServiceDetailScreen.kt:983 (arg of UrlGroupLabel)"
+  },
+  "add": {
+    "en": "Add",
+    "ctx": "ui/screens/ServiceDetailScreen.kt:1003 (label=)"
+  },
+  "custom_domains_come_with_pro_one": {
+    "en": "Custom domains come with Pro (one) and Pro Max (unlimited). To add one, first point a CNAME record from it to %1$s — that proves you control it.",
+    "ctx": "ui/screens/ServiceDetailScreen.kt:1013 (text=)",
+    "args": 1
+  },
+  "subdomains_only": {
+    "en": "Subdomains only",
+    "ctx": "viewmodels/RenameServiceViewModel.kt:141 (title=)"
+  },
+  "this_only_supports_subdomains_an_apex": {
+    "en": "This only supports subdomains — an apex like %1$s can't take a CNAME. Use %2$s?",
+    "ctx": "viewmodels/RenameServiceViewModel.kt:142 (message=)",
+    "args": 2
+  },
+  "use": {
+    "en": "Use %1$s",
+    "ctx": "viewmodels/RenameServiceViewModel.kt:143 (confirmLabel=)",
+    "args": 1
+  },
+  "replace_custom_domain": {
+    "en": "Replace custom domain?",
+    "ctx": "viewmodels/RenameServiceViewModel.kt:160 (title=)"
+  },
+  "this_will_permanently_replace_the_current": {
+    "en": "This will permanently replace the current custom domain (%1$s). It can't be undone, even if the new one fails to verify.",
+    "ctx": "viewmodels/RenameServiceViewModel.kt:161 (message=)",
+    "args": 1
+  },
+  "couldnt_request_custom_domain": {
+    "en": "Couldn't request custom domain",
+    "ctx": "viewmodels/RenameServiceViewModel.kt:178 (prose)"
+  },
+  "attach_custom_domain": {
+    "en": "Attach custom domain",
+    "ctx": "viewmodels/RenameServiceViewModel.kt:188 (prose)"
+  },
+  "couldnt_request_custom_domain_2": {
+    "en": "Couldn't request custom domain.",
+    "ctx": "viewmodels/RenameServiceViewModel.kt:224 (prose)"
   }
 }

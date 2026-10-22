@@ -1112,12 +1112,12 @@ function renderWebDomainsSection(service, links) {
   // ServiceDetailScreen.customDomainGroup.
   const cd = links?.customDomain ?? null;
   const customDomainBlock = !cd ? "" : `
-      <div class="label-tiny">CUSTOM DOMAIN</div>
+      <div class="label-tiny">${tr("CUSTOM DOMAIN")}</div>
       <div class="row" data-section="custom">
         <a class="weight-600 mono" href="https://${escapeHtml(cd)}" target="_blank" rel="noopener">
           ${displayUrl("https://" + cd)}
         </a>
-        <button class="ghost" data-copy="https://${escapeHtml(cd)}" aria-label="Copy custom domain">📋</button>
+        <button class="ghost" data-copy="https://${escapeHtml(cd)}" aria-label="${tr("Copy custom domain")}">📋</button>
       </div>
       <div class="mt-3"></div>`;
 
@@ -1236,20 +1236,19 @@ function renderCustomDomainsSection() {
   const remaining = cdCooldownRemainingMs();
   const cooling = remaining > 0;
   return `
-    <h2 class="mt-4">Set custom domain</h2>
+    <h2 class="mt-4">${tr("Set custom domain")}</h2>
     <div class="card">
       <div class="row" style="align-items:baseline;">
-        <div class="label-tiny" style="flex:1;">SET CUSTOM DOMAIN</div>
+        <div class="label-tiny" style="flex:1;">${tr("SET CUSTOM DOMAIN")}</div>
         <div class="label-tiny mono" id="sd-cd-cooldown" ${cooling ? "" : "hidden"}>${cooling ? cooldownLabel(remaining) : ""}</div>
       </div>
       <div class="row mt-2">
         <input id="sd-cd-input" placeholder="www.mydomain.com" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url" style="flex:1;" />
-        <button class="secondary" id="sd-cd-add" ${cooling ? "disabled" : ""}>Add</button>
+        <button class="secondary" id="sd-cd-add" ${cooling ? "disabled" : ""}>${tr("Add")}</button>
       </div>
       <div class="muted-sm text-xs mt-2">
-        Custom domains come with <a href="/pro">Pro</a> (one) and Pro Max (unlimited).
-        To add one, first point a CNAME record from it to
-        <span class="mono">${escapeHtml(customDomainRoot())}</span> — that proves you control it.
+        ${tr("Custom domains come with <a href=\"/pro\">Pro</a> (one) and Pro Max (unlimited). To add one, first point a CNAME record from it to")}
+        <span class="mono">${escapeHtml(customDomainRoot())}</span> ${tr("— that proves you control it.")}
       </div>
     </div>
   `;
@@ -1319,9 +1318,9 @@ async function submitCustomDomain() {
   if (fqdn.split(".").length < 3) {
     const suggested = `www.${fqdn}`;
     const ok = await inlineConfirm({
-      title: "Subdomains only",
-      message: `This only supports subdomains — an apex like ${fqdn} can't take a CNAME. Use ${suggested}?`,
-      okLabel: `Use ${suggested}`,
+      title: tr("Subdomains only"),
+      message: tr("This only supports subdomains — an apex like {0} can't take a CNAME. Use {1}?", fqdn, suggested),
+      okLabel: tr("Use {0}", suggested),
     });
     if (!ok) return;
     if (input) input.value = suggested;
@@ -1339,9 +1338,9 @@ async function submitCustomDomain() {
   const existing = currentServiceLinks?.customDomain ?? null;
   if (existing && existing !== fqdn) {
     const ok = await inlineConfirm({
-      title: "Replace custom domain?",
-      message: `This will permanently replace the current custom domain (${existing}). It can't be undone, even if the new one fails to verify.`,
-      okLabel: "Replace",
+      title: tr("Replace custom domain?"),
+      message: tr("This will permanently replace the current custom domain ({0}). It can't be undone, even if the new one fails to verify.", existing),
+      okLabel: tr("Replace"),
       danger: true,
     });
     if (!ok) return;
@@ -1355,7 +1354,7 @@ async function submitCustomDomain() {
 async function bindCustomDomain(fqdn) {
   const session = getSession();
   if (!session.username || !session.umk) {
-    toast("Sign in first.", "err");
+    toast(tr("Sign in first."), "err");
     return;
   }
   const issuedAt = Date.now();
@@ -1368,7 +1367,7 @@ async function bindCustomDomain(fqdn) {
     // when this account has one, else the owner IRK (legacy).
     sig = await sensitiveSigner()(session.umk, canonical);
   } catch (e) {
-    toast(`Couldn't sign: ${e.message ?? e}`, "err");
+    toast(tr("Couldn't sign: {0}", e.message ?? e), "err");
     return;
   }
   try {
@@ -1414,7 +1413,7 @@ async function bindCustomDomain(fqdn) {
     recordCustomDomainChangeLocally();
     if (currentServiceId) await renderServiceDetail(currentServiceId);
   } catch (e) {
-    toast(`Couldn't request custom domain: ${e.message ?? e}`, "err");
+    toast(tr("Couldn't request custom domain: {0}", e.message ?? e), "err");
   }
 }
 

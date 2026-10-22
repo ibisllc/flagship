@@ -138,9 +138,9 @@ class RenameServiceViewModel(
         if (fqdn.split(".").size < 3) {
             val suggested = "www.$fqdn"
             _customDomainPrompt.value = CustomDomainPrompt(
-                title = "Subdomains only",
-                message = "This only supports subdomains — an apex like $fqdn can't take a CNAME. Use $suggested?",
-                confirmLabel = "Use $suggested",
+                title = FSStrings.get(R.string.subdomains_only),
+                message = FSStrings.get(R.string.this_only_supports_subdomains_an_apex, fqdn, suggested),
+                confirmLabel = FSStrings.get(R.string.use, suggested),
                 destructive = false,
                 onConfirm = { submitCustomDomain(suggested) },
             )
@@ -157,9 +157,9 @@ class RenameServiceViewModel(
         val existing = _links.value?.customDomain
         if (existing != null && existing != fqdn) {
             _customDomainPrompt.value = CustomDomainPrompt(
-                title = "Replace custom domain?",
-                message = "This will permanently replace the current custom domain ($existing). It can't be undone, even if the new one fails to verify.",
-                confirmLabel = "Replace",
+                title = FSStrings.get(R.string.replace_custom_domain),
+                message = FSStrings.get(R.string.this_will_permanently_replace_the_current, existing),
+                confirmLabel = FSStrings.get(R.string.replace),
                 destructive = true,
                 onConfirm = { bindCustomDomain(fqdn) },
             )
@@ -175,7 +175,7 @@ class RenameServiceViewModel(
         val user = username()
         if (user.isNullOrEmpty()) {
             _customDomainPrompt.value = CustomDomainPrompt(
-                "Couldn't request custom domain", "No active account on this device.", null, false, null,
+                FSStrings.get(R.string.couldnt_request_custom_domain), FSStrings.get(R.string.no_active_account_on_this_device), null, false, null,
             )
             return
         }
@@ -185,11 +185,11 @@ class RenameServiceViewModel(
             // this device holds one, else the owner IRK (legacy). Canonical bytes
             // unchanged. (The service URL-stem rename below stays owner-IRK — not
             // in the sensitive set.)
-            Keystore.adminSigningKey("Attach custom domain")
+            Keystore.adminSigningKey(FSStrings.get(R.string.attach_custom_domain))
         } catch (e: Throwable) {
             _customDomainPrompt.value = CustomDomainPrompt(
-                "Couldn't request custom domain",
-                "Couldn't access your account keys: ${e.message}", null, false, null,
+                FSStrings.get(R.string.couldnt_request_custom_domain),
+                FSStrings.get(R.string.couldnt_access_your_account_keys, e.message), null, false, null,
             )
             return
         }
@@ -221,9 +221,9 @@ class RenameServiceViewModel(
             // reason verbatim; for 429 it is the byte-identical
             // "Too soon — try again in Ns." string the Mock uses.
             val msg = (e as? HttpException)?.let { extractError(it.body) }
-                ?: e.message ?: "Couldn't request custom domain."
+                ?: e.message ?: FSStrings.get(R.string.couldnt_request_custom_domain_2)
             _customDomainPrompt.value = CustomDomainPrompt(
-                "Couldn't request custom domain", msg, null, false, null,
+                FSStrings.get(R.string.couldnt_request_custom_domain), msg, null, false, null,
             )
         }
     }

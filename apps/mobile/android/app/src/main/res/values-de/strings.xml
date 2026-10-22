@@ -2672,4 +2672,16 @@
     <string name="use_one_list_for_on_every">Eine Liste für %1$s auf allen Servern verwenden</string>
     <string name="this_phone_isnt_set_up_on">Dieses Telefon ist auf %1$s nicht eingerichtet.</string>
     <string name="couldnt_change_the_list_try_again">Die Liste konnte nicht geändert werden. Versuche es gleich noch einmal.</string>
+    <string name="custom_domain">EIGENE DOMAIN</string>
+    <string name="set_custom_domain">EIGENE DOMAIN FESTLEGEN</string>
+    <string name="add">Hinzufügen</string>
+    <string name="custom_domains_come_with_pro_one">Eigene Domains gehören zu Pro (eine) und Pro Max (unbegrenzt). Um eine hinzuzufügen, richte zuerst einen CNAME-Eintrag von ihr auf %1$s – das beweist, dass du sie kontrollierst.</string>
+    <string name="subdomains_only">Nur Subdomains</string>
+    <string name="this_only_supports_subdomains_an_apex">Es werden nur Subdomains unterstützt – eine Apex-Domain wie %1$s kann keinen CNAME haben. %2$s verwenden?</string>
+    <string name="use">%1$s verwenden</string>
+    <string name="replace_custom_domain">Eigene Domain ersetzen?</string>
+    <string name="this_will_permanently_replace_the_current">Dadurch wird die aktuelle eigene Domain (%1$s) dauerhaft ersetzt. Das lässt sich nicht rückgängig machen, auch wenn die neue nicht verifiziert wird.</string>
+    <string name="couldnt_request_custom_domain">Eigene Domain konnte nicht angefordert werden</string>
+    <string name="attach_custom_domain">Eigene Domain verbinden</string>
+    <string name="couldnt_request_custom_domain_2">Eigene Domain konnte nicht angefordert werden.</string>
 </resources>
