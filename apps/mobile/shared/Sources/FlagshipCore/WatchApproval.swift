@@ -183,6 +183,10 @@ public enum WatchProtocol {
             case "recovery-set-up":     return String(localized: "Set up recovery")
             case "recovery-rotated":    return String(localized: "Rotated recovery passkey")
             case "app-renamed":         return String(localized: "Renamed app URL")
+            case "voici-name-set":      return String(localized: "Changed an app's link")
+            case "voici-name-cleared":  return String(localized: "Went back to an app's default link")
+            case "voici-name-released": return String(localized: "Released an app's link")
+            case "voici-name-warning":  return String(localized: "An app's link will be released soon")
             case "server-created":      return String(localized: "Created server")
             case "server-online":       return String(localized: "Server came online")
             case "server-revoked":      return String(localized: "Revoked server")
@@ -208,6 +212,8 @@ public enum WatchProtocol {
             case "recovery-set-up":     return "key.horizontal.fill"
             case "recovery-rotated":    return "arrow.triangle.2.circlepath"
             case "app-renamed":         return "link.circle"
+            case "voici-name-set", "voici-name-cleared", "voici-name-released": return "link.circle"
+            case "voici-name-warning":  return "exclamationmark.triangle"
             case "server-created", "demo-vps-provisioned": return "server.rack"
             case "server-online":       return "checkmark.seal.fill"
             case "server-revoked":      return "xmark.circle"
