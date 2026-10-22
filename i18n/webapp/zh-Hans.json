@@ -3393,5 +3393,21 @@
   "Install something a neighbour already built.": "安装邻居已经做好的东西。",
   "voi.ci/": "voi.ci/",
   "voi.ci/{0}": "voi.ci/{0}",
-  "Changed account name": "更改了账户名称"
+  "Changed account name": "更改了账户名称",
+  "Stem must be a DNS label: lowercase, [a-z0-9-], 1–40 chars, no leading/trailing hyphen.": "词干必须是 DNS 标签：小写字母、[a-z0-9-]，1–40 个字符，开头和结尾不能是连字符。",
+  "That name isn't valid (lowercase letters, digits, hyphens; 1–40 chars).": "该名称无效（小写字母、数字、连字符；1–40 个字符）。",
+  "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):": "替换访问 URL。这会更新指向此服务的所有链接，把“{0}”替换为新的词干。包括短链接在内的所有现有链接会立即失效。你已附加的外部域名不受影响。新词干（小写字母、数字、连字符；1–40 个字符；开头和结尾不能是连字符）：",
+  "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):": "替换访问网址。此服务的所有链接都会更新，“{0}”将被替换为新的词干。现有链接会立即失效。已关联的外部域名不受影响。新词干（小写字母、数字、连字符；1–40 个字符；开头和结尾不能是连字符）：",
+  "CUSTOM DOMAIN": "自定义域名",
+  "Copy custom domain": "复制自定义域名",
+  "Set custom domain": "设置自定义域名",
+  "SET CUSTOM DOMAIN": "设置自定义域名",
+  "Add": "添加",
+  "Custom domains come with <a href=\"/pro\">Pro</a> (one) and Pro Max (unlimited). To add one, first point a CNAME record from it to": "自定义域名包含在 <a href=\"/pro\">Pro</a>（1 个）和 Pro Max（不限）中。要添加一个，请先把它的 CNAME 记录指向",
+  "— that proves you control it.": "——这能证明你控制该域名。",
+  "Subdomains only": "仅支持子域名",
+  "This only supports subdomains — an apex like {0} can't take a CNAME. Use {1}?": "仅支持子域名——像 {0} 这样的根域名不能设置 CNAME。改用 {1}？",
+  "Replace custom domain?": "要替换自定义域名吗？",
+  "This will permanently replace the current custom domain ({0}). It can't be undone, even if the new one fails to verify.": "这会永久替换当前的自定义域名（{0}）。即使新域名验证失败，也无法撤销。",
+  "Couldn't request custom domain: {0}": "无法申请自定义域名：{0}"
 }
