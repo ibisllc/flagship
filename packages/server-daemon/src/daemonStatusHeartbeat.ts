@@ -146,6 +146,8 @@ export async function postDaemonStatus(args: {
   /** Receives the box's serving records (`serving: {regGen, policy?, leases[], delegations[]}`); the caller verifies
    *  each under its pinned admin key (servingStore.ts). */
   onServing?: (raw: unknown) => void;
+  /** Receives the account's plan from the reply ("free", "hobby", "maker"). */
+  onAccountTier?: (tier: string) => void;
   /**
    * `issuedAt` of the server order this box ranks by (0 = none). UNSIGNED
    * and advisory like `leadsServices`: `.com` relays it on /pods as the
@@ -249,13 +251,14 @@ export async function postDaemonStatus(args: {
     });
     // Log a rejected report so a non-2xx (bad signature, schema drift) is
     // visible in the journal instead of silently leaving daemon_status empty.
-    if (resp?.ok && (args.onServerOrder || args.onDoorbell || args.onServing)) {
+    if (resp?.ok && (args.onServerOrder || args.onDoorbell || args.onServing || args.onAccountTier)) {
       const reply = (await Promise.resolve()
         .then(() => resp.json())
-        .catch(() => null)) as { serverOrder?: unknown; doorbell?: unknown; serving?: unknown } | null;
+        .catch(() => null)) as { serverOrder?: unknown; doorbell?: unknown; serving?: unknown; tier?: unknown } | null;
       if (reply?.serverOrder && args.onServerOrder) args.onServerOrder(reply.serverOrder);
       if (reply?.doorbell && args.onDoorbell) args.onDoorbell(reply.doorbell);
       if (reply?.serving && args.onServing) args.onServing(reply.serving);
+      if (typeof reply?.tier === "string" && args.onAccountTier) args.onAccountTier(reply.tier);
     } else if (resp && !resp.ok) {
       const body = await resp.text().catch(() => "");
       console.error(
@@ -350,6 +353,8 @@ export function startDaemonStatusHeartbeat(args: {
   /** Receives the box's serving records (`serving: {regGen, policy?, leases[], delegations[]}`); the caller verifies
    *  each under its pinned admin key (servingStore.ts). */
   onServing?: (raw: unknown) => void;
+  /** Receives the account's plan from each reply (see postDaemonStatus). */
+  onAccountTier?: (tier: string) => void;
   /** `issuedAt` of the held server order, re-read each beat (see postDaemonStatus). */
   readOrderIssuedAt?: () => number;
   /** Whether this box waits for its backup, re-read each beat. */
@@ -449,6 +454,7 @@ export function startDaemonStatusHeartbeat(args: {
         ...(args.onServerOrder ? { onServerOrder: args.onServerOrder } : {}),
         ...(args.onDoorbell ? { onDoorbell: args.onDoorbell } : {}),
         ...(args.onServing ? { onServing: args.onServing } : {}),
+        ...(args.onAccountTier ? { onAccountTier: args.onAccountTier } : {}),
         ...(args.requestTimeoutMs !== undefined
           ? { requestTimeoutMs: args.requestTimeoutMs }
           : {}),

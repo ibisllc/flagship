@@ -22,6 +22,7 @@ import {
   type NameRecord,
 } from "./names.js";
 import { RENAMED_ACCOUNT_COLUMNS } from "./accountRename.js";
+import { D1RelayHealthStorage, type RelayHealthStorage } from "./relayHealth.js";
 import type {
   AccountType,
   AuditEventRecord,
@@ -5378,6 +5379,7 @@ export class D1Storage implements Storage {
   serverBootKeys: ServerBootKeyStorage;
   pqTrust: PqTrustStorage;
   voici: VoiciStorage;
+  relayHealth: RelayHealthStorage;
   constructor(db: D1Database) {
     this.names = new D1NameRegistryStorage(db);
     this.usernames = new D1UsernameStorage(db);
@@ -5443,6 +5445,7 @@ export class D1Storage implements Storage {
     this.serverBootKeys = new D1ServerBootKeyStorage(db);
     this.pqTrust = new D1PqTrustStorage(db);
     this.voici = new D1VoiciStorage(db);
+    this.relayHealth = new D1RelayHealthStorage(db);
   }
 }
 

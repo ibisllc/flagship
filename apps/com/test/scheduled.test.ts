@@ -28,7 +28,7 @@ describe("cronPlan — who runs when", () => {
       expect(jobs.length).toBeGreaterThan(0);
       const heavy = jobs.filter((j) => j === "ct-scan" || j === "adapter-publish" || j === "adapter-insights");
       expect(heavy.length).toBeLessThanOrEqual(1);
-      if (!(jobs.length === 1 && (jobs[0] === "adapter-publish" || jobs[0] === "adapter-insights"))) expect(jobs).toContain("demo");
+      if (!(jobs.length === 1 && (jobs[0] === "adapter-publish" || jobs[0] === "adapter-insights" || jobs[0] === "relay-probe"))) expect(jobs).toContain("demo");
     }
   });
 

@@ -289,7 +289,12 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
       'curl -sS -o /dev/null --connect-timeout 3 --max-time 8 "$CONTROL_PLANE_BASE/"',
     );
     expect(wrapper).toContain("network unavailable after 120s");
-    expect(wrapper).toContain("curl -fsS --connect-timeout 5 --max-time 30 -X POST");
+    expect(wrapper).toContain('curl -fsS --connect-timeout 5 --max-time "${3:-30}" -X POST');
+    expect(wrapper).toContain('flagship_post "$REGISTRATION_URL" @/run/register-payload.json 30');
+    // A box with an outbound proxy goes through the private relay and never
+    // probes .com directly (docs/outbound-proxy.md).
+    expect(wrapper).toContain("flagship-tsx scripts/install-helper.ts ohttp-post");
+    expect(wrapper).toContain("getent hosts");
   });
   it("enables the units DETERMINISTICALLY (chroot-proof manual .wants symlinks)", () => {
     // ROOT CAUSE of the live "installed but dead at the login prompt" box:
@@ -1325,7 +1330,10 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // Prior: 2026-07-19 daemon Restart=always.
       // Same appliance-only preinstalled helper reuse as the wired twin above.
       // Re-pinned 2026-10-12: retried data-services unit (see the wired pin above).
-      "2e9b3ce3f62d00ab5c3868d9423c65c4aa2aad65d3d4c8c0633c3b8c80857f9a",
+      // Re-pinned 2026-11-13 (feat/outbound-proxy folded into release/0.4): setup POSTs go through
+      // flagship_post, which uses the private relay (OHTTP, via flagship-tsx) when the recipe
+      // names an outbound proxy.
+      "d43030ff738a7f383475e951179da49101b11b0983b3b3176854a1bc8ea3f47f",
     );
   });
 

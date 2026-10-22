@@ -235,6 +235,19 @@ fun CreateServerScreen(
     // Advanced mode is turned off.
     var debugFriendly by rememberSaveable { mutableStateOf(false) }
     var debugSshKey by rememberSaveable { mutableStateOf("") }
+    // ADVANCED — an outbound proxy from the box's first connection
+    // (docs/outbound-proxy.md). Signed at mint with the sensitive-order key and
+    // carried as the UNSIGNED `outboundProxy` sibling (credentials beside it,
+    // only when typed). Snaps back to "none" when Advanced mode is turned off.
+    var proxyDraft by remember { mutableStateOf(com.flagshipserver.app.core.BoxProxyDraft()) }
+    // The proxy is part of Pro: the account's plan, read once. null while
+    // unknown, which shows the fields (the box checks too).
+    var accountTier by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        val u = app.currentUser.value ?: return@LaunchedEffect
+        accountTier = runCatching { flagshipServer.accountTier(u) }.getOrNull()
+    }
+    val proxyAllowed = com.flagshipserver.app.core.BoxProxyProtocol.allowedForTier(accountTier)
     val swkDepositStore = remember { PendingSwkDepositStore.from(context) }
     val pairingDepositStore = remember { PendingPairingDepositStore.from(context) }
     val rckStore = remember { com.flagshipserver.app.core.PendingRckStore.from(context) }
@@ -274,6 +287,7 @@ fun CreateServerScreen(
             embedSecrets = embedSecrets,
             debugFriendly = debugFriendly,
             debugSshKey = debugSshKey,
+            outboundProxy = proxyDraft.takeIf { advancedMode && proxyAllowed && it.kind != "none" },
             swkDepositStore = swkDepositStore,
             cgkDepositStore = cgkDepositStore,
             pairingDepositStore = pairingDepositStore,
@@ -422,7 +436,7 @@ fun CreateServerScreen(
                 advancedMode = advancedMode,
                 onAdvancedMode = {
                     advancedMode = it
-                    if (!it) { embedSecrets = false; debugFriendly = false; debugSshKey = "" }
+                    if (!it) { embedSecrets = false; debugFriendly = false; debugSshKey = ""; proxyDraft = com.flagshipserver.app.core.BoxProxyDraft() }
                 },
                 embedSecrets = embedSecrets,
                 onEmbedSecrets = { embedSecrets = it },
@@ -430,6 +444,9 @@ fun CreateServerScreen(
                 onDebugFriendly = { debugFriendly = it },
                 debugSshKey = debugSshKey,
                 onDebugSshKey = { debugSshKey = it },
+                proxyDraft = proxyDraft,
+                onProxyDraft = { proxyDraft = it },
+                proxyAllowed = proxyAllowed,
                 backupPolicy = backupPolicy,
                 reserveGb = reserveGb,
                 onReserveGb = {
@@ -448,6 +465,12 @@ fun CreateServerScreen(
                     if (designStep == 0 && !ServerLabel.isValid(name)) {
                         error = ServerLabel.errorMessage(name) ?: FSStrings.get(R.string.enter_a_subdomain)
                         return@DesignPhase
+                    }
+                    if (designStep == 1 && advancedMode && proxyAllowed) {
+                        proxyDraft.error()?.let {
+                            error = it
+                            return@DesignPhase
+                        }
                     }
                     error = null
                     designStep += 1
@@ -552,6 +575,7 @@ fun CreateServerScreen(
                                 embedSecrets = embedSecrets,
                                 debugFriendly = debugFriendly,
                                 debugSshKey = debugSshKey,
+                                outboundProxy = proxyDraft.takeIf { advancedMode && proxyAllowed && it.kind != "none" },
                                 swkDepositStore = swkDepositStore,
                                 pairingDepositStore = pairingDepositStore,
                                 rckStore = rckStore,
@@ -680,6 +704,9 @@ private fun DesignPhase(
     onDebugFriendly: (Boolean) -> Unit,
     debugSshKey: String,
     onDebugSshKey: (String) -> Unit,
+    proxyDraft: com.flagshipserver.app.core.BoxProxyDraft,
+    onProxyDraft: (com.flagshipserver.app.core.BoxProxyDraft) -> Unit,
+    proxyAllowed: Boolean,
     backupPolicy: CreateServerDraftStore.BackupPolicy?,
     reserveGb: Int,
     onReserveGb: (Int) -> Unit,
@@ -750,6 +777,9 @@ private fun DesignPhase(
                         onDebugFriendly = onDebugFriendly,
                         debugSshKey = debugSshKey,
                         onDebugSshKey = onDebugSshKey,
+                        proxyDraft = proxyDraft,
+                        onProxyDraft = onProxyDraft,
+                        proxyAllowed = proxyAllowed,
                     )
                 }
                 else -> {
@@ -919,6 +949,9 @@ private fun AdvancedModePicker(
     onDebugFriendly: (Boolean) -> Unit,
     debugSshKey: String,
     onDebugSshKey: (String) -> Unit,
+    proxyDraft: com.flagshipserver.app.core.BoxProxyDraft,
+    onProxyDraft: (com.flagshipserver.app.core.BoxProxyDraft) -> Unit,
+    proxyAllowed: Boolean,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
@@ -983,6 +1016,8 @@ private fun AdvancedModePicker(
                 fieldTag = "cs-debug-ssh-key",
             )
         }
+        Spacer(Modifier.height(FS.space.s4))
+        OutboundProxyCreateBlock(draft = proxyDraft, onDraft = onProxyDraft, allowed = proxyAllowed)
     }
 }
 
@@ -1254,6 +1289,8 @@ private suspend fun prepareDelivery(
     // `debugGrant` sibling.
     debugFriendly: Boolean = false,
     debugSshKey: String? = null,
+    // The owner's outbound proxy (Advanced), signed into the `outboundProxy` sibling.
+    outboundProxy: com.flagshipserver.app.core.BoxProxyDraft? = null,
     swkDepositStore: PendingSwkDepositStore? = null,
     // Per-service leadership (Phase 6): the per-cloud CGK is NEVER embedded in the
     // recipe; it is owed on EVERY created server (independent of embed-secrets) and
@@ -1285,6 +1322,7 @@ private suspend fun prepareDelivery(
         embedSecrets = embedSecrets,
         debugFriendly = debugFriendly,
         debugSshKey = debugSshKey,
+        outboundProxy = outboundProxy,
         swkDepositStore = swkDepositStore,
         cgkDepositStore = cgkDepositStore,
         pairingDepositStore = pairingDepositStore,
@@ -1341,6 +1379,10 @@ internal suspend fun mintRecipeBundle(
     // for [debugSshKey] into the recipe as the UNSIGNED `debugGrant` sibling.
     debugFriendly: Boolean = false,
     debugSshKey: String? = null,
+    // The owner's outbound proxy (docs/outbound-proxy.md): signed here with the
+    // sensitive-order key (admin root when held, else the IRK) and carried as
+    // the UNSIGNED `outboundProxy` sibling, credentials beside it when typed.
+    outboundProxy: com.flagshipserver.app.core.BoxProxyDraft? = null,
     swkDepositStore: PendingSwkDepositStore? = null,
     cgkDepositStore: com.flagshipserver.app.core.PendingCgkDepositStore? = null,
     pairingDepositStore: PendingPairingDepositStore? = null,
@@ -1357,6 +1399,7 @@ internal suspend fun mintRecipeBundle(
     enrollmentStore: com.flagshipserver.app.core.EnrollmentSecretStore? = com.flagshipserver.app.core.FirstContact.shared,
     // The recipe goes to Studio: also make the Studio confirm key sent beside it.
     forStudio: Boolean = false,
+    proxySigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.adminSigningKey(r) },
 ): MintedBundle {
     // Only an admin device of the account adds servers, and only opening the
     // account mints an admin root: refuse here, before any prompt or `.com`
@@ -1530,6 +1573,15 @@ internal suspend fun mintRecipeBundle(
     // Studio confirm key when Studio gets the recipe) until this device pins the server.
     val enrollment = com.flagshipserver.app.core.FirstContact.newEnrollment(enrollmentStore, serverDomain, serial, withStudioKey = forStudio)
 
+    val proxySibling = outboundProxy?.takeIf { it.kind != "none" }?.let { draft ->
+        draft.error()?.let { throw IllegalArgumentException(it) }
+        val order = draft.order(serverDomain, auth = draft.hasCredentials, now = now)
+        com.flagshipserver.app.core.BoxProxyWire(
+            order,
+            com.flagshipserver.app.core.BoxProxyProtocol.sign(order, proxySigner("Create server $serverName")),
+        )
+    }
+
     val bundle = InstallBlobBundle(
         blob = WireBlob(
             serverDomain = serverDomain,
@@ -1560,6 +1612,8 @@ internal suspend fun mintRecipeBundle(
         },
         debugGrant = debugGrantSibling,
         enrollmentKeyHex = enrollment.secretHex,
+        outboundProxy = proxySibling,
+        outboundProxyCredentials = proxySibling?.let { outboundProxy?.credentials() },
     )
 
     return MintedBundle(

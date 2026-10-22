@@ -24,6 +24,12 @@ export interface ProxyDeps {
   resolve?: (host: string) => Promise<string[]>;
   /** Connect upstream. Default: net.connect. Tests point it at a local server. */
   dial?: (address: string, port: number) => Socket;
+  /**
+   * Connect to the allowed host BY NAME through the box's outbound proxy
+   * (docs/outbound-proxy.md), after the public-address check. Returns null
+   * when no proxy is set, and the gateway dials the address itself.
+   */
+  dialViaProxy?: (host: string, port: number) => Promise<Socket> | null;
   /** Refuse non-public upstream addresses and the host's own (default true). */
   publicOnly?: boolean;
   /** The host's own addresses. Default: every interface's, read per connection. */
@@ -142,7 +148,18 @@ async function splice(deps: ProxyDeps, kind: ProxyKind, client: Socket, host: st
     client.destroy();
     return;
   }
-  const upstream = (deps.dial ?? ((a, p) => connect({ host: a, port: p })))(addr, port);
+  const proxied = deps.dialViaProxy?.(host, port) ?? null;
+  let upstream: Socket;
+  if (proxied) {
+    try {
+      upstream = await proxied;
+    } catch {
+      client.destroy();
+      return;
+    }
+  } else {
+    upstream = (deps.dial ?? ((a, p) => connect({ host: a, port: p })))(addr, port);
+  }
   const idle = deps.idleMs ?? 10 * 60_000;
   upstream.setTimeout(idle, () => upstream.destroy());
   client.setTimeout(idle, () => client.destroy());
@@ -159,12 +176,15 @@ async function splice(deps: ProxyDeps, kind: ProxyKind, client: Socket, host: st
     },
   });
   if (untrack) client.once("close", untrack);
-  upstream.once("connect", () => {
+  const start = () => {
     upstream.write(head);
     client.pipe(upstream);
     upstream.pipe(client);
     client.resume();
-  });
+    upstream.resume();
+  };
+  if (proxied) start();
+  else upstream.once("connect", start);
 }
 
 export interface ProxyServerHandle {

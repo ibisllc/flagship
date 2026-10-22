@@ -47,13 +47,15 @@ import { cronPlan, SUGGESTION_ATTEMPTS_PER_TICK, type CronJobId, type CronPlan }
 import { pruneRateLimitLog } from "./rateLimitLog.js";
 import { pruneOutboundDaily } from "./outboundHosts.js";
 import { protectedAccountsFrom } from "./prodReap.js";
+import { runRelayProbeCron, type OhttpEnv } from "./ohttpRoutes.js";
 import type { AdapterBucketLike } from "./adapterIndex.js";
 import { runVoiciGcCron } from "./voiciRoutes.js";
 import { runIssuanceSweep, type IssuanceEnv } from "./certificateIssuance.js";
 import { pruneUpdateReceipts } from "./updateReceipts.js";
 import type { VoiciBucket } from "@flagship/control-plane";
 
-export interface ScheduledEnv extends IssuanceEnv {
+export interface ScheduledEnv extends IssuanceEnv, OhttpEnv {
+  CONTROL_APEX?: string;
   DB?: D1Database;
   /** .services :8443 base (wrangler.toml) — custom-domain verifier
    *  pushes confirmed/invalidated redirections here (#79B/#87). */
@@ -178,6 +180,8 @@ async function runJob(id: CronJobId, env: ScheduledEnv, now: Date, plan: CronPla
       return runIssuanceSweepCron(env, now);
     case "prune-update-receipts":
       return env.DB ? pruneUpdateReceipts(env.DB, now) : null;
+    case "relay-probe":
+      return runRelayProbeCron(env, now, { apex: env.CONTROL_APEX ?? "flagshipserver.com" });
   }
 }
 
