@@ -1327,7 +1327,7 @@
     <string name="google_ai">Google AI</string>
     <string name="ollama_local">Ollama（本地）</string>
     <string name="ai_providers">AI 提供商</string>
-    <string name="plug_in_your_own_keys_flagship">接入你自己的密钥。Flagship 从不代理 LLM 流量：调用从你的服务器直接发往你选择的提供商。</string>
+    <string name="plug_in_your_own_keys_flagship">接入你自己的密钥。你的服务器会以端到端加密的方式调用你选择的提供商。默认情况下，调用会经过 Flagship 的中继，因此提供商看到的是 Flagship 的地址，而不是你的。</string>
     <string name="viewfinder">取景器</string>
     <string name="camera_permission_required_to_scan">扫描需要相机权限。</string>
     <string name="cloud_recovery">云恢复</string>
@@ -2167,7 +2167,7 @@
     <string name="disconnected_device">已断开设备</string>
     <string name="replaced_device">已替换设备</string>
     <string name="added_device">已添加设备</string>
-    <string name="wiped_restarted_account">已擦除并重新开始账户</string>
+    <string name="wiped_restarted_account">已擦除账户并重新开始</string>
     <string name="rotated_recovery_passkey">已轮换恢复通行密钥</string>
     <string name="used_a_recovery_code">使用了恢复代码</string>
     <string name="renamed_app_url">已重命名应用 URL</string>
