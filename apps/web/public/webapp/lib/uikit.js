@@ -69,7 +69,7 @@ export function chip({ value, label, selected = false, count = null }) {
  * @param {{ items: Array<{value:string,label:string,count?:number|null}>, selected:string, ariaLabel?:string }} opt
  * @returns {string}
  */
-export function chipRow({ items, selected, ariaLabel = "Filter" }) {
+export function chipRow({ items, selected, ariaLabel = tr("Filter") }) {
   const pills = (items ?? [])
     .map((it) => chip({ ...it, selected: it.value === selected }))
     .join("");
@@ -86,7 +86,7 @@ export function chipRow({ items, selected, ariaLabel = "Filter" }) {
  * @param {{ value?:string, placeholder?:string, id?:string }} [opt]
  * @returns {string}
  */
-export function searchField({ value = "", placeholder = "Search", id } = {}) {
+export function searchField({ value = "", placeholder = tr("Search"), id } = {}) {
   const idAttr = id ? ` id="${escapeHtml(id)}"` : "";
   const hasText = String(value).length > 0;
   return `

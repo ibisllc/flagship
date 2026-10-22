@@ -2534,5 +2534,17 @@
   "Couldn't attach \"{0}\".": "「{0}」を添付できませんでした。",
   "Add a server": "サーバーを追加",
   "{0} can now manage this server": "{0} はこのサーバーを管理できるようになりました",
-  "{0} can now see this server": "{0} はこのサーバーを見られるようになりました"
+  "{0} can now see this server": "{0} はこのサーバーを見られるようになりました",
+  "companion": "コンパニオン",
+  "invite": "招待",
+  "join": "参加",
+  "connecting": "接続中",
+  "remote": "リモート",
+  "locked": "ロック中",
+  "first run": "初回起動",
+  "Confirm": "確認",
+  "Filter": "フィルター",
+  "Search": "検索",
+  "authorize": "承認",
+  "device reset": "デバイスのリセット"
 }
