@@ -8,6 +8,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.google.crypto.tink.subtle.Ed25519Sign
 import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.serialization.Serializable
@@ -39,7 +40,7 @@ object BoxProxyProtocol {
     const val PATH = "/api/screens/outbound-proxy"
     const val MAX_SKEW_MS = 10 * 60_000L
     val KINDS = listOf("none", "socks5", "http")
-    const val PRO_NOTE = "An outbound proxy is part of Pro."
+    val PRO_NOTE get() = FSStrings.get(R.string.an_outbound_proxy_is_part_of)
 
     /** Free accounts can't set a proxy; an unknown plan doesn't block (the box
      *  checks too, once .com has told it the plan). */
@@ -54,15 +55,15 @@ object BoxProxyProtocol {
 
     /** Why [host] is not an acceptable proxy host, or null. Expects normalized input. */
     fun hostError(host: String): String? {
-        if (host.isEmpty()) return "Enter the proxy's address."
-        if (host.length > 253) return "That address is too long."
+        if (host.isEmpty()) return FSStrings.get(R.string.enter_the_proxys_address)
+        if (host.length > 253) return FSStrings.get(R.string.that_address_is_too_long)
         if (host.contains(':')) {
-            return if (IPV6.matches(host) && host.split(":").size >= 3) null else "Use a host name or an IP address, without a scheme, path or port."
+            return if (IPV6.matches(host) && host.split(":").size >= 3) null else FSStrings.get(R.string.use_a_host_name_or_an)
         }
         if (IPV4.matches(host)) return null
-        if (DIGITS_DOTS.matches(host)) return "That isn't a valid IPv4 address."
+        if (DIGITS_DOTS.matches(host)) return FSStrings.get(R.string.that_isnt_a_valid_ipv4_address)
         if (host.split(".").all { LABEL.matches(it) }) return null
-        return "Use a host name or an IP address, without a scheme, path or port."
+        return FSStrings.get(R.string.use_a_host_name_or_an)
     }
 
     /** Trim, lowercase and drop IPv6 brackets: what the app does to typed input before signing. */
@@ -77,11 +78,11 @@ object BoxProxyProtocol {
     fun credentialsError(username: String, password: String): String? {
         val u = username.toByteArray(Charsets.UTF_8).size
         val p = password.toByteArray(Charsets.UTF_8).size
-        if (u == 0 || p == 0) return "Enter a username and password."
-        if (u > 255 || p > 255) return "The username and password can be at most 255 bytes each."
-        if (username.contains(':')) return "The username can't contain a colon."
+        if (u == 0 || p == 0) return FSStrings.get(R.string.enter_a_username_and_password)
+        if (u > 255 || p > 255) return FSStrings.get(R.string.the_username_and_password_can_be)
+        if (username.contains(':')) return FSStrings.get(R.string.the_username_cant_contain_a_colon)
         val bad = { s: String -> s.any { it.code <= 0x1f || it.code == 0x7f } }
-        if (bad(username) || bad(password)) return "The username and password can't contain control characters."
+        if (bad(username) || bad(password)) return FSStrings.get(R.string.the_username_and_password_cant_contain)
         return null
     }
 
@@ -150,7 +151,7 @@ data class BoxProxyDraft(
         if (kind == "none") return null
         BoxProxyProtocol.hostError(BoxProxyProtocol.normalizeHost(host))?.let { return it }
         val p = port.trim().toIntOrNull()
-        if (p == null || p !in 1..65535) return "Enter a port from 1 to 65535."
+        if (p == null || p !in 1..65535) return FSStrings.get(R.string.enter_a_port_from_1_to)
         if (hasCredentials) return BoxProxyProtocol.credentialsError(username, password)
         return null
     }
