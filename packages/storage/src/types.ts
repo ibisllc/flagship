@@ -430,6 +430,10 @@ export type AuditEventKind =
   | "recovery-set-up"
   | "recovery-rotated"
   | "app-renamed"            // V2 — voi.ci-aware Replace stem
+  | "voici-name-set"         // a service got (or swapped) its custom voi.ci name
+  | "voici-name-cleared"      // the owner went back to the random code
+  | "voici-name-released"     // a custom name was released (idle 60 days, or the account went)
+  | "voici-name-warning"      // a custom name will be released unless a server runs the app (detail: name|releasesAt)
   | "server-created"         // a box registered to the account for the first time
   | "server-online"          // a box reported live (cert serving) for the first time
   | "server-migration-started"     // owner started moving a server to a new machine / VM
@@ -1531,8 +1535,9 @@ export interface VoiciNameStorage {
   countAllLive(): Promise<number>;
   markActive(key: string, at: number): Promise<void>;
   setWarned(key: string, warned: number): Promise<void>;
-  /** Every set, replace or clear, for the limits. */
-  recordChange(username: string, serviceId: string, at: number): Promise<void>;
+  /** Every set, replace or clear, for the limits; the order's nonce is single use. */
+  recordChange(username: string, serviceId: string, at: number, nonce: string): Promise<void>;
+  nonceUsed(nonce: string): Promise<boolean>;
   /** Changes of one service at or after `since`, oldest first. */
   changesForService(username: string, serviceId: string, since: number): Promise<number[]>;
   countChangesForUser(username: string, since: number): Promise<number>;
@@ -1557,6 +1562,8 @@ export interface VoiciLinkStorage {
   /** The service was deleted: keep the row so the code answers 410 and is
    *  never handed out again. Returns how many rows were retired. */
   retireByService(username: string, serviceId: string, at: number): Promise<number>;
+  /** The account was deleted: retire every service-bound code it holds. */
+  retireAllForUser(username: string, at: number): Promise<number>;
   /** Periodic GC for expired one-offs. */
   deleteExpired(before: number): Promise<number>;
 }

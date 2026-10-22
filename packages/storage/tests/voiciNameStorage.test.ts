@@ -88,10 +88,12 @@ function names(label: string, make: () => VoiciNameStorage, teardown?: () => voi
 
     it("changes are counted per service and per account, and pruned", async () => {
       const s = make();
-      await s.recordChange("fresh-poppy", "fresh-poppy--a", 100);
-      await s.recordChange("fresh-poppy", "fresh-poppy--a", 200);
-      await s.recordChange("fresh-poppy", "fresh-poppy--b", 300);
-      await s.recordChange("rapid-bison", "rapid-bison--a", 300);
+      await s.recordChange("fresh-poppy", "fresh-poppy--a", 100, "n1");
+      await s.recordChange("fresh-poppy", "fresh-poppy--a", 200, "n2");
+      await s.recordChange("fresh-poppy", "fresh-poppy--b", 300, "n3");
+      await s.recordChange("rapid-bison", "rapid-bison--a", 300, "n4");
+      expect(await s.nonceUsed("n4")).toBe(true);
+      expect(await s.nonceUsed("zz")).toBe(false);
       expect(await s.changesForService("fresh-poppy", "fresh-poppy--a", 150)).toEqual([200]);
       expect(await s.changesForService("fresh-poppy", "fresh-poppy--a", 0)).toEqual([100, 200]);
       expect(await s.countChangesForUser("fresh-poppy", 0)).toBe(3);
@@ -116,6 +118,16 @@ function links(label: string, make: () => VoiciLinkStorage, teardown?: () => voi
       expect(await s.getByService("fresh-poppy", "fresh-poppy--party")).toBeUndefined();
       expect(await s.insert(row("k3x9qa"))).toEqual({ ok: false, reason: "code already taken" });
       expect(await s.retireByService("fresh-poppy", "fresh-poppy--party", 600)).toBe(0);
+    });
+
+    it("retireAllForUser() retires every service-bound code of the account and no one else's", async () => {
+      const s = make();
+      await s.insert(row("aaaaaa", "fresh-poppy--a"));
+      await s.insert(row("bbbbbb", "fresh-poppy--b"));
+      await s.insert({ ...row("cccccc", "rapid-bison--c"), username: "rapid-bison" });
+      expect(await s.retireAllForUser("fresh-poppy", 700)).toBe(2);
+      expect((await s.get("aaaaaa"))?.retiredAt).toBe(700);
+      expect((await s.get("cccccc"))?.retiredAt).toBeUndefined();
     });
   });
 }

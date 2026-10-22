@@ -96,30 +96,25 @@ describe("handleServiceRename — happy path", () => {
     expect(alias?.displayLabel).toBe("mynotes");
   });
 
-  it("cascade-deletes old voi.ci codes on rename", async () => {
+  it("keeps the service's voi.ci code across renames (it is permanent)", async () => {
     const s = new InMemoryStorage();
     const irk = makeKey();
     await seed(s, irk);
-    // First rename → some code "abc1".
-    await handleServiceRename(makeDeps(s), USER, APP, signedBody({ irk, newDisplayLabel: "first" }));
-    const code1 = (await s.voiciLinks.deleteByService.bind(s.voiciLinks)) ? null : null; // noop guard
-    // Pre-check: at least one row exists for this app.
-    let preCount = 0;
-    for (const c of ["aaaaaa","bbbbbb","cccccc"]) { /* sample-not-applicable */ void c; }
-    // Reach into the in-memory map via the public API: insert another
-    // bogus row tied to a different serviceId and verify it doesn't get
-    // deleted.
-    const ok = await s.voiciLinks.insert({ code: "preservd", username: USER, serviceId: "other-app", targetUrl: "https://x.example.com/", createdAt: 1 });
-    expect(ok.ok).toBe(true);
+    await s.voiciLinks.insert({ code: "other1", username: USER, serviceId: "other-app", targetUrl: "https://x.example.com/", createdAt: 1 });
 
-    // Second rename — bumps the same app's codes.
+    const res1 = await handleServiceRename(makeDeps(s), USER, APP, signedBody({ irk, newDisplayLabel: "first" }));
+    const first = res1.body as { shortCode: string; deletedShortLinks: number };
+    expect(first.shortCode).toMatch(/^[a-z0-9]{6}$/);
+
     const res2 = await handleServiceRename(makeDeps(s), USER, APP, signedBody({ irk, newDisplayLabel: "second" }));
     expect(res2.status).toBe(200);
-    const b = res2.body as { deletedShortLinks: number };
-    expect(b.deletedShortLinks).toBeGreaterThanOrEqual(1);
-    // Cross-app row preserved.
-    expect((await s.voiciLinks.get("preservd"))?.code).toBe("preservd");
-    preCount += 1;
+    const second = res2.body as { shortCode: string; shortUrl: string; deletedShortLinks: number };
+    expect(second.shortCode).toBe(first.shortCode);
+    expect(second.shortUrl).toBe(`https://voi.ci/${first.shortCode}`);
+    expect(second.deletedShortLinks).toBe(0);
+    expect((await s.voiciLinks.get(first.shortCode))?.retiredAt).toBeUndefined();
+    // Another app's code is untouched.
+    expect((await s.voiciLinks.get("other1"))?.code).toBe("other1");
   });
 
   it("no-ops when the new label matches the existing one", async () => {

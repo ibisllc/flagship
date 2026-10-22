@@ -1812,6 +1812,17 @@ export class InMemoryVoiciLinkStorage implements VoiciLinkStorage {
     }
     return n;
   }
+  async retireAllForUser(username: string, at: number) {
+    const u = username.toLowerCase();
+    let n = 0;
+    for (const r of this.rows.values()) {
+      if (r.username === u && r.serviceId !== undefined && r.retiredAt === undefined) {
+        r.retiredAt = at;
+        n++;
+      }
+    }
+    return n;
+  }
   async deleteExpired(before: number) {
     let n = 0;
     for (const [code, r] of this.rows) {
@@ -1826,7 +1837,7 @@ export class InMemoryVoiciLinkStorage implements VoiciLinkStorage {
 
 export class InMemoryVoiciNameStorage implements VoiciNameStorage {
   private rows = new Map<string, VoiciNameRecord>();
-  private changes: Array<{ username: string; serviceId: string; at: number }> = [];
+  private changes: Array<{ username: string; serviceId: string; at: number; nonce: string }> = [];
   async get(key: string) {
     const r = this.rows.get(key);
     return r ? { ...r } : undefined;
@@ -1904,8 +1915,11 @@ export class InMemoryVoiciNameStorage implements VoiciNameStorage {
     const r = this.rows.get(key);
     if (r && r.state === "live") r.warned = warned;
   }
-  async recordChange(username: string, serviceId: string, at: number) {
-    this.changes.push({ username: username.toLowerCase(), serviceId, at });
+  async recordChange(username: string, serviceId: string, at: number, nonce: string) {
+    this.changes.push({ username: username.toLowerCase(), serviceId, at, nonce });
+  }
+  async nonceUsed(nonce: string) {
+    return this.changes.some((c) => c.nonce === nonce);
   }
   async changesForService(username: string, serviceId: string, since: number) {
     const u = username.toLowerCase();

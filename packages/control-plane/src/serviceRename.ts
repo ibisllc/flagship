@@ -4,12 +4,10 @@
 // and conceptual surface (an app's URL identity from the user's
 // perspective).
 //
-//   - handleServiceRename: signed by IRK; rewrites display_label, cascade-
-//     deletes the app's old voi.ci codes, mints a fresh one against
-//     the new canonical URL. The actual user-zone DNS publish is
+//   - handleServiceRename: signed by IRK; rewrites display_label. The actual user-zone DNS publish is
 //     delegated to a hook the Worker wires up (services-zone
 //     publisher); we surface it as deps.publishDns? so tests stub
-//     trivially.
+//     trivially. The service's voi.ci code is permanent and is NOT touched.
 //
 //   - handleGetAppLinks: public read; surfaces { canonical, short,
 //     instances[] } for the apps-list BFF. Falls back to the
@@ -32,12 +30,15 @@ import type {
   DaemonStatusStorage,
   ServerRecord,
   ServerStorage,
+  TierStorage,
   UserServiceAliasStorage,
   UsernameStorage,
   VoiciLinkStorage,
+  VoiciNameStorage,
 } from "@flagship/storage";
 import { hexToBytes } from "./hex.js";
 import { mintShortLink, type VoiciDeps } from "./voici.js";
+import { voiciLinkState } from "./voiciNames.js";
 import { recordAuditEvent } from "./auditEvents.js";
 import type { AuditEventStorage } from "@flagship/storage";
 import {
@@ -53,6 +54,10 @@ export interface ServiceRenameDeps {
   usernames: UsernameStorage;
   userServiceAliases: UserServiceAliasStorage;
   voiciLinks: VoiciLinkStorage;
+  /** Custom names: a minted code never equals one. Also feeds `link` on the links read. */
+  voiciNames?: VoiciNameStorage;
+  /** With [voiciNames]: the plan that sets how many names the account may hold. */
+  tiers?: TierStorage;
   servers: ServerStorage;
   auditEvents: AuditEventStorage;
   /** The boxes' heartbeats, which say which apps each box runs and leads.
@@ -161,10 +166,11 @@ export async function handleServiceRename(
 
   // Mutation sequence:
   //   1. Upsert the alias (atomic at the storage layer).
-  //   2. Cascade-delete the OLD app-bound short codes.
-  //   3. Mint a fresh short code against the new canonical URL.
-  //   4. Best-effort DNS re-publish via the hook.
-  //   5. Append audit row (truncated by recordAuditEvent on overflow).
+  //   2. Keep the service's short code: it is permanent (docs/named-links.md),
+  //      and a visit works out the canonical address afresh, so a rename needs
+  //      nothing re-minted. A service that has none yet gets one now.
+  //   3. Best-effort DNS re-publish via the hook.
+  //   4. Append audit row (truncated by recordAuditEvent on overflow).
   const ts = now;
   await deps.userServiceAliases.upsert({
     username: u,
@@ -173,24 +179,21 @@ export async function handleServiceRename(
     createdAt: existing?.createdAt ?? ts,
     updatedAt: ts,
   });
-  const deletedShortLinks = await deps.voiciLinks.deleteByService(u, r.serviceId);
 
   const newCanonical = (await appHome(deps, u, r.serviceId, newLabel)).canonicalUrl;
-  const minted = await mintShortLink(
-    {
-      usernames: deps.usernames,
-      voiciLinks: deps.voiciLinks,
-      now: deps.now,
-      shortHost: deps.shortHost,
-    } satisfies VoiciDeps,
-    {
-      username: u,
-      serviceId: r.serviceId,
-      targetUrl: newCanonical,
-      // App-bound short links don't get a TTL — they live as long as
-      // the app's display label stays the same.
-    },
-  );
+  const kept = await deps.voiciLinks.getByService(u, r.serviceId);
+  const minted: { code: string; shortUrl: string } | { error: string } = kept
+    ? { code: kept.code, shortUrl: `https://${deps.shortHost ?? "voi.ci"}/${kept.code}` }
+    : await mintShortLink(
+        {
+          usernames: deps.usernames,
+          voiciLinks: deps.voiciLinks,
+          voiciNames: deps.voiciNames,
+          now: deps.now,
+          shortHost: deps.shortHost,
+        } satisfies VoiciDeps,
+        { username: u, serviceId: r.serviceId, targetUrl: newCanonical },
+      );
 
   if (deps.publishDns) {
     try {
@@ -223,7 +226,7 @@ export async function handleServiceRename(
       displayLabel: newLabel,
       canonicalUrl: newCanonical,
       shortUrl: null,
-      deletedShortLinks,
+      deletedShortLinks: 0,
       shortLinkError: minted.error,
     });
   }
@@ -233,7 +236,7 @@ export async function handleServiceRename(
     canonicalUrl: newCanonical,
     shortUrl: minted.shortUrl,
     shortCode: minted.code,
-    deletedShortLinks,
+    deletedShortLinks: 0,
   });
 }
 
@@ -345,12 +348,20 @@ export async function handleGetAppLinks(
     ? await deps.customDomainOrders.get(u, serviceId)
     : undefined;
 
+  // The readable name on top of the code (docs/named-links.md): what the link
+  // field on the service page shows, with the limits it needs.
+  const link = deps.voiciNames
+    ? await voiciLinkState({ voiciNames: deps.voiciNames, tiers: deps.tiers, now: deps.now }, u, serviceId).catch(() => null)
+    : null;
+
   return ok({
     serviceId,
     displayLabel,
     canonicalUrl,
     instances,
     shortUrl,
+    shortCode: shortLink?.code ?? null,
+    link,
     customDomain: cdo ? cdo.fqdn : null,
     customDomainConfirmed: cdo ? cdo.status === "active" : null,
     ...(shortLinkError ? { shortLinkError } : {}),

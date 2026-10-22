@@ -11,7 +11,8 @@
 -- went out.
 --
 -- voici_name_changes: every set, replace or clear, for the per-service and
--- per-account limits. Nothing about the caller beyond the account.
+-- per-account limits, and the order's single-use nonce. Nothing about the
+-- caller beyond the account.
 --
 -- voici_links.retired_at: a service's random code is permanent while it lives;
 -- when the service is deleted the code is retired for good (410, never minted
@@ -35,9 +36,11 @@ CREATE INDEX IF NOT EXISTS idx_voici_names_state ON voici_names(state, released_
 CREATE TABLE IF NOT EXISTS voici_name_changes (
   username   TEXT NOT NULL,
   service_id TEXT NOT NULL,
-  at         INTEGER NOT NULL
+  at         INTEGER NOT NULL,
+  nonce      TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_voici_name_changes_service ON voici_name_changes(username, service_id, at);
 CREATE INDEX IF NOT EXISTS idx_voici_name_changes_user ON voici_name_changes(username, at);
+CREATE INDEX IF NOT EXISTS idx_voici_name_changes_nonce ON voici_name_changes(nonce);
 
 ALTER TABLE voici_links ADD COLUMN retired_at INTEGER;

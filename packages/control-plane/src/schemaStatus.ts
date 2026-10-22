@@ -79,6 +79,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0105",
   // The hub's list of hosts boxes' AI calls may leave through, and per-host totals.
   "0106",
+  // Custom voi.ci names, their changes and retired codes (feat/named-links).
+  "0107",
 ];
 
 export interface SchemaStatusDeps {

@@ -1134,6 +1134,13 @@ export class D1VoiciLinkStorage implements VoiciLinkStorage {
       .run();
     return r.meta?.changes ?? 0;
   }
+  async retireAllForUser(username: string, at: number): Promise<number> {
+    const r = await this.db
+      .prepare("UPDATE voici_links SET retired_at = ? WHERE username = ? AND service_id IS NOT NULL AND retired_at IS NULL")
+      .bind(at, username.toLowerCase())
+      .run();
+    return r.meta?.changes ?? 0;
+  }
   async deleteExpired(before: number): Promise<number> {
     const r = await this.db
       .prepare("DELETE FROM voici_links WHERE expires_at IS NOT NULL AND expires_at <= ?")
@@ -1247,11 +1254,15 @@ export class D1VoiciNameStorage implements VoiciNameStorage {
   async setWarned(key: string, warned: number) {
     await this.db.prepare("UPDATE voici_names SET warned = ? WHERE key = ? AND state = 'live'").bind(warned, key).run();
   }
-  async recordChange(username: string, serviceId: string, at: number) {
+  async recordChange(username: string, serviceId: string, at: number, nonce: string) {
     await this.db
-      .prepare("INSERT INTO voici_name_changes (username, service_id, at) VALUES (?, ?, ?)")
-      .bind(username.toLowerCase(), serviceId, at)
+      .prepare("INSERT INTO voici_name_changes (username, service_id, at, nonce) VALUES (?, ?, ?, ?)")
+      .bind(username.toLowerCase(), serviceId, at, nonce)
       .run();
+  }
+  async nonceUsed(nonce: string) {
+    const r = await this.db.prepare("SELECT 1 AS x FROM voici_name_changes WHERE nonce = ? LIMIT 1").bind(nonce).first<{ x: number }>();
+    return r !== null && r !== undefined;
   }
   async changesForService(username: string, serviceId: string, since: number) {
     const rs = await this.db

@@ -60,6 +60,8 @@ export type RateLimitEndpoint =
   // Name dibs initiate + verify: each verify makes outbound DNS/HTTPS lookups,
   // so a flood must not turn the Worker into a lookup amplifier.
   | "name-dibs"
+  // Custom voi.ci name check: up to two DNS lookups per call, and the field asks as people type.
+  | "voici-name-check"
   | "auth-code-issue"
   | "server-register"
   | "recovery-by-username"
@@ -197,6 +199,10 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   ],
   "name-dibs": [
     { axis: "ip", limit: 30, windowSec: 900 },
+  ],
+  "voici-name-check": [
+    { axis: "ip", limit: 60, windowSec: 60 },
+    { axis: "ip", limit: 600, windowSec: 3600 },
   ],
   "auth-code-issue": [
     { axis: "ip", limit: 20, windowSec: 3600 },
@@ -552,6 +558,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && pathname === "/api/accounts") return "username-claim";
   if (m === "POST" && pathname === "/api/username/suggest") return "username-suggest";
   if (m === "POST" && (pathname === "/api/name-dibs/initiate" || pathname === "/api/name-dibs/verify")) return "name-dibs";
+  if (m === "GET" && /^\/api\/users\/[^/]+\/voici-name-check$/.test(pathname)) return "voici-name-check";
   if (m === "POST" && pathname === "/api/auth-code/issue") return "auth-code-issue";
   if (m === "POST" && pathname === "/api/server/register") return "server-register";
   // Recovery re-pair initiate. NOT /re-pair/object or /re-pair/complete:
