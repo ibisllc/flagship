@@ -208,6 +208,14 @@ fun ServicesTab() {
                 AppDbQueryScreen(nav, serviceId = id, store = entry.arguments?.getString("store").orEmpty())
             }
         }
+        // The link field's "I own it": the domain proof for a voi.ci name, then back.
+        composable("name-dibs-link/{name}") { entry ->
+            com.flagshipserver.app.ui.screens.NameDibsScreen(
+                kind = com.flagshipserver.app.viewmodels.NameDibsViewModel.KIND_LINK,
+                presetName = entry.arguments?.getString("name").orEmpty(),
+                onDone = { nav.popBackStack() },
+            )
+        }
         composable("app-detail/{appId}") { entry ->
             val id = entry.arguments?.getString("appId") ?: return@composable
             PodScoped(nav, placement, entry, creation = false) {

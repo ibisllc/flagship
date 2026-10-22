@@ -100,6 +100,8 @@ class RenameServiceViewModel(
                     canonicalUrl = resp.canonicalUrl,
                     instances = _links.value?.instances ?: emptyList(),
                     shortUrl = resp.shortUrl,
+                    shortCode = _links.value?.shortCode,
+                    link = _links.value?.link,
                 )
             }
             _phase.value = RenameServicePhase.Completed(
