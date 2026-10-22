@@ -7,10 +7,14 @@ import FlagshipCore
 public struct NameDibsScreen: View {
     @Environment(\.colorScheme) private var scheme
     @State private var vm: NameDibsViewModel
-    @State private var name = ""
+    @State private var name: String
+    /// A custom-link proof ends with Done instead of the paid-name-change note.
+    private let onDone: (() -> Void)?
 
-    public init(vm: NameDibsViewModel) {
+    public init(vm: NameDibsViewModel, onDone: (() -> Void)? = nil) {
         _vm = State(initialValue: vm)
+        _name = State(initialValue: vm.presetName)
+        self.onDone = onDone
     }
 
     public var body: some View {
@@ -29,9 +33,17 @@ public struct NameDibsScreen: View {
                 case .publish(let claim):
                     publish(c, claim)
                 case .proven(let n):
-                    Text("You've proven you control \(n).com, so the name \(n) is held for you. Switching your account to it is a one-time $20 name change — your servers move with you.")
-                        .font(FS.font.body()).foregroundColor(c.text)
-                        .accessibilityIdentifier("dibs-proven")
+                    if vm.kind == .link {
+                        Text("You've proven you control \(n).com, so the name \(n) is held for you.")
+                            .font(FS.font.body()).foregroundColor(c.text)
+                            .accessibilityIdentifier("dibs-proven")
+                        FSPrimaryButton(String(localized: "Done"), block: true) { onDone?() }
+                            .accessibilityIdentifier("dibs-done")
+                    } else {
+                        Text("You've proven you control \(n).com, so the name \(n) is held for you. Switching your account to it is a one-time $20 name change — your servers move with you.")
+                            .font(FS.font.body()).foregroundColor(c.text)
+                            .accessibilityIdentifier("dibs-proven")
+                    }
                 case .failed(let msg):
                     Text(msg).font(FS.font.body()).foregroundColor(c.danger)
                 }
