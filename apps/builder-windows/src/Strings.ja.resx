@@ -244,6 +244,9 @@ VM と暗号化されたディスクイメージはこの PC から削除され�
   <data name="unlocking" xml:space="preserve">
     <value>ロック解除中…</value>
   </data>
+  <data name="notAValidServerName" xml:space="preserve">
+    <value>「{0}」は有効なサーバー名ではありません。</value>
+  </data>
   <data name="aHostedServerNamedAlreadyExists" xml:space="preserve">
     <value>「{0}」というホスト型サーバーはすでに存在します。</value>
   </data>
