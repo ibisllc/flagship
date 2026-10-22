@@ -53,6 +53,35 @@ const hasTerm = (str, term) =>
   new RegExp(`(?<![A-Za-z0-9\\u00C0-\\u024F])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:s)?(?![A-Za-z0-9\\u00C0-\\u024F])`, "u")
     .test(str.replace(/-/g, " "));
 
+// Placeholders with the argument each one reads: {2} -> 2, %3$s -> 2, a bare %s/%d -> its position.
+function argsAt(s) {
+  let n = 0;
+  return [...s.matchAll(/\{(\d+)\}|%(?:(\d+)\$)?(?:l{1,2}|h{1,2})?[sdfgiuxXeEc@]/g)].map((m) => ({ at: m.index, end: m.index + m[0].length, arg: m[1] !== undefined ? Number(m[1]) : m[2] !== undefined ? Number(m[2]) - 1 : n++ }));
+}
+/** The argument the singular/plural change is attached to: the placeholder inside the changed words, or the one right beside them ("{0} days"). */
+function countArg(one, other) {
+  if (one === other) return null;
+  const s = other.length >= one.length ? other : one, t = s === other ? one : other;
+  let a = 0;
+  while (a < t.length && s[a] === t[a]) a++;
+  let q = 0;
+  while (q < t.length - a && s[s.length - 1 - q] === t[t.length - 1 - q]) q++;
+  let b = Math.max(a, s.length - q);
+  const letter = /[\p{L}\p{M}\p{N}'’-]/u;
+  while (a > 0 && letter.test(s[a - 1])) a--;
+  while (b < s.length && letter.test(s[b])) b++;
+  const args = argsAt(s);
+  const inside = [...new Set(args.filter((x) => x.at < b && x.end > a).map((x) => x.arg))];
+  if (inside.length) return inside.length === 1 ? inside[0] : null;
+  const beside = [...new Set(args.filter((x) => (x.end <= a && /^[\s(（«“"]*$/.test(s.slice(x.end, a))) || (x.at >= b && /^[\s)）»”":：,]*$/.test(s.slice(b, x.at)))).map((x) => x.arg))];
+  return beside.length === 1 ? beside[0] : null;
+}
+/** A plural pair whose translation changes its wording next to a different argument than the English: the count was swapped with another value. */
+export function pluralArgProblem(enOne, enOther, trOne, trOther) {
+  const want = countArg(enOne, enOther), got = countArg(trOne, trOther);
+  return want !== null && got !== null && want !== got ? `the count is {${want}} in English but the translation changes its wording next to {${got}}` : null;
+}
+
 /** Problems with one translation of one entry (empty list when fine). */
 export function lintEntry(key, en, text, code) {
   const out = [];
@@ -70,6 +99,10 @@ export function lintEntry(key, en, text, code) {
     for (const k of glossary.keep) if (hasTerm(e, k) && !hasTerm(t, k)) out.push(`${code}: ${key}: drops "${k}": ${t}`);
     if (/^\s|\s$/.test(e) !== /^\s|\s$/.test(t) && e.trim() === e) out.push(`${code}: ${key}: stray edge whitespace`);
     if (e.length >= 3 && e.length <= 24 && t.length > e.length * 3 + 6) out.push(`${code}: ${key}: much longer than English (${e.length} -> ${t.length}): ${t}`);
+  }
+  if (typeof forms.one === "string" && typeof forms.other === "string" && typeof enForms.one === "string" && typeof enForms.other === "string") {
+    const p = pluralArgProblem(enForms.one, enForms.other, forms.one, forms.other);
+    if (p) out.push(`${code}: ${key}: ${p}`);
   }
   return out;
 }
@@ -213,4 +246,35 @@ export function runCommon(surface, argv) {
     return true;
   }
   return false;
+}
+
+// ---- reuse across surfaces ---------------------------------------------------------------------------
+
+const REUSE_TOKEN = /%(?:(\d+)\$)?(?:l{1,2}|h{1,2})?[sdfgiuxXeEc@]|\{(\d+)\}/g;
+const reuseTokens = (s) => [...s.matchAll(REUSE_TOKEN)].map((m) => ({ text: m[0], index: m[1] ? Number(m[1]) - 1 : m[2] !== undefined ? Number(m[2]) : null }));
+
+/**
+ * A donor surface's translation rewritten in the target surface's placeholder style (scripts/i18n-reuse.mjs).
+ * Both English sentences are the same once placeholders are ignored, so the n-th placeholder of the donor English
+ * and the n-th of the target English are the same value; each placeholder of the donor translation becomes the
+ * target's placeholder for that value, with the target's own argument number. null when it cannot be mapped.
+ */
+export function convertPlaceholders(donorEn, donorTr, targetEn) {
+  const dEn = reuseTokens(donorEn), tEn = reuseTokens(targetEn);
+  if (dEn.length !== tEn.length || reuseTokens(donorTr).length !== dEn.length) return null;
+  const order = dEn.map((t, i) => t.index ?? i); // the argument read by the donor English's n-th placeholder
+  const used = [];
+  let i = 0;
+  const out = donorTr.replace(REUSE_TOKEN, (m, p1, p2) => {
+    const idx = p1 ? Number(p1) - 1 : p2 !== undefined ? Number(p2) : i;
+    i++;
+    const pos = order.indexOf(idx);
+    used.push(pos < 0 ? null : pos);
+    return pos < 0 ? m : tEn[pos].text;
+  });
+  if (used.includes(null)) return null;
+  // `%@`/`%lld` are order-bound: only reusable when the donor kept the argument order
+  const bare = tEn.every((t) => !/%\d+\$|^\{/.test(t.text));
+  if (bare && used.some((u, k) => u !== k)) return null;
+  return out;
 }

@@ -20,7 +20,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import ts from "typescript";
 import { parse, serialize } from "parse5";
-import { ROOT, locales, targets, readEn, writeEn, readTr, runCommon, lintSurface } from "./lib/i18n-kv.mjs";
+import { ROOT, locales, targets, readEn, writeEn, readTr, runCommon, lintSurface, pluralArgProblem } from "./lib/i18n-kv.mjs";
 
 const SURFACE = "webapp";
 const WEBAPP = path.join(ROOT, "apps/web/public/webapp");
@@ -529,8 +529,8 @@ function staticHtmlEntries() {
   return found;
 }
 
-/** Every literal key the code already passes to tr()/trn(), by file:line (hand-written calls included). */
-function harvestCalls() {
+/** Every literal key the code already passes to tr()/trn(), by file:line (hand-written calls included). `pairs` gets each trn(n, one, other). */
+function harvestCalls(pairs = []) {
   const found = {};
   for (const f of listJs()) {
     const text = fs.readFileSync(f, "utf8");
@@ -540,6 +540,7 @@ function harvestCalls() {
     const visit = (n) => {
       if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && /^(tr|tr_|trn)$/.test(n.expression.text)) {
         const idx = n.expression.text === "trn" ? [1, 2] : [0];
+        if (n.expression.text === "trn" && lit(n.arguments[1]) !== null && lit(n.arguments[2]) !== null) pairs.push([lit(n.arguments[1]), lit(n.arguments[2])]);
         for (const i of idx) {
           const k = lit(n.arguments[i]);
           if (k !== null && lettersIn(k) >= 1 && !(k in found)) found[k] = { en: k, ctx: `webapp/${rel}:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}` };
@@ -612,7 +613,17 @@ if (cmd === "extract") {
   const problems = lintSurface(SURFACE);
   const ga = locales.locales.filter((l) => l.status === "ga" && l.code !== locales.source);
   const en = readEn(SURFACE);
-  for (const k of Object.keys(harvestCalls())) if (!en[k]) problems.push(`not in i18n/webapp/en.json (run node scripts/i18n-pwa.mjs extract): ${k.slice(0, 70)}`);
+  const pairs = [];
+  for (const k of Object.keys(harvestCalls(pairs))) if (!en[k]) problems.push(`not in i18n/webapp/en.json (run node scripts/i18n-pwa.mjs extract): ${k.slice(0, 70)}`);
+  // trn(n, one, other) passes the count as {0}; each language must put its singular/plural change next to the same argument
+  for (const l of targets) {
+    const tr = readTr(SURFACE, l.code);
+    for (const [one, other] of pairs) {
+      if (typeof tr[one] !== "string" || typeof tr[other] !== "string") continue;
+      const p = pluralArgProblem(one, other, tr[one], tr[other]);
+      if (p) problems.push(`${l.code}: trn("${one.slice(0, 50)}", …): ${p}: ${tr[other]}`);
+    }
+  }
   for (const l of ga) {
     const tr = readTr(SURFACE, l.code);
     const missing = Object.keys(en).filter((k) => en[k].translatable !== false && !tr[k]);
