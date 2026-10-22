@@ -57,7 +57,7 @@ function looksUiTemplate(raw) {
   if (/[\/=?<>@\\]|:\/\/|Bearer|HTTP |^status |Flagship-Boot|^[a-z]+\./.test(st)) return false;
   return /[A-Za-z]{2,}/.test(st) && /[A-Za-z]+[\s\u0000]|[\s\u0000][A-Za-z]+/.test(st);
 }
-const UI_CALLS = /^(toast|showToast|alert|confirm|prompt|notify|announce|setStatus|showStatus|setError|showError|inlinePrompt|confirmModal|modal|openModal|banner|setNote|flash|sheet|confirmSheet)$/i;
+const UI_CALLS = /^(toast|showToast|setSubtitle|setTitle|alert|confirm|prompt|notify|announce|setStatus|showStatus|setError|showError|inlinePrompt|confirmModal|modal|openModal|banner|setNote|flash|sheet|confirmSheet)$/i;
 const NEVER_CALLS = /^(console\.\w+|require|import|fetch|URL|RegExp|Symbol|\$|getElementById|querySelector(All)?|closest|matches|addEventListener|removeEventListener|dispatchEvent|CustomEvent|Event|setAttribute|getAttribute|removeAttribute|hasAttribute|localStorage\.\w+|sessionStorage\.\w+|JSON\.\w+|Object\.\w+|classList\.\w+|\w+\.(includes|indexOf|lastIndexOf|startsWith|endsWith|match|matchAll|test|replace|replaceAll|split|join|localeCompare|normalize|padStart|padEnd|at|charAt|get|set|has|delete|add|append|push|concat|slice|substring|toLowerCase|toUpperCase|encode|decode|fromCharCode|log|warn|error|info|debug)|btoa|atob|parseInt|parseFloat|Number|String|Boolean|Array\.\w+|Math\.\w+|Date\.\w+|Intl\.\w+|encodeURIComponent|decodeURIComponent|escapeHtml|esc|bytesToHex|hexToBytes|utf8|new TextEncoder|signWith\w+|canonical\w*|hash\w*|sha256|derive\w+|fsEvent|postMessage|importScripts|caches\.\w+|navigator\.\w+)$/;
 const INLINE_TAGS = new Set(["a", "b", "i", "em", "strong", "code", "kbd", "small", "u", "mark", "sup", "sub", "br", "abbr", "s", "wbr"]);
 
@@ -152,6 +152,11 @@ function transformFile(file) {
     while (p && (ts.isParenthesizedExpression(p) || (ts.isConditionalExpression(p) && p.condition !== child) || (ts.isBinaryExpression(p) && [ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken, ts.SyntaxKind.AmpersandAmpersandToken].includes(p.operatorToken.kind) && p.right === child) || ts.isAsExpression(p) || ts.isNonNullExpression(p))) { child = p; p = p.parent; }
     if (!p) return null;
     if (ts.isImportDeclaration(p) || ts.isExportDeclaration(p) || ts.isLiteralTypeNode(p) || ts.isCaseClause(p) || ts.isTaggedTemplateExpression(p) || ts.isDecorator(p)) return null;
+    // the default of a label-like parameter: `function confirm({ okLabel = "Confirm" })`
+    if ((ts.isBindingElement(p) || ts.isParameter(p)) && p.initializer === child && !ts.isConstructorDeclaration(p.parent)) {
+      const k = ts.isIdentifier(p.name) ? p.name.text : "";
+      return EXPLICIT_KEYS.has(k) || /(Label|Title|Text|Message|Placeholder)$/.test(k) ? "explicit" : null;
+    }
     if (ts.isPropertyAssignment(p) && p.initializer === child) {
       const k = ts.isIdentifier(p.name) || ts.isStringLiteral(p.name) ? p.name.text : "";
       if (EXPLICIT_KEYS.has(k)) return "explicit";
