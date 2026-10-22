@@ -148,7 +148,7 @@ private fun iconFor(kind: String): ImageVector = when (kind) {
     "wipe-restart" -> Icons.Outlined.Delete
     "recovery-set-up" -> Icons.Outlined.Key
     "recovery-rotated" -> Icons.Outlined.Autorenew
-    "app-renamed" -> Icons.Outlined.Link
+    "app-renamed", "voici-name-set", "voici-name-cleared", "voici-name-released", "voici-name-warning" -> Icons.Outlined.Link
     "invite-created" -> Icons.Outlined.PersonAddAlt
     "server-created", "demo-vps-provisioned" -> Icons.Outlined.Dns
     "server-online" -> Icons.Outlined.Verified

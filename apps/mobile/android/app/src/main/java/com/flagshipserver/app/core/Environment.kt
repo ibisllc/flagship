@@ -11,6 +11,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import com.flagshipserver.app.api.BuildClient
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.NameDibsClient
+import com.flagshipserver.app.api.VoiciNameClient
 import com.flagshipserver.app.api.ServerTransferClient
 import com.flagshipserver.app.api.InMemorySessionStore
 import com.flagshipserver.app.api.ScreensClient
@@ -41,6 +42,9 @@ val LocalServerTransferClient = staticCompositionLocalOf<ServerTransferClient> {
 
 /** Name-dibs client (`.com`): the public window + IRK-signed claim initiate/verify. */
 val LocalNameDibsClient = staticCompositionLocalOf<NameDibsClient> { Variant.defaultNameDibs() }
+
+/** Custom voi.ci name client (`.com`): availability check, the account's names, and the signed set/clear. */
+val LocalVoiciNameClient = staticCompositionLocalOf<VoiciNameClient> { Variant.defaultVoiciName() }
 
 /** The pod session store backing the BFF (holds podBaseUrl + session token).
  *  Production MainActivity installs the EncryptedSessionStore; previews + tests
