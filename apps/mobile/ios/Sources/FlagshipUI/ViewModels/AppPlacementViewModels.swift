@@ -115,7 +115,7 @@ public enum AppCopyOrder {
         do {
             signature = try key.signature(for: grant.canonicalBytes())
         } catch {
-            throw Failure(message: "Couldn't sign the copy: \(UserErrorText.of(error))")
+            throw Failure(message: String(localized: "Couldn't sign the copy: \(UserErrorText.of(error))"))
         }
         return AppCopyRequest(grant: grant, signature: HexUtil.encode(signature))
     }
@@ -473,7 +473,7 @@ public final class AppRunsOnController {
             do {
                 key = try await signer(String(localized: "Copy \(appName) to \(target.name)"))
             } catch {
-                throw AppCopyOrder.Failure(message: "Couldn't access your account key: \(UserErrorText.of(error))")
+                throw AppCopyOrder.Failure(message: String(localized: "Couldn't access your account key: \(UserErrorText.of(error))"))
             }
             let boxClient = await client(target.fqdn)
             do {

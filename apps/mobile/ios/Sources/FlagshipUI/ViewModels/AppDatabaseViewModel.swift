@@ -124,7 +124,7 @@ public enum AppDbOrder {
         do {
             signature = try key.signature(for: grant.canonicalBytes())
         } catch {
-            throw Failure(message: "Couldn't sign the change: \(UserErrorText.of(error))")
+            throw Failure(message: String(localized: "Couldn't sign the change: \(UserErrorText.of(error))"))
         }
         return AppDbQueryRequest(sql: sql, grant: grant, signature: HexUtil.encode(signature))
     }
@@ -362,7 +362,7 @@ public final class AppDbQueryController {
             do {
                 key = try await signer(String(localized: "Change \(appName)'s data"))
             } catch {
-                throw AppDbOrder.Failure(message: "Couldn't access your account key: \(UserErrorText.of(error))")
+                throw AppDbOrder.Failure(message: String(localized: "Couldn't access your account key: \(UserErrorText.of(error))"))
             }
             var attempt = 0
             while true {

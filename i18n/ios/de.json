@@ -1836,7 +1836,7 @@
   "Account": "Konto",
   "Display name": "Anzeigename",
   "Code protection on — recovery needs a code.": "Codeschutz an – die Wiederherstellung braucht einen Code.",
-  "Single-device — recovery is a 3-day wait.": "Ein Gerät – die Wiederherstellung dauert 3 Tage Wartezeit.",
+  "Single-device — recovery is a 3-day wait.": "Ein Gerät – die Wiederherstellung erfordert 3 Tage Wartezeit.",
   "Bring-your-own keys for building apps": "Eigene Schlüssel zum Bauen von Apps mitbringen",
   "Recover on a new device": "Auf einem neuen Gerät wiederherstellen",
   "Back up account key": "Kontoschlüssel sichern",
@@ -2378,5 +2378,8 @@
   "One of your apps wants to reach the internet.": "Eine deiner Apps möchte ins Internet.",
   "A device on your account invited someone to one of your apps.": "Ein Gerät deines Kontos hat jemanden zu einer deiner Apps eingeladen.",
   "Open Flagship to see what's new.": "Öffne Flagship, um zu sehen, was es Neues gibt.",
-  "A server shared with you is asking you to unlock it.": "Ein mit dir geteilter Server bittet dich, ihn zu entsperren."
+  "A server shared with you is asking you to unlock it.": "Ein mit dir geteilter Server bittet dich, ihn zu entsperren.",
+  "Couldn't sign the change: %@": "Die Änderung konnte nicht signiert werden: %@",
+  "Couldn't sign the key: %@": "Der Schlüssel konnte nicht signiert werden: %@",
+  "Couldn't sign the copy: %@": "Die Kopie konnte nicht signiert werden: %@"
 }

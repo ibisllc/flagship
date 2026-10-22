@@ -10515,5 +10515,17 @@
     "en": "A server shared with you is asking you to unlock it.",
     "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
     "manual": true
+  },
+  "Couldn't sign the change: %@": {
+    "en": "Couldn't sign the change: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AppAccessViewModel.swift:134"
+  },
+  "Couldn't sign the key: %@": {
+    "en": "Couldn't sign the key: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AppApiKeysViewModel.swift:108"
+  },
+  "Couldn't sign the copy: %@": {
+    "en": "Couldn't sign the copy: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AppPlacementViewModels.swift:118"
   }
 }
