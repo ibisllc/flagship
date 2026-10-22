@@ -43,6 +43,10 @@ fun auditEventLabel(kind: String): String = when (kind) {
     "recovery-rotated"    -> "Rotated recovery passkey"
     "recovery-code-consumed" -> "Used a recovery code"
     "app-renamed"         -> "Renamed app URL"
+    "voici-name-set"      -> FSStrings.get(R.string.changed_an_apps_link)
+    "voici-name-cleared"  -> FSStrings.get(R.string.went_back_to_an_apps_default_link)
+    "voici-name-released" -> FSStrings.get(R.string.released_an_apps_link)
+    "voici-name-warning"  -> FSStrings.get(R.string.an_apps_link_will_be_released_soon)
     "server-created"      -> "Created server"
     "server-online"       -> "Server came online"
     "server-migration-started"    -> "Started moving a server"
@@ -67,7 +71,7 @@ fun auditEventLabel(kind: String): String = when (kind) {
     "invite-created"      -> "Someone was invited to an app"
     "account-deleted"     -> "Deleted account"
     "username-reclaimed"  -> "Username reclaimed"
-    "account-renamed"     -> "Changed account name"
+    "account-renamed"     -> FSStrings.get(R.string.changed_account_name)
     else -> kind.replace(Regex("[._-]+"), " ").trim()
         .ifEmpty { FSStrings.get(R.string.account_event) }
         .replaceFirstChar { it.uppercaseChar() }
