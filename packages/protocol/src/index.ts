@@ -58,3 +58,5 @@ export * from "./peerBackupMail.js";
 export * from "./securityNotice.js";
 export * from "./nameDibs.js";
 export * from "./voiciName.js";
+export * from "./appListScope.js";
+export * from "./planAttestation.js";

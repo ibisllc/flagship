@@ -174,6 +174,14 @@ import {
   handlePostServerHealth,
   handleUserPubKeyCert,
   handleAccountKeyAttestation,
+  handleMarketplaceList,
+  handleMarketplaceGet,
+  handleMarketplaceSearch,
+  handleMarketplaceRemove,
+  handleMarketplaceInstall,
+  parseBlockedInstallGrades,
+  handleMarketplaceScanResult,
+  handleMarketplaceScanQueue,
   buildPushForwarder,
   wrapForwarderAsV12Fanout,
   handleGetEntitlementRevocations,
@@ -184,6 +192,21 @@ import {
   handlePushRevoke,
   handleUsageReport,
   handleUsageStatus,
+  handleUserAllowance,
+  handlePlanAttestation,
+  handleAdminTierGrant,
+  handleRedeemVoucher,
+  handleIssueVoucher,
+  handleStripeWebhook,
+  handleCreateCheckout,
+  handleCreateAppCheckout,
+  type StripeConfig,
+  handleListUserPurchases,
+  handleAdminSetAppPrice,
+  handleCreatorSetAppPrice,
+  handleAdminGrantPurchase,
+  handleDeveloperSales,
+  parseCutBps,
   handleVouchedDeviceAdmit,
   handleLlmPromoIssue,
   handleLlmPromoStatus,
@@ -232,7 +255,7 @@ import {
   type HandlerResponseWithHeaders,
   type IsoManifest,
 } from "@flagship/control-plane";
-import { D1Storage, D1DemoUsersStorage, D1MeterStorage, RequestD1, type D1Database } from "@flagship/storage";
+import { D1Storage, D1DemoUsersStorage, D1MeterStorage, D1VoucherStorage, D1StripeEventStore, D1AppPurchaseStorage, D1AppSalesStorage, RequestD1, type D1Database } from "@flagship/storage";
 import {
   routeBoot,
   AUTH_HEADER,
@@ -319,6 +342,13 @@ export interface ControlPlaneEnv {
   /** IPv4 of the .services SNI passthrough listener (Fly anycast). */
   SERVICES_PASSTHROUGH_IPV4?: string;
   SERVICES_PASSTHROUGH_IPV6?: string;
+  /** Hex-encoded Ed25519 pubkey of the marketplace scanner (Flagship-operated). */
+  MARKETPLACE_SCANNER_PUBKEY_HEX?: string;
+  /** Comma list of scan grades that BLOCK install (require an explicit
+   *  override). Absent ⇒ ["F"] (see DEFAULT_BLOCKED_INSTALL_GRADES). */
+  MARKETPLACE_INSTALL_BLOCKED_GRADES?: string;
+  /** Platform revenue cut in basis points (#15). Absent ⇒ 1500 (15%). */
+  MARKETPLACE_CUT_BPS?: string;
   /** Shared secret gating /api/admin/* operational endpoints. */
   FLAGSHIP_ADMIN_SECRET?: string;
 
@@ -404,6 +434,22 @@ export interface ControlPlaneEnv {
    * the relay's USAGE_REPORT_SECRET. NOT in git — `wrangler secret put`.
    */
   USAGE_REPORT_SECRET?: string;
+
+  /**
+   * Stripe (#11 — the "convenient lane"). All optional: with none set, the
+   * Stripe checkout + webhook routes 503 (feature ships dark). NOT in git —
+   * `wrangler secret put` for the secrets; price ids + URLs may live in [vars].
+   *   STRIPE_SECRET_KEY      `sk_…`   authorizes outbound Checkout creation
+   *   STRIPE_WEBHOOK_SECRET  `whsec_…` verifies inbound webhooks
+   *   STRIPE_PRICE_HOBBY/_MAKER        price ids → tier
+   *   STRIPE_SUCCESS_URL / _CANCEL_URL post-checkout redirects
+   */
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
+  STRIPE_PRICE_HOBBY?: string;
+  STRIPE_PRICE_MAKER?: string;
+  STRIPE_SUCCESS_URL?: string;
+  STRIPE_CANCEL_URL?: string;
 
   /** APNs HTTP/2 token-auth credentials. Set together to enable APNs. */
   APNS_KEY_ID?: string;
@@ -554,6 +600,11 @@ function accountDnsDepsOf(
 const ROUTE_RE = {
   USAGE_REPORT: /^\/api\/usage\/report$/,
   USAGE_STATUS: /^\/api\/usage\/status$/,
+  USER_ALLOWANCE: /^\/api\/users\/([^/]+)\/allowance$/,
+  USER_PLAN_ATTESTATION: /^\/api\/users\/([^/]+)\/plan-attestation$/,
+  USER_PURCHASES: /^\/api\/users\/([^/]+)\/purchases$/,
+  ADMIN_APP_PRICE: /^\/api\/admin\/marketplace\/([^/]+)\/([^/]+)\/price$/,
+  ADMIN_APP_GRANT_PURCHASE: /^\/api\/admin\/marketplace\/([^/]+)\/([^/]+)\/grant-purchase$/,
   USERNAME_CLAIM: /^\/api\/username\/claim$/,
   ACCOUNT_BOOTSTRAP: /^\/api\/accounts$/,
   USERNAME_SUGGEST: /^\/api\/username\/suggest$/,
@@ -771,6 +822,19 @@ const ROUTE_RE = {
   ADMIN_CA_LEASE_STATUS: /^\/api\/admin\/ca-lease-status$/,
   ADMIN_USERNAME_RECLAIM: /^\/api\/admin\/username\/([^/]+)\/reclaim$/,
   ACCOUNT_SELF_DELETE: /^\/api\/account\/self-delete$/,
+  ADMIN_TIER_GRANT: /^\/api\/admin\/tier-grant$/,
+  ADMIN_VOUCHER_ISSUE: /^\/api\/admin\/voucher\/issue$/,
+  VOUCHER_REDEEM: /^\/api\/voucher\/redeem$/,
+  STRIPE_WEBHOOK: /^\/api\/stripe\/webhook$/,
+  STRIPE_CHECKOUT: /^\/api\/stripe\/checkout$/,
+  STRIPE_APP_CHECKOUT: /^\/api\/stripe\/app-checkout$/,
+  MARKETPLACE_LIST: /^\/api\/marketplace\/list$/,
+  MARKETPLACE_SEARCH: /^\/api\/marketplace\/search$/,
+  MARKETPLACE_GET: /^\/api\/marketplace\/([^/]+)\/([^/]+)$/,
+  MARKETPLACE_INSTALL: /^\/api\/marketplace\/([^/]+)\/([^/]+)\/install$/,
+  MARKETPLACE_SCAN_RESULT: /^\/api\/marketplace\/([^/]+)\/([^/]+)\/scan$/,
+  MARKETPLACE_SET_PRICE: /^\/api\/marketplace\/([^/]+)\/([^/]+)\/price$/,
+  DEVELOPER_SALES: /^\/api\/developer\/sales\/([^/]+)$/,
   PUSH_REGISTER: /^\/api\/push\/register$/,
   PUSH_RELAY: /^\/api\/push\/relay$/,
   PUSH_VAPID_KEY: /^\/api\/push\/vapid-public-key$/,
@@ -791,6 +855,7 @@ const ROUTE_RE = {
   USER_IDENTITY_GET: /^\/api\/user-identity\/([^/]+)$/,
   INTERNAL_ACTIVE_REDIRECTIONS: /^\/api\/internal\/active-redirections$/,
   INTERNAL_REDIRECTION_LOOKUP: /^\/api\/internal\/redirection-lookup$/,
+  INTERNAL_MARKETPLACE_SCAN_QUEUE: /^\/api\/internal\/marketplace-scan-queue$/,
   // Idempotent demo creation, exact-ID cleanup, and admin status reads.
   DEMO_USER_CREATE: /^\/api\/dev\/sample-user\/create$/,
   DEMO_USER_CLEANUP: /^\/api\/dev\/sample-user\/cleanup$/,
@@ -959,6 +1024,20 @@ function bootJson(body: unknown, status: number): Response {
   });
 }
 
+/** Assemble the Stripe config from env (#11). Every field optional — the
+ *  handlers 503 when the field they need is absent, so the feature ships dark
+ *  until the owner sets the keys. */
+function stripeConfigFromEnv(env: ControlPlaneEnv): StripeConfig {
+  return {
+    ...(env.STRIPE_WEBHOOK_SECRET ? { webhookSecret: env.STRIPE_WEBHOOK_SECRET } : {}),
+    ...(env.STRIPE_SECRET_KEY ? { secretKey: env.STRIPE_SECRET_KEY } : {}),
+    ...(env.STRIPE_PRICE_HOBBY ? { priceHobby: env.STRIPE_PRICE_HOBBY } : {}),
+    ...(env.STRIPE_PRICE_MAKER ? { priceMaker: env.STRIPE_PRICE_MAKER } : {}),
+    ...(env.STRIPE_SUCCESS_URL ? { successUrl: env.STRIPE_SUCCESS_URL } : {}),
+    ...(env.STRIPE_CANCEL_URL ? { cancelUrl: env.STRIPE_CANCEL_URL } : {}),
+  };
+}
+
 /** Test seams for time-dependent handlers (the CPU harness holds a 25 s
  *  stream on a virtual clock). Production passes nothing. */
 export interface ControlPlaneOptions {
@@ -1043,6 +1122,29 @@ export async function tryControlPlane(
         env.USAGE_REPORT_SECRET,
         url.searchParams.get("username"),
       ),
+    );
+  }
+  // Per-user allowance read — the #6 dashboard + #7 alert data source. Account
+  // metadata gated like /pods by the account's read token
+  // (docs/account-read-token.md); the edge rate-limits it ("user-allowance").
+  if (method === "GET" && (m = path.match(ROUTE_RE.USER_ALLOWANCE))) {
+    const gate = await gateAccountRead(storage, env, request, decodeURIComponent(m[1]!));
+    if (gate) return gate;
+    return finishRead(
+      await handleUserAllowance(
+        { meter: new D1MeterStorage(env.DB), tiers: storage.tiers },
+        decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+
+  // The account's plan, CA-signed, for its boxes (docs/service-access-gating.md
+  // "Separate lists per server (Pro)"): gated like /pods by the read token.
+  if (method === "GET" && (m = path.match(ROUTE_RE.USER_PLAN_ATTESTATION))) {
+    const gate = await gateAccountRead(storage, env, request, decodeURIComponent(m[1]!));
+    if (gate) return gate;
+    return finishRead(
+      await handlePlanAttestation({ ca, tiers: storage.tiers, usernames: storage.usernames }, decodeURIComponent(m[1]!)),
     );
   }
 
@@ -3043,6 +3145,17 @@ export async function tryControlPlane(
       ),
     );
   }
+  if (method === "GET" && ROUTE_RE.INTERNAL_MARKETPLACE_SCAN_QUEUE.test(path)) {
+    const sd = parseInt(url.searchParams.get("staleDays") ?? "", 10);
+    return finish(
+      await handleMarketplaceScanQueue(
+        { marketplace: storage.marketplace },
+        bearer(request.headers.get("authorization")),
+        env.SERVICES_CONTROL_SECRET,
+        Number.isFinite(sd) ? sd : undefined,
+      ),
+    );
+  }
   if (method === "POST" && ROUTE_RE.VOICI_SHORTEN.test(path)) {
     return finish(
       await handleVoiciShorten(
@@ -3159,6 +3272,93 @@ export async function tryControlPlane(
     );
   }
 
+  // ── Admin: tier grant (#8) ────────────────────────────────────
+  // POST /api/admin/tier-grant — the entitlement-WRITE path the manual
+  // cash/Monero Pro flow uses: set a username's tier + expiry by hand.
+  // Body: { username, tier, durationDays }. Admin-secret authed.
+  if (method === "POST" && ROUTE_RE.ADMIN_TIER_GRANT.test(path)) {
+    const auth = authorizeAdmin({
+      expected: env.FLAGSHIP_ADMIN_SECRET,
+      provided: request.headers.get("x-admin-secret"),
+    });
+    if (auth) return finishPlain(auth);
+    return finishPlain(await handleAdminTierGrant({ tiers: storage.tiers }, await readJson(request)));
+  }
+
+  // ── Vouchers (#9) — prepaid Pro, bearer codes ─────────────────
+  // POST /api/admin/voucher/issue (admin) — mint a code, return it ONCE.
+  if (method === "POST" && ROUTE_RE.ADMIN_VOUCHER_ISSUE.test(path)) {
+    const auth = authorizeAdmin({
+      expected: env.FLAGSHIP_ADMIN_SECRET,
+      provided: request.headers.get("x-admin-secret"),
+    });
+    if (auth) return finishPlain(auth);
+    return finishPlain(
+      await handleIssueVoucher(
+        { vouchers: new D1VoucherStorage(env.DB), tiers: storage.tiers },
+        await readJson(request),
+      ),
+    );
+  }
+  // POST /api/voucher/redeem (PUBLIC) — the code is the bearer secret.
+  if (method === "POST" && ROUTE_RE.VOUCHER_REDEEM.test(path)) {
+    return finishPlain(
+      await handleRedeemVoucher(
+        { vouchers: new D1VoucherStorage(env.DB), tiers: storage.tiers },
+        await readJson(request),
+      ),
+    );
+  }
+
+  // ── Stripe (#11) — the convenient card lane ───────────────────
+  // POST /api/stripe/webhook (Stripe → us). Needs the EXACT signed bytes, so
+  // read request.text() (NOT readJson) and pass the Stripe-Signature header.
+  if (method === "POST" && ROUTE_RE.STRIPE_WEBHOOK.test(path)) {
+    const rawBody = await request.text();
+    return finishPlain(
+      await handleStripeWebhook(
+        {
+          tiers: storage.tiers,
+          stripeEvents: new D1StripeEventStore(env.DB),
+          purchases: new D1AppPurchaseStorage(env.DB),
+          marketplace: storage.marketplace,
+          sales: new D1AppSalesStorage(env.DB),
+          cutBps: parseCutBps(env.MARKETPLACE_CUT_BPS),
+          config: stripeConfigFromEnv(env),
+        },
+        { rawBody, signature: request.headers.get("stripe-signature") },
+      ),
+    );
+  }
+  // POST /api/stripe/checkout (PUBLIC) — mint a hosted subscription Checkout URL.
+  if (method === "POST" && ROUTE_RE.STRIPE_CHECKOUT.test(path)) {
+    return finishPlain(
+      await handleCreateCheckout(
+        {
+          tiers: storage.tiers,
+          stripeEvents: new D1StripeEventStore(env.DB),
+          config: stripeConfigFromEnv(env),
+        },
+        await readJson(request),
+      ),
+    );
+  }
+  // POST /api/stripe/app-checkout (PUBLIC) — mint a one-time app-purchase URL.
+  if (method === "POST" && ROUTE_RE.STRIPE_APP_CHECKOUT.test(path)) {
+    return finishPlain(
+      await handleCreateAppCheckout(
+        {
+          tiers: storage.tiers,
+          stripeEvents: new D1StripeEventStore(env.DB),
+          purchases: new D1AppPurchaseStorage(env.DB),
+          marketplace: storage.marketplace,
+          config: stripeConfigFromEnv(env),
+        },
+        await readJson(request),
+      ),
+    );
+  }
+
   if (method === "POST" && (m = path.match(ROUTE_RE.INSTALL_EVENTS))) {
     return finish(
       await handlePostInstallEvent(
@@ -3237,6 +3437,185 @@ export async function tryControlPlane(
       await handleGetProvisionStatus(
         { storage: storage.provisionStatus },
         decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+
+  // ── Marketplace ──────────────────────────────────────────────
+  if (method === "POST" && ROUTE_RE.MARKETPLACE_LIST.test(path)) {
+    return finish(
+      await handleMarketplaceList(
+        {
+          marketplace: storage.marketplace,
+          usernames: storage.usernames,
+          servers: storage.servers,
+        },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && ROUTE_RE.MARKETPLACE_SEARCH.test(path)) {
+    const limit = parseInt(url.searchParams.get("limit") ?? "30", 10) || 30;
+    const offset = parseInt(url.searchParams.get("offset") ?? "0", 10) || 0;
+    const sortRaw = url.searchParams.get("sort");
+    const sort = sortRaw === "newest" || sortRaw === "name" || sortRaw === "popular" ? sortRaw : undefined;
+    return finish(
+      await handleMarketplaceSearch(
+        { marketplace: storage.marketplace, usernames: storage.usernames },
+        {
+          text: url.searchParams.get("q") ?? undefined,
+          category: url.searchParams.get("cat") ?? undefined,
+          verifiedOnly: url.searchParams.get("verified") === "1",
+          limit,
+          offset,
+          sort,
+        },
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.MARKETPLACE_GET))) {
+    return finish(
+      await handleMarketplaceGet(
+        { marketplace: storage.marketplace, usernames: storage.usernames },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
+      ),
+    );
+  }
+  if (method === "DELETE" && (m = path.match(ROUTE_RE.MARKETPLACE_GET))) {
+    return finish(
+      await handleMarketplaceRemove(
+        { marketplace: storage.marketplace, usernames: storage.usernames },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.MARKETPLACE_INSTALL))) {
+    // #14 — paid apps gate on ownership. The installer identifies the account
+    // via ?username=; a free app ignores it.
+    const override =
+      url.searchParams.get("override") === "1" ||
+      url.searchParams.get("installAnyway") === "1";
+    return finish(
+      await handleMarketplaceInstall(
+        {
+          marketplace: storage.marketplace,
+          usernames: storage.usernames,
+          purchases: new D1AppPurchaseStorage(env.DB),
+          blockedInstallGrades: parseBlockedInstallGrades(env.MARKETPLACE_INSTALL_BLOCKED_GRADES),
+        },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
+        url.searchParams.get("username"),
+        override,
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.MARKETPLACE_SCAN_RESULT))) {
+    if (!env.MARKETPLACE_SCANNER_PUBKEY_HEX) {
+      return finishPlain({
+        status: 503,
+        body: { error: "marketplace scanner not configured on this deployment" },
+      });
+    }
+    let scannerPubkey: Uint8Array;
+    try {
+      const hex = env.MARKETPLACE_SCANNER_PUBKEY_HEX;
+      scannerPubkey = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < scannerPubkey.length; i++) {
+        scannerPubkey[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+      }
+    } catch {
+      return finishPlain({ status: 500, body: { error: "scanner pubkey misconfigured" } });
+    }
+    return finish(
+      await handleMarketplaceScanResult(
+        { marketplace: storage.marketplace, scannerPubkey },
+        await readJson(request),
+      ),
+    );
+  }
+  // POST /api/marketplace/:creator/:slug/price (CREATOR, #15) — creator-signed
+  // self-serve pricing (distinct from the admin path below).
+  if (method === "POST" && (m = path.match(ROUTE_RE.MARKETPLACE_SET_PRICE))) {
+    return finishPlain(
+      await handleCreatorSetAppPrice(
+        {
+          marketplace: storage.marketplace,
+          usernames: storage.usernames,
+          servers: storage.servers,
+        },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
+        await readJson(request),
+      ),
+    );
+  }
+
+  // GET /api/developer/sales/:creator (CREATOR-signed, #15) — the developer
+  // console payout report (ledger + rollups). Gated by a creator signature in
+  // the query (?issuedAt=&sig=), not the admin secret.
+  if (method === "GET" && (m = path.match(ROUTE_RE.DEVELOPER_SALES))) {
+    return finishPlain(
+      await handleDeveloperSales(
+        {
+          sales: new D1AppSalesStorage(env.DB),
+          marketplace: storage.marketplace,
+          usernames: storage.usernames,
+          servers: storage.servers,
+          cutBps: parseCutBps(env.MARKETPLACE_CUT_BPS),
+        },
+        decodeURIComponent(m[1]!),
+        url.searchParams.get("issuedAt"),
+        url.searchParams.get("sig"),
+      ),
+    );
+  }
+
+  // ── Paid apps (#14) — purchase entitlements + curated pricing ─
+  // GET /api/users/:u/purchases — the install-what-you-own list, gated by the
+  // account's read token like /pods (docs/account-read-token.md).
+  if (method === "GET" && (m = path.match(ROUTE_RE.USER_PURCHASES))) {
+    const gate = await gateAccountRead(storage, env, request, decodeURIComponent(m[1]!));
+    if (gate) return gate;
+    return finishRead(
+      await handleListUserPurchases(
+        { purchases: new D1AppPurchaseStorage(env.DB), marketplace: storage.marketplace },
+        decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  // POST /api/admin/marketplace/:creator/:slug/price (ADMIN) — set a price.
+  if (method === "POST" && (m = path.match(ROUTE_RE.ADMIN_APP_PRICE))) {
+    const auth = authorizeAdmin({
+      expected: env.FLAGSHIP_ADMIN_SECRET,
+      provided: request.headers.get("x-admin-secret"),
+    });
+    if (auth) return finishPlain(auth);
+    return finishPlain(
+      await handleAdminSetAppPrice(
+        { purchases: new D1AppPurchaseStorage(env.DB), marketplace: storage.marketplace },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
+        await readJson(request),
+      ),
+    );
+  }
+  // POST /api/admin/marketplace/:creator/:slug/grant-purchase (ADMIN) — comp.
+  if (method === "POST" && (m = path.match(ROUTE_RE.ADMIN_APP_GRANT_PURCHASE))) {
+    const auth = authorizeAdmin({
+      expected: env.FLAGSHIP_ADMIN_SECRET,
+      provided: request.headers.get("x-admin-secret"),
+    });
+    if (auth) return finishPlain(auth);
+    return finishPlain(
+      await handleAdminGrantPurchase(
+        { purchases: new D1AppPurchaseStorage(env.DB), marketplace: storage.marketplace },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
+        await readJson(request),
       ),
     );
   }

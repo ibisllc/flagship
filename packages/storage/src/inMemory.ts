@@ -64,6 +64,12 @@ import type {
   LlmPromoStorage,
   LlmPromoUsageRecord,
   LuksKeyStorage,
+  MarketplaceListingRecord,
+  MarketplaceSearchQuery,
+  MarketplaceStorage,
+  AppSalesStorage,
+  AppSaleRecord,
+  AppSalesTotals,
   PushTokenRecord,
   PushTokenStorage,
   DeviceIdentityRecord,
@@ -550,6 +556,126 @@ export class InMemoryLuksKeyStorage implements LuksKeyStorage {
   async deleteSealed(serverDomain: string): Promise<void> {
     this.sealed.delete(serverDomain);
   }
+}
+
+export class InMemoryMarketplaceStorage implements MarketplaceStorage {
+  private listings = new Map<string, MarketplaceListingRecord>();
+  private key(c: string, s: string) { return `${c.toLowerCase()}/${s.toLowerCase()}`; }
+  async upsert(rec: MarketplaceListingRecord): Promise<void> {
+    this.listings.set(this.key(rec.creator, rec.slug), { ...rec });
+  }
+  async get(creator: string, slug: string): Promise<MarketplaceListingRecord | undefined> {
+    const r = this.listings.get(this.key(creator, slug));
+    return r ? { ...r } : undefined;
+  }
+  async search(q: MarketplaceSearchQuery): Promise<MarketplaceListingRecord[]> {
+    const limit = q.limit ?? 30;
+    const offset = q.offset ?? 0;
+    let all = [...this.listings.values()].filter((l) => l.status === "listed");
+    if (q.category) all = all.filter((l) => l.category === q.category);
+    if (q.verifiedOnly) all = all.filter((l) => !!l.scanGrade);
+    if (q.text) {
+      const needle = q.text.toLowerCase();
+      all = all.filter((l) =>
+        l.name.toLowerCase().includes(needle) ||
+        l.tagline.toLowerCase().includes(needle) ||
+        l.tagsCsv.toLowerCase().includes(needle),
+      );
+    }
+    switch (q.sort ?? "popular") {
+      case "popular":
+        all.sort((a, b) => b.rankScore - a.rankScore || b.installCount - a.installCount);
+        break;
+      case "newest":
+        all.sort((a, b) => b.listedAt - a.listedAt);
+        break;
+      case "name":
+        all.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+    }
+    return all.slice(offset, offset + limit).map((r) => ({ ...r }));
+  }
+  async remove(creator: string, slug: string): Promise<void> {
+    const key = this.key(creator, slug);
+    const r = this.listings.get(key);
+    if (r) this.listings.set(key, { ...r, status: "removed" });
+  }
+  async recordInstall(creator: string, slug: string): Promise<void> {
+    const r = this.listings.get(this.key(creator, slug));
+    if (r) {
+      r.installCount += 1;
+      r.rankScore = computeMarketplaceRank(r);
+    }
+  }
+  async setPrice(creator: string, slug: string, priceUsdCents: number): Promise<boolean> {
+    const r = this.listings.get(this.key(creator, slug));
+    if (!r) return false;
+    r.priceUsdCents = priceUsdCents > 0 ? Math.floor(priceUsdCents) : undefined;
+    return true;
+  }
+  async setScanResult(
+    creator: string,
+    slug: string,
+    grade: "A" | "B" | "C" | "D" | "F",
+    reportKey: string,
+    completedAt: number,
+  ): Promise<boolean> {
+    const r = this.listings.get(this.key(creator, slug));
+    if (!r) return false;
+    r.scanGrade = grade;
+    r.scanReportKey = reportKey;
+    r.scanCompletedAt = completedAt;
+    r.rankScore = computeMarketplaceRank(r);
+    return true;
+  }
+  async listNeedingScan(staleBeforeMs: number): Promise<MarketplaceListingRecord[]> {
+    return [...this.listings.values()]
+      .filter(
+        (l) =>
+          l.status === "listed" &&
+          (l.scanCompletedAt === undefined || l.scanCompletedAt < staleBeforeMs),
+      )
+      .map((l) => ({ ...l }));
+  }
+  async listByCreator(creator: string): Promise<MarketplaceListingRecord[]> {
+    const c = creator.toLowerCase();
+    return [...this.listings.values()]
+      .filter((l) => l.creator.toLowerCase() === c && l.status !== "removed")
+      .sort((a, b) => b.listedAt - a.listedAt)
+      .map((l) => ({ ...l }));
+  }
+}
+
+export class InMemoryAppSalesStorage implements AppSalesStorage {
+  private rows = new Map<string, AppSaleRecord>();
+  async record(rec: AppSaleRecord): Promise<boolean> {
+    if (this.rows.has(rec.saleKey)) return false;
+    this.rows.set(rec.saleKey, { ...rec });
+    return true;
+  }
+  async listForCreator(creatorAccount: string): Promise<AppSaleRecord[]> {
+    return [...this.rows.values()]
+      .filter((r) => r.creatorAccount === creatorAccount)
+      .sort((a, b) => b.at - a.at)
+      .map((r) => ({ ...r }));
+  }
+  async totalsForCreator(creatorAccount: string): Promise<AppSalesTotals> {
+    const mine = [...this.rows.values()].filter((r) => r.creatorAccount === creatorAccount);
+    return {
+      grossCents: mine.reduce((s, r) => s + r.grossCents, 0),
+      cutCents: mine.reduce((s, r) => s + r.cutCents, 0),
+      netCents: mine.reduce((s, r) => s + r.netCents, 0),
+      saleCount: mine.length,
+    };
+  }
+}
+
+export function computeMarketplaceRank(l: MarketplaceListingRecord): number {
+  const installs = Math.log10(l.installCount + 1) * 4;
+  const recency = Math.max(0, 30 - (Date.now() - l.updatedAt) / 86_400_000);
+  const grade = l.scanGrade ? { A: 5, B: 3, C: 1, D: -2, F: -5 }[l.scanGrade] : 0;
+  const featured = l.featuredUntil && l.featuredUntil > Date.now() ? 10 : 0;
+  return installs + recency + grade + featured;
 }
 
 export class InMemoryPushTokenStorage implements PushTokenStorage {
@@ -2308,6 +2434,7 @@ export class InMemoryStorage implements Storage {
   boxSealedLeases = new InMemoryBoxSealedLeaseStorage();
   pendingRePairs = new InMemoryPendingRePairStorage();
   webauthnRecovery = new InMemoryWebauthnRecoveryStorage();
+  marketplace = new InMemoryMarketplaceStorage();
   pushTokens = new InMemoryPushTokenStorage();
   deviceIdentities = new InMemoryDeviceIdentityStorage();
   accountProfiles = new InMemoryAccountProfileStorage();

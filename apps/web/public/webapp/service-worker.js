@@ -364,7 +364,13 @@
 //       and English-first browsers stay in English.
 //  v159: named links (feat/named-links): the .com domain proof ("Claim your .com
 //       name") and, on top of it, custom voi.ci names for services.
-const SHELL_VERSION = "v159";
+
+//  v160: feat/marketplace only: main's shell plus the branch's files
+//       (marketplace, tier status, allowance, install, developer views, and
+//       the Pro "Separate list on each server" switch: lib/listScope.js, an
+//       access-lists push that opens the activity), so it runs a version
+//       above its parent's; bump it past the parent's on rebase.
+const SHELL_VERSION = "v160";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -399,6 +405,7 @@ const OPTIONAL_SHELL = [
   "/qrScanner.js",
   "/lib/util.js",
   "/lib/podPair.js",
+  "/lib/installService.js",
   "/lib/leases.js",
   "/lib/recovery.js",
   "/lib/keyfile.js",
@@ -446,6 +453,7 @@ const OPTIONAL_SHELL = [
   "/lib/appPlacement.js",
   "/lib/serverMonitoring.js",
   "/lib/memberRoles.js",
+  "/lib/listScope.js",
   "/lib/serverShare.js",
   "/lib/serverShares.js",
   "/lib/serviceEnvChange.js",
@@ -540,6 +548,9 @@ const OPTIONAL_SHELL = [
   "/lib/uikit.js",
   "/lib/usersCheck.js",
   "/lib/wipeRestartCeremony.js",
+  "/lib/allowance.js",
+  "/lib/marketplaceLlmKey.js",
+  "/lib/proBanner.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
@@ -558,6 +569,9 @@ const OPTIONAL_SHELL = [
   "/views/app-access.js",
   "/views/app-db.js",
   "/views/paired-sessions.js",
+  "/views/tier-status.js",
+  "/views/marketplace.js",
+  "/views/developer.js",
   "/views/vibe-code.js",
   "/views/edit-service.js",
   "/views/service-env.js",
@@ -891,6 +905,23 @@ self.addEventListener("push", (event) => {
         requireInteraction: false,
         icon: "/icon.svg",
         data: { kind: "invite-created", deepLink: "/?view=account-audit" },
+      }),
+    );
+    return;
+  }
+
+  // Pro ended, so apps with a separate access list on each server went back to
+  // one list (feat/marketplace). The push names no app or person; the
+  // activity view shows the box's row.
+  if (data && (data.category === "access-lists" || data.kind === "access-lists")) {
+    event.waitUntil(
+      self.registration.showNotification("Flagship", {
+        body: "Pro ended, so your apps use one access list on all your servers again.",
+        tag: "flagship-access-lists",
+        renotify: true,
+        requireInteraction: false,
+        icon: "/icon.svg",
+        data: { kind: "access-lists", deepLink: "/?view=account-audit" },
       }),
     );
     return;

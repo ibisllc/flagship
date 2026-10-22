@@ -112,8 +112,10 @@ export const HOME_BUTTON_ICONS = {
   "open-pod-pair":          keyIcon,
   "open-server-detail":     serverIcon,
   "open-apps-list":         packageIcon,
+  "open-marketplace":       shoppingBagIcon,
   "open-vibe-code":         sparklesIcon,
   "open-paired-sessions":   usersIcon,
+  "open-tier-status":       activityIcon,
   "open-install-progress":  downloadIcon,
   // #32 — only entry point is service-detail.js; legacy id kept so a
   // pinned fork's CSS still resolves the icon. New code should not

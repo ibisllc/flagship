@@ -16,6 +16,14 @@ import kotlinx.serialization.json.JsonObject
 
 // ---------- Shared shapes ----------------------------------------------
 
+/** sha256 hex of a UTF-8 string. Used to verify a carried marketplace manifest
+ *  hashes to the listing's committed `manifest_hash` before install (mirror of
+ *  the webapp `sha256Hex` + iOS `manifestSha256Hex`). */
+fun manifestSha256Hex(s: String): String =
+    com.flagshipserver.app.core.HexUtil.encode(
+        java.security.MessageDigest.getInstance("SHA-256").digest(s.toByteArray(Charsets.UTF_8)),
+    )
+
 @Serializable
 data class AppSummary(
     val serviceId: String,
@@ -669,6 +677,182 @@ data class AppDetailResponse(
     )
 }
 
+// ---------- P1.4 marketplace-browse ------------------------------------
+
+@Serializable
+data class MarketplaceListing(
+    val creator: String,
+    val slug: String,
+    val title: String,
+    val summary: String,
+    val screenshots: List<String>,
+    val installCount: Int,
+    val requiresLlmKey: Boolean,
+    /** Env-var NAME a `requiresLlmKey` app reads its key from (e.g.
+     *  `OPENAI_API_KEY`); relayed by the BFF so the client can prefill
+     *  "Configure environment" after install. Null ⇒ fall back to
+     *  [MarketplaceLlmKey.DEFAULT_ENV_VAR]. */
+    val llmKeyEnvVar: String? = null,
+    /** Marketplace scanner verdict ("A".."F"), or null when not yet scanned
+     *  (the pill renders "ungraded"). MIRRORS the BFF's `scanGrade`. */
+    val scanGrade: String? = null,
+    val alreadyInstalled: Boolean,
+)
+
+/**
+ * Marketplace install LLM-key UX helpers, byte-identical with the daemon BFF
+ * (`LLM_KEY_ENV_DEFAULT`), the webapp (`lib/marketplaceLlmKey.js`), and iOS
+ * (`MarketplaceLlmKey`) so the prefilled-name flow is the same everywhere.
+ */
+object MarketplaceLlmKey {
+    /** Fallback env-var name when a listing doesn't declare one. */
+    const val DEFAULT_ENV_VAR = "OPENAI_API_KEY"
+
+    /** The env-var name to prefill for [listing] — its declared name, else the
+     *  default. */
+    fun envVar(listing: MarketplaceListing): String =
+        listing.llmKeyEnvVar?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENV_VAR
+}
+
+/**
+ * Marketplace scanner-grade → display bucket, mapped identically on every
+ * surface (mirrors the webapp `scanGradePill`): A/B → OK, C/D → WARN, F → ERR,
+ * and anything else (incl. null — `scan_grade` is NULL until the scanner runs)
+ * → UNGRADED.
+ */
+enum class ScanGradeBucket {
+    OK, WARN, ERR, UNGRADED;
+
+    companion object {
+        fun from(grade: String?): ScanGradeBucket = when (grade?.uppercase()) {
+            "A", "B" -> OK
+            "C", "D" -> WARN
+            "F" -> ERR
+            else -> UNGRADED
+        }
+
+        /** Pill label: "scan A".."scan F" for a known grade, else "ungraded". */
+        fun pillLabel(grade: String?): String = when (grade?.uppercase()) {
+            "A", "B", "C", "D", "F" -> "scan ${grade!!.uppercase()}"
+            else -> "ungraded"
+        }
+
+        /** Conservative install-confirm gate: a failing grade (F → ERR) BLOCKS
+         *  the normal Install tap; the client must demand an explicit,
+         *  visually-distinct "Install anyway" override before posting to the
+         *  box. A/B/C/D and ungraded do NOT block. */
+        fun blocksInstall(grade: String?): Boolean = from(grade) == ERR
+
+        /** True when the listing has no usable grade yet (null / empty /
+         *  unrecognised → UNGRADED) — the confirm cautions "not yet
+         *  security-scanned" but still allows the install. */
+        fun isUngraded(grade: String?): Boolean = from(grade) == UNGRADED
+    }
+}
+
+@Serializable
+data class MarketplaceBrowseResponse(val listings: List<MarketplaceListing>)
+
+/**
+ * Single-listing fetch (`GET https://flagshipserver.com/api/marketplace/<creator>/<slug>`).
+ * MIRRORS the iOS `MarketplaceListingDetail` + the webapp's `fetchListing`
+ * in `apps/web/public/webapp/lib/installService.js` — `manifestJson` is the
+ * opaque JSON the daemon verifies on install. Extra fields the .com worker
+ * returns are tolerated (`ignoreUnknownKeys`).
+ */
+@Serializable
+data class MarketplaceListingDetail(
+    val creator: String,
+    val slug: String,
+    val title: String,
+    val summary: String,
+    val manifestJson: String,
+    /** The listing's committed `manifest_hash` (sha256 hex of manifestJson).
+     *  The VM re-checks it before install so a swapped manifest is rejected.
+     *  Empty on legacy listings that predate the carried manifest. */
+    val manifestHash: String = "",
+)
+
+/**
+ * Wire shape of the `.com` single-listing GET
+ * (`GET https://flagshipserver.com/api/marketplace/<creator>/<slug>`): the
+ * listing object is wrapped under `listing` and uses snake_case keys. Mapped
+ * into [MarketplaceListingDetail] by the Live client. Unknown fields tolerated.
+ */
+@Serializable
+internal data class ComListingEnvelope(val listing: ComListingObject)
+
+@Serializable
+internal data class ComListingObject(
+    val creator: String,
+    val slug: String,
+    val name: String = "",
+    val tagline: String = "",
+    @SerialName("manifest_json") val manifestJson: String = "",
+    @SerialName("manifest_hash") val manifestHash: String = "",
+)
+
+/**
+ * Install-marketplace-app request. Wire-identical to the iOS
+ * `InstallServiceRequest` + the webapp body in
+ * `apps/web/public/webapp/lib/installService.js`: same field names, same
+ * canonical tag (`flagship/install-service/v1`), same envelope
+ * (`{ request, signature }`). The daemon endpoint is `POST <pod>/api/services`
+ * (NOT a screens-BFF route — the install pipeline lives on the
+ * service-platform handler in `packages/server-daemon/src/servicePlatform.ts`).
+ */
+@Serializable
+data class InstallServiceRequest(
+    val serverId: String,
+    val creator: String,
+    val slug: String,
+    val manifestJson: String,
+    val addOwnerToMembership: Boolean,
+    val issuedAt: Long,
+)
+
+/**
+ * `{request, signature}` envelope expected by `POST <pod>/api/services`.
+ * `signature` is the hex-encoded Ed25519 signature of
+ * [installServiceCanonicalBytes] produced with the user's IRK.
+ */
+@Serializable
+data class InstallServiceEnvelope(
+    val request: InstallServiceRequest,
+    val signature: String,
+)
+
+/** Daemon's success body for `POST /api/services`. Mirrors `installService`
+ *  in `servicePlatform.ts` (+ the iOS `InstallServiceResponse`). */
+@Serializable
+data class InstallServiceResponse(
+    val ok: Boolean,
+    val serviceId: String,
+    val urlLabel: String,
+    val port: Int? = null,
+)
+
+/**
+ * Canonical-bytes for [InstallServiceRequest], byte-identical with the iOS
+ * `installServiceCanonicalBytes`, the webapp's `canonicalInstallService`,
+ * and the TS protocol `canonicalInstallService` in
+ * `packages/protocol/src/auth.ts`. Format:
+ *
+ *     flagship/install-service/v1 | serverId | creator | slug | manifestJson | (1|0) | issuedAt
+ *
+ * `addOwnerToMembership` is encoded as `"1"` (true) / `"0"` (false);
+ * `issuedAt` is a base-10 integer (no padding, no inner separator).
+ */
+fun installServiceCanonicalBytes(r: InstallServiceRequest): ByteArray = listOf(
+    "flagship/install-service/v1",
+    r.serverId,
+    r.creator,
+    r.slug,
+    r.manifestJson,
+    if (r.addOwnerToMembership) "1" else "0",
+    r.issuedAt.toString(),
+).joinToString("|").toByteArray(Charsets.UTF_8)
+
 // ---------- P1.5 vibe-code/start ---------------------------------------
 
 /**
@@ -904,6 +1088,19 @@ data class ProvisionStatusRecord(
     val updatedAt: Long,
     /** Append-only history of every phase report, oldest first. */
     val history: List<ProvisionStatusEntry> = emptyList(),
+)
+
+// ---------- P1.16 tier-status ------------------------------------------
+
+@Serializable
+data class TierStatusResponse(
+    val tier: String,                              // "free" | "promo" | "byok"
+    val llmCreditsRemainingDay: Long? = null,
+    val llmCreditsRemainingTotal: Long? = null,
+    val dispatcherUsageGBmonth: Double? = null,
+    val dispatcherFreeQuotaGBmonth: Double? = null,
+    val customDomains: List<String>,
+    val reservedNames: List<String>,
 )
 
 // ---------- P1.17 / P1.18 url-controller -------------------------------

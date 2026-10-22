@@ -91,7 +91,7 @@ class MockScreensClient(
             recentInstallEvents = listOf(
                 RecentInstallEvent(now() - 60_000L * 30, "installed", "bright-maple--plants", "via vibe-code"),
                 RecentInstallEvent(now() - 60_000L * 60 * 6, "deploy", "bright-maple--wiki", "v1.4.0"),
-                RecentInstallEvent(now() - 60_000L * 60 * 26, "installed", "bright-maple--wiki", "via vibe-code"),
+                RecentInstallEvent(now() - 60_000L * 60 * 26, "installed", "bright-maple--wiki", "marketplace"),
             ),
             lastUpdate = LastUpdate(
                 outcome = "applied",
@@ -544,6 +544,60 @@ class MockScreensClient(
         return AppRankResponse(ok = true, target = t, rank = role)
     }
 
+    // ---------- Access control — a separate list on each server (Pro) ----
+
+    /** The account's plan as the box sees it (null: the gym's seed, else "free"). */
+    var listScopePlan: String? = null
+    /** Per-app scope the box holds (absent: "server" for Plants when the gym seeds it, else "account"). */
+    val listScopes: MutableMap<String, String> = mutableMapOf()
+    /** The app's servers in server order (the demo's first two). */
+    var listScopeServers: List<String> = listOf("home.bright-maple.flagship.services", "office.bright-maple.flagship.services")
+    val setListScopeCalls: MutableList<Pair<String, AppListScopeRequest>> = mutableListOf()
+    /** Status to refuse the next list-scope change with (e.g. 409), once. */
+    var listScopeStatus: Int? = null
+
+    private fun mockPlan(): String = listScopePlan ?: com.flagshipserver.app.core.GymSeams.listsPlan ?: "free"
+
+    private fun scopeOf(serviceId: String): String =
+        listScopes[serviceId]
+            ?: if (com.flagshipserver.app.core.GymSeams.separateLists && serviceId == GYM_SEPARATE_APP) "server" else "account"
+
+    private fun listScopeState(serviceId: String) = AppListScopeState(
+        serviceRef = serviceId,
+        scope = scopeOf(serviceId),
+        plan = mockPlan(),
+        self = "$podContext.bright-maple.flagship.services",
+        leader = listScopeServers.firstOrNull().orEmpty(),
+        servers = listScopeServers,
+    )
+
+    override suspend fun appListScope(serviceId: String): AppListScopeState {
+        tick()
+        return listScopeState(serviceId)
+    }
+
+    /** Mirrors the box: Pro only for "server", newest order wins. */
+    override suspend fun setAppListScope(serviceId: String, req: AppListScopeRequest): AppListScopeState {
+        tick()
+        setListScopeCalls.add(serviceId to req)
+        listScopeStatus?.let { listScopeStatus = null; throw ScreensError.Http(it, """{"error":"refused"}""") }
+        if (req.order.scope == "server" && mockPlan() != "pro") {
+            throw ScreensError.Http(402, """{"error":"A separate list on each server comes with Pro.","code":"pro-required"}""")
+        }
+        listScopes[serviceId] = req.order.scope
+        return listScopeState(serviceId)
+    }
+
+    override suspend fun accessListsSummary(): AccessListsSummary {
+        tick()
+        val apps = (listScopes.keys + GYM_SEPARATE_APP).filter { scopeOf(it) == "server" }
+        return AccessListsSummary(
+            plan = mockPlan(),
+            separateApps = apps.size,
+            leaders = if (apps.isEmpty()) emptyList() else listOfNotNull(listScopeServers.firstOrNull()),
+        )
+    }
+
     override suspend fun serviceDb(serviceId: String): AppDbOverview {
         tick()
         dbError?.let { throw it }
@@ -657,11 +711,93 @@ class MockScreensClient(
         )
     }
 
+    override suspend fun marketplaceBrowse(): MarketplaceBrowseResponse {
+        tick()
+        return MarketplaceBrowseResponse(
+            listings = listOf(
+                MarketplaceListing(
+                    creator = "trent", slug = "scratchpad", title = "Scratchpad",
+                    summary = "A markdown notes app with offline-first sync.",
+                    screenshots = emptyList(), installCount = 412,
+                    requiresLlmKey = false, scanGrade = "A", alreadyInstalled = true,
+                ),
+                MarketplaceListing(
+                    creator = "wendy", slug = "wishlist", title = "Family Wishlist",
+                    summary = "Shared birthday + holiday lists for the household.",
+                    screenshots = emptyList(), installCount = 188,
+                    requiresLlmKey = false, scanGrade = null, alreadyInstalled = false,
+                ),
+                MarketplaceListing(
+                    creator = "peggy", slug = "feed-reader", title = "Tiny Feed Reader",
+                    summary = "Atom + RSS in a clean reader. Optional AI summaries.",
+                    screenshots = emptyList(), installCount = 974,
+                    requiresLlmKey = true, llmKeyEnvVar = "OPENAI_API_KEY",
+                    scanGrade = "C", alreadyInstalled = false,
+                ),
+            )
+        )
+    }
 
     val vibeCodeStartCalls: MutableList<VibeCodeStartRequest> = mutableListOf()
 
     /** When set, start refuses with it (e.g. an edit's 409 or 413). */
     var vibeCodeStartError: Throwable? = null
+
+    // P1.4 marketplace install plumbing.
+    //
+    // Tests inspect these recorders to assert the install call shape (request
+    // body + signature presence). The Live client posts the same payload to
+    // `<pod>/api/services`. Mirrors iOS MockScreensClient.
+
+    /** Records each `installFromMarketplace` envelope so tests can assert
+     *  the wire shape. Mirrors iOS `installCalls`. */
+    val installCalls: MutableList<InstallServiceEnvelope> = mutableListOf()
+
+    /** Records each `marketplaceFetchListing` call. Mirrors iOS `listingFetches`. */
+    data class ListingFetch(val creator: String, val slug: String)
+    val listingFetches: MutableList<ListingFetch> = mutableListOf()
+
+    /** When true the next `installFromMarketplace` call throws so tests can
+     *  exercise the error path. Mirrors iOS `installShouldFail`. */
+    var installShouldFail: Boolean = false
+    var installFailureMessage: String = "simulated daemon error"
+
+    /** When true `marketplaceFetchListing` returns a listing whose
+     *  `manifestHash` does NOT match its `manifestJson`, so the VM's
+     *  install-time hash check can be exercised. Mirrors iOS
+     *  `tamperListingManifest`. */
+    var tamperListingManifest: Boolean = false
+
+    /** Deterministic listing detail. The `manifestJson` is opaque (a real
+     *  daemon validates the inner JSON); the mock returns a small recognizable
+     *  stub so tests can assert it round-trips into the install request. */
+    override suspend fun marketplaceFetchListing(creator: String, slug: String): MarketplaceListingDetail {
+        tick()
+        listingFetches.add(ListingFetch(creator, slug))
+        val manifestJson = """{"name":"$slug","version":"1.0.0","creator":"$creator"}"""
+        return MarketplaceListingDetail(
+            creator = creator,
+            slug = slug,
+            title = slug.replaceFirstChar { it.uppercase() },
+            summary = "Marketplace stub for $creator/$slug",
+            manifestJson = manifestJson,
+            manifestHash = if (tamperListingManifest) "00".repeat(32) else manifestSha256Hex(manifestJson),
+        )
+    }
+
+    /** Records the install envelope, then returns a deterministic success
+     *  body. Set `installShouldFail = true` to exercise the error path. */
+    override suspend fun installFromMarketplace(envelope: InstallServiceEnvelope): InstallServiceResponse {
+        tick()
+        installCalls.add(envelope)
+        if (installShouldFail) throw ScreensError.Http(400, installFailureMessage)
+        return InstallServiceResponse(
+            ok = true,
+            serviceId = "${envelope.request.creator}--${envelope.request.slug}",
+            urlLabel = envelope.request.slug,
+            port = 8080,
+        )
+    }
 
     override suspend fun vibeCodeStart(req: VibeCodeStartRequest): VibeCodeStartResponse {
         tick()
@@ -762,6 +898,25 @@ class MockScreensClient(
 
     override suspend fun ordersSend(req: OrdersSendRequest): OrdersSendResponse {
         tick(); return OrdersSendResponse(ok = true, response = null)
+    }
+
+    /** Overridable fixture so tests (and dev mode) can pin an exact tier
+     *  wire shape — BYOK, custom-domains-present, free-tier, etc. — without
+     *  editing the default. Null = the default promo fixture below. */
+    var tierStatusFixture: TierStatusResponse? = null
+
+    override suspend fun tierStatus(): TierStatusResponse {
+        tick()
+        tierStatusFixture?.let { return it }
+        return TierStatusResponse(
+            tier = "promo",
+            llmCreditsRemainingDay = 38,
+            llmCreditsRemainingTotal = 162,
+            dispatcherUsageGBmonth = 1.2,
+            dispatcherFreeQuotaGBmonth = 50.0,
+            customDomains = emptyList(),
+            reservedNames = listOf("bright-maple"),
+        )
     }
 
     override suspend fun urlControllerOwned(): UrlControllerOwnedResponse {
@@ -1672,6 +1827,8 @@ class MockScreensClient(
         const val OTHER_DEVICE_ID = "fedcba9876543210fedcba9876543210"
         val OTHER_DEVICE_PUB = "b2".repeat(32)
         const val CO_MANAGER_SHARE_ID = "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+        /** The demo app the gym gives a separate list on each server. */
+        const val GYM_SEPARATE_APP = "bright-maple--plants"
 
         /** The names the account directory would give them (decrypted on the phone). */
         val DEVICE_NAMES = mapOf(SELF_DEVICE_ID to "Pixel 9", OTHER_DEVICE_ID to "Kitchen iPad")

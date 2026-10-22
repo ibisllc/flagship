@@ -35,6 +35,7 @@ import com.flagshipserver.app.ui.screens.RecoveryScreen
 import com.flagshipserver.app.ui.screens.AccountDeletionScreen
 import com.flagshipserver.app.ui.screens.ReplaceDeviceFinalizeScreen
 import com.flagshipserver.app.ui.screens.SettingsScreen
+import com.flagshipserver.app.ui.screens.TierStatusScreen
 import com.flagshipserver.app.ui.screens.TrustedDevicesScreen
 
 @Composable
@@ -140,6 +141,8 @@ fun SettingsTab() {
         composable("privacy") { PrivacyScreen(nav) }
         composable("profiles") { ProfilesScreen(nav) }
         composable("name-dibs") { com.flagshipserver.app.ui.screens.NameDibsScreen() }
+        // P7 — dedicated tier-status / subscription screen (marketplace).
+        composable("tier-status") { TierStatusScreen(nav) }
         // Web-experience gating — the browser QR-logins this phone authorized.
         composable("secured-sessions") { SecuredSessionsScreen(nav) }
         // Web-experience gating — paste an https://flagshipserver.com/access link / "Get link".

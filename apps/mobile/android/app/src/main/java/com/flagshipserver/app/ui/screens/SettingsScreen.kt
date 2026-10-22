@@ -38,6 +38,7 @@ import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.LightMode
@@ -222,6 +223,13 @@ fun SettingsScreen(nav: NavController) {
         FSSettingsGroup(
             header = stringResource(R.string.account),
             rows = listOf(
+                // Plan / Subscription: the dedicated tier-status screen (marketplace).
+                FSSettingsRowData(
+                    icon = Icons.Outlined.CreditCard,
+                    title = "Plan / Subscription",
+                    subtitle = "Tier, LLM credits, dispatcher usage, custom domains.",
+                    onClick = { nav.navigate("tier-status") },
+                ),
                 // Account security leads; the live account type (single vs
                 // multi-device + 2FA) rides the subtitle.
                 FSSettingsRowData(

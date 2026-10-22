@@ -182,6 +182,79 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func appDetail(serviceId: String) async throws -> AppDetailResponse {
         try await request("/api/screens/app-detail/\(serviceId)")
     }
+    public func marketplaceBrowse() async throws -> MarketplaceBrowseResponse {
+        try await request("/api/screens/marketplace-browse")
+    }
+
+    /// Public-listing fetch from `.com` (no auth). Cross-origin from iOS but
+    /// same field shape as the webapp expects. Returns the full
+    /// `manifestJson` the daemon needs to install.
+    public func marketplaceFetchListing(creator: String, slug: String) async throws -> MarketplaceListingDetail {
+        let encodedCreator = creator.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? creator
+        let encodedSlug = slug.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? slug
+        guard let url = URL(string: "https://flagshipserver.com/api/marketplace/\(encodedCreator)/\(encodedSlug)") else {
+            throw ScreensClientError.http(status: 0, message: "bad URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        let (data, resp) = try await urlSession.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw ScreensClientError.http(status: 0, message: "no response")
+        }
+        if !(200..<300).contains(http.statusCode) {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: http.statusCode, message: text)
+        }
+        do {
+            // .com wraps the listing under `listing` with snake_case keys; map
+            // it into the flat detail the VM consumes.
+            let env = try JSONDecoder().decode(ComListingEnvelope.self, from: data)
+            let l = env.listing
+            return MarketplaceListingDetail(
+                creator: l.creator,
+                slug: l.slug,
+                title: l.name ?? "",
+                summary: l.tagline ?? "",
+                manifestJson: l.manifest_json ?? "",
+                manifestHash: l.manifest_hash ?? ""
+            )
+        } catch {
+            throw ScreensClientError.decoding(String(describing: error))
+        }
+    }
+
+    /// POST `<podBaseUrl>/api/services` with the IRK-signed install envelope.
+    /// MIRRORS `installFromMarketplace` in
+    /// `apps/web/public/webapp/lib/installService.js` byte-for-byte: same
+    /// path, same `{request, signature}` shape, same response keys
+    /// (`ok`, `serviceId`, `urlLabel`, `port`).
+    public func installFromMarketplace(_ envelope: InstallServiceEnvelope) async throws -> InstallServiceResponse {
+        guard let base = await store.podBaseUrl else { throw ScreensClientError.notPaired }
+        guard let token = await store.sessionToken else { throw ScreensClientError.noSessionToken }
+        let baseTrimmed = base.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let url = URL(string: baseTrimmed + "/api/services") else {
+            throw ScreensClientError.http(status: 0, message: "bad URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue(token, forHTTPHeaderField: "x-flagship-session")
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONEncoder().encode(envelope)
+
+        let (data, resp) = try await urlSession.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw ScreensClientError.http(status: 0, message: "no response")
+        }
+        if !(200..<300).contains(http.statusCode) {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: http.statusCode, message: text)
+        }
+        do {
+            return try JSONDecoder().decode(InstallServiceResponse.self, from: data)
+        } catch {
+            throw ScreensClientError.decoding(String(describing: error))
+        }
+    }
     public func vibeCodeStart(_ req: VibeCodeStartRequest) async throws -> VibeCodeStartResponse {
         let body = try JSONEncoder().encode(req)
         return try await request("/api/screens/vibe-code/start", method: "POST", body: body)
@@ -204,6 +277,9 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func ordersSend(_ req: OrdersSendRequest) async throws -> OrdersSendResponse {
         let body = try JSONEncoder().encode(req)
         return try await request("/api/screens/orders/send", method: "POST", body: body)
+    }
+    public func tierStatus() async throws -> TierStatusResponse {
+        try await request("/api/screens/tier-status")
     }
     public func urlControllerOwned() async throws -> UrlControllerOwnedResponse {
         try await request("/api/screens/url-controller/owned")
@@ -373,6 +449,16 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func setAppRank(serviceId: String, _ req: AppRankRequest) async throws -> AppRankResponse {
         let body = try JSONEncoder().encode(req)
         return try await request("/api/screens/services/\(segment(serviceId))/members/rank", method: "POST", body: body)
+    }
+    public func appListScope(serviceId: String) async throws -> AppListScopeState {
+        try await request("/api/screens/services/\(segment(serviceId))/list-scope")
+    }
+    public func setAppListScope(serviceId: String, _ req: AppListScopeRequest) async throws -> AppListScopeState {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/screens/services/\(segment(serviceId))/list-scope", method: "POST", body: body)
+    }
+    public func accessListsSummary() async throws -> AccessListsSummary {
+        try await request("/api/screens/access-lists/summary", timeout: 30)
     }
     @discardableResult
     public func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck {

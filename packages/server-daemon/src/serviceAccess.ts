@@ -599,6 +599,19 @@ export class ServiceAccessStore {
     await this.persist();
   }
 
+  /**
+   * Drop an app's list but keep its mode (feat/marketplace: a server going back
+   * to one list takes the lead server's list from its journal; the mode stays
+   * until an order from that journal changes it, so a members-only app never
+   * opens up in between).
+   */
+  async resetList(serviceRef: string): Promise<void> {
+    const e = this.byService.get(serviceRef);
+    if (!e) return;
+    this.byService.set(serviceRef, { mode: e.mode, allow: [], groups: {}, roles: emptyRoles() });
+    await this.persist();
+  }
+
   /** Drop everything about an app (its uninstall): a reinstall under the same id starts clean. */
   async forget(serviceRef: string): Promise<boolean> {
     if (!this.byService.delete(serviceRef)) return false;

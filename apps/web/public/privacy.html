@@ -105,6 +105,7 @@
           <li><span class="yes">Push tokens</span>, if you opt into push</li>
           <li><span class="yes">Billing data</span>, if you pay us</li>
           <li>Anonymous <span class="yes">repo adaptations</span> your server shares, which we publish</li>
+          <li><span class="yes">Marketplace listing</span> metadata, if you publish</li>
         </ul>
       </div>
       <div>
@@ -125,7 +126,7 @@
 
     <section id="who">
       <h2>1. Who this policy covers</h2>
-      <p>This policy applies to Flagship (operated by the Flagship team, sole proprietorship pending entity formation; the "Service") and to the websites <code>flagshipserver.com</code> and <code>flagship.services</code>, the iOS, Android, and webapp clients.</p>
+      <p>This policy applies to Flagship (operated by the Flagship team, sole proprietorship pending entity formation; the "Service") and to the websites <code>flagshipserver.com</code> and <code>flagship.services</code>, the iOS, Android, and webapp clients, and the marketplace at <code>/marketplace</code>.</p>
       <p>It does not cover services you install on your own Flagship server. Those services run on hardware you own, under your control, and their privacy practices are theirs. We provide a sandbox; we don't supervise its inhabitants.</p>
       <p>It does not cover services you connect through the BYOK / browser features (Anthropic, OpenAI, Amazon, your bank, etc.). When you log into a third-party service from your Flagship browser, that service's privacy policy governs.</p>
     </section>
@@ -207,6 +208,9 @@
       <p>We cannot read your content, but we do see who talks to whom, when and how much. <code>flagshipserver.com</code> sees account names, account and device public keys, which devices are admin devices, push tokens, each server's name, public keys, the address its heartbeat arrives from, last-seen times, running software version, health reports and the orders posted for it, per-account traffic and AI-usage counts, and the audit events your devices post. <code>flagship.services</code> sees, for each connection while it is open, the client's address, the name of the box asked for (TLS names are sent in the clear), the time and the bytes each way, and which boxes are online. Each box's certificate names the box, so account and box names are visible in public Certificate Transparency logs. A network between you and a box can see which box you contact. The complete list is in our <a href="https://github.com/ibisllc/flagship/blob/main/docs/metadata-threat-model.md">metadata page</a>.</p>
       <h3 id="outbound-ai">2.10 AI calls that leave your box through our relay</h3>
       <p>By default, when your server calls an AI provider with your own key, the call leaves your box through our relay address instead of your home address. The connection is encrypted between your box and the provider: the relay cannot read it. It sees the provider's hostname and the amount of data, and it limits how many connections a box may open. We keep a list of provider hostnames boxes have reached, with daily totals; the list has no account, server or address in it. You can switch this off per key. A provider that cannot be reached this way is reported to you as an address that couldn't be reached.</p>
+
+      <h3 id="marketplace">2.11 Marketplace listing data (only if you publish)</h3>
+      <p>If you publish an app listing, we store the listing fields you submit: title, description, category, screenshots (in R2), the canonical pod URL, your username as author, and timestamps. Listings are public by definition.</p>
     </section>
 
     <section id="processors">
@@ -240,6 +244,7 @@
         <li><strong>Logs</strong>: 30 days, then aggregated counters only.</li>
         <li><strong>Repo adaptations</strong>: published, and kept public; our own copy of the file is deleted once it is published, usually within a day. Taken out of the index when the repo's owner asks; git history keeps earlier versions. They carry no personal data.</li>
         <li><strong>Problem reports on adaptations</strong>: notes deleted within 90 days. For a retired adaptation, its private copy and its reports are deleted 180 days after it was retired.</li>
+        <li><strong>Marketplace listings</strong>: kept while published; removed on delisting.</li>
       </ul>
     </section>
 
@@ -319,6 +324,7 @@
       <h4>Product</h4>
       <ul>
         <li><a href="/docs#how-it-works">How it works</a></li>
+        <li><a href="/marketplace/">Services</a></li>
         <li><a href="https://webapp.flagshipserver.com/">Webapp</a></li>
       </ul>
     </div>

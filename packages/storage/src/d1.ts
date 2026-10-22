@@ -40,6 +40,9 @@ import type {
   LlmPromoStorage,
   LlmPromoUsageRecord,
   LuksKeyStorage,
+  MarketplaceListingRecord,
+  MarketplaceSearchQuery,
+  MarketplaceStorage,
   PushTokenRecord,
   PushTokenStorage,
   DeviceIdentityRecord,
@@ -60,6 +63,14 @@ import type {
   Storage,
   TierStorage,
   TierSubscriptionRecord,
+  VoucherStorage,
+  VoucherRecord,
+  StripeEventStore,
+  AppPurchaseStorage,
+  AppPurchaseRecord,
+  AppSalesStorage,
+  AppSaleRecord,
+  AppSalesTotals,
   UserIdentityRecord,
   UserIdentityRecordStorage,
   UsernameRecord,
@@ -3015,6 +3026,187 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
   }
 }
 
+export class D1MarketplaceStorage implements MarketplaceStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async upsert(rec: MarketplaceListingRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO marketplace_listings (
+           creator, slug, name, tagline, description_md, category, tags_csv,
+           canonical_url, manifest_hash_hex, manifest_json, screenshot_keys_json, status,
+           scan_grade, scan_report_key, scan_completed_at, featured_until,
+           rank_score, install_count, public_distribution, listed_at, updated_at,
+           irk_signature_hex
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         ON CONFLICT(creator, slug) DO UPDATE SET
+           name=excluded.name,
+           tagline=excluded.tagline,
+           description_md=excluded.description_md,
+           category=excluded.category,
+           tags_csv=excluded.tags_csv,
+           canonical_url=excluded.canonical_url,
+           manifest_hash_hex=excluded.manifest_hash_hex,
+           manifest_json=excluded.manifest_json,
+           screenshot_keys_json=excluded.screenshot_keys_json,
+           status=excluded.status,
+           public_distribution=excluded.public_distribution,
+           updated_at=excluded.updated_at,
+           irk_signature_hex=excluded.irk_signature_hex`,
+      )
+      .bind(
+        rec.creator, rec.slug, rec.name, rec.tagline, rec.descriptionMd,
+        rec.category, rec.tagsCsv, rec.canonicalUrl, rec.manifestHashHex,
+        rec.manifestJson ?? "",
+        rec.screenshotKeysJson, rec.status,
+        rec.scanGrade ?? null, rec.scanReportKey ?? null, rec.scanCompletedAt ?? null,
+        rec.featuredUntil ?? null,
+        rec.rankScore, rec.installCount, rec.publicDistribution ? 1 : 0,
+        rec.listedAt, rec.updatedAt, rec.irkSignatureHex,
+      )
+      .run();
+  }
+
+  async get(creator: string, slug: string): Promise<MarketplaceListingRecord | undefined> {
+    const row = await this.db
+      .prepare(`SELECT * FROM marketplace_listings WHERE creator = ? AND slug = ?`)
+      .bind(creator, slug)
+      .first<RawMarketplaceRow>();
+    return row ? rowToRecord(row) : undefined;
+  }
+
+  async search(q: MarketplaceSearchQuery): Promise<MarketplaceListingRecord[]> {
+    const limit = Math.min(q.limit ?? 30, 100);
+    const offset = q.offset ?? 0;
+    const wheres: string[] = [`status = 'listed'`];
+    const args: unknown[] = [];
+    if (q.category) {
+      wheres.push(`category = ?`);
+      args.push(q.category);
+    }
+    if (q.verifiedOnly) {
+      wheres.push(`scan_grade IS NOT NULL`);
+    }
+    if (q.text) {
+      wheres.push(`(name LIKE ? OR tagline LIKE ? OR tags_csv LIKE ?)`);
+      const like = `%${q.text.toLowerCase()}%`;
+      args.push(like, like, like);
+    }
+    const order =
+      q.sort === "newest" ? "listed_at DESC" :
+      q.sort === "name" ? "name ASC" :
+      "rank_score DESC, install_count DESC";
+    const sql = `SELECT * FROM marketplace_listings WHERE ${wheres.join(" AND ")} ORDER BY ${order} LIMIT ? OFFSET ?`;
+    args.push(limit, offset);
+    const result = await this.db.prepare(sql).bind(...args).all<RawMarketplaceRow>();
+    return (result.results ?? []).map(rowToRecord);
+  }
+
+  async remove(creator: string, slug: string): Promise<void> {
+    await this.db
+      .prepare(`UPDATE marketplace_listings SET status = 'removed', updated_at = ? WHERE creator = ? AND slug = ?`)
+      .bind(Date.now(), creator, slug)
+      .run();
+  }
+
+  async recordInstall(creator: string, slug: string): Promise<void> {
+    await this.db
+      .prepare(`UPDATE marketplace_listings SET install_count = install_count + 1, updated_at = ? WHERE creator = ? AND slug = ?`)
+      .bind(Date.now(), creator, slug)
+      .run();
+  }
+
+  async setPrice(creator: string, slug: string, priceUsdCents: number): Promise<boolean> {
+    const r = await this.db
+      .prepare(`UPDATE marketplace_listings SET price_usd_cents = ?, updated_at = ? WHERE creator = ? AND slug = ?`)
+      .bind(priceUsdCents > 0 ? Math.floor(priceUsdCents) : null, Date.now(), creator, slug)
+      .run();
+    return (r.meta?.changes ?? 0) > 0;
+  }
+  async setScanResult(
+    creator: string,
+    slug: string,
+    grade: "A" | "B" | "C" | "D" | "F",
+    reportKey: string,
+    completedAt: number,
+  ): Promise<boolean> {
+    const r = await this.db
+      .prepare(
+        `UPDATE marketplace_listings
+           SET scan_grade = ?, scan_report_key = ?, scan_completed_at = ?, updated_at = ?
+         WHERE creator = ? AND slug = ?`,
+      )
+      .bind(grade, reportKey, completedAt, Date.now(), creator, slug)
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+  async listNeedingScan(staleBeforeMs: number): Promise<MarketplaceListingRecord[]> {
+    const result = await this.db
+      .prepare(
+        `SELECT * FROM marketplace_listings
+           WHERE status = 'listed'
+             AND (scan_completed_at IS NULL OR scan_completed_at < ?)
+         ORDER BY scan_completed_at ASC NULLS FIRST, listed_at ASC`,
+      )
+      .bind(staleBeforeMs)
+      .all<RawMarketplaceRow>();
+    return (result.results ?? []).map(rowToRecord);
+  }
+
+  async listByCreator(creator: string): Promise<MarketplaceListingRecord[]> {
+    const result = await this.db
+      .prepare(
+        `SELECT * FROM marketplace_listings
+           WHERE creator = ? AND status != 'removed'
+         ORDER BY listed_at DESC`,
+      )
+      .bind(creator.toLowerCase())
+      .all<RawMarketplaceRow>();
+    return (result.results ?? []).map(rowToRecord);
+  }
+}
+
+interface RawMarketplaceRow {
+  creator: string; slug: string; name: string; tagline: string;
+  description_md: string; category: string; tags_csv: string;
+  canonical_url: string; manifest_hash_hex: string; manifest_json: string | null;
+  screenshot_keys_json: string;
+  status: string; scan_grade: string | null; scan_report_key: string | null;
+  scan_completed_at: number | null; featured_until: number | null;
+  rank_score: number; install_count: number; public_distribution: number;
+  listed_at: number; updated_at: number; irk_signature_hex: string;
+  price_usd_cents: number | null;
+}
+
+function rowToRecord(r: RawMarketplaceRow): MarketplaceListingRecord {
+  return {
+    creator: r.creator,
+    slug: r.slug,
+    name: r.name,
+    tagline: r.tagline,
+    descriptionMd: r.description_md,
+    category: r.category,
+    tagsCsv: r.tags_csv,
+    canonicalUrl: r.canonical_url,
+    manifestHashHex: r.manifest_hash_hex,
+    manifestJson: r.manifest_json ?? "",
+    screenshotKeysJson: r.screenshot_keys_json,
+    status: r.status as "listed" | "private" | "removed",
+    priceUsdCents: r.price_usd_cents ?? undefined,
+    scanGrade: (r.scan_grade ?? undefined) as "A" | "B" | "C" | "D" | "F" | undefined,
+    scanReportKey: r.scan_report_key ?? undefined,
+    scanCompletedAt: r.scan_completed_at ?? undefined,
+    featuredUntil: r.featured_until ?? undefined,
+    rankScore: r.rank_score,
+    installCount: r.install_count,
+    publicDistribution: r.public_distribution !== 0,
+    listedAt: r.listed_at,
+    updatedAt: r.updated_at,
+    irkSignatureHex: r.irk_signature_hex,
+  };
+}
+
 export class D1PushTokenStorage implements PushTokenStorage {
   constructor(private readonly db: D1Database) {}
   async put(rec: PushTokenRecord): Promise<void> {
@@ -3546,6 +3738,207 @@ export class D1TierStorage implements TierStorage {
  *  (`meter_counters`, `meter_batches`). Standalone — constructed on demand
  *  (like D1NonceStore), not part of the D1Storage aggregate. */
 export { D1MeterStore as D1MeterStorage } from "@ibisllc/billing-store-d1";
+
+/** Prepaid Pro vouchers (migration 0052). Standalone — constructed on demand,
+ *  not part of the D1Storage aggregate. */
+export class D1VoucherStorage implements VoucherStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async create(rec: VoucherRecord): Promise<{ ok: true } | { ok: false; reason: string }> {
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO vouchers (code_hash, tier, duration_days, created_at) VALUES (?,?,?,?)`,
+        )
+        .bind(rec.codeHash, rec.tier, rec.durationDays, rec.createdAt)
+        .run();
+      return { ok: true as const };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/unique constraint|constraint failed/i.test(msg)) {
+        return { ok: false as const, reason: "voucher code already exists" };
+      }
+      throw e;
+    }
+  }
+
+  async get(codeHash: string): Promise<VoucherRecord | undefined> {
+    const r = await this.db
+      .prepare(`SELECT * FROM vouchers WHERE code_hash = ?`)
+      .bind(codeHash)
+      .first<{
+        code_hash: string;
+        tier: string;
+        duration_days: number;
+        created_at: number;
+        redeemed_at: number | null;
+        redeemed_by: string | null;
+      }>();
+    return r
+      ? {
+          codeHash: r.code_hash,
+          tier: r.tier as VoucherRecord["tier"],
+          durationDays: r.duration_days,
+          createdAt: r.created_at,
+          redeemedAt: r.redeemed_at ?? undefined,
+          redeemedBy: r.redeemed_by ?? undefined,
+        }
+      : undefined;
+  }
+
+  async redeem(codeHash: string, username: string, now: number): Promise<boolean> {
+    // Atomic single-use: the WHERE redeemed_at IS NULL means only the first
+    // concurrent redemption changes a row.
+    const r = await this.db
+      .prepare(
+        `UPDATE vouchers SET redeemed_at = ?, redeemed_by = ? WHERE code_hash = ? AND redeemed_at IS NULL`,
+      )
+      .bind(now, username, codeHash)
+      .run();
+    return (r.meta?.changes ?? 0) > 0;
+  }
+}
+
+export class D1StripeEventStore implements StripeEventStore {
+  constructor(private readonly db: D1Database) {}
+
+  async claim(eventId: string, eventType: string, now: number): Promise<boolean> {
+    // INSERT OR IGNORE: a redelivery of an already-claimed event id changes 0
+    // rows, so only the first delivery returns true and proceeds to grant.
+    const r = await this.db
+      .prepare(
+        `INSERT OR IGNORE INTO stripe_events (event_id, event_type, processed_at) VALUES (?,?,?)`,
+      )
+      .bind(eventId, eventType, now)
+      .run();
+    return (r.meta?.changes ?? 0) > 0;
+  }
+}
+
+export class D1AppPurchaseStorage implements AppPurchaseStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async grant(rec: AppPurchaseRecord): Promise<boolean> {
+    // INSERT OR IGNORE: re-granting an owned (user, app) changes 0 rows, so a
+    // Stripe redelivery / double-purchase never duplicates the entitlement.
+    const r = await this.db
+      .prepare(
+        `INSERT OR IGNORE INTO app_purchases (username, creator, slug, purchased_at, source, ref)
+         VALUES (?,?,?,?,?,?)`,
+      )
+      .bind(rec.username, rec.creator, rec.slug, rec.purchasedAt, rec.source, rec.ref ?? null)
+      .run();
+    return (r.meta?.changes ?? 0) > 0;
+  }
+
+  async has(username: string, creator: string, slug: string): Promise<boolean> {
+    const row = await this.db
+      .prepare(`SELECT 1 AS one FROM app_purchases WHERE username = ? AND creator = ? AND slug = ?`)
+      .bind(username, creator, slug)
+      .first<{ one: number }>();
+    return row != null;
+  }
+
+  async listForUser(username: string): Promise<AppPurchaseRecord[]> {
+    const result = await this.db
+      .prepare(
+        `SELECT username, creator, slug, purchased_at, source, ref
+           FROM app_purchases WHERE username = ? ORDER BY purchased_at DESC`,
+      )
+      .bind(username)
+      .all<{ username: string; creator: string; slug: string; purchased_at: number; source: string; ref: string | null }>();
+    return (result.results ?? []).map((r) => ({
+      username: r.username,
+      creator: r.creator,
+      slug: r.slug,
+      purchasedAt: r.purchased_at,
+      source: r.source,
+      ref: r.ref ?? undefined,
+    }));
+  }
+}
+
+interface RawAppSaleRow {
+  sale_key: string;
+  listing_id: string;
+  creator_account: string;
+  buyer_account: string;
+  gross_cents: number;
+  cut_cents: number;
+  net_cents: number;
+  currency: string;
+  stripe_event_id: string | null;
+  at: number;
+}
+
+function saleRowToRecord(r: RawAppSaleRow): AppSaleRecord {
+  return {
+    saleKey: r.sale_key,
+    listingId: r.listing_id,
+    creatorAccount: r.creator_account,
+    buyerAccount: r.buyer_account,
+    grossCents: r.gross_cents,
+    cutCents: r.cut_cents,
+    netCents: r.net_cents,
+    currency: r.currency,
+    ...(r.stripe_event_id ? { stripeEventId: r.stripe_event_id } : {}),
+    at: r.at,
+  };
+}
+
+export class D1AppSalesStorage implements AppSalesStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async record(rec: AppSaleRecord): Promise<boolean> {
+    // INSERT OR IGNORE on the sale_key: a redelivered stripe event / re-grant
+    // changes 0 rows, so a sale is recorded exactly once.
+    const r = await this.db
+      .prepare(
+        `INSERT OR IGNORE INTO app_sales
+           (sale_key, listing_id, creator_account, buyer_account,
+            gross_cents, cut_cents, net_cents, currency, stripe_event_id, at)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      )
+      .bind(
+        rec.saleKey, rec.listingId, rec.creatorAccount, rec.buyerAccount,
+        rec.grossCents, rec.cutCents, rec.netCents, rec.currency,
+        rec.stripeEventId ?? null, rec.at,
+      )
+      .run();
+    return (r.meta?.changes ?? 0) > 0;
+  }
+
+  async listForCreator(creatorAccount: string): Promise<AppSaleRecord[]> {
+    const result = await this.db
+      .prepare(
+        `SELECT sale_key, listing_id, creator_account, buyer_account,
+                gross_cents, cut_cents, net_cents, currency, stripe_event_id, at
+           FROM app_sales WHERE creator_account = ? ORDER BY at DESC`,
+      )
+      .bind(creatorAccount)
+      .all<RawAppSaleRow>();
+    return (result.results ?? []).map(saleRowToRecord);
+  }
+
+  async totalsForCreator(creatorAccount: string): Promise<AppSalesTotals> {
+    const row = await this.db
+      .prepare(
+        `SELECT COALESCE(SUM(gross_cents),0) AS g,
+                COALESCE(SUM(cut_cents),0)   AS c,
+                COALESCE(SUM(net_cents),0)   AS n,
+                COUNT(*)                     AS k
+           FROM app_sales WHERE creator_account = ?`,
+      )
+      .bind(creatorAccount)
+      .first<{ g: number; c: number; n: number; k: number }>();
+    return {
+      grossCents: row?.g ?? 0,
+      cutCents: row?.c ?? 0,
+      netCents: row?.n ?? 0,
+      saleCount: row?.k ?? 0,
+    };
+  }
+}
 
 export class D1EntitlementRevocationStorage implements EntitlementRevocationStorage {
   constructor(private readonly db: D1Database) {}
@@ -4593,6 +4986,7 @@ export class D1Storage implements Storage {
   boxSealedLeases: BoxSealedLeaseStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
+  marketplace: MarketplaceStorage;
   pushTokens: PushTokenStorage;
   deviceIdentities: DeviceIdentityStorage;
   accountProfiles: AccountProfileStorage;
@@ -4650,6 +5044,7 @@ export class D1Storage implements Storage {
     this.boxSealedLeases = new D1BoxSealedLeaseStorage(db);
     this.pendingRePairs = new D1PendingRePairStorage(db);
     this.webauthnRecovery = new D1WebauthnRecoveryStorage(db);
+    this.marketplace = new D1MarketplaceStorage(db);
     this.pushTokens = new D1PushTokenStorage(db);
     this.deviceIdentities = new D1DeviceIdentityStorage(db);
     this.accountProfiles = new D1AccountProfileStorage(db);

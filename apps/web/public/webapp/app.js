@@ -113,6 +113,9 @@ import {
 } from "./views/companion-requests.js";
 import { enterNameDibs } from "./views/name-dibs.js";
 import { fetchDibsWindow } from "./lib/nameDibs.js";
+import { initTierStatusView, enterTierStatus } from "./views/tier-status.js";
+import { initMarketplaceView, enterMarketplace } from "./views/marketplace.js";
+import { initDeveloperView, enterDeveloper } from "./views/developer.js";
 import { initVibeCodeView, enterVibeCode, openVibeCodeSessionById } from "./views/vibe-code.js";
 import { initServiceEnvView, enterServiceEnv } from "./views/service-env.js";
 import { initBuildSourceView, enterBuildSource } from "./views/build-source.js";
@@ -171,6 +174,8 @@ const SUB_VIEW_TABS = {
   "view-service-access": "apps",
   "view-app-access": "apps",
   "view-app-db": "apps",
+  "view-marketplace": "apps",
+  "view-developer": "apps",
   "view-vibe-code": "apps",
   "view-build-source": "apps",
   "view-build-key": "apps",
@@ -312,6 +317,8 @@ function wireSettingsTabEntries() {
     document.querySelector("#push-switch")?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
   wire("settings-tab-name-dibs", enterNameDibs);
+  // Tier & usage (marketplace) — dedicated subscription/tier-status screen.
+  wire("settings-tab-tier", enterTierStatus);
   wire("settings-tab-recovery", enterRecovery);
   // "Back up account key" reuses the Recovery screen's `.flagshipkey`
   // export ceremony — jump there and focus the backup button.
@@ -355,7 +362,9 @@ function wireActivityEntries() {
 function wireServicesTabEntries() {
   const wire = (id, fn) =>
     $(id)?.addEventListener("click", () => Promise.resolve(fn()).catch((e) => { console.error(e); toast(humanError(e), "err"); }));
+  wire("services-list-open-marketplace", enterMarketplace);
   wire("services-list-open-vibe-code", enterBuildSource);
+  wire("services-list-open-developer", enterDeveloper);
 }
 
 /** #91 — true iff we're paired to a box (so the AI-chat poll has somewhere to
@@ -555,6 +564,9 @@ async function boot() {
   initAccountSecurityView();
   initAddDeviceView();
   initJoinView();
+  initTierStatusView();
+  initMarketplaceView();
+  initDeveloperView();
   initVibeCodeView();
   initBuildSourceView();
   initBuildKeyView();

@@ -39,10 +39,12 @@ import {
   type PdfText,
 } from "../llm/vibeCodeAttachments.js";
 import type { Attachment, FetchLike } from "@flagship/llm-providers";
-import { parseServiceEnvChange, parseServiceId } from "@flagship/protocol";
+import { parseServiceEnvChange, parseServiceId, signMarketplaceList } from "@flagship/protocol";
 import { checkServiceName, type NameHolders, type ServiceNameDeps } from "../llm/serviceName.js";
 import type { EditableService } from "../buildmodes/buildOrchestrator.js";
 import { EDIT_SOURCE_MAX_BYTES } from "../llm/vibeCodeStartStreaming.js";
+import type { MarketplaceListRequest } from "@flagship/protocol";
+import { sha256 } from "@noble/hashes/sha256";
 import type {
   AppBackupStartRequest,
   AppBackupStartResponse,
@@ -58,6 +60,7 @@ import type {
   LineagePauseSummary,
   LineageResolveRequest,
   LineageResolveResponse,
+  MarketplaceBrowseResponse,
   OrdersSendRequest,
   OrdersSendResponse,
   OwnedUrl,
@@ -70,6 +73,7 @@ import type {
   ServerDetailResponse,
   ServiceEnvListResponse,
   ServiceEnvOpResponse,
+  TierStatusResponse,
   UrlControllerClaimRequest,
   UrlControllerOwnedResponse,
   VerifyCustomDomainRequest,
@@ -112,6 +116,7 @@ import {
 import type { UpdateOutcomeRecord } from "../updateOutcome.js";
 import { isAppDbPath } from "../dataLayer/ownerDb.js";
 import { isMemberRolesPath } from "../memberRoles.js";
+import { isListScopePath } from "../accessScopeHttp.js";
 import { isAppCopyPath } from "../appCopy/target.js";
 import { isServerArchivePath } from "../serverArchive/service.js";
 import { isBackupPolicyPath } from "../backupPolicy/http.js";
@@ -210,6 +215,8 @@ export interface ScreensHttpDeps {
    * only (companions get 403 on every method, the list names members).
    */
   memberRoles?: { handle: (path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null> } | null;
+  /** Separate lists per server (accessScopeHttp.ts, feat/marketplace): owner sessions; companions read only. */
+  listScope?: { handle: (path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null> } | null;
   /**
    * Copying an app onto this server from another (appCopy/target.ts,
    * docs/app-placement.md §5): `POST /services/copy`, `GET /services/copies`
@@ -290,8 +297,23 @@ export interface ScreensHttpDeps {
   vibeCode?: VibeCodeRuntime | null;
   /** Phone-orders dispatcher. Required by P1.14. */
   ordersDispatch?: OrdersDispatchLike | null;
-  /** .com control plane URL for proxy endpoints (tier, install-events). */
+  /** .com control plane URL for proxy endpoints (marketplace, tier, install-events). */
   controlPlaneBaseUrl?: string | null;
+  /**
+   * Task #28 — box-originated marketplace publish. When wired, POST
+   * /api/screens/marketplace/publish takes a running service, builds a signed
+   * `MarketplaceListRequest` from its manifest, and submits it to .com's
+   * listing-upsert. Signed with the box's daemon IDENTITY key (the owner IRK is
+   * phone-held); .com accepts it because the box is a registered server of the
+   * creator's account (see control-plane handleMarketplaceList's server-signer
+   * path). When null, the endpoint returns 503.
+   */
+  marketplacePublish?: {
+    /** The box's daemon identity keypair (the additive host-authority signer). */
+    signingKey: { privateKey: Uint8Array; publicKey: Uint8Array };
+    /** The account username — the listing's `creator` (and the box's owner). */
+    creatorUsername: string;
+  } | null;
   /** Override fetch for .com proxies (tests inject; production uses globalThis.fetch). */
   fetchImpl?: FetchLike;
   /** Test seam — derives the calling client's session token from the request. */
@@ -608,6 +630,13 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       if (r) return r;
     }
 
+    if (deps.listScope && isListScopePath(path)) {
+      const denied = method === "GET" ? null : denyCompanionWrite(deps.pairedSessions ?? null, req);
+      if (denied) return denied;
+      const r = await deps.listScope.handle(path, method, req);
+      if (r) return r;
+    }
+
     if (deps.serverArchive && isServerArchivePath(path)) {
       const companion = deps.pairedSessions?.isCompanionRequest?.(req) === true;
       const r = await deps.serverArchive.handle(path, method, req, { companion });
@@ -905,6 +934,65 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       });
       const out: ServerMetricsResponse = snapshot;
       return jok(out);
+    }
+
+    // ---- P1.4 GET /api/screens/marketplace-browse (proxied to .com)
+    if (path === "/api/screens/marketplace-browse" && method === "GET") {
+      const f = deps.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+      if (!deps.controlPlaneBaseUrl) return jerr(503, "control plane not configured");
+      const r = await f(
+        `${trimSlash(deps.controlPlaneBaseUrl)}/api/marketplace/search`,
+        { method: "GET" },
+      );
+      if (!r.ok) return jerr(502, `marketplace fetch failed: ${r.status}`);
+      const upstream = (await r.json()) as { listings?: unknown[] };
+      const installed = new Set(
+        (deps.servicePlatform?.list() ?? []).map((a) => `${a.creator}/${a.slug}`),
+      );
+      const listings = (upstream.listings ?? []).map((raw) =>
+        parseListing(raw, installed),
+      );
+      const body: MarketplaceBrowseResponse = { listings };
+      return jok(body);
+    }
+
+    // ---- Task #28 POST /api/screens/marketplace/publish
+    //
+    // Publish an installed service to the marketplace FROM the box. The box
+    // holds the manifest + its daemon identity key; the owner IRK is phone-held,
+    // so the box signs the listing with its identity key. .com accepts it
+    // because the box is a registered server of the creator's account (the
+    // control-plane server-signer path).
+    if (path === "/api/screens/marketplace/publish" && method === "POST") {
+      return await handleMarketplacePublish(deps, req, now);
+    }
+
+    // ---- P1.16 GET /api/screens/tier-status (proxied to .com)
+    if (path === "/api/screens/tier-status" && method === "GET") {
+      const f = deps.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+      if (!deps.controlPlaneBaseUrl) {
+        // No control plane → free tier with no quota visibility.
+        const body: TierStatusResponse = { tier: "free", customDomains: [], reservedNames: [] };
+        return jok(body);
+      }
+      try {
+        const r = await f(
+          `${trimSlash(deps.controlPlaneBaseUrl)}/api/tier/status`,
+          { method: "GET" },
+        );
+        if (!r.ok) {
+          // Treat as free tier on upstream failure rather than 502 — the
+          // tier dashboard is a soft surface; we don't want a .com
+          // outage to break the webapp's settings view.
+          const body: TierStatusResponse = { tier: "free", customDomains: [], reservedNames: [] };
+          return jok(body);
+        }
+        const upstream = (await r.json()) as TierStatusResponse;
+        return jok(upstream);
+      } catch {
+        const body: TierStatusResponse = { tier: "free", customDomains: [], reservedNames: [] };
+        return jok(body);
+      }
     }
 
     // ---- P1.5 POST /api/screens/vibe-code/start
@@ -1486,6 +1574,37 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
   };
 }
 
+function parseListing(
+  raw: unknown,
+  installed: Set<string>,
+): MarketplaceBrowseResponse["listings"][number] {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const creator = typeof r.creator === "string" ? r.creator : "";
+  const slug = typeof r.slug === "string" ? r.slug : "";
+  return {
+    creator,
+    slug,
+    title: typeof r.title === "string" ? r.title : slug,
+    summary: typeof r.summary === "string" ? r.summary : "",
+    screenshots: Array.isArray(r.screenshots)
+      ? (r.screenshots as unknown[]).filter((s): s is string => typeof s === "string")
+      : [],
+    installCount: typeof r.installCount === "number" ? r.installCount : 0,
+    requiresLlmKey: !!r.requiresLlmKey,
+    // `.com` exposes the scan verdict as `scan_grade` (snake_case) and the
+    // LLM env-var name as `llm_key_env_var`; accept either casing so a future
+    // camelCase upstream still flows through. Absent ⇒ omitted (client shows
+    // "ungraded" / falls back to the default env name).
+    scanGrade: pickString(r.scanGrade) ?? pickString(r.scan_grade),
+    llmKeyEnvVar: pickString(r.llmKeyEnvVar) ?? pickString(r.llm_key_env_var),
+    alreadyInstalled: installed.has(`${creator}/${slug}`),
+  };
+}
+
+function pickString(v: unknown): string | undefined {
+  return typeof v === "string" && v.length > 0 ? v : undefined;
+}
+
 function trimSlash(s: string): string {
   return s.replace(/\/+$/, "");
 }
@@ -1650,6 +1769,100 @@ function parseJson(buf: Buffer): unknown {
 }
 
 /**
+ * Task #28 — build + submit a marketplace listing for a running service.
+ *
+ * Takes `{ serviceCanonical }` (the vibe-code deploy's canonical app name) OR
+ * an explicit `{ creator, slug }`, resolves the installed service, derives the
+ * listing metadata from its manifest, signs a `MarketplaceListRequest` with the
+ * box's daemon identity key, and POSTs it to `.com`'s listing-upsert. The
+ * manifest itself is carried on the listing (Blocker 1) so install clients can
+ * verify it — the daemon commits to it via `manifestHashHex = sha256(json)`.
+ */
+async function handleMarketplacePublish(
+  deps: ScreensHttpDeps,
+  req: HttpRequest,
+  now: () => number,
+): Promise<HttpResponse> {
+  const pub = deps.marketplacePublish;
+  if (!pub) return jerr(503, "marketplace publish not configured");
+  if (!deps.controlPlaneBaseUrl) return jerr(503, "control plane not configured");
+  const platform = deps.servicePlatform;
+  if (!platform) return jerr(503, "service platform not configured");
+
+  const body = parseJson(req.body) as
+    | { serviceCanonical?: unknown; creator?: unknown; slug?: unknown }
+    | null;
+  const serviceCanonical =
+    typeof body?.serviceCanonical === "string" ? body.serviceCanonical : null;
+  const wantCreator = typeof body?.creator === "string" ? body.creator : null;
+  const wantSlug = typeof body?.slug === "string" ? body.slug : null;
+  if (!serviceCanonical && !(wantCreator && wantSlug)) {
+    return jerr(400, "serviceCanonical (or creator+slug) required");
+  }
+
+  // Resolve the installed service by any of its addressing forms.
+  const installed = platform.list();
+  const match = installed.find((s) => {
+    if (wantCreator && wantSlug) return s.creator === wantCreator && s.slug === wantSlug;
+    return (
+      s.serviceId === serviceCanonical ||
+      `${s.creator}--${s.slug}` === serviceCanonical ||
+      `${s.creator}-${s.slug}` === serviceCanonical ||
+      s.slug === serviceCanonical
+    );
+  });
+  if (!match) return jerr(404, "service not found on this box");
+
+  // The box only publishes apps IT authored — its identity key is a registered
+  // server of `creatorUsername`, and .com's server-signer check pins the
+  // listing's `creator` to a server owned by that account.
+  if (match.creator !== pub.creatorUsername) {
+    return jerr(403, "can only publish apps authored by this account");
+  }
+
+  const manifestJson = JSON.stringify(match.manifest);
+  const manifestHashHex = Buffer.from(
+    sha256(new TextEncoder().encode(manifestJson)),
+  ).toString("hex");
+  const description =
+    typeof match.manifest.description === "string" ? match.manifest.description : "";
+  const request: MarketplaceListRequest = {
+    creator: match.creator,
+    slug: match.slug,
+    name: match.manifest.name || match.slug,
+    tagline: description.slice(0, 30),
+    descriptionMd: description,
+    category: "other",
+    tagsCsv: "",
+    canonicalUrl: `${match.slug}.${match.creator}.flagship.services`,
+    manifestHashHex,
+    manifestJson,
+    screenshotKeys: [],
+    publicDistribution: match.manifest.distribution?.public ?? false,
+    status: "listed",
+    issuedAt: now(),
+  };
+  const signature = Buffer.from(signMarketplaceList(request, pub.signingKey)).toString("hex");
+
+  const f = deps.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+  let r: Awaited<ReturnType<FetchLike>>;
+  try {
+    r = await f(`${trimSlash(deps.controlPlaneBaseUrl)}/api/marketplace/list`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ request, signature }),
+    });
+  } catch {
+    return jerr(502, "couldn't reach the marketplace");
+  }
+  if (!r.ok) {
+    const text = await r.text().catch(() => "");
+    return jerr(502, `marketplace rejected the listing: ${r.status} ${text}`.trim());
+  }
+  return jok({ ok: true, slug: match.slug, creator: match.creator });
+}
+
+/**
  * Validate an optional BYOK credential off a request body.
  *   - absent / null / undefined → `null` (no credential delivered)
  *   - well-formed → the `LlmCredential` (provider + apiKey [+ baseUrl])
@@ -1714,6 +1927,8 @@ function isWriteScopedPath(path: string): boolean {
   if (path === "/api/screens/orders/send") return true;
   // copying an app onto this server (signed)
   if (path === "/api/screens/services/copy") return true;
+  // marketplace publish — owner action; companions may not list apps.
+  if (path === "/api/screens/marketplace/publish") return true;
   // url-controller claim
   if (path === "/api/screens/url-controller/claim") return true;
   // url-controller verify (POST, but it's a read-shaped network probe)

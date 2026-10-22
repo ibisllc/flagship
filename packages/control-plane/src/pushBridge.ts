@@ -256,6 +256,7 @@ const APNS_ALERTS: Record<string, { title: string; body: string }> = {
   "cert-alert": { title: "Flagship", body: "One of your servers needs your attention." },
   "app-access": { title: "Flagship", body: "One of your apps wants to reach the internet." },
   "invite-created": { title: "Flagship", body: "A device on your account invited someone to one of your apps." },
+  "access-lists": { title: "Flagship", body: "Pro ended, so your apps use one access list on all your servers again." },
 };
 const APNS_ALERT_DEFAULT = { title: "Flagship", body: "Open Flagship to see what's new." };
 

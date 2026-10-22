@@ -65,6 +65,7 @@ import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSChipItem
 import com.flagshipserver.app.ui.components.FSChipRow
+import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSListLeading
 import com.flagshipserver.app.ui.components.FSListRow
 import com.flagshipserver.app.ui.components.FSPill
@@ -207,12 +208,19 @@ fun ServicesListScreen(nav: NavController) {
                 icon = Icons.Outlined.AutoAwesome,
                 iconTint = FS.colors.accent,
                 action = {
+                  Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                     FSPrimaryButton(
                         label = stringResource(R.string.build_a_service),
                         onClick = { nav.navigate("build/source") },
                         block = true,
                         modifier = Modifier.testTag("services-build-cta"),
                     )
+                    FSGhostButton(
+                        label = "Browse marketplace",
+                        onClick = { nav.navigate("marketplace") },
+                        block = true,
+                    )
+                  }
                 },
             )
         } else {

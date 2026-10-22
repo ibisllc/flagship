@@ -139,7 +139,10 @@
       <!-- View 3a: Home tab — identity + servers + AI provider chip.
            The "Servers" heading + search + filter chips are rendered INTO
            #servers-list by views/home.js (the WhatsApp-style large
-           collapsing title); the empty-state path renders its own card. -->
+           collapsing title); the empty-state path renders its own card.
+           Dismissible banners (recovery nudge, account-reset alert, and the
+           always-available "Become a Pro member" CTA) are DOM-inserted ABOVE
+           #servers-list by their respective lib modules — no static slot. -->
       <section id="view-home" class="hidden" data-tab="home">
         <!-- The ACCOUNT's chosen name leads; the routing handle is only the
              fallback while locked or before a name is set. Both are filled in
@@ -251,6 +254,7 @@
           <div class="fs-group">
             <button class="fs-row" id="settings-tab-account-security"><span class="fs-row-icon icon" data-row-icon="security"></span><span class="fs-row-body"><span class="fs-row-title">Account security</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-providers"><span class="fs-row-icon icon" data-row-icon="providers"></span><span class="fs-row-body"><span class="fs-row-title">AI keys</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-tier"><span class="fs-row-icon icon" data-row-icon="tier"></span><span class="fs-row-body"><span class="fs-row-title">Tier &amp; usage</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-recovery"><span class="fs-row-icon icon" data-row-icon="recovery"></span><span class="fs-row-body"><span class="fs-row-title">Cloud recovery</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-backup-key"><span class="fs-row-icon icon" data-row-icon="backupkey"></span><span class="fs-row-body"><span class="fs-row-title">Back up account key</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row hidden" id="settings-tab-name-dibs"><span class="fs-row-icon icon" data-row-icon="dibs"></span><span class="fs-row-body"><span class="fs-row-title">Claim your .com name</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
@@ -420,10 +424,13 @@
         <div id="services-list-content"></div>
         <div class="card mt-3">
           <p class="note">
-            Vibe-code a new service, or share-install one from a creator.
+            Browse the marketplace, vibe-code a new service, or share-install one
+            from a creator.
           </p>
           <div class="row-2">
+            <button class="secondary" id="services-list-open-marketplace">Marketplace</button>
             <button class="secondary" id="services-list-open-vibe-code">Vibe-code</button>
+            <button class="secondary" id="services-list-open-developer">Developer</button>
           </div>
         </div>
         <div class="row-2">
@@ -578,7 +585,35 @@
         </div>
       </section>
 
+      <!-- View 11: Tier dashboard (P2.11) -->
+      <section id="view-tier-status" class="hidden">
+        <h2>Tier &amp; usage</h2>
+        <div id="tier-status-content"></div>
+        <div class="row-2">
+          <button class="secondary" id="tier-status-refresh">Refresh</button>
+          <button class="secondary" id="tier-status-back">← Back</button>
+        </div>
+      </section>
 
+      <!-- View 12: Marketplace (P2.4) -->
+      <section id="view-marketplace" class="hidden">
+        <h2>Marketplace</h2>
+        <div id="marketplace-content"></div>
+        <div class="row-2">
+          <button class="secondary" id="marketplace-refresh">Refresh</button>
+          <button class="secondary" id="marketplace-back">← Back</button>
+        </div>
+      </section>
+
+      <!-- View 12b: Developer console — your listings, sales, payout owed -->
+      <section id="view-developer" class="hidden">
+        <h2>Developer console</h2>
+        <div id="developer-content"></div>
+        <div class="row-2">
+          <button class="secondary" id="developer-refresh">Refresh</button>
+          <button class="secondary" id="developer-back">← Back</button>
+        </div>
+      </section>
 
       <!-- View 13: Vibe-code chat (P2.5) — a multi-turn chat with attachments -->
       <section id="view-vibe-code" class="hidden">
@@ -682,6 +717,10 @@
           <button class="card build-tile full-width mt-2" id="build-src-mcp">
             <strong>Connect your IDE (Cursor / Cline)</strong>
             <span class="note">Build from your editor with your own AI. Your box exposes a secure tool surface — no AI key on the box.</span>
+          </button>
+          <button class="card build-tile full-width mt-2" id="build-src-market">
+            <strong>Get from the marketplace</strong>
+            <span class="note">Install something a neighbour already built.</span>
           </button>
         </div>
         <div class="row-2 mt-2"><button class="secondary" id="build-source-back">← Back</button></div>

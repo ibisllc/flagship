@@ -28,6 +28,8 @@ sealed interface HomeRoute {
 
 sealed interface AppsRoute {
     data class AppDetail(val appId: String) : AppsRoute
+    data object Marketplace : AppsRoute
+    data class MarketplaceDetail(val creator: String, val slug: String) : AppsRoute
     data object VibeCodeProviderPick : AppsRoute
     data object VibeCodeDescribe : AppsRoute
     data class VibeCodeGenerating(val sessionId: String) : AppsRoute
@@ -48,6 +50,9 @@ sealed interface ActivityRoute {
 
 sealed interface SettingsRoute {
     data object Providers : SettingsRoute
+    /** P7 — the dedicated tier-status / subscription screen, reached from
+     *  the Settings "Plan / Subscription" nav row. */
+    data object TierStatus : SettingsRoute
     data object Recovery : SettingsRoute
     data object PostRecoveryProgress : SettingsRoute
     data object About : SettingsRoute

@@ -20,6 +20,24 @@ public protocol ScreensClient: Sendable {
     // P1.3 app-detail
     func appDetail(serviceId: String) async throws -> AppDetailResponse
 
+    // P1.4 marketplace-browse
+    func marketplaceBrowse() async throws -> MarketplaceBrowseResponse
+
+    // P1.4 — single-listing fetch (full manifestJson). Hits
+    // `https://flagshipserver.com/api/marketplace/<creator>/<slug>` directly;
+    // same-origin from the webapp, cross-origin from iOS but the listing
+    // body is public so no auth is required.
+    func marketplaceFetchListing(creator: String, slug: String) async throws -> MarketplaceListingDetail
+
+    // P1.4 — install a marketplace app on the user's paired pod. POSTs the
+    // IRK-signed envelope to `<podBaseUrl>/api/services` (NOT under
+    // `/api/screens/*`; mirrors the webapp's `installFromMarketplace` in
+    // `apps/web/public/webapp/lib/installService.js`). The caller is
+    // responsible for producing `envelope.signature` by signing
+    // `installServiceCanonicalBytes(envelope.request)` with the user's
+    // IRK private key.
+    func installFromMarketplace(_ envelope: InstallServiceEnvelope) async throws -> InstallServiceResponse
+
     // P1.5 vibe-code/start
     func vibeCodeStart(_ req: VibeCodeStartRequest) async throws -> VibeCodeStartResponse
 
@@ -37,6 +55,9 @@ public protocol ScreensClient: Sendable {
 
     // P1.14 orders/send
     func ordersSend(_ req: OrdersSendRequest) async throws -> OrdersSendResponse
+
+    // P1.16 tier-status
+    func tierStatus() async throws -> TierStatusResponse
 
     // P1.17 url-controller/owned
     func urlControllerOwned() async throws -> UrlControllerOwnedResponse
@@ -179,6 +200,15 @@ public protocol ScreensClient: Sendable {
     /// `POST …/members/rank`: an admin's signed `flagship/app-rank/v1` order.
     /// 403 = not an admin, 409 = a newer order already applied (sign again).
     func setAppRank(serviceId: String, _ req: AppRankRequest) async throws -> AppRankResponse
+    /// `GET /api/screens/services/<id>/list-scope`: one access list on every
+    /// server, or a separate one on each (a Pro option). An older box answers 404.
+    func appListScope(serviceId: String) async throws -> AppListScopeState
+    /// `POST …/list-scope`: an admin's signed `flagship/app-list-scope/v1`.
+    /// 402 = needs Pro, 403 = not an admin, 409 = stale (sign again).
+    func setAppListScope(serviceId: String, _ req: AppListScopeRequest) async throws -> AppListScopeState
+    /// `GET /api/screens/access-lists/summary`: the account's apps with a
+    /// separate list on each server.
+    func accessListsSummary() async throws -> AccessListsSummary
 
     // Copying an app between the owner's servers (docs/app-placement.md §5).
     /// `POST /api/screens/services/copy` to the TARGET box: the owner's signed
@@ -476,6 +506,15 @@ public extension ScreensClient {
     }
     func setAppRank(serviceId: String, _ req: AppRankRequest) async throws -> AppRankResponse {
         throw ScreensClientError.notImplemented("app members")
+    }
+    func appListScope(serviceId: String) async throws -> AppListScopeState {
+        throw ScreensClientError.notImplemented("separate access lists")
+    }
+    func setAppListScope(serviceId: String, _ req: AppListScopeRequest) async throws -> AppListScopeState {
+        throw ScreensClientError.notImplemented("separate access lists")
+    }
+    func accessListsSummary() async throws -> AccessListsSummary {
+        throw ScreensClientError.notImplemented("separate access lists")
     }
     func accessRequestEvents() -> AsyncStream<Void> {
         AsyncStream { $0.finish() }

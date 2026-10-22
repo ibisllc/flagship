@@ -75,6 +75,10 @@ data class SmokeModeConfig(
     /** The build chat the mock box serves (MockScreensClient.chatVariant):
      *  "ready" | "failed" (continuable) | "env" (asks for an env var, the default). */
     val chatVariant: String? = null,
+    /** The account's plan as the mock box sees it (GymSeams.listsPlan). */
+    val listsPlan: String? = null,
+    /** Plants keeps a separate access list on each server (GymSeams.separateLists). */
+    val separateLists: Boolean = false,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -95,6 +99,8 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_ONBOARDING = "flagship.smokeOnboarding"
         const val EXTRA_SMOKE_RATE_LIMITED = "flagship.smokeRateLimited"
         const val EXTRA_SMOKE_CHAT = "flagship.smokeChat"
+        const val EXTRA_SMOKE_PLAN = "flagship.smokePlan"
+        const val EXTRA_SMOKE_SEPARATE_LISTS = "flagship.smokeSeparateLists"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -128,6 +134,9 @@ data class SmokeModeConfig(
                     ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.takeIf { it.isNotEmpty() },
                 chatVariant = intent.getStringExtra(EXTRA_SMOKE_CHAT)?.trim()?.lowercase()
                     ?.takeIf { it in setOf("ready", "failed", "env") },
+                listsPlan = intent.getStringExtra(EXTRA_SMOKE_PLAN)?.trim()?.lowercase()
+                    ?.takeIf { it == "pro" || it == "free" },
+                separateLists = intent.getBooleanExtra(EXTRA_SMOKE_SEPARATE_LISTS, false),
             )
         }
     }
@@ -224,6 +233,9 @@ object SmokeMode {
         com.flagshipserver.app.api.MockServiceAccessClient.shared.reset()
         GymSeams.rateLimited.clear()
         config.rateLimited?.let { GymSeams.rateLimited += it }
+        GymSeams.listsPlan = config.listsPlan
+        GymSeams.separateLists = config.separateLists
+        GymSeams.bypassBiometricGates = true
 
         if (config.seedTrustUntrusted) {
             trust.markUntrusted(

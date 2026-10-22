@@ -212,6 +212,47 @@ export interface AppDetailResponse {
   adaptedFrom?: { repo: string };
 }
 
+// ---------- P1.4 — /api/screens/marketplace-browse ---------------------
+
+export interface MarketplaceListing {
+  creator: string;
+  slug: string;
+  title: string;
+  summary: string;
+  screenshots: string[];
+  installCount: number;
+  requiresLlmKey: boolean;
+  /**
+   * The env-var NAME an `requiresLlmKey` app reads its key from (e.g.
+   * `OPENAI_API_KEY`). Carried so the client can deep-link the owner to
+   * "Configure environment" with the right name PREFILLED after install —
+   * the value itself is set on the box (sealed env store), never here.
+   * Absent ⇒ the client falls back to `LLM_KEY_ENV_DEFAULT`.
+   */
+  llmKeyEnvVar?: string;
+  /**
+   * Marketplace scanner verdict: "A" | "B" | "C" | "D" | "F", or absent
+   * when the listing hasn't been scanned yet (the scanner service is still
+   * in flight — see CLAUDE.md "Current status & open work"). Relayed
+   * verbatim from `.com`'s `scan_grade`; clients render an "ungraded" pill
+   * when absent.
+   */
+  scanGrade?: string;
+  alreadyInstalled: boolean;
+}
+
+/**
+ * Fallback env-var name for an `requiresLlmKey` listing that doesn't carry
+ * an explicit `llmKeyEnvVar`. Kept in sync byte-for-byte with the webapp
+ * (`lib/marketplaceLlmKey.js`), iOS (`MarketplaceLlmKey`), and Android
+ * (`MarketplaceLlmKey`) so the prefilled-name UX is identical everywhere.
+ */
+export const LLM_KEY_ENV_DEFAULT = "OPENAI_API_KEY";
+
+export interface MarketplaceBrowseResponse {
+  listings: MarketplaceListing[];
+}
+
 // ---------- P1.5 — /api/screens/vibe-code/start ------------------------
 
 export interface VibeCodeStartRequest {
@@ -428,6 +469,18 @@ export type InstallEvent =
   | { kind: "cert-issued"; at: number }
   | { kind: "ready"; serverFqdn: string; at: number }
   | { kind: "failed"; reason: string; at: number };
+
+// ---------- P1.16 — /api/screens/tier-status ---------------------------
+
+export interface TierStatusResponse {
+  tier: "free" | "promo" | "byok";
+  llmCreditsRemainingDay?: number;
+  llmCreditsRemainingTotal?: number;
+  dispatcherUsageGBmonth?: number;
+  dispatcherFreeQuotaGBmonth?: number;
+  customDomains: string[];
+  reservedNames: string[];
+}
 
 // ---------- P1.17 / P1.18 — /api/screens/url-controller ----------------
 

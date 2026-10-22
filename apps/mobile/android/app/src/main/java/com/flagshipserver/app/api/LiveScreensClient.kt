@@ -152,6 +152,55 @@ class LiveScreensClient(
     override suspend fun appDetail(serviceId: String): AppDetailResponse =
         request("/api/screens/app-detail/$serviceId", AppDetailResponse.serializer())
 
+    override suspend fun marketplaceBrowse(): MarketplaceBrowseResponse =
+        request("/api/screens/marketplace-browse", MarketplaceBrowseResponse.serializer())
+
+    /** Public-listing fetch from `.com` (no auth, cross-origin from the pod).
+     *  Mirrors the iOS Live impl + the webapp's `fetchListing`; returns the
+     *  full `manifestJson` the daemon needs to install. */
+    override suspend fun marketplaceFetchListing(creator: String, slug: String): MarketplaceListingDetail {
+        val encCreator = java.net.URLEncoder.encode(creator, "UTF-8")
+        val encSlug = java.net.URLEncoder.encode(slug, "UTF-8")
+        val req = Request.Builder()
+            .url("https://flagshipserver.com/api/marketplace/$encCreator/$encSlug")
+            .get()
+            .build()
+        val resp = suspendCoroutine<okhttp3.Response> { cont ->
+            client.newCall(req).enqueue(object : okhttp3.Callback {
+                override fun onFailure(call: okhttp3.Call, e: IOException) { cont.resumeWithException(e) }
+                override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) { cont.resume(response) }
+            })
+        }
+        val status = resp.code
+        val bytes = resp.body?.bytes() ?: ByteArray(0)
+        resp.close()
+        if (status !in 200..299) throw ScreensError.Http(status, String(bytes, Charsets.UTF_8))
+        return try {
+            // .com wraps the listing under `listing` with snake_case keys; map
+            // it into the flat detail the VM consumes.
+            val env = json.decodeFromString(ComListingEnvelope.serializer(), String(bytes, Charsets.UTF_8))
+            val l = env.listing
+            MarketplaceListingDetail(
+                creator = l.creator,
+                slug = l.slug,
+                title = l.name,
+                summary = l.tagline,
+                manifestJson = l.manifestJson,
+                manifestHash = l.manifestHash,
+            )
+        } catch (t: Throwable) {
+            throw ScreensError.Decoding(t.message ?: "decode failed")
+        }
+    }
+
+    /** POST `<podBaseUrl>/api/services` with the IRK-signed install envelope.
+     *  Mirrors the iOS `installFromMarketplace` byte-for-byte: same path, same
+     *  `{request, signature}` shape, same response keys. */
+    override suspend fun installFromMarketplace(envelope: InstallServiceEnvelope): InstallServiceResponse {
+        val body = json.encodeToString(InstallServiceEnvelope.serializer(), envelope).toByteArray()
+        return request("/api/services", InstallServiceResponse.serializer(), "POST", body)
+    }
+
     override suspend fun vibeCodeStart(req: VibeCodeStartRequest): VibeCodeStartResponse {
         val body = json.encodeToString(VibeCodeStartRequest.serializer(), req).toByteArray()
         return request("/api/screens/vibe-code/start", VibeCodeStartResponse.serializer(), "POST", body)
@@ -174,6 +223,9 @@ class LiveScreensClient(
         val body = json.encodeToString(OrdersSendRequest.serializer(), req).toByteArray()
         return request("/api/screens/orders/send", OrdersSendResponse.serializer(), "POST", body)
     }
+
+    override suspend fun tierStatus(): TierStatusResponse =
+        request("/api/screens/tier-status", TierStatusResponse.serializer())
 
     override suspend fun urlControllerOwned(): UrlControllerOwnedResponse =
         request("/api/screens/url-controller/owned", UrlControllerOwnedResponse.serializer())
@@ -299,6 +351,17 @@ class LiveScreensClient(
         val body = json.encodeToString(AppRankRequest.serializer(), req).toByteArray()
         return request("${servicePath(serviceId)}/members/rank", AppRankResponse.serializer(), "POST", body)
     }
+
+    override suspend fun appListScope(serviceId: String): AppListScopeState =
+        request("${servicePath(serviceId)}/list-scope", AppListScopeState.serializer())
+
+    override suspend fun setAppListScope(serviceId: String, req: AppListScopeRequest): AppListScopeState {
+        val body = json.encodeToString(AppListScopeRequest.serializer(), req).toByteArray()
+        return request("${servicePath(serviceId)}/list-scope", AppListScopeState.serializer(), "POST", body)
+    }
+
+    override suspend fun accessListsSummary(): AccessListsSummary =
+        request("/api/screens/access-lists/summary", AccessListsSummary.serializer())
 
     override suspend fun serviceApiKeys(serviceId: String): AppApiKeysResponse =
         request("${servicePath(serviceId)}/api-keys", AppApiKeysResponse.serializer())

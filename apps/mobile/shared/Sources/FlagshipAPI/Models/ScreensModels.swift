@@ -384,6 +384,255 @@ public enum RelayFailure {
     }
 }
 
+// MARK: - P1.4 marketplace-browse
+
+public struct MarketplaceListing: Codable, Equatable, Sendable {
+    public let creator: String
+    public let slug: String
+    public let title: String
+    public let summary: String
+    public let screenshots: [String]
+    public let installCount: Int
+    public let requiresLlmKey: Bool
+    /// Env-var NAME a `requiresLlmKey` app reads its key from (e.g.
+    /// `OPENAI_API_KEY`); relayed by the BFF so the client can prefill
+    /// "Configure environment" after install. Nil ⇒ fall back to
+    /// `MarketplaceLlmKey.defaultEnvVar`.
+    public let llmKeyEnvVar: String?
+    /// Marketplace scanner verdict ("A"/"B"/"C"/"D"/"F"), or nil when not yet
+    /// scanned (the pill renders "ungraded"). MIRRORS the BFF's `scanGrade`.
+    public let scanGrade: String?
+    public let alreadyInstalled: Bool
+
+    public init(
+        creator: String,
+        slug: String,
+        title: String,
+        summary: String,
+        screenshots: [String],
+        installCount: Int,
+        requiresLlmKey: Bool,
+        llmKeyEnvVar: String? = nil,
+        scanGrade: String? = nil,
+        alreadyInstalled: Bool
+    ) {
+        self.creator = creator
+        self.slug = slug
+        self.title = title
+        self.summary = summary
+        self.screenshots = screenshots
+        self.installCount = installCount
+        self.requiresLlmKey = requiresLlmKey
+        self.llmKeyEnvVar = llmKeyEnvVar
+        self.scanGrade = scanGrade
+        self.alreadyInstalled = alreadyInstalled
+    }
+}
+
+/// Marketplace scanner-grade → display bucket. Pure + testable so the pill on
+/// each surface maps grades identically: A/B → ok, C/D → warn, F → err, and
+/// anything else (incl. nil — `scan_grade` is NULL until the scanner runs) →
+/// ungraded. Mirrors the webapp `scanGradePill` buckets.
+public enum ScanGradeBucket: Equatable, Sendable {
+    case ok       // A, B
+    case warn     // C, D
+    case err      // F
+    case ungraded // not yet scanned / unknown
+
+    /// Map a raw grade (any casing, possibly nil) to a bucket.
+    public static func from(_ grade: String?) -> ScanGradeBucket {
+        switch grade?.uppercased() {
+        case "A", "B": return .ok
+        case "C", "D": return .warn
+        case "F":      return .err
+        default:       return .ungraded
+        }
+    }
+
+    /// The full pill label for a raw grade — "scan A".."scan F" or "ungraded".
+    public static func pillLabel(_ grade: String?) -> String {
+        switch grade?.uppercased() {
+        case "A", "B", "C", "D", "F": return "scan \(grade!.uppercased())"
+        default:                      return "ungraded"
+        }
+    }
+
+    /// Client-side install consent gate. An `F` verdict (`.err`) is the only
+    /// grade conservative enough to BLOCK the normal install: the confirm must
+    /// require a distinct "Install anyway" override before anything reaches the
+    /// box. A/B/C/D install normally. Pure so the gate can be unit-tested
+    /// without a running app and stays identical across surfaces.
+    public var blocksInstall: Bool { self == .err }
+
+    /// An ungraded listing (`nil`/unknown scan_grade) installs, but the confirm
+    /// must caution the owner it hasn't been security-scanned yet.
+    public var installCaution: Bool { self == .ungraded }
+}
+
+extension MarketplaceListing {
+    /// The install-consent bucket for THIS listing's scan grade — the single
+    /// source the confirm surface reads to decide block / caution / normal.
+    public var scanGateBucket: ScanGradeBucket { ScanGradeBucket.from(scanGrade) }
+}
+
+/// Marketplace install LLM-key UX helpers, shared so the prefilled-name flow
+/// and the default name stay byte-identical with the daemon BFF
+/// (`LLM_KEY_ENV_DEFAULT`), the webapp (`lib/marketplaceLlmKey.js`), and
+/// Android (`MarketplaceLlmKey`).
+public enum MarketplaceLlmKey {
+    /// Fallback env-var name when a listing doesn't declare one.
+    public static let defaultEnvVar = "OPENAI_API_KEY"
+
+    /// The env-var name to prefill for `listing` — its declared name, else the
+    /// default.
+    public static func envVar(for listing: MarketplaceListing) -> String {
+        if let n = listing.llmKeyEnvVar, !n.isEmpty { return n }
+        return defaultEnvVar
+    }
+}
+
+public struct MarketplaceBrowseResponse: Codable, Equatable, Sendable {
+    public let listings: [MarketplaceListing]
+}
+
+/// Single-listing fetch (`GET https://flagshipserver.com/api/marketplace/<creator>/<slug>`).
+/// MIRRORS the webapp's `fetchListing` in
+/// `apps/web/public/webapp/lib/installService.js` — same field is required
+/// (`manifestJson` is opaque JSON the daemon verifies on install). Extra
+/// fields the .com worker returns are tolerated by Codable.
+public struct MarketplaceListingDetail: Codable, Equatable, Sendable {
+    public let creator: String
+    public let slug: String
+    public let title: String
+    public let summary: String
+    public let manifestJson: String
+    /// The listing's committed `manifest_hash` (sha256 hex of manifestJson).
+    /// The VM re-checks it before install so a swapped manifest is rejected.
+    /// Empty on legacy listings that predate the carried manifest.
+    public let manifestHash: String
+    public init(
+        creator: String,
+        slug: String,
+        title: String,
+        summary: String,
+        manifestJson: String,
+        manifestHash: String = ""
+    ) {
+        self.creator = creator
+        self.slug = slug
+        self.title = title
+        self.summary = summary
+        self.manifestJson = manifestJson
+        self.manifestHash = manifestHash
+    }
+}
+
+/// Wire shape of the `.com` single-listing GET
+/// (`GET https://flagshipserver.com/api/marketplace/<creator>/<slug>`): the
+/// listing object is wrapped under `listing` with snake_case keys. Decoded by
+/// the Live client and mapped into `MarketplaceListingDetail`.
+struct ComListingEnvelope: Decodable {
+    struct Listing: Decodable {
+        let creator: String
+        let slug: String
+        let name: String?
+        let tagline: String?
+        let manifest_json: String?
+        let manifest_hash: String?
+    }
+    let listing: Listing
+}
+
+/// sha256 hex of a UTF-8 string. Verifies a carried marketplace manifest hashes
+/// to the listing's committed `manifest_hash` before install (mirror of the
+/// webapp `sha256Hex` + Android `manifestSha256Hex`).
+public func manifestSha256Hex(_ s: String) -> String {
+    let digest = SHA256.hash(data: Data(s.utf8))
+    return digest.map { String(format: "%02x", $0) }.joined()
+}
+
+/// Install-marketplace-app request. MIRRORS the webapp wire shape in
+/// `apps/web/public/webapp/lib/installService.js` byte-for-byte: same field
+/// names, same canonical tag (`flagship/install-service/v1`), same envelope
+/// (`{ request, signature }`) — see `installServiceCanonicalBytes` for the
+/// canonical-bytes implementation. The daemon endpoint is
+/// `POST <pod>/api/services` (NOT under `/api/screens/*` — the install
+/// pipeline lives on the service-platform handler in
+/// `packages/server-daemon/src/servicePlatform.ts`).
+public struct InstallServiceRequest: Codable, Equatable, Sendable {
+    public let serverId: String
+    public let creator: String
+    public let slug: String
+    public let manifestJson: String
+    public let addOwnerToMembership: Bool
+    public let issuedAt: Int64
+    public init(
+        serverId: String,
+        creator: String,
+        slug: String,
+        manifestJson: String,
+        addOwnerToMembership: Bool,
+        issuedAt: Int64
+    ) {
+        self.serverId = serverId
+        self.creator = creator
+        self.slug = slug
+        self.manifestJson = manifestJson
+        self.addOwnerToMembership = addOwnerToMembership
+        self.issuedAt = issuedAt
+    }
+}
+
+/// `{request, signature}` envelope expected by `POST <pod>/api/services`.
+/// `signature` is the hex-encoded Ed25519 signature of
+/// `installServiceCanonicalBytes(request)` produced with the user's IRK.
+public struct InstallServiceEnvelope: Codable, Equatable, Sendable {
+    public let request: InstallServiceRequest
+    public let signature: String
+    public init(request: InstallServiceRequest, signature: String) {
+        self.request = request
+        self.signature = signature
+    }
+}
+
+/// Daemon's success body for `POST /api/services`. Mirrors
+/// `installService` in `servicePlatform.ts`.
+public struct InstallServiceResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let serviceId: String
+    public let urlLabel: String
+    public let port: Int?
+    public init(ok: Bool, serviceId: String, urlLabel: String, port: Int? = nil) {
+        self.ok = ok
+        self.serviceId = serviceId
+        self.urlLabel = urlLabel
+        self.port = port
+    }
+}
+
+/// Canonical-bytes for `InstallServiceRequest`, byte-identical with
+/// `canonicalInstallService` in
+/// `apps/web/public/webapp/lib/installService.js` and with the TS protocol
+/// in `packages/protocol/src/auth.ts` (`canonicalInstallService`). Format:
+///
+///     flagship/install-service/v1 | serverId | creator | slug | manifestJson | (1|0) | issuedAt
+///
+/// `addOwnerToMembership` is encoded as `"1"` (true) or `"0"` (false) to
+/// match the webapp; `issuedAt` is a base-10 integer (no separator inside
+/// the value, no padding).
+public func installServiceCanonicalBytes(_ r: InstallServiceRequest) -> Data {
+    let parts: [String] = [
+        "flagship/install-service/v1",
+        r.serverId,
+        r.creator,
+        r.slug,
+        r.manifestJson,
+        r.addOwnerToMembership ? "1" : "0",
+        String(r.issuedAt),
+    ]
+    return Data(parts.joined(separator: "|").utf8)
+}
+
 // MARK: - P1.5 vibe-code/start
 
 public struct VibeCodeStartRequest: Codable, Equatable, Sendable {
@@ -614,6 +863,36 @@ public enum InstallEvent: Codable, Equatable {
         case .ready(let f, _):       return .ready(serverFqdn: f, at: at)
         case .failed(let r, _):      return .failed(reason: r, at: at)
         }
+    }
+}
+
+// MARK: - P1.16 tier-status
+
+public struct TierStatusResponse: Codable, Equatable, Sendable {
+    public let tier: String   // "free" | "promo" | "byok"
+    public let llmCreditsRemainingDay: Int64?
+    public let llmCreditsRemainingTotal: Int64?
+    public let dispatcherUsageGBmonth: Double?
+    public let dispatcherFreeQuotaGBmonth: Double?
+    public let customDomains: [String]
+    public let reservedNames: [String]
+
+    public init(
+        tier: String,
+        llmCreditsRemainingDay: Int64?,
+        llmCreditsRemainingTotal: Int64?,
+        dispatcherUsageGBmonth: Double?,
+        dispatcherFreeQuotaGBmonth: Double?,
+        customDomains: [String],
+        reservedNames: [String]
+    ) {
+        self.tier = tier
+        self.llmCreditsRemainingDay = llmCreditsRemainingDay
+        self.llmCreditsRemainingTotal = llmCreditsRemainingTotal
+        self.dispatcherUsageGBmonth = dispatcherUsageGBmonth
+        self.dispatcherFreeQuotaGBmonth = dispatcherFreeQuotaGBmonth
+        self.customDomains = customDomains
+        self.reservedNames = reservedNames
     }
 }
 

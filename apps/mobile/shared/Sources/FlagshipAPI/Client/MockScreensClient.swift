@@ -614,6 +614,54 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return AppRankResponse(ok: true, target: t, rank: rank)
     }
 
+    // MARK: Separate access list per server (Pro)
+
+    /// Per-service list scope the box would answer (nil: an older box, 404).
+    public var mockListScope: [String: AppListScopeState] = [:]
+    public private(set) var setAppListScopeCalls: [(serviceId: String, req: AppListScopeRequest)] = []
+    /// Status to answer the next list-scope change with (e.g. 403), once.
+    public var mockListScopeStatus: Int?
+    /// The account summary the plan screen reads (nil: an older box, 404).
+    public var mockAccessListsSummary: AccessListsSummary?
+
+    public func appListScope(serviceId: String) async throws -> AppListScopeState {
+        try await tick()
+        guard let s = mockListScope[serviceId] else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"not found"}"#)
+        }
+        return s
+    }
+
+    /// Mirrors the box: "server" needs Pro (402), "account" always goes through.
+    public func setAppListScope(serviceId: String, _ req: AppListScopeRequest) async throws -> AppListScopeState {
+        try await tick()
+        setAppListScopeCalls.append((serviceId, req))
+        if let status = mockListScopeStatus {
+            mockListScopeStatus = nil
+            throw ScreensClientError.http(status: status, message: #"{"error":"refused"}"#)
+        }
+        guard let cur = mockListScope[serviceId] else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"not found"}"#)
+        }
+        if req.order.scope == "server", !cur.isPro {
+            throw ScreensClientError.http(
+                status: 402,
+                message: #"{"error":"A separate list on each server comes with Pro.","code":"pro-required"}"#)
+        }
+        let next = AppListScopeState(serviceRef: cur.serviceRef, scope: req.order.scope, pending: false, plan: cur.plan,
+                                     selfFqdn: cur.selfFqdn, leader: cur.leader, servers: cur.servers)
+        mockListScope[serviceId] = next
+        return next
+    }
+
+    public func accessListsSummary() async throws -> AccessListsSummary {
+        try await tick()
+        guard let s = mockAccessListsSummary else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"not found"}"#)
+        }
+        return s
+    }
+
     /// When set, a signed query is refused unless this key made the signature.
     public var mockDbVerifyKey: Data?
     public private(set) var serviceDbQueryCalls: [(serviceId: String, store: String, req: AppDbQueryRequest)] = []
@@ -922,6 +970,110 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public var mockAdaptedFrom: [String: String] = [:]
     /// Headless-browser tabs running for an app: serviceId → tab ids.
     public var mockBrowserTabIds: [String: [String]] = [:]
+    // MARK: - P1.4 marketplace install plumbing
+    //
+    // Tests inspect these recorders to assert the install call shape (path,
+    // request body, signature presence). The Live client posts the same
+    // payload to `<pod>/api/services`.
+    public private(set) var installCalls: [InstallServiceEnvelope] = []
+    public struct ListingFetch: Equatable, Sendable {
+        public let creator: String
+        public let slug: String
+    }
+    public private(set) var listingFetches: [ListingFetch] = []
+    /// When true, the next `installFromMarketplace` call throws to let tests
+    /// exercise the error path.
+    public var installShouldFail: Bool = false
+    public var installFailureMessage: String = "simulated daemon error"
+    /// HTTP status the simulated install failure throws. Default 400; set to
+    /// 402 to exercise the paid-app gate.
+    public var installFailureStatus: Int = 400
+
+    /// When true, `marketplaceFetchListing` returns a listing whose
+    /// `manifestHash` does NOT match its `manifestJson`, so the VM's
+    /// install-time hash check can be exercised. Mirrors Android
+    /// `tamperListingManifest`.
+    public var tamperListingManifest: Bool = false
+
+    // MARK: - P1.4 marketplace-browse
+
+    public func marketplaceBrowse() async throws -> MarketplaceBrowseResponse {
+        try await tick()
+        return MarketplaceBrowseResponse(listings: [
+            MarketplaceListing(
+                creator: "trent",
+                slug: "scratchpad",
+                title: "Scratchpad",
+                summary: "A markdown notes app with offline-first sync.",
+                screenshots: [],
+                installCount: 412,
+                requiresLlmKey: false,
+                scanGrade: "A",
+                alreadyInstalled: true
+            ),
+            MarketplaceListing(
+                creator: "wendy",
+                slug: "wishlist",
+                title: "Family Wishlist",
+                summary: "Shared birthday + holiday lists for the household.",
+                screenshots: [],
+                installCount: 188,
+                requiresLlmKey: false,
+                scanGrade: nil,   // unscanned → "ungraded" pill
+                alreadyInstalled: false
+            ),
+            MarketplaceListing(
+                creator: "peggy",
+                slug: "feed-reader",
+                title: "Tiny Feed Reader",
+                summary: "Atom + RSS in a clean reader. Optional AI summaries.",
+                screenshots: [],
+                installCount: 974,
+                requiresLlmKey: true,
+                llmKeyEnvVar: "OPENAI_API_KEY",
+                scanGrade: "C",
+                alreadyInstalled: false
+            )
+        ])
+    }
+
+    /// Deterministic listing detail. The `manifestJson` is opaque (a real
+    /// daemon validates the inner JSON); the mock returns a small, recognizable
+    /// stub so tests can assert it round-trips into the install request.
+    public func marketplaceFetchListing(creator: String, slug: String) async throws -> MarketplaceListingDetail {
+        try await tick()
+        listingFetches.append(ListingFetch(creator: creator, slug: slug))
+        let manifestJson = """
+        {"name":"\(slug)","version":"1.0.0","creator":"\(creator)"}
+        """
+        return MarketplaceListingDetail(
+            creator: creator,
+            slug: slug,
+            title: slug.capitalized,
+            summary: "Marketplace stub for \(creator)/\(slug)",
+            manifestJson: manifestJson,
+            manifestHash: tamperListingManifest
+                ? String(repeating: "00", count: 32)
+                : manifestSha256Hex(manifestJson)
+        )
+    }
+
+    /// Records the install envelope so tests can assert its shape, then
+    /// returns a deterministic success body. Set `installShouldFail = true`
+    /// to exercise the error path.
+    public func installFromMarketplace(_ envelope: InstallServiceEnvelope) async throws -> InstallServiceResponse {
+        try await tick()
+        installCalls.append(envelope)
+        if installShouldFail {
+            throw ScreensClientError.http(status: installFailureStatus, message: installFailureMessage)
+        }
+        return InstallServiceResponse(
+            ok: true,
+            serviceId: "\(envelope.request.creator)--\(envelope.request.slug)",
+            urlLabel: envelope.request.slug,
+            port: 8080
+        )
+    }
 
     // MARK: - P1.5 vibe-code/start
 
@@ -1007,6 +1159,27 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func ordersSend(_ req: OrdersSendRequest) async throws -> OrdersSendResponse {
         try await tick()
         return OrdersSendResponse(ok: true, response: nil)
+    }
+
+    // MARK: - P1.16 tier-status
+
+    /// Overridable fixture so tests (and dev mode) can pin an exact tier
+    /// wire shape — BYOK, custom-domains-present, free-tier, etc. — without
+    /// editing the default. Nil = the default promo fixture below.
+    public var tierStatusFixture: TierStatusResponse?
+
+    public func tierStatus() async throws -> TierStatusResponse {
+        try await tick()
+        if let fixture = tierStatusFixture { return fixture }
+        return TierStatusResponse(
+            tier: "promo",
+            llmCreditsRemainingDay: 38,
+            llmCreditsRemainingTotal: 162,
+            dispatcherUsageGBmonth: 1.2,
+            dispatcherFreeQuotaGBmonth: 50.0,
+            customDomains: [],
+            reservedNames: ["bright-maple"]
+        )
     }
 
     // MARK: - P1.17 / P1.18 url-controller

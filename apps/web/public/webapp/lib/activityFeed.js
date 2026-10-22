@@ -37,6 +37,8 @@ export const BOX_EVENT_LABELS = Object.freeze({
   "server.debug-access.expired": { label: tr("Debug access ended"), icon: "🔒" },
   "server.debug-access.revoked": { label: tr("Debug access turned off"), icon: "🔒" },
   "server.state.corrupt": { label: tr("This server found a damaged settings file and locked it down"), icon: "⚠️" },
+  // feat/marketplace: Pro ended and apps with separate lists went back to one.
+  "access.lists.merged": { label: tr("Back to one access list"), icon: "👥" },
 });
 
 function humanize(s) {

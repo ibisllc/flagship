@@ -592,16 +592,22 @@ struct FlagshipApp: App {
     /// demo apps' Access control, signed with fixed keys instead of the Keystore.
     /// `-smoke-non-admin-device` plays a device without the admin root (a
     /// Manager in the apps); `-smoke-member-rank-device` one an admin set to
-    /// Member.
+    /// Member. `-smoke-list-scope free|pro|separate` adds the Pro switch for
+    /// a separate access list on each server (feat/marketplace).
     private let accessFixture = AccessFixtureOnce()
     private var accessFixtureKeys: ServiceAccessKeys? {
         let args = ProcessInfo.processInfo.arguments
         guard args.contains("-smoke-mode"), args.contains("-smoke-access-fixture"), GymLaunch.usesMocks else { return nil }
+        func value(_ flag: String) -> String? {
+            args.firstIndex(of: flag).flatMap { args.indices.contains($0 + 1) ? args[$0 + 1] : nil }
+        }
         return accessFixture.keys {
             ServiceAccessFixture.seed(access: mockServiceAccess, screens: mockClient,
                                       serviceIds: ["bright-maple--plants", "bright-maple--wiki", "trent--scratchpad"],
                                       nonAdmin: args.contains("-smoke-non-admin-device"),
-                                      memberRank: args.contains("-smoke-member-rank-device"))
+                                      memberRank: args.contains("-smoke-member-rank-device"),
+                                      listScope: value("-smoke-list-scope"),
+                                      username: value("-smoke-username") ?? "bright-maple")
         }
     }
     /// Every mock client, for the gym's launch seams.

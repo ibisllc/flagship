@@ -3,7 +3,7 @@ import Flagship
 import FlagshipCore
 import FlagshipAPI
 
-/// Services tab: list → detail; vibe-code launcher. Owns its
+/// Services tab: list → detail; marketplace; vibe-code launcher. Owns its
 /// own NavigationStack with AppsRoute as the path element type. Surfaces
 /// as "Services" in the UI.
 public struct ServicesTab: View {
@@ -106,6 +106,11 @@ public struct ServicesTab: View {
                 path.append(.appDetail(serviceId: id))
             }
             _ = linker.consume()
+        case .marketplace:
+            if !path.contains(.marketplace) {
+                path.append(.marketplace)
+            }
+            _ = linker.consume()
         case .vibeCodeChat(let sessionId):
             if path.last != .vibeCodeChat(sessionId: sessionId) {
                 path.openVibeSession(sessionId)
@@ -143,6 +148,7 @@ public struct ServicesTab: View {
                     VStack(alignment: .leading, spacing: FS.space.s4) {
                         subheader(c: c, vm: vm)
                         emptyOrList(vm: vm, c: c)
+                        marketplaceCard(c: c)
                         Spacer().frame(height: FS.space.s12)
                     }
                     .padding(.horizontal, FS.space.s6)
@@ -203,6 +209,10 @@ public struct ServicesTab: View {
         switch route {
         case .appDetail(let id):
             ServiceDetailContainer(serviceId: id, path: $path)
+        case .marketplace:
+            MarketplaceContainer(path: $path)
+        case .marketplaceDetail(let creator, let slug):
+            MarketplaceDetailContainer(creator: creator, slug: slug, path: $path)
         case .buildSource:
             BuildSourceChooserContainer(path: $path, target: creation,
                                         onPickServer: { pod in bind(pod.fqdn) })
@@ -241,8 +251,8 @@ public struct ServicesTab: View {
             VibeCodeDescribeContainer(path: $path, holder: buildCred)
         case .vibeCodeGenerating(let sessionId), .vibeCodeChat(let sessionId):
             VibeCodeSessionContainer(sessionId: sessionId)
-        case .serviceEnv(let appId, let creator, let slug):
-            ServiceEnvContainer(appId: appId, creator: creator, slug: slug)
+        case .serviceEnv(let appId, let creator, let slug, let prefillName):
+            ServiceEnvContainer(appId: appId, creator: creator, slug: slug, prefillName: prefillName)
         case .browserTabs(let serviceId):
             BrowserTabsContainer(serviceId: serviceId, path: $path)
         case .browserViewer(_, let tabId):
@@ -375,6 +385,21 @@ public struct ServicesTab: View {
         }
     }
 
+    private func marketplaceCard(c: FSColors) -> some View {
+        Button(action: { path.append(.marketplace) }) {
+            FSCard {
+                HStack(spacing: FS.space.s3) {
+                    Image(systemName: "square.grid.2x2").foregroundColor(c.success)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Marketplace").foregroundColor(c.text)
+                        Text("Services your neighbours built").font(FS.font.caption()).foregroundColor(c.textMuted)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                }
+            }
+        }.buttonStyle(.plain)
+    }
 }
 
 /// Apps tab creator filter (the chip row). `.all` shows everything; `.yours`
@@ -680,6 +705,9 @@ struct ServiceEnvContainer: View {
     let appId: String
     let creator: String
     let slug: String
+    /// When set (a marketplace install of an app that needs an LLM key), the
+    /// env editor auto-opens the add-sheet with this NAME prefilled.
+    var prefillName: String? = nil
     @Environment(\.screensClient) private var client
     @Environment(AppState.self) private var app
     @Environment(\.vibeCodeEnvelopeSigner) private var signer
@@ -692,7 +720,8 @@ struct ServiceEnvContainer: View {
             creator: creator,
             slug: slug,
             client: client,
-            signEnvelope: signer
+            signEnvelope: signer,
+            prefillName: prefillName
         )
     }
 }
@@ -732,6 +761,310 @@ struct EditDescribeContainer: View {
             onOpenSessions: { path.openBuildSessions() },
             onUseIDE: { path.append(.editMcp(serviceId: serviceId)) }
         )
+    }
+}
+
+struct MarketplaceContainer: View {
+    @Binding var path: [AppsRoute]
+    @Environment(\.screensClient) private var client
+    @Environment(\.colorScheme) private var scheme
+    @Environment(AppState.self) private var app
+    @State private var vm: MarketplaceViewModel?
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        ScrollView {
+            VStack(alignment: .leading, spacing: FS.space.s4) {
+                Text("Marketplace").font(.system(size: 32, weight: .medium)).foregroundColor(c.text)
+                Text("Services your neighbours built. One tap to install.")
+                    .font(.system(size: 17)).foregroundColor(c.textMuted)
+                if app.pods.isEmpty {
+                    // The marketplace is a catalog, browsable before you
+                    // own a server. Until the central catalog ships, show
+                    // a friendly placeholder instead of a "not paired" error.
+                    FSCard {
+                        Text("The marketplace is coming soon.")
+                            .foregroundColor(c.textMuted)
+                    }
+                } else if let vm {
+                    @Bindable var bindable = vm
+                    FSField(value: $bindable.searchQuery, label: "", placeholder: "Search marketplace")
+                    switch vm.state {
+                    case .idle, .loading:
+                        VStack { ForEach(0..<3) { _ in ServerCardSkeleton() } }
+                    case .failed(let msg):
+                        ErrorCard(message: msg)
+                    case .loaded:
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: FS.space.s3)], spacing: FS.space.s3) {
+                            ForEach(vm.filtered, id: \.slug) { listing in
+                                Button(action: { path.append(.marketplaceDetail(creator: listing.creator, slug: listing.slug)) }) {
+                                    listingRow(listing: listing, c: c)
+                                }.buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(FS.space.s6)
+        }
+        .background(c.bg.ignoresSafeArea())
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            guard !app.pods.isEmpty else { return }
+            if vm == nil { vm = MarketplaceViewModel(client: client) }
+            if case .idle = vm?.state { await vm?.load() }
+        }
+    }
+
+    private func listingRow(listing: MarketplaceListing, c: FSColors) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                Text(listing.title).font(.system(size: 17, weight: .semibold)).foregroundColor(c.text)
+                Text("by \(listing.creator)").font(FS.font.caption()).foregroundColor(c.textMuted)
+                Text(listing.summary).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                HStack(spacing: FS.space.s2) {
+                    FSPill("\(listing.installCount) deploys", kind: listing.installCount > 0 ? .online : .idle)
+                    ScanGradePill(grade: listing.scanGrade)
+                    if listing.requiresLlmKey { FSPill("Needs LLM key", kind: .provisioning) }
+                    if listing.alreadyInstalled { FSPill("Deployed", kind: .idle) }
+                }
+            }
+        }
+    }
+}
+
+/// Marketplace scanner-grade pill. Mirrors the webapp's `scanGradePill`
+/// (`views/marketplace.js`): A/B → ok (green), C/D → warn (amber), F → err
+/// (red), and `nil` (not yet scanned — `scan_grade` is NULL today) → a neutral
+/// "ungraded" pill. The label + colour buckets are identical across surfaces.
+struct ScanGradePill: View {
+    let grade: String?
+    var body: some View {
+        let label = ScanGradeBucket.pillLabel(grade)
+        switch ScanGradeBucket.from(grade) {
+        case .ok:       FSPill(label, kind: .online)
+        case .warn:     FSPill(label, kind: .renewing)
+        case .err:      FSPill(label, kind: .offline)
+        case .ungraded: FSPill(label, kind: .idle)
+        }
+    }
+}
+
+struct MarketplaceDetailContainer: View {
+    let creator: String
+    let slug: String
+    @Binding var path: [AppsRoute]
+    @Environment(\.screensClient) private var client
+    @Environment(\.screensServerFqdn) private var bound
+    @Environment(\.colorScheme) private var scheme
+    @Environment(AppState.self) private var app
+    @State private var listing: MarketplaceListing?
+    /// Owns the install lifecycle (fetch → hash-verify → biometric sign → POST →
+    /// state), mirroring Android's MarketplaceViewModel. Created lazily in
+    /// `.task` once the environment client is available.
+    @State private var vm: MarketplaceViewModel?
+    /// Drives the pre-install confirmation alert (parity with the webapp's
+    /// `inlineConfirm`).
+    @State private var confirmingInstall = false
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        ScrollView {
+            VStack(alignment: .leading, spacing: FS.space.s4) {
+                if let l = listing {
+                    Text(l.title).font(FS.font.h2()).foregroundColor(c.text)
+                    Text("by \(l.creator)").foregroundColor(c.textMuted)
+                    FSCard { Text(l.summary).foregroundColor(c.text) }
+                    HStack {
+                        FSPill("\(l.installCount) deploys", kind: .online)
+                        ScanGradePill(grade: l.scanGrade)
+                        if l.requiresLlmKey { FSPill("Needs LLM key", kind: .provisioning) }
+                    }
+                    installControls(listing: l, c: c)
+                    FSGhostButton("View source", block: true) {}
+                } else {
+                    ServerCardSkeleton()
+                }
+            }
+            .padding(FS.space.s6)
+        }
+        .background(c.bg.ignoresSafeArea())
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            if vm == nil { vm = MarketplaceViewModel(client: client) }
+            let resp = (try? await client.marketplaceBrowse())?.listings ?? []
+            listing = resp.first(where: { $0.creator == creator && $0.slug == slug })
+        }
+        // Same assurance the webapp confirm states: the signed envelope is
+        // verified against the IRK before the daemon starts the container.
+        // A scan-grade F BLOCKS the normal Install: the only way through is the
+        // distinct destructive "Install anyway" override (never the plain tap).
+        .confirmationDialog(
+            confirmTitle,
+            isPresented: $confirmingInstall,
+            titleVisibility: .visible
+        ) {
+            if listing?.scanGateBucket.blocksInstall == true {
+                Button("Install anyway", role: .destructive) { startInstall() }
+                    .accessibilityIdentifier("marketplace-install-anyway")
+            } else {
+                Button("Install") { startInstall() }
+                    .accessibilityIdentifier("marketplace-install-confirm")
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(confirmMessage)
+        }
+    }
+
+    /// Confirm-dialog title — a security warning for an F verdict, otherwise the
+    /// neutral install prompt.
+    private var confirmTitle: String {
+        if listing?.scanGateBucket.blocksInstall == true {
+            return "⚠️ Security warning — \(creator)/\(slug)"
+        }
+        return "Install \(creator)/\(slug)?"
+    }
+
+    /// Confirm-dialog body — escalates for a failed scan, cautions for an
+    /// ungraded listing, else the standard IRK-verification assurance.
+    private var confirmMessage: String {
+        switch listing?.scanGateBucket {
+        case .some(let b) where b.blocksInstall:
+            return "This app FAILED the marketplace security scan (grade F). Installing it could put your box at risk. Only continue if you fully trust this creator."
+        case .some(let b) where b.installCaution:
+            return "This app hasn't been security-scanned yet. The signed envelope is still verified against your IRK, but its code hasn't been graded — install with caution."
+        default:
+            return "The signed app envelope is verified against your IRK before the daemon starts the container."
+        }
+    }
+
+    /// Sign + POST the install (shared by the normal and override buttons).
+    private func startInstall() {
+        // The signed order names the box the screens client talks to (the
+        // creation flow's server), not the current pod.
+        if let l = listing, let vm {
+            let serverFqdn = app.screensFqdn(bound: bound)
+            Task { await vm.install(creator: l.creator, slug: l.slug, serverId: serverFqdn) }
+        }
+    }
+
+    @ViewBuilder
+    private func installControls(listing l: MarketplaceListing, c: FSColors) -> some View {
+        switch vm?.installState ?? .idle {
+        case .idle:
+            scanGateNotice(for: l, c: c)
+            FSPrimaryButton(
+                l.alreadyInstalled ? "Already installed" : "Deploy",
+                enabled: !l.alreadyInstalled,
+                block: true,
+                large: true
+            ) {
+                confirmingInstall = true
+            }
+            .accessibilityIdentifier("marketplace-deploy-button")
+        case .installing:
+            FSPrimaryButton("Installing…", enabled: false, block: true, large: true) {}
+                .accessibilityIdentifier("marketplace-deploy-installing")
+            ProgressView().padding(.top, FS.space.s2)
+        case .succeeded(let serviceId):
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s3) {
+                    HStack(spacing: FS.space.s2) {
+                        Image(systemName: "checkmark.circle.fill").foregroundColor(c.success)
+                        Text("Installed as \(serviceId).")
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.text)
+                    }
+                    // An app that needs an LLM key would be broken with no next
+                    // step — hand the owner straight to Configure environment
+                    // with the expected name prefilled. The value is set on the
+                    // box (sealed env store); flagshipserver.com never sees it.
+                    if l.requiresLlmKey {
+                        Text("This app needs an AI key (\(MarketplaceLlmKey.envVar(for: l))) to work. Add it on your server now.")
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.textMuted)
+                        FSPrimaryButton("Add AI key", block: true) {
+                            path.append(.serviceEnv(
+                                appId: serviceId,
+                                creator: l.creator,
+                                slug: l.slug,
+                                prefillName: MarketplaceLlmKey.envVar(for: l)
+                            ))
+                        }
+                        .accessibilityIdentifier("marketplace-add-llm-key")
+                    }
+                }
+            }
+            .accessibilityIdentifier("marketplace-deploy-success")
+        case .paymentRequired(let priceUsdCents):
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s3) {
+                    Text(priceUsdCents > 0
+                        ? "This is a paid app (\(formatUsd(priceUsdCents)))."
+                        : "This is a paid app.")
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.text)
+                    Text("Purchase it to install on your box.")
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.textMuted)
+                }
+            }
+            .accessibilityIdentifier("marketplace-payment-required")
+            FSGhostButton("Try again", block: true) { vm?.resetInstall() }
+        case .failed(let message):
+            ErrorCard(message: "Install failed: \(message)")
+                .accessibilityIdentifier("marketplace-deploy-error")
+            FSGhostButton("Try again", block: true) { vm?.resetInstall() }
+        }
+    }
+
+    /// Inline pre-install security banner mirroring the paymentRequired card:
+    /// a red danger card for an F verdict (the install is gated behind the
+    /// "Install anyway" override), an amber caution for an ungraded listing,
+    /// and nothing for a clean A/B/C/D grade.
+    @ViewBuilder
+    private func scanGateNotice(for l: MarketplaceListing, c: FSColors) -> some View {
+        let bucket = l.scanGateBucket
+        if bucket.blocksInstall {
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    HStack(spacing: FS.space.s2) {
+                        Image(systemName: "exclamationmark.octagon.fill")
+                            .foregroundColor(c.danger)
+                        Text("Failed the security scan")
+                            .font(FS.font.h4())
+                            .foregroundColor(c.text)
+                    }
+                    Text("This app was graded F. Deploy is blocked unless you explicitly choose \u{201C}Install anyway.\u{201D}")
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.textMuted)
+                }
+            }
+            .accessibilityIdentifier("marketplace-scan-blocked")
+        } else if bucket.installCaution {
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    HStack(spacing: FS.space.s2) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(c.warning)
+                        Text("Not yet security-scanned")
+                            .font(FS.font.h4())
+                            .foregroundColor(c.text)
+                    }
+                    Text("This app hasn't been graded by the marketplace scanner. Install with caution.")
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.textMuted)
+                }
+            }
+            .accessibilityIdentifier("marketplace-scan-caution")
+        }
+    }
+
+    private func formatUsd(_ cents: Int) -> String {
+        String(format: "$%.2f", Double(cents) / 100.0)
     }
 }
 
@@ -851,7 +1184,9 @@ struct VibeCodeDescribeContainer: View {
 }
 
 // Build-a-service chooser container. The new create-a-service entry; fans
-// into the build modes. Scratch reuses the existing vibe flow.
+// into the build modes. Scratch reuses the existing vibe flow; the
+// marketplace tile routes to the live MarketplaceContainer (this branch
+// ships the marketplace).
 struct BuildSourceChooserContainer: View {
     @Binding var path: [AppsRoute]
     /// "Runs on" for this creation flow; nil hides the row.
@@ -868,6 +1203,7 @@ struct BuildSourceChooserContainer: View {
             onScratch: { path.append(.buildKey(purpose: .scratch)) },
             onGit: { path.append(.buildGit) },
             onMcp: { path.append(.buildMcp) },
+            onMarketplace: { path.append(.marketplace) },
             onPastBuilds: { path.append(.buildJournal(buildId: nil)) }
         )
         // Re-counted each time the chooser shows (e.g. Back from a session)

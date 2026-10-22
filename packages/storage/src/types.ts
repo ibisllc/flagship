@@ -1760,6 +1760,7 @@ export interface Storage {
   boxSealedLeases: BoxSealedLeaseStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
+  marketplace: MarketplaceStorage;
   pushTokens: PushTokenStorage;
   deviceIdentities: DeviceIdentityStorage;
   accountProfiles: AccountProfileStorage;
@@ -2105,6 +2106,86 @@ export interface EntitlementRevocationStorage {
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// Marketplace
+// ──────────────────────────────────────────────────────────────────────
+
+export interface MarketplaceListingRecord {
+  creator: string;
+  slug: string;
+  name: string;
+  tagline: string;
+  descriptionMd: string;
+  category: string;
+  tagsCsv: string;
+  canonicalUrl: string;
+  manifestHashHex: string;
+  /** The app's public manifest JSON (config, not a secret). Carried on the
+   *  listing so an install client can fetch + verify it against
+   *  `manifestHashHex` without a round-trip to the creator's pod. Empty
+   *  string on legacy rows written before migration 0090. */
+  manifestJson: string;
+  screenshotKeysJson: string;       // JSON array of strings
+  status: "listed" | "private" | "removed";
+  /** Price in USD cents (#14). Absent/0 ⇒ free. Curated (admin-set) for now;
+   *  developer self-serve pricing is #15. */
+  priceUsdCents?: number;
+  scanGrade?: "A" | "B" | "C" | "D" | "F";
+  scanReportKey?: string;
+  scanCompletedAt?: number;
+  featuredUntil?: number;
+  rankScore: number;
+  installCount: number;
+  publicDistribution: boolean;
+  listedAt: number;
+  updatedAt: number;
+  irkSignatureHex: string;
+}
+
+export interface MarketplaceSearchQuery {
+  text?: string;            // free-text search across name + tagline + tags
+  category?: string;
+  verifiedOnly?: boolean;
+  limit?: number;           // default 30
+  offset?: number;          // default 0
+  sort?: "popular" | "newest" | "name";
+}
+
+export interface MarketplaceStorage {
+  upsert(rec: MarketplaceListingRecord): Promise<void>;
+  get(creator: string, slug: string): Promise<MarketplaceListingRecord | undefined>;
+  search(q: MarketplaceSearchQuery): Promise<MarketplaceListingRecord[]>;
+  remove(creator: string, slug: string): Promise<void>;
+  recordInstall(creator: string, slug: string): Promise<void>;
+  /** Set the listing's price in USD cents (#14; null/0 ⇒ free). Curated path —
+   *  the creator's IRK-signed listing claim is unchanged (no canonical-bytes
+   *  ripple). Returns false if the listing doesn't exist. */
+  setPrice(creator: string, slug: string, priceUsdCents: number): Promise<boolean>;
+  /**
+   * Update scan_grade + scan_report_key + scan_completed_at on an
+   * existing listing. Called by the scanner service after it
+   * pulls the listing's docker image and runs Trivy + custom checks.
+   * Returns false if the listing doesn't exist.
+   */
+  setScanResult(
+    creator: string,
+    slug: string,
+    grade: "A" | "B" | "C" | "D" | "F",
+    reportKey: string,
+    completedAt: number,
+  ): Promise<boolean>;
+  /**
+   * Listings that need a (re)scan (#14 auto-trigger): status='listed'
+   * AND (never scanned OR scanCompletedAt < `staleBeforeMs`). Powers
+   * the authed scan-queue endpoint the nightly CI runner drains so a
+   * listing never ships scan_grade=NULL indefinitely.
+   */
+  listNeedingScan(staleBeforeMs: number): Promise<MarketplaceListingRecord[]>;
+  /** All of a creator's non-removed listings, newest first (the developer
+   *  console's per-listing rollup: install counts + price + grade). */
+  listByCreator(creator: string): Promise<MarketplaceListingRecord[]>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // Push tokens
 // ──────────────────────────────────────────────────────────────────────
 
@@ -2324,6 +2405,120 @@ export type MeterCounterRecord = MeterCounter;
 export type MeterStorage = MeterStore;
 /** Idempotent relay batches (migration 0070 `meter_batches`). */
 export type { MeterBatchEntry, MeterBatchResult };
+
+// ──────────────────────────────────────────────────────────────────────
+// Prepaid Pro vouchers (migration 0052) — feat/marketplace #9
+// ──────────────────────────────────────────────────────────────────────
+
+/** A bearer voucher: redeeming it grants `tier` for `durationDays`. We persist
+ *  only the SHA-256 of the normalized code (`codeHash`). Single-use. */
+export interface VoucherRecord {
+  codeHash: string;
+  tier: TierName;
+  durationDays: number;
+  createdAt: number;
+  redeemedAt?: number;
+  redeemedBy?: string;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Stripe webhook idempotency (migration 0053) — feat/marketplace #11
+// ──────────────────────────────────────────────────────────────────────
+
+/** Standalone store (constructed on demand like D1VoucherStorage). The webhook
+ *  CLAIMS an event id before granting; only the first claimer proceeds, so a
+ *  Stripe redelivery never double-grants. */
+export interface StripeEventStore {
+  /** Atomically record `eventId` as processed. Returns true if THIS call
+   *  claimed it (first delivery → proceed), false if it was already present
+   *  (a redelivery → skip). */
+  claim(eventId: string, eventType: string, now: number): Promise<boolean>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Paid-app purchase entitlements (migration 0054) — feat/marketplace #14
+// ──────────────────────────────────────────────────────────────────────
+
+/** Proof that `username` owns the paid app `<creator>/<slug>` — the
+ *  install-entitlement primitive. One per (user, app). */
+export interface AppPurchaseRecord {
+  username: string;
+  creator: string;
+  slug: string;
+  purchasedAt: number;
+  /** "stripe" | "admin" | "voucher". */
+  source: string;
+  /** Opaque provenance ref (audit only). */
+  ref?: string;
+}
+
+/** Standalone store (like VoucherStorage — not part of the `Storage`
+ *  aggregate). */
+export interface AppPurchaseStorage {
+  /** Idempotently record a purchase. Returns true if THIS call created it,
+   *  false if the (user, app) already owned it (re-grant / redelivery). */
+  grant(rec: AppPurchaseRecord): Promise<boolean>;
+  /** Does `username` own `<creator>/<slug>`? */
+  has(username: string, creator: string, slug: string): Promise<boolean>;
+  /** Every app `username` owns (the install-what-you-own list). */
+  listForUser(username: string): Promise<AppPurchaseRecord[]>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Developer payouts + revenue cut (migration 0091) — feat/marketplace #15
+// ──────────────────────────────────────────────────────────────────────
+
+/** One completed paid-app sale: the gross the buyer paid, the platform cut,
+ *  and the net owed to the creator. The payout-ledger primitive the developer
+ *  console reads. Written once per purchase, idempotently. */
+export interface AppSaleRecord {
+  /** Idempotency key: the Stripe event id, or `<source>:<creator>:<slug>:<buyer>`
+   *  for an admin comp / voucher. A redelivery with the same key is a no-op. */
+  saleKey: string;
+  /** Composite listing id `<creator>--<slug>`. */
+  listingId: string;
+  creatorAccount: string;
+  buyerAccount: string;
+  grossCents: number;
+  cutCents: number;
+  netCents: number;
+  /** ISO-4217-ish lowercase (e.g. "usd"). */
+  currency: string;
+  /** Audit provenance; absent for admin/voucher comps. */
+  stripeEventId?: string;
+  at: number;
+}
+
+/** Roll-up of a creator's sales (developer console totals). */
+export interface AppSalesTotals {
+  grossCents: number;
+  cutCents: number;
+  netCents: number;
+  saleCount: number;
+}
+
+/** Standalone store (like AppPurchaseStorage — not part of the `Storage`
+ *  aggregate). */
+export interface AppSalesStorage {
+  /** Idempotently record a sale. Returns true iff THIS call inserted it;
+   *  false when `saleKey` already existed (redelivery / re-grant), so a
+   *  sale is never double-counted. */
+  record(rec: AppSaleRecord): Promise<boolean>;
+  /** A creator's sales, newest first (the developer console ledger). */
+  listForCreator(creatorAccount: string): Promise<AppSaleRecord[]>;
+  /** Gross/cut/net + count rolled up for a creator. */
+  totalsForCreator(creatorAccount: string): Promise<AppSalesTotals>;
+}
+
+/** Standalone store (like UsageStorage — not part of the `Storage` aggregate). */
+export interface VoucherStorage {
+  /** Insert a new voucher. Collision on code_hash → ok:false. */
+  create(rec: VoucherRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  get(codeHash: string): Promise<VoucherRecord | undefined>;
+  /** Atomically mark redeemed IFF not already redeemed. Returns true only when
+   *  THIS call won the redemption (false ⇒ missing or already redeemed). */
+  redeem(codeHash: string, username: string, now: number): Promise<boolean>;
+}
 
 // ──────────────────────────────────────────────────────────────────────
 // User-identity mandate store (#71)
