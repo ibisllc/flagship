@@ -2378,5 +2378,8 @@
   "One of your apps wants to reach the internet.": "L’une de vos apps veut accéder à Internet.",
   "A device on your account invited someone to one of your apps.": "Un appareil de votre compte a invité quelqu’un dans l’une de vos apps.",
   "Open Flagship to see what's new.": "Ouvrez Flagship pour voir les nouveautés.",
-  "A server shared with you is asking you to unlock it.": "Un serveur partagé avec vous vous demande de le déverrouiller."
+  "A server shared with you is asking you to unlock it.": "Un serveur partagé avec vous vous demande de le déverrouiller.",
+  "Couldn't sign the change: %@": "Impossible de signer la modification : %@",
+  "Couldn't sign the key: %@": "Impossible de signer la clé : %@",
+  "Couldn't sign the copy: %@": "Impossible de signer la copie : %@"
 }
