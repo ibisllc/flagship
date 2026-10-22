@@ -51,6 +51,10 @@
       "meaning": "a long phrase the user types to protect a key file",
       "es": "frase de contraseña", "fr": "phrase secrète", "de": "Passphrase", "pt-BR": "frase secreta", "ja": "パスフレーズ", "zh-Hans": "密码短语"
     },
+    "passkey": {
+      "meaning": "a WebAuthn passkey kept by iCloud Keychain or a password manager; the platforms' own word, never the word for password",
+      "es": "llave de acceso", "fr": "clé d’accès", "de": "Passkey", "pt-BR": "passkey", "ja": "パスキー", "zh-Hans": "通行密钥"
+    },
     "admin": {
       "meaning": "a device or person allowed to manage the server",
       "es": "administrador", "fr": "administrateur", "de": "Administrator", "pt-BR": "administrador", "ja": "管理者", "zh-Hans": "管理员"
