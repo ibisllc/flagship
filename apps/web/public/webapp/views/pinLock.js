@@ -37,7 +37,7 @@ let setMode = "set";
 export function lockToPin() {
   stopRenewals?.();
   lockSession();
-  setSubtitle("locked");
+  setSubtitle(tr("locked"));
   show("view-pin-unlock");
 }
 
