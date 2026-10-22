@@ -69,3 +69,13 @@ describe("box page language", () => {
     expect(dl).toContain("Descargar una copia");
   });
 });
+
+describe("language negotiation vectors (test-vectors/language-negotiation.json)", () => {
+  it("chooses the same language as the webapp and the website", async () => {
+    const { readFileSync } = await import("node:fs");
+    const v = JSON.parse(readFileSync(new URL("../../../test-vectors/language-negotiation.json", import.meta.url), "utf8")) as { ga: string[]; cases: Array<{ accept: string; expect: string }> };
+    for (const k of Object.keys(CATALOGS)) delete CATALOGS[k];
+    for (const code of v.ga) CATALOGS[code] = {};
+    for (const c of v.cases) expect([c.accept, languageFor({ "accept-language": c.accept })]).toEqual([c.accept, c.expect]);
+  });
+});
