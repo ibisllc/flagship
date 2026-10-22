@@ -30,12 +30,22 @@ public final class NameDibsViewModel {
         case failed(String)
     }
 
+    /// What the proof is for: the account's name, or a service's custom voi.ci
+    /// name (the same `.com` proof covers both, docs/named-links.md).
+    public enum Kind: Equatable, Sendable {
+        case account
+        case link
+    }
+
     public private(set) var phase: Phase = .loading
     /// The last refusal shown inline (e.g. "no proof found yet").
     public private(set) var inlineError: String?
 
     private let client: any NameDibsClient
     private let username: String
+    public let kind: Kind
+    /// The name the field starts with, hyphens dropped (a `.com` has none).
+    public let presetName: String
     private let signer: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
     private let now: () -> Int64
     private var claim: DibsClaim?
@@ -44,14 +54,20 @@ public final class NameDibsViewModel {
     public init(
         client: any NameDibsClient,
         username: String,
+        kind: Kind = .account,
+        presetName: String = "",
         signer: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
     ) {
         self.client = client
         self.username = username.lowercased()
+        self.kind = kind
+        self.presetName = presetName.replacingOccurrences(of: "-", with: "")
         self.signer = signer ?? { reason in try await Keystore.deriveIRK(reason: reason) }
         self.now = now
     }
+
+    private var kindField: String? { kind == .link ? "link" : nil }
 
     public func load() async {
         phase = .loading
@@ -93,7 +109,7 @@ public final class NameDibsViewModel {
             let sig = try key.signature(for: NameDibsInitiate.canonicalBytes(
                 username: request.username, name: request.name, irkPubHex: request.irkPubHex, issuedAt: request.issuedAt
             ))
-            let c = try await client.initiate(DibsInitiateBody(request: request, signature: HexUtil.encode(sig)))
+            let c = try await client.initiate(DibsInitiateBody(request: request, signature: HexUtil.encode(sig), kind: kindField))
             claim = c
             phase = c.verified ? .proven(name: c.name) : .publish(c)
         } catch {
@@ -112,7 +128,7 @@ public final class NameDibsViewModel {
             let sig = try key.signature(for: NameDibsVerify.canonicalBytes(
                 username: request.username, name: request.name, nonce: request.nonce, issuedAt: request.issuedAt
             ))
-            let r = try await client.verify(DibsVerifyBody(request: request, signature: HexUtil.encode(sig)))
+            let r = try await client.verify(DibsVerifyBody(request: request, signature: HexUtil.encode(sig), kind: kindField))
             phase = r.verified ? .proven(name: r.name) : .publish(c)
         } catch {
             inlineError = error.localizedDescription

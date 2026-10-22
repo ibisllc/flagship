@@ -38,7 +38,12 @@ public struct DibsInitiateRequest: Codable, Equatable, Sendable {
 public struct DibsInitiateBody: Encodable, Equatable, Sendable {
     public let request: DibsInitiateRequest
     public let signature: String
-    public init(request: DibsInitiateRequest, signature: String) { self.request = request; self.signature = signature }
+    /// "link" when the proof is for a custom voi.ci name; unsigned, and left
+    /// out for an account name (docs/named-links.md, as the webapp sends it).
+    public let kind: String?
+    public init(request: DibsInitiateRequest, signature: String, kind: String? = nil) {
+        self.request = request; self.signature = signature; self.kind = kind
+    }
 }
 
 public struct DibsVerifyRequest: Codable, Equatable, Sendable {
@@ -54,7 +59,12 @@ public struct DibsVerifyRequest: Codable, Equatable, Sendable {
 public struct DibsVerifyBody: Encodable, Equatable, Sendable {
     public let request: DibsVerifyRequest
     public let signature: String
-    public init(request: DibsVerifyRequest, signature: String) { self.request = request; self.signature = signature }
+    /// "link" when the proof is for a custom voi.ci name; unsigned, and left
+    /// out for an account name (docs/named-links.md, as the webapp sends it).
+    public let kind: String?
+    public init(request: DibsVerifyRequest, signature: String, kind: String? = nil) {
+        self.request = request; self.signature = signature; self.kind = kind
+    }
 }
 
 /// `.com`'s answer to initiate: what to publish and where.

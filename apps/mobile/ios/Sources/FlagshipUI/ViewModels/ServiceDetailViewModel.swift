@@ -388,9 +388,26 @@ public final class ServiceDetailViewModel {
         }
     }
 
+    /// The "Your link" field saved a change: show the new link state, and the
+    /// short link that goes with it, without another round-trip.
+    public func applyLink(_ link: VoiciLinkState) {
+        guard let current = appLinks.value else { return }
+        let code = current.shortCode
+        appLinks = .loaded(AppLinksResponse(
+            serviceId: current.serviceId,
+            displayLabel: current.displayLabel,
+            canonicalUrl: current.canonicalUrl,
+            instances: current.instances,
+            shortUrl: (link.name ?? code).map { "https://voi.ci/\($0)" } ?? current.shortUrl,
+            shortCode: code,
+            link: link
+        ))
+    }
+
     /// V2 — Replace ceremony. Signs the canonical bytes with the
     /// user's CURRENT IRK, POSTs to /api/users/:u/apps/:serviceId/rename,
-    /// updates `appLinks` from the response on success.
+    /// updates `appLinks` from the response on success. The service's voi.ci
+    /// name is not touched by a rename.
     ///
     /// The caller is expected to have just shown a biometric scare
     /// sheet — the IRK derivation below uses Keystore.deriveIRK
@@ -459,6 +476,8 @@ public final class ServiceDetailViewModel {
                         AppLinkInstance(serverDomain: "", url: canonical)
                     },
                     shortUrl: resp.shortUrl,
+                    shortCode: resp.shortCode ?? appLinks.value?.shortCode,
+                    link: appLinks.value?.link,
                 ))
             }
             renamePhase = .completed(displayLabel: trimmed, shortUrl: resp.shortUrl)

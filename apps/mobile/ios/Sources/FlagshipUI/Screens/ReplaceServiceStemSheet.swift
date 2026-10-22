@@ -47,7 +47,7 @@ struct ReplaceServiceStemSheet: View {
                     .foregroundColor(c.text)
                 Spacer()
             }
-            Text("This will update all the links to this service, replacing **\(currentStem)** with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected.")
+            Text("This will update all the links to this service, replacing **\(currentStem)** with a new stem. All existing links break immediately. If you have attached external domains, those stay unaffected.")
                 .font(FS.font.bodySm())
                 .foregroundColor(c.textMuted)
 

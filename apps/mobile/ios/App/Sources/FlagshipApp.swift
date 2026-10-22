@@ -86,6 +86,7 @@ struct FlagshipApp: App {
             }
         )
         self.readTokens = readTokens
+        self.liveVoiciName = LiveVoiciNameClient(readTokens: readTokens)
         // Every LIVE /pods response feeds the cert-pin registry (verify the
         // STK-signed daemon-status per pod → install/clear that box's
         // fingerprint pin). Live-only by construction: the Mock never invokes
@@ -507,6 +508,9 @@ struct FlagshipApp: App {
     private let liveServiceAccess: any ServiceAccessClient
     private let liveMailbox: any SecretMailboxClient
     private let readTokens: AccountReadTokenProvider
+    // Custom voi.ci name client — hits `.com` with the account read token for
+    // its checks and list.
+    private let liveVoiciName: any VoiciNameClient
     // Cross-device pairing relay (Add a device / Join an account): the live
     // /qr-pipe transport, or the in-process relay the gym and unit tests pair
     // through in a Debug build launched with mocks.
@@ -574,6 +578,8 @@ struct FlagshipApp: App {
     // Name-dibs client — hits `.com`; live/mock split as transfer.
     private let mockNameDibs = MockNameDibsClient()
     private let liveNameDibs: any NameDibsClient = LiveNameDibsClient()
+    // Custom voi.ci name client — mock half; the live half is built with the read token.
+    private let mockVoiciName = MockVoiciNameClient()
     // Server-migration lane client — hits `.com` (the migration orchestration
     // lane), not a box-pinned pipe; live/mock split as transfer.
     private let mockServerMigration = MockServerMigrationClient()
@@ -687,6 +693,12 @@ struct FlagshipApp: App {
         #endif
         return liveNameDibs
     }
+    private var activeVoiciName: any VoiciNameClient {
+        #if DEBUG
+        if GymLaunch.usesMocks { return mockVoiciName }
+        #endif
+        return liveVoiciName
+    }
     private var activeServerMigration: any ServerMigrationClient {
         #if DEBUG
         if GymLaunch.usesMocks { return mockServerMigration }
@@ -726,6 +738,7 @@ struct FlagshipApp: App {
                 .environment(\.serviceAccessKeys, accessFixtureKeys)
                 .environment(\.serverTransferClient, activeServerTransfer)
                 .environment(\.nameDibsClient, activeNameDibs)
+                .environment(\.voiciNameClient, activeVoiciName)
                 .environment(\.serverMigrationClient, activeServerMigration)
                 .environment(\.pushRegistrar, pushRegistrar)
                 .alert(

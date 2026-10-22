@@ -17,6 +17,7 @@ import FlagshipCore
 /// Pure view: takes a `vm` (ServiceDetailViewModel) and a list of pods.
 public struct ServiceDetailScreen: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.voiciNameClient) private var voiciNames
     @Bindable var vm: ServiceDetailViewModel
     let username: String?
     let pods: [PodInfo]
@@ -232,22 +233,16 @@ public struct ServiceDetailScreen: View {
 
     @ViewBuilder
     private func shortRedirectGroup(c: FSColors) -> some View {
-        VStack(alignment: .leading, spacing: FS.space.s2) {
-            sectionLabel(String(localized: "Short redirect"), c: c)
-            // UX-E — name the trust tradeoff vs. the canonical link below.
-            Text("A convenient short link that redirects to your service.")
-                .font(FS.font.caption())
-                .foregroundColor(c.textMuted)
-            if let short = vm.appLinks.value?.shortUrl, !short.isEmpty {
+        if let links = vm.appLinks.value, let user = username,
+           let field = VoiciLinkField.make(
+               client: voiciNames, username: user, links: links,
+               onChanged: { vm.applyLink($0) }
+           ) {
+            field.id(links.serviceId)
+        } else if let short = vm.appLinks.value?.shortUrl, !short.isEmpty {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                sectionLabel(String(localized: "Your link"), c: c)
                 urlRow(url: short, style: .prominent, c: c)
-            } else if vm.appLinks.isLoading {
-                Text("Generating short link…")
-                    .font(FS.font.bodySm())
-                    .foregroundColor(c.textMuted)
-            } else {
-                Text("No short link yet. Tap Replace to mint one.")
-                    .font(FS.font.bodySm())
-                    .foregroundColor(c.textMuted)
             }
         }
     }

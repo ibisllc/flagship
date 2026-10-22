@@ -184,9 +184,8 @@ public protocol FlagshipServerClient: Sendable {
     ) async throws -> WipeRestartResponse
 
     /// V2 — rename the user-visible URL stem for an app. Signed by
-    /// the user's current IRK. The Worker upserts the alias,
-    /// cascade-deletes old voi.ci codes, mints a fresh one against
-    /// the new canonical URL, emits an audit row.
+    /// the user's current IRK. The Worker upserts the alias and emits an
+    /// audit row; the service's voi.ci code and custom name are kept.
     func renameApp(
         username: String,
         serviceId: String,
@@ -474,21 +473,29 @@ public struct AppLinksResponse: Decodable, Equatable, Sendable {
     public let displayLabel: String
     public let canonicalUrl: String
     public let instances: [AppLinkInstance]
-    /// V4 — lazy-minted by handleGetAppLinks on first call; preserved
-    /// across calls until the next Replace cascade-deletes it.
+    /// `https://voi.ci/<name>`: the custom name while one is live, else the
+    /// service's permanent random code (docs/named-links.md).
     public let shortUrl: String?
+    /// The service's random code, which survives renames and always redirects.
+    public let shortCode: String?
+    /// The custom-name state behind the "Your link" field; nil from an older `.com`.
+    public let link: VoiciLinkState?
     public init(
         serviceId: String,
         displayLabel: String,
         canonicalUrl: String,
         instances: [AppLinkInstance],
-        shortUrl: String?
+        shortUrl: String?,
+        shortCode: String? = nil,
+        link: VoiciLinkState? = nil
     ) {
         self.serviceId = serviceId
         self.displayLabel = displayLabel
         self.canonicalUrl = canonicalUrl
         self.instances = instances
         self.shortUrl = shortUrl
+        self.shortCode = shortCode
+        self.link = link
     }
 }
 
@@ -3167,7 +3174,9 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
                     url: canonical
                 ),
             ],
-            shortUrl: "https://voi.ci/\(shortCode)"
+            shortUrl: "https://voi.ci/\(shortCode)",
+            shortCode: shortCode,
+            link: VoiciLinkState(name: nil, held: 0, limit: 5, changesLeft: 3)
         )
     }
 
