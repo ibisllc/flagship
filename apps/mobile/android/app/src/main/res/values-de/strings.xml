@@ -1827,6 +1827,7 @@
     <string name="only_you_and_this_server_see">Nur du und dieser Server sehen diesen Namen.</string>
     <string name="use_up_to_64_characters_without">Verwende bis zu 64 Zeichen, ohne |.</string>
     <string name="what_can_do">Was darf %1$s tun?</string>
+    <string name="share_person_fallback">diese Person</string>
     <string name="both_are_off_unless_you_turn">Beide sind aus, sofern du sie nicht einschaltest. Du kannst sie später ändern.</string>
     <string name="creating_link">Link wird erstellt …</string>
     <string name="create_link">Link erstellen</string>
@@ -1865,7 +1866,8 @@
     <string name="leave_3">Verlassen</string>
     <string name="stay">Bleiben</string>
     <string name="is_starting">%1$s startet</string>
-    <string name="its_waiting_for_its_disk_to">Er wartet darauf, dass sein Datenträger entsperrt wird. Genehmige nur, wenn du den Start erwartet hast%1$s.</string>
+    <string name="its_waiting_for_its_disk_to">Er wartet darauf, dass sein Datenträger entsperrt wird. Genehmige nur, wenn du den Start erwartet hast.</string>
+    <string name="its_waiting_for_its_disk_to_asked">Er wartet darauf, dass sein Datenträger entsperrt wird (angefragt %1$s). Genehmige nur, wenn du den Start erwartet hast.</string>
     <string name="unlocking">Wird entsperrt …</string>
     <string name="unlock_it">Entsperren</string>
     <string name="no_readings_yet">Noch keine Messwerte.</string>

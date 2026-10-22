@@ -1827,6 +1827,7 @@
     <string name="only_you_and_this_server_see">Só você e este servidor veem este nome.</string>
     <string name="use_up_to_64_characters_without">Use até 64 caracteres, sem |.</string>
     <string name="what_can_do">O que %1$s pode fazer?</string>
+    <string name="share_person_fallback">essa pessoa</string>
     <string name="both_are_off_unless_you_turn">Ambas ficam desativadas, a menos que você as ative. Você pode mudar depois.</string>
     <string name="creating_link">Criando link…</string>
     <string name="create_link">Criar link</string>
@@ -1865,7 +1866,8 @@
     <string name="leave_3">Sair</string>
     <string name="stay">Ficar</string>
     <string name="is_starting">%1$s está iniciando</string>
-    <string name="its_waiting_for_its_disk_to">Ele está aguardando o disco ser desbloqueado. Aprove somente se você esperava que ele iniciasse%1$s.</string>
+    <string name="its_waiting_for_its_disk_to">Ele está aguardando o disco ser desbloqueado. Aprove somente se você esperava que ele iniciasse.</string>
+    <string name="its_waiting_for_its_disk_to_asked">Ele está aguardando o disco ser desbloqueado (pedido %1$s). Aprove somente se você esperava que ele iniciasse.</string>
     <string name="unlocking">Desbloqueando…</string>
     <string name="unlock_it">Desbloquear</string>
     <string name="no_readings_yet">Ainda não há leituras.</string>

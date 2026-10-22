@@ -530,7 +530,7 @@ fun ShareSheetContent(
                 FSGhostButton(label = stringResource(R.string.cancel), onClick = onClose, block = true)
             }
             ShareSheetStep.Level -> {
-                Muted(fsString(R.string.what_can_do, name ?: "they"), size = 14)
+                Muted(fsString(R.string.what_can_do, name ?: stringResource(R.string.share_person_fallback)), size = 14)
                 LevelChoice(level = level, onChange = onLevel)
                 Muted(ShareCopy.NEVER_LINE, size = 12)
                 FSPrimaryButton(label = stringResource(R.string.next), onClick = { onStep(ShareSheetStep.Options) }, block = true, modifier = Modifier.testTag("share-next"))
@@ -552,7 +552,7 @@ fun ShareSheetContent(
             }
             ShareSheetStep.Link -> {
                 val l = link.orEmpty()
-                Muted(fsString(R.string.send_this_link_to_it_works, name ?: "them"), size = 14)
+                Muted(fsString(R.string.send_this_link_to_it_works, name ?: stringResource(R.string.share_person_fallback)), size = 14)
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     QrImage(payload = l, size = 200.dp, contentDescription = stringResource(R.string.share_link_qr_code), modifier = Modifier.testTag("share-qr"))
                 }
@@ -893,7 +893,7 @@ private fun StartupCard(serverName: String, s: ShareStartup, busy: Boolean, onAp
                 Icon(Icons.Outlined.Lock, contentDescription = null, tint = FS.colors.warning)
                 Text(fsString(R.string.is_starting, serverName), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
             }
-            Muted(fsString(R.string.its_waiting_for_its_disk_to, if (s.pending.postedAt > 0) " (asked ${FlagshipDateFormat.format(s.pending.postedAt)})" else ""))
+            Muted(if (s.pending.postedAt > 0) fsString(R.string.its_waiting_for_its_disk_to_asked, FlagshipDateFormat.format(s.pending.postedAt)) else stringResource(R.string.its_waiting_for_its_disk_to))
             FSPrimaryButton(label = if (busy) stringResource(R.string.unlocking) else stringResource(R.string.unlock_it), onClick = onApprove, enabled = !busy, block = true, modifier = Modifier.testTag("shared-approve-startup"))
         }
     }

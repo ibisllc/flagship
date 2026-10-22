@@ -1827,6 +1827,7 @@
     <string name="only_you_and_this_server_see">Seuls vous et ce serveur voyez ce nom.</string>
     <string name="use_up_to_64_characters_without">Utilisez 64 caractères au plus, sans |.</string>
     <string name="what_can_do">Que peut faire %1$s ?</string>
+    <string name="share_person_fallback">cette personne</string>
     <string name="both_are_off_unless_you_turn">Les deux sont désactivées sauf si vous les activez. Vous pourrez les modifier plus tard.</string>
     <string name="creating_link">Création du lien…</string>
     <string name="create_link">Créer le lien</string>
@@ -1865,7 +1866,8 @@
     <string name="leave_3">Quitter</string>
     <string name="stay">Rester</string>
     <string name="is_starting">%1$s démarre</string>
-    <string name="its_waiting_for_its_disk_to">Il attend le déverrouillage de son disque. N’approuvez que si vous attendiez son démarrage%1$s.</string>
+    <string name="its_waiting_for_its_disk_to">Il attend le déverrouillage de son disque. N’approuvez que si vous attendiez son démarrage.</string>
+    <string name="its_waiting_for_its_disk_to_asked">Il attend le déverrouillage de son disque (demandé %1$s). N’approuvez que si vous attendiez son démarrage.</string>
     <string name="unlocking">Déverrouillage…</string>
     <string name="unlock_it">Le déverrouiller</string>
     <string name="no_readings_yet">Pas encore de relevés.</string>
