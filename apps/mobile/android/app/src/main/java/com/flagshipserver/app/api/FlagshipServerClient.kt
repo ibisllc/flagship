@@ -161,8 +161,8 @@ interface FlagshipServerClient {
     ): WipeRestartResponse
 
     /** V3 — rename the user-visible URL stem for a service. Signed by
-     *  the user's current IRK. The Worker upserts the alias,
-     *  cascade-deletes old voi.ci codes, mints a fresh one. */
+     *  the user's current IRK. The Worker upserts the alias; the voi.ci
+     *  code and any custom name stay as they are. */
     suspend fun renameApp(
         username: String,
         serviceId: String,
@@ -170,7 +170,7 @@ interface FlagshipServerClient {
     ): AppRenameResponse
 
     /** V3 — read the per-user URL identity of a service:
-     *  { displayLabel, canonicalUrl, instances, shortUrl }. */
+     *  { displayLabel, canonicalUrl, instances, shortUrl, shortCode, link }. */
     suspend fun getAppLinks(
         username: String,
         serviceId: String,
@@ -459,6 +459,20 @@ data class AppLinksResponse(
     val canonicalUrl: String,
     val instances: List<AppLinkInstance>,
     val shortUrl: String? = null,
+    /** The service's permanent random code (voi.ci/<code>); shown in the link field until a custom name is set. */
+    val shortCode: String? = null,
+    val link: AppLinkState? = null,
+)
+
+/** A service's custom voi.ci name and its limits (docs/named-links.md); `name` is null while it uses its code. */
+@Serializable
+data class AppLinkState(
+    val name: String? = null,
+    val held: Int = 0,
+    val limit: Int = 0,
+    val changesLeft: Int = 0,
+    val nextChangeAt: Long? = null,
+    val releasesAt: Long? = null,
 )
 
 @Serializable

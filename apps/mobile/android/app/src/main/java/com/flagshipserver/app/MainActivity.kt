@@ -275,6 +275,7 @@ class MainActivity : FragmentActivity() {
         ) { trustCenter.isServerTrusted }
         val liveTransfer = LiveServerTransferClient(OkHttpJsonTransport(okHttp))
         val liveNameDibs = com.flagshipserver.app.api.LiveNameDibsClient(OkHttpJsonTransport(okHttp))
+        val liveVoiciName = com.flagshipserver.app.api.LiveVoiciNameClient(OkHttpJsonTransport(okHttp))
         // A′ pinning — every live /pods fetch reconciles the cert-pin
         // registry under STKs derived from THIS device's UMK. Live-only by
         // construction (the mock never invokes the observer), so demo/mock
@@ -349,6 +350,7 @@ class MainActivity : FragmentActivity() {
             val effectiveMailbox: SecretMailboxClient = mocks?.mailbox ?: liveMailbox
             val effectiveTransfer: ServerTransferClient = mocks?.transfer ?: liveTransfer
             val effectiveNameDibs: com.flagshipserver.app.api.NameDibsClient = mocks?.nameDibs ?: liveNameDibs
+            val effectiveVoiciName: com.flagshipserver.app.api.VoiciNameClient = mocks?.voiciName ?: liveVoiciName
             val effectiveFlagshipServer: FlagshipServerClient = mocks?.flagshipServer ?: liveFlagshipServer
             // Clients bound to one server's own base URL and session, for the
             // screens that work on a server other than the current one
@@ -653,6 +655,7 @@ class MainActivity : FragmentActivity() {
                     LocalSecretMailboxClient provides effectiveMailbox,
                     LocalServerTransferClient provides effectiveTransfer,
                     com.flagshipserver.app.core.LocalNameDibsClient provides effectiveNameDibs,
+                    com.flagshipserver.app.core.LocalVoiciNameClient provides effectiveVoiciName,
                     LocalSessionStore provides sessionStore,
                     com.flagshipserver.app.core.LocalPodClients provides podClients,
                     com.flagshipserver.app.viewmodels.LocalServerShares provides (if (useLive) liveShares else mocks?.shares),

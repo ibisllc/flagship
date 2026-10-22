@@ -43,6 +43,10 @@ fun auditEventLabel(kind: String): String = when (kind) {
     "recovery-rotated"    -> FSStrings.get(R.string.rotated_recovery_passkey)
     "recovery-code-consumed" -> FSStrings.get(R.string.used_a_recovery_code)
     "app-renamed"         -> FSStrings.get(R.string.renamed_app_url)
+    "voici-name-set"      -> FSStrings.get(R.string.changed_an_apps_link)
+    "voici-name-cleared"  -> FSStrings.get(R.string.went_back_to_an_apps_default_link)
+    "voici-name-released" -> FSStrings.get(R.string.released_an_apps_link)
+    "voici-name-warning"  -> FSStrings.get(R.string.an_apps_link_will_be_released_soon)
     "server-created"      -> FSStrings.get(R.string.created_server)
     "server-online"       -> FSStrings.get(R.string.server_came_online)
     "server-migration-started"    -> FSStrings.get(R.string.started_moving_a_server)
@@ -66,7 +70,7 @@ fun auditEventLabel(kind: String): String = when (kind) {
     "invite-created"      -> FSStrings.get(R.string.someone_was_invited_to_an_app)
     "account-deleted"     -> FSStrings.get(R.string.deleted_account)
     "username-reclaimed"  -> FSStrings.get(R.string.username_reclaimed)
-    "account-renamed"     -> "Changed account name"
+    "account-renamed"     -> FSStrings.get(R.string.changed_account_name)
     else -> kind.replace(Regex("[._-]+"), " ").trim()
         .ifEmpty { FSStrings.get(R.string.account_event) }
         .replaceFirstChar { it.uppercaseChar() }

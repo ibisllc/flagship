@@ -508,10 +508,9 @@ private fun TopAnnouncement(
             Spacer(Modifier.height(FS.space.s4))
             FSAnnouncementCard(
                 icon = Icons.Outlined.Flag,
-                title = "Own a .com? Claim the matching name",
-                message = "Until ${formatDibsDate(dibsNoticeClosesAt)}, a name that matches a registered .com " +
-                    "is held for whoever controls that domain.",
-                ctaLabel = "Claim your .com name",
+                title = stringResource(R.string.own_a_com_claim_the_matching),
+                message = fsString(R.string.until_a_name_that_matches_a, formatDibsDate(dibsNoticeClosesAt)),
+                ctaLabel = stringResource(R.string.claim_your_com_name),
                 onCta = onClaimDibs,
                 onDismiss = onDismissDibs,
                 modifier = Modifier.testTag("dibs-notice"),

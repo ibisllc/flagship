@@ -73,6 +73,7 @@ import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.PodInfo
 import com.flagshipserver.app.core.SlugUtil
+import com.flagshipserver.app.viewmodels.LinkFieldViewModel
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSCardDivider
 import com.flagshipserver.app.ui.components.FSDivider
@@ -188,10 +189,30 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
         },
     )
 
+    // The "Your link" field (docs/named-links.md). Kept per service so what was typed
+    // survives the trip to the domain proof and back.
+    val voiciNames = com.flagshipserver.app.core.LocalVoiciNameClient.current
+    val linkVm: LinkFieldViewModel = viewModel(
+        key = "link-field-$serviceId",
+        factory = viewModelFactory {
+            initializer {
+                LinkFieldViewModel(
+                    client = voiciNames,
+                    username = { appState.currentUser.value },
+                    serviceId = serviceId,
+                )
+            }
+        },
+    )
+
     val detail by detailVm.detail.collectAsState()
     val certMismatch by detailVm.certMismatch.collectAsState()
     val phase by renameVm.phase.collectAsState()
     val appLinks by renameVm.links.collectAsState()
+    LaunchedEffect(appLinks, adminDevice) {
+        val l = appLinks ?: return@LaunchedEffect
+        l.link?.let { linkVm.bind(l.shortCode.orEmpty(), it, adminDevice) }
+    }
 
     var showReplaceDialog by remember { mutableStateOf(false) }
     var replaceDraft by remember { mutableStateOf("") }
@@ -310,6 +331,9 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                     fallbackLabel = resp.app.urlLabel,
                     username = appState.currentUser.collectAsState().value,
                     links = appLinks,
+                    linkVm = linkVm,
+                    adminDevice = adminDevice,
+                    onOwnIt = { name -> nav.navigate("name-dibs-link/${android.net.Uri.encode(name)}") },
                     selectedPods = selectedPods,
                     onReplaceTap = {
                         replaceDraft = appLinks?.displayLabel ?: resp.app.urlLabel
@@ -836,7 +860,7 @@ private fun relativeTime(ms: Long): String {
 // driven by RenameServiceViewModel / appLinks, not the detail VM).
 // ---------------------------------------------------------------
 
-/** Three labelled groups: short redirect (top, bold), canonical
+/** The "Your link" field (top), then canonical
  *  (shared by all instances), and individual instances. A Replace
  *  button floats top-right of the section header. */
 @Composable
@@ -844,6 +868,9 @@ private fun WebDomainsSection(
     fallbackLabel: String,
     username: String?,
     links: AppLinksResponse?,
+    linkVm: LinkFieldViewModel,
+    adminDevice: Boolean,
+    onOwnIt: (name: String) -> Unit,
     selectedPods: List<PodInfo>,
     onReplaceTap: () -> Unit,
 ) {
@@ -867,21 +894,15 @@ private fun WebDomainsSection(
         }
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-                    UrlGroupLabel(stringResource(R.string.short_redirect))
-                    UrlGroupNote(stringResource(R.string.a_convenient_short_link_that_redirects))
-                    val short = links?.shortUrl
-                    if (!short.isNullOrEmpty()) {
-                        UrlRow(url = short, prominent = true)
-                    } else {
-                        Text(
-                            text = stringResource(R.string.no_short_link_yet_tap_replace),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
+                if (links?.link != null) {
+                    LinkFieldSection(
+                        vm = linkVm,
+                        shortCode = links?.shortCode.orEmpty(),
+                        admin = adminDevice,
+                        onOwnIt = onOwnIt,
+                    )
+                    FSCardDivider()
                 }
-                FSCardDivider()
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
                     UrlGroupLabel(stringResource(R.string.canonical_shared_by_all_instances))
                     UrlGroupNote(stringResource(R.string.the_permanent_verifiable_address_safe_to))

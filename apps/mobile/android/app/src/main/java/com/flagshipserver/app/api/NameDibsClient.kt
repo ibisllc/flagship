@@ -9,6 +9,8 @@
 
 package com.flagshipserver.app.api
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.JsonHttpTransport
@@ -36,13 +38,22 @@ data class DibsWindow(
 data class DibsInitiateRequest(val username: String, val name: String, val irkPubHex: String, val issuedAt: Long)
 
 @Serializable
-data class DibsInitiateBody(val request: DibsInitiateRequest, val signature: String)
+data class DibsInitiateBody(
+    val request: DibsInitiateRequest,
+    val signature: String,
+    /** "link" when the proof is for a voi.ci name; unsigned, as in the webapp. Absent for an account name. */
+    val kind: String? = null,
+)
 
 @Serializable
 data class DibsVerifyRequest(val username: String, val name: String, val nonce: String, val issuedAt: Long)
 
 @Serializable
-data class DibsVerifyBody(val request: DibsVerifyRequest, val signature: String)
+data class DibsVerifyBody(
+    val request: DibsVerifyRequest,
+    val signature: String,
+    val kind: String? = null,
+)
 
 @Serializable
 data class DibsPublishDns(val name: String, val type: String = "TXT")
@@ -107,6 +118,6 @@ class LiveNameDibsClient(
         val message = runCatching {
             Json.parseToJsonElement(e.body).jsonObject["error"]?.jsonPrimitive?.content
         }.getOrNull()
-        throw DibsClientException(e.status, message ?: "HTTP ${e.status}")
+        throw DibsClientException(e.status, message ?: FSStrings.get(R.string.http_2, e.status))
     }
 }

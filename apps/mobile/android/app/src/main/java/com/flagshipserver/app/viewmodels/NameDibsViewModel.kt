@@ -9,6 +9,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.DibsClaim
 import com.flagshipserver.app.api.DibsInitiateBody
 import com.flagshipserver.app.api.DibsInitiateRequest
@@ -39,11 +41,14 @@ sealed interface NameDibsPhase {
 class NameDibsViewModel(
     private val client: NameDibsClient,
     username: String,
+    /** "link" when the proof is for a voi.ci name (docs/named-links.md); anything else is the account name. */
+    kind: String? = null,
     private val signer: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveIRK(r) },
     private val irkPubHex: suspend () -> String = { Keystore.irkPubHex() },
     private val now: () -> Long = { System.currentTimeMillis() },
 ) {
     private val username = username.lowercase()
+    private val kind = kind.takeIf { it == KIND_LINK }
     private val _phase = MutableStateFlow<NameDibsPhase>(NameDibsPhase.Loading)
     val phase: StateFlow<NameDibsPhase> = _phase.asStateFlow()
     private val _inlineError = MutableStateFlow<String?>(null)
@@ -62,28 +67,28 @@ class NameDibsViewModel(
                 else -> NameDibsPhase.Closed(null)
             }
         } catch (e: Exception) {
-            NameDibsPhase.Failed(e.message ?: "Couldn't load the dibs window")
+            NameDibsPhase.Failed(e.message ?: FSStrings.get(R.string.couldnt_load_the_dibs_window))
         }
     }
 
     suspend fun start(raw: String) {
         val name = normalize(raw)
         if (name.isEmpty()) {
-            _inlineError.value = "Enter a name."
+            _inlineError.value = FSStrings.get(R.string.enter_a_name)
             return
         }
         _inlineError.value = null
         val previous = _phase.value
         _phase.value = NameDibsPhase.Working
         try {
-            val key = signer("Claim $name.com")
+            val key = signer(FSStrings.get(R.string.claim_com, name))
             val request = DibsInitiateRequest(username, name, irkPubHex().lowercase(), now())
             val sig = key.sign(NameDibsInitiate.canonicalBytes(request.username, request.name, request.irkPubHex, request.issuedAt))
-            val c = client.initiate(DibsInitiateBody(request, HexUtil.encode(sig)))
+            val c = client.initiate(DibsInitiateBody(request, HexUtil.encode(sig), kind))
             claim = c
             _phase.value = if (c.verified) NameDibsPhase.Proven(c.name) else NameDibsPhase.Publish(c)
         } catch (e: Exception) {
-            _inlineError.value = e.message ?: "Couldn't start the claim"
+            _inlineError.value = e.message ?: FSStrings.get(R.string.couldnt_start_the_claim)
             _phase.value = previous
         }
     }
@@ -93,13 +98,13 @@ class NameDibsViewModel(
         _inlineError.value = null
         _phase.value = NameDibsPhase.Working
         try {
-            val key = signer("Check ${c.name}.com")
+            val key = signer(FSStrings.get(R.string.check_com, c.name))
             val request = DibsVerifyRequest(username, c.name, c.nonce, now())
             val sig = key.sign(NameDibsVerify.canonicalBytes(request.username, request.name, request.nonce, request.issuedAt))
-            val r = client.verify(DibsVerifyBody(request, HexUtil.encode(sig)))
+            val r = client.verify(DibsVerifyBody(request, HexUtil.encode(sig), kind))
             _phase.value = if (r.verified) NameDibsPhase.Proven(r.name) else NameDibsPhase.Publish(c)
         } catch (e: Exception) {
-            _inlineError.value = e.message ?: "Couldn't check the claim"
+            _inlineError.value = e.message ?: FSStrings.get(R.string.couldnt_check_the_claim)
             _phase.value = NameDibsPhase.Publish(c)
         }
     }
@@ -112,6 +117,7 @@ class NameDibsViewModel(
     }
 
     companion object {
+        const val KIND_LINK = "link"
         const val BANNER_DISMISS_KEY = "flagship.dibs.banner.dismissed.v1"
 
         /** "Acme.com " → "acme". */
