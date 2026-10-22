@@ -120,7 +120,7 @@
     <string name="keep_a_copy_on_this_phone">Guardar una copia en este teléfono</string>
     <string name="only_on_wi_fi_while_charging">Solo por Wi-Fi y mientras carga.</string>
     <string name="delete_this_backup_from_the_server">¿Eliminar esta copia de seguridad del servidor?</string>
-    <string name="each_backup_is_one_flagship_file">Cada copia de seguridad es un archivo .flagship. Importar una copia en Inicio la restaura. Se abre en tus propios dispositivos sin frase de acceso.</string>
+    <string name="each_backup_is_one_flagship_file">Cada copia de seguridad es un archivo .flagship. Importar una copia en Inicio la restaura. Se abre en tus propios dispositivos sin código.</string>
     <string name="not_chosen_yet">Aún no elegido</string>
     <string name="youll_need_this_passcode_to_import">Necesitarás este código para importar la copia en una cuenta que no sea tuya. Tu propia cuenta la abre sin el código.</string>
     <string name="backup_policy">Política de copias: %1$s</string>
@@ -1827,6 +1827,7 @@
     <string name="only_you_and_this_server_see">Solo tú y este servidor veis este nombre.</string>
     <string name="use_up_to_64_characters_without">Usa hasta 64 caracteres, sin |.</string>
     <string name="what_can_do">¿Qué puede hacer %1$s?</string>
+    <string name="share_person_fallback">esta persona</string>
     <string name="both_are_off_unless_you_turn">Ambas están desactivadas salvo que las actives. Puedes cambiarlas más adelante.</string>
     <string name="creating_link">Creando enlace…</string>
     <string name="create_link">Crear enlace</string>
@@ -1865,7 +1866,8 @@
     <string name="leave_3">Salir</string>
     <string name="stay">Quedarme</string>
     <string name="is_starting">%1$s se está iniciando</string>
-    <string name="its_waiting_for_its_disk_to">Está esperando a que se desbloquee su disco. Apruébalo solo si esperabas que se iniciara%1$s.</string>
+    <string name="its_waiting_for_its_disk_to">Está esperando a que se desbloquee su disco. Apruébalo solo si esperabas que se iniciara.</string>
+    <string name="its_waiting_for_its_disk_to_asked">Está esperando a que se desbloquee su disco (lo pidió %1$s). Apruébalo solo si esperabas que se iniciara.</string>
     <string name="unlocking">Desbloqueando…</string>
     <string name="unlock_it">Desbloquearlo</string>
     <string name="no_readings_yet">Aún no hay lecturas.</string>
