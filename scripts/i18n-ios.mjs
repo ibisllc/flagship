@@ -443,7 +443,8 @@ function buildOne(surface, withDrafts) {
   if (Object.keys(readEn(surface)).length === 0) return;
   if (SURFACES[surface].lproj) {
     const dir = path.resolve(IOS, SURFACES[surface].lproj);
-    fs.rmSync(dir, { recursive: true, force: true });
+    // only the generated language folders: anything else in Resources is not ours to delete
+    for (const d of fs.existsSync(dir) ? fs.readdirSync(dir) : []) if (d.endsWith(".lproj")) fs.rmSync(path.join(dir, d), { recursive: true, force: true });
     for (const [rel, text] of Object.entries(emitStrings(surface, withDrafts))) { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), text); }
     console.log(`${surface}: wrote ${path.relative(ROOT, dir)}`);
     return;
@@ -463,9 +464,18 @@ else if (cmd === "check") {
   const problems = [];
   for (const s of Object.keys(SURFACES)) {
     problems.push(...lintSurface(s));
-    if (SURFACES[s].lproj) continue;
-    const f = path.join(IOS, SURFACES[s].catalog);
-    if (Object.keys(readEn(s)).length && (!fs.existsSync(f) || fs.readFileSync(f, "utf8") !== emitCatalog(s, false))) problems.push(`${path.relative(ROOT, f)} is stale: run node scripts/i18n-ios.mjs build`);
+    if (SURFACES[s].lproj) {
+      const dir = path.resolve(IOS, SURFACES[s].lproj);
+      const want = emitStrings(s, false);
+      for (const [rel, text] of Object.entries(want)) {
+        const f = path.join(dir, rel);
+        if (!fs.existsSync(f) || fs.readFileSync(f, "utf8") !== text) problems.push(`${path.relative(ROOT, f)} is stale: run node scripts/i18n-ios.mjs build`);
+      }
+      for (const d of fs.existsSync(dir) ? fs.readdirSync(dir).filter((x) => x.endsWith(".lproj")) : []) if (!want[`${d}/Localizable.strings`]) problems.push(`${path.relative(ROOT, path.join(dir, d))} is not a ga language: run node scripts/i18n-ios.mjs build`);
+    } else {
+      const f = path.join(IOS, SURFACES[s].catalog);
+      if (Object.keys(readEn(s)).length && (!fs.existsSync(f) || fs.readFileSync(f, "utf8") !== emitCatalog(s, false))) problems.push(`${path.relative(ROOT, f)} is stale: run node scripts/i18n-ios.mjs build`);
+    }
     for (const l of locales.locales.filter((x) => x.status === "ga" && x.code !== locales.source)) {
       const en = readEn(s), tr = readTr(s, l.code);
       const missing = Object.keys(en).filter((k) => en[k].translatable !== false && tr[k] == null);
