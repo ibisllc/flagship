@@ -1446,6 +1446,14 @@ rebase renumbers them again):
 when `main` passes it, take the next unused number and move the tests' pins.
 Not compiled since the rebase: the iOS and Android code on any branch.
 
+- **Branch order since 2026-10-22 (owner):** `main` → `feat/multilingual` → `feat/named-links`
+  (custom voi.ci names + the `.com` domain proof, plan in `docs/named-links.md`) → `feat/marketplace` →
+  `feat/custom-names` / `feat/custom-domains` / `feat/outbound-proxy`. The dibs domain check moved from
+  custom-names into named-links; custom-names keeps the paid account-name change. `feat/marketplace`
+  and `feat/outbound-proxy` were rebuilt as ONE commit each (their old histories are on
+  `backup/<slug>-pre-named-links-2026-10-21`); webapp shell versions: named-links v158,
+  marketplace v159, custom-domains v160, custom-names v161, outbound-proxy v162. Not compiled: the
+  iOS and Android code on any of these branches (no Xcode or SDK in the cloud session).
 - **`feat/marketplace`** (+ Pro payments, vouchers). Also a Pro option:
   **a separate access list on each server** per app (2026-10-15,
   `docs/service-access-gating.md` "Separate lists per server (Pro)": an
