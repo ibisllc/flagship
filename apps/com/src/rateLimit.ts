@@ -188,7 +188,24 @@ export type RateLimitEndpoint =
   | "signed-time"
   // Canary update receipts (POST /api/update-receipts, updateReceipts.ts): anonymous by design, so the
   // network is the only axis; a box sends about one per update.
-  | "update-receipt";
+  | "update-receipt"
+  // Monetization — prepaid Pro voucher redeem. The code is a 100-bit bearer
+  // secret, so brute force is already infeasible; the cap is a cheap flood
+  // fence (each attempt does two D1 reads + a possible write). Per-IP only —
+  // there's no signature/IRK at the edge, just the code in the body.
+  | "voucher-redeem"
+  // Monetization — public per-user allowance read (the #6 dashboard + #7
+  // alert data source). Unauthenticated account metadata (same class as the
+  // `/pods` directory) keyed by username in the path; per-IP only, generous
+  // enough for a polling dashboard while fencing a scrape loop.
+  | "user-allowance"
+  // Monetization — public Stripe Checkout creation (subscription + app
+  // purchase). Each call hits the Stripe API, so per-IP and tight to fence a
+  // session-farming loop; a human clicks "pay" a handful of times.
+  | "stripe-checkout"
+  // Monetization — public install-what-you-own read (#14/#19). Account
+  // metadata (same class as /pods), per-IP, generous for a polling client.
+  | "user-purchases";
 
 /**
  * Endpoints that refuse when the counter can't be reached: each one gates
@@ -411,6 +428,20 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 6, windowSec: 3600 },
     { axis: "ip", limit: 24, windowSec: 86_400 },
   ],
+  // Voucher redeem — flood fence over an already-unguessable 100-bit code.
+  "voucher-redeem": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "ip", limit: 100, windowSec: 3600 },
+  ],
+  // Public allowance read — generous for a polling dashboard, fences a scrape.
+  "user-allowance": [{ axis: "ip", limit: 60, windowSec: 60 }],
+  // Stripe Checkout creation — each call hits the Stripe API; tight per-IP.
+  "stripe-checkout": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "ip", limit: 60, windowSec: 3600 },
+  ],
+  // Install-what-you-own read — generous for a polling client, fences a scrape.
+  "user-purchases": [{ axis: "ip", limit: 60, windowSec: 60 }],
 };
 
 export interface RateLimitInput {
@@ -767,6 +798,19 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   // addresses on every model call, and is token-authenticated: not limited.
   if (m === "POST" && (pathname === "/api/free-ai/token" || pathname === "/api/free-ai/status")) {
     return "free-ai";
+  }
+  // Monetization — voucher redeem + public allowance read.
+  if (m === "POST" && pathname === "/api/voucher/redeem") {
+    return "voucher-redeem";
+  }
+  if (m === "GET" && /^\/api\/users\/[^/]+\/(?:allowance|plan-attestation)$/.test(pathname)) {
+    return "user-allowance";
+  }
+  if (m === "POST" && (pathname === "/api/stripe/checkout" || pathname === "/api/stripe/app-checkout")) {
+    return "stripe-checkout";
+  }
+  if (m === "GET" && /^\/api\/users\/[^/]+\/purchases$/.test(pathname)) {
+    return "user-purchases";
   }
   return null;
 }

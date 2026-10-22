@@ -74,6 +74,10 @@ fun ServiceEnvScreen(
     appId: String,
     creator: String,
     slug: String,
+    /** When set (a marketplace install of an app that needs an LLM key), the
+     *  add-dialog auto-opens with this NAME prefilled — the user only pastes
+     *  the value, which is set on the box. */
+    prefillName: String? = null,
 ) {
     val client = LocalScreensClient.current
     val appState = LocalAppState.current
@@ -105,7 +109,12 @@ fun ServiceEnvScreen(
         }
     }
 
-    LaunchedEffect(Unit) { reload() }
+    LaunchedEffect(Unit) {
+        reload()
+        // Marketplace-install deep link: open the add-dialog straight away with
+        // the expected env-var name prefilled so the owner just pastes the key.
+        if (!prefillName.isNullOrEmpty()) showAddDialog = true
+    }
 
     FSScreen(
         title = stringResource(R.string.configure_environment),
@@ -182,6 +191,7 @@ fun ServiceEnvScreen(
 
     if (showAddDialog) {
         AddEnvVarDialog(
+            prefillName = prefillName,
             onDismiss = { showAddDialog = false },
             onSubmit = { name, value ->
                 scope.launch {
@@ -211,10 +221,13 @@ fun ServiceEnvScreen(
 
 @Composable
 private fun AddEnvVarDialog(
+    prefillName: String? = null,
     onDismiss: () -> Unit,
     onSubmit: (name: String, value: String) -> Unit,
 ) {
-    var name by remember { mutableStateOf("") }
+    // Seed only the NAME from the deep link; the value stays empty for the
+    // owner to paste.
+    var name by remember { mutableStateOf(prefillName.orEmpty()) }
     var value by remember { mutableStateOf("") }
     // A name the box can't take is refused here, before anything is signed.
     var nameError by remember { mutableStateOf<String?>(null) }

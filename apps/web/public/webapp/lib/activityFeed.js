@@ -43,6 +43,8 @@ export const BOX_EVENT_LABELS = Object.freeze({
   "server.stack.switch-started": { label: tr("Started a stack move"), icon: "🔀" },
   "server.stack.switched": { label: tr("Finished a stack move"), icon: "🔀" },
   "server.stack.switch-reverted": { label: tr("The stack move was undone"), icon: "↩️" },
+  // feat/marketplace: Pro ended and apps with separate lists went back to one.
+  "access.lists.merged": { label: tr("Back to one access list"), icon: "👥" },
 });
 
 function humanize(s) {

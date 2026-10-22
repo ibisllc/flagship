@@ -8,7 +8,8 @@
 
 export const MANIFEST_SCHEMA_VERSION = 1;
 
-/** Repo-wide cap on the app one-liner (`manifest.description`). It renders in tight rows
+/** Repo-wide cap on the app one-liner (`manifest.description`, and the
+ *  marketplace `tagline` that mirrors it). It renders in tight rows
  *  (apps list, app detail) right next to the equally-capped server
  *  description — keep them symmetrical so neither wraps. */
 export const APP_ONELINER_MAX_LEN = 30;

@@ -21,6 +21,7 @@ import {
   verifyOfflineSecrets,
   verifyServerShareGrant,
   verifyServerShareRevoke,
+  verifyAppListScope,
   type Keypair,
   type ServerRevokeBySelf,
   type ServerShareRevoke,
@@ -372,6 +373,8 @@ import { buildPodsPeers, peerSiblings, type PodsPeers } from "./accessPeers.js";
 import { BoxReadToken, ownDepositFetch } from "./boxReadToken.js";
 import { TrustedClock, setTrustedClock, trustedNow } from "./trustedClock.js";
 import { warnIfSharedApplianceDiskKey } from "./applianceDiskKey.js";
+import { AccessScopes, PlanCheck, type ProState } from "./accessScope.js";
+import { buildListScopeHttp } from "./accessScopeHttp.js";
 
 /**
  * The `.com` doorbell (doorbell.ts): created once the box knows its account and
@@ -1656,6 +1659,9 @@ async function main(): Promise<void> {
     if (typeof r.unref === "function") r.unref();
   }
   const podsPeersRef: { current: PodsPeers | null } = { current: null };
+  // Separate lists per server (feat/marketplace): the owner's surface, wired by
+  // wireOwnerHandlers once the sync exists.
+  const listScopeRef: ListScopeRef = { current: null };
   const {
     pullStateStore,
     updateServer,
@@ -2197,6 +2203,7 @@ async function main(): Promise<void> {
       serviceAccessRef,
       accessPrincipals,
       accessSyncRef,
+      listScopeRef,
       runtime,
       cfg,
       env: env as RuntimeEnv,
@@ -2265,6 +2272,18 @@ async function main(): Promise<void> {
     custodian,
     backupLoop,
     migratePause,
+    listScopeRef,
+    notifyListsMerged: cfg
+      ? () =>
+          void sendPushRelay({
+            category: "access-lists",
+            targetUsername: cfg.userId,
+            signer: custodian,
+            controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+            logTag: "[access-scope] lists-merged push",
+            log: (l) => console.log(l),
+          })
+      : null,
   });
 
   // ---- The owner's switch between the classic stack and arch-v2 (archV2Switch.ts) ----
@@ -2556,6 +2575,7 @@ async function main(): Promise<void> {
 
 /** Late-binding cell for the ServicePlatform (built only once the runtime is up). */
 type ServicePlatformRef = { current: ServicePlatform | null };
+type ListScopeRef = { current: ((path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null>) | null };
 
 interface PeerBackupBundle {
   backupLoop: BackupLoop | null;
@@ -3129,6 +3149,7 @@ async function wireRuntimeSurfaces(deps: {
   serviceAccessRef: { current: ServiceAccessStore | null };
   accessPrincipals: AccessPrincipals;
   accessSyncRef: { current: AccessSync | null };
+  listScopeRef: ListScopeRef;
   serverOrder: ServerOrderHolder | null;
   runtime: DaemonRuntime;
   cfg: ServerConfig | null;
@@ -4354,6 +4375,16 @@ async function wireRuntimeSurfaces(deps: {
           },
         }
       : null,
+    listScope: {
+      handle: (path, method, req) =>
+        deps.listScopeRef.current
+          ? deps.listScopeRef.current(path, method, req)
+          : Promise.resolve({
+              status: 503,
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ error: "access control isn't ready yet" }),
+            }),
+    },
     appApiKeys: runtime.appApiKeys,
     accessAlerts: accessAlertSetting,
     serverOrder: deps.serverOrder,
@@ -4450,6 +4481,10 @@ async function wireRuntimeSurfaces(deps: {
         }
       : null,
     controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,
+    // Task #28 — box-originated marketplace publish. The box signs the listing
+    // with its daemon identity key (the owner IRK is phone-held); .com accepts
+    // it because this box is a registered server of the account.
+    marketplacePublish: { signingKey: identityKeypair, creatorUsername: username },
     lineageResolver,
     updateMode: {
       get: (id) => deps.updateClient.policyOf(id),
@@ -4664,6 +4699,9 @@ async function wireOwnerHandlers(deps: {
   migratePause: MigratePause | null;
   /** The owner's server order as this box verified it: the account's word for its siblings. */
   serverOrder: ServerOrderHolder | null;
+  listScopeRef: ListScopeRef;
+  /** The content-free push when Pro ended and apps went back to one list. */
+  notifyListsMerged: (() => void) | null;
 }): Promise<void> {
   const { runtime, cfg, env, autoUnlockSuppressor, hostPowerRunner, identityKeypair, authorityHub, restoredAccess } = deps;
   if (!cfg) return;
@@ -4973,6 +5011,61 @@ async function wireOwnerHandlers(deps: {
         return a ? { manifest: a.manifest } : null;
       },
     });
+    // Separate lists per server (feat/marketplace): honoured only while the
+    // box holds a CA-signed attestation that the account is Pro.
+    const selfRepo = process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship";
+    const planReader = new BoxReadToken({
+      comBaseUrl: env.controlPlaneBaseUrl,
+      username: cfg.userId,
+      serverFqdn: env.serverFqdn,
+      boxPublicKey: () => identityKeypair.publicKey,
+      signAsBox: (msg) => ed.sign(msg, identityKeypair.privateKey),
+    });
+    const plan = new PlanCheck({
+      path: `${accessDataDir}/data/flagship-access/plan-attestation.json`,
+      username: cfg.userId,
+      chain: () => {
+        try {
+          return caTrustChainFromFolder({ gitRepoPath: selfRepo });
+        } catch {
+          return null;
+        }
+      },
+      fetchAttestation: async () => {
+        const base = env.controlPlaneBaseUrl.replace(/\/+$/, "");
+        const r = await planReader.fetch(`${base}/api/users/${encodeURIComponent(cfg.userId)}/plan-attestation`);
+        return r.ok ? await r.json() : null;
+      },
+      log: (m) => console.warn(m),
+    });
+    await plan.load();
+    const scopeAuthority = {
+      ownerIrkPub: cfg.irkPublicKey,
+      ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+      username: cfg.userId,
+    };
+    const scopes = new AccessScopes({
+      path: `${accessDataDir}/data/flagship-access/access-scope.json`,
+      plan,
+      verify: (order, sigHex) => {
+        let sig: Uint8Array;
+        try {
+          sig = hexToBytes(sigHex);
+        } catch {
+          return false;
+        }
+        return authorizeSensitiveOrder({
+          order,
+          signature: sig,
+          verify: verifyAppListScope,
+          ...scopeAuthority,
+          activeGrants: deviceBook.adminGrants(),
+          now: Date.now(),
+        });
+      },
+      log: (m) => console.warn(m),
+    });
+    await scopes.load();
     const sync = buildAccessSync({
       selfFqdn: env.serverFqdn,
       journal,
@@ -4983,12 +5076,45 @@ async function wireOwnerHandlers(deps: {
       installed: (ref) => installedIds().includes(ref),
       apps: installedIds,
       fetchImpl: accessSyncFetch,
+      scopes,
+      planRefresh: () => void plan.refreshSoon().catch(() => {}),
       log: (m) => console.log(m),
     });
+    scopes.onTransition((ref, change) => sync.onScopeChange(ref, change));
+    // Pro ended (verifiably): every app with separate lists goes back to one.
+    // The app's lead server tells the owner, with nothing about which app.
+    const onPlan = (state: ProState) => {
+      void scopes.planChanged(state).then((merged) => {
+        if (merged.length === 0) return;
+        const self = env.serverFqdn.toLowerCase();
+        const leads = merged.some((ref) => (deps.accessPeersRef.current?.leaderFor(ref)?.toLowerCase() ?? self) === self);
+        if (!leads) return;
+        deps.activityLog.note(
+          "access.lists.merged",
+          "Pro ended, so apps that had a separate access list on each server went back to one list.",
+        );
+        deps.notifyListsMerged?.();
+      });
+    };
+    plan.onChange(onPlan);
+    // What the box already knew at boot (a lapse it saw before a restart).
+    onPlan(plan.state());
+    plan.start();
     deps.accessSyncRef.current = sync;
+    deps.listScopeRef.current = buildListScopeHttp({
+      selfFqdn: env.serverFqdn,
+      scopes,
+      plan,
+      sync: () => deps.accessSyncRef.current,
+      peers: () => deps.accessPeersRef.current as (AccessPeers & { inOrder?(r: string): string[] }) | null,
+      installed: (ref) => installedIds().includes(ref),
+    });
     runtime.addHandler(sync.handle);
     sync.start();
-    process.once("SIGTERM", () => sync.stop());
+    process.once("SIGTERM", () => {
+      sync.stop();
+      plan.stop();
+    });
     if (freshnessOn) {
       const authDir = join(process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship", "authority");
       const leases = new FreshnessLeases(join(authDir, "freshness.json"), authClock);

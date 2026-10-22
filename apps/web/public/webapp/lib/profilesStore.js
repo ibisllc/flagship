@@ -87,6 +87,7 @@ export const SLOT_FIELDS = Object.freeze([
   // When this device last wrote an account-key file (the sign-out warning reads it).
   { slot: "keyBackupAt",             legacy: "flagship.keyBackupAt.v1" },
   { slot: "dibsBannerDismissed",     legacy: "flagship.dibs.banner.dismissed.v1" },
+  { slot: "proBannerDismissed",      legacy: "flagship.pro.banner.dismissed.v1" },
   { slot: "peerBackupChoice",        legacy: "flagship.peerBackup.choice.v1" },
   { slot: "pushTokenId",             legacy: "flagship.pushTokenId" },
   { slot: "sessionId",               legacy: "flagship.sessionId" },

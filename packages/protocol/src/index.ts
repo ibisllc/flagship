@@ -98,3 +98,5 @@ export * from "./caLeasePq.js";
 export * from "./bootUnlockV2.js";
 export * from "./signedTime.js";
 export * from "./archV2Switch.js";
+export * from "./appListScope.js";
+export * from "./planAttestation.js";
