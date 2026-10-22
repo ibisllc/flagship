@@ -87,12 +87,14 @@ function looksProse(t) {
   const startsUpper = /^[A-ZÀ-Þ“‘("'¿¡0-9]/.test(x);
   return startsUpper && (/\s/.test(x) || /[.!?…:]$/.test(x));
 }
+// literals that are the same in every language (SQL's NULL in the database view)
+const VERBATIM = new Set(["NULL"]);
 /** In an explicit UI context even one word ("Save", "creating…") is text. */
 function looksLabel(t) {
   const x = t.trim();
+  if (VERBATIM.has(x)) return false;
   if (x === "OK") return true;
   if (looksCode(x) && !/^[A-Z][a-z]{2,}/.test(x)) return false;
-  if (x === "OK") return true;
   if (/^[A-Z][A-Z0-9_]{2,}$/.test(x)) return false;
   if (/^[a-z]+([A-Z][a-z0-9]+)+$/.test(x)) return false;
   if (/^(https?:|\/|\.|#)/.test(x)) return false;
@@ -286,7 +288,7 @@ function transformFile(file) {
     const bare = key.replace(/\{\d+\}/g, "").trim();
     if (!bare) return null;
     if (!opts.html && !(opts.explicit ? looksLabel(bare) : looksProse(bare))) return null;
-    if (opts.html && lettersIn(bare) < 2) return null;
+    if (opts.html && (lettersIn(bare) < 2 || VERBATIM.has(bare))) return null;
     note(key, n);
     usedTr = true;
     const argsSrc = argExprs.map(renderNode);
