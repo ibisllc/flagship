@@ -1182,7 +1182,7 @@ function bindWebDomainsHandlers(service) {
 }
 
 // ---------------------------------------------------------------
-// SET CUSTOM DOMAIN — Mock-faithful with the iOS client (#80/#81).
+// SET CUSTOM DOMAIN — same behaviour as the iOS client (#80/#81).
 //
 // Decoupled request/confirm: a 200 only RECORDS the request; .com
 // verifies the CNAME out-of-band and pushes the outcome. Non-200 is
@@ -1392,9 +1392,9 @@ async function bindCustomDomain(fqdn) {
       // Non-200 is the ONLY synchronous denial — rate-limit / busy,
       // never a CNAME verdict (that's async). Show .com's reason
       // verbatim; for 429 it is the byte-identical "Too soon — try
-      // again in Ns." string the iOS Mock uses.
+      // again in Ns." string the iOS client shows.
       // Prefer .com's own reason string (e.g. the byte-identical 429
-      // "Too soon — try again in Ns." the iOS Mock uses); only fall back
+      // "Too soon — try again in Ns." the iOS client shows); only fall back
       // to generic human copy when there's no usable server message.
       let msg = humanError(r.status);
       try {
