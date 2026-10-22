@@ -727,6 +727,16 @@
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/SecretRequestCoordinator.kt", "lease\\.sign\\(material\\.signer\\)"], ["apps/mobile/android/app/src/testDebug/java/com/flagshipserver/app/core/AutoUnlockLeaseSignerTest.kt", "anAdminRootDeviceSignsTheLeaseWithTheIrk"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/leases.js", "signWithIrk"], ["packages/protocol/tests/autoUnlockLeaseVectors.test.ts", "admin root is refused"]] }
       }
+    },
+    {
+      "id": "named-links",
+      "title": "A service's voi.ci link is an editable field: a custom name on top of the permanent random code, admin devices only, signed flagship/voici-name/v1; limits, waiting period and the domain-proof hand-off are decided on .com (docs/named-links.md)",
+      "ref": "web",
+      "surfaces": {
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/linkField.js", "export function linkMessage"], ["apps/web/public/webapp/lib/voiciName.js", "flagship/voici-name/v1"]] },
+        "ios": { "status": "missing", "reason": "Not ported yet: link field, Free-one-up list, dibs hand-off, voici-name vectors.", "anchors": [] },
+        "android": { "status": "missing", "reason": "Not ported yet: link field, Free-one-up list, dibs hand-off, voici-name vectors.", "anchors": [] }
+      }
     }
   ]
 }
