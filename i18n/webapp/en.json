@@ -11057,5 +11057,125 @@
   "Install something a neighbour already built.": {
     "en": "Install something a neighbour already built.",
     "ctx": "webapp/index.html"
+  },
+  "Send this server's internet traffic through a proxy, so Flagship and the sites it reaches see the proxy's address instead of yours.": {
+    "en": "Send this server's internet traffic through a proxy, so Flagship and the sites it reaches see the proxy's address instead of yours.",
+    "ctx": "webapp/index.html"
+  },
+  "The username and password are saved in the setup file. Only give the file to people you trust.": {
+    "en": "The username and password are saved in the setup file. Only give the file to people you trust.",
+    "ctx": "webapp/lib/boxProxy.js:27"
+  },
+  "If the proxy stops working, connect directly": {
+    "en": "If the proxy stops working, connect directly",
+    "ctx": "webapp/lib/boxProxy.js:28"
+  },
+  "If this is off and the proxy stops working, the server goes offline until the proxy is back or you change it from the same network.": {
+    "en": "If this is off and the proxy stops working, the server goes offline until the proxy is back or you change it from the same network.",
+    "ctx": "webapp/lib/boxProxy.js:30"
+  },
+  "An outbound proxy is part of Pro.": {
+    "en": "An outbound proxy is part of Pro.",
+    "ctx": "webapp/lib/boxProxy.js:33"
+  },
+  "{0} <a href=\"/pro\" target=\"_blank\" rel=\"noopener\">See Pro</a>": {
+    "en": "{0} <a href=\"/pro\" target=\"_blank\" rel=\"noopener\">See Pro</a>",
+    "ctx": "webapp/lib/boxProxy.js:43"
+  },
+  "Enter the proxy's address.": {
+    "en": "Enter the proxy's address.",
+    "ctx": "webapp/lib/boxProxy.js:53"
+  },
+  "That address is too long.": {
+    "en": "That address is too long.",
+    "ctx": "webapp/lib/boxProxy.js:54"
+  },
+  "Use a host name or an IP address, without a scheme, path or port.": {
+    "en": "Use a host name or an IP address, without a scheme, path or port.",
+    "ctx": "webapp/lib/boxProxy.js:56"
+  },
+  "That isn't a valid IPv4 address.": {
+    "en": "That isn't a valid IPv4 address.",
+    "ctx": "webapp/lib/boxProxy.js:59"
+  },
+  "Enter a username and password.": {
+    "en": "Enter a username and password.",
+    "ctx": "webapp/lib/boxProxy.js:74"
+  },
+  "The username and password can be at most 255 bytes each.": {
+    "en": "The username and password can be at most 255 bytes each.",
+    "ctx": "webapp/lib/boxProxy.js:83"
+  },
+  "The username can't contain a colon.": {
+    "en": "The username can't contain a colon.",
+    "ctx": "webapp/lib/boxProxy.js:84"
+  },
+  "The username and password can't contain control characters.": {
+    "en": "The username and password can't contain control characters.",
+    "ctx": "webapp/lib/boxProxy.js:85"
+  },
+  "The port must be a number from 1 to 65535.": {
+    "en": "The port must be a number from 1 to 65535.",
+    "ctx": "webapp/lib/boxProxy.js:145"
+  },
+  "Enter both a username and a password, or neither.": {
+    "en": "Enter both a username and a password, or neither.",
+    "ctx": "webapp/lib/boxProxy.js:150"
+  },
+  "Can't reach the proxy.": {
+    "en": "Can't reach the proxy.",
+    "ctx": "webapp/lib/boxProxy.js:212"
+  },
+  "Not working: {0}": {
+    "en": "Not working: {0}",
+    "ctx": "webapp/lib/boxProxy.js:212"
+  },
+  "Using a direct connection: the proxy isn't answering": {
+    "en": "Using a direct connection: the proxy isn't answering",
+    "ctx": "webapp/lib/boxProxy.js:213"
+  },
+  "Type": {
+    "en": "Type",
+    "ctx": "webapp/lib/boxProxy.js:245"
+  },
+  "Proxy address": {
+    "en": "Proxy address",
+    "ctx": "webapp/lib/boxProxy.js:248"
+  },
+  "Port": {
+    "en": "Port",
+    "ctx": "webapp/lib/boxProxy.js:251"
+  },
+  "Username (optional)": {
+    "en": "Username (optional)",
+    "ctx": "webapp/lib/boxProxy.js:254"
+  },
+  "Password (optional)": {
+    "en": "Password (optional)",
+    "ctx": "webapp/lib/boxProxy.js:256"
+  },
+  "Outbound proxy: {0}": {
+    "en": "Outbound proxy: {0}",
+    "ctx": "webapp/views/create-server.js:358"
+  },
+  "Change": {
+    "en": "Change",
+    "ctx": "webapp/views/server-detail.js:868"
+  },
+  "Outbound proxy": {
+    "en": "Outbound proxy",
+    "ctx": "webapp/index.html"
+  },
+  "Proxy": {
+    "en": "Proxy",
+    "ctx": "webapp/views/server-detail.js:859"
+  },
+  "Saved. The server now connects directly.": {
+    "en": "Saved. The server now connects directly.",
+    "ctx": "webapp/views/server-detail.js:909"
+  },
+  "Saved. The server is reconnecting through the proxy.": {
+    "en": "Saved. The server is reconnecting through the proxy.",
+    "ctx": "webapp/views/server-detail.js:910"
   }
 }

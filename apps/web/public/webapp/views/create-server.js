@@ -355,7 +355,7 @@ export function readOutboundProxy() {
   const adv = $("cs-advanced");
   if (!adv || !adv.checked || !$("cs-proxy-kind")) return { kind: "none" };
   const r = readProxyForm(readProxyFields("cs-proxy"));
-  if (!r.ok) throw new Error(`Outbound proxy: ${r.error}`);
+  if (!r.ok) throw new Error(tr("Outbound proxy: {0}", r.error));
   return r.value;
 }
 

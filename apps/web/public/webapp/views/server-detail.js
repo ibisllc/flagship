@@ -852,11 +852,11 @@ export function outboundProxyHtml(body, { canEdit = canEditProxy() } = {}) {
   // Free: no new proxy, but one already set can still be turned off.
   const pro = summary.available !== false;
   return `
-      <h2 class="mt-4">Outbound proxy</h2>
+      <h2 class="mt-4">${tr("Outbound proxy")}</h2>
       <div class="card" id="outbound-proxy-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
         <p class="note">${escapeHtml(PROXY_EXPLAINER)}</p>
         <div class="row mt-2">
-          <span class="label">Proxy</span>
+          <span class="label">${tr("Proxy")}</span>
           <span class="value" id="outbound-proxy-summary">${escapeHtml(proxySummaryText(summary))}</span>
         </div>
         ${status
@@ -865,8 +865,8 @@ export function outboundProxyHtml(body, { canEdit = canEditProxy() } = {}) {
         ${pro ? "" : proxyProHtml()}
         ${canEdit && (pro || on)
           ? `<div class="row-2 mt-2">
-          ${pro ? `<button id="outbound-proxy-change" class="full-width">Change</button>` : ""}
-          ${on ? `<button id="outbound-proxy-off" class="secondary full-width">Turn off</button>` : ""}
+          ${pro ? `<button id="outbound-proxy-change" class="full-width">${tr("Change")}</button>` : ""}
+          ${on ? `<button id="outbound-proxy-off" class="secondary full-width">${tr("Turn off")}</button>` : ""}
         </div>`
           : ""}
       </div>`;
@@ -891,7 +891,7 @@ function wireOutboundProxy(body) {
 async function saveProxy(body, value) {
   const session = getSession();
   if (!session.umk) {
-    toast("Unlock the webapp first", "err");
+    toast(tr("Unlock the webapp first"), "err");
     return false;
   }
   try {
@@ -906,8 +906,8 @@ async function saveProxy(body, value) {
     );
     toast(
       value.kind === "none"
-        ? "Saved. The server now connects directly."
-        : "Saved. The server is reconnecting through the proxy.",
+        ? tr("Saved. The server now connects directly.")
+        : tr("Saved. The server is reconnecting through the proxy."),
       "ok",
     );
     void renderServerDetail();
@@ -922,9 +922,9 @@ function openProxyEditor(body) {
   const p = body.outboundProxy?.proxy ?? null;
   const dlg = document.createElement("dialog");
   dlg.className = "modal-card";
-  dlg.setAttribute("aria-label", "Outbound proxy");
+  dlg.setAttribute("aria-label", tr("Outbound proxy"));
   dlg.innerHTML = `
-    <h3 class="modal-title">Outbound proxy</h3>
+    <h3 class="modal-title">${tr("Outbound proxy")}</h3>
     <p class="modal-message">${escapeHtml(PROXY_EXPLAINER)}</p>
     ${proxyFieldsHtml("sd-proxy", {
       kind: p?.kind ?? "none",
@@ -934,8 +934,8 @@ function openProxyEditor(body) {
       hasCredentials: !!body.outboundProxy?.hasCredentials,
     })}
     <div class="row-2 mt-3">
-      <button class="secondary" data-proxy-cancel>Cancel</button>
-      <button data-proxy-save>Save</button>
+      <button class="secondary" data-proxy-cancel>${tr("Cancel")}</button>
+      <button data-proxy-save>${tr("Save")}</button>
     </div>
   `;
   document.body.appendChild(dlg);
@@ -959,12 +959,12 @@ function openProxyEditor(body) {
       return;
     }
     saveBtn.disabled = true;
-    saveBtn.textContent = "Saving…";
+    saveBtn.textContent = tr("Saving…");
     const ok = await saveProxy(body, r.value);
     if (ok) close();
     else {
       saveBtn.disabled = false;
-      saveBtn.textContent = "Save";
+      saveBtn.textContent = tr("Save");
     }
   });
 }

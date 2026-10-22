@@ -4,6 +4,8 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -65,7 +67,7 @@ internal fun OutboundProxyFields(
                 FilterChip(
                     selected = draft.kind == k,
                     onClick = { onDraft(draft.withKind(k)) },
-                    label = { Text(if (k == "none") "None" else BoxProxyProtocol.kindLabel(k)) },
+                    label = { Text(if (k == "none") stringResource(R.string.none) else BoxProxyProtocol.kindLabel(k)) },
                     modifier = Modifier.testTag("proxy-kind-$k"),
                 )
             }
@@ -76,20 +78,20 @@ internal fun OutboundProxyFields(
             FSField(
                 value = draft.host,
                 onValueChange = { onDraft(draft.copy(host = it)) },
-                label = "Proxy address",
-                placeholder = "proxy.example.net or 192.168.1.20",
+                label = stringResource(R.string.proxy_address),
+                placeholder = stringResource(R.string.proxy_example_net_or_192_168),
                 error = hostError,
                 keyboardType = KeyboardType.Uri,
                 fieldTag = "proxy-host",
             )
             val portError = draft.port.takeIf { it.isNotBlank() }?.let {
                 val p = it.trim().toIntOrNull()
-                if (p == null || p !in 1..65535) "Enter a port from 1 to 65535." else null
+                if (p == null || p !in 1..65535) stringResource(R.string.enter_a_port_from_1_to) else null
             }
             FSField(
                 value = draft.port,
                 onValueChange = { v -> onDraft(draft.copy(port = v.filter(Char::isDigit).take(5))) },
-                label = "Port",
+                label = stringResource(R.string.port),
                 error = portError,
                 keyboardType = KeyboardType.Number,
                 fieldTag = "proxy-port",
@@ -100,14 +102,14 @@ internal fun OutboundProxyFields(
             FSField(
                 value = draft.username,
                 onValueChange = { onDraft(draft.copy(username = it)) },
-                label = "Username (optional)",
+                label = stringResource(R.string.username_optional),
                 placeholder = passwordPlaceholder,
                 fieldTag = "proxy-username",
             )
             FSField(
                 value = draft.password,
                 onValueChange = { onDraft(draft.copy(password = it)) },
-                label = "Password (optional)",
+                label = stringResource(R.string.password_optional),
                 placeholder = passwordPlaceholder,
                 error = credError,
                 keyboardType = KeyboardType.Password,
@@ -116,14 +118,14 @@ internal fun OutboundProxyFields(
             )
             if (showSetupFileWarning && draft.hasCredentials) {
                 Text(
-                    "The username and password are saved in the setup file. Only give the file to people you trust.",
+                    stringResource(R.string.the_username_and_password_are_saved),
                     color = FS.colors.warning,
                     style = TextStyle(fontSize = 12.sp),
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "If the proxy stops working, connect directly",
+                    stringResource(R.string.if_the_proxy_stops_working_connect),
                     color = FS.colors.text,
                     style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
                     modifier = Modifier.weight(1f),
@@ -135,7 +137,7 @@ internal fun OutboundProxyFields(
                 )
             }
             Text(
-                "If this is off and the proxy stops working, the server goes offline until the proxy is back or you change it from the same network.",
+                stringResource(R.string.if_this_is_off_and_the),
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 12.sp),
             )
@@ -151,7 +153,7 @@ internal fun OutboundProxyProNote() {
     Column(Modifier.testTag("proxy-pro")) {
         Text(BoxProxyProtocol.PRO_NOTE, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
         Text(
-            "See Pro",
+            stringResource(R.string.see_pro),
             color = FS.colors.primary,
             style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium),
             modifier = Modifier.clickable { uri.openUri("${Endpoints.controlBaseUrl}/pro") },
@@ -163,12 +165,12 @@ internal fun OutboundProxyProNote() {
 @Composable
 internal fun OutboundProxyCreateBlock(draft: BoxProxyDraft, onDraft: (BoxProxyDraft) -> Unit, allowed: Boolean = true) {
     Text(
-        "Outbound proxy",
+        stringResource(R.string.outbound_proxy),
         color = FS.colors.text,
         style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
     )
     Text(
-        "Send this server's internet traffic through a proxy, so Flagship and the sites it reaches see the proxy's address instead of yours.",
+        stringResource(R.string.send_this_servers_internet_traffic_through),
         color = FS.colors.textMuted,
         style = TextStyle(fontSize = 12.sp),
     )
@@ -220,7 +222,7 @@ internal fun OutboundProxyCard(
     }
 
     Text(
-        "Outbound proxy",
+        stringResource(R.string.outbound_proxy),
         color = FS.colors.text,
         style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
     )
@@ -246,7 +248,7 @@ internal fun OutboundProxyCard(
             if (canChange) {
                 if (pro) {
                     FSPrimaryButton(
-                        label = "Change",
+                        label = stringResource(R.string.change),
                         onClick = {
                             draft = BoxProxyDraft.from(summary)
                             error = null
@@ -259,7 +261,7 @@ internal fun OutboundProxyCard(
                 }
                 if (summary.proxy != null) {
                     FSSecondaryButton(
-                        label = if (working && !editing) "Saving…" else "Turn off",
+                        label = if (working && !editing) stringResource(R.string.saving) else stringResource(R.string.turn_off),
                         onClick = { send(BoxProxyDraft()) },
                         enabled = !working,
                         block = true,
@@ -283,18 +285,18 @@ internal fun OutboundProxyCard(
                 verticalArrangement = Arrangement.spacedBy(FS.space.s3),
             ) {
                 Text(
-                    "Outbound proxy",
+                    stringResource(R.string.outbound_proxy),
                     color = FS.colors.text,
                     style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
                 )
                 OutboundProxyFields(
                     draft = draft,
                     onDraft = { draft = it },
-                    passwordPlaceholder = if (summary.hasCredentials) "Unchanged" else "",
+                    passwordPlaceholder = if (summary.hasCredentials) stringResource(R.string.unchanged_2) else "",
                 )
                 error?.let { Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp)) }
                 FSPrimaryButton(
-                    label = if (working) "Saving…" else "Save",
+                    label = if (working) stringResource(R.string.saving) else stringResource(R.string.save),
                     onClick = { send(draft) },
                     enabled = !working && draft.error() == null,
                     block = true,

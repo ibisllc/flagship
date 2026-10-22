@@ -6,6 +6,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.OutboundProxySetRequest
 import com.flagshipserver.app.api.OutboundProxySummary
 import com.flagshipserver.app.api.ScreensClient
@@ -32,9 +34,9 @@ class OutboundProxyOrder(
     }
 
     companion object {
-        const val REASON = "Confirm the proxy change"
-        const val SAVED_PROXY = "Saved. The server is reconnecting through the proxy."
-        const val SAVED_DIRECT = "Saved. The server now connects directly."
+        val REASON get() = FSStrings.get(R.string.confirm_the_proxy_change)
+        val SAVED_PROXY get() = FSStrings.get(R.string.saved_the_server_is_reconnecting_through)
+        val SAVED_DIRECT get() = FSStrings.get(R.string.saved_the_server_now_connects_directly)
 
         /**
          * Whether the order says the proxy needs a password: when the owner typed
@@ -61,9 +63,9 @@ class OutboundProxyOrder(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: BiometricCancelled) {
-                return Outcome.Failed("Not changed: you didn't confirm it.")
+                return Outcome.Failed(FSStrings.get(R.string.not_changed_you_didnt_confirm_it))
             } catch (e: Throwable) {
-                return Outcome.Failed("Couldn't access your account key.")
+                return Outcome.Failed(FSStrings.get(R.string.couldnt_access_your_account_key_2))
             }
             val signature = BoxProxyProtocol.sign(order, key)
             val r = client.outboundProxySet(OutboundProxySetRequest(order, signature, draft.credentials()))
@@ -75,7 +77,7 @@ class OutboundProxyOrder(
             Outcome.Failed(
                 when {
                     box != null -> box
-                    t is ScreensError.Http && t.status == 403 -> "The server refused this change. Check this phone's clock and try again."
+                    t is ScreensError.Http && t.status == 403 -> FSStrings.get(R.string.the_server_refused_this_change_check_2)
                     else -> t.userFacing()
                 },
             )

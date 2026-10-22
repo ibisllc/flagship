@@ -533,15 +533,15 @@ data class OutboundProxySummary(
             val p = proxy ?: return "Off"
             val host = if (p.host.contains(':')) "[${p.host}]" else p.host
             val base = "${com.flagshipserver.app.core.BoxProxyProtocol.kindLabel(p.kind)} · $host:${p.port}"
-            return if (p.auth) "$base · needs a password" else base
+            return if (p.auth) FSStrings.get(R.string.needs_a_password, base) else base
         }
 
     /** The status line, or null when there's nothing to say. */
     val statusLine: String?
         get() = when (status.state) {
             "ok" -> if (proxy != null) "Working" else null
-            "failing" -> "Not working: ${status.lastError ?: "the proxy isn't answering."}"
-            "fallback" -> "Using a direct connection: the proxy isn't answering"
+            "failing" -> FSStrings.get(R.string.not_working, status.lastError ?: "the proxy isn't answering.")
+            "fallback" -> FSStrings.get(R.string.using_a_direct_connection_the_proxy)
             else -> null
         }
 }

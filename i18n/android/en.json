@@ -11063,5 +11063,135 @@
   "couldnt_change_the_list_try_again": {
     "en": "Couldn't change the list. Try again in a moment.",
     "ctx": "viewmodels/ServiceAccessViewModel.kt:804 (prose)"
+  },
+  "needs_a_password": {
+    "en": "%1$s · needs a password",
+    "ctx": "api/ScreensModels.kt:536 (prose)",
+    "args": 1
+  },
+  "not_working": {
+    "en": "Not working: %1$s",
+    "ctx": "api/ScreensModels.kt:543 (prose)",
+    "args": 1
+  },
+  "using_a_direct_connection_the_proxy": {
+    "en": "Using a direct connection: the proxy isn't answering",
+    "ctx": "api/ScreensModels.kt:544 (prose)"
+  },
+  "an_outbound_proxy_is_part_of": {
+    "en": "An outbound proxy is part of Pro.",
+    "ctx": "core/BoxProxy.kt:42 (prose)"
+  },
+  "enter_the_proxys_address": {
+    "en": "Enter the proxy's address.",
+    "ctx": "core/BoxProxy.kt:57 (prose)"
+  },
+  "that_address_is_too_long": {
+    "en": "That address is too long.",
+    "ctx": "core/BoxProxy.kt:58 (prose)"
+  },
+  "use_a_host_name_or_an": {
+    "en": "Use a host name or an IP address, without a scheme, path or port.",
+    "ctx": "core/BoxProxy.kt:60 (prose)"
+  },
+  "that_isnt_a_valid_ipv4_address": {
+    "en": "That isn't a valid IPv4 address.",
+    "ctx": "core/BoxProxy.kt:63 (prose)"
+  },
+  "enter_a_username_and_password": {
+    "en": "Enter a username and password.",
+    "ctx": "core/BoxProxy.kt:80 (prose)"
+  },
+  "the_username_and_password_can_be": {
+    "en": "The username and password can be at most 255 bytes each.",
+    "ctx": "core/BoxProxy.kt:81 (prose)"
+  },
+  "the_username_cant_contain_a_colon": {
+    "en": "The username can't contain a colon.",
+    "ctx": "core/BoxProxy.kt:82 (prose)"
+  },
+  "the_username_and_password_cant_contain": {
+    "en": "The username and password can't contain control characters.",
+    "ctx": "core/BoxProxy.kt:84 (prose)"
+  },
+  "enter_a_port_from_1_to": {
+    "en": "Enter a port from 1 to 65535.",
+    "ctx": "core/BoxProxy.kt:153 (prose)"
+  },
+  "none": {
+    "en": "None",
+    "ctx": "ui/screens/OutboundProxyUi.kt:68 (ui label)"
+  },
+  "proxy_address": {
+    "en": "Proxy address",
+    "ctx": "ui/screens/OutboundProxyUi.kt:79 (label=)"
+  },
+  "proxy_example_net_or_192_168": {
+    "en": "proxy.example.net or 192.168.1.20",
+    "ctx": "ui/screens/OutboundProxyUi.kt:80 (placeholder=)"
+  },
+  "port": {
+    "en": "Port",
+    "ctx": "ui/screens/OutboundProxyUi.kt:92 (label=)"
+  },
+  "username_optional": {
+    "en": "Username (optional)",
+    "ctx": "ui/screens/OutboundProxyUi.kt:103 (label=)"
+  },
+  "password_optional": {
+    "en": "Password (optional)",
+    "ctx": "ui/screens/OutboundProxyUi.kt:110 (label=)"
+  },
+  "the_username_and_password_are_saved": {
+    "en": "The username and password are saved in the setup file. Only give the file to people you trust.",
+    "ctx": "ui/screens/OutboundProxyUi.kt:119 (arg of Text)"
+  },
+  "if_the_proxy_stops_working_connect": {
+    "en": "If the proxy stops working, connect directly",
+    "ctx": "ui/screens/OutboundProxyUi.kt:126 (arg of Text)"
+  },
+  "if_this_is_off_and_the": {
+    "en": "If this is off and the proxy stops working, the server goes offline until the proxy is back or you change it from the same network.",
+    "ctx": "ui/screens/OutboundProxyUi.kt:138 (arg of Text)"
+  },
+  "see_pro": {
+    "en": "See Pro",
+    "ctx": "ui/screens/OutboundProxyUi.kt:154 (arg of Text)"
+  },
+  "outbound_proxy": {
+    "en": "Outbound proxy",
+    "ctx": "ui/screens/OutboundProxyUi.kt:166 (arg of Text)"
+  },
+  "send_this_servers_internet_traffic_through": {
+    "en": "Send this server's internet traffic through a proxy, so Flagship and the sites it reaches see the proxy's address instead of yours.",
+    "ctx": "ui/screens/OutboundProxyUi.kt:171 (arg of Text)"
+  },
+  "unchanged_2": {
+    "en": "Unchanged",
+    "ctx": "ui/screens/OutboundProxyUi.kt:293 (ui label)"
+  },
+  "confirm_the_proxy_change": {
+    "en": "Confirm the proxy change",
+    "ctx": "viewmodels/OutboundProxyOrder.kt:35 (prose)"
+  },
+  "saved_the_server_is_reconnecting_through": {
+    "en": "Saved. The server is reconnecting through the proxy.",
+    "ctx": "viewmodels/OutboundProxyOrder.kt:36 (prose)"
+  },
+  "saved_the_server_now_connects_directly": {
+    "en": "Saved. The server now connects directly.",
+    "ctx": "viewmodels/OutboundProxyOrder.kt:37 (prose)"
+  },
+  "not_changed_you_didnt_confirm_it": {
+    "en": "Not changed: you didn't confirm it.",
+    "ctx": "viewmodels/OutboundProxyOrder.kt:64 (prose)"
+  },
+  "couldnt_access_your_account_key_2": {
+    "en": "Couldn't access your account key.",
+    "ctx": "viewmodels/OutboundProxyOrder.kt:66 (prose)"
+  },
+  "the_server_refused_this_change_check_2": {
+    "en": "The server refused this change. Check this phone's clock and try again.",
+    "ctx": "viewmodels/OutboundProxyOrder.kt:78 (prose)"
   }
 }
