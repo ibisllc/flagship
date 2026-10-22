@@ -2378,5 +2378,8 @@
   "One of your apps wants to reach the internet.": "你的某个应用想要访问互联网。",
   "A device on your account invited someone to one of your apps.": "你账户上的某台设备邀请了某人加入你的一个应用。",
   "Open Flagship to see what's new.": "打开 Flagship 查看最新动态。",
-  "A server shared with you is asking you to unlock it.": "与你共享的一台服务器请求你将其解锁。"
+  "A server shared with you is asking you to unlock it.": "与你共享的一台服务器请求你将其解锁。",
+  "Couldn't sign the change: %@": "无法为此更改签名：%@",
+  "Couldn't sign the key: %@": "无法为此密钥签名：%@",
+  "Couldn't sign the copy: %@": "无法为此副本签名：%@"
 }
