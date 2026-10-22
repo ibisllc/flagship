@@ -578,7 +578,7 @@ https://flagshipserver.com</value>
     <value>刻录到 U 盘</value>
   </data>
   <data name="buildADedicatedHardwareApplianceThe" xml:space="preserve">
-    <value>构建专用硬件设备，这是最理想的方式。用 U 盘启动任意闲置的机器。</value>
+    <value>构建专用硬件主机，这是最理想的方式。用 U 盘启动任意闲置的机器。</value>
   </data>
   <data name="hostOnThisPc" xml:space="preserve">
     <value>在这台电脑上托管</value>
