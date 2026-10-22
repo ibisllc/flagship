@@ -7607,6 +7607,10 @@
     "ctx": "ui/screens/ShareServerScreens.kt:529 (prose)",
     "args": 1
   },
+  "share_person_fallback": {
+    "en": "this person",
+    "ctx": "ui/screens/ShareServerScreens.kt (the person a share is for, before a name is typed)"
+  },
   "both_are_off_unless_you_turn": {
     "en": "Both are off unless you turn them on. You can change them later.",
     "ctx": "ui/screens/ShareServerScreens.kt:536 (prose)"
@@ -7770,7 +7774,11 @@
     "args": 1
   },
   "its_waiting_for_its_disk_to": {
-    "en": "It's waiting for its disk to be unlocked. Approve only if you expected it to start%1$s.",
+    "en": "It's waiting for its disk to be unlocked. Approve only if you expected it to start.",
+    "ctx": "ui/screens/ShareServerScreens.kt:892 (prose)"
+  },
+  "its_waiting_for_its_disk_to_asked": {
+    "en": "It's waiting for its disk to be unlocked (asked %1$s). Approve only if you expected it to start.",
     "ctx": "ui/screens/ShareServerScreens.kt:892 (prose)",
     "args": 1
   },

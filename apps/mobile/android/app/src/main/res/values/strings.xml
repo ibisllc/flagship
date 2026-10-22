@@ -1830,6 +1830,7 @@
     <string name="only_you_and_this_server_see">Only you and this server see this name.</string>
     <string name="use_up_to_64_characters_without">Use up to 64 characters, without |.</string>
     <string name="what_can_do">What can %1$s do?</string>
+    <string name="share_person_fallback">this person</string>
     <string name="both_are_off_unless_you_turn">Both are off unless you turn them on. You can change them later.</string>
     <string name="creating_link">Creating link…</string>
     <string name="create_link">Create link</string>
@@ -1868,7 +1869,8 @@
     <string name="leave_3">Leave</string>
     <string name="stay">Stay</string>
     <string name="is_starting">%1$s is starting</string>
-    <string name="its_waiting_for_its_disk_to">It\'s waiting for its disk to be unlocked. Approve only if you expected it to start%1$s.</string>
+    <string name="its_waiting_for_its_disk_to">It\'s waiting for its disk to be unlocked. Approve only if you expected it to start.</string>
+    <string name="its_waiting_for_its_disk_to_asked">It\'s waiting for its disk to be unlocked (asked %1$s). Approve only if you expected it to start.</string>
     <string name="unlocking">Unlocking…</string>
     <string name="unlock_it">Unlock it</string>
     <string name="no_readings_yet">No readings yet.</string>
