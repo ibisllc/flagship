@@ -1,0 +1,54 @@
+{
+  "about": "Separate access lists per server, a Pro option (docs/service-access-gating.md, Separate lists per server (Pro)). flagship/app-list-scope/v1|<serviceRef>|<account|server>|<issuedAt>. Signer: a raw Ed25519 seed (stands in for the admin root). Every port must produce `canonical` and `signature` exactly, and refuse every `rejects` case.",
+  "signerSeedHex": "3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c",
+  "signerPub": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60",
+  "cases": [
+    {
+      "serviceRef": "harry--chess-club",
+      "scope": "server",
+      "issuedAt": 1760000000000,
+      "canonical": "flagship/app-list-scope/v1|harry--chess-club|server|1760000000000",
+      "signature": "f3d27d3522eb823f3b65f52db83bf428b66a360fe3ae1e21cfcee4966ff38a20d88f91d51cb50e5fceeeafd32215a2f92829ae4d247fcf314a2ab09f928dc60f"
+    },
+    {
+      "serviceRef": "harry--chess-club",
+      "scope": "account",
+      "issuedAt": 1760000000001,
+      "canonical": "flagship/app-list-scope/v1|harry--chess-club|account|1760000000001",
+      "signature": "a643b12afbf34a4582b2975bc531aa12631f988e439147052a7613a30e1618807a36b3d7a30fab8aa6fec3c17eaab65c4e4182dbdc0086c5638597690ac7870d"
+    },
+    {
+      "serviceRef": "plucky-avocet--notes",
+      "scope": "server",
+      "issuedAt": 1760000123456,
+      "canonical": "flagship/app-list-scope/v1|plucky-avocet--notes|server|1760000123456",
+      "signature": "b337cb7bba55e5aa82fa9fea142b3cb7a65fc7190b832bdc0e577f435731e0d8eeb833d0ab4a0c58b7151805a4898d87014ddebb0e2ed0a70246d77763c13203"
+    }
+  ],
+  "rejects": [
+    {
+      "why": "unknown scope",
+      "serviceRef": "harry--chess-club",
+      "scope": "pro",
+      "issuedAt": 1760000000000
+    },
+    {
+      "why": "uppercase serviceRef",
+      "serviceRef": "Harry--Chess",
+      "scope": "server",
+      "issuedAt": 1760000000000
+    },
+    {
+      "why": "negative issuedAt",
+      "serviceRef": "harry--chess-club",
+      "scope": "server",
+      "issuedAt": -1
+    },
+    {
+      "why": "pipe in serviceRef",
+      "serviceRef": "harry|x",
+      "scope": "account",
+      "issuedAt": 1760000000000
+    }
+  ]
+}

@@ -66,6 +66,13 @@ final class MockScreensClientTests: XCTestCase {
         XCTAssertNotEqual(home.cpuHistory.map(\.value), office.cpuHistory.map(\.value))
     }
 
+    func test_marketplaceBrowse_returnsListings() async throws {
+        let c = makeClient()
+        let r = try await c.marketplaceBrowse()
+        XCTAssertFalse(r.listings.isEmpty)
+        XCTAssertTrue(r.listings.contains(where: { $0.alreadyInstalled }))
+    }
+
     func test_ordersSend_succeeds() async throws {
         let c = makeClient()
         let r = try await c.ordersSend(.init(envelope: "Zm9v", kind: "app-policy/v1"))

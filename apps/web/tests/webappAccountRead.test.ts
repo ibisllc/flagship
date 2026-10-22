@@ -48,6 +48,7 @@ describe("accountReadFetch", () => {
     expect(accountReadUsername(`https://com.test/api/users/${U}/stream?cursor=x`)).toBe(U);
     expect(accountReadUsername(`https://com.test/api/users/${U}/apps/${U}--family/links`)).toBe(U);
     expect(accountReadUsername(`https://com.test/api/users/${U}/apps/aliases`)).toBe(U);
+    expect(accountReadUsername(`https://com.test/api/users/${U}/allowance`)).toBe(U);
     expect(accountReadUsername(`https://com.test/api/users/${U}/apps/${U}--family/rename`)).toBeNull();
     expect(accountReadUsername(`https://com.test/api/users/${U}/pubkey-cert`)).toBeNull();
   });

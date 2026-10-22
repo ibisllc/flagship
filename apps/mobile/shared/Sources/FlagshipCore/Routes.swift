@@ -64,6 +64,9 @@ public enum HomeRoute: Hashable, Sendable {
 
 public enum AppsRoute: Hashable, Sendable {
     case appDetail(serviceId: String)
+    /// Marketplace browse + per-listing detail (feat/marketplace).
+    case marketplace
+    case marketplaceDetail(creator: String, slug: String)
     /// Build-a-service chooser ("how do you want to build it?"). The new
     /// create-a-service entry; fans into the build modes below. Scratch
     /// routes on to `.vibeCodeProviderPick` (the existing vibe flow).
@@ -100,8 +103,12 @@ public enum AppsRoute: Hashable, Sendable {
     /// `https://flagshipserver.com/app/vibecode/<sessionId>` when the AI needs the owner.
     case vibeCodeChat(sessionId: String)
     /// W10 — per-app env-var KV editor. Reached from the per-service
-    /// detail screen's "Configure environment" menu item.
-    case serviceEnv(appId: String, creator: String, slug: String)
+    /// detail screen's "Configure environment" menu item, OR from a
+    /// marketplace install of an app that needs an LLM key — in which case
+    /// `prefillName` carries the expected env-var name so the add-form opens
+    /// with it filled in (the user only pastes the value, which is set on the
+    /// box; flagshipserver.com never sees it).
+    case serviceEnv(appId: String, creator: String, slug: String, prefillName: String? = nil)
     /// P8 — list of headless-Chromium tabs running for an app.
     case browserTabs(serviceId: String)
     /// P8 — the framebuffer viewer that streams a single tab.
@@ -149,6 +156,9 @@ public enum SettingsRoute: Hashable, Sendable {
     case aiKeys
     /// Settings → "Claim your .com name" (name dibs; only while the window is open).
     case nameDibs
+    /// P7 — the dedicated tier-status / subscription screen, reached from
+    /// the Settings "Subscription" nav row.
+    case tierStatus
     case recovery
     /// Settings → Account security. TOTP enroll/disable, recovery codes, and
     /// the Watch delegate. Reached via the account-security row — previously

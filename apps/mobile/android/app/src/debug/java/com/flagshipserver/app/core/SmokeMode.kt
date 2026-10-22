@@ -84,6 +84,10 @@ data class SmokeModeConfig(
     val storeWorld: String? = null,
     /** With [storeWorld]: cabin is waiting for its start-up approval. */
     val storeWaiting: Boolean = false,
+    /** The account's plan as the mock box sees it (GymSeams.listsPlan). */
+    val listsPlan: String? = null,
+    /** Plants keeps a separate access list on each server (GymSeams.separateLists). */
+    val separateLists: Boolean = false,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -108,6 +112,8 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_RESCUE = "flagship.smokeRescue"
         const val EXTRA_SMOKE_STORE_WORLD = "flagship.smokeStoreWorld"
         const val EXTRA_SMOKE_STORE_WAITING = "flagship.smokeStoreWaiting"
+        const val EXTRA_SMOKE_PLAN = "flagship.smokePlan"
+        const val EXTRA_SMOKE_SEPARATE_LISTS = "flagship.smokeSeparateLists"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -146,6 +152,9 @@ data class SmokeModeConfig(
                     ?.takeIf { it in setOf("found", "not-found", "wrong-key", "expired-cert", "interrupt", "stranger") },
                 storeWorld = intent.getStringExtra(EXTRA_SMOKE_STORE_WORLD),
                 storeWaiting = intent.getBooleanExtra(EXTRA_SMOKE_STORE_WAITING, false),
+                listsPlan = intent.getStringExtra(EXTRA_SMOKE_PLAN)?.trim()?.lowercase()
+                    ?.takeIf { it == "pro" || it == "free" },
+                separateLists = intent.getBooleanExtra(EXTRA_SMOKE_SEPARATE_LISTS, false),
             )
         }
     }
@@ -256,6 +265,9 @@ object SmokeMode {
         com.flagshipserver.app.api.MockServiceAccessClient.shared.reset()
         GymSeams.rateLimited.clear()
         config.rateLimited?.let { GymSeams.rateLimited += it }
+        GymSeams.listsPlan = config.listsPlan
+        GymSeams.separateLists = config.separateLists
+        GymSeams.bypassBiometricGates = true
 
         if (config.seedTrustUntrusted) {
             trust.markUntrusted(

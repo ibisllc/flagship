@@ -186,6 +186,7 @@ public enum BoxEventLabels {
         // The relay mesh (relay-mesh.md §9.3, §9.4): the detail is the box's own sentence.
         "server.relay.moved": String(localized: "Moved to another Flagship relay"),
         "server.relay.move-refused": String(localized: "Stayed on its current relay"),
+        "access.lists.merged": String(localized: "Back to one access list"),
     ]
 
     /// The row's title, or nil when the entry isn't worth a row (the log also
@@ -214,6 +215,7 @@ public enum BoxEventLabels {
         if key.hasPrefix("server.relay") { return "antenna.radiowaves.left.and.right" }
         if key.hasPrefix("app.") { return "app.badge.fill" }
         if key.hasPrefix("share.") { return "person.2.fill" }
+        if key.hasPrefix("access.") { return "person.badge.key.fill" }
         return "circle.fill"
     }
 }

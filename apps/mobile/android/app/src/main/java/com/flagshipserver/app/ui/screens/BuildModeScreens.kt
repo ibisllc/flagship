@@ -3,6 +3,7 @@
 //   - scratch     → the existing vibe-code flow
 //   - git         → import a repo (fit → install / not fit → AI-adapt)
 //   - mcp         → connect Cursor/Cline with your own AI
+//   - marketplace → install something already built (opens the catalog)
 // plus "Resume or view past builds" into the build sessions list.
 //
 // MIRRORS the webapp reference apps/web/public/webapp/views/build-*.js and
@@ -260,6 +261,11 @@ fun BuildSourceChooserScreen(nav: NavController) {
                 body = stringResource(R.string.build_from_your_editor_using_your),
                 onClick = { nav.navigate("build/mcp") },
                 testTag = "build-src-mcp",
+            )
+            SourceTile(
+                title = "Get from the marketplace",
+                body = "Install something your neighbours already built. One tap onto any of your boxes.",
+                onClick = { nav.navigate("marketplace") },
             )
         }
     }

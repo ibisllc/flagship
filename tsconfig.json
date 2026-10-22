@@ -56,6 +56,9 @@
       "path": "./apps/web"
     },
     {
+      "path": "./services/marketplace-scanner"
+    },
+    {
       "path": "./tools/vps-e2e"
     },
     {
