@@ -216,11 +216,11 @@ struct UpdateLockScreen: View {
             }
         }
         .confirmationDialog(
-            app.hasCloudRecovery ? String(localized: "Sign out of this device?") : "Sign out without recovery?",
+            app.hasCloudRecovery ? String(localized: "Sign out of this device?") : String(localized: "Sign out without recovery?"),
             isPresented: $confirmSignOut,
             titleVisibility: .visible
         ) {
-            Button(app.hasCloudRecovery || app.isDemoAccount ? String(localized: "Sign out") : "Sign out anyway", role: .destructive) {
+            Button(app.hasCloudRecovery || app.isDemoAccount ? String(localized: "Sign out") : String(localized: "Sign out anyway"), role: .destructive) {
                 Keystore.wipe()
                 app.signOut()
             }
@@ -228,7 +228,7 @@ struct UpdateLockScreen: View {
         } message: {
             Text(app.hasCloudRecovery || app.isDemoAccount
                 ? String(localized: "This erases this device's account key and returns you to the start. Sign back in with your recovery passkey to restore it. Your account and servers stay put.")
-                : "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in. Back up your account key first.")
+                : String(localized: "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in. Back up your account key first."))
         }
     }
 
@@ -238,7 +238,7 @@ struct UpdateLockScreen: View {
     private func askToSignOut() async {
         failure = nil
         if accountUnlocked { confirmSignOut = true; return }
-        switch await DestructiveAuth.ask(reason: "Sign out of Flagship") {
+        switch await DestructiveAuth.ask(reason: String(localized: "Sign out of Flagship")) {
         case .allowed: confirmSignOut = true
         case .declined: break
         case let .failed(message): failure = message

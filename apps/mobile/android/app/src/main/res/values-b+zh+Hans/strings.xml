@@ -2561,4 +2561,6 @@
         <item quantity="one">已重新关联 %1$s 行 · %2$s 未更改</item>
         <item quantity="other">已重新关联 %1$s 行 · %2$s 未更改</item>
     </plurals>
+    <string name="sign_out_of_flagship">退出 Flagship 登录</string>
+    <string name="confirm_its_you">确认是你本人</string>
 </resources>

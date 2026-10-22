@@ -10515,5 +10515,25 @@
     "en": "A server shared with you is asking you to unlock it.",
     "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
     "manual": true
+  },
+  "Sign out of Flagship": {
+    "en": "Sign out of Flagship",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/BiometricLockScreen.swift:155"
+  },
+  "Remove this account from the device": {
+    "en": "Remove this account from the device",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Notices/AccountGoneViews.swift:184"
+  },
+  "Sign out without recovery?": {
+    "en": "Sign out without recovery?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/BiometricLockScreen.swift:95"
+  },
+  "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good.": {
+    "en": "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/BiometricLockScreen.swift:116"
+  },
+  "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in. Back up your account key first.": {
+    "en": "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in. Back up your account key first.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Notices/NoticeViews.swift:231"
   }
 }

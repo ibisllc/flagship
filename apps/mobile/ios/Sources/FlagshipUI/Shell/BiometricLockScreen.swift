@@ -92,12 +92,12 @@ struct BiometricLockScreen: View {
         }
         .accessibilityAddTraits(.isModal)
         .confirmationDialog(
-            app.hasCloudRecovery ? String(localized: "Sign out of this device?") : "Sign out without recovery?",
+            app.hasCloudRecovery ? String(localized: "Sign out of this device?") : String(localized: "Sign out without recovery?"),
             isPresented: $showStartOver,
             titleVisibility: .visible
         ) {
             Button(
-                app.hasCloudRecovery ? String(localized: "Sign out") : "Sign out anyway",
+                app.hasCloudRecovery ? String(localized: "Sign out") : String(localized: "Sign out anyway"),
                 role: .destructive
             ) {
                 // Tier-2 sign out from the lock screen: erase ALL Keychain
@@ -113,7 +113,7 @@ struct BiometricLockScreen: View {
         } message: {
             Text(app.hasCloudRecovery
                 ? String(localized: "This erases this device's account key from the Keychain and returns you to the start. Sign back in with your recovery passkey to restore it — your account and servers stay put.")
-                : "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good.")
+                : String(localized: "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good."))
         }
         // Auto-prompt once the app is in front — pattern most password-manager
         // apps follow — EXCEPT when the user reached this screen by tapping
@@ -152,7 +152,7 @@ struct BiometricLockScreen: View {
     /// deleted app leaves the account key in the Keychain, so without this
     /// anyone holding the phone could destroy it.
     private func authenticateForSignOut() async {
-        switch await DestructiveAuth.ask(reason: "Sign out of Flagship") {
+        switch await DestructiveAuth.ask(reason: String(localized: "Sign out of Flagship")) {
         case .allowed: showStartOver = true
         case .declined: break
         case let .failed(message): status = .failed(message)

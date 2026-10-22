@@ -2378,5 +2378,10 @@
   "One of your apps wants to reach the internet.": "你的某个应用想要访问互联网。",
   "A device on your account invited someone to one of your apps.": "你账户上的某台设备邀请了某人加入你的一个应用。",
   "Open Flagship to see what's new.": "打开 Flagship 查看最新动态。",
-  "A server shared with you is asking you to unlock it.": "与你共享的一台服务器请求你将其解锁。"
+  "A server shared with you is asking you to unlock it.": "与你共享的一台服务器请求你将其解锁。",
+  "Sign out of Flagship": "退出 Flagship 登录",
+  "Remove this account from the device": "从设备移除该账户",
+  "Sign out without recovery?": "在没有恢复的情况下退出登录？",
+  "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good.": "你尚未设置云恢复。在没有备份的情况下擦除此设备的密钥，意味着无法再次登录：你将永久失去对账户的访问。",
+  "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in. Back up your account key first.": "你尚未设置云恢复。在没有备份的情况下擦除此设备的密钥，意味着无法再次登录。请先备份你的账户密钥。"
 }

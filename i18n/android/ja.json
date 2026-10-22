@@ -2558,5 +2558,7 @@
   "rows_reanchored_unchanged": {
     "one": "%1$s 行を再接続 · %2$s は変更なし",
     "other": "%1$s 行を再接続 · %2$s は変更なし"
-  }
+  },
+  "sign_out_of_flagship": "Flagshipからサインアウト",
+  "confirm_its_you": "ご本人であることを確認してください"
 }

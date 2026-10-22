@@ -2558,5 +2558,7 @@
   "rows_reanchored_unchanged": {
     "one": "%1$s ligne rattachée · %2$s inchangées",
     "other": "%1$s lignes rattachées · %2$s inchangées"
-  }
+  },
+  "sign_out_of_flagship": "Se déconnecter de Flagship",
+  "confirm_its_you": "Confirmez que c’est bien vous"
 }

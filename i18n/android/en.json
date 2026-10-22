@@ -10592,5 +10592,13 @@
     },
     "ctx": "ui/screens/PostRecoveryScreen.kt",
     "plural": true
+  },
+  "sign_out_of_flagship": {
+    "en": "Sign out of Flagship",
+    "ctx": "ui/shell/DestructiveAuth.kt:22 (title=)"
+  },
+  "confirm_its_you": {
+    "en": "Confirm it's you",
+    "ctx": "ui/shell/DestructiveAuth.kt:22 (subtitle=)"
   }
 }

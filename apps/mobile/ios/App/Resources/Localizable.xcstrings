@@ -97580,6 +97580,211 @@
           }
         }
       }
+    },
+    "Sign out of Flagship": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerrar sesión en Flagship"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se déconnecter de Flagship"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Von Flagship abmelden"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sair do Flagship"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagshipからサインアウト"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出 Flagship 登录"
+          }
+        }
+      }
+    },
+    "Remove this account from the device": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar esta cuenta del dispositivo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirer ce compte de l’appareil"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Konto vom Gerät entfernen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remover esta conta do dispositivo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このアカウントをデバイスから削除"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从设备移除该账户"
+          }
+        }
+      }
+    },
+    "Sign out without recovery?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Cerrar sesión sin recuperación?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se déconnecter sans récupération ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ohne Wiederherstellung abmelden?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sair sem recuperação?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リカバリーなしでサインアウトしますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在没有恢复的情况下退出登录？"
+          }
+        }
+      }
+    },
+    "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No tienes configurada la recuperación en la nube. Borrar la clave de este dispositivo sin copia de seguridad significa que no hay forma de volver a iniciar sesión: perderás el acceso a tu cuenta para siempre."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous n’avez pas configuré de récupération dans le cloud. Effacer la clé de cet appareil sans sauvegarde signifie qu’il n’y a aucun moyen de se reconnecter — l’accès à votre compte sera perdu définitivement."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du hast keine Cloud-Wiederherstellung eingerichtet. Das Löschen des Schlüssels dieses Geräts ohne Backup bedeutet, dass es keinen Weg zurück gibt – dein Kontozugriff ist endgültig verloren."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Você não configurou a recuperação na nuvem. Apagar a chave deste dispositivo sem backup significa que não há como entrar de novo — o acesso à sua conta será perdido para sempre."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "クラウドリカバリーが設定されていません。バックアップなしでこのデバイスのキーを消去すると、再びサインインする手段がなくなり、アカウントへのアクセスは完全に失われます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你尚未设置云恢复。在没有备份的情况下擦除此设备的密钥，意味着无法再次登录：你将永久失去对账户的访问。"
+          }
+        }
+      }
+    },
+    "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in. Back up your account key first.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No tienes configurada la recuperación en la nube. Borrar la clave de este dispositivo sin copia de seguridad significa que no hay forma de volver a iniciar sesión. Haz primero una copia de seguridad de la clave de tu cuenta."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous n’avez pas configuré de récupération dans le cloud. Effacer la clé de cet appareil sans sauvegarde signifie qu’il n’y a aucun moyen de se reconnecter. Sauvegardez d’abord la clé de votre compte."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du hast keine Cloud-Wiederherstellung eingerichtet. Das Löschen des Schlüssels dieses Geräts ohne Backup bedeutet, dass es keinen Weg zurück gibt. Erstelle zuerst ein Backup deines Kontoschlüssels."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Você não configurou a recuperação na nuvem. Apagar a chave deste dispositivo sem backup significa que não há como entrar de novo. Faça antes um backup da chave da sua conta."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "クラウドリカバリーが設定されていません。バックアップなしでこのデバイスのキーを消去すると、再びサインインする手段がなくなります。先にアカウントキーをバックアップしてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你尚未设置云恢复。在没有备份的情况下擦除此设备的密钥，意味着无法再次登录。请先备份你的账户密钥。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

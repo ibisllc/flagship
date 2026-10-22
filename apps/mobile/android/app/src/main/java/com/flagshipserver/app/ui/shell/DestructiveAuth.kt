@@ -1,6 +1,8 @@
 package com.flagshipserver.app.ui.shell
 
 import androidx.fragment.app.FragmentActivity
+import com.flagshipserver.app.R
+import com.flagshipserver.app.core.FSStrings
 import com.flagshipserver.app.core.NetworkErrorHumanizer
 import com.flagshipserver.app.keystore.BiometricCancelled
 import com.flagshipserver.app.keystore.BiometricFailed
@@ -19,7 +21,7 @@ internal sealed class SignOutAuth {
 /** Ok also when the device has nothing to authenticate with (no screen
  *  lock), where the sign-out is the only way out of this screen. */
 internal suspend fun authenticateForSignOut(activity: FragmentActivity): SignOutAuth = try {
-    BiometricGate.evaluate(activity, title = "Sign out of Flagship", subtitle = "Confirm it's you")
+    BiometricGate.evaluate(activity, title = FSStrings.get(R.string.sign_out_of_flagship), subtitle = FSStrings.get(R.string.confirm_its_you))
     SignOutAuth.Ok
 } catch (e: BiometricFailed) {
     if (e.code in setOf(

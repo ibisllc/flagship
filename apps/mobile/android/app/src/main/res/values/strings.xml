@@ -2565,4 +2565,6 @@
         <item quantity="one">%1$s row re-anchored · %2$s unchanged</item>
         <item quantity="other">%1$s rows re-anchored · %2$s unchanged</item>
     </plurals>
+    <string name="sign_out_of_flagship">Sign out of Flagship</string>
+    <string name="confirm_its_you">Confirm it\'s you</string>
 </resources>

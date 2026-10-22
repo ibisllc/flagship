@@ -2378,5 +2378,10 @@
   "One of your apps wants to reach the internet.": "L’une de vos apps veut accéder à Internet.",
   "A device on your account invited someone to one of your apps.": "Un appareil de votre compte a invité quelqu’un dans l’une de vos apps.",
   "Open Flagship to see what's new.": "Ouvrez Flagship pour voir les nouveautés.",
-  "A server shared with you is asking you to unlock it.": "Un serveur partagé avec vous vous demande de le déverrouiller."
+  "A server shared with you is asking you to unlock it.": "Un serveur partagé avec vous vous demande de le déverrouiller.",
+  "Sign out of Flagship": "Se déconnecter de Flagship",
+  "Remove this account from the device": "Retirer ce compte de l’appareil",
+  "Sign out without recovery?": "Se déconnecter sans récupération ?",
+  "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good.": "Vous n’avez pas configuré de récupération dans le cloud. Effacer la clé de cet appareil sans sauvegarde signifie qu’il n’y a aucun moyen de se reconnecter — l’accès à votre compte sera perdu définitivement.",
+  "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in. Back up your account key first.": "Vous n’avez pas configuré de récupération dans le cloud. Effacer la clé de cet appareil sans sauvegarde signifie qu’il n’y a aucun moyen de se reconnecter. Sauvegardez d’abord la clé de votre compte."
 }

@@ -2561,4 +2561,6 @@
         <item quantity="one">%1$s linha reassociada · %2$s sem alteração</item>
         <item quantity="other">%1$s linhas reassociadas · %2$s sem alteração</item>
     </plurals>
+    <string name="sign_out_of_flagship">Sair do Flagship</string>
+    <string name="confirm_its_you">Confirme que é você</string>
 </resources>

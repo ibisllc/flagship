@@ -2378,5 +2378,10 @@
   "One of your apps wants to reach the internet.": "いずれかのアプリがインターネットへのアクセスを求めています。",
   "A device on your account invited someone to one of your apps.": "アカウントのデバイスが、あなたのアプリのいずれかに誰かを招待しました。",
   "Open Flagship to see what's new.": "Flagship を開いて新着を確認してください。",
-  "A server shared with you is asking you to unlock it.": "あなたと共有されているサーバーが、ロック解除を求めています。"
+  "A server shared with you is asking you to unlock it.": "あなたと共有されているサーバーが、ロック解除を求めています。",
+  "Sign out of Flagship": "Flagshipからサインアウト",
+  "Remove this account from the device": "このアカウントをデバイスから削除",
+  "Sign out without recovery?": "リカバリーなしでサインアウトしますか？",
+  "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good.": "クラウドリカバリーが設定されていません。バックアップなしでこのデバイスのキーを消去すると、再びサインインする手段がなくなり、アカウントへのアクセスは完全に失われます。",
+  "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in. Back up your account key first.": "クラウドリカバリーが設定されていません。バックアップなしでこのデバイスのキーを消去すると、再びサインインする手段がなくなります。先にアカウントキーをバックアップしてください。"
 }
