@@ -14,6 +14,7 @@ import { invites } from "./invites.js";
 import { lifecycle } from "./lifecycle.js";
 import { mcpIde } from "./mcpIde.js";
 import { migrate } from "./migrate.js";
+import { namedLinks } from "./namedLinks.js";
 import { oneList } from "./oneList.js";
 import { quota } from "./quota.js";
 import { realAccount } from "./realAccount.js";
@@ -50,6 +51,7 @@ export const GROUPS: Group[] = [
   quota,
   backups,
   oneList,
+  namedLinks,
   update,
   lifecycle,
   ...RELEASE_03_GROUPS,
