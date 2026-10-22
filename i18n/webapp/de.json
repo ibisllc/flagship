@@ -1939,7 +1939,7 @@
   "Server committed but local install failed: {0}. Re-open the app to recover.": "Der Server hat übernommen, aber die lokale Installation ist fehlgeschlagen: {0}. Öffne die App erneut, um das zu beheben.",
   "Server wiped — re-open the app to finish on this browser.": "Server gelöscht – öffne die App erneut, um auf diesem Browser abzuschließen.",
   "Wipe complete. New account key installed.": "Löschen abgeschlossen. Neuer Kontoschlüssel installiert.",
-  "Wipe & restart complete.": "Löschen &amp; Neustart abgeschlossen.",
+  "Wipe & restart complete.": "Löschen und Neustart abgeschlossen.",
   "Couldn't wipe": "Löschen nicht möglich",
   "Enter your TOTP code": "Gib deinen TOTP-Code ein",
   "This account requires a 6-digit code from your authenticator app, or a recovery code if you've lost the device with the authenticator.": "Dieses Konto erfordert einen 6-stelligen Code aus deiner Authenticator-App oder einen Wiederherstellungscode, falls du das Gerät mit dem Authenticator verloren hast.",
