@@ -131,6 +131,7 @@ public final class LiveNameDibsClient: NameDibsClient, @unchecked Sendable {
 
 // MARK: - Mock
 
+#if DEBUG
 /// Scriptable dibs broker for previews and tests. Records every signed body.
 public final class MockNameDibsClient: NameDibsClient, @unchecked Sendable {
     public var scriptedWindow = DibsWindow(configured: false, open: false, start: nil, end: nil)
@@ -161,3 +162,4 @@ public final class MockNameDibsClient: NameDibsClient, @unchecked Sendable {
         return DibsVerifyResult(name: body.request.name, verified: true, method: "dns")
     }
 }
+#endif
