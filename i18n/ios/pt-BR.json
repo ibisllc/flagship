@@ -2381,5 +2381,10 @@
   "A server shared with you is asking you to unlock it.": "Um servidor compartilhado com você pede que você o desbloqueie.",
   "Couldn't sign the change: %@": "Não foi possível assinar a alteração: %@",
   "Couldn't sign the key: %@": "Não foi possível assinar a chave: %@",
-  "Couldn't sign the copy: %@": "Não foi possível assinar a cópia: %@"
+  "Couldn't sign the copy: %@": "Não foi possível assinar a cópia: %@",
+  "Sign out of Flagship": "Sair do Flagship",
+  "Remove this account from the device": "Remover esta conta do dispositivo",
+  "Sign out without recovery?": "Sair sem recuperação?",
+  "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good.": "Você não configurou a recuperação na nuvem. Apagar a chave deste dispositivo sem backup significa que não há como entrar de novo — o acesso à sua conta será perdido para sempre.",
+  "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in. Back up your account key first.": "Você não configurou a recuperação na nuvem. Apagar a chave deste dispositivo sem backup significa que não há como entrar de novo. Faça antes um backup da chave da sua conta."
 }
