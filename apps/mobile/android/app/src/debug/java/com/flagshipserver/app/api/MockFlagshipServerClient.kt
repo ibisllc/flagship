@@ -625,8 +625,8 @@ class MockFlagshipServerClient(
                     ok = true,
                     displayLabel = newLabel,
                     canonicalUrl = canonical,
-                    shortUrl = "https://voi.ci/${newLabel.take(2)}mock1",
-                    shortCode = "${newLabel.take(2)}mock1",
+                    shortUrl = "https://voi.ci/$MOCK_SHORT_CODE",
+                    shortCode = MOCK_SHORT_CODE,
                     unchanged = false,
                 )
             }
@@ -664,7 +664,9 @@ class MockFlagshipServerClient(
             instances = listOf(
                 AppLinkInstance(serverDomain = host, url = canonical),
             ),
-            shortUrl = null,
+            shortUrl = "https://voi.ci/$MOCK_SHORT_CODE",
+            shortCode = MOCK_SHORT_CODE,
+            link = AppLinkState(name = null, held = 0, limit = 5, changesLeft = 3),
         )
     }
 
