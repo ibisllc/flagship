@@ -93,7 +93,7 @@ export function renderLinkField({ link, shortCode, admin }) {
     <div class="link-field" data-lf="root">
       <label class="label-tiny" for="lf-input">${tr("Your link")}</label>
       <div class="link-field-row">
-        <span class="mono link-field-prefix">voi.ci/</span>
+        <span class="mono link-field-prefix">${"voi.ci/"}</span>
         <input id="lf-input" class="mono" data-lf="input" value="${escapeHtml(value)}" maxlength="40"
           autocapitalize="off" autocomplete="off" spellcheck="false" ${admin ? "" : "readonly"}>
         <button class="ghost" data-copy="https://voi.ci/${escapeHtml(value)}" aria-label="${tr("Copy short link")}">📋</button>
@@ -209,7 +209,7 @@ export function bindLinkField(root, o, deps = {}) {
     }
     free.innerHTML = names
       .map(
-        (n, i) => `<div class="row"><span class="mono">voi.ci/${escapeHtml(n.name)}</span>
+        (n, i) => `<div class="row"><span class="mono">${"voi.ci/"}${escapeHtml(n.name)}</span>
           <button class="ghost" data-i="${i}">${tr("Use default")}</button></div>`,
       )
       .join("");
