@@ -2689,5 +2689,8 @@
   "Developer": "開発者",
   "Developer console": "開発者コンソール",
   "Get from the marketplace": "マーケットプレイスから入手",
-  "Install something a neighbour already built.": "近所の人がすでに作ったものをインストールします。"
+  "Install something a neighbour already built.": "近所の人がすでに作ったものをインストールします。",
+  "voi.ci/": "voi.ci/",
+  "voi.ci/{0}": "voi.ci/{0}",
+  "Changed account name": "アカウント名を変更しました"
 }

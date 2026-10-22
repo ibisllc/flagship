@@ -2689,5 +2689,8 @@
   "Developer": "开发者",
   "Developer console": "开发者控制台",
   "Get from the marketplace": "从市场获取",
-  "Install something a neighbour already built.": "安装邻居已经做好的东西。"
+  "Install something a neighbour already built.": "安装邻居已经做好的东西。",
+  "voi.ci/": "voi.ci/",
+  "voi.ci/{0}": "voi.ci/{0}",
+  "Changed account name": "更改了账户名称"
 }

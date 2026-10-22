@@ -11057,5 +11057,17 @@
   "Install something a neighbour already built.": {
     "en": "Install something a neighbour already built.",
     "ctx": "webapp/index.html"
+  },
+  "voi.ci/": {
+    "en": "voi.ci/",
+    "ctx": "webapp/lib/linkField.js:96"
+  },
+  "voi.ci/{0}": {
+    "en": "voi.ci/{0}",
+    "ctx": "webapp/lib/linkField.js:212"
+  },
+  "Changed account name": {
+    "en": "Changed account name",
+    "ctx": "webapp/lib/auditLog.js:92"
   }
 }

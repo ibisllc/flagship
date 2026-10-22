@@ -2689,5 +2689,8 @@
   "Developer": "Développeur",
   "Developer console": "Console développeur",
   "Get from the marketplace": "Obtenir depuis la place de marché",
-  "Install something a neighbour already built.": "Installez quelque chose qu'un voisin a déjà créé."
+  "Install something a neighbour already built.": "Installez quelque chose qu'un voisin a déjà créé.",
+  "voi.ci/": "voi.ci/",
+  "voi.ci/{0}": "voi.ci/{0}",
+  "Changed account name": "A modifié le nom du compte"
 }
