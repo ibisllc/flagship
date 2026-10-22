@@ -229,7 +229,7 @@ verified proof serves both):
 Stays on `feat/custom-names`: `nameChange.ts`, `accountRename.ts`, vouchers,
 `0093`, `0094`, the paid account-name flow and its Settings entry.
 
-### 4.3 Storage (migration `0107_voici_names.sql`)
+### 4.3 Storage (migration `0110_voici_names.sql`)
 
 - `voici_names`: `key` PK (hyphens removed), `display`, `username`,
   `service_id`, `state` (`live` | `waiting`), `set_at`, `released_at`,
@@ -274,7 +274,7 @@ pushed only after `npx tsc -b`, `npx vitest run` (affected packages),
    strip the account-name allocation and payment, generalize to `kind`, wire
    the routes, make tests green on this base.
 3. **Protocol**: `voici-name/v1` bytes, vectors, TS tests.
-4. **Storage**: migration 0107 (+0092 change), interfaces, D1, in-memory,
+4. **Storage**: migration 0110 (+0092 change), interfaces, D1, in-memory,
    tests.
 5. **Control-plane + Worker**: routes, rules (2.2–2.9), redirect, cascade
    removal, deletion paths, cron, push and Activity, rate limits, CPU budget,
@@ -379,7 +379,7 @@ iOS and Android files will conflict, and its own strings need wrapping and
 
 ## 7. Deploy (with the multilingual release, not before)
 
-1. D1 migrations `0092` (if not yet applied) and `0107` before the `.com`
+1. D1 migrations `0092` (if not yet applied) and `0110` before the `.com`
    deploy.
 2. `.com` deploy (`npm run deploy` in `apps/com`; webapp shell v158) with
    `DIBS_WINDOW_START` = release day, `DIBS_WINDOW_END` = +6 months.
@@ -392,7 +392,7 @@ iOS and Android files will conflict, and its own strings need wrapping and
 1. **Who can change a link**: admin devices only (proposed) or any device.
 2. **Where this spec and the migrations live**: `main` (the Conventions rule:
    docs and migrations are workspace artifacts; means a push to `main` now,
-   reserving 0107) or the branch (as 0092–0094 are today).
+   reserving 0110) or the branch (as 0092–0094 are today).
 3. **A tier-2 routing bug found in phase 11** is shipped behaviour: fix it on
    `main` (proposed) or on this branch.
 4. **Re-parenting timing**: do §6.3 as the last phase here (proposed), or wait

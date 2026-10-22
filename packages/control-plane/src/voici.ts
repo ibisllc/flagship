@@ -23,9 +23,11 @@ import {
   verifyVoiciShorten,
   type VoiciShorten,
 } from "@flagship/protocol";
+import { voiciNameKey } from "@flagship/protocol";
 import type {
   UsernameStorage,
   VoiciLinkStorage,
+  VoiciNameStorage,
 } from "@flagship/storage";
 import { hexToBytes } from "./hex.js";
 import {
@@ -40,6 +42,12 @@ import {
 export interface VoiciDeps {
   usernames: UsernameStorage;
   voiciLinks: VoiciLinkStorage;
+  /** Custom names (docs/named-links.md). Absent: codes only. */
+  voiciNames?: VoiciNameStorage;
+  /** The service's canonical address (`https://<label>.<user>.flagship.services`),
+   *  worked out on each visit so a link follows a rename. Null: fall back to
+   *  [resolveAppUrl] and then to the stored target. */
+  resolveCanonical?: (username: string, serviceId: string) => Promise<string | null>;
   /** Optional clock injection — tests override; production uses Date.now. */
   now?: () => number;
   /** Base hostname used when formatting the short URL the API returns
@@ -93,6 +101,8 @@ export async function mintShortLink(
 
   for (let attempt = 0; attempt < MAX_MINT_RETRIES; attempt++) {
     const code = randomBase36Code(len);
+    // A readable name that happens to look like this code keeps it: never hand it out.
+    if (deps.voiciNames && (await deps.voiciNames.get(code))) continue;
     const insert = await deps.voiciLinks.insert({
       code,
       username,
@@ -166,35 +176,52 @@ export async function handleVoiciShorten(
   });
 }
 
-/** Worker hostname route. Input is the raw code path component;
- *  output is a 302 redirect (handled by the Worker frontend). 410
- *  Gone fires when the code resolves but has expired — distinct
- *  from 404 so a victim of a rename sees "this link was rotated"
- *  rather than "this link never existed." */
+/** Worker hostname route. Input is the raw path component: a random code or a
+ *  custom name. Output is a 302 (handled by the Worker frontend). 410 Gone says
+ *  the link is no longer in use (a rotated one-off, a retired code, a custom
+ *  name in its wait); 404 says it never existed. A custom name in its wait
+ *  redirects nowhere on purpose, so caches elsewhere forget it before anyone
+ *  else can take the name. */
 export async function handleVoiciRedirect(
   deps: VoiciDeps,
   code: string,
 ): Promise<HandlerResponseWithHeaders> {
   const now = (deps.now ?? (() => Date.now()))();
-  if (!/^[a-z0-9]{1,10}$/.test(code)) return notFound("short code not found");
-  const row = await deps.voiciLinks.get(code);
-  if (!row) return notFound("short code not found");
-  if (row.expiresAt !== undefined && row.expiresAt <= now) {
-    return gone("this short link was rotated; ask the sender for a fresh one");
-  }
-  let target = row.targetUrl;
-  if (row.serviceId && deps.resolveAppUrl) {
-    const now = await deps.resolveAppUrl(row.username, row.serviceId).catch(() => null);
-    if (now && TARGET_URL_RE.test(now)) target = now;
-  }
-  return {
-    status: 302,
-    body: { ok: true, target },
-    headers: {
-      location: target,
-      "cache-control": "private, no-store",
-    },
+  const target = async (username: string, serviceId: string | undefined, stored: string | undefined): Promise<string | null> => {
+    if (serviceId) {
+      const canonical = await deps.resolveCanonical?.(username, serviceId).catch(() => null);
+      if (canonical && TARGET_URL_RE.test(canonical)) return canonical;
+      const live = await deps.resolveAppUrl?.(username, serviceId).catch(() => null);
+      if (live && TARGET_URL_RE.test(live)) return live;
+    }
+    return stored ?? null;
   };
+  const found = (to: string): HandlerResponseWithHeaders => ({
+    status: 302,
+    body: { ok: true, target: to },
+    headers: { location: to, "cache-control": "private, no-store" },
+  });
+
+  if (/^[a-z0-9]{1,10}$/.test(code)) {
+    const row = await deps.voiciLinks.get(code);
+    if (row) {
+      if (row.retiredAt !== undefined) return gone("this short link is no longer in use");
+      if (row.expiresAt !== undefined && row.expiresAt <= now) {
+        return gone("this short link was rotated; ask the sender for a fresh one");
+      }
+      const to = await target(row.username, row.serviceId, row.targetUrl);
+      return to ? found(to) : notFound("short code not found");
+    }
+  }
+  if (deps.voiciNames && code.length >= 4 && code.length <= 40 && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(code)) {
+    const name = await deps.voiciNames.get(voiciNameKey(code));
+    if (name) {
+      if (name.state === "waiting") return gone("this short link is no longer in use");
+      const to = await target(name.username, name.serviceId, undefined);
+      return to ? found(to) : notFound("short code not found");
+    }
+  }
+  return notFound("short code not found");
 }
 
 /** Cryptographically-strong base36 code generator. */
