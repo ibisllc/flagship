@@ -81,6 +81,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0106",
   // Which servers are locked, so no auto-unlock lease is released for them.
   "0107", "0108", "0109",
+  // Custom voi.ci names, their changes and retired codes (named links).
+  "0110",
 ];
 
 export interface SchemaStatusDeps {
