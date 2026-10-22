@@ -45,8 +45,8 @@ export function inlinePrompt({
   placeholder = "",
   initial = "",
   type = "text",
-  okLabel = "OK",
-  cancelLabel = "Cancel",
+  okLabel = tr("OK"),
+  cancelLabel = tr("Cancel"),
   validate = null,
 } = {}) {
   return new Promise((resolve) => {
@@ -117,8 +117,8 @@ export function inlinePrompt({
 export function inlineConfirm({
   title,
   message,
-  okLabel = "Confirm",
-  cancelLabel = "Cancel",
+  okLabel = tr("Confirm"),
+  cancelLabel = tr("Cancel"),
   danger = false,
 } = {}) {
   return new Promise((resolve) => {
@@ -210,7 +210,7 @@ export function inlineChoice({ title, message, choices = [] } = {}) {
 /**
  * Inline alert: title/message and one button. Resolves when dismissed.
  */
-export function inlineAlert({ title, message, okLabel = "OK" } = {}) {
+export function inlineAlert({ title, message, okLabel = tr("OK") } = {}) {
   return new Promise((resolve) => {
     const host = ensureHost();
     const overlay = buildOverlay();

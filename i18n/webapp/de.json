@@ -2534,5 +2534,17 @@
   "Couldn't attach \"{0}\".": "„{0}“ konnte nicht angehängt werden.",
   "Add a server": "Server hinzufügen",
   "{0} can now manage this server": "{0} kann diesen Server jetzt verwalten",
-  "{0} can now see this server": "{0} kann diesen Server jetzt sehen"
+  "{0} can now see this server": "{0} kann diesen Server jetzt sehen",
+  "companion": "Begleiter",
+  "invite": "Einladung",
+  "join": "beitreten",
+  "connecting": "Verbindungsaufbau",
+  "remote": "Fernzugriff",
+  "locked": "gesperrt",
+  "first run": "erster Start",
+  "Confirm": "Bestätigen",
+  "Filter": "Filtern",
+  "Search": "Suchen",
+  "authorize": "autorisieren",
+  "device reset": "Gerät zurückgesetzt"
 }
