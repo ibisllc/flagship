@@ -25,7 +25,7 @@
   "It frees immediately and may be claimed by someone else.": "它会立即释放，可能被其他人占用。",
   "Your servers go dark": "你的服务器将失联",
   "They stop being reachable and manageable. If you want to keep one, transfer it first.": "它们将无法访问，也无法管理。如果想保留某台服务器，请先转移它。",
-  "No recovery": "无法恢复",
+  "No recovery": "无恢复方式",
   "No passkey, no other device, no reset. This is final.": "没有通行密钥，没有其他设备，也无法重置。这是最终操作。",
   "Keep a server? Transfer it to another account first.": "想保留某台服务器？请先把它转移到另一个账户。",
   "Ask all my servers to delete their content": "要求我的所有服务器删除其内容",
