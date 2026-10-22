@@ -25,7 +25,7 @@ export async function askLocalPassphrase(prompt) {
     title: tr("Lock this browser"),
     message:
       tr("Choose a passphrase (8+ characters). You'll type it to unlock this account on this browser. flagshipserver.com never sees it."),
-    placeholder: "passphrase",
+    placeholder: tr("Passphrase"),
     type: "password",
     okLabel: tr("Continue"),
     validate: (v) => (isLocalPassphrase(v) ? null : tr("Use at least 8 characters")),
@@ -34,7 +34,7 @@ export async function askLocalPassphrase(prompt) {
   const again = await prompt({
     title: tr("Confirm passphrase"),
     message: tr("Type it again."),
-    placeholder: "passphrase",
+    placeholder: tr("Passphrase"),
     type: "password",
     validate: (v) => (v !== pass ? tr("passphrases don't match") : null),
   });
