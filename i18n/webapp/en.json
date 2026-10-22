@@ -10437,5 +10437,53 @@
   "{0} can now see this server": {
     "en": "{0} can now see this server",
     "ctx": "webapp/views/server-sharing.js:222"
+  },
+  "companion": {
+    "en": "companion",
+    "ctx": "webapp/app.js:538"
+  },
+  "invite": {
+    "en": "invite",
+    "ctx": "webapp/app.js:748"
+  },
+  "join": {
+    "en": "join",
+    "ctx": "webapp/app.js:770"
+  },
+  "connecting": {
+    "en": "connecting",
+    "ctx": "webapp/app.js:783"
+  },
+  "remote": {
+    "en": "remote",
+    "ctx": "webapp/app.js:795"
+  },
+  "locked": {
+    "en": "locked",
+    "ctx": "webapp/app.js:831"
+  },
+  "first run": {
+    "en": "first run",
+    "ctx": "webapp/app.js:842"
+  },
+  "Confirm": {
+    "en": "Confirm",
+    "ctx": "webapp/lib/freshUnlock.js:25"
+  },
+  "Filter": {
+    "en": "Filter",
+    "ctx": "webapp/lib/uikit.js:72"
+  },
+  "Search": {
+    "en": "Search",
+    "ctx": "webapp/lib/uikit.js:89"
+  },
+  "authorize": {
+    "en": "authorize",
+    "ctx": "webapp/views/access-authorize.js:45"
+  },
+  "device reset": {
+    "en": "device reset",
+    "ctx": "webapp/views/unlock.js:92"
   }
 }

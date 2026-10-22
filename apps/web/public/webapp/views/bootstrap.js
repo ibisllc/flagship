@@ -207,7 +207,7 @@ async function createAccount() {
     title: tr("Create your account"),
     message:
       tr("Choose a passphrase (8+ chars). It encrypts your key in this browser — flagshipserver.com never sees it."),
-    placeholder: "passphrase",
+    placeholder: tr("Passphrase"),
     type: "password",
     validate: (v) => (!v || v.length < 8 ? "8+ characters" : null),
   });
@@ -215,7 +215,7 @@ async function createAccount() {
   const confirm = await inlinePrompt({
     title: tr("Confirm passphrase"),
     message: tr("Type it again."),
-    placeholder: "passphrase",
+    placeholder: tr("Passphrase"),
     type: "password",
     validate: (v) => (v !== pass ? tr("passphrases don't match") : null),
   });

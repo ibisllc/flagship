@@ -2534,5 +2534,17 @@
   "Couldn't attach \"{0}\".": "No se pudo adjuntar «{0}».",
   "Add a server": "Añadir un servidor",
   "{0} can now manage this server": "{0} ahora puede gestionar este servidor",
-  "{0} can now see this server": "{0} ahora puede ver este servidor"
+  "{0} can now see this server": "{0} ahora puede ver este servidor",
+  "companion": "acompañante",
+  "invite": "invitación",
+  "join": "unirse",
+  "connecting": "conectando",
+  "remote": "remoto",
+  "locked": "bloqueado",
+  "first run": "primer uso",
+  "Confirm": "Confirmar",
+  "Filter": "Filtrar",
+  "Search": "Buscar",
+  "authorize": "autorizar",
+  "device reset": "dispositivo restablecido"
 }

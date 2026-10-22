@@ -488,7 +488,7 @@ async function freshShareUnlock(opts) {
  *  (an overlay would sit under the open <dialog>). Same contract: resolves
  *  the typed passphrase, or null on Cancel. */
 function sheetPrompt(dlg) {
-  return ({ title, message, okLabel = "Confirm" }) =>
+  return ({ title, message, okLabel = tr("Confirm") }) =>
     new Promise((resolve) => {
       const form = dlg.querySelector('[data-share-stage="form"]');
       const stage = document.createElement("div");

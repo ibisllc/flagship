@@ -89,7 +89,7 @@ export async function handleReset() {
   profileRemove("podBaseUrl");
   lockSession();
   stopRenewals();
-  setSubtitle("device reset");
+  setSubtitle(tr("device reset"));
   show("view-bootstrap");
 }
 

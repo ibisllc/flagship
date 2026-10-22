@@ -535,7 +535,7 @@ async function boot() {
   initCompanionDockView();
   initCompanionDockStartView({
     onComplete: async () => {
-      setSubtitle("companion");
+      setSubtitle(tr("companion"));
       applyCompanionUiRestrictions();
       await enterHome();
     },
@@ -745,7 +745,7 @@ async function boot() {
   // secret lives only in the URL fragment — it is never sent to .com.
   const inviteCtx = inviteContextFromLocation();
   if (inviteCtx) {
-    setSubtitle("invite");
+    setSubtitle(tr("invite"));
     // The v2 fragment also carries the author AID + inviteId (for the friend's
     // per-author contact identity + the manual-approve acceptance) — pass them.
     await enterInviteRedeem(inviteCtx.secret, inviteCtx.boxBaseUrl ?? undefined, {
@@ -767,7 +767,7 @@ async function boot() {
   // holds an identity.
   const joinLink = joinLinkFromLocation();
   if (joinLink) {
-    setSubtitle("join");
+    setSubtitle(tr("join"));
     enterJoin(joinLink);
     return;
   }
@@ -780,7 +780,7 @@ async function boot() {
   // — that's the marker for "this profile can't sign".
   const companionPayload = companionPayloadFromLocation();
   if (companionPayload) {
-    setSubtitle("connecting");
+    setSubtitle(tr("connecting"));
     const result = await redeemCompanionAndPersist(companionPayload);
     if (result.error) {
       toast(result.error, "err");
@@ -792,7 +792,7 @@ async function boot() {
       // Remote sessions skip the unlock view entirely — there's no UMK
       // to unwrap. Render the home tab so they land somewhere
       // meaningful.
-      setSubtitle("remote");
+      setSubtitle(tr("remote"));
       show("view-home");
       await enterHome();
       return;
@@ -828,7 +828,7 @@ async function boot() {
   }
 
   if (await hasWrappedUmk()) {
-    setSubtitle("locked");
+    setSubtitle(tr("locked"));
     // Prefer the PIN screen when a PIN is set; the passphrase remains
     // reachable from there via "Unlock with passphrase instead".
     let pinSet = false;
@@ -839,7 +839,7 @@ async function boot() {
     }
     show(pinSet ? "view-pin-unlock" : "view-unlock");
   } else {
-    setSubtitle("first run");
+    setSubtitle(tr("first run"));
     show("view-bootstrap");
   }
 }

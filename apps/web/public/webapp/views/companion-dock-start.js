@@ -16,7 +16,7 @@ export function initCompanionDockStartView({ onComplete } = {}) {
 }
 
 export function enterCompanionDockStart() {
-  setSubtitle("remote");
+  setSubtitle(tr("remote"));
   show("view-dock-start");
   void startRequest();
 }
