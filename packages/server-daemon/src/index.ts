@@ -1979,13 +1979,22 @@ function wireBffStores(): BffStores {
  * `browser.domains` are unaffected (they get 403). Returns null when disabled
  * or unreachable. The teardown hook is registered separately on exit.
  */
+/**
+ * SEC-BROWSER-001: the app browser is off. Apps shared one Chromium profile
+ * and the allowlist was checked only on openTab and navigate, so an app
+ * granted one site could follow a redirect and read another signed-in one.
+ * It stays off until per-app contexts and continuous navigation enforcement
+ * pass (SECURITY-HARDENING-PLAN.md §10.4). A code switch, not an env flag.
+ */
+export const APP_BROWSER = { enabled: false };
+
 async function wireBrowserBundle(deps: {
   dataDir: string;
   alertInbox: InMemoryAlertInbox;
   pairedSessions: FilePairedSessionStore;
 }): Promise<BrowserBundle | null> {
   const cdpEndpoint = process.env.FLAGSHIP_CHROMIUM_CDP ?? "http://127.0.0.1:9222";
-  if (process.env.FLAGSHIP_DISABLE_BROWSER === "1") return null;
+  if (!APP_BROWSER.enabled || process.env.FLAGSHIP_DISABLE_BROWSER === "1") return null;
   try {
     const bundle = await bootstrapBrowserBundle({
       cdpEndpoint,
