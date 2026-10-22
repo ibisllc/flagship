@@ -73,6 +73,24 @@ class NameDibsViewModelTest {
         assertEquals("no proof found yet", model.inlineError.value)
     }
 
+    @Test fun kindLink_travelsUnsigned_onInitiateAndVerify_andAccountClaimsCarryNone() = runBlocking {
+        val forLink = MockNameDibsClient().apply { scriptedWindow = DibsWindow(true, true, 0, 9_000) }
+        val linkModel = NameDibsViewModel(forLink, "fresh-poppy", "link", { Ed25519Sign(pair.privateKey) }, { pubHex }, { 1_000 })
+        linkModel.load()
+        linkModel.start("acme")
+        linkModel.check()
+        assertEquals("link", forLink.initiates.single().kind)
+        assertEquals("link", forLink.verifies.single().kind)
+
+        val forAccount = MockNameDibsClient().apply { scriptedWindow = DibsWindow(true, true, 0, 9_000) }
+        val accountModel = vm(forAccount)
+        accountModel.load()
+        accountModel.start("acme")
+        accountModel.check()
+        assertEquals(null, forAccount.initiates.single().kind)
+        assertEquals(null, forAccount.verifies.single().kind)
+    }
+
     @Test fun banner_showsOnlyWhileOpen_andUntilDismissed() {
         val open = DibsWindow(true, true, 0, 1)
         assertTrue(NameDibsViewModel.shouldShowBanner(open, dismissed = false))

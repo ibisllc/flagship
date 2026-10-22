@@ -7130,18 +7130,6 @@
     "en": "Replace",
     "ctx": "ui/screens/ServiceDetailScreen.kt:862 (arg of Text)"
   },
-  "short_redirect": {
-    "en": "Short redirect",
-    "ctx": "ui/screens/ServiceDetailScreen.kt:868 (arg of UrlGroupLabel)"
-  },
-  "a_convenient_short_link_that_redirects": {
-    "en": "A convenient short link that redirects to your service.",
-    "ctx": "ui/screens/ServiceDetailScreen.kt:869 (prose)"
-  },
-  "no_short_link_yet_tap_replace": {
-    "en": "No short link yet. Tap Replace to mint one.",
-    "ctx": "ui/screens/ServiceDetailScreen.kt:875 (text=)"
-  },
   "canonical_shared_by_all_instances": {
     "en": "Canonical (shared by all instances)",
     "ctx": "ui/screens/ServiceDetailScreen.kt:883 (arg of UrlGroupLabel)"
@@ -7164,7 +7152,7 @@
     "ctx": "ui/screens/ServiceDetailScreen.kt:970 (arg of Text)"
   },
   "this_will_update_all_the_links": {
-    "en": "This will update all the links to this service, replacing “%1$s” with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected.",
+    "en": "This will update all the links to this service, replacing “%1$s” with a new stem. All existing links break immediately. If you have attached external domains, those stay unaffected.",
     "ctx": "ui/screens/ServiceDetailScreen.kt:974 (text=)",
     "args": 1
   },
@@ -10600,5 +10588,214 @@
     },
     "ctx": "ui/screens/PostRecoveryScreen.kt",
     "plural": true
+  },
+  "http_2": {
+    "en": "HTTP %1$s",
+    "ctx": "api/NameDibsClient.kt:119 (prose)",
+    "args": 1
+  },
+  "own_a_com_claim_the_matching": {
+    "en": "Own a .com? Claim the matching name",
+    "ctx": "ui/screens/HomeScreen.kt:511 (title=)"
+  },
+  "until_a_name_that_matches_a": {
+    "en": "Until %1$s, a name that matches a registered .com is held for whoever controls that domain.",
+    "ctx": "ui/screens/HomeScreen.kt:512 (message=)",
+    "args": 1
+  },
+  "claim_your_com_name": {
+    "en": "Claim your .com name",
+    "ctx": "ui/screens/HomeScreen.kt:514 (prose)"
+  },
+  "the_dibs_window_opens_on": {
+    "en": "The dibs window opens on %1$s.",
+    "ctx": "ui/screens/NameDibsScreen.kt:81 (prose)",
+    "args": 1
+  },
+  "the_dibs_window_isnt_open_so": {
+    "en": "The dibs window isn't open, so no names are held for .com holders — any free name can be bought as an ordinary name change.",
+    "ctx": "ui/screens/NameDibsScreen.kt:82 (prose)"
+  },
+  "the_window_closes": {
+    "en": "the window closes",
+    "ctx": "ui/screens/NameDibsScreen.kt:86 (fragment)"
+  },
+  "until_a_name_matching_a_registered": {
+    "en": "Until %1$s, a name matching a registered .com is held for whoever controls that domain. Enter the name of the .com you control.",
+    "ctx": "ui/screens/NameDibsScreen.kt:86 (prose)",
+    "args": 1
+  },
+  "com": {
+    "en": " .com",
+    "ctx": "ui/screens/NameDibsScreen.kt:98 (arg of Text)"
+  },
+  "get_my_code": {
+    "en": "Get my code",
+    "ctx": "ui/screens/NameDibsScreen.kt:102 (arg of FSPrimaryButton)"
+  },
+  "youve_proven_you_control_com_so": {
+    "en": "You've proven you control %1$s.com, so the name %2$s is held for you.",
+    "ctx": "ui/screens/NameDibsScreen.kt:116 (arg of Text)",
+    "args": 2
+  },
+  "youve_proven_you_control_com_so_2": {
+    "en": "You've proven you control %1$s.com, so the name %2$s is held for you. Switching your account to it is a one-time $20 name change — your servers move with you.",
+    "ctx": "ui/screens/NameDibsScreen.kt:124 (arg of Text)",
+    "args": 2
+  },
+  "publish_this_code_in_one_of": {
+    "en": "Publish this code in one of these two places, then check. It's tied to your account's key, so nobody else can use it. DNS changes can take a while — you can leave and come back.",
+    "ctx": "ui/screens/NameDibsScreen.kt:146 (prose)"
+  },
+  "option_1_dns_txt_record": {
+    "en": "Option 1 — DNS TXT record",
+    "ctx": "ui/screens/NameDibsScreen.kt:150 (prose)"
+  },
+  "option_2_a_file_on_your": {
+    "en": "Option 2 — a file on your website",
+    "ctx": "ui/screens/NameDibsScreen.kt:152 (prose)"
+  },
+  "check_now": {
+    "en": "Check now",
+    "ctx": "ui/screens/NameDibsScreen.kt:154 (arg of FSPrimaryButton)"
+  },
+  "use_a_different_name": {
+    "en": "Use a different name",
+    "ctx": "ui/screens/NameDibsScreen.kt:156 (arg of FSSecondaryButton)"
+  },
+  "own_the_com_the_matching_name": {
+    "en": "Own the .com? The matching name is held for you.",
+    "ctx": "ui/screens/SettingsScreen.kt:250 (subtitle=)"
+  },
+  "changed_account_name": {
+    "en": "Changed account name",
+    "ctx": "viewmodels/AuditLogViewModel.kt:73 (prose)"
+  },
+  "couldnt_load_the_dibs_window": {
+    "en": "Couldn't load the dibs window",
+    "ctx": "viewmodels/NameDibsViewModel.kt:68 (prose)"
+  },
+  "enter_a_name": {
+    "en": "Enter a name.",
+    "ctx": "viewmodels/NameDibsViewModel.kt:75 (prose)"
+  },
+  "claim_com": {
+    "en": "Claim %1$s.com",
+    "ctx": "viewmodels/NameDibsViewModel.kt:82 (prose)",
+    "args": 1
+  },
+  "couldnt_start_the_claim": {
+    "en": "Couldn't start the claim",
+    "ctx": "viewmodels/NameDibsViewModel.kt:89 (prose)"
+  },
+  "check_com": {
+    "en": "Check %1$s.com",
+    "ctx": "viewmodels/NameDibsViewModel.kt:99 (prose)",
+    "args": 1
+  },
+  "couldnt_check_the_claim": {
+    "en": "Couldn't check the claim",
+    "ctx": "viewmodels/NameDibsViewModel.kt:105 (prose)"
+  },
+  "your_link": {
+    "en": "Your link",
+    "ctx": "ui/screens/LinkFieldSection.kt (prose)"
+  },
+  "only_an_admin_device_can_change_this": {
+    "en": "Only an admin device can change this",
+    "ctx": "viewmodels/LinkFieldViewModel.kt (prose)"
+  },
+  "next_change": {
+    "en": "Next change %1$s",
+    "ctx": "viewmodels/LinkFieldViewModel.kt (prose)",
+    "args": 1
+  },
+  "letters_numbers_and_hyphens_only": {
+    "en": "Letters, numbers and hyphens only",
+    "ctx": "viewmodels/LinkFieldViewModel.kt (prose)"
+  },
+  "at_least_4_characters": {
+    "en": "At least 4 characters",
+    "ctx": "viewmodels/LinkFieldViewModel.kt (prose)"
+  },
+  "at_most_40_characters": {
+    "en": "At most 40 characters",
+    "ctx": "viewmodels/LinkFieldViewModel.kt (prose)"
+  },
+  "all_names_in_use": {
+    "en": "All %1$s names in use",
+    "ctx": "viewmodels/LinkFieldViewModel.kt (prose)",
+    "args": 1
+  },
+  "reserved": {
+    "en": "Reserved",
+    "ctx": "viewmodels/LinkFieldViewModel.kt (prose)"
+  },
+  "taken": {
+    "en": "Taken",
+    "ctx": "viewmodels/LinkFieldViewModel.kt (prose)"
+  },
+  "reserved_for_the_owner_of": {
+    "en": "Reserved for the owner of %1$s",
+    "ctx": "viewmodels/LinkFieldViewModel.kt (prose)",
+    "args": 1
+  },
+  "couldnt_check_try_again": {
+    "en": "Couldn't check %1$s. Try again.",
+    "ctx": "viewmodels/LinkFieldViewModel.kt (prose)",
+    "args": 1
+  },
+  "too_many_changes_today": {
+    "en": "Too many changes today",
+    "ctx": "viewmodels/LinkFieldViewModel.kt (prose)"
+  },
+  "couldnt_save_try_again": {
+    "en": "Couldn't save. Try again.",
+    "ctx": "viewmodels/LinkFieldViewModel.kt (prose)"
+  },
+  "unused_for_60_days_its_released": {
+    "en": "Unused for 60 days, it's released.",
+    "ctx": "ui/screens/LinkFieldSection.kt (prose)"
+  },
+  "i_own_it": {
+    "en": "I own it",
+    "ctx": "ui/screens/LinkFieldSection.kt (prose)"
+  },
+  "free_one_up": {
+    "en": "Free one up",
+    "ctx": "ui/screens/LinkFieldSection.kt (prose)"
+  },
+  "use_default": {
+    "en": "Use default",
+    "ctx": "ui/screens/LinkFieldSection.kt (prose)"
+  },
+  "your_names": {
+    "en": "Your names",
+    "ctx": "ui/screens/LinkFieldSection.kt (prose)"
+  },
+  "replace_voici_link_confirm": {
+    "en": "Replace voi.ci/%1$s? It stops working now and can't be taken back.",
+    "ctx": "ui/screens/LinkFieldSection.kt (prose)",
+    "args": 1
+  },
+  "change_your_link": {
+    "en": "Change your link",
+    "ctx": "viewmodels/LinkFieldViewModel.kt (biometric prompt) (prose)"
+  },
+  "changed_an_apps_link": {
+    "en": "Changed an app's link",
+    "ctx": "viewmodels/AuditLogViewModel.kt (prose)"
+  },
+  "went_back_to_an_apps_default_link": {
+    "en": "Went back to an app's default link",
+    "ctx": "viewmodels/AuditLogViewModel.kt (prose)"
+  },
+  "released_an_apps_link": {
+    "en": "Released an app's link",
+    "ctx": "viewmodels/AuditLogViewModel.kt (prose)"
+  },
+  "an_apps_link_will_be_released_soon": {
+    "en": "An app's link will be released soon",
+    "ctx": "viewmodels/AuditLogViewModel.kt (prose)"
   }
 }
