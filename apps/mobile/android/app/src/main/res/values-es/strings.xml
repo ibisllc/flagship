@@ -216,7 +216,7 @@
     <string name="h_ago">hace %1$s h</string>
     <string name="h_m_left">Quedan %1$s h %2$s min</string>
     <string name="m_left">Quedan %1$s min</string>
-    <string name="anyone_with_this_key_can_read">Cualquiera con esta clave puede leer todo lo que hay en este servidor mientras esté activo.</string>
+    <string name="anyone_with_this_key_can_read">Cualquiera con esta clave puede leer todo lo que hay en este servidor mientras esté activa.</string>
     <string name="it_turns_off_by_itself_7">%1$s Se desactiva solo dentro de 7 días.</string>
     <string name="only_an_admin_device_can_turn">Solo un dispositivo administrador puede activar o desactivar el acceso de depuración.</string>
     <string name="the_debug_access_grant_doesnt_name">La concesión de acceso de depuración no indica ningún servidor.</string>
@@ -1327,7 +1327,7 @@
     <string name="google_ai">Google AI</string>
     <string name="ollama_local">Ollama (local)</string>
     <string name="ai_providers">Proveedores de IA</string>
-    <string name="plug_in_your_own_keys_flagship">Conecta tus propias claves. Flagship nunca hace de intermediario del tráfico de LLM: las llamadas van directas desde tu servidor al proveedor que elijas.</string>
+    <string name="plug_in_your_own_keys_flagship">Conecta tus propias claves. Tu servidor llama al proveedor que elijas, con cifrado de extremo a extremo. Por defecto, la llamada pasa por el relé de Flagship, así que el proveedor ve la dirección de Flagship, no la tuya.</string>
     <string name="viewfinder">Visor</string>
     <string name="camera_permission_required_to_scan">Se necesita permiso de la cámara para escanear.</string>
     <string name="cloud_recovery">Recuperación en la nube</string>
@@ -1984,7 +1984,7 @@
     <string name="set_up_a_key">Configurar una clave</string>
     <string name="invite_only">Solo con invitación</string>
     <string name="anyone_with_the_link">Cualquiera con el enlace</string>
-    <string name="anyone_with_the_address_can_open">Cualquiera que tenga la dirección puede abrirla. Donde necesite saber quién es alguien, inicia sesión con Flagship.</string>
+    <string name="anyone_with_the_address_can_open">Cualquiera que tenga la dirección puede abrirla. Cuando necesita saber quién es alguien, esa persona inicia sesión con Flagship.</string>
     <string name="only_you_and_the_people_you">Solo tú y las personas que invites en Flagship pueden abrirla.</string>
     <string name="a_habit_tracker_i_tick_off">Un registro de hábitos: marco mis hábitos diarios y veo mis rachas del último mes.</string>
     <string name="a_family_wishlist_everyone_keeps_a">Una lista de deseos familiar: cada persona tiene su lista y los demás pueden marcar en secreto lo que van a comprar.</string>

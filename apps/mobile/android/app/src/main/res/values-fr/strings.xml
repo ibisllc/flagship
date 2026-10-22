@@ -216,7 +216,7 @@
     <string name="h_ago">il y a %1$s h</string>
     <string name="h_m_left">Reste %1$s h %2$s min</string>
     <string name="m_left">Reste %1$s min</string>
-    <string name="anyone_with_this_key_can_read">Toute personne disposant de cette clé peut lire tout ce qui se trouve sur ce serveur tant qu’il est actif.</string>
+    <string name="anyone_with_this_key_can_read">Toute personne disposant de cette clé peut lire tout ce qui se trouve sur ce serveur tant qu’elle est active.</string>
     <string name="it_turns_off_by_itself_7">%1$s Il se désactive tout seul dans 7 jours.</string>
     <string name="only_an_admin_device_can_turn">Seul un appareil administrateur peut activer ou désactiver l’accès de débogage.</string>
     <string name="the_debug_access_grant_doesnt_name">L’autorisation d’accès de débogage ne désigne aucun serveur.</string>
@@ -1327,7 +1327,7 @@
     <string name="google_ai">Google AI</string>
     <string name="ollama_local">Ollama (local)</string>
     <string name="ai_providers">Fournisseurs d’IA</string>
-    <string name="plug_in_your_own_keys_flagship">Branchez vos propres clés. Flagship ne fait jamais transiter le trafic LLM : les appels vont directement de votre serveur au fournisseur choisi.</string>
+    <string name="plug_in_your_own_keys_flagship">Branchez vos propres clés. Votre serveur appelle le fournisseur choisi, chiffré de bout en bout. Par défaut, l’appel passe par le relais de Flagship : le fournisseur voit l’adresse de Flagship, pas la vôtre.</string>
     <string name="viewfinder">Viseur</string>
     <string name="camera_permission_required_to_scan">L’autorisation de l’appareil photo est requise pour scanner.</string>
     <string name="cloud_recovery">Récupération dans le cloud</string>
@@ -1924,7 +1924,7 @@
     <string name="lock_managed_name">Verrouiller le nom géré</string>
     <string name="names_are_encrypted_and_apply_only">Les noms sont chiffrés et ne s’appliquent qu’au sein de ce compte Flagship.</string>
     <string name="couldnt_save_the_encrypted_name_check">Impossible d’enregistrer le nom chiffré. Vérifiez le nom et réessayez.</string>
-    <string name="this_revokes_the_devices_account_access">Cela révoque l’accès du dispositif au compte. Son nom d’affichage n’est jamais stocké en clair par le plan de contrôle de Flagship.</string>
+    <string name="this_revokes_the_devices_account_access">Cela révoque l’accès de l’appareil au compte. Son nom d’affichage n’est jamais stocké en clair par le plan de contrôle de Flagship.</string>
     <string name="couldnt_disconnect_check_your_connection_and">Impossible de déconnecter — vérifiez votre connexion et réessayez.</string>
     <string name="wipe_and_start_over">Effacer et recommencer ?</string>
     <string name="your_account_keeps_the_same_username">Votre compte conserve le même nom d’utilisateur et vos serveurs conservent leurs données. Tous les appareils actuellement sur ce compte seront déconnectés — y compris ce téléphone, qui devient la nouvelle racine de confiance. Vous réassocierez chacun d’eux à neuf.\n\nCette action ne peut pas être annulée depuis un autre appareil.</string>
