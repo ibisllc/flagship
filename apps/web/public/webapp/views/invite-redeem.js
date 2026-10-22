@@ -65,7 +65,7 @@ export async function enterInviteRedeem(secretHex, boxBaseUrl, ctx = {}) {
     typeof ctx.inviteId === "string" && /^[0-9a-f]{64}$/i.test(ctx.inviteId) ? ctx.inviteId.toLowerCase() : null;
   pendingServiceRef =
     typeof ctx.serviceRef === "string" && /^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$/.test(ctx.serviceRef) ? ctx.serviceRef : null;
-  setSubtitle("invite");
+  setSubtitle(tr("invite"));
   show("view-invite-redeem");
   await renderInviteRedeem();
 }
@@ -347,7 +347,7 @@ export function hasPendingInviteRedeem() {
 /** Re-render the redeem flow after the friend unlocks (called from app.js). */
 export async function resumePendingInviteRedeem() {
   if (!pendingSecretHex) return false;
-  setSubtitle("invite");
+  setSubtitle(tr("invite"));
   show("view-invite-redeem");
   await renderInviteRedeem();
   return true;

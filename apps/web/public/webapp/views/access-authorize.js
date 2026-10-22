@@ -42,7 +42,7 @@ let pendingLink = null;
 /** Enter the authorize view. An optional pre-filled `raw` link (e.g. routed
  *  from a clipboard paste) skips straight to the confirm step. */
 export async function enterAccessAuthorize(raw) {
-  setSubtitle("authorize");
+  setSubtitle(tr("authorize"));
   show("view-access-authorize");
   pendingLink = typeof raw === "string" ? parseAccessDeepLink(raw) : null;
   if (pendingLink) renderConfirm();
