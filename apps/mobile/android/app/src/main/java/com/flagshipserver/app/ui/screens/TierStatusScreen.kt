@@ -12,6 +12,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -78,12 +81,12 @@ fun TierStatusScreen(@Suppress("UNUSED_PARAMETER") nav: NavController) {
     ) {
         Spacer(Modifier.height(FS.space.s8))
         Text(
-            "Tier & usage",
+            stringResource(R.string.tier_usage),
             color = FS.colors.text,
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
         Text(
-            "Your subscription, LLM credits, dispatcher usage, custom domains, and reserved names.",
+            stringResource(R.string.your_subscription_llm_credits_dispatcher),
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 14.sp),
         )
@@ -114,20 +117,20 @@ private fun Body(t: TierStatusResponse) {
     TierBadgeCard(t)
     Spacer(Modifier.height(FS.space.s4))
 
-    SectionHeader("LLM credits")
+    SectionHeader(stringResource(R.string.llm_credits))
     Spacer(Modifier.height(FS.space.s2))
     LlmCard(t)
 
     Spacer(Modifier.height(FS.space.s4))
-    SectionHeader("Dispatcher relay")
+    SectionHeader(stringResource(R.string.dispatcher_relay))
     Spacer(Modifier.height(FS.space.s2))
     DispatcherCard(t)
 
     Spacer(Modifier.height(FS.space.s4))
-    SectionHeader("Custom domains")
+    SectionHeader(stringResource(R.string.custom_domains))
     Spacer(Modifier.height(FS.space.s2))
     if (t.customDomains.isEmpty()) {
-        PlaceholderCard("none — your default subdomain is forever-free")
+        PlaceholderCard(stringResource(R.string.none_your_default_subdomain_is_forever))
     } else {
         t.customDomains.forEach { d ->
             FSCard(padding = PaddingValues(FS.space.s4)) {
@@ -138,10 +141,10 @@ private fun Body(t: TierStatusResponse) {
     }
 
     Spacer(Modifier.height(FS.space.s4))
-    SectionHeader("Reserved names")
+    SectionHeader(stringResource(R.string.reserved_names))
     Spacer(Modifier.height(FS.space.s2))
     if (t.reservedNames.isEmpty()) {
-        PlaceholderCard("none — your username is FCFS-free")
+        PlaceholderCard(stringResource(R.string.none_your_username_is_fcfs_free))
     } else {
         t.reservedNames.forEach { n ->
             FSCard(padding = PaddingValues(FS.space.s4)) {
@@ -161,7 +164,7 @@ private fun TierBadgeCard(t: TierStatusResponse) {
                 .semantics { testTag = "tier-status-badge-row" },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Tier", color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp))
+            Text(stringResource(R.string.tier), color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp))
             Spacer(Modifier.weight(1f))
             FSPill(
                 label = tierLabel(t.tier),
@@ -177,12 +180,12 @@ private fun LlmCard(t: TierStatusResponse) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             val day = t.llmCreditsRemainingDay
             if (day != null) {
-                LabelValueRow("today remaining", grouped(day))
+                LabelValueRow(stringResource(R.string.today_remaining), grouped(day))
             } else {
                 LabelValueRow("today", "— (BYOK or promo not in use)")
             }
             t.llmCreditsRemainingTotal?.let { total ->
-                LabelValueRow("lifetime remaining", grouped(total))
+                LabelValueRow(stringResource(R.string.lifetime_remaining), grouped(total))
             }
         }
     }
@@ -194,7 +197,7 @@ private fun DispatcherCard(t: TierStatusResponse) {
         val used = t.dispatcherUsageGBmonth
         if (used != null) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                LabelValueRow("this month", dispatcherValue(used, t.dispatcherFreeQuotaGBmonth))
+                LabelValueRow(stringResource(R.string.this_month), dispatcherValue(used, t.dispatcherFreeQuotaGBmonth))
                 ProgressBar(percent = TierStatusViewModel.usagePercent(used, t.dispatcherFreeQuotaGBmonth))
             }
         } else {
@@ -260,7 +263,7 @@ private fun tierLabel(tier: String): String = when (tier) {
 private fun dispatcherValue(used: Double, quota: Double?): String {
     val usedStr = String.format(Locale.US, "%.2f GB", used)
     return if (quota != null) {
-        "$usedStr / ${String.format(Locale.US, "%.0f", quota)} GB free"
+        fsString(R.string.gb_free, usedStr, String.format(Locale.US, "%.0f", quota))
     } else {
         "$usedStr / —"
     }
