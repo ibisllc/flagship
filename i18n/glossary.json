@@ -11,6 +11,10 @@
       "meaning": "the user's own Flagship computer (a box at home or a hosted VM). Never 'cloud' and never 'host'.",
       "es": "servidor", "fr": "serveur", "de": "Server", "pt-BR": "servidor", "ja": "サーバー", "zh-Hans": "服务器"
     },
+    "box": {
+      "meaning": "the physical or virtual machine a server runs on (the English 'box'). Never the word for 'device', which is a phone, tablet, watch or computer paired to the account.",
+      "es": "equipo", "fr": "boîtier", "de": "Box", "pt-BR": "caixa", "ja": "ボックス", "zh-Hans": "主机"
+    },
     "phone": {
       "meaning": "the user's mobile device that is the trust root. In the apps say 'phone' even on a tablet.",
       "es": "teléfono", "fr": "téléphone", "de": "Telefon", "pt-BR": "celular", "ja": "スマートフォン", "zh-Hans": "手机"
@@ -27,9 +31,13 @@
       "meaning": "a copy of data kept so it can be restored",
       "es": "copia de seguridad", "fr": "sauvegarde", "de": "Backup", "pt-BR": "backup", "ja": "バックアップ", "zh-Hans": "备份"
     },
+    "piece": {
+      "meaning": "one encrypted fragment of a peer backup, kept on another server",
+      "es": "fragmento", "fr": "fragment", "de": "Teil", "pt-BR": "pedaço", "ja": "断片", "zh-Hans": "分片"
+    },
     "recovery": {
-      "meaning": "getting back into an account after losing the phone",
-      "es": "recuperación", "fr": "récupération", "de": "Wiederherstellung", "pt-BR": "recuperação", "ja": "復旧", "zh-Hans": "恢复"
+      "meaning": "getting back into an account after losing the phone (ja: リカバリー, as in リカバリーコード; 復旧 only for recovering from trouble in general)",
+      "es": "recuperación", "fr": "récupération", "de": "Wiederherstellung", "pt-BR": "recuperação", "ja": "リカバリー", "zh-Hans": "恢复"
     },
     "pair": {
       "meaning": "connect a new device to the account by scanning a code",
@@ -41,7 +49,7 @@
     },
     "passphrase": {
       "meaning": "a long phrase the user types to protect a key file",
-      "es": "frase de contraseña", "fr": "phrase secrète", "de": "Passphrase", "pt-BR": "frase secreta", "ja": "パスフレーズ", "zh-Hans": "口令短语"
+      "es": "frase de contraseña", "fr": "phrase secrète", "de": "Passphrase", "pt-BR": "frase secreta", "ja": "パスフレーズ", "zh-Hans": "密码短语"
     },
     "admin": {
       "meaning": "a device or person allowed to manage the server",
