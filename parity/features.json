@@ -735,7 +735,7 @@
       "surfaces": {
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/linkField.js", "export function linkMessage"], ["apps/web/public/webapp/lib/voiciName.js", "flagship/voici-name/v1"]] },
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/VoiciName.swift", "flagship/voici-name/v1"], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/VoiciLinkViewModel.swift", "static func message"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/VoiciLinkField.swift", "struct VoiciLinkField"]] },
-        "android": { "status": "missing", "reason": "Not ported yet: link field, Free-one-up list, dibs hand-off, voici-name vectors.", "anchors": [] }
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/LinkFieldViewModel.kt", "object LinkField"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/VoiciName.kt", "flagship/voici-name/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/LinkFieldSection.kt", "fun LinkFieldSection"]] }
       }
     }
   ]
