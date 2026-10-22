@@ -66,7 +66,6 @@
 //  v39: unique build names checked as you type, "Invite only", Discard in Build
 //       sessions, named past builds, and the AI Key page split into add and
 //       choose; precaches lib/vibeSessions.js + lib/vibeNames.js.
-//  v157: translations (lib/i18n.js tr/trn, lib/i18nLocales.js; i18n/<lang>.json is fetched per language and cached at runtime).
 //  v40: "Edit this service" (AI chat or IDE); precaches views/edit-service.js
 //       + lib/editService.js.
 //  v41: name a git import, follow the AI adapt in the background, Discard
@@ -360,7 +359,10 @@
 //  v154: a server's Home row no longer lists "leads <app>"; only the leader is marked.
 //  v155: finishing the first-run wizard enters Home (it showed the pre-sign-in panel until a reload).
 //  v156: Backups on other servers are no longer offered at create time or in Backups; the notice lock lets the two boot-unlock writes through.
-const SHELL_VERSION = "v157";
+//  v157: translations (lib/i18n.js tr/trn, lib/i18nLocales.js; i18n/<lang>.json is fetched per language and cached at runtime).
+//  v158: translation fixes; each catalog URL carries its content hash (lib/i18nLocales.js CATALOG_VERSIONS); Traditional-Chinese
+//       and English-first browsers stay in English.
+const SHELL_VERSION = "v158";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

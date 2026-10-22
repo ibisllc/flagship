@@ -8,30 +8,44 @@
 // list from i18n/locales.json) and one i18n/<lang>.json per ga language. While that list is empty nothing is
 // fetched and every call returns its English argument.
 
-import { GA_LOCALES } from "./i18nLocales.js";
+import { GA_LOCALES, CATALOG_VERSIONS } from "./i18nLocales.js";
 
 let catalog = null;
 let active = "en";
 
 const STORE_KEY = "fs-lang";
 
-function chosenLanguage() {
-  try {
-    const saved = localStorage.getItem(STORE_KEY);
-    if (saved && GA_LOCALES.includes(saved)) return saved;
-  } catch { /* storage can be blocked */ }
-  const wanted = (typeof navigator !== "undefined" && (navigator.languages?.length ? navigator.languages : [navigator.language])) || [];
-  for (const raw of wanted) {
+// Traditional-Chinese readers get English rather than Simplified, which reads as a different written language.
+const TRADITIONAL_ZH = /^zh-(hant|tw|hk|mo)\b/;
+
+/** The language to show: a saved choice if it is still shipped, else the first browser preference we ship, else English. */
+export function pickLanguage(saved, wanted, ga = GA_LOCALES) {
+  if (saved && ga.includes(saved)) return saved;
+  for (const raw of wanted ?? []) {
     if (!raw) continue;
     const tag = String(raw).toLowerCase();
-    const exact = GA_LOCALES.find((l) => l.toLowerCase() === tag);
+    if (tag === "en" || tag.startsWith("en-")) return "en";
+    const exact = ga.find((l) => l.toLowerCase() === tag);
     if (exact) return exact;
+    if (TRADITIONAL_ZH.test(tag)) continue;
     const base = tag.split("-")[0];
-    const script = tag.startsWith("zh") ? "zh-Hans" : null;
-    const hit = GA_LOCALES.find((l) => l.toLowerCase() === (script ?? base).toLowerCase() || l.toLowerCase().split("-")[0] === base);
+    const hit = ga.find((l) => l.toLowerCase().split("-")[0] === base);
     if (hit) return hit;
   }
   return "en";
+}
+
+function chosenLanguage() {
+  let saved = null;
+  try { saved = localStorage.getItem(STORE_KEY); } catch { /* storage can be blocked */ }
+  const wanted = typeof navigator !== "undefined" ? (navigator.languages?.length ? navigator.languages : [navigator.language]) : [];
+  return pickLanguage(saved, wanted);
+}
+
+/** The catalog's URL carries its content hash, so a new build is fetched once and an old one is never served from the HTTP cache. */
+export function catalogUrl(lang, base = import.meta.url) {
+  const v = CATALOG_VERSIONS?.[lang];
+  return new URL(`../i18n/${lang}.json${v ? `?v=${v}` : ""}`, base);
 }
 
 /** Load the catalog for the active language. Runs once, at import time (top-level await below), so every module that imports t() evaluates after it. */
@@ -40,7 +54,7 @@ export async function initI18n() {
   const lang = chosenLanguage();
   if (lang === "en") return;
   try {
-    const res = await fetch(new URL(`../i18n/${lang}.json`, import.meta.url), { cache: "force-cache" });
+    const res = await fetch(catalogUrl(lang), { cache: "force-cache" });
     if (!res.ok) return;
     catalog = await res.json();
     active = lang;
