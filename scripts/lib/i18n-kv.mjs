@@ -43,6 +43,10 @@ export function writeTr(surface, code, tr, order) {
 // printf-style (%s %1$s %d %lld %@ %f), brace-style ({0}, {name}) and Kotlin-style ($name) tokens.
 const TOKEN = /%(?:\d+\$)?(?:l{1,2}|h{1,2})?[sdfgiuxXeEc@]|\{\d+\}|\{[A-Za-z_]\w*\}/g;
 export const tokensOf = (s) => [...s.matchAll(TOKEN)].map((m) => m[0].replace(/^%\d+\$/, "%")).sort();
+// Markup a translation must carry over unchanged (it may move): tags with their attributes and numbered <1>…</1>.
+const MARKUP = /<\/?[A-Za-z][^<>]*>|<\/?\d+\/?>/g;
+export const markupOf = (s) => [...s.matchAll(MARKUP)].map((m) => m[0]).sort();
+const ENTITY = /&(?:[a-z]+|#\d+|#x[0-9a-f]+);/i;
 
 const hasTerm = (str, term) =>
   new RegExp(`(?<![A-Za-z0-9\\u00C0-\\u024F])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:s)?(?![A-Za-z0-9\\u00C0-\\u024F])`, "u")
@@ -58,6 +62,10 @@ export function lintEntry(key, en, text, code) {
     if (typeof t !== "string" || t.trim() === "") { out.push(`${code}: ${key}: empty ${form}`); continue; }
     const a = tokensOf(e).join(" "), b = tokensOf(t).join(" ");
     if (a !== b) out.push(`${code}: ${key}: placeholders differ (en "${a}" / "${b}"): ${t}`);
+    const ma = markupOf(e).join(" "), mb = markupOf(t).join(" ");
+    if (ma !== mb) out.push(`${code}: ${key}: markup differs (en "${ma}" / "${mb}"): ${t}`);
+    // English with no entity is shown as plain text, where "&amp;" would appear literally
+    if (!ENTITY.test(e) && ENTITY.test(t)) out.push(`${code}: ${key}: HTML entity in plain text: ${t}`);
     for (const k of glossary.keep) if (hasTerm(e, k) && !hasTerm(t, k)) out.push(`${code}: ${key}: drops "${k}": ${t}`);
     if (/^\s|\s$/.test(e) !== /^\s|\s$/.test(t) && e.trim() === e) out.push(`${code}: ${key}: stray edge whitespace`);
     if (e.length >= 3 && e.length <= 24 && t.length > e.length * 3 + 6) out.push(`${code}: ${key}: much longer than English (${e.length} -> ${t.length}): ${t}`);
