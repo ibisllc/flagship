@@ -1827,6 +1827,7 @@
     <string name="only_you_and_this_server_see">この名前が見えるのは、あなたとこのサーバーだけです。</string>
     <string name="use_up_to_64_characters_without">64 文字以内で、| は使えません。</string>
     <string name="what_can_do">%1$s には何を許可しますか？</string>
+    <string name="share_person_fallback">この人</string>
     <string name="both_are_off_unless_you_turn">どちらも、オンにしない限りオフです。後から変更できます。</string>
     <string name="creating_link">リンクを作成中…</string>
     <string name="create_link">リンクを作成</string>
@@ -1865,7 +1866,8 @@
     <string name="leave_3">退出</string>
     <string name="stay">とどまる</string>
     <string name="is_starting">%1$s を起動中</string>
-    <string name="its_waiting_for_its_disk_to">ディスクのロック解除を待っています。起動を予期していた場合にのみ承認してください%1$s。</string>
+    <string name="its_waiting_for_its_disk_to">ディスクのロック解除を待っています。起動を予期していた場合にのみ承認してください。</string>
+    <string name="its_waiting_for_its_disk_to_asked">ディスクのロック解除を待っています（%1$s に要求）。起動を予期していた場合にのみ承認してください。</string>
     <string name="unlocking">ロック解除中…</string>
     <string name="unlock_it">ロックを解除</string>
     <string name="no_readings_yet">測定値はまだありません。</string>
