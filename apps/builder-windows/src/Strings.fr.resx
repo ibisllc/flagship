@@ -244,6 +244,9 @@ La VM et son image disque chiffrée sont supprimées de ce PC. </value>
   <data name="unlocking" xml:space="preserve">
     <value>Déverrouillage…</value>
   </data>
+  <data name="notAValidServerName" xml:space="preserve">
+    <value>« {0} » n’est pas un nom de serveur valide.</value>
+  </data>
   <data name="aHostedServerNamedAlreadyExists" xml:space="preserve">
     <value>Un serveur hébergé nommé « {0} » existe déjà.</value>
   </data>

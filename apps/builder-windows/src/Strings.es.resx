@@ -244,6 +244,9 @@ La VM y su imagen de disco cifrada se eliminan de este PC. </value>
   <data name="unlocking" xml:space="preserve">
     <value>Desbloqueando…</value>
   </data>
+  <data name="notAValidServerName" xml:space="preserve">
+    <value>«{0}» no es un nombre de servidor válido.</value>
+  </data>
   <data name="aHostedServerNamedAlreadyExists" xml:space="preserve">
     <value>Ya existe un servidor alojado llamado «{0}».</value>
   </data>
