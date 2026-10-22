@@ -66,7 +66,6 @@
 //  v39: unique build names checked as you type, "Invite only", Discard in Build
 //       sessions, named past builds, and the AI Key page split into add and
 //       choose; precaches lib/vibeSessions.js + lib/vibeNames.js.
-//  v157: translations (lib/i18n.js tr/trn, lib/i18nLocales.js; i18n/<lang>.json is fetched per language and cached at runtime).
 //  v40: "Edit this service" (AI chat or IDE); precaches views/edit-service.js
 //       + lib/editService.js.
 //  v41: name a git import, follow the AI adapt in the background, Discard
