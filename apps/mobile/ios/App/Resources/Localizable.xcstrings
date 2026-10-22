@@ -1114,7 +1114,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sin clave de acceso, sin otro dispositivo, sin restablecimiento. Es definitivo."
+            "value": "Sin llave de acceso, sin otro dispositivo, sin restablecimiento. Es definitivo."
           }
         },
         "fr": {
@@ -16694,7 +16694,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Clave de acceso de recuperación rotada"
+            "value": "Llave de acceso de recuperación rotada"
           }
         },
         "fr": {
@@ -18539,7 +18539,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Esto borra del llavero la clave de cuenta de este dispositivo y te devuelve al inicio. Vuelve a iniciar sesión con tu clave de acceso de recuperación para restaurarla: tu cuenta y tus servidores no cambian."
+            "value": "Esto borra del llavero la clave de cuenta de este dispositivo y te devuelve al inicio. Vuelve a iniciar sesión con tu llave de acceso de recuperación para restaurarla: tu cuenta y tus servidores no cambian."
           }
         },
         "fr": {
@@ -35718,7 +35718,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Otro dispositivo de esta cuenta ejecutó Desconectar, Reemplazar o Borrar. Vuelve a iniciar sesión con tu clave de acceso de recuperación para volver a entrar."
+            "value": "Otro dispositivo de esta cuenta ejecutó Desconectar, Reemplazar o Borrar. Vuelve a iniciar sesión con tu llave de acceso de recuperación para volver a entrar."
           }
         },
         "fr": {
@@ -35923,7 +35923,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Guarda una clave de acceso para poder recuperar tu cuenta si cambias de dispositivo."
+            "value": "Guarda una llave de acceso para poder recuperar tu cuenta si cambias de dispositivo."
           }
         },
         "fr": {
@@ -48018,7 +48018,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Esto borra la clave de cuenta de este dispositivo y te devuelve al inicio. Vuelve a iniciar sesión con tu clave de acceso de recuperación para restaurarla. Tu cuenta y tus servidores no cambian."
+            "value": "Esto borra la clave de cuenta de este dispositivo y te devuelve al inicio. Vuelve a iniciar sesión con tu llave de acceso de recuperación para restaurarla. Tu cuenta y tus servidores no cambian."
           }
         },
         "fr": {
@@ -51093,7 +51093,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Introduce tu frase de contraseña de recuperación y verifica tu clave de acceso para restaurar el acceso en este dispositivo."
+            "value": "Introduce tu frase de contraseña de recuperación y verifica tu llave de acceso para restaurar el acceso en este dispositivo."
           }
         },
         "fr": {
@@ -51175,7 +51175,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Introduce tu frase de contraseña de recuperación, verifica tu clave de acceso y añade tu código de recuperación para restaurar el acceso en este dispositivo. Por tu seguridad, se activa tras una espera de 24 horas y se avisa a tus otros dispositivos."
+            "value": "Introduce tu frase de contraseña de recuperación, verifica tu llave de acceso y añade tu código de recuperación para restaurar el acceso en este dispositivo. Por tu seguridad, se activa tras una espera de 24 horas y se avisa a tus otros dispositivos."
           }
         },
         "fr": {
@@ -51544,7 +51544,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Como tu cuenta tiene más de un dispositivo, restaurar el acceso aquí requiere tu código de recuperación además de tu clave de acceso. Tras una espera de 24 horas, este dispositivo pasa a ser el principal; mientras tanto se avisa a tus otros dispositivos."
+            "value": "Como tu cuenta tiene más de un dispositivo, restaurar el acceso aquí requiere tu código de recuperación además de tu llave de acceso. Tras una espera de 24 horas, este dispositivo pasa a ser el principal; mientras tanto se avisa a tus otros dispositivos."
           }
         },
         "fr": {
@@ -51749,7 +51749,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Autenticando con tu clave de acceso…"
+            "value": "Autenticando con tu llave de acceso…"
           }
         },
         "fr": {
@@ -52159,7 +52159,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Se canceló el inicio de sesión con clave de acceso. Toca Restaurar el acceso para volver a intentarlo, o usa Importar archivo de copia de seguridad más abajo."
+            "value": "Se canceló el inicio de sesión con llave de acceso. Toca Restaurar el acceso para volver a intentarlo, o usa Importar archivo de copia de seguridad más abajo."
           }
         },
         "fr": {
@@ -52241,7 +52241,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "No encontramos tu clave de acceso de recuperación en este dispositivo. Comprueba que has iniciado sesión en la misma cuenta de iCloud con el llavero de iCloud activado, o usa Importar archivo de copia de seguridad más abajo."
+            "value": "No encontramos tu llave de acceso de recuperación en este dispositivo. Comprueba que has iniciado sesión en la misma cuenta de iCloud con el llavero de iCloud activado, o usa Importar archivo de copia de seguridad más abajo."
           }
         },
         "fr": {
@@ -52487,7 +52487,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "No encontramos tu clave de acceso de recuperación en este dispositivo. Comprueba que has iniciado sesión en la misma cuenta de iCloud con el llavero de iCloud activado. Si tienes tu archivo de clave de copia de seguridad, usa Importar archivo de copia de seguridad más abajo."
+            "value": "No encontramos tu llave de acceso de recuperación en este dispositivo. Comprueba que has iniciado sesión en la misma cuenta de iCloud con el llavero de iCloud activado. Si tienes tu archivo de clave de copia de seguridad, usa Importar archivo de copia de seguridad más abajo."
           }
         },
         "fr": {
@@ -52692,7 +52692,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Elige una frase de contraseña (8 o más caracteres): trátala como una contraseña y anótala en un lugar seguro. La necesitarás, junto con tu clave de acceso, para volver a entrar en un dispositivo nuevo. No podemos restablecerla."
+            "value": "Elige una frase de contraseña (8 o más caracteres): trátala como una contraseña y anótala en un lugar seguro. La necesitarás, junto con tu llave de acceso, para volver a entrar en un dispositivo nuevo. No podemos restablecerla."
           }
         },
         "fr": {
@@ -52733,7 +52733,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Clave de acceso: %@"
+            "value": "Llave de acceso: %@"
           }
         },
         "fr": {
@@ -52938,7 +52938,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Registrando la clave de acceso…"
+            "value": "Registrando la llave de acceso…"
           }
         },
         "fr": {
@@ -53020,7 +53020,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Verificando la clave de acceso…"
+            "value": "Verificando la llave de acceso…"
           }
         },
         "fr": {
@@ -53143,7 +53143,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "La recuperación requiere tanto tu frase de contraseña de recuperación como acceso a la clave de acceso que guardaste para Flagship (en el llavero de iCloud o en tu gestor de contraseñas). Juntas abren la copia cifrada de la clave de tu cuenta guardada en nuestros servidores; no podemos leerla ni restablecer tu frase de contraseña."
+            "value": "La recuperación requiere tanto tu frase de contraseña de recuperación como acceso a la llave de acceso que guardaste para Flagship (en el llavero de iCloud o en tu gestor de contraseñas). Juntas abren la copia cifrada de la clave de tu cuenta guardada en nuestros servidores; no podemos leerla ni restablecer tu frase de contraseña."
           }
         },
         "fr": {
@@ -56136,7 +56136,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Trátala como una contraseña: anótala en un lugar seguro. La necesitarás, junto con tu clave de acceso, para volver a entrar en un dispositivo nuevo. No podemos restablecerla."
+            "value": "Trátala como una contraseña: anótala en un lugar seguro. La necesitarás, junto con tu llave de acceso, para volver a entrar en un dispositivo nuevo. No podemos restablecerla."
           }
         },
         "fr": {
@@ -76636,7 +76636,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Esto borra la clave de cuenta y los datos de este dispositivo para que no quede nada sensible almacenado. Tu cuenta y tus servidores no se tocan: vuelve a iniciar sesión con tu clave de acceso de recuperación y se restaura la misma clave, sin volver a vincular."
+            "value": "Esto borra la clave de cuenta y los datos de este dispositivo para que no quede nada sensible almacenado. Tu cuenta y tus servidores no se tocan: vuelve a iniciar sesión con tu llave de acceso de recuperación y se restaura la misma clave, sin volver a vincular."
           }
         },
         "fr": {
@@ -77743,7 +77743,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Revocaremos el acceso de este dispositivo a las notificaciones y borraremos sus claves locales. Usa tu clave de acceso de recuperación para volver a iniciar sesión más adelante."
+            "value": "Revocaremos el acceso de este dispositivo a las notificaciones y borraremos sus claves locales. Usa tu llave de acceso de recuperación para volver a iniciar sesión más adelante."
           }
         },
         "fr": {
@@ -86394,7 +86394,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Falló el registro de la clave de acceso: %@"
+            "value": "Falló el registro de la llave de acceso: %@"
           }
         },
         "fr": {
