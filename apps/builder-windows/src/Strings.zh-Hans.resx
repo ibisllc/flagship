@@ -244,6 +244,9 @@ https://flagshipserver.com</value>
   <data name="unlocking" xml:space="preserve">
     <value>正在解锁…</value>
   </data>
+  <data name="notAValidServerName" xml:space="preserve">
+    <value>“{0}”不是有效的服务器名称。</value>
+  </data>
   <data name="aHostedServerNamedAlreadyExists" xml:space="preserve">
     <value>已存在名为“{0}”的托管服务器。</value>
   </data>

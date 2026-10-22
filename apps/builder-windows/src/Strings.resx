@@ -322,6 +322,10 @@ The VM and its encrypted disk image are removed from this PC. </value>
     <value>Unlocking…</value>
     <comment>VM/VMInventoryStore.cs:36 (prose)</comment>
   </data>
+  <data name="notAValidServerName" xml:space="preserve">
+    <value>'{0}' is not a valid server name.</value>
+    <comment>VM/VMInventoryStore.cs:84 (prose)</comment>
+  </data>
   <data name="aHostedServerNamedAlreadyExists" xml:space="preserve">
     <value>A hosted server named '{0}' already exists.</value>
     <comment>VM/VMInventoryStore.cs:85 (prose)</comment>
