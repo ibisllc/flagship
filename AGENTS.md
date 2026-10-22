@@ -215,7 +215,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > when done. History up to 2026-10-10 is frozen verbatim in
 > `docs/archive/status-log-through-2026-10-10.md`; read it for the why behind
 > anything below. Keep this section short: it loads into every agent session.
-> Last updated **2026-10-21**.
+> Last updated **2026-10-22**.
 
 ### Launch
 
@@ -326,21 +326,19 @@ of the last check here: **not yet checked**.
 
 ### In flight
 
-- **Multilingual (2026-10-21, branch `feat/multilingual`, local, not pushed; `docs/i18n.md`).**
-  Six languages (es, fr, de, pt-BR, ja, zh-Hans) are `"status": "ga"` in `i18n/locales.json` and their native
-  outputs are built and committed for: the website, the webapp PWA (shell v157; `tr()`/`trn()`,
-  `scripts/i18n-pwa.mjs`, catalogs fetched per language), the pages the box serves itself (`t(lang, …)` from
-  Accept-Language, `scripts/i18n-box.mjs`; a box serves them only after an endorsed release), Android + Wear,
-  iOS + Watch + widgets + Info.plist, the Mac/Windows/Linux Studios and the APNs sentences (`loc-key`).
-  `npm run i18n` is the gate, `npm run i18n:status` the coverage; rebuild after editing English with the
-  surface's script (`i18n-web|android|ios|windows|linux|pwa|box.mjs build`). The translations are machine
-  drafts that no native reviewer has seen (`i18n/REVIEW.md`; `i18n/glossary.json` fixes the terms): recovery,
-  pairing and unlock wording is the first thing to review. Thrown error messages, the box's JSON API errors,
-  signed security-notice text, the legal pages and emails to Flagship staff stay English by design. Not yet
-  exercised: the PWA in a browser with a translated language, the box pages on a real box, and device builds:
-  the iOS app at HEAD fails `ContentView.swift:149` type-checking with this Xcode (also on the base commit);
-  Windows was checked with a Roslyn pass and the .NET 8 tests, not a WPF build. Store screenshots and banners per
-  language are not made yet. Rerun `harvest` (iOS) / `extract` (Android, PWA, box) after editing any English text.
+- **Multilingual (2026-10-22, branch `feat/multilingual`, pushed; `docs/i18n.md`).**
+  Six languages (es, fr, de, pt-BR, ja, zh-Hans) are `"status": "ga"` in `i18n/locales.json` with native outputs committed for
+  the website, the webapp PWA (shell **v158**; catalogs fetched by content-hashed URL), the box pages (served after an endorsed
+  release), Android + Wear, iOS + Watch + widgets + Info.plist, the three Studios and the APNs sentences. `npm run i18n` is the
+  gate (placeholders, markup, glossary, plural-argument placement, stale English on name-keyed surfaces via
+  `translated-from.json`, freshness of every generated file). Translations are machine drafts; a 2026-10-22 review pass read every
+  recovery, pairing, unlock, backup, wipe and admin string in all six languages and fixed meaning errors, two placeholder swaps
+  and the glossary (`i18n/REVIEW.md` still wants a native reviewer before store screenshots). Found and fixed on the branch:
+  the service worker never registered (classic `<script>` importing a module), Wear OS shipped no translations, webapp
+  dialogs/subtitles and some iOS errors were English. Exercised: the webapp in Chromium in fr/ja/de. Not yet: box pages on a
+  real box, device builds (iOS fails `ContentView.swift:149` with the newest Xcode, also on the base commit; Android and the
+  WPF app were not compiled here). Store assets: brief v2 in `docs/store-assets/`, awaiting the owner. Handoff notes for
+  packaging: `docs/store-assets/HANDOFF-DELETE-ME.md`.
 - **Final-round device test fixes (2026-10-19; on `origin/main`).**
   The Windows device test (`device-results/FINAL-ROUND-windows-2026-10-19.md` on
   `device-results/windows-2026-10-17`) found these; the fixes are merged:
