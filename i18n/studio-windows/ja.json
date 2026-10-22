@@ -77,6 +77,7 @@
   "unknownProvisioningMode": "不明なプロビジョニングモード「{0}」です。",
   "unknownNetworkMode": "不明なネットワークモード「{0}」です。",
   "unlocking": "ロック解除中…",
+  "notAValidServerName": "「{0}」は有効なサーバー名ではありません。",
   "aHostedServerNamedAlreadyExists": "「{0}」というホスト型サーバーはすでに存在します。",
   "noHostedServerNamed": "「{0}」というホスト型サーバーはありません。",
   "unknownVmState": "不明な VM の状態「{0}」です。",

@@ -311,6 +311,10 @@
     "en": "Unlocking…",
     "ctx": "VM/VMInventoryStore.cs:36 (prose)"
   },
+  "notAValidServerName": {
+    "en": "'{0}' is not a valid server name.",
+    "ctx": "VM/VMInventoryStore.cs:84 (prose)"
+  },
   "aHostedServerNamedAlreadyExists": {
     "en": "A hosted server named '{0}' already exists.",
     "ctx": "VM/VMInventoryStore.cs:85 (prose)"

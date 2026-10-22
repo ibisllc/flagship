@@ -244,6 +244,9 @@ Die VM und ihr verschlüsseltes Datenträger-Image werden von diesem PC entfernt
   <data name="unlocking" xml:space="preserve">
     <value>Entsperre …</value>
   </data>
+  <data name="notAValidServerName" xml:space="preserve">
+    <value>„{0}“ ist kein gültiger Servername.</value>
+  </data>
   <data name="aHostedServerNamedAlreadyExists" xml:space="preserve">
     <value>Ein gehosteter Server namens „{0}“ existiert bereits.</value>
   </data>

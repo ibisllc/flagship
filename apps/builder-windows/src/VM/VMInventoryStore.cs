@@ -81,7 +81,7 @@ public sealed class VMStoreException : Exception
     public VMStoreException(VMStoreErrorKind kind, string name)
         : base(kind switch
         {
-            VMStoreErrorKind.InvalidName => $"'{name}' is not a valid server name.",
+            VMStoreErrorKind.InvalidName => Strings.F("notAValidServerName", name),
             VMStoreErrorKind.AlreadyExists => Strings.F("aHostedServerNamedAlreadyExists", name),
             VMStoreErrorKind.NotFound => Strings.F("noHostedServerNamed", name),
             _ => name,

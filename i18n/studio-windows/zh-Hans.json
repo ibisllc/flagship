@@ -77,6 +77,7 @@
   "unknownProvisioningMode": "未知的预配模式“{0}”。",
   "unknownNetworkMode": "未知的网络模式“{0}”。",
   "unlocking": "正在解锁…",
+  "notAValidServerName": "“{0}”不是有效的服务器名称。",
   "aHostedServerNamedAlreadyExists": "已存在名为“{0}”的托管服务器。",
   "noHostedServerNamed": "没有名为“{0}”的托管服务器。",
   "unknownVmState": "未知的虚拟机状态“{0}”。",

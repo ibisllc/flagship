@@ -77,6 +77,7 @@
   "unknownProvisioningMode": "Unbekannter Bereitstellungsmodus „{0}“.",
   "unknownNetworkMode": "Unbekannter Netzwerkmodus „{0}“.",
   "unlocking": "Entsperre …",
+  "notAValidServerName": "„{0}“ ist kein gültiger Servername.",
   "aHostedServerNamedAlreadyExists": "Ein gehosteter Server namens „{0}“ existiert bereits.",
   "noHostedServerNamed": "Es gibt keinen gehosteten Server namens „{0}“.",
   "unknownVmState": "Unbekannter VM-Zustand „{0}“.",
