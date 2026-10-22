@@ -1103,7 +1103,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "无法恢复"
+            "value": "无恢复方式"
           }
         }
       }
@@ -2918,25 +2918,25 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Clave de administrador rotada. Los demás dispositivos deben recuperarse para volver a ser administradores."
+            "value": "Clave de administrador rotada. Los demás dispositivos deben pasar por una recuperación para volver a ser administradores."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Clé d’administrateur renouvelée. Les autres appareils doivent récupérer pour retrouver le rôle d’administrateur."
+            "value": "Clé d’administrateur renouvelée. Les autres appareils doivent passer par une récupération pour retrouver le rôle d’administrateur."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Admin-Schlüssel rotiert. Andere Geräte müssen sich wiederherstellen, um wieder Admin zu sein."
+            "value": "Admin-Schlüssel rotiert. Andere Geräte brauchen eine Wiederherstellung, um wieder Admin zu sein."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Chave de administrador girada. Os outros dispositivos precisam recuperar para voltar a ser administradores."
+            "value": "Chave de administrador girada. Os outros dispositivos precisam passar por uma recuperação para voltar a ser administradores."
           }
         },
         "ja": {
@@ -14012,7 +14012,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ 行中 %@～%@ 行目"
+            "value": "%3$@ 行中 %1$@～%2$@ 行目"
           }
         },
         "zh-Hans": {
@@ -53272,7 +53272,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rétablissez votre clé d’administrateur"
+            "value": "Restaurez votre clé d’administrateur"
           }
         },
         "de": {
@@ -55316,25 +55316,25 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tu clave de administrador se rotó, pero falló al guardarla en este dispositivo. Recupera en este dispositivo para terminar. (%@)"
+            "value": "Tu clave de administrador se rotó, pero no se pudo guardar en este dispositivo. Haz una recuperación en este dispositivo para terminar. (%@)"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Votre clé d’administrateur a été renouvelée, mais son enregistrement sur cet appareil a échoué. Récupérez sur cet appareil pour terminer. (%@)"
+            "value": "Votre clé d’administrateur a été renouvelée, mais son enregistrement sur cet appareil a échoué. Lancez une récupération sur cet appareil pour terminer. (%@)"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Dein Admin-Schlüssel wurde rotiert, aber das Speichern auf diesem Gerät ist fehlgeschlagen. Stelle auf diesem Gerät wieder her, um abzuschließen. (%@)"
+            "value": "Dein Admin-Schlüssel wurde rotiert, aber das Speichern auf diesem Gerät ist fehlgeschlagen. Führe auf diesem Gerät eine Wiederherstellung durch, um abzuschließen. (%@)"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sua chave de administrador foi girada, mas salvá-la neste dispositivo falhou. Recupere neste dispositivo para concluir. (%@)"
+            "value": "Sua chave de administrador foi girada, mas não foi possível salvá-la neste dispositivo. Faça uma recuperação neste dispositivo para concluir. (%@)"
           }
         },
         "ja": {
@@ -55931,7 +55931,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Copia de seguridad en iCloud"
+            "value": "Hacer copia en iCloud"
           }
         },
         "fr": {
@@ -61384,7 +61384,7 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cada copia de seguridad es un archivo .flagship. Importar una copia en Inicio la restaura. Se abre en tus propios dispositivos sin frase de acceso."
+            "value": "Cada copia de seguridad es un archivo .flagship. Importar una copia en Inicio la restaura. Se abre en tus propios dispositivos sin código."
           }
         },
         "fr": {
