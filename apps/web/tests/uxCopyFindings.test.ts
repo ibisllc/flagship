@@ -127,12 +127,11 @@ describe("UX-D — recovery passphrase copy is de-jargoned", () => {
   });
 });
 
-describe("UX-E — short vs canonical link labels", () => {
-  it("service-detail labels the short redirect and the canonical address", () => {
+describe("UX-E — link field and canonical address", () => {
+  it("service-detail shows the editable link and the canonical address", () => {
     const src = read("views", "service-detail.js");
-    expect(src).toMatch(/redirects to your box/i);
-    // App-bound short links have no TTL — they live until the next rename.
-    expect(src).toMatch(/until you rename the service/i);
+    expect(src).toMatch(/renderLinkField/);
+    expect(src).not.toMatch(/SHORT REDIRECT/);
     expect(src).toMatch(/permanent, verifiable address/i);
   });
 });

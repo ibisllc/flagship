@@ -100,6 +100,8 @@ import { isDeviceFullyScoped } from "../lib/usersCheck.js";
 import { accountReadFetch } from "../lib/accountRead.js";
 
 import { tr } from "../lib/i18n.js";
+import { renderLinkField, bindLinkField } from "../lib/linkField.js";
+import { isAdminDevice } from "../lib/memberRoles.js";
 const COM_BASE = controlApex();
 
 /** V3 — cached service-links per serviceId for the current render. */
@@ -1082,22 +1084,8 @@ function renderWebDomainsSection(service, links) {
   // <server>.<user>.flagship.services`) — the per-box wildcard cert covers it
   // (model A′); a locally-derived `<label>.<user>` form would be a tier-2
   // name with no valid cert until shared service certs ship.
-  const shortUrl = links?.shortUrl ?? null;
   const canonical = links?.canonicalUrl ?? service.url;
   const instances = links?.instances ?? [];
-
-  const shortRow = shortUrl
-    ? `
-        <div class="row" data-section="short">
-          <a class="weight-600 mono" href="${escapeHtml(shortUrl)}" target="_blank" rel="noopener">
-            ${displayUrl(shortUrl)}
-          </a>
-          <button class="ghost" data-copy="${escapeHtml(shortUrl)}" aria-label="${tr("Copy short link")}">📋</button>
-        </div>`
-    : `
-        <div class="row" data-section="short">
-          <span class="muted-sm">${tr("No short link yet. Tap Replace to mint one.")}</span>
-        </div>`;
 
   const canonicalRow = `
     <div class="row" data-section="canonical">
@@ -1123,9 +1111,7 @@ function renderWebDomainsSection(service, links) {
       <button class="danger small" id="sd-replace-stem">${tr("Replace")}</button>
     </div>
     <div class="card">
-      <div class="label-tiny">${tr("SHORT REDIRECT")}</div>
-      <div class="muted-sm text-xs">${tr("Convenient to share — redirects to your box. Stays the same until you rename the service.")}</div>
-      ${shortRow}
+      ${links?.link ? renderLinkField({ link: links.link, shortCode: links.shortCode, admin: isAdminDevice(getSession()) }) : ""}
       <div class="mt-3">
         <div class="label-tiny">${tr("CANONICAL (SHARED BY ALL INSTANCES)")}</div>
         <div class="muted-sm text-xs">${tr("Permanent, verifiable address — share this when the exact name matters.")}</div>
@@ -1150,6 +1136,22 @@ function bindWebDomainsHandlers(service) {
     });
   });
   $("sd-replace-stem")?.addEventListener("click", () => openReplaceModal(service));
+  const lf = document.querySelector('[data-lf="root"]');
+  if (lf && currentServiceLinks?.link) {
+    const session = getSession();
+    bindLinkField(lf, {
+      username: session.username,
+      serviceId: service.serviceId,
+      link: currentServiceLinks.link,
+      shortCode: currentServiceLinks.shortCode,
+      admin: isAdminDevice(session),
+      onChanged: (link) => { currentServiceLinks = { ...currentServiceLinks, link }; },
+      onDibs: async (name) => {
+        const { enterNameDibs } = await import("./name-dibs.js");
+        await enterNameDibs({ name, kind: "link", onDone: () => renderServiceDetail(service.serviceId) });
+      },
+    });
+  }
 }
 
 /** Modal-style scare sheet for the Replace ceremony. Inline (no
@@ -1158,7 +1160,7 @@ async function openReplaceModal(service) {
   const { inlineConfirm } = await import("../lib/modal.js");
   const currentLabel = currentServiceLinks?.displayLabel ?? service.urlLabel ?? "";
   const draft = window.prompt(
-    tr("Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):", currentLabel),
+    tr("Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):", currentLabel),
     currentLabel,
   );
   if (draft === null) return; // cancelled
@@ -1173,7 +1175,7 @@ async function openReplaceModal(service) {
   const ok = await inlineConfirm({
     title: tr("Replace stem with '{0}'?", trimmed),
     message:
-      tr("Every link to this service changes immediately, including the short link. Attached external domains are unaffected. Other devices see the new URL on next refresh."),
+      tr("Every link to this service changes immediately. Attached external domains are unaffected. Other devices see the new URL on next refresh."),
     okLabel: tr("Replace"),
     danger: true,
   });
@@ -1234,9 +1236,10 @@ async function runRename(service, newLabel) {
       displayLabel: body.displayLabel,
       canonicalUrl: body.canonicalUrl,
       instances: currentServiceLinks?.instances ?? [],
-      shortUrl: body.shortUrl,
+      shortCode: body.shortCode ?? currentServiceLinks?.shortCode,
+      link: currentServiceLinks?.link,
     };
-    toast(tr("Renamed to {0}. New short link minted.", body.displayLabel));
+    toast(tr("Renamed to {0}.", body.displayLabel));
     // Re-render the section in place.
     if (currentServiceId === service.serviceId) {
       await renderServiceDetail(service.serviceId);

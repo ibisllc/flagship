@@ -495,6 +495,8 @@ const OPTIONAL_SHELL = [
   "/lib/maintainerTrust.js",
   "/lib/modal.js",
   "/lib/nameDibs.js",
+  "/lib/voiciName.js",
+  "/lib/linkField.js",
   "/views/name-dibs.js",
   "/lib/lockSweep.js",
   "/lib/accountGone.js",
