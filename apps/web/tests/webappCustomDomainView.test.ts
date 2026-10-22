@@ -39,11 +39,11 @@ describe("webapp service-detail — SET CUSTOM DOMAIN (#80)", () => {
     const body = await asset("/webapp/views/service-detail.js");
     // U+2014 em dash, byte-identical to ServiceDetailViewModel.
     expect(body).toContain(
-      "This only supports subdomains — an apex like ${fqdn} can't take a CNAME. Use ${suggested}?",
+      "This only supports subdomains — an apex like {0} can't take a CNAME. Use {1}?",
     );
     expect(body).toContain("Subdomains only");
     expect(body).toContain(
-      "This will permanently replace the current custom domain (${existing}). It can't be undone, even if the new one fails to verify.",
+      "This will permanently replace the current custom domain ({0}). It can't be undone, even if the new one fails to verify.",
     );
     // Apex test is structural (<3 labels), not a DNS check.
     expect(body).toContain('fqdn.split(".").length < 3');
@@ -56,9 +56,9 @@ describe("webapp service-detail — SET CUSTOM DOMAIN (#80)", () => {
     expect(body).toContain("startCooldownTicker");
     expect(body).toContain("point a CNAME record from it to");
     // Custom domains are a Pro feature (owner decision 2026-10-09).
-    expect(body).toContain('Custom domains come with <a href="/pro">Pro</a> (one) and Pro Max (unlimited).');
+    expect(body).toContain('Custom domains come with <a href=\\"/pro\\">Pro</a> (one) and Pro Max (unlimited).');
     // The CUSTOM DOMAIN group sits atop WEB DOMAINS once bound.
-    expect(body).toContain('<div class="label-tiny">CUSTOM DOMAIN</div>');
+    expect(body).toContain('<div class="label-tiny">${tr("CUSTOM DOMAIN")}</div>');
   });
 
   it("dropped the legacy P1.22 TXT-verify custom-domain model", async () => {

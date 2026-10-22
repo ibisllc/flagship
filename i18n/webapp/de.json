@@ -3393,5 +3393,21 @@
   "Install something a neighbour already built.": "Installiere etwas, das ein Nachbar schon gebaut hat.",
   "voi.ci/": "voi.ci/",
   "voi.ci/{0}": "voi.ci/{0}",
-  "Changed account name": "Kontonamen geändert"
+  "Changed account name": "Kontonamen geändert",
+  "Stem must be a DNS label: lowercase, [a-z0-9-], 1–40 chars, no leading/trailing hyphen.": "Der Stamm muss ein DNS-Label sein: Kleinbuchstaben, [a-z0-9-], 1–40 Zeichen, kein Bindestrich am Anfang oder Ende.",
+  "That name isn't valid (lowercase letters, digits, hyphens; 1–40 chars).": "Dieser Name ist ungültig (Kleinbuchstaben, Ziffern, Bindestriche; 1–40 Zeichen).",
+  "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):": "Zugriffs-URLs ersetzen. Dadurch werden alle Links zu diesem Dienst aktualisiert, wobei „{0}“ durch einen neuen Stamm ersetzt wird. Alle bestehenden Links funktionieren sofort nicht mehr, auch der Kurzlink. Angehängte externe Domains bleiben unberührt. Neuer Stamm (Kleinbuchstaben, Ziffern, Bindestriche; 1–40 Zeichen; kein Bindestrich am Anfang oder Ende):",
+  "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):": "Zugriffs-URLs ersetzen. Alle Links zu diesem Dienst werden aktualisiert, \"{0}\" wird durch einen neuen Stamm ersetzt. Alle bestehenden Links funktionieren sofort nicht mehr. Angehängte externe Domains bleiben unberührt. Neuer Stamm (Kleinbuchstaben, Ziffern, Bindestriche; 1–40 Zeichen; kein Bindestrich am Anfang oder Ende):",
+  "CUSTOM DOMAIN": "EIGENE DOMAIN",
+  "Copy custom domain": "Eigene Domain kopieren",
+  "Set custom domain": "Eigene Domain festlegen",
+  "SET CUSTOM DOMAIN": "EIGENE DOMAIN FESTLEGEN",
+  "Add": "Hinzufügen",
+  "Custom domains come with <a href=\"/pro\">Pro</a> (one) and Pro Max (unlimited). To add one, first point a CNAME record from it to": "Eigene Domains gehören zu <a href=\"/pro\">Pro</a> (eine) und Pro Max (unbegrenzt). Um eine hinzuzufügen, richte zuerst einen CNAME-Eintrag von ihr auf",
+  "— that proves you control it.": "— das beweist, dass du sie kontrollierst.",
+  "Subdomains only": "Nur Subdomains",
+  "This only supports subdomains — an apex like {0} can't take a CNAME. Use {1}?": "Es werden nur Subdomains unterstützt – eine Apex-Domain wie {0} kann keinen CNAME haben. {1} verwenden?",
+  "Replace custom domain?": "Eigene Domain ersetzen?",
+  "This will permanently replace the current custom domain ({0}). It can't be undone, even if the new one fails to verify.": "Dadurch wird die aktuelle eigene Domain ({0}) dauerhaft ersetzt. Das lässt sich nicht rückgängig machen, auch wenn die neue nicht verifiziert wird.",
+  "Couldn't request custom domain: {0}": "Eigene Domain konnte nicht angefordert werden: {0}"
 }

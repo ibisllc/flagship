@@ -3393,5 +3393,21 @@
   "Install something a neighbour already built.": "Instala algo que ya hizo un vecino.",
   "voi.ci/": "voi.ci/",
   "voi.ci/{0}": "voi.ci/{0}",
-  "Changed account name": "Cambió el nombre de la cuenta"
+  "Changed account name": "Cambió el nombre de la cuenta",
+  "Stem must be a DNS label: lowercase, [a-z0-9-], 1–40 chars, no leading/trailing hyphen.": "La raíz debe ser una etiqueta DNS: minúsculas, [a-z0-9-], de 1 a 40 caracteres, sin guion al principio ni al final.",
+  "That name isn't valid (lowercase letters, digits, hyphens; 1–40 chars).": "Ese nombre no es válido (minúsculas, dígitos, guiones; de 1 a 40 caracteres).",
+  "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):": "Reemplazar las URL de acceso. Esto actualizará todos los enlaces a este servicio, reemplazando «{0}» por una raíz nueva. Todos los enlaces existentes dejan de funcionar de inmediato, incluido el enlace corto. Los dominios externos que hayas asociado no se ven afectados. Raíz nueva (minúsculas, dígitos, guiones; de 1 a 40 caracteres; sin guion al principio ni al final):",
+  "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):": "Reemplazar las URL de acceso. Se actualizarán todos los enlaces a este servicio y \"{0}\" se sustituirá por una raíz nueva. Todos los enlaces existentes dejan de funcionar de inmediato. Los dominios externos que hayas asociado no se ven afectados. Raíz nueva (letras minúsculas, dígitos, guiones; 1–40 caracteres; sin guion al principio ni al final):",
+  "CUSTOM DOMAIN": "DOMINIO PERSONALIZADO",
+  "Copy custom domain": "Copiar dominio personalizado",
+  "Set custom domain": "Configurar dominio personalizado",
+  "SET CUSTOM DOMAIN": "CONFIGURAR DOMINIO PERSONALIZADO",
+  "Add": "Añadir",
+  "Custom domains come with <a href=\"/pro\">Pro</a> (one) and Pro Max (unlimited). To add one, first point a CNAME record from it to": "Los dominios personalizados vienen con <a href=\"/pro\">Pro</a> (uno) y Pro Max (ilimitados). Para añadir uno, primero apunta con un registro CNAME desde él a",
+  "— that proves you control it.": "— eso demuestra que lo controlas.",
+  "Subdomains only": "Solo subdominios",
+  "This only supports subdomains — an apex like {0} can't take a CNAME. Use {1}?": "Esto solo admite subdominios: un dominio raíz como {0} no puede tener un CNAME. ¿Usar {1}?",
+  "Replace custom domain?": "¿Reemplazar el dominio personalizado?",
+  "This will permanently replace the current custom domain ({0}). It can't be undone, even if the new one fails to verify.": "Esto sustituirá de forma permanente el dominio personalizado actual ({0}). No se puede deshacer, aunque el nuevo no llegue a verificarse.",
+  "Couldn't request custom domain: {0}": "No se pudo solicitar el dominio personalizado: {0}"
 }
