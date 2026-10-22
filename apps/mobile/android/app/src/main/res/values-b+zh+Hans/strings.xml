@@ -59,7 +59,7 @@
     <string name="remove_anyway">仍然移除</string>
     <string name="sign_out">退出登录？</string>
     <string name="signing_out_removes_this_devices_admin">退出登录会移除此设备的管理员密钥。请先备份你的账户密钥，或仍然退出登录。</string>
-    <string name="signing_out_removes_this_devices_admin_2">退出登录会移除此设备的管理员密钥。你已备份账户密钥，请妥善保管该文件及其口令短语。</string>
+    <string name="signing_out_removes_this_devices_admin_2">退出登录会移除此设备的管理员密钥。你已备份账户密钥，请妥善保管该文件及其密码短语。</string>
     <string name="sign_out_anyway">仍然退出登录</string>
     <string name="only_an_admin_device_of_this">只有此账户的管理员设备才能添加服务器。</string>
     <string name="only_an_admin_device_of_this_2">只有此账户的管理员设备才能添加设备。</string>
