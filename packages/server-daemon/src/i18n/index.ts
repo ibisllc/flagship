@@ -39,6 +39,7 @@ export function languageFor(headers: Record<string, string | string[] | undefine
     .filter((w) => w.tag && w.tag !== "*" && w.q > 0)
     .sort((a, b) => b.q - a.q || a.i - b.i);
   for (const { tag } of wanted) {
+    if (tag === "en" || tag.startsWith("en-")) return "en";
     const exact = have.find((c) => c.toLowerCase() === tag);
     if (exact) return exact;
     const primary = tag.split("-")[0];
