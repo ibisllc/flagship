@@ -93,7 +93,7 @@ public enum AppApiKeyOrder {
         do {
             key = try await signer(String(localized: "Create an API key for \(appName)"))
         } catch {
-            throw Failure(message: "Couldn't access your account key: \(UserErrorText.of(error))")
+            throw Failure(message: String(localized: "Couldn't access your account key: \(UserErrorText.of(error))"))
         }
         // A 409 (that keyId is taken) is retried once with a fresh one.
         for attempt in 0..<2 {
@@ -105,7 +105,7 @@ public enum AppApiKeyOrder {
             do {
                 signature = try key.signature(for: grant.canonicalBytes())
             } catch {
-                throw Failure(message: "Couldn't sign the key: \(UserErrorText.of(error))")
+                throw Failure(message: String(localized: "Couldn't sign the key: \(UserErrorText.of(error))"))
             }
             let r: AppApiKeyCreateResponse
             do {
