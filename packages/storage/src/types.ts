@@ -16,6 +16,7 @@ import type { ServerOrderStorage } from "./serverOrders.js";
 import type { VoiciStorage } from "./voici.js";
 import type { ServerBootKeyStorage } from "./serverBootKeys.js";
 import type { PqTrustStorage } from "./pqTrust.js";
+import type { RelayHealthStorage } from "./relayHealth.js";
 
 /**
  * v1.2 security cascade — account-type discriminator. See
@@ -1948,6 +1949,8 @@ export interface Storage {
   pqTrust: PqTrustStorage;
   /** voi.ci pages and Messages (migration 0123). */
   voici: VoiciStorage;
+  /** How proxy boxes' setup calls arrived: private relay or direct fallback (docs/outbound-proxy.md). */
+  relayHealth: RelayHealthStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────

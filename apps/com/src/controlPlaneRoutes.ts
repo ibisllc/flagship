@@ -3107,6 +3107,7 @@ export async function tryControlPlane(
               },
               server,
             ),
+          tiers: storage.tiers,
         },
         await readJson(request),
       ),

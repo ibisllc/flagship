@@ -5,6 +5,7 @@ import { InMemoryPqTrustStorage } from "./pqTrust.js";
 import { InMemoryVoiciStorage } from "./voici.js";
 import { InMemoryNameRegistryStorage, type NameRecord } from "./names.js";
 import { applyBootSuspension, type BootSuspensionOrder, type BootSuspensionState, type SuspensionOutcome } from "@flagship/protocol";
+import { InMemoryRelayHealthStorage } from "./relayHealth.js";
 import type {
   SchemaVersionRecord,
   SchemaVersionStorage,
@@ -2639,6 +2640,7 @@ export class InMemoryStorage implements Storage {
   serverBootKeys = new InMemoryServerBootKeyStorage();
   pqTrust = new InMemoryPqTrustStorage();
   voici = new InMemoryVoiciStorage();
+  relayHealth = new InMemoryRelayHealthStorage();
   demoAccountProvisioning = new InMemoryDemoAccountProvisioningStorage(
     this.usernames,
     this.deviceIdentities,

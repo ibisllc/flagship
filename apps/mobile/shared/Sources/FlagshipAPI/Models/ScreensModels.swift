@@ -100,6 +100,9 @@ public struct ServerDetailResponse: Codable, Equatable, Sendable {
     public var storage: ServerStorage? = nil
     /// The Node.js the box runs and how it checks out (RuntimeVerificationModel.swift). Absent from older daemons.
     public var runtime: RuntimeVerificationView? = nil
+    /// The box's outbound proxy and whether it works (docs/outbound-proxy.md).
+    /// Absent from older daemons: the page then hides the section.
+    public var outboundProxy: OutboundProxySummary? = nil
 }
 
 /// Owner debug access as the box reports it (docs/recipe-delivery-and-remote-install.md

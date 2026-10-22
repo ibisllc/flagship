@@ -186,7 +186,13 @@ export const STEPS: Record<string, () => Promise<unknown>> = {
     await repairRootConfig({ log });
     const env = await daemonEnv();
     if (!env.FLAGSHIP_CONTROL_PLANE_BASE_URL || !env.FLAGSHIP_SUBDOMAIN) return false;
-    return installHealthReporter({ controlPlaneBaseUrl: env.FLAGSHIP_CONTROL_PLANE_BASE_URL, serverDomain: env.FLAGSHIP_SUBDOMAIN, run, onLog: log });
+    return installHealthReporter({
+      controlPlaneBaseUrl: env.FLAGSHIP_CONTROL_PLANE_BASE_URL,
+      serverDomain: env.FLAGSHIP_SUBDOMAIN,
+      proxyCurlrcPath: join(DATA_DIR, "outbound-proxy.curlrc"),
+      run,
+      onLog: log,
+    });
   },
   "update-guard": async () => {
     // Runs as root on every boot, so a box installed before its bootstrap wrote root's config gets it on its first boot of this release.

@@ -1,6 +1,7 @@
 import { connect as netConnect, type Socket } from "node:net";
 import type { Duplex } from "node:stream";
 import { WebSocket } from "ws";
+import { outboundNet } from "../outboundProxy/outboundNet.js";
 import type { EventEmitter } from "node:events";
 import {
   closeFrame,
@@ -114,7 +115,8 @@ export interface WebSocketFactory {
 
 export const defaultWebSocketFactory: WebSocketFactory = Object.assign(
   ((url: string) => {
-    const ws = new WebSocket(url) as unknown as TunnelWebSocketLike;
+    const agent = outboundNet.agentFor(url);
+    const ws = new WebSocket(url, agent ? { agent } : {}) as unknown as TunnelWebSocketLike;
     ws.binaryType = "arraybuffer";
     return ws;
   }) as (url: string) => TunnelWebSocketLike,
@@ -936,6 +938,11 @@ export interface SupervisedTunnelClient {
   moving(): boolean;
   /** Run the hourly relay check now (tests, diagnostics). */
   checkRelayNow(): Promise<void>;
+  /**
+   * Drop the live connection and dial again now, e.g. after the box's
+   * outbound proxy changed, so the hub sees the new path.
+   */
+  reconnect(): void;
   /** Stop supervising. Cancels any pending reconnect timer + closes the live WS. */
   close(): Promise<void>;
 }
@@ -1357,6 +1364,17 @@ export function superviseTunnelClient(
     meshRelay: () => live?.meshRelay?.() ?? null,
     moving: () => moving,
     checkRelayNow: () => relayCheck(),
+    reconnect: () => {
+      if (stopped) return;
+      attempt = 0;
+      if (pendingTimer !== null) {
+        clearTimeoutFn(pendingTimer);
+        pendingTimer = null;
+        startOne();
+        return;
+      }
+      void live?.close();
+    },
     close: async () => {
       stopped = true;
       if (pendingTimer !== null) {

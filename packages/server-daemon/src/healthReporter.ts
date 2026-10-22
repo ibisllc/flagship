@@ -50,6 +50,8 @@ export function buildHealthReportScript(args: {
   nodePath?: string;
   keydEntry?: string;
   keydSocket?: string;
+  /** curl config naming the outbound proxy (docs/outbound-proxy.md), used when present. */
+  proxyCurlrcPath?: string;
 }): string {
   const base = args.controlPlaneBaseUrl.replace(/\/+$/, "");
   const domain = args.serverDomain.toLowerCase();
@@ -60,6 +62,8 @@ export function buildHealthReportScript(args: {
   const entry = args.keydEntry ?? HEALTH_KEYD_ENTRY;
   const socket = args.keydSocket ?? HEALTH_KEYD_SOCKET;
   for (const p of [key, node, entry, socket]) if (!/^\/[A-Za-z0-9._\/-]+$/.test(p)) throw new Error("unsafe key path");
+  const curlrc = args.proxyCurlrcPath ?? "/var/flagship/outbound-proxy.curlrc";
+  if (!/^\/[A-Za-z0-9._/-]+$/.test(curlrc)) throw new Error("unsafe proxy config path");
   return `#!/bin/bash
 # Flagship box health report (installed by the daemon; see healthReporter.ts).
 set -u
@@ -101,7 +105,9 @@ if [ -n "$pq" ]; then
 else
   body=$(jq -cn --arg r "$report" --arg s "$sig" '{report:$r, signature:$s}')
 fi
-curl -fsS --connect-timeout 5 --max-time 15 -X POST -H 'content-type: application/json' \\
+proxy=()
+[ -r ${curlrc} ] && proxy=(-K ${curlrc})
+curl \${proxy[@]+"\${proxy[@]}"} -fsS --connect-timeout 5 --max-time 15 -X POST -H 'content-type: application/json' \\
   --data "$body" "${base}/api/server/${domain}/health" >/dev/null 2>&1 || true
 `;
 }
@@ -130,6 +136,7 @@ WantedBy=timers.target
 export interface HealthReporterInstallOptions {
   controlPlaneBaseUrl: string;
   serverDomain: string;
+  proxyCurlrcPath?: string;
   run: (cmd: string, args: string[]) => Promise<unknown>;
   read?: (path: string) => Promise<string | null>;
   write?: (path: string, content: string, mode: number) => Promise<void>;
