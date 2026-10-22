@@ -5526,7 +5526,7 @@
     "ctx": "ui/screens/ProvidersScreen.kt:65 (title=)"
   },
   "plug_in_your_own_keys_flagship": {
-    "en": "Plug in your own keys. Flagship never proxies LLM traffic — calls go direct from your server to the provider you pick.",
+    "en": "Plug in your own keys. Your server calls the provider you pick, encrypted end to end. By default the call goes through Flagship's relay, so the provider sees Flagship's address, not yours.",
     "ctx": "ui/screens/ProvidersScreen.kt:67 (subtitle=)"
   },
   "viewfinder": {

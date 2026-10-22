@@ -1330,7 +1330,7 @@
     <string name="google_ai">Google AI</string>
     <string name="ollama_local">Ollama (local)</string>
     <string name="ai_providers">AI providers</string>
-    <string name="plug_in_your_own_keys_flagship">Plug in your own keys. Flagship never proxies LLM traffic — calls go direct from your server to the provider you pick.</string>
+    <string name="plug_in_your_own_keys_flagship">Plug in your own keys. Your server calls the provider you pick, encrypted end to end. By default the call goes through Flagship\'s relay, so the provider sees Flagship\'s address, not yours.</string>
     <string name="viewfinder">Viewfinder</string>
     <string name="camera_permission_required_to_scan">Camera permission required to scan.</string>
     <string name="cloud_recovery">Cloud recovery</string>

@@ -2303,25 +2303,25 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Úsalo solo si un dispositivo puede haberse perdido o robado. Sustituye tu clave de administrador en todas partes y QUITA el rol de administrador a todos los demás dispositivos: tendrán que recuperarlo. No se puede deshacer."
+            "value": "Úsalo solo si un dispositivo puede haberse perdido o robado. Sustituye tu clave de administrador en todas partes y QUITA el rol de administrador a todos los demás dispositivos: tendrán que pasar por una recuperación para recuperarlo. No se puede deshacer."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "À n’utiliser que si un appareil a pu être perdu ou volé. Cela remplace votre clé d’administrateur partout et RETIRE le rôle d’administrateur de tous les autres appareils : ils devront récupérer pour le retrouver. Irréversible."
+            "value": "À n’utiliser que si un appareil a pu être perdu ou volé. Cela remplace votre clé d’administrateur partout et RETIRE le rôle d’administrateur de tous les autres appareils : ils devront passer par une récupération pour le retrouver. Irréversible."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nutze das nur, wenn ein Gerät verloren gegangen oder gestohlen sein könnte. Es ersetzt deinen Admin-Schlüssel überall und ENTZIEHT allen anderen Geräten die Admin-Rechte – sie müssen sich wiederherstellen, um sie zurückzuerhalten. Das lässt sich nicht rückgängig machen."
+            "value": "Nutze das nur, wenn ein Gerät verloren gegangen oder gestohlen sein könnte. Es ersetzt deinen Admin-Schlüssel überall und ENTZIEHT allen anderen Geräten die Admin-Rechte – sie brauchen eine Wiederherstellung, um sie zurückzuerhalten. Das lässt sich nicht rückgängig machen."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Use apenas se um dispositivo puder ter sido perdido ou roubado. Isso substitui sua chave de administrador em todos os lugares e REMOVE o papel de administrador de todos os outros dispositivos — eles precisarão recuperar para readquiri-lo. Não pode ser desfeito."
+            "value": "Use apenas se um dispositivo puder ter sido perdido ou roubado. Isso substitui sua chave de administrador em todos os lugares e REMOVE o papel de administrador de todos os outros dispositivos — eles precisarão passar por uma recuperação para readquiri-lo. Não pode ser desfeito."
           }
         },
         "ja": {
@@ -2877,25 +2877,25 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Si un dispositivo puede haberse perdido o robado, rota tu clave de administrador. Pasa a ser la única clave de administrador; todos los demás dispositivos pierden el rol de administrador hasta que se recuperen."
+            "value": "Si un dispositivo puede haberse perdido o robado, rota tu clave de administrador. Pasa a ser la única clave de administrador; todos los demás dispositivos pierden el rol de administrador hasta que pasen por una recuperación."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Si un appareil a pu être perdu ou volé, renouvelez votre clé d’administrateur. Elle devient la seule clé d’administrateur ; tous les autres appareils perdent le rôle d’administrateur jusqu’à ce qu’ils récupèrent."
+            "value": "Si un appareil a pu être perdu ou volé, renouvelez votre clé d’administrateur. Elle devient la seule clé d’administrateur ; tous les autres appareils perdent le rôle d’administrateur jusqu’à ce qu’ils passent par une récupération."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wenn ein Gerät verloren gegangen oder gestohlen sein könnte, rotiere deinen Admin-Schlüssel. Er wird zum einzigen Admin-Schlüssel; alle anderen Geräte verlieren die Admin-Rechte, bis sie sich wiederherstellen."
+            "value": "Wenn ein Gerät verloren gegangen oder gestohlen sein könnte, rotiere deinen Admin-Schlüssel. Er wird zum einzigen Admin-Schlüssel; alle anderen Geräte verlieren die Admin-Rechte, bis sie eine Wiederherstellung durchlaufen."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Se um dispositivo puder ter sido perdido ou roubado, gire sua chave de administrador. Ela passa a ser a única chave de administrador; todos os outros dispositivos perdem o papel de administrador até recuperarem."
+            "value": "Se um dispositivo puder ter sido perdido ou roubado, gire sua chave de administrador. Ela passa a ser a única chave de administrador; todos os outros dispositivos perdem o papel de administrador até passarem por uma recuperação."
           }
         },
         "ja": {
@@ -16642,7 +16642,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "已擦除并重新开始账户"
+            "value": "已擦除账户并重新开始"
           }
         }
       }
@@ -33135,13 +33135,13 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cualquiera con esta clave puede leer todo lo que hay en este servidor mientras esté activo."
+            "value": "Cualquiera con esta clave puede leer todo lo que hay en este servidor mientras esté activa."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Toute personne disposant de cette clé peut lire tout ce qui se trouve sur ce serveur tant qu’il est actif."
+            "value": "Toute personne disposant de cette clé peut lire tout ce qui se trouve sur ce serveur tant qu’elle est active."
           }
         },
         "de": {
@@ -33153,7 +33153,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Qualquer pessoa com esta chave pode ler tudo neste servidor enquanto ele estiver ativo."
+            "value": "Qualquer pessoa com esta chave pode ler tudo neste servidor enquanto ela estiver ativa."
           }
         },
         "ja": {
@@ -60605,13 +60605,13 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Un solo Face ID aprueba unas copias de seguridad de aproximadamente un año. El servidor puede sellar copias nuevas con ellas, pero nunca abrir las antiguas."
+            "value": "Un solo Face ID aprueba alrededor de un año de copias de seguridad. Con esa aprobación, el servidor puede sellar copias nuevas, pero nunca abrir las antiguas."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Un seul Face ID approuve environ un an de sauvegardes. Le serveur peut sceller de nouvelles sauvegardes avec elles, jamais ouvrir les anciennes."
+            "value": "Un seul Face ID approuve environ un an de sauvegardes. Grâce à cette approbation, le serveur peut sceller de nouvelles sauvegardes, mais jamais ouvrir les anciennes."
           }
         },
         "de": {
@@ -60623,7 +60623,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Um Face ID aprova cerca de um ano de backups. O servidor pode selar novos backups com elas, mas nunca abrir os antigos."
+            "value": "Um Face ID aprova cerca de um ano de backups. Com essa aprovação, o servidor pode selar backups novos, mas nunca abrir os antigos."
           }
         },
         "ja": {
@@ -76314,7 +76314,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cela révoque l’accès du dispositif au compte. Son nom d’affichage n’est jamais envoyé en clair au plan de contrôle de Flagship."
+            "value": "Cela révoque l’accès de l’appareil au compte. Son nom d’affichage n’est jamais envoyé en clair au plan de contrôle de Flagship."
           }
         },
         "de": {
