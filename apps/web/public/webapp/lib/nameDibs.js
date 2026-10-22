@@ -17,6 +17,7 @@ import { announcementCard } from "./uikit.js";
 import { flagIcon } from "./icons.js";
 import { get as profileGet, set as profileSet } from "./profilesStore.js";
 
+import { tr } from "./i18n.js";
 const TAG_INITIATE = "flagship/name-dibs-initiate/v1";
 const TAG_VERIFY = "flagship/name-dibs-verify/v1";
 const enc = (s) => new TextEncoder().encode(s);
@@ -85,7 +86,7 @@ export async function startDibsClaim(args, deps = {}) {
     issuedAt: (deps.now || Date.now)(),
   };
   const sig = await args.signWithIrk(args.umk, canonicalDibsInitiateBytes(request));
-  return post("/api/name-dibs/initiate", { request, signature: toHex(sig) }, deps);
+  return post("/api/name-dibs/initiate", { request, signature: toHex(sig), ...(args.kind === "link" ? { kind: "link" } : {}) }, deps);
 }
 
 /**
@@ -102,7 +103,7 @@ export async function verifyDibsClaim(args, deps = {}) {
     issuedAt: (deps.now || Date.now)(),
   };
   const sig = await args.signWithIrk(args.umk, canonicalDibsVerifyBytes(request));
-  return post("/api/name-dibs/verify", { request, signature: toHex(sig) }, deps);
+  return post("/api/name-dibs/verify", { request, signature: toHex(sig), ...(args.kind === "link" ? { kind: "link" } : {}) }, deps);
 }
 
 /** Pure: show the Home dibs notice iff the window is open and this device
@@ -148,9 +149,9 @@ export async function renderDibsBanner({ onClaim, deps } = {}) {
   host.id = DIBS_BANNER_ID;
   host.innerHTML = announcementCard({
     icon: flagIcon,
-    title: "Own a .com? Claim the matching name",
-    message: `Until ${formatDibsDate(w.end)}, a name that matches a registered .com is held for whoever controls that domain.`,
-    ctaLabel: "Claim your .com name",
+    title: tr("Own a .com? Claim the matching name"),
+    message: tr("Until {0}, a name that matches a registered .com is held for whoever controls that domain.", formatDibsDate(w.end)),
+    ctaLabel: tr("Claim your .com name"),
     dismissible: true,
     tone: "teal",
   });
