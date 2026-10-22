@@ -226,7 +226,7 @@ export async function runApprove(row, deps = {}) {
   // still signs with the owner IRK. Legacy accounts sign everything with the IRK.
   const sign = deps.signWithIrk || sensitiveSigner();
   if (!session?.umk || typeof sign !== "function") {
-    setRowError(row.requestId, "unlock the webapp first");
+    setRowError(row.requestId, tr("Unlock the webapp first."));
     return { ok: false, error: "locked" };
   }
 
