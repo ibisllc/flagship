@@ -40,11 +40,13 @@ import type {
   SecretMailboxStorage,
   SecretMailboxPurpose,
   ServerOrderStorage,
+  TierStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, bytesToHex, hexToBytes } from "./hex.js";
 import { healthForPods, type BoxHealthReport } from "./serverHealth.js";
 import { readServerOrder } from "./serverOrder.js";
+import { effectiveTierOf } from "./meter.js";
 import {
   forbidden,
   malformed,
@@ -90,6 +92,9 @@ export interface PodInventoryDeps {
    *  failure to compute it leaves it out of the reply and the box polls as it
    *  always did. */
   doorbell?: (server: { serverDomain: string; username: string; identityPubKeyHex: string }) => Promise<unknown>;
+  /** The account's plan, returned in the daemon-status reply so a box can
+   *  refuse Pro-only owner orders (docs/outbound-proxy.md "Pro only"). */
+  tiers?: TierStorage;
   now?: () => number;
 }
 
@@ -722,11 +727,14 @@ export async function handlePostDaemonStatus(
 
   // The owner's server order rides back to the box (docs/server-order.md); the
   // box re-verifies it under its pinned authority before using it.
-  const [serverOrder, doorbell] = await Promise.all([
+  const [serverOrder, doorbell, tier] = await Promise.all([
     deps.serverOrders
       ? readServerOrder(deps.serverOrders, server.username).catch(() => null)
       : Promise.resolve(null),
     deps.doorbell ? deps.doorbell(server).catch(() => undefined) : Promise.resolve(undefined),
+    deps.tiers
+      ? effectiveTierOf(deps.tiers, server.username, (deps.now ?? (() => Date.now()))()).catch(() => null)
+      : Promise.resolve(null),
   ]);
-  return ok({ ok: true, serverOrder, ...(doorbell ? { doorbell } : {}) });
+  return ok({ ok: true, serverOrder, ...(doorbell ? { doorbell } : {}), ...(tier ? { tier } : {}) });
 }

@@ -37,6 +37,7 @@ import {
 } from "./policy.js";
 import { startProxyServer, startTcpForwarder, type ProxyServerHandle } from "./proxy.js";
 import { setSandboxNetworking } from "./sandboxNetworking.js";
+import { outboundNet } from "../outboundProxy/outboundNet.js";
 
 export const DEFAULT_EGRESS_PORTS: FirewallPorts = { tls: 15443, http: 15080, dns: 15053 };
 /** Host data services an app or staging copy may reach (Postgres). */
@@ -224,6 +225,7 @@ export class EgressGateway {
     return {
       allow: (s: string, h: string) => this.allowSync(s, h),
       onDenied: (s: string, h: string | null, k: string) => this.denied(s, h, k),
+      dialViaProxy: (h: string, p: number) => (outboundNet.current() ? outboundNet.connectTcp(h, p) : null),
       track: (c: { src: string; host: string; close: () => void }) => {
         this.live.add(c);
         return () => {

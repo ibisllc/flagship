@@ -358,6 +358,7 @@
 //       every fourth round once it has failed too (lib/liveSync.js).
 //  v154: a server's Home row no longer lists "leads <app>"; only the leader is marked.
 //  v155: finishing the first-run wizard enters Home (it showed the pre-sign-in panel until a reload).
+//  v174: feat/outbound-proxy only: feat/marketplace's v171 plus the outbound-proxy setting.
 //  v171: feat/marketplace only: feat/UX's shell plus the marketplace, tier status, allowance, install, developer views and the Pro "Separate list on each server" switch (lib/listScope.js); a version above its parent's, bump past the parent's on rebase.
 //  v170: feat/UX: the webapp in six languages (lib/i18n.js tr/trn, lib/i18nLocales.js; each catalog
 //       i18n/<lang>.json?v=<hash> is fetched per language; Traditional-Chinese and English-first browsers
@@ -377,7 +378,7 @@
 //  v159: an offline recipe signs a commitment to its workload key (offline-secrets).
 //  v158: an admin sees a pending recovery and can reject it (re-pair veto).
 //  v157: Backups on other servers are no longer offered at create time or in Backups; the notice lock lets the two boot-unlock writes through.
-const SHELL_VERSION = "v171";
+const SHELL_VERSION = "v174";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -434,6 +435,7 @@ const OPTIONAL_SHELL = [
   "/lib/serverOrder.js",
   "/lib/debugAccess.js",
   "/lib/freshUnlock.js",
+  "/lib/boxProxy.js",
   "/lib/totp.js",
   "/lib/edToMont.js",
   "/lib/bootApproval.js",

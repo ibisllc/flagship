@@ -158,6 +158,8 @@ async function cmdUserData(rest: string[]): Promise<void> {
     swkHex: loaded.swkHex,
     offlineSecrets: loaded.offlineSecrets,
     debugGrant: loaded.debugGrant,
+    outboundProxy: loaded.outboundProxy,
+    outboundProxyCredentials: loaded.outboundProxyCredentials,
     // Dev / e2e diagnosis only (--debug-ssh-key[-file]). The owner's debug
     // grant never feeds this: its key is let in by the box itself, with an
     // expiry, after the box verifies the grant.
@@ -215,6 +217,8 @@ async function cmdPrepare(rest: string[]): Promise<void> {
     swkHex: loaded.swkHex,
     offlineSecrets: loaded.offlineSecrets,
     debugGrant: loaded.debugGrant,
+    outboundProxy: loaded.outboundProxy,
+    outboundProxyCredentials: loaded.outboundProxyCredentials,
     // Dev / e2e diagnosis only (--debug-ssh-key[-file]). The owner's debug
     // grant never feeds this: its key is let in by the box itself, with an
     // expiry, after the box verifies the grant.

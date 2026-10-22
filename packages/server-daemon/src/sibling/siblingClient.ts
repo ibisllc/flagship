@@ -21,6 +21,7 @@
  */
 
 import { WebSocket } from "ws";
+import { outboundNet } from "../outboundProxy/outboundNet.js";
 import type { Bytes, Keypair, PodIdentityBinding } from "@flagship/protocol";
 import {
   startSyncConnection,
@@ -282,7 +283,8 @@ export function startPersistentSiblingClient(
 }
 
 function defaultWsFactory(url: string): WsLike {
-  const ws = new WebSocket(url);
+  const agent = outboundNet.agentFor(url);
+  const ws = new WebSocket(url, agent ? { agent } : {});
   return ws as unknown as WsLike;
 }
 

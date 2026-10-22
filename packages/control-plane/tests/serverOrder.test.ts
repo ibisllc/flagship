@@ -82,6 +82,32 @@ describe("POST /api/accounts/<u>/server-order", () => {
     expect((beat.body as { serverOrder?: { order: ServerOrder } }).serverOrder?.order.stks).toEqual(order);
   });
 
+  it("tells the box its account's plan, so it can refuse Pro-only orders", async () => {
+    const h = await harness();
+    const report = {
+      serverDomain: `s0.${U}.flagship.services`,
+      certSha256: null,
+      certValidUntil: null,
+      certIssuer: null,
+      appsServed: [],
+      nonce: "n2",
+      issuedAt: NOW,
+    };
+    const records = new Map([[U, { username: U, tier: "hobby" as const, currentPeriodEnd: NOW + 1, updatedAt: 1 }]]);
+    const tiers = { get: async (u: string) => records.get(u), put: async () => {} };
+    const beat = (t: typeof tiers | undefined, nonce: string) => {
+      const r = { ...report, nonce };
+      return handlePostDaemonStatus(
+        { daemonStatus: h.storage.daemonStatus, servers: h.storage.servers, routing: h.storage.routing, ...(t ? { tiers: t } : {}), now: () => NOW },
+        { request: r, signature: hex(signDaemonStatusReport(r, h.stks[0]!)) },
+      );
+    };
+    expect(((await beat(tiers, "a")).body as { tier?: string }).tier).toBe("hobby");
+    records.set(U, { username: U, tier: "hobby", currentPeriodEnd: NOW - 1, updatedAt: 1 });
+    expect(((await beat(tiers, "b")).body as { tier?: string }).tier).toBe("free");
+    expect("tier" in ((await beat(undefined, "c")).body as object)).toBe(false);
+  });
+
   it("rides /stream, and a reorder answers a held stream at once", async () => {
     const h = await harness();
     const inv = { daemonStatus: h.storage.daemonStatus, servers: h.storage.servers, routing: h.storage.routing, serverOrders: h.storage.serverOrders, now: () => NOW };

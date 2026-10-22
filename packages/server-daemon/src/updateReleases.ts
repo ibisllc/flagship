@@ -4,6 +4,7 @@ import type { ReleaseEndorsement } from "@ibisllc/maintainers";
 import { MAINTAINER_PINNED_MANDATE_HASH } from "@flagship/protocol";
 import { verifyEndorsementChainAgainstGit, verifyMaintainersFolder, type ReleaseStatus } from "./releaseVerifier.js";
 import { maintainersStatusFromRef } from "./selfUpdateReleaseGate.js";
+import { outboundNet } from "./outboundProxy/outboundNet.js";
 
 /**
  * The releases this box could move to, worked out by the box itself so the
@@ -67,6 +68,7 @@ export function buildReleaseCatalog(opts: ReleaseCatalogOptions): ReleaseCatalog
     (async (args, timeoutMs = 30_000) => {
       try {
         const { stdout } = await execFileP("git", ["-C", opts.repoPath, ...args], {
+          env: outboundNet.childEnv(),
           timeout: timeoutMs,
           maxBuffer: 16 * 1024 * 1024,
         });
