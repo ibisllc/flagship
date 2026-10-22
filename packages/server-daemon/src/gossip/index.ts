@@ -29,7 +29,7 @@ import {
   urlControllerRouteClaimer,
 } from "./routeClaimer.js";
 import { buildRouteNudgeHandler, type CertPrewarm } from "./routeNudge.js";
-import { SiblingView } from "./siblingView.js";
+import { mergeSiblings, SiblingView, type ViewMember } from "./siblingView.js";
 
 /** The FULL leadership map a `/api/leads` reader serves. */
 export interface LeadsSnapshot {
@@ -113,6 +113,11 @@ export interface WireGossipDeps {
   certPrewarm?: CertPrewarm;
   /** The gossip key's operations from the key custodian (keyd holds the key; the daemon never sees it). */
   gossipCrypto?: GossipCrypto;
+  /**
+   * Servers learned from `.com`'s server list and a direct ask (see
+   * GossipLoopDeps.extraSiblings). Re-read each round.
+   */
+  extraSiblings?: () => ViewMember[];
   /** Test seams. */
   cgk?: Uint8Array;
   intervalMs?: number;
@@ -214,6 +219,7 @@ export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult
     ...(deps.certPrewarm ? { certPrewarm: deps.certPrewarm } : {}),
     readSelf,
     rankOf,
+    ...(deps.extraSiblings ? { extraSiblings: deps.extraSiblings } : {}),
     broadcastUrl,
     intervalMs: deps.intervalMs ?? ANNOUNCE_INTERVAL_MS,
     livenessWindowMs: deps.livenessWindowMs ?? LIVENESS_WINDOW_MS,
@@ -228,9 +234,12 @@ export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult
   const routeNudgeHandler = buildRouteNudgeHandler({
     user: deps.user,
     serverFqdn: deps.serverFqdn,
-    birthDate: deps.birthDate,
+    birthDate: deps.extraSiblings ? 0 : deps.birthDate,
     listServiceSlugs: deps.listServiceSlugs,
-    liveSiblings: () => view.liveMembers((deps.now ?? (() => Date.now()))(), rankOf),
+    liveSiblings: () => {
+      const gossiped = view.liveMembers((deps.now ?? (() => Date.now()))(), rankOf);
+      return deps.extraSiblings ? mergeSiblings(gossiped, deps.extraSiblings()) : gossiped;
+    },
     selfOrderRank: () => rankOf(deps.identityPubHex),
     claimer,
     fqdnForService,
