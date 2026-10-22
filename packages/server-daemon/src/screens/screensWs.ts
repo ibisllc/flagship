@@ -16,6 +16,7 @@
 import type { Socket } from "node:net";
 import { WebSocketServer, type WebSocket as WsSocket } from "ws";
 import type { PairedSessionGate } from "../alertInboxHttp.js";
+import { companionDenied } from "../ownerOnlyGate.js";
 import type {
   BrowserManager,
   InputEvent,
@@ -34,6 +35,8 @@ const wss = new WebSocketServer({ noServer: true });
 
 export interface ScreensWsDeps {
   gate: PairedSessionGate;
+  /** A companion (Remote) token may read the event stream, never drive a build or a browser tab. */
+  isCompanion?: (req: HttpRequest) => boolean;
   vibeCodeRegistry?: VibeCodeSessionRegistry | null;
   browser?: BrowserManager | null;
   tabRegistry?: TabRegistry | null;
@@ -87,7 +90,7 @@ function acceptVibeCodeStream(
     headers: args.headers,
     body: Buffer.alloc(0),
   };
-  const denied = deps.gate.check(fakeHttpReq);
+  const denied = deps.gate.check(fakeHttpReq) ?? (deps.isCompanion?.(fakeHttpReq) ? companionDenied() : null);
   if (denied) {
     rejectUpgrade(args.socket, denied.status, "unauthorized");
     return true;
@@ -242,7 +245,7 @@ function acceptBrowserTabStream(
     headers: args.headers,
     body: Buffer.alloc(0),
   };
-  const denied = deps.gate.check(fakeHttpReq);
+  const denied = deps.gate.check(fakeHttpReq) ?? (deps.isCompanion?.(fakeHttpReq) ? companionDenied() : null);
   if (denied) {
     rejectUpgrade(args.socket, denied.status, "unauthorized");
     return true;

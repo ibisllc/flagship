@@ -168,6 +168,19 @@ export class FilePairedSessionStore implements PairedSessionGate {
     return n;
   }
 
+  /** Drop every companion (Remote) session, keeping the owner's. Returns how many went. */
+  async removeCompanions(): Promise<number> {
+    let n = 0;
+    for (const [token, row] of this.byToken) {
+      if (row.companion === true) {
+        this.byToken.delete(token);
+        n++;
+      }
+    }
+    if (n > 0) await this.flush();
+    return n;
+  }
+
   list(): Array<{ token: string; addedAt: number; companion?: true; expiresAt?: number }> {
     return [...this.byToken.entries()].map(([token, info]) => ({
       token,

@@ -115,6 +115,7 @@ import {
 import { buildRunMigration } from "./runMigration.js";
 import { buildScreensHttp } from "./screens/screensHttp.js";
 import { buildAppBackupHttpHandlers } from "./serviceBackupHttp.js";
+import { ownerOnlyGate } from "./ownerOnlyGate.js";
 import { buildAppStatusReader } from "./appStatus.js";
 import { buildActivityResolver } from "./serviceActivity.js";
 import { buildScreensUpgradeHandler } from "./screens/screensWs.js";
@@ -996,6 +997,16 @@ async function main(): Promise<void> {
   // ---- Paired-session store (phone-paired browser bearer tokens) ----
   const pairedSessions = new FilePairedSessionStore(defaultPairedSessionPath(dataDir));
   await pairedSessions.load();
+  // SEC-AUTH-001: companion tokens issued before the owner-only build gate
+  // could build and deploy; end them once, on the first boot of this code.
+  {
+    const marker = join(dataDir, "companion-sessions-revoked.v1");
+    if (!existsSync(marker)) {
+      const n = await pairedSessions.removeCompanions();
+      await writeFileDurable(marker, `${new Date().toISOString()}\n`);
+      if (n > 0) console.warn(`[daemon] ended ${n} companion session(s) issued before the owner-only build gate`);
+    }
+  }
 
   // ---- Subscriber registry (per-app FQDN allowlist for update-pack pulls) ----
   const subscriberRegistry = new FileSubscriberRegistry(
@@ -1980,7 +1991,7 @@ async function wireBrowserBundle(deps: {
       cdpEndpoint,
       dataDir: deps.dataDir,
       alertInbox: deps.alertInbox,
-      pairedSessionGate: deps.pairedSessions,
+      pairedSessionGate: ownerOnlyGate(deps.pairedSessions, deps.pairedSessions),
     });
     console.log(`[daemon] browser bundle online (CDP ${cdpEndpoint})`);
     return bundle;
@@ -2114,7 +2125,7 @@ function wirePreRuntimeHandlers(deps: {
     gate: deps.pairedSessions,
   });
   const identityRotateHandle = buildIdentityRotateHandlers({
-    gate: deps.pairedSessions,
+    gate: ownerOnlyGate(deps.pairedSessions, deps.pairedSessions),
     pendingPath: defaultPendingIdentityPath(deps.dataDir),
   });
 
@@ -2573,7 +2584,7 @@ async function wireRuntimeSurfaces(deps: {
     : undefined;
   const vibeCodeHandle = buildVibeCodeHttpHandlers({
     registry: vibeRegistry,
-    gate: pairedSessions,
+    gate: ownerOnlyGate(pairedSessions, pairedSessions),
     username,
     serverFqdn: env.serverFqdn,
     deploySession,
@@ -2752,7 +2763,7 @@ async function wireRuntimeSurfaces(deps: {
     runtime.addHandler(
       buildBuildModesHttpHandlers({
         orchestrator: buildOrchestrator,
-        gate: pairedSessions,
+        gate: ownerOnlyGate(pairedSessions, pairedSessions),
         credentials: llmCredentials,
       }),
     );
@@ -3521,12 +3532,16 @@ async function wireRuntimeSurfaces(deps: {
   // The archive app-backup/start names; without this every client's fetch 404'd.
   if (runtime.appBackup) {
     runtime.addHandler(
-      buildAppBackupHttpHandlers({ backups: runtime.appBackup, gate: sharesBundle?.gate ?? pairedSessions }),
+      buildAppBackupHttpHandlers({
+        backups: runtime.appBackup,
+        gate: ownerOnlyGate(sharesBundle?.gate ?? pairedSessions, pairedSessions),
+      }),
     );
   }
   runtime.addUpgradeHandler(
     buildScreensUpgradeHandler({
       gate: sharesBundle?.gate ?? pairedSessions,
+      isCompanion: (req) => pairedSessions.isCompanionRequest(req),
       vibeCodeRegistry: deploySession ? vibeRegistry : null,
       browser: browserBundle?.browser ?? null,
       tabRegistry: browserBundle?.tabRegistry ?? null,
