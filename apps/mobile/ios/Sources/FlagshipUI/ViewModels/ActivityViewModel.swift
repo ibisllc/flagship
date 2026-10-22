@@ -174,6 +174,7 @@ public enum BoxEventLabels {
         "share.signed-in": String(localized: "A shared person signed in"),
         "server.update": String(localized: "Server updated by a co-manager"),
         "server.state.corrupt": String(localized: "This server found a damaged settings file and locked it down"),
+        "access.lists.merged": String(localized: "Back to one access list"),
     ]
 
     /// The row's title, or nil when the entry isn't worth a row (the log also
@@ -200,6 +201,7 @@ public enum BoxEventLabels {
         if key.hasPrefix("server.disk") { return "internaldrive.fill" }
         if key.hasPrefix("app.") { return "app.badge.fill" }
         if key.hasPrefix("share.") { return "person.2.fill" }
+        if key.hasPrefix("access.") { return "person.badge.key.fill" }
         return "circle.fill"
     }
 }

@@ -122,6 +122,7 @@ final class SignOutPolicyTests: XCTestCase {
         var openedRecovery = false
         let _ = SettingsScreen(
             username: "u",
+            tier: .idle,
             controlDevices: .loaded([]),
             trustedDevices: .loaded([]),
             onSignOut: { XCTFail("a blocked screen must never be handed a live wipe") },

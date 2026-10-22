@@ -30,6 +30,7 @@ sealed interface DeepLink {
     /** "Create app here" on a server's page: the creation flow pinned to
      *  that server (docs/app-placement.md §3). Internal-only. */
     data class CreateApp(val podId: String) : DeepLink
+    data object Marketplace : DeepLink
     data object CreateServer : DeepLink
     /** Home's "Build a service": the Services tab's build chooser, on no
      *  particular server. Internal-only — not parsed from a URI. */
@@ -236,6 +237,7 @@ sealed interface DeepLink {
                 "secret-requests", "secret-request", "unlock-approve", "unlock-approvals" -> SecretRequests
                 "server" -> params["podId"]?.let { ServerDetail(it) }
                 "app" -> params["appId"]?.let { AppDetail(it) }
+                "marketplace" -> Marketplace
                 "create-server" -> CreateServer
                 "share" -> ServerShare.parseShareLink(uri.toString())?.let { ShareOffer(it.shareId, it.secretHex) }
                 "backup-download" -> {

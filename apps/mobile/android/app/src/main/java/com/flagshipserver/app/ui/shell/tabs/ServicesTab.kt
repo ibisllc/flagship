@@ -1,4 +1,4 @@
-// Services tab: list of installed services + vibe-code launcher.
+// Services tab: list of installed services + marketplace + vibe-code launcher.
 
 package com.flagshipserver.app.ui.shell.tabs
 
@@ -23,7 +23,10 @@ import com.flagshipserver.app.ui.screens.ServiceDetailScreen
 import com.flagshipserver.app.ui.screens.accessListRoute
 import com.flagshipserver.app.ui.screens.ServiceEnvScreen
 import com.flagshipserver.app.ui.screens.ServicesListScreen
+import com.flagshipserver.app.ui.screens.MarketplaceListScreen
+import com.flagshipserver.app.ui.screens.MarketplaceDetailScreen
 import com.flagshipserver.app.ui.screens.AiKeyStepScreen
+import java.net.URLDecoder
 import com.flagshipserver.app.ui.screens.BuildGitScreen
 import com.flagshipserver.app.ui.screens.BuildJournalScreen
 import com.flagshipserver.app.ui.screens.BuildMcpScreen
@@ -151,6 +154,10 @@ fun ServicesTab() {
                 deepLinker.consume()
                 nav.navigate("invite-accept?reply=${java.net.URLEncoder.encode(link.rawLink, "UTF-8")}")
             }
+            DeepLink.Marketplace -> {
+                deepLinker.consume()
+                nav.navigate("marketplace")
+            }
             else -> { /* not for this tab */ }
         }
     }
@@ -271,6 +278,38 @@ fun ServicesTab() {
         }
         composable(BUILD_CHOOSER_ROUTE) { entry -> PodScoped(nav, placement, entry, creation = true) { BuildSourceChooserScreen(nav) } }
         composable("build/git") { entry -> PodScoped(nav, placement, entry, creation = true) { BuildGitScreen(nav) } }
+        composable("marketplace") { MarketplaceListScreen(nav) }
+        composable("marketplace-detail/{creator}/{slug}") { entry ->
+            val creator = entry.arguments?.getString("creator") ?: return@composable
+            val slug = entry.arguments?.getString("slug") ?: return@composable
+            MarketplaceDetailScreen(nav, creator = creator, slug = slug)
+        }
+        // W10 — per-app env-var editor. Reachable from a marketplace install of
+        // an app that needs an LLM key (deep-linked with the expected env-var
+        // name in `prefill` so the add-dialog opens with it filled in). The
+        // value is set on the box; flagshipserver.com is never in the path.
+        composable(
+            route = "service-env/{appId}/{creator}/{slug}?prefill={prefill}",
+            arguments = listOf(
+                navArgument("appId") { type = NavType.StringType },
+                navArgument("creator") { type = NavType.StringType },
+                navArgument("slug") { type = NavType.StringType },
+                navArgument("prefill") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) { entry ->
+            val appId = entry.arguments?.getString("appId") ?: return@composable
+            val creator = entry.arguments?.getString("creator") ?: return@composable
+            val slug = entry.arguments?.getString("slug") ?: return@composable
+            val prefill = entry.arguments?.getString("prefill")
+                ?.let { URLDecoder.decode(it, "UTF-8") }
+            PodScoped(nav, placement, entry, creation = false) {
+                ServiceEnvScreen(nav, appId = appId, creator = creator, slug = slug, prefillName = prefill)
+            }
+        }
         // AI-key step for the git-adapt path. On confirm it stows the chosen
         // credential and pops back to the git screen, whose onAppear takes it
         // off PendingBuildCredential and runs the adapt pass with it.

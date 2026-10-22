@@ -6,6 +6,7 @@
 //   - scratch     → describe it, the AI writes + deploys it (existing vibe flow)
 //   - git         → import a repo; if Flagship-ready install as-is, else AI-adapt
 //   - mcp         → connect Cursor/Cline; build from your editor with your own AI
+//   - marketplace → install something already built (lit up by feat/marketplace)
 
 import { $, registerView, show } from "../lib/router.js";
 import { escapeHtml } from "../lib/util.js";
@@ -17,6 +18,7 @@ import { enterBuildMcp } from "./build-mcp.js";
 import { enterBuildJournal } from "./build-journal.js";
 import { enterBuildKey } from "./build-key.js";
 import { loadAccountPods, sessionServers, startCreation } from "../lib/appPlacement.js";
+import { enterMarketplace } from "./marketplace.js";
 
 import { tr } from "../lib/i18n.js";
 registerView("view-build-source");
@@ -47,6 +49,7 @@ export function initBuildSourceView() {
   );
   $("build-src-git").addEventListener("click", () => enterBuildGit());
   $("build-src-mcp").addEventListener("click", () => enterBuildMcp());
+  $("build-src-market").addEventListener("click", () => enterMarketplace());
   $("build-source-journal-link").addEventListener("click", (e) => {
     e.preventDefault();
     enterBuildJournal();

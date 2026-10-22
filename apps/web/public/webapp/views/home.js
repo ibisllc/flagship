@@ -19,6 +19,7 @@ import { releaseServerName } from "../lib/releaseServer.js";
 import { renderDibsBanner } from "../lib/nameDibs.js";
 import { isDemoProfile } from "../lib/demoAccount.js";
 import { enterNameDibs } from "./name-dibs.js";
+import { renderProBanner } from "../lib/proBanner.js";
 import { getActiveProfile } from "../lib/profiles.js";
 import { demoLifecycle, ensureDemoServerPairing } from "../lib/usersCheck.js";
 import {
@@ -27,6 +28,7 @@ import {
 } from "../lib/usersCheck.js";
 import { loadProviders } from "../providers.js";
 import { renderListProgressBar } from "../lib/provisionProgress.js";
+import { renderAllowanceCard } from "../lib/allowance.js";
 import {
   get as recoveryStoreGet,
   set as recoveryStoreSet,
@@ -819,6 +821,34 @@ function renderRecoveryBanner() {
     });
 }
 
+const ALLOWANCE_CARD_ID = "home-allowance-card";
+
+/**
+ * #6 / #7 — fetch + render the bandwidth usage/allowance card (with the
+ * over-allowance upgrade alert) above the server list. Best-effort: the
+ * allowance lib resolves to null on any failure / `!ok` / missing endpoint,
+ * in which case the host is left empty and removed — Home never breaks.
+ */
+async function renderAllowance(username) {
+  if (!username) {
+    document.getElementById(ALLOWANCE_CARD_ID)?.remove();
+    return;
+  }
+  let host = document.getElementById(ALLOWANCE_CARD_ID);
+  if (!host) {
+    host = document.createElement("div");
+    host.id = ALLOWANCE_CARD_ID;
+    const list = document.getElementById("servers-list");
+    list?.parentNode?.insertBefore(host, list);
+  }
+  const status = await renderAllowanceCard(host, username);
+  if (!status) {
+    host.remove();
+    return;
+  }
+  // The upgrade CTA is a plain anchor to /pro; nothing to wire (full-page nav).
+}
+
 /**
  * E7 — peer "your account was reset on another device" detector.
  *
@@ -1459,6 +1489,12 @@ export async function renderHome() {
   const deviceCap = activeDeviceCapability();
   renderDeviceCapabilityChip(deviceCap);
   applyScopeGateToButton(
+    $("services-list-open-marketplace"),
+    deviceCap,
+    "install-service",
+    "This device cannot install services. Use a primary device.",
+  );
+  applyScopeGateToButton(
     $("services-list-open-vibe-code"),
     deviceCap,
     "vibe-code",
@@ -1483,6 +1519,15 @@ export async function renderHome() {
   if (!isDemoProfile(getActiveProfile())) {
     renderDibsBanner({ onClaim: () => enterNameDibs() }).catch(() => {});
   }
+  // Always-available "Become a Pro member" support CTA — a gentle, on-brand
+  // membership nudge (distinct from the cap-hit upgrade alert) for the ~95%
+  // who never hit the bandwidth cap but would happily back the project.
+  // Fully dismissible; once dismissed on this device it never re-appears.
+  renderProBanner();
+
+  // #6 / #7 — bandwidth usage/allowance card + over-allowance upgrade alert.
+  // Fire-and-forget; best-effort so a metering hiccup never blocks Home.
+  renderAllowance(session.username).catch(() => {});
 
   const sid = recoveryStoreGet("sessionId");
   const serverSource = homeServerSource(sid, getActiveProfile(), Date.now(), {
