@@ -10485,5 +10485,193 @@
   "device reset": {
     "en": "device reset",
     "ctx": "webapp/views/unlock.js:92"
+  },
+  "Changed an app's link": {
+    "en": "Changed an app's link",
+    "ctx": "webapp/lib/auditLog.js:55"
+  },
+  "Went back to an app's default link": {
+    "en": "Went back to an app's default link",
+    "ctx": "webapp/lib/auditLog.js:56"
+  },
+  "Released an app's link": {
+    "en": "Released an app's link",
+    "ctx": "webapp/lib/auditLog.js:57"
+  },
+  "An app's link will be released soon": {
+    "en": "An app's link will be released soon",
+    "ctx": "webapp/lib/auditLog.js:58"
+  },
+  "Only an admin device can change this": {
+    "en": "Only an admin device can change this",
+    "ctx": "webapp/lib/linkField.js:29"
+  },
+  "Next change {0}": {
+    "en": "Next change {0}",
+    "ctx": "webapp/lib/linkField.js:31"
+  },
+  "Letters, numbers and hyphens only": {
+    "en": "Letters, numbers and hyphens only",
+    "ctx": "webapp/lib/linkField.js:35"
+  },
+  "At least 4 characters": {
+    "en": "At least 4 characters",
+    "ctx": "webapp/lib/linkField.js:36"
+  },
+  "At most 40 characters": {
+    "en": "At most 40 characters",
+    "ctx": "webapp/lib/linkField.js:37"
+  },
+  "All {0} names in use": {
+    "en": "All {0} names in use",
+    "ctx": "webapp/lib/linkField.js:39"
+  },
+  "Available": {
+    "en": "Available",
+    "ctx": "webapp/lib/linkField.js:44"
+  },
+  "Reserved": {
+    "en": "Reserved",
+    "ctx": "webapp/lib/linkField.js:50"
+  },
+  "Taken": {
+    "en": "Taken",
+    "ctx": "webapp/lib/linkField.js:52"
+  },
+  "Reserved for the owner of {0}": {
+    "en": "Reserved for the owner of {0}",
+    "ctx": "webapp/lib/linkField.js:54"
+  },
+  "Couldn't check {0}. Try again.": {
+    "en": "Couldn't check {0}. Try again.",
+    "ctx": "webapp/lib/linkField.js:56"
+  },
+  "Too many changes today": {
+    "en": "Too many changes today",
+    "ctx": "webapp/lib/linkField.js:78"
+  },
+  "Couldn't save. Try again.": {
+    "en": "Couldn't save. Try again.",
+    "ctx": "webapp/lib/linkField.js:82"
+  },
+  "Unused for 60 days, it's released.": {
+    "en": "Unused for 60 days, it's released.",
+    "ctx": "webapp/lib/linkField.js:90"
+  },
+  "Your link": {
+    "en": "Your link",
+    "ctx": "webapp/lib/linkField.js:94"
+  },
+  "I own it": {
+    "en": "I own it",
+    "ctx": "webapp/lib/linkField.js:148"
+  },
+  "Free one up": {
+    "en": "Free one up",
+    "ctx": "webapp/lib/linkField.js:149"
+  },
+  "Use default": {
+    "en": "Use default",
+    "ctx": "webapp/lib/linkField.js:151"
+  },
+  "Replace voi.ci/{0}? It stops working now and can't be taken back.": {
+    "en": "Replace voi.ci/{0}? It stops working now and can't be taken back.",
+    "ctx": "webapp/lib/linkField.js:179"
+  },
+  "Own a .com? Claim the matching name": {
+    "en": "Own a .com? Claim the matching name",
+    "ctx": "webapp/lib/nameDibs.js:152"
+  },
+  "Until {0}, a name that matches a registered .com is held for whoever controls that domain.": {
+    "en": "Until {0}, a name that matches a registered .com is held for whoever controls that domain.",
+    "ctx": "webapp/lib/nameDibs.js:153"
+  },
+  "Claim your .com name": {
+    "en": "Claim your .com name",
+    "ctx": "webapp/index.html"
+  },
+  "The dibs window opens on {0}.": {
+    "en": "The dibs window opens on {0}.",
+    "ctx": "webapp/views/name-dibs.js:44"
+  },
+  "The dibs window isn't open, so no names are held for .com holders — any free name can be taken as usual.": {
+    "en": "The dibs window isn't open, so no names are held for .com holders — any free name can be taken as usual.",
+    "ctx": "webapp/views/name-dibs.js:45"
+  },
+  "Until {0}, a name matching a registered <strong>.com</strong> is held for whoever controls that domain. Enter the name of the .com you control.": {
+    "en": "Until {0}, a name matching a registered <strong>.com</strong> is held for whoever controls that domain. Enter the name of the .com you control.",
+    "ctx": "webapp/views/name-dibs.js:50"
+  },
+  ".com": {
+    "en": ".com",
+    "ctx": "webapp/views/name-dibs.js:53"
+  },
+  "Get my code": {
+    "en": "Get my code",
+    "ctx": "webapp/views/name-dibs.js:57"
+  },
+  "Publish this code in <strong>one</strong> of these two places, then tap <em>Check now</em>. It's tied to your account's key, so nobody else can use it. DNS changes can take a while — you can close this and come back.": {
+    "en": "Publish this code in <strong>one</strong> of these two places, then tap <em>Check now</em>. It's tied to your account's key, so nobody else can use it. DNS changes can take a while — you can close this and come back.",
+    "ctx": "webapp/views/name-dibs.js:61"
+  },
+  "Later": {
+    "en": "Later",
+    "ctx": "webapp/views/name-dibs.js:66"
+  },
+  "Check now": {
+    "en": "Check now",
+    "ctx": "webapp/views/name-dibs.js:67"
+  },
+  "Copied": {
+    "en": "Copied",
+    "ctx": "webapp/views/name-dibs.js:86"
+  },
+  "Enter a name.": {
+    "en": "Enter a name.",
+    "ctx": "webapp/views/name-dibs.js:103"
+  },
+  "<strong>Option 1 — DNS.</strong> Add a <code>TXT</code> record:": {
+    "en": "<strong>Option 1 — DNS.</strong> Add a <code>TXT</code> record:",
+    "ctx": "webapp/views/name-dibs.js:113"
+  },
+  "Name: {0}": {
+    "en": "Name: {0}",
+    "ctx": "webapp/views/name-dibs.js:114"
+  },
+  "Value: {0}": {
+    "en": "Value: {0}",
+    "ctx": "webapp/views/name-dibs.js:115"
+  },
+  "Copy name": {
+    "en": "Copy name",
+    "ctx": "webapp/views/name-dibs.js:116"
+  },
+  "Copy value": {
+    "en": "Copy value",
+    "ctx": "webapp/views/name-dibs.js:116"
+  },
+  "<strong>Option 2 — a file on your website.</strong> Serve this text at": {
+    "en": "<strong>Option 2 — a file on your website.</strong> Serve this text at",
+    "ctx": "webapp/views/name-dibs.js:118"
+  },
+  "Copy text": {
+    "en": "Copy text",
+    "ctx": "webapp/views/name-dibs.js:120"
+  },
+  "You've proven you control <strong>{0}.com</strong>, so the name <strong>{1}</strong> is held for you.": {
+    "en": "You've proven you control <strong>{0}.com</strong>, so the name <strong>{1}</strong> is held for you.",
+    "ctx": "webapp/views/name-dibs.js:152"
+  },
+  "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):": {
+    "en": "Replace access URLs. This will update all the links to this service, replacing \"{0}\" with a new stem. All existing links break immediately. If you have attached external domains, those stay unaffected. New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):",
+    "ctx": "webapp/views/service-detail.js:1163"
+  },
+  "Every link to this service changes immediately. Attached external domains are unaffected. Other devices see the new URL on next refresh.": {
+    "en": "Every link to this service changes immediately. Attached external domains are unaffected. Other devices see the new URL on next refresh.",
+    "ctx": "webapp/views/service-detail.js:1178"
+  },
+  "Renamed to {0}.": {
+    "en": "Renamed to {0}.",
+    "ctx": "webapp/views/service-detail.js:1242"
   }
 }
