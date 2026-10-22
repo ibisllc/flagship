@@ -98,6 +98,9 @@ public struct ServerDetailResponse: Codable, Equatable, Sendable {
     public var debugAccess: DebugAccessView? = nil
     /// Each app's disk use against its limits and the disk brake (docs/app-runtimes.md 5.3). Absent from older daemons.
     public var storage: ServerStorage? = nil
+    /// The box's outbound proxy and whether it works (docs/outbound-proxy.md).
+    /// Absent from older daemons: the page then hides the section.
+    public var outboundProxy: OutboundProxySummary? = nil
 }
 
 /// The box's own account of its dead-man switch (server-detail `deadMan`).

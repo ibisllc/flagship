@@ -175,7 +175,13 @@ export const STEPS: Record<string, () => Promise<unknown>> = {
   "health-reporter": async () => {
     const env = await daemonEnv();
     if (!env.FLAGSHIP_CONTROL_PLANE_BASE_URL || !env.FLAGSHIP_SUBDOMAIN) return false;
-    return installHealthReporter({ controlPlaneBaseUrl: env.FLAGSHIP_CONTROL_PLANE_BASE_URL, serverDomain: env.FLAGSHIP_SUBDOMAIN, run, onLog: log });
+    return installHealthReporter({
+      controlPlaneBaseUrl: env.FLAGSHIP_CONTROL_PLANE_BASE_URL,
+      serverDomain: env.FLAGSHIP_SUBDOMAIN,
+      proxyCurlrcPath: join(DATA_DIR, "outbound-proxy.curlrc"),
+      run,
+      onLog: log,
+    });
   },
   "update-guard": () => installUpdateGuard({ repoPath: REPO, dataDir: DATA_DIR, run, onLog: log }),
   "container-links": () => ensureContainerLinksUnmanaged(localCommandRunner, { log }),

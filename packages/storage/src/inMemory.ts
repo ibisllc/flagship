@@ -3,6 +3,7 @@ import { InMemoryServerOrderStorage } from "./serverOrders.js";
 import { InMemoryServerBootKeyStorage } from "./serverBootKeys.js";
 import { InMemoryPqTrustStorage } from "./pqTrust.js";
 import { applyBootSuspension, type BootSuspensionOrder, type BootSuspensionState, type SuspensionOutcome } from "@flagship/protocol";
+import { InMemoryRelayHealthStorage } from "./relayHealth.js";
 import type {
   SchemaVersionRecord,
   SchemaVersionStorage,
@@ -2609,6 +2610,7 @@ export class InMemoryStorage implements Storage {
   serverOrders = new InMemoryServerOrderStorage();
   serverBootKeys = new InMemoryServerBootKeyStorage();
   pqTrust = new InMemoryPqTrustStorage();
+  relayHealth = new InMemoryRelayHealthStorage();
   demoAccountProvisioning = new InMemoryDemoAccountProvisioningStorage(
     this.usernames,
     this.deviceIdentities,

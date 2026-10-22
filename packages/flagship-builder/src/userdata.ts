@@ -137,6 +137,9 @@ export interface UserDataOptions {
    * the recipe via {@link LoadedBlob.debugGrant}.
    */
   debugGrant?: string;
+  /** The outbound proxy siblings (docs/outbound-proxy.md); see {@link LoadedBlob.outboundProxy}. */
+  outboundProxy?: string;
+  outboundProxyCredentials?: string;
 }
 
 /**
@@ -215,6 +218,7 @@ export function resolveBootstrapInputs(opts: UserDataOptions): ResolvedBootstrap
           opts.debugGrant,
           opts.offlineSecrets,
           opts.enrollmentKeyHex,
+          { outboundProxy: opts.outboundProxy, outboundProxyCredentials: opts.outboundProxyCredentials },
         ),
       ),
     ),
@@ -469,6 +473,28 @@ export interface BootstrapTemplateArgs {
  * specialization). Exported so preseed.ts and the engine reuse the exact same
  * script.
  */
+/**
+ * Setup calls to `.com` (docs/outbound-proxy.md §OHTTP). A box whose recipe
+ * names an outbound proxy sends them through the private relay (OHTTP),
+ * falling back to a direct, marked request when the relay fails; before Node
+ * is installed it sends nothing rather than go direct. Every other box sends
+ * them directly with curl, as before. `$1` URL, `$2` JSON body or @file,
+ * `$3` curl's max time (default 30). Prints the answer; fails like curl -f.
+ */
+export const SETUP_POST_FN = `flagship_via_relay() { jq -e '.outboundProxy' /var/flagship/install-blob.json >/dev/null 2>&1; }
+flagship_post() {
+    if flagship_via_relay; then
+        command -v flagship-tsx >/dev/null 2>&1 && [ -f /opt/flagship/scripts/install-helper.ts ] || {
+            echo "[flagship] private relay helper not installed yet; not sending $1" >&2
+            return 1
+        }
+        (cd /opt/flagship && flagship-tsx scripts/install-helper.ts ohttp-post --url "$1" --data "$2")
+    else
+        curl -fsS --connect-timeout 5 --max-time "\${3:-30}" -X POST -H 'content-type: application/json' \\
+            --data "$2" "$1"
+    fi
+}`;
+
 export function buildBootstrapScript(args: BootstrapTemplateArgs): string {
   if (!/^[0-9a-f]{40}$/.test(args.ref)) {
     throw new Error(`the installer must name an exact 40-character commit, not ${JSON.stringify(args.ref)}`);
@@ -626,16 +652,15 @@ FLAGSHIP_MOTD
 # installer can also report the earlier downloading/partitioning phases; the
 # d-i late_command can only report from here on — clone/build onward.)
 CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||')"
+${SETUP_POST_FN}
 report_phase() {
     # $1 = canonical ProvisionStatusPhase, $2 = optional detail (error string)
     if [ -n "\${2:-}" ]; then
-        curl -fsS -m 8 -X POST -H 'content-type: application/json' \\
-            --data '{"phase":"'"$1"'","detail":"'"$2"'"}' \\
-            "$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status" >/dev/null 2>&1 || true
+        flagship_post "$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status" \\
+            '{"phase":"'"$1"'","detail":"'"$2"'"}' 8 >/dev/null 2>&1 || true
     else
-        curl -fsS -m 8 -X POST -H 'content-type: application/json' \\
-            --data '{"phase":"'"$1"'"}' \\
-            "$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status" >/dev/null 2>&1 || true
+        flagship_post "$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status" \\
+            '{"phase":"'"$1"'"}' 8 >/dev/null 2>&1 || true
     fi
 }
 # Error trap — any fatal bootstrap failure reports the terminal canonical
@@ -835,10 +860,18 @@ cd /opt/flagship
 # the encrypted path already reported it inline before its in-target register,
 # so its registered.flag makes this unit skip (no double-emit). Best-effort.
 CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||')"
+${SETUP_POST_FN}
 report_phase() {
-    curl -fsS --connect-timeout 3 --max-time 8 -X POST -H 'content-type: application/json' \\
-        --data '{"phase":"'"$1"'"}' \\
-        "$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status" >/dev/null 2>&1 || true
+    flagship_post "$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status" '{"phase":"'"$1"'"}' 8 >/dev/null 2>&1 || true
+}
+# Behind a proxy the box never contacts .com directly just to test the
+# network: DNS answering is enough, the relay call itself retries.
+registration_reachable() {
+    if flagship_via_relay; then
+        getent hosts "$(echo "$CONTROL_PLANE_BASE" | sed 's|^https://||; s|/.*||')" >/dev/null
+    else
+        curl -sS -o /dev/null --connect-timeout 3 --max-time 8 "$CONTROL_PLANE_BASE/"
+    fi
 }
 wait_for_registration_network() {
     # network-online.target is only meaningful when the installed networking
@@ -848,8 +881,7 @@ wait_for_registration_network() {
     _attempt=0
     while [ "$(date +%s)" -lt "$_deadline" ]; do
         _attempt=$((_attempt + 1))
-        if ip route show default 2>/dev/null | grep -q . && \\
-           curl -sS -o /dev/null --connect-timeout 3 --max-time 8 "$CONTROL_PLANE_BASE/"; then
+        if ip route show default 2>/dev/null | grep -q . && registration_reachable; then
             echo "[register] network ready (attempt $_attempt)"
             return 0
         fi
@@ -867,9 +899,7 @@ flagship-tsx scripts/install-helper.ts sign-server-register "\${ID_ARGS[@]}" \\
     --auth-code-blob /var/flagship/install-blob.json \\
     > /run/register-payload.json
 echo "[register] POST $REGISTRATION_URL"
-curl -fsS --connect-timeout 5 --max-time 30 -X POST -H "content-type: application/json" \\
-    --data @/run/register-payload.json \\
-    "$REGISTRATION_URL"
+flagship_post "$REGISTRATION_URL" @/run/register-payload.json 30
 date > /var/flagship/registered.flag
 echo "[register] done"
 WRAPPER
@@ -1515,8 +1545,7 @@ flagship-tsx scripts/install-helper.ts sign-server-register \\
     --priv-hex "$SERVER_IDENTITY_PRIV_HEX" \\
     --auth-code-blob /var/flagship/install-blob.json \\
     > /run/register-payload.json
-if ! curl -fsS -X POST -H 'content-type: application/json' \\
-    --data @/run/register-payload.json "$REGISTRATION_URL"; then
+if ! flagship_post "$REGISTRATION_URL" @/run/register-payload.json 120; then
     echo "[flagship-bootstrap] FATAL: registration failed — keeping the install-time key (recoverable), aborting"
     exit 1
 fi
@@ -1577,9 +1606,7 @@ flagship-tsx scripts/install-helper.ts sign-sealed-key \\
     --issued-at "$NOW_MS" \\
     > /run/sealed-key-payload.json
 CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||')"
-if ! curl -fsS -X POST -H 'content-type: application/json' \\
-    --data @/run/sealed-key-payload.json \\
-    "\${CONTROL_PLANE_BASE}/api/server/\${SERVER_DOMAIN}/sealed-luks-key"; then
+if ! flagship_post "\${CONTROL_PLANE_BASE}/api/server/\${SERVER_DOMAIN}/sealed-luks-key" @/run/sealed-key-payload.json 120; then
     echo "[flagship-bootstrap] FATAL: sealed-key upload failed — keeping the install-time key (recoverable), aborting"
     exit 1
 fi
@@ -1732,6 +1759,7 @@ export function installBlobToJson(
   debugGrant?: string,
   offlineSecrets?: string,
   enrollmentKeyHex?: string,
+  proxy?: { outboundProxy?: string; outboundProxyCredentials?: string },
 ): Record<string, unknown> {
   return {
     version: b.version,
@@ -1791,6 +1819,14 @@ export function installBlobToJson(
     ...(debugGrant ? { debugGrant } : {}),
     // First contact (protocol enrollment.ts): the one-time secret the box proves its key with.
     ...(enrollmentKeyHex ? { enrollmentKeyHex } : {}),
+    // The owner-signed outbound proxy (docs/outbound-proxy.md), and its
+    // credentials only when the owner put them in the recipe. Unsigned
+    // siblings: the order carries its own signature, which the daemon checks
+    // before it uses the proxy. Absent ⇒ serialized as before.
+    ...(proxy?.outboundProxy ? { outboundProxy: proxy.outboundProxy } : {}),
+    ...(proxy?.outboundProxy && proxy.outboundProxyCredentials
+      ? { outboundProxyCredentials: proxy.outboundProxyCredentials }
+      : {}),
   };
 }
 

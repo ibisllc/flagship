@@ -28,6 +28,7 @@ import { pickWebLocale } from "./localeRedirect.js";
 import { GA_WEB_LOCALES } from "./localeTable.generated.js";
 import { securityHeaders } from "./securityHeaders.js";
 import { tryControlPlane, tryBootHost, isAccountGoneResponse } from "./controlPlaneRoutes.js";
+import { noteRelayFallback, privateRelayForStatus, tryOhttp, type OhttpEnv } from "./ohttpRoutes.js";
 import {
   handleAdapterIndex,
   isAdapterIndexPath,
@@ -55,9 +56,11 @@ import {
   bindingSubject,
   checkRateLimit,
   clientIp,
+  clientKey,
   endpointFor,
   extractIrkPub,
   extractUsernameHash,
+  markRelayed,
   rateLimitedResponse,
   type RateLimitNamespace,
 } from "./rateLimit.js";
@@ -288,7 +291,7 @@ const CORS_ALLOWED_ORIGINS = new Set<string>([
   "http://localhost:5173",
 ]);
 
-export interface RouteEnv {
+export interface RouteEnv extends OhttpEnv {
   SERVICES_BASE_URL: string;
   /** The Worker assets binding. Tests pass a stub. */
   ASSETS: { fetch(req: Request): Promise<Response> };
@@ -577,6 +580,10 @@ export async function route(
     );
   }
 
+  // A proxy box's setup call that the private relay couldn't carry
+  // (docs/outbound-proxy.md §OHTTP): counted, never refused.
+  noteRelayFallback(request, env, ctx);
+
   // ---- CORS preflight ----
   // Cross-origin POSTs from the webapp (on webapp.flagshipserver.com) to
   // /api/* on the apex trigger a preflight. Answer it directly so the
@@ -671,6 +678,16 @@ async function routeImpl(
   // not what the user's browser sees.
   if (url.pathname === STATUS_PROBE_PATH) {
     return statusProbe(env);
+  }
+
+  // The private relay's gateway (docs/outbound-proxy.md §OHTTP). Decrypted
+  // requests run through this same router, limited to the setup and
+  // boot-unlock paths.
+  {
+    const res = await tryOhttp(request, url, env, { apex: apexHost(env), boot: BOOT_HOST }, (inner) =>
+      route(markRelayed(inner), env, ctx),
+    );
+    if (res) return res;
   }
 
   // The repo adapter index. Served before the rate limiter and the .services
@@ -927,7 +944,7 @@ async function routeImpl(
     const subject = bindingSubject(rlEndpoint, url.pathname);
     const rl = await checkRateLimit(env, {
       endpoint: rlEndpoint,
-      ip: clientIp(request),
+      ip: clientKey(request, rlEndpoint, url.pathname, irkPub),
       ...(irkPub ? { irkPub } : {}),
       ...(usernameHash ? { usernameHash } : {}),
       ...(subject ? { subject } : {}),
@@ -1033,6 +1050,8 @@ interface ProbeResult {
   checkedAt: string;
   error?: string;
   health?: unknown;
+  /** Is the private relay carrying proxy servers' setup calls? (docs/outbound-proxy.md) */
+  privateRelay?: import("@flagship/control-plane").PrivateRelayStatus;
 }
 
 /**
@@ -1144,6 +1163,8 @@ async function statusProbe(env: RouteEnv): Promise<Response> {
       error: String((e as Error).message ?? e),
     };
   }
+  const relay = await privateRelayForStatus(env);
+  if (relay) result.privateRelay = relay;
   return jsonResponse(result, 200);
 }
 

@@ -28,6 +28,12 @@
  *                    --issued-at <ms> > body.json
  *       Build the JSON envelope for POST /api/server/:host/sealed-luks-key.
  *
+ *   ohttp-post --url <https url> --data <json | @file> [--method POST|GET]
+ *       Send one setup call through the private relay (OHTTP), falling back
+ *       to a direct, marked request when the relay fails
+ *       (docs/outbound-proxy.md). Prints the response body; exits 0 on 2xx,
+ *       22 otherwise (like curl -f). Used only by boxes with an outbound proxy.
+ *
  * Run:
  *   npx tsx scripts/install-helper.ts <subcommand> [args]
  */
@@ -35,6 +41,9 @@
 import { writeFileSync, chmodSync, readFileSync } from "node:fs";
 import {
   bootKeyBindingToWire,
+  DEFAULT_OHTTP_RELAY,
+  ohttpRelayFrom,
+  sendPrivately,
   ed,
   signBootKeyBinding,
   mintDevEntitlements,
@@ -385,11 +394,39 @@ function mintEntitlements(argv: string[]): void {
   console.error(`[install-helper] wrote entitlement bundle to ${outPath}`);
 }
 
+async function ohttpPost(argv: string[]): Promise<void> {
+  const url = arg(argv, "--url");
+  const data = arg(argv, "--data");
+  const mi = argv.indexOf("--method");
+  const method = mi >= 0 ? (argv[mi + 1] ?? "POST").toUpperCase() : "POST";
+  const body = data.startsWith("@") ? readFileSync(data.slice(1)) : Buffer.from(data, "utf8");
+  const relay =
+    ohttpRelayFrom(process.env.FLAGSHIP_OHTTP_RELAY_URL, process.env.FLAGSHIP_OHTTP_KEY_CONFIG) ??
+    (DEFAULT_OHTTP_RELAY ? ohttpRelayFrom(DEFAULT_OHTTP_RELAY.relayUrl, DEFAULT_OHTTP_RELAY.keyConfigHex) : null);
+  const res = await sendPrivately(
+    { url, method, headers: method === "GET" ? [] : [["content-type", "application/json"]], body: new Uint8Array(body) },
+    { relay, timeoutMs: 20_000 },
+  );
+  console.error(
+    res.path === "ohttp"
+      ? `[ohttp] ${method} ${new URL(url).pathname} via the private relay: ${res.status}`
+      : `[ohttp] ${method} ${new URL(url).pathname} sent directly (${res.fallbackReason}): ${res.status}`,
+  );
+  process.stdout.write(Buffer.from(res.body));
+  process.exitCode = res.status >= 200 && res.status < 300 ? 0 : 22;
+}
+
 async function main(): Promise<void> {
   const [, , cmd, ...rest] = process.argv;
   switch (cmd) {
     case "mint-wildcard-grant":
       return mintWildcardGrant(rest);
+    case "ohttp-post":
+      ohttpPost(rest).catch((e) => {
+        console.error(`[ohttp] failed: ${(e as Error).message}`);
+        process.exit(7);
+      });
+      return;
     case "gen-identity":
       return genIdentity(rest);
     case "gen-boot-key":
@@ -408,7 +445,7 @@ async function main(): Promise<void> {
       return mintEntitlements(rest);
     default:
       console.error(
-        "usage: install-helper <gen-identity|gen-boot-key|sign-boot-key-binding|pkcs8-from-hex|sign-server-register|sign-sealed-key|seal-for-bak|mint-entitlements> [args]",
+        "usage: install-helper <gen-identity|gen-boot-key|sign-boot-key-binding|pkcs8-from-hex|sign-server-register|sign-sealed-key|seal-for-bak|mint-entitlements|ohttp-post> [args]",
       );
       process.exit(2);
   }

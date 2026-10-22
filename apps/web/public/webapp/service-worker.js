@@ -479,6 +479,7 @@ const OPTIONAL_SHELL = [
   "/lib/serverOrder.js",
   "/lib/debugAccess.js",
   "/lib/freshUnlock.js",
+  "/lib/boxProxy.js",
   "/lib/totp.js",
   "/lib/edToMont.js",
   "/lib/bootApproval.js",

@@ -75,6 +75,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/journal-read/v1", //           read a unit's journal (the IRK only on an unpinned box)
   "flagship/arch-v2-switch/v1", //         move a classic box to the new stack (archV2Switch.ts)
   "flagship/app-list-scope/v1", //         a separate access list on each server (Pro, feat/marketplace)
+  "flagship/box-proxy/v1", //              a server's outbound proxy
   // `.com`-side (authorizeSensitiveComOp)
   "flagship/server-update/v1", //          in-place server update (2-of-2)
   "flagship/account-self-delete/v1", //    account deletion
