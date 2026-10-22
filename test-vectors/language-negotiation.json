@@ -1,0 +1,27 @@
+{
+  "_about": "One rule for choosing a language from the browser's preferences, shared by the webapp (lib/i18n.js pickLanguage), the box's own pages (server-daemon i18n languageFor) and the website's first-visit redirect (apps/com localeRedirect.ts pickWebLocale). `accept` is an Accept-Language header; the webapp reads the same tags in q order as navigator.languages. `expect` is the language served, \"en\" for English. The rule: take the preferences in order; English (any region) stops the search; an exact tag wins; Traditional Chinese (zh-TW, zh-HK, zh-MO, zh-Hant) is never given Simplified; otherwise the same base language matches (pt-PT reads pt-BR, fr-CA reads fr).",
+  "ga": ["es", "fr", "de", "pt-BR", "ja", "zh-Hans"],
+  "cases": [
+    { "accept": "fr-FR,fr;q=0.9", "expect": "fr" },
+    { "accept": "en-US,fr;q=0.8", "expect": "en" },
+    { "accept": "it-IT,en;q=0.9,fr;q=0.8", "expect": "en" },
+    { "accept": "it-IT,es;q=0.5", "expect": "es" },
+    { "accept": "pt-BR", "expect": "pt-BR" },
+    { "accept": "pt-PT,pt;q=0.9", "expect": "pt-BR" },
+    { "accept": "fr-CA", "expect": "fr" },
+    { "accept": "de-AT", "expect": "de" },
+    { "accept": "ja", "expect": "ja" },
+    { "accept": "zh-CN,zh;q=0.9", "expect": "zh-Hans" },
+    { "accept": "zh", "expect": "zh-Hans" },
+    { "accept": "zh-Hans-SG", "expect": "zh-Hans" },
+    { "accept": "zh-TW,zh;q=0.9", "expect": "zh-Hans" },
+    { "accept": "zh-TW", "expect": "en" },
+    { "accept": "zh-HK", "expect": "en" },
+    { "accept": "zh-Hant", "expect": "en" },
+    { "accept": "zh-Hant-TW,ja;q=0.5", "expect": "ja" },
+    { "accept": "de;q=0.2,es;q=0.9", "expect": "es" },
+    { "accept": "de,es;q=0", "expect": "de" },
+    { "accept": "it", "expect": "en" },
+    { "accept": "", "expect": "en" }
+  ]
+}
