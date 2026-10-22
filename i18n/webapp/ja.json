@@ -1326,7 +1326,7 @@
   "Unlock first.": "先にロックを解除してください。",
   "Couldn't save the PIN.": "PIN を保存できませんでした。",
   "PIN updated": "PIN を更新しました",
-  "Unlocked": "ロック解除しました",
+  "Unlocked": "ロック解除済み",
   "Too many wrong PINs — use your passphrase.": "PIN の誤りが多すぎます。パスフレーズを使ってください。",
   "Wrong PIN — {0} try left.": "PIN が違います — 残り {0} 回。",
   "Wrong PIN — {0} tries left.": "PIN が違います — 残り {0} 回。",
