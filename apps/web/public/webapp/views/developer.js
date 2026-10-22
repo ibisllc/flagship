@@ -14,12 +14,13 @@ import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { scanGradePill } from "./marketplace.js";
 
+import { tr as tr_ } from "../lib/i18n.js";
 registerView("view-developer");
 
 export const TAG_DEVELOPER_SALES_READ = "flagship/developer-sales-read/v1";
 
 export const EMPTY_STATE_HTML =
-  '<div class="card placeholder">You have no marketplace listings yet.</div>';
+  `<div class="card placeholder">${tr_("You have no marketplace listings yet.")}</div>`;
 
 /** Canonical bytes the backend Ed25519-verifies against the user's IRK. */
 export function canonicalDeveloperSalesBytes(creator, issuedAt) {
@@ -50,16 +51,16 @@ export function renderTotalsHtml(totals, cutBps) {
     <div class="card">
       <div class="row row-top">
         <div>
-          <div class="faint-sm">payout owed</div>
+          <div class="faint-sm">${tr_("payout owed")}</div>
           <div class="weight-600">${formatCents(payout)}</div>
         </div>
         <div>
-          <div class="faint-sm">gross</div>
+          <div class="faint-sm">${tr_("gross")}</div>
           <div class="value">${formatCents(t.gross_cents)}</div>
         </div>
       </div>
-      <div class="muted-sm">platform cut ${escapeHtml(formatCutPct(cutBps))} · ${formatCents(t.cut_cents)}</div>
-      <div class="muted-sm">${Number(t.sale_count) || 0} sales · ${Number(t.install_count) || 0} installs</div>
+      <div class="muted-sm">${tr_("platform cut {0} · {1}", escapeHtml(formatCutPct(cutBps)), formatCents(t.cut_cents))}</div>
+      <div class="muted-sm">${tr_("{0} sales · {1} installs", Number(t.sale_count) || 0, Number(t.install_count) || 0)}</div>
     </div>`;
 }
 
@@ -85,7 +86,7 @@ export function renderListingsTableHtml(listings) {
     <div class="card">
       <table class="developer-listings">
         <thead>
-          <tr><th>app</th><th>price</th><th>installs</th><th>sales</th><th>gross</th><th>net</th><th>scan</th></tr>
+          <tr><th>${tr_("app")}</th><th>${tr_("price")}</th><th>${tr_("installs")}</th><th>${tr_("sales")}</th><th>${tr_("gross")}</th><th>${tr_("net")}</th><th>${tr_("scan")}</th></tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
@@ -101,7 +102,7 @@ export function renderSalesListHtml(sales) {
       </div>`;
   }).join("");
   if (!items) return "";
-  return `<div class="card"><div class="faint-sm">recent sales</div>${items}</div>`;
+  return `<div class="card"><div class="faint-sm">${tr_("recent sales")}</div>${items}</div>`;
 }
 
 /**
@@ -132,12 +133,12 @@ export async function renderDeveloper() {
   if (!root) return;
   const session = getSession();
   if (!session.umk) {
-    root.innerHTML = '<div class="card placeholder">Unlock to view your developer console.</div>';
+    root.innerHTML = `<div class="card placeholder">${tr_("Unlock to view your developer console.")}</div>`;
     return;
   }
   const creator = session.username;
   if (!creator) {
-    root.innerHTML = '<div class="card placeholder">No username on this account yet.</div>';
+    root.innerHTML = `<div class="card placeholder">${tr_("No username on this account yet.")}</div>`;
     return;
   }
   root.innerHTML = skeletonCards(3);
