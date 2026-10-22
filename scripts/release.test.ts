@@ -3,7 +3,7 @@
 // --list, --dry-run, --status and the phase-order refusal, all of which run with
 // shims for every network tool on PATH that record any call.
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -421,9 +421,10 @@ describe("release.sh parsers against captured tool output", () => {
     // The fixture ledger ends at 0104, so everything after it is pending.
     expect(r.out).toMatch(/^0105_re_pair_proof\.sql$/m);
     expect(r.out).toMatch(/^0106_outbound_hosts\.sql$/m);
-    expect(r.out.split("\n")).toHaveLength(2);
+    // Feature branches park their own migrations below the ledger's end (0090-0094, 0099): only the ones after it count here.
+    expect(r.out.split("\n").filter((f) => f >= "0105")).toHaveLength(2);
     // a ledger that has everything -> nothing pending
-    const all = JSON.stringify([{ results: ["0105", "0106", ...JSON.parse(fx("wrangler-d1-ledger.synthetic.json"))[0].results.map((x: { version: string }) => x.version)].map((version) => ({ version })) }]);
+    const all = JSON.stringify([{ results: readdirSync(dir).filter((f) => /^\d{4}_.*\.sql$/.test(f)).map((f) => ({ version: f.slice(0, 4) })) }]);
     expect(sh(`pending_migrations ${dir}`, all).out).toBe("");
   });
 

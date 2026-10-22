@@ -362,7 +362,9 @@
 //  v157: translations (lib/i18n.js tr/trn, lib/i18nLocales.js; i18n/<lang>.json is fetched per language and cached at runtime).
 //  v158: translation fixes; each catalog URL carries its content hash (lib/i18nLocales.js CATALOG_VERSIONS); Traditional-Chinese
 //       and English-first browsers stay in English.
-const SHELL_VERSION = "v158";
+//  v159: named links (feat/named-links): the .com domain proof ("Claim your .com
+//       name") and, on top of it, custom voi.ci names for services.
+const SHELL_VERSION = "v159";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -492,6 +494,8 @@ const OPTIONAL_SHELL = [
   "/lib/loginTakeover.js",
   "/lib/maintainerTrust.js",
   "/lib/modal.js",
+  "/lib/nameDibs.js",
+  "/views/name-dibs.js",
   "/lib/lockSweep.js",
   "/lib/accountGone.js",
   "/lib/accountGoneUi.js",
