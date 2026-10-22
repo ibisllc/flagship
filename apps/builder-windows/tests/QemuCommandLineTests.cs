@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using Xunit;
 using Flagship.Builder.VM;
@@ -29,6 +30,9 @@ public class QemuCommandLineTests
 
     private static readonly VMBundleLayout Layout = new(@"C:\vms");
     private const string Code = @"C:\qemu\share\edk2-x86_64-code.fd";
+    // The bundle paths as this OS joins them (C:\vms\<name>\... on Windows), so the
+    // suite also passes where it is run off Windows (dotnet test on a Mac).
+    private static string InBundle(string file) => Path.Combine(@"C:\vms", "home.harry.flagship.services", file);
 
     private static string Joined(string[] args) => string.Join(" ", args);
 
@@ -63,7 +67,7 @@ public class QemuCommandLineTests
         var args = QemuCommandLine.Build(Config(), Layout, Code, false, 4444, 0);
         var s = Joined(args);
         Assert.Contains($"if=pflash,format=raw,readonly=on,file={Code}", s);
-        Assert.Contains(@"if=pflash,format=raw,file=C:\vms\home.harry.flagship.services\efi-vars.fd", s);
+        Assert.Contains($"if=pflash,format=raw,file={InBundle("efi-vars.fd")}", s);
     }
 
     [Fact]
@@ -74,7 +78,7 @@ public class QemuCommandLineTests
         // then installs onto the 755MB stick and fails. AHCI reproduces the
         // metal order (sda = system disk, sdb = installer). Found live.
         var s = Joined(QemuCommandLine.Build(Config(), Layout, Code, false, 4444, 0));
-        Assert.Contains(@"id=flagship-main,if=none,format=qcow2,cache=writeback,aio=threads,discard=unmap,file=C:\vms\home.harry.flagship.services\disk.qcow2", s);
+        Assert.Contains($"id=flagship-main,if=none,format=qcow2,cache=writeback,aio=threads,discard=unmap,file={InBundle("disk.qcow2")}", s);
         Assert.Contains("ide-hd,drive=flagship-main", s);
         Assert.DoesNotContain("if=virtio,format=qcow2", s);
     }
@@ -136,7 +140,7 @@ public class QemuCommandLineTests
         var s = Joined(QemuCommandLine.Build(Config(console: true), Layout, Code, false, 4444, 5555));
         Assert.Contains("port=5555", s);
         Assert.Contains("-serial chardev:ser0", s);
-        Assert.Contains(@"logfile=C:\vms\home.harry.flagship.services\console.log", s);
+        Assert.Contains($"logfile={InBundle("console.log")}", s);
         Assert.Contains("host=127.0.0.1", s);
     }
 
