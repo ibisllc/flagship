@@ -49,7 +49,7 @@ describe("home pro-banner copy + link", () => {
     expect(PRO_BANNER_JS).toContain("Become a Pro member");
     expect(PRO_BANNER_JS).toMatch(/keep Flagship free & independent/);
     // The CTA wording is membership/support, never a donation ask.
-    expect(PRO_BANNER_JS).toMatch(/ctaLabel:\s*"See Pro membership"/);
+    expect(PRO_BANNER_JS).toMatch(/ctaLabel:\s*tr\("See Pro membership"\)/);
   });
 
   it("links to the /pro membership page on the .com origin", () => {

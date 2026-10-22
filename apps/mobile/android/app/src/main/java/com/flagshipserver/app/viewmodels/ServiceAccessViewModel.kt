@@ -476,7 +476,7 @@ class ServiceAccessViewModel(
         _busyScope.value = true
         val scope = if (on) AppListScope.SERVER else AppListScope.ACCOUNT
         return try {
-            val key = adminSigner(if (on) "Give $serviceRef a separate list on each server" else "Use one list for $serviceRef on every server")
+            val key = adminSigner(if (on) FSStrings.get(R.string.give_a_separate_list_on_each, serviceRef) else FSStrings.get(R.string.use_one_list_for_on_every, serviceRef))
             suspend fun send(at: Long): AppListScopeState {
                 val o = AppListScope.Order(serviceRef, scope, at)
                 return s.setAppListScope(serviceRef, AppListScopeRequest(AppListScopeOrderBody(o.serviceRef, o.scope, o.issuedAt), AppListScope.signHex(key, o)))
@@ -519,7 +519,7 @@ class ServiceAccessViewModel(
         if (target == _shownServer.value || target !in pickerServers) return false
         val client = if (target == homeSelf) homeBox else screensFor(target)
         if (client == null) {
-            _phase.value = ServiceAccessPhase.Failed("This phone isn't set up on ${serverLabel(target)}.")
+            _phase.value = ServiceAccessPhase.Failed(FSStrings.get(R.string.this_phone_isnt_set_up_on, serverLabel(target)))
             return false
         }
         box = client
@@ -801,7 +801,7 @@ class ServiceAccessViewModel(
 
         fun coManagerInvitedBy(label: String?): String =
             if (!label.isNullOrBlank()) FSStrings.get(R.string.invited_by_co_manager, label) else FSStrings.get(R.string.invited_by_a_co_manager)
-        const val LIST_SCOPE_FAILED = "Couldn't change the list. Try again in a moment."
+        val LIST_SCOPE_FAILED get() = FSStrings.get(R.string.couldnt_change_the_list_try_again)
 
         fun create(
             context: Context,

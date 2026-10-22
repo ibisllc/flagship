@@ -13,18 +13,19 @@
 
 import { bytesToHex } from "../keystore.js";
 
+import { tr } from "./i18n.js";
 export const TAG_APP_LIST_SCOPE = "flagship/app-list-scope/v1";
 export const LIST_SCOPES = ["account", "server"];
 
-export const LIST_SCOPE_TITLE = "Separate list on each server";
-export const LIST_SCOPE_NOTE = "Each server keeps its own members and invites.";
-export const LIST_SCOPE_PRO_NOTE = "Comes with Pro.";
-export const LIST_SCOPE_PRO_LINK = "See Pro membership";
-export const LIST_SCOPE_PENDING = "Waiting for this server to confirm Pro.";
-export const LIST_SCOPE_READONLY_ON = "Each server has its own list.";
-export const LIST_SCOPE_ON_TITLE = "A separate list on each server?";
-export const LIST_SCOPE_ON_CONFIRM = "Each server keeps its current list. Changes you make on one server stay on it.";
-export const LIST_SCOPE_OFF_TITLE = "One list on every server?";
+export const LIST_SCOPE_TITLE = tr("Separate list on each server");
+export const LIST_SCOPE_NOTE = tr("Each server keeps its own members and invites.");
+export const LIST_SCOPE_PRO_NOTE = tr("Comes with Pro.");
+export const LIST_SCOPE_PRO_LINK = tr("See Pro membership");
+export const LIST_SCOPE_PENDING = tr("Waiting for this server to confirm Pro.");
+export const LIST_SCOPE_READONLY_ON = tr("Each server has its own list.");
+export const LIST_SCOPE_ON_TITLE = tr("A separate list on each server?");
+export const LIST_SCOPE_ON_CONFIRM = tr("Each server keeps its current list. Changes you make on one server stay on it.");
+export const LIST_SCOPE_OFF_TITLE = tr("One list on every server?");
 export const PRO_URL = "https://flagshipserver.com/pro";
 
 const SERVICE_REF_RE = /^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$/;
@@ -75,7 +76,7 @@ export function normalizeListScope(raw) {
 
 /** Sign and post the switch; resolves to the new state. A 402 rejects with `code: "pro-required"`. */
 export async function setListScope({ serviceRef, scope, umk, signWithIrk, fetchJson, now = Date.now }) {
-  if (!umk || typeof signWithIrk !== "function") throw new Error("Unlock the webapp first");
+  if (!umk || typeof signWithIrk !== "function") throw new Error(tr("Unlock the webapp first"));
   const body = await signListScope({ serviceRef, scope, issuedAt: now(), umk, signWithIrk });
   return normalizeListScope(await fetchJson(scopePath(serviceRef), { method: "POST", body: JSON.stringify(body) }));
 }
@@ -102,7 +103,7 @@ export function serverName(fqdn) {
 }
 
 export function listScopeOffConfirm(leader, nameOf = serverName) {
-  return `Every server will use ${nameOf(leader)}'s list. People who joined on other servers since lose access.`;
+  return tr("Every server will use {0}'s list. People who joined on other servers since lose access.", nameOf(leader));
 }
 
 /** Whether the switch can be turned on here (it can always be turned off). */
@@ -117,10 +118,10 @@ export function separateListsWarning(summary, nameOf = serverName) {
   const leaders = [...new Set(summary.leaders ?? [])];
   if (n === 1) {
     return leaders.length === 1
-      ? `1 app has a separate access list on each server. When Pro ends it will use ${nameOf(leaders[0])}'s list.`
-      : "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.";
+      ? tr("1 app has a separate access list on each server. When Pro ends it will use {0}'s list.", nameOf(leaders[0]))
+      : tr("1 app has a separate access list on each server. When Pro ends it will use its lead server's list.");
   }
   return leaders.length === 1
-    ? `${n} apps have a separate access list on each server. When Pro ends they'll all use ${nameOf(leaders[0])}'s list.`
-    : `${n} apps have a separate access list on each server. When Pro ends each will use its lead server's list.`;
+    ? tr("{0} apps have a separate access list on each server. When Pro ends they'll all use {1}'s list.", n, nameOf(leaders[0]))
+    : tr("{0} apps have a separate access list on each server. When Pro ends each will use its lead server's list.", n);
 }

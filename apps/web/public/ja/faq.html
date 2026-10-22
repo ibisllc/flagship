@@ -104,7 +104,7 @@
   <section class="page-hero">
     <h1>質問と答えを、わかりやすい言葉で。</h1>
     <p>ハードウェアとスマートフォンを預ける前に、実際によく聞かれる質問です。ここにない場合は <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a> までご連絡ください。</p>
-    <nav class="toc" aria-label="セクション"><a href="#setup">セットアップとインストール</a><a href="#privacy">プライバシーとセキュリティ</a><a href="#apps">サービス</a><a href="#endgame">Flagship がなくなったら</a></nav>
+    <nav class="toc" aria-label="セクション"><a href="#setup">セットアップとインストール</a><a href="#privacy">プライバシーとセキュリティ</a><a href="#apps">サービスとマーケットプレイス</a><a href="#money">料金とサブスクリプション</a><a href="#endgame">Flagship がなくなったら</a></nav>
   </section>
 
   <section class="faq-section" id="setup" aria-label="セットアップとインストール">
@@ -205,14 +205,26 @@
     </div>
   </section>
 
-  <section class="faq-section" id="apps" aria-label="サービス">
-    <h2>サービス</h2>
-    <p class="section-lede">サービスは、お手元の箱で動くコンテナで、ユーザーごとの名前空間で分けられています。</p>
+  <section class="faq-section" id="apps" aria-label="サービスとマーケットプレイス">
+    <h2>サービスとマーケットプレイス</h2>
+    <p class="section-lede">サービスは、ユーザーごとに分離されてあなたのサーバー上で動くコンテナーです。マーケットプレイスはリンクの一覧であり、コードのホスティングではありません。</p>
     <div class="qlist">
       <details class="q">
         <summary>サービスを「バイブコーディング」するとは？</summary>
         <div class="answer">
           <p>作りたいものを普通の言葉で説明します（「どの観葉植物に水をやったか記録して、5 日以上水切れの植物があれば通知して」など）。LLM がコードを書き、デーモンがビルドし、データ層のスコープ（Postgres のテーブル、オブジェクトストレージ、プッシュ）を選んで、<code>plant-water.you.flagship.services</code> で動かします。所要時間は約 90 秒。気が向けばコードを編集することもできます。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>マーケットプレイスの仕組みは？</summary>
+        <div class="answer">
+          <p>誰でも出品できます。タイトル、説明、スクリーンショット、正規ポッドへのリンクが必要です。私たちが預かるのは出品情報だけで、コードは預かりません。サービスをインストールすると、あなたのデーモンが正規ポッド（または指定したフォーク）からソースを取得し、サーバーの ID で署名して、あなたの名前空間で実行します。マーケットプレイスはディレクトリであり、アプリストアではありません。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>出品は審査されますか？</summary>
+        <div class="answer">
+          <p>出品者が任意で行います。出品者は有償でセキュリティスキャン（npm audit + trivy + semgrep + 動的チェック）を受け、評価をアルファベットで出品に表示できます。評価は参考情報であり、出品の条件にはしていません。<a href="/terms">/terms</a> の利用規定に違反する出品は、通報を受けて削除します。</p>
         </div>
       </details>
       <details class="q">
@@ -237,6 +249,55 @@
         <summary>サービスをきれいにアンインストールできますか？</summary>
         <div class="answer">
           <p>はい。アンインストールすると、コンテナ、Postgres データベース、ファイルフォルダー、アクセスリストが削除されます。後でデータに戻りたい場合は、アンインストール前にスナップショットを残しておけます。</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="faq-section" id="money" aria-label="料金とサブスクリプション">
+    <h2>料金とサブスクリプション</h2>
+    <p class="section-lede">ハードウェアは買い切りです。サブスクリプションは任意です。自分のハードウェアを使うなら、ずっと無料です。</p>
+    <div class="qlist">
+      <details class="q">
+        <summary>Flagship の料金は？</summary>
+        <div class="answer">
+          <p>自分のハードウェアなら 0 ドル。まだ本体もサブスクリプションも販売していません。販売する際は詳細を公開し、上級者向けの機能に限った任意のものにします。ほとんどの人は、この先もずっと何も支払いません。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>「自分のハードウェア」なのに、なぜ料金がかかるのですか？</summary>
+        <div class="answer">
+          <p>実際にかかる費用は 3 つです。組み立て済み本体の発送（価格で利益を出すのではなく原価に近い設定）、Fly 上のトンネルハブの運用（私たちの規模ではサーバー 1 台あたり月数セント）、そして <code>flagship.services</code> のワイルドカード DNS の管理です。無料プランは、個人が自分のハードウェアで通常使う分をまかないます。サブスクリプションは、そうでなければ私たちが負担することになる部分をまかないます。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>いつでも解約できますか？</summary>
+        <div class="answer">
+          <p>はい。解約はスマートフォンからワンタップでできます。当期の未使用分は日割りで精算します。サブドメインはあなたのままで、ルーティングも引き続き動作します。止まるのは有料のアドオン（大規模なプッシュ通知など）だけです。DNS を人質に取ることはしません。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>ハードウェアの返金ポリシーは？</summary>
+        <div class="answer">
+          <p>30 日間、全額返金、返送はお客様で。米国内の返送料は当社が負担し、米国外はお客様負担です。本体が初期不良で届いた場合は往復とも当社が負担します。再入荷手数料はありません。詳細は <a href="/terms">/terms</a> をご覧ください。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>暗号資産は使えますか？</summary>
+        <div class="answer">
+          <p>まだ対応していません。Stripe はカード（USD、EUR、GBP）を扱います。プライバシーを重視する方向けに monero / lightning を検討中ですが、直近のロードマップにはありません。必要な方は <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a> までご連絡ください。機能の優先順位はそうして決めています。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>価格は変わりますか？</summary>
+        <div class="answer">
+          <p>ハードウェア：部品コスト次第で変わる可能性があります。既存の注文は据え置きです。サブスクリプション：価格を変更する場合も、既存の契約者には少なくとも 12 か月間は従来の条件を維持し、プランが「導入価格」の場合は申し込み時にお知らせします。「更新したら価格が 3 倍に」といったことはしません。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>長期的にはどうやって収益を得るのですか？</summary>
+        <div class="answer">
+          <p>ハードウェアの利益、任意のアドオンのサブスクリプション、マーケットプレイスでのプロモーション料（「おすすめ」と明記）で収益を得ます。広告、テレメトリー、モデル学習の権利、あなたのデータは販売しません。正しいことだからでもありますが、構造的にそれができないからでもあります。</p>
         </div>
       </details>
     </div>
@@ -283,6 +344,7 @@
       <h4>製品</h4>
       <ul>
         <li><a href="/ja/docs#how-it-works">しくみ</a></li>
+        <li><a href="/marketplace/">サービス</a></li>
         <li><a href="https://webapp.flagshipserver.com/">Web アプリ</a></li>
       </ul>
     </div>

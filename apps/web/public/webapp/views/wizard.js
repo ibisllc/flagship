@@ -364,7 +364,7 @@ async function renderStepBody(state, step) {
         <p class="note">${tr("You're all set. Explore your server, or finish here — you can add services any time.")}</p>
         <div class="btn-row-sm">
           <button id="wizard-skip-demo" class="pill primary">${tr("Finish")}</button>
-          <button id="wizard-go-demo" class="pill">Browse marketplace</button>
+          <button id="wizard-go-demo" class="pill">${tr("Browse marketplace")}</button>
         </div>
       `;
     default:

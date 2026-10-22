@@ -11204,5 +11204,131 @@
     "en": "A server shared with you is asking you to unlock it.",
     "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
     "manual": true
+  },
+  "Manage recovery protection and account-level security.": {
+    "en": "Manage recovery protection and account-level security.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:35"
+  },
+  "Use this only if a device may be lost or stolen. It replaces your admin key everywhere and REMOVES admin from every other device — they'll need to recover to regain it. This can't be undone.": {
+    "en": "Use this only if a device may be lost or stolen. It replaces your admin key everywhere and REMOVES admin from every other device — they'll need to recover to regain it. This can't be undone.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:75"
+  },
+  "Removes your authenticator and recovery codes. Recovery goes back to a 3-day wait. Refused while other trusted devices exist.": {
+    "en": "Removes your authenticator and recovery codes. Recovery goes back to a 3-day wait. Refused while other trusted devices exist.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:102"
+  },
+  "Recovering this account needs a 6-digit code from your authenticator app (or a recovery code) and a 24-hour wait.": {
+    "en": "Recovering this account needs a 6-digit code from your authenticator app (or a recovery code) and a 24-hour wait.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:119"
+  },
+  "Your authenticator was set up on this device on %@. Store your recovery codes somewhere safe — they're the only way back in if your authenticator app is lost.": {
+    "en": "Your authenticator was set up on this device on %@. Store your recovery codes somewhere safe — they're the only way back in if your authenticator app is lost.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:134"
+  },
+  "Approve a server boot from your Apple Watch while Flagship is unlocked on this iPhone. Other actions (revoke server, wipe & restart, replace device) always need your iPhone. Off by default.": {
+    "en": "Approve a server boot from your Apple Watch while Flagship is unlocked on this iPhone. Other actions (revoke server, wipe & restart, replace device) always need your iPhone. Off by default.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:195"
+  },
+  "Quick approve from Apple Watch": {
+    "en": "Quick approve from Apple Watch",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:180"
+  },
+  "If a device might be lost or stolen, rotate your admin key. It becomes the only admin key; every other device loses admin until it recovers.": {
+    "en": "If a device might be lost or stolen, rotate your admin key. It becomes the only admin key; every other device loses admin until it recovers.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:232"
+  },
+  "Your admin key changed. Enter your recovery passphrase to update your recovery backup — otherwise recovery would restore the OLD admin key.": {
+    "en": "Your admin key changed. Enter your recovery passphrase to update your recovery backup — otherwise recovery would restore the OLD admin key.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:286"
+  },
+  "You'll need an authenticator app like 1Password, Google Authenticator, or Authy. We'll show a QR code and a manual key — scan or paste either one.": {
+    "en": "You'll need an authenticator app like 1Password, Google Authenticator, or Authy. We'll show a QR code and a manual key — scan or paste either one.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:394"
+  },
+  "With code protection on, recovery needs your 6-digit code (or a recovery code) and a 24-hour wait instead of the 3-day wait.": {
+    "en": "With code protection on, recovery needs your 6-digit code (or a recovery code) and a 24-hour wait instead of the 3-day wait.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:396"
+  },
+  "Print these or store them in a password manager. Each code works once if you lose your authenticator. They're the ONLY way back in.": {
+    "en": "Print these or store them in a password manager. Each code works once if you lose your authenticator. They're the ONLY way back in.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:483"
+  },
+  "Only an admin device can turn on quick approve from Apple Watch.": {
+    "en": "Only an admin device can turn on quick approve from Apple Watch.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/AddServerGate.swift:67"
+  },
+  "AI keys": {
+    "en": "AI keys",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AiKeysScreen.swift:130"
+  },
+  "Add/Restore server": {
+    "en": "Add/Restore server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:675"
+  },
+  "Process URL": {
+    "en": "Process URL",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ProcessUrlScreen.swift:60"
+  },
+  "Pasting a link from a Flagship sign-in page? Drop it here and we'll open it. Most of the time you'll just tap the link or scan the QR — this is the fallback when you can't.": {
+    "en": "Pasting a link from a Flagship sign-in page? Drop it here and we'll open it. Most of the time you'll just tap the link or scan the QR — this is the fallback when you can't.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ProcessUrlScreen.swift:28"
+  },
+  "Open link": {
+    "en": "Open link",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ProcessUrlScreen.swift:51"
+  },
+  "https://%@/access#…": {
+    "en": "https://%@/access#…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ProcessUrlScreen.swift:34",
+    "translatable": false
+  },
+  "We couldn't read that link. Copy the full link from the sign-in page and try again.": {
+    "en": "We couldn't read that link. Copy the full link from the sign-in page and try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ProcessUrlScreen.swift:67"
+  },
+  "This will update all the links to this service, replacing **%@** with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected.": {
+    "en": "This will update all the links to this service, replacing **%@** with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ReplaceServiceStemSheet.swift:50"
+  },
+  "Short redirect": {
+    "en": "Short redirect",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceDetailScreen.swift:236"
+  },
+  "A convenient short link that redirects to your service.": {
+    "en": "A convenient short link that redirects to your service.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceDetailScreen.swift:238"
+  },
+  "Generating short link…": {
+    "en": "Generating short link…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceDetailScreen.swift:244"
+  },
+  "No short link yet. Tap Replace to mint one.": {
+    "en": "No short link yet. Tap Replace to mint one.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceDetailScreen.swift:248"
+  },
+  "Open a sign-in link you copied": {
+    "en": "Open a sign-in link you copied",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:832"
+  },
+  "Scan a pairing code": {
+    "en": "Scan a pairing code",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift:576"
+  },
+  "On by default. Flagship asks you to unlock each time the app launches or returns from the background, so you stay signed in without re-entering your passphrase. Turn it off to open straight in. Either way your services keep running and your pods stay reachable — this only controls who can see and tap.": {
+    "en": "On by default. Flagship asks you to unlock each time the app launches or returns from the background, so you stay signed in without re-entering your passphrase. Turn it off to open straight in. Either way your services keep running and your pods stay reachable — this only controls who can see and tap.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:677"
+  },
+  "Off by default. When on, Flagship doesn't keep you signed in — each launch needs a full sign-in with your account passphrase, not just a quick unlock. The strongest option, and the slowest.": {
+    "en": "Off by default. When on, Flagship doesn't keep you signed in — each launch needs a full sign-in with your account passphrase, not just a quick unlock. The strongest option, and the slowest.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift:698"
+  },
+  "Turn on Quick approve from Apple Watch in Flagship on your iPhone first.": {
+    "en": "Turn on Quick approve from Apple Watch in Flagship on your iPhone first.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApprovalResponder.swift:32"
+  },
+  "Pro ended, so your apps use one access list on all your servers again.": {
+    "en": "Pro ended, so your apps use one access list on all your servers again.",
+    "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
+    "manual": true
   }
 }

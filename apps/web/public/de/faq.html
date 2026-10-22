@@ -104,7 +104,7 @@
   <section class="page-hero">
     <h1>Fragen, in klaren Worten.</h1>
     <p>Die, die sich Leute wirklich stellen, bevor sie uns ihre Hardware und ihr Telefon anvertrauen. Fehlt deine, schreib an <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a>.</p>
-    <nav class="toc" aria-label="Abschnitte"><a href="#setup">Einrichtung &amp; Installation</a><a href="#privacy">Datenschutz &amp; Sicherheit</a><a href="#apps">Dienste</a><a href="#endgame">Falls Flagship verschwindet</a></nav>
+    <nav class="toc" aria-label="Abschnitte"><a href="#setup">Einrichtung &amp; Installation</a><a href="#privacy">Datenschutz &amp; Sicherheit</a><a href="#apps">Dienste &amp; Marktplatz</a><a href="#money">Geld &amp; Abonnements</a><a href="#endgame">Falls Flagship verschwindet</a></nav>
   </section>
 
   <section class="faq-section" id="setup" aria-label="Einrichtung und Installation">
@@ -205,14 +205,26 @@
     </div>
   </section>
 
-  <section class="faq-section" id="apps" aria-label="Dienste">
-    <h2>Dienste</h2>
-    <p class="section-lede">Dienste sind Container, die auf deiner Box laufen, getrennt nach Benutzer-Namespaces.</p>
+  <section class="faq-section" id="apps" aria-label="Dienste und Marktplatz">
+    <h2>Dienste &amp; Marktplatz</h2>
+    <p class="section-lede">Dienste sind Container, die auf deinem Server laufen, getrennt nach Nutzer. Der Marktplatz ist eine Liste von Verweisen, kein Code-Hoster.</p>
     <div class="qlist">
       <details class="q">
         <summary>Was heißt, einen Dienst per „Vibe-Coding“ zu bauen?</summary>
         <div class="answer">
           <p>Du beschreibst in normaler Sprache, was du willst („ein Tracker, welche Zimmerpflanzen ich gegossen habe; benachrichtige mich, wenn eine seit mehr als 5 Tagen durstig ist“). Ein LLM schreibt den Code. Dein Daemon baut ihn, wählt die Datenschicht-Bereiche (Postgres-Tabellen, Objektspeicher, Push) und führt ihn unter <code>plant-water.you.flagship.services</code> aus. Etwa 90 Sekunden. Den Code kannst du bearbeiten, wenn du Lust hast.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Wie funktioniert der Marktplatz?</summary>
+        <div class="answer">
+          <p>Jeder kann einen Eintrag veröffentlichen: Titel, Beschreibung, Screenshots und einen Link zu einem kanonischen Pod. Wir hosten Einträge, nicht Code. Wenn du einen Dienst installierst, holt dein Daemon den Quellcode vom kanonischen Pod (oder von einem Fork, den du angibst), signiert ihn mit der Identität deines Servers und führt ihn in deinem Namensraum aus. Der Marktplatz ist ein Verzeichnis, kein App-Store.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Werden Einträge geprüft?</summary>
+        <div class="answer">
+          <p>Optional, durch den Ersteller. Publisher können einen Sicherheitsscan bezahlen (npm audit + trivy + semgrep + dynamische Prüfungen) und eine Note auf ihrem Eintrag anzeigen lassen. Die Note ist informativ; Einträge machen wir nicht davon abhängig. Einträge, die gegen die Richtlinie zur zulässigen Nutzung unter <a href="/terms">/terms</a> verstoßen, nehmen wir auf Meldung hin herunter.</p>
         </div>
       </details>
       <details class="q">
@@ -237,6 +249,55 @@
         <summary>Kann ich einen Dienst sauber deinstallieren?</summary>
         <div class="answer">
           <p>Ja. Beim Deinstallieren werden Container, Postgres-Datenbank, Dateiordner und Zugriffsliste entfernt. Du kannst vor dem Deinstallieren einen Snapshot behalten, falls du später auf die Daten zurückkommen möchtest.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="faq-section" id="money" aria-label="Geld und Abonnements">
+    <h2>Geld &amp; Abonnements</h2>
+    <p class="section-lede">Hardware ist eine Einmalzahlung. Abonnements sind optional. Eigene Hardware mitzubringen ist für immer kostenlos.</p>
+    <div class="qlist">
+      <details class="q">
+        <summary>Was kostet Flagship?</summary>
+        <div class="answer">
+          <p>Mit eigener Hardware: 0 $. Wir verkaufen noch keine Boxen oder Abonnements. Wenn wir das tun, veröffentlichen wir die Details, und sie sind nur für Power-User-Funktionen und optional. Die meisten zahlen nie etwas.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Warum überhaupt etwas verlangen, wenn es „deine Hardware“ ist?</summary>
+        <div class="answer">
+          <p>Es gibt drei echte Kosten: den Versand der vorgefertigten Boxen (Marge, kein Gewinn über den Preis), den Tunnel-Hub bei Fly (bei unserer Größe wenige Cent pro Server und Monat) und den Betrieb des Wildcard-DNS von <code>flagship.services</code>. Der kostenlose Tarif deckt den Dauerbetrieb einer Einzelperson auf eigener Hardware ab. Abonnements decken, was wir sonst subventionieren müssten.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Kann ich jederzeit kündigen?</summary>
+        <div class="answer">
+          <p>Ja. Die Kündigung ist ein Tipp auf dem Telefon. Den ungenutzten Teil des laufenden Zeitraums erstatten wir anteilig. Deine Subdomain bleibt deine; der Routing-Eintrag funktioniert weiter; nur die kostenpflichtigen Zusatzdienste (Push in großem Umfang usw.) werden abgeschaltet. Wir erpressen dich nicht mit deinem DNS.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Wie sieht eure Rückgabepolitik für Hardware aus?</summary>
+        <div class="answer">
+          <p>30 Tage, volle Erstattung, du schickst es zurück. Innerhalb der USA zahlen wir den Rückversand; außerhalb der USA trägst du ihn. Kam die Box defekt an, zahlen wir beide Wege. Keine Wiedereinlagerungsgebühr. Alle Bedingungen unter <a href="/terms">/terms</a>.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Nehmt ihr Krypto an?</summary>
+        <div class="answer">
+          <p>Noch nicht. Stripe akzeptiert Karten (USD, EUR, GBP). Wir prüfen Monero / Lightning für Datenschutzbewusste, aber es steht nicht auf der unmittelbaren Roadmap. Wenn dir das wichtig ist, schreib an <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a>, denn so werden Funktionen priorisiert.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Wird sich der Preis ändern?</summary>
+        <div class="answer">
+          <p>Hardware: wahrscheinlich, je nach Komponentenkosten. Bestehende Bestellungen bleiben unverändert. Abonnements: Bei einer Preisänderung gilt für alle bestehenden Abonnenten mindestens 12 Monate Bestandsschutz, und wir sagen dir bei der Anmeldung, wenn ein Tarif „Einführungspreis“ ist. Ein „deine Verlängerung kostet jetzt das Dreifache“ gibt es bei uns nicht.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Wie verdient ihr langfristig Geld?</summary>
+        <div class="answer">
+          <p>Mit der Hardware-Marge, Abonnements für optionale Zusatzdienste und Werbegebühren im Marktplatz (deutlich als „hervorgehoben“ gekennzeichnet). Wir verkaufen keine Werbung, Telemetrie, Rechte zum Training von Modellen oder deine Daten – zum Teil, weil es richtig ist, vor allem aber, weil wir es strukturell gar nicht können.</p>
         </div>
       </details>
     </div>
@@ -283,6 +344,7 @@
       <h4>Produkt</h4>
       <ul>
         <li><a href="/de/docs#how-it-works">So funktioniert es</a></li>
+        <li><a href="/marketplace/">Dienste</a></li>
         <li><a href="https://webapp.flagshipserver.com/">Web-App</a></li>
       </ul>
     </div>
