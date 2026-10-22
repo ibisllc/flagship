@@ -39,12 +39,15 @@ export type CronJobId =
   | "dns-gc"
   | "legacy-dns-sweep"
   | "adapter-publish"
-  | "adapter-insights";
+  | "adapter-insights"
+  | "voici-names";
 
 export interface CronPlan {
   jobs: CronJobId[];
   /** For "ct-scan": the window of users this tick scans. */
   ctWindow?: { start: number; count: number };
+  /** For "voici-names": the window of live names this tick looks at. */
+  voiciWindow?: { start: number; count: number };
 }
 
 export const SIX_HOURLY_CRON = "0 */6 * * *";
@@ -54,12 +57,14 @@ export const TEN_MINUTE_CRON = "*/10 * * * *";
 export const CT_USERS_PER_TICK = 4;
 /** Candidate names the suggestion queue tries per tick (2 subrequests each). */
 export const SUGGESTION_ATTEMPTS_PER_TICK = 2;
+/** Custom voi.ci names the upkeep looks at per run (it runs every 40 minutes). */
+export const VOICI_NAMES_PER_RUN = 10;
 
 const TEN_MIN_MS = 10 * 60_000;
 
 const MINOR_GROUPS: CronJobId[][] = [
   ["repair-alerts", "quarantine-alerts", "dns-gc", "legacy-dns-sweep"],
-  ["suggestions", "eviction-gc"],
+  ["suggestions", "eviction-gc", "voici-names"],
 ];
 
 export function cronPlan(cron: string, scheduledTime: number): CronPlan {
@@ -77,7 +82,13 @@ export function cronPlan(cron: string, scheduledTime: number): CronPlan {
     if (tick % 2 === 0) {
       return { jobs: ["demo", "ct-scan"], ctWindow: { start: pair * CT_USERS_PER_TICK, count: CT_USERS_PER_TICK } };
     }
-    return { jobs: ["demo", ...MINOR_GROUPS[pair % MINOR_GROUPS.length]!] };
+    const group = pair % MINOR_GROUPS.length;
+    const plan: CronPlan = { jobs: ["demo", ...MINOR_GROUPS[group]!] };
+    // This group runs every 40 minutes; its Nth run takes the Nth window of names.
+    if (plan.jobs.includes("voici-names")) {
+      plan.voiciWindow = { start: Math.floor(pair / MINOR_GROUPS.length) * VOICI_NAMES_PER_RUN, count: VOICI_NAMES_PER_RUN };
+    }
+    return plan;
   }
   // Unknown cron string: do nothing rather than mis-dispatch (a cron cannot be
   // added without a deploy).
