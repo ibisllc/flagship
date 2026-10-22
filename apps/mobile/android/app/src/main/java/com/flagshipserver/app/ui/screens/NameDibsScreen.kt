@@ -2,6 +2,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -45,16 +48,20 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
+/**
+ * [kind] is "link" when the proof is for a voi.ci name (docs/named-links.md): the label is
+ * filled in from the link field, and [onDone] returns to it once the domain is proven.
+ */
 @Composable
-fun NameDibsScreen() {
+fun NameDibsScreen(kind: String? = null, presetName: String = "", onDone: (() -> Unit)? = null) {
     val client = LocalNameDibsClient.current
     val app = LocalAppState.current
     val user = app.currentUser.collectAsState().value ?: ""
-    val vm = remember(user) { NameDibsViewModel(client, user) }
+    val vm = remember(user, kind) { NameDibsViewModel(client, user, kind) }
     val phase by vm.phase.collectAsState()
     val inlineError by vm.inlineError.collectAsState()
     val scope = rememberCoroutineScope()
-    var name by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(presetName.replace("-", "")) }
 
     LaunchedEffect(vm) { vm.load() }
 
@@ -66,7 +73,7 @@ fun NameDibsScreen() {
     ) {
         Spacer(Modifier.height(FS.space.s8))
         Text(
-            "Claim your .com name",
+            stringResource(R.string.claim_your_com_name),
             color = FS.colors.text,
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
@@ -74,13 +81,12 @@ fun NameDibsScreen() {
         when (val p = phase) {
             NameDibsPhase.Loading, NameDibsPhase.Working -> CircularProgressIndicator()
             is NameDibsPhase.Closed -> Muted(
-                p.opensAt?.let { "The dibs window opens on ${formatDibsDate(it)}." }
-                    ?: "The dibs window isn't open, so no names are held for .com holders — any free name can be bought as an ordinary name change.",
+                p.opensAt?.let { fsString(R.string.the_dibs_window_opens_on, formatDibsDate(it)) }
+                    ?: stringResource(R.string.the_dibs_window_isnt_open_so),
             )
             is NameDibsPhase.EnterName -> {
                 Muted(
-                    "Until ${p.closesAt?.let(::formatDibsDate) ?: "the window closes"}, a name matching a registered .com " +
-                        "is held for whoever controls that domain. Enter the name of the .com you control.",
+                    fsString(R.string.until_a_name_matching_a_registered, p.closesAt?.let(::formatDibsDate) ?: stringResource(R.string.the_window_closes)),
                 )
                 Spacer(Modifier.height(FS.space.s3))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -91,11 +97,11 @@ fun NameDibsScreen() {
                         placeholder = { Text("acme") },
                         modifier = Modifier.weight(1f).testTag("dibs-name"),
                     )
-                    Text(" .com", color = FS.colors.textMuted)
+                    Text(stringResource(R.string.com), color = FS.colors.textMuted)
                 }
                 Spacer(Modifier.height(FS.space.s3))
                 FSPrimaryButton(
-                    "Get my code",
+                    stringResource(R.string.get_my_code),
                     onClick = { scope.launch { vm.start(name) } },
                     enabled = name.isNotBlank(),
                     block = true,
@@ -107,12 +113,21 @@ fun NameDibsScreen() {
                 onCheck = { scope.launch { vm.check() } },
                 onRestart = { vm.restart() },
             )
-            is NameDibsPhase.Proven -> Text(
-                "You've proven you control ${p.name}.com, so the name ${p.name} is held for you. " +
-                    "Switching your account to it is a one-time $20 name change — your servers move with you.",
-                color = FS.colors.text,
-                modifier = Modifier.testTag("dibs-proven"),
-            )
+            is NameDibsPhase.Proven -> if (kind == NameDibsViewModel.KIND_LINK) {
+                Text(
+                    fsString(R.string.youve_proven_you_control_com_so, p.name, p.name),
+                    color = FS.colors.text,
+                    modifier = Modifier.testTag("dibs-proven"),
+                )
+                Spacer(Modifier.height(FS.space.s3))
+                FSPrimaryButton(stringResource(R.string.done), onClick = { onDone?.invoke() }, block = true, modifier = Modifier.testTag("dibs-done"))
+            } else {
+                Text(
+                    fsString(R.string.youve_proven_you_control_com_so_2, p.name, p.name),
+                    color = FS.colors.text,
+                    modifier = Modifier.testTag("dibs-proven"),
+                )
+            }
             is NameDibsPhase.Failed -> Text(p.message, color = FS.colors.danger)
         }
         inlineError?.let {
@@ -129,17 +144,16 @@ private fun Muted(text: String) = Text(text, color = FS.colors.textMuted, style 
 @Composable
 private fun Publish(claim: DibsClaim, onCheck: () -> Unit, onRestart: () -> Unit) {
     Muted(
-        "Publish this code in one of these two places, then check. It's tied to your account's key, so nobody " +
-            "else can use it. DNS changes can take a while — you can leave and come back.",
+        stringResource(R.string.publish_this_code_in_one_of),
     )
     Spacer(Modifier.height(FS.space.s3))
-    Place("Option 1 — DNS TXT record", listOf("Name" to claim.publishAt.dns.name, "Value" to claim.record))
+    Place(stringResource(R.string.option_1_dns_txt_record), listOf("Name" to claim.publishAt.dns.name, "Value" to claim.record))
     Spacer(Modifier.height(FS.space.s2))
-    Place("Option 2 — a file on your website", listOf("URL" to claim.publishAt.https.url, "Text" to claim.record))
+    Place(stringResource(R.string.option_2_a_file_on_your), listOf("URL" to claim.publishAt.https.url, "Text" to claim.record))
     Spacer(Modifier.height(FS.space.s3))
-    FSPrimaryButton("Check now", onClick = onCheck, block = true, modifier = Modifier.testTag("dibs-check"))
+    FSPrimaryButton(stringResource(R.string.check_now), onClick = onCheck, block = true, modifier = Modifier.testTag("dibs-check"))
     Spacer(Modifier.height(FS.space.s2))
-    FSSecondaryButton("Use a different name", onClick = onRestart, block = true)
+    FSSecondaryButton(stringResource(R.string.use_a_different_name), onClick = onRestart, block = true)
 }
 
 @Composable
@@ -154,7 +168,7 @@ private fun Place(title: String, lines: List<Pair<String, String>>) {
                         Text(label, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
                         Text(value, color = FS.colors.text, style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace))
                     }
-                    TextButton(onClick = { clipboard.setText(AnnotatedString(value)) }) { Text("Copy") }
+                    TextButton(onClick = { clipboard.setText(AnnotatedString(value)) }) { Text(stringResource(R.string.copy)) }
                 }
             }
         }

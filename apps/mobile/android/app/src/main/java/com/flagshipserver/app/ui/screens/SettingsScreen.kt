@@ -246,8 +246,8 @@ fun SettingsScreen(nav: NavController) {
             ) + (if (dibsOpen && !isDemoAccountSession) listOf(
                 FSSettingsRowData(
                     icon = Icons.Outlined.Flag,
-                    title = "Claim your .com name",
-                    subtitle = "Own the .com? The matching name is held for you.",
+                    title = stringResource(R.string.claim_your_com_name),
+                    subtitle = stringResource(R.string.own_the_com_the_matching_name),
                     onClick = { nav.navigate("name-dibs") },
                     testTag = "settings-open-name-dibs",
                 ),
