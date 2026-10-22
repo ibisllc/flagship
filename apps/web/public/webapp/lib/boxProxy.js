@@ -15,21 +15,22 @@
 
 import { bytesToHex } from "../keystore.js";
 
+import { tr } from "./i18n.js";
 export const TAG_BOX_PROXY = "flagship/box-proxy/v1";
 export const OUTBOUND_PROXY_PATH = "/api/screens/outbound-proxy";
 export const BOX_PROXY_KINDS = ["none", "socks5", "http"];
 export const DEFAULT_PROXY_PORT = { socks5: 1080, http: 3128 };
 
 export const PROXY_EXPLAINER =
-  "Send this server's internet traffic through a proxy, so Flagship and the sites it reaches see the proxy's address instead of yours.";
+  tr("Send this server's internet traffic through a proxy, so Flagship and the sites it reaches see the proxy's address instead of yours.");
 export const PROXY_CREDENTIALS_NOTE =
-  "The username and password are saved in the setup file. Only give the file to people you trust.";
-export const PROXY_FALLBACK_LABEL = "If the proxy stops working, connect directly";
+  tr("The username and password are saved in the setup file. Only give the file to people you trust.");
+export const PROXY_FALLBACK_LABEL = tr("If the proxy stops working, connect directly");
 export const PROXY_FALLBACK_NOTE =
-  "If this is off and the proxy stops working, the server goes offline until the proxy is back or you change it from the same network.";
+  tr("If this is off and the proxy stops working, the server goes offline until the proxy is back or you change it from the same network.");
 
 /** Shown instead of the fields on a Free account: the proxy is part of Pro. */
-export const PROXY_PRO_NOTE = "An outbound proxy is part of Pro.";
+export const PROXY_PRO_NOTE = tr("An outbound proxy is part of Pro.");
 
 /** Free accounts can't set a proxy; an unknown plan doesn't block (the box
  *  checks too, once .com has told it the plan). */
@@ -39,7 +40,7 @@ export function proxyAllowedForTier(tier) {
 
 /** The "Part of Pro" row, linking to the Pro page. */
 export function proxyProHtml() {
-  return `<p class="faint-sm" data-proxy-pro>${esc(PROXY_PRO_NOTE)} <a href="/pro" target="_blank" rel="noopener">See Pro</a></p>`;
+  return `<p class="faint-sm" data-proxy-pro>${tr("{0} <a href=\"/pro\" target=\"_blank\" rel=\"noopener\">See Pro</a>", esc(PROXY_PRO_NOTE))}</p>`;
 }
 
 const HOSTNAME_LABEL = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -49,15 +50,15 @@ const HEX64 = /^[0-9a-f]{64}$/;
 
 /** Why `host` is not an acceptable proxy host, or null. Expects normalized input. */
 export function boxProxyHostError(host) {
-  if (host.length === 0) return "Enter the proxy's address.";
-  if (host.length > 253) return "That address is too long.";
+  if (host.length === 0) return tr("Enter the proxy's address.");
+  if (host.length > 253) return tr("That address is too long.");
   if (host.includes(":")) {
-    return IPV6.test(host) && host.split(":").length >= 3 ? null : "Use a host name or an IP address, without a scheme, path or port.";
+    return IPV6.test(host) && host.split(":").length >= 3 ? null : tr("Use a host name or an IP address, without a scheme, path or port.");
   }
   if (IPV4.test(host)) return null;
-  if (/^[0-9.]+$/.test(host)) return "That isn't a valid IPv4 address.";
+  if (/^[0-9.]+$/.test(host)) return tr("That isn't a valid IPv4 address.");
   if (host.split(".").every((l) => HOSTNAME_LABEL.test(l))) return null;
-  return "Use a host name or an IP address, without a scheme, path or port.";
+  return tr("Use a host name or an IP address, without a scheme, path or port.");
 }
 
 /** Trim, lowercase and drop IPv6 brackets and a trailing dot. */
@@ -70,7 +71,7 @@ export function normalizeBoxProxyHost(raw) {
 
 /** Why the credentials can't be used, or null. SOCKS5 caps both at 255 bytes. */
 export function boxProxyCredentialsError(c) {
-  if (typeof c?.username !== "string" || typeof c?.password !== "string") return "Enter a username and password.";
+  if (typeof c?.username !== "string" || typeof c?.password !== "string") return tr("Enter a username and password.");
   const enc = new TextEncoder();
   const bad = (s) => [...s].some((ch) => {
     const code = ch.charCodeAt(0);
@@ -78,10 +79,10 @@ export function boxProxyCredentialsError(c) {
   });
   const u = enc.encode(c.username).length;
   const p = enc.encode(c.password).length;
-  if (u === 0 || p === 0) return "Enter a username and password.";
-  if (u > 255 || p > 255) return "The username and password can be at most 255 bytes each.";
-  if (c.username.includes(":")) return "The username can't contain a colon.";
-  if (bad(c.username) || bad(c.password)) return "The username and password can't contain control characters.";
+  if (u === 0 || p === 0) return tr("Enter a username and password.");
+  if (u > 255 || p > 255) return tr("The username and password can be at most 255 bytes each.");
+  if (c.username.includes(":")) return tr("The username can't contain a colon.");
+  if (bad(c.username) || bad(c.password)) return tr("The username and password can't contain control characters.");
   return null;
 }
 
@@ -141,12 +142,12 @@ export function readProxyForm({ kind, host, port, username, password, fallbackDi
   if (hostErr) return { ok: false, error: hostErr, field: "host" };
   const portText = String(port ?? "").trim();
   const n = /^\d{1,5}$/.test(portText) ? Number(portText) : NaN;
-  if (!Number.isInteger(n) || n < 1 || n > 65535) return { ok: false, error: "The port must be a number from 1 to 65535.", field: "port" };
+  if (!Number.isInteger(n) || n < 1 || n > 65535) return { ok: false, error: tr("The port must be a number from 1 to 65535."), field: "port" };
   const u = String(username ?? "");
   const pw = String(password ?? "");
   let credentials = null;
   if (u !== "" || pw !== "") {
-    if (u === "" || pw === "") return { ok: false, error: "Enter both a username and a password, or neither.", field: "credentials" };
+    if (u === "" || pw === "") return { ok: false, error: tr("Enter both a username and a password, or neither."), field: "credentials" };
     credentials = { username: u, password: pw };
     const why = boxProxyCredentialsError(credentials);
     if (why) return { ok: false, error: why, field: "credentials" };
@@ -166,7 +167,7 @@ function randomNonceHex() {
  * keeps the box's stored credentials).
  */
 export async function buildSignedBoxProxy({ serverDomain, value, keepAuth = false }, { umk, sign, now = Date.now, nonceHex } = {}) {
-  if (!umk || typeof sign !== "function") throw new Error("Unlock the webapp first");
+  if (!umk || typeof sign !== "function") throw new Error(tr("Unlock the webapp first"));
   const on = value.kind === "socks5" || value.kind === "http";
   const proxy = {
     serverDomain: String(serverDomain).toLowerCase(),
@@ -208,8 +209,8 @@ export function proxyStatusText(summary) {
   const s = summary?.status;
   if (!summary?.proxy || !s) return "";
   if (s.state === "ok") return "Working";
-  if (s.state === "failing") return `Not working: ${s.lastError ?? "Can't reach the proxy."}`;
-  if (s.state === "fallback") return "Using a direct connection: the proxy isn't answering";
+  if (s.state === "failing") return tr("Not working: {0}", s.lastError ?? tr("Can't reach the proxy."));
+  if (s.state === "fallback") return tr("Using a direct connection: the proxy isn't answering");
   return "";
 }
 
@@ -241,18 +242,18 @@ export function proxyFieldsHtml(prefix, init = {}) {
   const kind = init.kind === "socks5" || init.kind === "http" ? init.kind : "none";
   const opt = (v, label) => `<option value="${v}"${kind === v ? " selected" : ""}>${label}</option>`;
   return `
-    <label for="${prefix}-kind">Type</label>
+    <label for="${prefix}-kind">${tr("Type")}</label>
     <select id="${prefix}-kind">${opt("none", "None")}${opt("socks5", "SOCKS5")}${opt("http", "HTTP")}</select>
     <div id="${prefix}-fields"${kind === "none" ? ' class="hidden"' : ""}>
-      <label for="${prefix}-host">Proxy address</label>
+      <label for="${prefix}-host">${tr("Proxy address")}</label>
       <input id="${prefix}-host" type="text" autocomplete="off" autocapitalize="none" spellcheck="false"
              placeholder="proxy.example.net or 192.168.1.20" value="${esc(init.host ?? "")}" />
-      <label for="${prefix}-port">Port</label>
+      <label for="${prefix}-port">${tr("Port")}</label>
       <input id="${prefix}-port" type="number" min="1" max="65535" inputmode="numeric"
              value="${esc(init.port ?? (kind === "none" ? "" : DEFAULT_PROXY_PORT[kind]))}" />
-      <label for="${prefix}-username">Username (optional)</label>
+      <label for="${prefix}-username">${tr("Username (optional)")}</label>
       <input id="${prefix}-username" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" />
-      <label for="${prefix}-password">Password (optional)</label>
+      <label for="${prefix}-password">${tr("Password (optional)")}</label>
       <input id="${prefix}-password" type="password" autocomplete="new-password"${init.hasCredentials ? ' placeholder="Unchanged"' : ""} />
       <p id="${prefix}-cred-note" class="faint-sm hidden">${esc(PROXY_CREDENTIALS_NOTE)}</p>
       <label class="inline-check mt-2">

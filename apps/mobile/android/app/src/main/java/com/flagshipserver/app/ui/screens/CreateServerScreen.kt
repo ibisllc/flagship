@@ -1566,7 +1566,7 @@ internal suspend fun mintRecipeBundle(
         val order = draft.order(serverDomain, auth = draft.hasCredentials, now = now)
         com.flagshipserver.app.core.BoxProxyWire(
             order,
-            com.flagshipserver.app.core.BoxProxyProtocol.sign(order, proxySigner("Create server $serverName")),
+            com.flagshipserver.app.core.BoxProxyProtocol.sign(order, proxySigner(fsString(R.string.create_server, serverName))),
         )
     }
 
