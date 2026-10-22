@@ -62,3 +62,18 @@ describe("tr / trn without a catalog", () => {
     expect(trn(3, "{0} app", "{0} apps")).toBe("3 apps");
   });
 });
+
+describe("language negotiation vectors (test-vectors/language-negotiation.json)", () => {
+  it("chooses the same language as the box pages and the website", () => {
+    const v = JSON.parse(readFileSync(resolve(__dirname, "..", "..", "..", "test-vectors", "language-negotiation.json"), "utf8")) as { ga: string[]; cases: Array<{ accept: string; expect: string }> };
+    for (const c of v.cases) {
+      // navigator.languages is the header's tags in preference order, without the q=0 ones
+      const tags = c.accept.split(",").map((p, i) => {
+        const [tag, ...params] = p.trim().split(";");
+        const q = Number(/q=([\d.]+)/.exec(params.join(";"))?.[1] ?? 1);
+        return { tag: (tag ?? "").trim(), q, i };
+      }).filter((x) => x.tag && x.q > 0).sort((a, b) => b.q - a.q || a.i - b.i).map((x) => x.tag);
+      expect([c.accept, pickLanguage(null, tags, v.ga)]).toEqual([c.accept, c.expect]);
+    }
+  });
+});

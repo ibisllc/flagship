@@ -36,3 +36,12 @@ describe("pickWebLocale", () => {
     expect(pickWebLocale("en", "fs-lang=fr", live)).toBeNull();
   });
 });
+
+describe("language negotiation vectors (test-vectors/language-negotiation.json)", () => {
+  it("chooses the same language as the webapp and the box pages", async () => {
+    const { readFileSync } = await import("node:fs");
+    const v = JSON.parse(readFileSync(new URL("../../../test-vectors/language-negotiation.json", import.meta.url), "utf8")) as { ga: string[]; cases: Array<{ accept: string; expect: string }> };
+    const all: WebLocale[] = v.ga.map((code) => ({ code, webPath: code.toLowerCase() }));
+    for (const c of v.cases) expect([c.accept, pickWebLocale(c.accept, null, all)?.code ?? "en"]).toEqual([c.accept, c.expect]);
+  });
+});
