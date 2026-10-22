@@ -2534,5 +2534,17 @@
   "Couldn't attach \"{0}\".": "Impossible de joindre « {0} ».",
   "Add a server": "Ajouter un serveur",
   "{0} can now manage this server": "{0} peut maintenant gérer ce serveur",
-  "{0} can now see this server": "{0} peut maintenant voir ce serveur"
+  "{0} can now see this server": "{0} peut maintenant voir ce serveur",
+  "companion": "compagnon",
+  "invite": "invitation",
+  "join": "rejoindre",
+  "connecting": "connexion",
+  "remote": "à distance",
+  "locked": "verrouillé",
+  "first run": "premier lancement",
+  "Confirm": "Confirmer",
+  "Filter": "Filtrer",
+  "Search": "Rechercher",
+  "authorize": "autoriser",
+  "device reset": "appareil réinitialisé"
 }
