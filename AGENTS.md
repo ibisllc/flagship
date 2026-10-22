@@ -339,6 +339,15 @@ of the last check here: **not yet checked**.
   real box, device builds (iOS fails `ContentView.swift:149` with the newest Xcode, also on the base commit; Android and the
   WPF app were not compiled here). Store assets: brief v2 in `docs/store-assets/`, awaiting the owner. Handoff notes for
   packaging: `docs/store-assets/HANDOFF-DELETE-ME.md`.
+- **Custom voi.ci names (2026-10-22, branch `feat/named-links`, plan `docs/named-links.md`).** A service keeps
+  its random code for life and an admin device may add ONE custom name (4-40 of `a-z 0-9 -`, hyphen-less key)
+  signed `flagship/voici-name/v1`. Limits: 3 changes per service per 30 days, names held 5 / 25 / 100 by plan,
+  10 changes a day per account; released after 60 days with no running server (warnings at 30 and 7), then a
+  30-day wait (410, nobody can take it). Dibs: `.com`-registered labels need the domain proof (same flow as account
+  names, `kind: link`). Built: protocol, D1 0107, `.com` routes + cron, webapp field (shell v159, six languages).
+  Open: iOS and Android ports, rank/priority text review, box-side gossip fix so the canonical address always reaches
+  a running instance, live gym group, then set `VOICI_CANONICAL=1` (off until proven). `.com` has no per-service
+  delete signal, so a deleted app's code retires only with its account.
 - **Final-round device test fixes (2026-10-19; on `origin/main`).**
   The Windows device test (`device-results/FINAL-ROUND-windows-2026-10-19.md` on
   `device-results/windows-2026-10-17`) found these; the fixes are merged:
