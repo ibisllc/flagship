@@ -289,6 +289,9 @@ new_sqlite_classes = ["RateLimitCounter"]
 # is off and every free name is open to everyone.
 # DIBS_WINDOW_START = "2026-10-15"
 # DIBS_WINDOW_END = "2027-10-15"
+# voi.ci links go to the canonical address (<label>.<user>.flagship.services) once "1".
+# Turn on only after the gym group named-links proves it reaches a running instance.
+# VOICI_CANONICAL = "1"
 # Apex roots, as CONFIG (docs/ui-test-gym.md §6.5 / §12-G1). PROD VALUES =
 # today's literals, so this Worker is byte-identical to before. The `gym.`
 # test Worker (a separate wrangler config / --name) overrides these to
