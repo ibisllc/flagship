@@ -2609,4 +2609,6 @@
     <string name="went_back_to_an_apps_default_link">Voltou ao link padrão de um app</string>
     <string name="released_an_apps_link">O link de um app foi liberado</string>
     <string name="an_apps_link_will_be_released_soon">O link de um app será liberado em breve</string>
+    <string name="sign_out_of_flagship">Sair do Flagship</string>
+    <string name="confirm_its_you">Confirme que é você</string>
 </resources>

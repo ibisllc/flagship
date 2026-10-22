@@ -2613,4 +2613,6 @@
     <string name="went_back_to_an_apps_default_link">Went back to an app\'s default link</string>
     <string name="released_an_apps_link">Released an app\'s link</string>
     <string name="an_apps_link_will_be_released_soon">An app\'s link will be released soon</string>
+    <string name="sign_out_of_flagship">Sign out of Flagship</string>
+    <string name="confirm_its_you">Confirm it\'s you</string>
 </resources>

@@ -2609,4 +2609,6 @@
     <string name="went_back_to_an_apps_default_link">アプリのリンクをデフォルトに戻しました</string>
     <string name="released_an_apps_link">アプリのリンクを解放しました</string>
     <string name="an_apps_link_will_be_released_soon">アプリのリンクはまもなく解放されます</string>
+    <string name="sign_out_of_flagship">Flagshipからサインアウト</string>
+    <string name="confirm_its_you">ご本人であることを確認してください</string>
 </resources>
