@@ -20,6 +20,7 @@
  * ZERO active (`revokedAt === null`) device grants for the account.
  */
 
+import { releaseAccountLinks, type VoiciNamesDeps } from "./voiciNames.js";
 import {
   verifyAccountSelfDelete,
   verifyServersSelfDelete,
@@ -81,6 +82,8 @@ export interface AccountDeletionDeps {
   webauthnRecovery?: WebauthnRecoveryStorage;
   pushTokens?: PushTokenStorage;
   serverOrders?: ServerOrderStorage;
+  /** voi.ci: the account's custom names enter their wait and its codes are retired (docs/named-links.md). */
+  voici?: Pick<VoiciNamesDeps, "voiciLinks" | "voiciNames">;
   /** Mailbox the §5 content-wipe order is DEPOSITED into (one row per owned
    *  server), so an online box consumes it on its heartbeat and wipes. Absent
    *  ⇒ the content-wipe is recorded as an audit row only (no box-side delivery).
@@ -288,6 +291,14 @@ async function commitAccountHardDelete(
       /* swallow */
     }
     for (const z of zones) await removeAccountDns(deps.dns, z);
+  }
+
+  if (deps.voici) {
+    try {
+      await releaseAccountLinks({ ...deps.voici, now: deps.now }, username);
+    } catch {
+      /* swallow — the account death has already committed */
+    }
   }
 
   // Purge account-scoped credentials so a reclaimed name starts clean and no

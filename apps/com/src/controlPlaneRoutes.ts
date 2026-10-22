@@ -144,6 +144,9 @@ import {
   handleSetRoutingTarget,
   handleSuggestUsername,
   handleNameDibsWindow,
+  handleVoiciNameCheck,
+  handleVoiciNameSet,
+  handleListVoiciNames,
   handleNameDibsInitiate,
   handleNameDibsVerify,
   parseDibsWindow,
@@ -764,6 +767,9 @@ const ROUTE_RE = {
   WIPE_RESTART: /^\/api\/users\/([^/]+)\/wipe-restart$/,
   APP_RENAME: /^\/api\/users\/([^/]+)\/apps\/([^/]+)\/rename$/,
   APP_LINKS: /^\/api\/users\/([^/]+)\/apps\/([^/]+)\/links$/,
+  VOICI_NAME_SET: /^\/api\/users\/([^/]+)\/apps\/([^/]+)\/voici-name$/,
+  VOICI_NAME_CHECK: /^\/api\/users\/([^/]+)\/voici-name-check$/,
+  VOICI_NAMES_LIST: /^\/api\/users\/([^/]+)\/voici-names$/,
   CUSTOM_DOMAIN: /^\/api\/users\/([^/]+)\/apps\/([^/]+)\/custom-domain$/,
   APP_ALIASES: /^\/api\/users\/([^/]+)\/apps\/aliases$/,
   VOICI_SHORTEN: /^\/api\/voici\/shorten$/,
@@ -861,6 +867,9 @@ const ACCOUNT_GONE_ROUTES: { re: RegExp; methods?: readonly string[] }[] = [
   { re: ROUTE_RE.APP_ALIASES },
   { re: ROUTE_RE.APP_LINKS },
   { re: ROUTE_RE.APP_RENAME },
+  { re: ROUTE_RE.VOICI_NAME_SET },
+  { re: ROUTE_RE.VOICI_NAME_CHECK },
+  { re: ROUTE_RE.VOICI_NAMES_LIST },
   { re: ROUTE_RE.DEVICE_GRANTS_LIST },
   { re: ROUTE_RE.DEVICE_GRANTS_REVOKE },
   { re: ROUTE_RE.ACCOUNT_READ_TOKEN },
@@ -1329,6 +1338,7 @@ export async function tryControlPlane(
           webauthnRecovery: storage.webauthnRecovery,
           pushTokens: storage.pushTokens,
           serverOrders: storage.serverOrders,
+          voici: { voiciLinks: storage.voiciLinks, voiciNames: storage.voiciNames },
           // §5 box-side delivery: deposit the content-wipe order for each owned
           // server so an online box consumes it on its heartbeat and wipes.
           secretMailbox: storage.secretMailbox,
@@ -2963,6 +2973,7 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           userServiceAliases: storage.userServiceAliases,
           voiciLinks: storage.voiciLinks,
+          voiciNames: storage.voiciNames,
           servers: storage.servers,
           daemonStatus: storage.daemonStatus,
           auditEvents: storage.auditEvents,
@@ -2978,6 +2989,28 @@ export async function tryControlPlane(
       ),
     );
   }
+  if (method === "POST" && (m = path.match(ROUTE_RE.VOICI_NAME_SET))) {
+    return finish(
+      await handleVoiciNameSet(voiciNamesDeps(storage, env), decodeURIComponent(m[1]!), decodeURIComponent(m[2]!), await readJson(request)),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.VOICI_NAME_CHECK))) {
+    const gate = await gateAccountRead(storage, env, request, decodeURIComponent(m[1]!));
+    if (gate) return gate;
+    return finishRead(
+      await handleVoiciNameCheck(
+        voiciNamesDeps(storage, env),
+        decodeURIComponent(m[1]!),
+        url.searchParams.get("service"),
+        url.searchParams.get("name") ?? "",
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.VOICI_NAMES_LIST))) {
+    const gate = await gateAccountRead(storage, env, request, decodeURIComponent(m[1]!));
+    if (gate) return gate;
+    return finishRead(await handleListVoiciNames(voiciNamesDeps(storage, env), decodeURIComponent(m[1]!)));
+  }
   if (method === "GET" && (m = path.match(ROUTE_RE.APP_LINKS))) {
     const gate = await gateAccountRead(storage, env, request, decodeURIComponent(m[1]!));
     if (gate) return gate;
@@ -2987,6 +3020,8 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           userServiceAliases: storage.userServiceAliases,
           voiciLinks: storage.voiciLinks,
+          voiciNames: storage.voiciNames,
+          tiers: storage.tiers,
           servers: storage.servers,
           daemonStatus: storage.daemonStatus,
           auditEvents: storage.auditEvents,
@@ -3870,6 +3905,23 @@ function finishPlain(r: HandlerResponse): Response {
 /** Private per-account reads answer `private, no-store` so no cache keeps them. */
 function finishRead(r: HandlerResponseWithHeaders): Response {
   return finish({ ...r, headers: { ...(r.headers ?? {}), ...ACCOUNT_READ_HEADERS } });
+}
+
+/** Everything the custom-name handlers need (docs/named-links.md); the dibs part is the same window and proofs as the account-name claim. */
+function voiciNamesDeps(storage: D1Storage, env: ControlPlaneEnv) {
+  return {
+    usernames: storage.usernames,
+    voiciLinks: storage.voiciLinks,
+    voiciNames: storage.voiciNames,
+    tiers: storage.tiers,
+    grants: storage.deviceCapabilityGrants,
+    auditEvents: storage.auditEvents,
+    dibs: {
+      claims: storage.nameDibsClaims,
+      window: parseDibsWindow(env.DIBS_WINDOW_START, env.DIBS_WINDOW_END),
+      fetch: (url: string, init?: Parameters<DibsFetch>[1]) => fetch(url, init),
+    },
+  };
 }
 
 function accountReadTokenDeps(storage: D1Storage, env: ControlPlaneEnv) {
