@@ -123,3 +123,14 @@ export class SiblingView {
     return this.records.get(id.toLowerCase());
   }
 }
+
+/**
+ * Gossiped members plus the ones learned another way (`extra`), each server
+ * once: a gossiped record wins. The extras have no known birth date, so every
+ * member is compared at birth date 0 and the server order, then the domain,
+ * decides identically on every box.
+ */
+export function mergeSiblings(gossiped: ViewMember[], extra: ViewMember[]): ViewMember[] {
+  const seen = new Set(gossiped.map((m) => m.id));
+  return [...gossiped.map((m) => ({ ...m, birthDate: 0 })), ...extra.filter((m) => !seen.has(m.id))];
+}

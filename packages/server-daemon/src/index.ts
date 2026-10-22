@@ -289,7 +289,7 @@ import { providerRelay } from "./tunnel/relayFetch.js";
 import { AccessPrincipals, AccountDeviceBook } from "./accessPrincipals.js";
 import { AccessJournal } from "./accessJournal.js";
 import { buildAccessSync, deriveAccessSyncKey, type AccessPeers, type AccessSync } from "./accessSync.js";
-import { buildPodsPeers } from "./accessPeers.js";
+import { buildPodsPeers, type PodsPeers } from "./accessPeers.js";
 import { BoxReadToken } from "./boxReadToken.js";
 
 /**
@@ -1078,6 +1078,7 @@ async function main(): Promise<void> {
   // once gossip is up (below).
   const accessSyncRef: { current: AccessSync | null } = { current: null };
   const accessPeersRef: { current: AccessPeers | null } = { current: null };
+  const podsPeersRef: { current: PodsPeers | null } = { current: null };
   const {
     pullStateStore,
     updateServer,
@@ -1750,6 +1751,24 @@ async function main(): Promise<void> {
         listServiceSlugs: () =>
           servicePlatformRefForServer.current?.list().map((a) => a.slug) ?? [],
         ...(serverOrder ? { serverOrder } : {}),
+        // Gossip frames have never reached a sibling live, so the other
+        // servers are also read from .com's list and asked directly: the same
+        // view the one-list-per-app sync already leads by.
+        extraSiblings: () => {
+          const peers = podsPeersRef.current;
+          const apps = servicePlatformRefForServer.current?.list() ?? [];
+          if (!peers) return [];
+          const slugOf = new Map(apps.map((a) => [a.serviceId, a.slug]));
+          return peers.peerRunners().map((r) => ({
+            id: r.domain,
+            domain: r.domain,
+            stkHex: r.stkHex,
+            birthDate: 0,
+            orderRank: serverOrder?.rankOf(r.stkHex) ?? null,
+            liveness: "live" as const,
+            services: r.apps.map((id) => slugOf.get(id)).filter((x): x is string => !!x),
+          }));
+        },
         // The zone this box lives in (`<server>.<user>.<apex>`): the gym's
         // boxes are under gym.flagship.services, so broadcast and the
         // leader-routed URLs must not assume the production apex.
@@ -1807,6 +1826,7 @@ async function main(): Promise<void> {
       log: (m) => console.warn(m),
     });
     accessPeersRef.current = peers;
+    podsPeersRef.current = peers;
     peers.start();
   }
 

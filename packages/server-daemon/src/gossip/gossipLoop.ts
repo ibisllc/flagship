@@ -32,7 +32,7 @@ import {
 } from "./election.js";
 import type { RouteClaimer } from "./routeClaimer.js";
 import type { CertPrewarm } from "./routeNudge.js";
-import type { SiblingView } from "./siblingView.js";
+import { mergeSiblings, type SiblingView, type ViewMember } from "./siblingView.js";
 
 /** Default announce cadence — within the 30-60s window the spec calls for. */
 export const ANNOUNCE_INTERVAL_MS = 45_000;
@@ -70,6 +70,16 @@ export interface GossipLoopDeps {
   readSelf: () => SelfAnnounceState;
   /** Position of a box (by STK hex) in the held server order, or null. */
   rankOf?: (stkHex: string) => number | null;
+  /**
+   * Siblings known by another route than gossip frames: `.com`'s server list
+   * plus a direct ask of each server (accessPeers.ts). Gossip frames have never
+   * reached a sibling live, so without this every box elected itself for
+   * every service. A server heard both ways counts once, by its gossip record.
+   * Because the birth date of these members is unknown, every member is
+   * compared at birth date 0 while this is set: the server order decides, then
+   * the domain, the same on every box.
+   */
+  extraSiblings?: () => ViewMember[];
   /** Broadcast endpoint, e.g. https://broadcast--harry.flagship.services . */
   broadcastUrl: string;
   intervalMs?: number;
@@ -149,13 +159,19 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
     }
   }
 
+  function siblings(t: number): ViewMember[] {
+    const gossiped = deps.view.liveMembers(t, rankOf);
+    if (!deps.extraSiblings) return gossiped;
+    return mergeSiblings(gossiped, deps.extraSiblings());
+  }
+
   /** Build the SelfMember for this box from its current announce state. */
   function selfMember(s: SelfAnnounceState): SelfMember {
     return {
       id: s.name.toLowerCase(),
       domain: s.name.toLowerCase(),
       stkHex: s.birthAuthHex.toLowerCase(),
-      birthDate: s.birthDate,
+      birthDate: deps.extraSiblings ? 0 : s.birthDate,
       orderRank: rankOf(s.birthAuthHex),
       services: s.services,
     };
@@ -165,7 +181,7 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
     const t = now();
     deps.view.prune(t);
     const self: SelfMember = selfMember(s);
-    const liveSiblings = deps.view.liveMembers(t, rankOf);
+    const liveSiblings = siblings(t);
     // Record the leads BEFORE applying claim/release so the heartbeat reports the
     // election outcome even if a claim apply throws (the route is soft, the
     // election is the source of truth for "lead").
@@ -216,13 +232,13 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
       const t = now();
       deps.view.prune(t);
       const self = selfMember(deps.readSelf());
-      const liveSiblings = deps.view.liveMembers(t, rankOf);
+      const liveSiblings = siblings(t);
       return computeLeadsSnapshot({ self, liveSiblings });
     },
     leader: () => {
       const t = now();
       deps.view.prune(t);
-      return accountLeader({ self: selfMember(deps.readSelf()), liveSiblings: deps.view.liveMembers(t, rankOf) });
+      return accountLeader({ self: selfMember(deps.readSelf()), liveSiblings: siblings(t) });
     },
   };
 }
