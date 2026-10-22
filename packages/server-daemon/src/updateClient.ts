@@ -39,6 +39,23 @@ const execFileP = promisify(execFile);
 export type UpdatePolicy = "auto" | "manual" | "frozen";
 
 /**
+ * Creator code never updates a box on its own (SEC-MIG-001): a stored "auto"
+ * is treated as "manual" until the migration sandbox exists, so every
+ * third-party update waits for the owner.
+ */
+export function effectiveUpdatePolicy(p: UpdatePolicy): UpdatePolicy {
+  return p === "auto" ? "manual" : p;
+}
+
+/** `.js` and `.ts` migrations are creator code; the host never executes them. */
+export function isHostScriptMigration(filename: string): boolean {
+  return /\.(?:[cm]?js|[cm]?ts|jsx|tsx)$/i.test(filename);
+}
+
+export const HOST_SCRIPT_MIGRATION_REFUSAL =
+  "This update carries a script migration, which a server does not run. Only SQL migrations are accepted.";
+
+/**
  * Per-app state persisted on disk by the daemon. Read on boot, written
  * after each successful pull / migration. The store is injected so we
  * don't dictate the on-disk layout (production: per-app JSON file under
@@ -248,6 +265,7 @@ export class UpdateClient {
     if (state.updatePolicy === "frozen") {
       return { kind: "no-op", reason: "frozen-policy" };
     }
+    const policy = effectiveUpdatePolicy(state.updatePolicy);
     // Durable auto-pause: a previous tick detected a lineage break and
     // the phone hasn't resolved it yet. Refuse to even fetch — we
     // don't want to re-emit an alert every 6h, and we definitely don't
@@ -387,7 +405,7 @@ export class UpdateClient {
         };
       }
 
-      if (state.updatePolicy === "manual") {
+      if (policy === "manual") {
         // Stage but don't merge. Record the pending tip; the phone-side
         // approval flow will call `applyPending` to commit.
         const next: AppPullState = { ...state, pendingPullCommit: upstreamTip };
@@ -496,6 +514,18 @@ export class UpdateClient {
       atCommit: toCommit,
       lastApplied: state.lastAppliedMigration,
     });
+    // Refuse before the tree moves: a creator's script must never run on the host.
+    const scripted = migrationsToRun.find((m) => isHostScriptMigration(m));
+    if (scripted) {
+      const reason = HOST_SCRIPT_MIGRATION_REFUSAL;
+      this.deps.emitPhoneAlert({
+        kind: "migration-failed",
+        serviceId,
+        migrationFile: scripted,
+        reason,
+      });
+      return { kind: "halted-migration-failed", failingFile: scripted, reason };
+    }
 
     // Fast-forward main to toCommit (creates main on first pull).
     const hasMain = await this.refExists(workDir, "main");

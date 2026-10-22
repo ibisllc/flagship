@@ -156,44 +156,7 @@ describe("UpdateClient", () => {
     expect(fetched).toBe(false);
   });
 
-  it("auto policy: applies new commits, runs no migrations when none exist, restarts container", async () => {
-    const store = new MemStore();
-    await store.put(APP_ID, {
-      canonicalUrl: "game1.alice.flagship.services",
-      lineageAnchor: firstCommit,
-      currentTip: firstCommit,
-      lastAppliedMigration: "",
-      updatePolicy: "auto",
-    });
-    const bundle = await makeBundle(upstream, `${firstCommit}..main`);
-    const client = makeClient({
-      store,
-      fetcher: async () =>
-        new Response(bundle, {
-          status: 200,
-          headers: { "content-type": "application/x-git-bundle" },
-        }),
-    });
-    const res = await client.pullOne({ serviceId: APP_ID });
-    expect(res).toMatchObject({ kind: "applied", from: firstCommit, to: secondCommit });
-    expect(restartCount).toBe(1);
-    expect(migrationsRun).toEqual([]);
-    const after = await store.get(APP_ID);
-    expect(after?.currentTip).toBe(secondCommit);
-    // Working tree was reset to main; README should now read "v2".
-    const readme = await readFile(join(subscriber, "README.md"), "utf8");
-    expect(readme).toBe("v2\n");
-  });
-
-  it("auto policy: runs new migrations in lex order then restarts", async () => {
-    // Add migrations to upstream and commit them.
-    const m1 = "0001_init.sql";
-    const m2 = "0002_add_levels.sql";
-    await commitFile(upstream, `migrations/${m1}`, "-- init\n", "add migration 1");
-    const tipAfterM1 = await git(upstream, ["rev-parse", "HEAD"]);
-    await commitFile(upstream, `migrations/${m2}`, "-- levels\n", "add migration 2");
-    const tipAfterM2 = await git(upstream, ["rev-parse", "HEAD"]);
-
+  it("auto policy is held as manual: never advances on its own", async () => {
     const store = new MemStore();
     await store.put(APP_ID, {
       canonicalUrl: "game1.alice.flagship.services",
@@ -208,13 +171,70 @@ describe("UpdateClient", () => {
       fetcher: async () => new Response(bundle, { status: 200 }),
     });
     const res = await client.pullOne({ serviceId: APP_ID });
+    expect(res).toMatchObject({ kind: "halted-manual-pending", from: firstCommit, to: secondCommit });
+    expect(restartCount).toBe(0);
+    expect(migrationsRun).toEqual([]);
+    expect(await git(subscriber, ["rev-parse", "main"])).toBe(firstCommit);
+    expect((await store.get(APP_ID))?.currentTip).toBe(firstCommit);
+  });
+
+  it("applyPending: runs SQL migrations in lex order then restarts", async () => {
+    const m1 = "0001_init.sql";
+    const m2 = "0002_add_levels.sql";
+    await commitFile(upstream, `migrations/${m1}`, "-- init\n", "add migration 1");
+    await commitFile(upstream, `migrations/${m2}`, "-- levels\n", "add migration 2");
+    const tipAfterM2 = await git(upstream, ["rev-parse", "HEAD"]);
+
+    const store = new MemStore();
+    await store.put(APP_ID, {
+      canonicalUrl: "game1.alice.flagship.services",
+      lineageAnchor: firstCommit,
+      currentTip: firstCommit,
+      lastAppliedMigration: "",
+      updatePolicy: "manual",
+    });
+    const bundle = await makeBundle(upstream, `${firstCommit}..main`);
+    const client = makeClient({
+      store,
+      fetcher: async () => new Response(bundle, { status: 200 }),
+    });
+    await client.pullOne({ serviceId: APP_ID });
+    const res = await client.applyPending({ serviceId: APP_ID });
     expect(res).toMatchObject({ kind: "applied", to: tipAfterM2, migrationsApplied: [m1, m2] });
     expect(migrationsRun).toEqual([m1, m2]);
     expect(restartCount).toBe(1);
-    const after = await store.get(APP_ID);
-    expect(after?.lastAppliedMigration).toBe(m2);
-    void tipAfterM1;
+    expect((await store.get(APP_ID))?.lastAppliedMigration).toBe(m2);
+    expect(await readFile(join(subscriber, "README.md"), "utf8")).toBe("v2\n");
   });
+
+  it.each(["0001_seed.js", "0001_seed.ts", "0001_seed.mjs"])(
+    "applyPending refuses a %s migration before the tree moves",
+    async (script) => {
+      await commitFile(upstream, `migrations/${script}`, "process.exit(0)\n", "add script migration");
+      const store = new MemStore();
+      await store.put(APP_ID, {
+        canonicalUrl: "game1.alice.flagship.services",
+        lineageAnchor: firstCommit,
+        currentTip: firstCommit,
+        lastAppliedMigration: "",
+        updatePolicy: "manual",
+      });
+      const bundle = await makeBundle(upstream, `${firstCommit}..main`);
+      const client = makeClient({
+        store,
+        fetcher: async () => new Response(bundle, { status: 200 }),
+      });
+      await client.pullOne({ serviceId: APP_ID });
+      const res = await client.applyPending({ serviceId: APP_ID });
+      expect(res).toMatchObject({ kind: "halted-migration-failed", failingFile: script });
+      expect(migrationsRun).toEqual([]);
+      expect(restartCount).toBe(0);
+      expect(await git(subscriber, ["rev-parse", "main"])).toBe(firstCommit);
+      expect(alerts).toContainEqual(
+        expect.objectContaining({ kind: "migration-failed", migrationFile: script }),
+      );
+    },
+  );
 
   it("manual policy: stages incoming-main but doesn't advance — emits manual-pending alert", async () => {
     const store = new MemStore();
@@ -326,7 +346,7 @@ describe("UpdateClient", () => {
       lineageAnchor: firstCommit,
       currentTip: firstCommit,
       lastAppliedMigration: "",
-      updatePolicy: "auto",
+      updatePolicy: "manual",
     });
     const bundle = await makeBundle(upstream, `${firstCommit}..main`);
     const client = makeClient({
@@ -337,7 +357,8 @@ describe("UpdateClient", () => {
         migrationsRun.push(filename);
       },
     });
-    const res = await client.pullOne({ serviceId: APP_ID });
+    await client.pullOne({ serviceId: APP_ID });
+    const res = await client.applyPending({ serviceId: APP_ID });
     expect(res).toMatchObject({
       kind: "halted-migration-failed",
       failingFile: m1,
@@ -345,6 +366,7 @@ describe("UpdateClient", () => {
     });
     expect(restartCount).toBe(0);
     expect(alerts).toEqual([
+      expect.objectContaining({ kind: "manual-pending" }),
       expect.objectContaining({
         kind: "migration-failed",
         serviceId: APP_ID,

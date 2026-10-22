@@ -501,7 +501,7 @@ export class ServicePlatform {
       r.creator !== this.deps.host.username
     ) {
       const canonicalUrl = ServicePlatform.canonicalUrl(r.creator, r.slug);
-      const updatePolicy: UpdatePolicy = "auto";
+      const updatePolicy: UpdatePolicy = "manual";
       let currentTip = "";
       if (this.deps.cloneService) {
         try {
