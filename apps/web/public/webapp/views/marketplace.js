@@ -14,6 +14,7 @@ import { llmKeyEnvVarFor } from "../lib/marketplaceLlmKey.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-marketplace");
 
 /**
@@ -33,9 +34,9 @@ export function scanGradePill(grade) {
   };
   if (g && map[g]) {
     const { cls, tip } = map[g];
-    return `<span class="pill ${cls}" title="${escapeHtml(tip)}">scan ${escapeHtml(g)}</span>`;
+    return `<span class="pill ${cls}" title="${escapeHtml(tip)}">${tr("scan {0}", escapeHtml(g))}</span>`;
   }
-  return '<span class="pill" title="not yet scanned — Flagship\'s scanner service is queueing this listing">ungraded</span>';
+  return `<span class="pill" title="${tr("not yet scanned — Flagship's scanner service is queueing this listing")}">${tr("ungraded")}</span>`;
 }
 
 export async function renderMarketplace() {
@@ -45,23 +46,23 @@ export async function renderMarketplace() {
   // catalog exists, show a friendly placeholder instead of a
   // "not paired to a server yet" error when there's no pod.
   if (!getPodBaseUrl()) {
-    root.innerHTML = '<div class="card placeholder">The marketplace is coming soon.</div>';
+    root.innerHTML = `<div class="card placeholder">${tr("The marketplace is coming soon.")}</div>`;
     return;
   }
   root.innerHTML = skeletonCards(4);
   try {
     const body = await screensFetch("/api/screens/marketplace-browse");
     if (!body.listings?.length) {
-      root.innerHTML = '<div class="card placeholder">no listings yet</div>';
+      root.innerHTML = `<div class="card placeholder">${tr("no listings yet")}</div>`;
       return;
     }
     root.innerHTML = body.listings.map((l) => {
       const safeKey = `${escapeHtml(l.creator)}/${escapeHtml(l.slug)}`;
       const installedBadge = l.alreadyInstalled
-        ? '<span class="pill ok">installed</span>'
+        ? `<span class="pill ok">${tr("installed")}</span>`
         : "";
       const llmBadge = l.requiresLlmKey
-        ? '<span class="pill">needs LLM key</span>'
+        ? `<span class="pill">${tr("needs LLM key")}</span>`
         : "";
       const gradeBadge = scanGradePill(l.scan_grade ?? l.scanGrade ?? null);
       return `
@@ -71,11 +72,11 @@ export async function renderMarketplace() {
               <div class="weight-600">${escapeHtml(l.title)} ${installedBadge} ${gradeBadge} ${llmBadge}</div>
               <div class="muted-sm">${escapeHtml(l.summary)}</div>
               <div class="value text-xs">${escapeHtml(l.creator)}/${escapeHtml(l.slug)}</div>
-              <div class="faint-sm">${l.installCount} installs</div>
+              <div class="faint-sm">${tr("{0} installs", l.installCount)}</div>
             </div>
             ${l.alreadyInstalled
-              ? '<button class="secondary" disabled>installed</button>'
-              : `<button data-action="install" data-creator="${escapeHtml(l.creator)}" data-slug="${escapeHtml(l.slug)}">install</button>`}
+              ? `<button class="secondary" disabled>${tr("installed")}</button>`
+              : `<button data-action="install" data-creator="${escapeHtml(l.creator)}" data-slug="${escapeHtml(l.slug)}">${tr("install")}</button>`}
           </div>
         </div>
       `;
@@ -121,18 +122,16 @@ export function installConfirmParams(listing) {
   const raw = l.scan_grade ?? l.scanGrade ?? null;
   const grade = typeof raw === "string" ? raw.toUpperCase() : null;
   const verifyNote =
-    "The signed app envelope is verified against your IRK before the daemon starts the container.";
+    tr("The signed app envelope is verified against your IRK before the daemon starts the container.");
   if (grade === "F") {
     return {
       grade,
       blocked: true,
       danger: true,
-      title: `⚠ Security warning — ${creator}/${slug}`,
+      title: tr("⚠ Security warning — {0}/{1}", creator, slug),
       message:
-        "Flagship's scanner gave this app a failing grade (F) — it found critical " +
-        "security issues, so installing it is strongly discouraged. " +
-        verifyNote,
-      okLabel: "Install anyway",
+        tr("Flagship's scanner gave this app a failing grade (F) — it found critical security issues, so installing it is strongly discouraged. {0}", verifyNote),
+      okLabel: tr("Install anyway"),
     };
   }
   if (!grade) {
@@ -140,18 +139,18 @@ export function installConfirmParams(listing) {
       grade: null,
       blocked: false,
       danger: false,
-      title: `Install ${creator}/${slug}?`,
-      message: `This app has not been security-scanned yet. ${verifyNote}`,
-      okLabel: "Install",
+      title: tr("Install {0}/{1}?", creator, slug),
+      message: tr("This app has not been security-scanned yet. {0}", verifyNote),
+      okLabel: tr("Install"),
     };
   }
   return {
     grade,
     blocked: false,
     danger: false,
-    title: `Install ${creator}/${slug}?`,
+    title: tr("Install {0}/{1}?", creator, slug),
     message: verifyNote,
-    okLabel: "Install",
+    okLabel: tr("Install"),
   };
 }
 
@@ -171,7 +170,7 @@ async function runInstall(listing, btn) {
   });
   if (!ok) return;
   btn.disabled = true;
-  btn.textContent = "installing…";
+  btn.textContent = tr("installing…");
   try {
     await installFromMarketplace({ creator, slug });
     toast(`installed ${creator}/${slug}`);

@@ -21,6 +21,7 @@ import {
   set as profileSet,
 } from "./profilesStore.js";
 
+import { tr } from "./i18n.js";
 // Per-device dismiss flag — a UI preference, not a security/account decision,
 // so it lives in the per-profile store. Pinned-to-string by the proBanner test.
 export const PRO_BANNER_DISMISS_KEY = "flagship.pro.banner.dismissed.v1";
@@ -68,10 +69,10 @@ export function renderProBanner() {
   host.id = PRO_BANNER_ID;
   host.innerHTML = announcementCard({
     icon: sparklesIcon,
-    title: "Become a Pro member",
+    title: tr("Become a Pro member"),
     message:
-      "Flagship is free and always will be. Go Pro to support the project — keep Flagship free & independent — and lift your bandwidth to 250 GB.",
-    ctaLabel: "See Pro membership",
+      tr("Flagship is free and always will be. Go Pro to support the project — keep Flagship free & independent — and lift your bandwidth to 250 GB."),
+    ctaLabel: tr("See Pro membership"),
     dismissible: true,
     tone: "teal",
   });

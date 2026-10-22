@@ -6,6 +6,7 @@ import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { fetchSeparateListsSummary, separateListsWarning } from "../lib/listScope.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-tier-status");
 
 function pct(used, quota) {
@@ -24,51 +25,51 @@ export async function renderTierStatus() {
     // Pro ending sends apps with separate lists back to one list (feat/marketplace).
     const listsWarning = separateListsWarning(lists);
     const tierBadge = body.tier === "free"
-      ? '<span class="pill">free</span>'
+      ? `<span class="pill">${tr("free")}</span>`
       : body.tier === "promo"
-      ? '<span class="pill ok">promo</span>'
-      : '<span class="pill ok">BYOK</span>';
+      ? `<span class="pill ok">${tr("promo")}</span>`
+      : `<span class="pill ok">${tr("BYOK")}</span>`;
     const llmDay = body.llmCreditsRemainingDay;
     const llmTotal = body.llmCreditsRemainingTotal;
     const dispatchUsed = body.dispatcherUsageGBmonth;
     const dispatchQuota = body.dispatcherFreeQuotaGBmonth;
     root.innerHTML = `
       <div class="card">
-        <div class="row"><span class="label">Tier</span><span>${tierBadge}</span></div>
+        <div class="row"><span class="label">${tr("Tier")}</span><span>${tierBadge}</span></div>
       </div>
       ${listsWarning ? `<div class="card mt-3 warn" id="tier-status-separate-lists-warning" data-testid="tier-status-separate-lists-warning"><p class="note">${escapeHtml(listsWarning)}</p></div>` : ""}
-      <h2 class="mt-4">LLM credits</h2>
+      <h2 class="mt-4">${tr("LLM credits")}</h2>
       <div class="card">
         ${typeof llmDay === "number"
-          ? `<div class="row"><span class="label">today remaining</span><span class="value">${llmDay.toLocaleString()}</span></div>`
-          : '<div class="row"><span class="label">today</span><span class="value">— (BYOK or promo not in use)</span></div>'}
+          ? `<div class="row"><span class="label">${tr("today remaining")}</span><span class="value">${llmDay.toLocaleString()}</span></div>`
+          : `<div class="row"><span class="label">${tr("today")}</span><span class="value">${tr("— (BYOK or promo not in use)")}</span></div>`}
         ${typeof llmTotal === "number"
-          ? `<div class="row"><span class="label">lifetime remaining</span><span class="value">${llmTotal.toLocaleString()}</span></div>`
+          ? `<div class="row"><span class="label">${tr("lifetime remaining")}</span><span class="value">${llmTotal.toLocaleString()}</span></div>`
           : ""}
       </div>
-      <h2 class="mt-4">Dispatcher relay</h2>
+      <h2 class="mt-4">${tr("Dispatcher relay")}</h2>
       <div class="card">
         ${typeof dispatchUsed === "number"
           ? `
             <div class="row">
-              <span class="label">this month</span>
-              <span class="value">${dispatchUsed.toFixed(2)} GB / ${typeof dispatchQuota === "number" ? `${dispatchQuota.toFixed(0)} GB free` : "—"}</span>
+              <span class="label">${tr("this month")}</span>
+              <span class="value">${tr("{0} GB / {1}", dispatchUsed.toFixed(2), typeof dispatchQuota === "number" ? tr("{0} GB free", dispatchQuota.toFixed(0)) : "—")}</span>
             </div>
             <div class="progress-track">
               <div class="progress-fill" style="width:${pct(dispatchUsed, dispatchQuota)}%"></div>
             </div>
           `
-          : '<div class="row"><span class="label">usage</span><span class="value">—</span></div>'}
+          : `<div class="row"><span class="label">${tr("usage")}</span><span class="value">—</span></div>`}
       </div>
-      <h2 class="mt-4">Custom domains</h2>
+      <h2 class="mt-4">${tr("Custom domains")}</h2>
       ${(body.customDomains ?? []).length === 0
-        ? '<div class="card placeholder">none — your default subdomain is forever-free</div>'
+        ? `<div class="card placeholder">${tr("none — your default subdomain is forever-free")}</div>`
         : (body.customDomains ?? []).map((d) => `
           <div class="card"><div class="value">${escapeHtml(d)}</div></div>
         `).join("")}
-      <h2 class="mt-4">Reserved names</h2>
+      <h2 class="mt-4">${tr("Reserved names")}</h2>
       ${(body.reservedNames ?? []).length === 0
-        ? '<div class="card placeholder">none — your username is FCFS-free</div>'
+        ? `<div class="card placeholder">${tr("none — your username is FCFS-free")}</div>`
         : (body.reservedNames ?? []).map((n) => `
           <div class="card"><div class="value">${escapeHtml(n)}</div></div>
         `).join("")}
