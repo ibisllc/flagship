@@ -42,6 +42,8 @@ export const RENAMED_ACCOUNT_COLUMNS: ReadonlyArray<readonly [table: string, col
   ["usage_counters", "username"],
   ["user_service_aliases", "username"],
   ["voici_links", "username"],
+  ["voici_name_changes", "username"],
+  ["voici_names", "username"],
   ["vouchers", "redeemed_by"],
   ["watch_delegates", "username"],
   ["webauthn_recovery_records", "username"],
