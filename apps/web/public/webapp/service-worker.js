@@ -507,6 +507,8 @@ const OPTIONAL_SHELL = [
   "/lib/loginTakeover.js",
   "/lib/maintainerTrust.js",
   "/lib/modal.js",
+  "/lib/nameDibs.js",
+  "/views/name-dibs.js",
   "/lib/lockSweep.js",
   "/lib/accountGone.js",
   "/lib/accountGoneUi.js",
