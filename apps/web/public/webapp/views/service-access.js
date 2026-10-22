@@ -226,7 +226,7 @@ export async function renderServiceAccess(service) {
       <p class="note mt-1" id="sa-scope-note">${escapeHtml(LIST_SCOPE_NOTE)}</p>
       <p class="note mt-1 hidden" id="sa-scope-pro" data-testid="service-access-list-scope-pro">${escapeHtml(LIST_SCOPE_PRO_NOTE)} <a href="${PRO_URL}" target="_blank" rel="noopener">${escapeHtml(LIST_SCOPE_PRO_LINK)}</a></p>
       <p class="note mt-1 hidden" id="sa-scope-pending" data-testid="service-access-list-scope-pending">${escapeHtml(LIST_SCOPE_PENDING)}</p>
-      <div class="fs-segmented mt-2 hidden" id="sa-server-picker" data-testid="service-access-server-picker" role="radiogroup" aria-label="Server"></div>
+      <div class="fs-segmented mt-2 hidden" id="sa-server-picker" data-testid="service-access-server-picker" role="radiogroup" aria-label="${tr("Server")}"></div>
     </div>
 
     <h2 class="mt-4" id="sa-account-title">${tr("Account members")}</h2>
@@ -393,8 +393,8 @@ async function onScopeToggle(service, wantOn) {
   const { inlineConfirm } = await import("../lib/modal.js");
   const ok = await inlineConfirm(
     wantOn
-      ? { title: LIST_SCOPE_ON_TITLE, message: LIST_SCOPE_ON_CONFIRM, okLabel: "Separate lists" }
-      : { title: LIST_SCOPE_OFF_TITLE, message: listScopeOffConfirm(state.leader || state.self), okLabel: "One list" },
+      ? { title: LIST_SCOPE_ON_TITLE, message: LIST_SCOPE_ON_CONFIRM, okLabel: tr("Separate lists") }
+      : { title: LIST_SCOPE_OFF_TITLE, message: listScopeOffConfirm(state.leader || state.self), okLabel: tr("One list") },
   );
   if (!ok) return revert();
   const session = getSession();
@@ -407,7 +407,7 @@ async function onScopeToggle(service, wantOn) {
       signWithIrk: sensitiveSigner(),
       fetchJson: screensJson,
     });
-    toast(wantOn ? "Each server now keeps its own list." : "Every server now uses one list.");
+    toast(wantOn ? tr("Each server now keeps its own list.") : tr("Every server now uses one list."));
   } catch (e) {
     revert();
     if (e?.status === 402 || e?.body?.code === "pro-required") {

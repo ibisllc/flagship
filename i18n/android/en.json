@@ -10797,5 +10797,271 @@
   "an_apps_link_will_be_released_soon": {
     "en": "An app's link will be released soon",
     "ctx": "viewmodels/AuditLogViewModel.kt (prose)"
+  },
+  "separate_list_on_each_server": {
+    "en": "Separate list on each server",
+    "ctx": "core/AppListScope.kt:37 (prose)"
+  },
+  "each_server_keeps_its_own_members": {
+    "en": "Each server keeps its own members and invites.",
+    "ctx": "core/AppListScope.kt:38 (prose)"
+  },
+  "comes_with_pro": {
+    "en": "Comes with Pro.",
+    "ctx": "core/AppListScope.kt:39 (prose)"
+  },
+  "waiting_for_this_server_to_confirm": {
+    "en": "Waiting for this server to confirm Pro.",
+    "ctx": "core/AppListScope.kt:40 (prose)"
+  },
+  "each_server_has_its_own_list": {
+    "en": "Each server has its own list.",
+    "ctx": "core/AppListScope.kt:41 (prose)"
+  },
+  "a_separate_list_on_each_server": {
+    "en": "A separate list on each server?",
+    "ctx": "core/AppListScope.kt:42 (prose)"
+  },
+  "each_server_keeps_its_current_list": {
+    "en": "Each server keeps its current list. Changes you make on one server stay on it.",
+    "ctx": "core/AppListScope.kt:43 (prose)"
+  },
+  "one_list_on_every_server": {
+    "en": "One list on every server?",
+    "ctx": "core/AppListScope.kt:44 (prose)"
+  },
+  "every_server_will_use_s_list": {
+    "en": "Every server will use %1$s's list. People who joined on other servers since lose access.",
+    "ctx": "core/AppListScope.kt:53 (prose)",
+    "args": 1
+  },
+  "apps_have_a_separate_access_list": {
+    "en": "%1$s apps have a separate access list on each server. When Pro ends they'll all use %2$s's list.",
+    "ctx": "core/AppListScope.kt:66 (prose)",
+    "args": 2
+  },
+  "apps_have_a_separate_access_list_2": {
+    "en": "%1$s apps have a separate access list on each server. When Pro ends each will use its lead server's list.",
+    "ctx": "core/AppListScope.kt:68 (prose)",
+    "args": 1
+  },
+  "back_to_one_access_list": {
+    "en": "Back to one access list",
+    "ctx": "core/BoxEventLabels.kt:39 (prose)"
+  },
+  "pro_ended_so_your_apps_use": {
+    "en": "Pro ended, so your apps use one access list on all your servers again.",
+    "ctx": "push/AccessListsPush.kt:13 (prose)"
+  },
+  "get_from_the_marketplace": {
+    "en": "Get from the marketplace",
+    "ctx": "ui/screens/BuildModeScreens.kt:266 (title=)"
+  },
+  "install_something_your_neighbours_already": {
+    "en": "Install something your neighbours already built. One tap onto any of your boxes.",
+    "ctx": "ui/screens/BuildModeScreens.kt:267 (body=)"
+  },
+  "marketplace": {
+    "en": "Marketplace",
+    "ctx": "ui/screens/MarketplaceScreens.kt:79 (text=)"
+  },
+  "apps_your_neighbours_built_one_tap": {
+    "en": "Apps your neighbours built. One tap to install on any of your boxes.",
+    "ctx": "ui/screens/MarketplaceScreens.kt:84 (text=)"
+  },
+  "add_a_server_first_marketplace_apps": {
+    "en": "Add a server first. Marketplace apps run on your own box.",
+    "ctx": "ui/screens/MarketplaceScreens.kt:96 (text=)"
+  },
+  "search_apps": {
+    "en": "Search apps",
+    "ctx": "ui/screens/MarketplaceScreens.kt:109 (placeholder=)"
+  },
+  "deploys": {
+    "en": "%1$s deploys",
+    "ctx": "ui/screens/MarketplaceScreens.kt:147 (label=)",
+    "args": 1
+  },
+  "needs_llm_key": {
+    "en": "Needs LLM key",
+    "ctx": "ui/screens/MarketplaceScreens.kt:149 (label=)"
+  },
+  "an_app_from_the_marketplace_the": {
+    "en": "An app from the marketplace. The phone will sign the install order and ship it to the box you pick.",
+    "ctx": "ui/screens/MarketplaceScreens.kt:225 (prose)"
+  },
+  "install_on": {
+    "en": "INSTALL ON",
+    "ctx": "ui/screens/MarketplaceScreens.kt:241 (text=)"
+  },
+  "this_device_cannot_install_services_use": {
+    "en": "This device cannot install services. Use a primary device.",
+    "ctx": "ui/screens/MarketplaceScreens.kt:266 (text=)"
+  },
+  "installed_as": {
+    "en": "Installed as %1$s.",
+    "ctx": "ui/screens/MarketplaceScreens.kt:278 (text=)",
+    "args": 1
+  },
+  "this_app_needs_an_ai_key": {
+    "en": "This app needs an AI key (%1$s) to work. Add it on your server now.",
+    "ctx": "ui/screens/MarketplaceScreens.kt:292 (text=)",
+    "args": 1
+  },
+  "add_ai_key": {
+    "en": "Add AI key",
+    "ctx": "ui/screens/MarketplaceScreens.kt:298 (label=)"
+  },
+  "install_failed": {
+    "en": "Install failed: %1$s",
+    "ctx": "ui/screens/MarketplaceScreens.kt:313 (arg of ErrorCard)",
+    "args": 1
+  },
+  "install": {
+    "en": "Install",
+    "ctx": "ui/screens/MarketplaceScreens.kt:347 (ui label)"
+  },
+  "view_source": {
+    "en": "View source",
+    "ctx": "ui/screens/MarketplaceScreens.kt:359 (label=)"
+  },
+  "install_anyway": {
+    "en": "Install %1$s/%2$s anyway?",
+    "ctx": "ui/screens/MarketplaceScreens.kt:378 (prose)",
+    "args": 2
+  },
+  "install_2": {
+    "en": "Install %1$s/%2$s?",
+    "ctx": "ui/screens/MarketplaceScreens.kt:378 (prose)",
+    "args": 2
+  },
+  "this_app_failed_the_security_scan": {
+    "en": "This app FAILED the security scan (grade F). Installing it could put your box at risk — only continue if you fully trust the developer.",
+    "ctx": "ui/screens/MarketplaceScreens.kt:383 (text=)"
+  },
+  "this_app_has_not_yet_been": {
+    "en": "This app has not yet been security-scanned. Install only if you trust the developer.",
+    "ctx": "ui/screens/MarketplaceScreens.kt:390 (text=)"
+  },
+  "the_signed_app_envelope_is_verified": {
+    "en": "The signed app envelope is verified against your IRK before the daemon starts the container.",
+    "ctx": "ui/screens/MarketplaceScreens.kt:397 (text=)"
+  },
+  "install_anyway_2": {
+    "en": "Install anyway",
+    "ctx": "ui/screens/MarketplaceScreens.kt:418 (prose)"
+  },
+  "security_scan_failed_grade_f": {
+    "en": "Security scan failed (grade F)",
+    "ctx": "ui/screens/MarketplaceScreens.kt:437 (text=)"
+  },
+  "the_marketplace_scanner_flagged_this_app": {
+    "en": "The marketplace scanner flagged this app as unsafe. Installing it is not recommended — only continue if you fully trust the developer.",
+    "ctx": "ui/screens/MarketplaceScreens.kt:443 (text=)"
+  },
+  "each_server_now_keeps_its_own": {
+    "en": "Each server now keeps its own list.",
+    "ctx": "ui/screens/ServiceAccessScreen.kt:657 (prose)"
+  },
+  "every_server_now_uses_one_list": {
+    "en": "Every server now uses one list.",
+    "ctx": "ui/screens/ServiceAccessScreen.kt:657 (prose)"
+  },
+  "separate_lists": {
+    "en": "Separate lists",
+    "ctx": "ui/screens/ServiceAccessScreen.kt:662 (prose)"
+  },
+  "one_list": {
+    "en": "One list",
+    "ctx": "ui/screens/ServiceAccessScreen.kt:662 (prose)"
+  },
+  "browse_marketplace": {
+    "en": "Browse marketplace",
+    "ctx": "ui/screens/ServicesListScreen.kt:219 (label=)"
+  },
+  "plan_subscription": {
+    "en": "Plan / Subscription",
+    "ctx": "ui/screens/SettingsScreen.kt:229 (title=)"
+  },
+  "tier_llm_credits_dispatcher_usage_custom": {
+    "en": "Tier, LLM credits, dispatcher usage, custom domains.",
+    "ctx": "ui/screens/SettingsScreen.kt:230 (subtitle=)"
+  },
+  "tier_usage": {
+    "en": "Tier & usage",
+    "ctx": "ui/screens/TierStatusScreen.kt:81 (arg of Text)"
+  },
+  "your_subscription_llm_credits_dispatcher": {
+    "en": "Your subscription, LLM credits, dispatcher usage, custom domains, and reserved names.",
+    "ctx": "ui/screens/TierStatusScreen.kt:86 (arg of Text)"
+  },
+  "llm_credits": {
+    "en": "LLM credits",
+    "ctx": "ui/screens/TierStatusScreen.kt:117 (arg of SectionHeader)"
+  },
+  "dispatcher_relay": {
+    "en": "Dispatcher relay",
+    "ctx": "ui/screens/TierStatusScreen.kt:122 (arg of SectionHeader)"
+  },
+  "custom_domains": {
+    "en": "Custom domains",
+    "ctx": "ui/screens/TierStatusScreen.kt:127 (arg of SectionHeader)"
+  },
+  "none_your_default_subdomain_is_forever": {
+    "en": "none — your default subdomain is forever-free",
+    "ctx": "ui/screens/TierStatusScreen.kt:130 (arg of PlaceholderCard)"
+  },
+  "reserved_names": {
+    "en": "Reserved names",
+    "ctx": "ui/screens/TierStatusScreen.kt:141 (arg of SectionHeader)"
+  },
+  "none_your_username_is_fcfs_free": {
+    "en": "none — your username is FCFS-free",
+    "ctx": "ui/screens/TierStatusScreen.kt:144 (arg of PlaceholderCard)"
+  },
+  "tier": {
+    "en": "Tier",
+    "ctx": "ui/screens/TierStatusScreen.kt:164 (arg of Text)"
+  },
+  "today_remaining": {
+    "en": "today remaining",
+    "ctx": "ui/screens/TierStatusScreen.kt:180 (arg of LabelValueRow)"
+  },
+  "lifetime_remaining": {
+    "en": "lifetime remaining",
+    "ctx": "ui/screens/TierStatusScreen.kt:185 (arg of LabelValueRow)"
+  },
+  "this_month": {
+    "en": "this month",
+    "ctx": "ui/screens/TierStatusScreen.kt:197 (arg of LabelValueRow)"
+  },
+  "gb_free": {
+    "en": "%1$s / %2$s GB free",
+    "ctx": "ui/screens/TierStatusScreen.kt:263 (prose)",
+    "args": 2
+  },
+  "install_3": {
+    "en": "Install %1$s/%2$s",
+    "ctx": "viewmodels/MarketplaceViewModel.kt:123 (prose)",
+    "args": 2
+  },
+  "give_a_separate_list_on_each": {
+    "en": "Give %1$s a separate list on each server",
+    "ctx": "viewmodels/ServiceAccessViewModel.kt:479 (prose)",
+    "args": 1
+  },
+  "use_one_list_for_on_every": {
+    "en": "Use one list for %1$s on every server",
+    "ctx": "viewmodels/ServiceAccessViewModel.kt:479 (prose)",
+    "args": 1
+  },
+  "this_phone_isnt_set_up_on": {
+    "en": "This phone isn't set up on %1$s.",
+    "ctx": "viewmodels/ServiceAccessViewModel.kt:522 (prose)",
+    "args": 1
+  },
+  "couldnt_change_the_list_try_again": {
+    "en": "Couldn't change the list. Try again in a moment.",
+    "ctx": "viewmodels/ServiceAccessViewModel.kt:804 (prose)"
   }
 }

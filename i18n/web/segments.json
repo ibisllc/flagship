@@ -83,6 +83,20 @@
       "index.html"
     ]
   },
+  "sb251fd64bd": {
+    "en": "<1>Services</1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "index.html",
+      "faq.html",
+      "help.html",
+      "security.html",
+      "docs/index.html",
+      "open-source.html",
+      "blog/index.html"
+    ]
+  },
   "s19a72ce7ce": {
     "en": "<1>FAQ</1>",
     "kind": "text",
@@ -417,6 +431,190 @@
     "en": "Trust waterfall: mobile app → flagshipserver.com → flagship.services → your own server",
     "kind": "attr",
     "ctx": "aside[aria-label]",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s4c6242c07b": {
+    "en": "Things people actually built last week.",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s5fdb562ac4": {
+    "en": "Real services from real users. Each runs on the creator's hardware; install on your own and the data stays with you, not them.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s2f5f2fb7a8": {
+    "en": "<1>A</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sc10a226144": {
+    "en": "<1>@bright-maple · 14 installs</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s68ed775288": {
+    "en": "plant-water",
+    "kind": "text",
+    "ctx": "h4",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s32a96fb72b": {
+    "en": "Tracks watered houseplants. Push notification after 5+ thirsty days.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s5ac51d2775": {
+    "en": "<1>@sarah · 6 installs</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s5f6abe2999": {
+    "en": "study-club",
+    "kind": "text",
+    "ctx": "h4",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s1e6218df1d": {
+    "en": "Private discussion board for a weekly book club. Six humans, mutual trust.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s6910c49457": {
+    "en": "<1>@martin · 3 installs</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s5b8e9fed90": {
+    "en": "family-photos",
+    "kind": "text",
+    "ctx": "h4",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s31c5cc095c": {
+    "en": "Self-hosted album. Mobile app uploads on home Wi-Fi. Face clusters stay local.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s00f9f0655d": {
+    "en": "<1>B</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s1a20bceb14": {
+    "en": "<1>@alice · 28 installs</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sb94817ed41": {
+    "en": "shopper",
+    "kind": "text",
+    "ctx": "h4",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sfb2d4e802b": {
+    "en": "Watches Amazon wishlist, alerts on real price drops. Cookies in the pod browser.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sdd48cf4290": {
+    "en": "<1>@nora · 11 installs</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sde38eda644": {
+    "en": "fitness-log",
+    "kind": "text",
+    "ctx": "h4",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s1ba265ac9e": {
+    "en": "Tiny PR tracker for a friend group. Sharing via signed invite tokens.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "sfa25be413c": {
+    "en": "<1>@max · 41 installs</1>",
+    "kind": "text",
+    "ctx": "div",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "scc5419efbc": {
+    "en": "recipe-jar",
+    "kind": "text",
+    "ctx": "h4",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s976be63f2a": {
+    "en": "One-tap save from any recipe site. Full-text search over a year of saves.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s711661b391": {
+    "en": "<1> <2>→</2> <3>Browse the full marketplace</3> </1>",
+    "kind": "text",
+    "ctx": "div",
     "pages": [
       "index.html"
     ]
@@ -911,8 +1109,16 @@
       "faq.html"
     ]
   },
-  "sb251fd64bd": {
-    "en": "<1>Services</1>",
+  "s837b13ac8f": {
+    "en": "<1>Services &amp; marketplace</1>",
+    "kind": "text",
+    "ctx": "nav",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s0c5c40d8b9": {
+    "en": "<1>Money &amp; subscriptions</1>",
     "kind": "text",
     "ctx": "nav",
     "pages": [
@@ -1213,24 +1419,24 @@
       "faq.html"
     ]
   },
-  "sfcecd0fc91": {
-    "en": "Services",
+  "s821a06cb07": {
+    "en": "Services and marketplace",
     "kind": "attr",
     "ctx": "section[aria-label]",
     "pages": [
       "faq.html"
     ]
   },
-  "s7a99dd0a63": {
-    "en": "Services",
+  "s6464bfe22d": {
+    "en": "Services &amp; marketplace",
     "kind": "text",
     "ctx": "h2",
     "pages": [
       "faq.html"
     ]
   },
-  "s50f70c8f02": {
-    "en": "Services are containers running on your box, namespaced by user.",
+  "s835f19534e": {
+    "en": "Services are containers running on your box, namespaced by user. The marketplace is a list of pointers, not a code host.",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -1252,6 +1458,38 @@
     "verbatim": [
       "plant-water.you.flagship.services"
     ],
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s4f307c17c7": {
+    "en": "How does the marketplace work?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "se7916468d8": {
+    "en": "Anyone can publish a listing: a title, description, screenshots, a link to a canonical pod. We host listings; we don't host code. When you install a service, your daemon pulls source from the canonical pod (or a fork you point to), signs it with your server identity, and runs it under your namespace. The marketplace is a directory, not an app store.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s5d6177096a": {
+    "en": "Are listings reviewed?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s10b33d6cd5": {
+    "en": "Optionally, by the lister. Publishers can pay for a security scan (npm audit + trivy + semgrep + dynamic checks) and get a letter grade displayed on their listing. The grade is informational; we don't gate listings behind it. We'll take down listings that violate the acceptable-use policy in <1>/terms</1> on report.",
+    "kind": "text",
+    "ctx": "p",
     "pages": [
       "faq.html"
     ]
@@ -1314,6 +1552,145 @@
   },
   "sa75e47f852": {
     "en": "Yes. Uninstall drops its container, its Postgres database, its files folder and its access list. You can keep a snapshot before uninstall if you want to come back to the data later.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s3de61d0e82": {
+    "en": "Money and subscriptions",
+    "kind": "attr",
+    "ctx": "section[aria-label]",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s04023830bf": {
+    "en": "Money &amp; subscriptions",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s7d790f299e": {
+    "en": "Hardware is one-time. Subscriptions are optional. Bring-your-own-hardware is free forever.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s8b66831b3f": {
+    "en": "What does Flagship cost?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s3af620babd": {
+    "en": "Bring-your-own-hardware: $0. We're not selling boxes or subscriptions yet. When we are, we'll publish the details and they'll be opt-in for power-user surfaces only. Most people pay nothing, forever.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sb6cfbdc86a": {
+    "en": "Why charge anything if it's \"your hardware\"?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s0f3498f3d0": {
+    "en": "Three real costs: shipping the pre-built boxes (margin, not profit-from-pricing), running the tunnel hub on Fly (a few cents per server per month at our scale), and running the registrar of <1>flagship.services</1> wildcard DNS. The free tier covers the steady-state for an individual on their own hardware. Subscriptions cover the things we'd otherwise have to subsidize.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "flagship.services"
+    ],
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s1d74edb26e": {
+    "en": "Can I cancel anytime?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sf8108b3584": {
+    "en": "Yes. Cancellation is one tap from the phone. We prorate the unused portion of the current period. Your subdomain stays yours; the routing entry continues to work; only the billed add-ons (push at scale, etc.) shut off. We don't ransom your DNS.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s3325b0d89d": {
+    "en": "What's your refund policy on hardware?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sef2b4d2532": {
+    "en": "30 days, full refund, you ship it back. We pay return shipping inside the US; outside the US it's on you. If the box arrived dead or DOA we pay both ways. We don't restock-fee. Full terms at <1>/terms</1>.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s5d1f2c772c": {
+    "en": "Do you take crypto?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sba9c0054e8": {
+    "en": "Not yet. Stripe takes cards (USD, EUR, GBP). We're exploring monero / lightning for the privacy-conscious, but it's not on the immediate roadmap. If this matters to you, mail <1>support@flagshipserver.com</1> and tell us, because that's how features get prioritized.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s1c1aa47d98": {
+    "en": "Will the price change?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s742f80ea96": {
+    "en": "Hardware: probably, with component costs. Existing orders are locked in. Subscriptions: we'll grandfather every existing subscriber on a price change for at least 12 months and we'll tell you at signup if a plan is \"introductory.\" We don't do \"your renewal is now triple.\"",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s89ea2ebc43": {
+    "en": "How do you make money long-term?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s2cc38fb526": {
+    "en": "Hardware margin, subscriptions on the optional add-ons, marketplace promotion fees (clearly labeled \"featured\"). We don't sell ads, telemetry, model-training rights, or your data, partly because it's the right thing, mostly because we structurally can't.",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -2209,8 +2586,8 @@
       "security.html"
     ]
   },
-  "s374da2a0ec": {
-    "en": "Vulnerabilities in apps installed by individual users (those are the app author's responsibility; report to them directly).",
+  "s70a605be66": {
+    "en": "Vulnerabilities in apps installed by individual users (those are the app author's responsibility; report to them directly via the app's marketplace listing).",
     "kind": "text",
     "ctx": "li",
     "pages": [
@@ -2952,8 +3329,8 @@
       "docs/index.html"
     ]
   },
-  "s3d7e9cf0c0": {
-    "en": "<1>3.</1> Vibe-code your first app from the phone. Done.",
+  "s577ae0fcf4": {
+    "en": "<1>3.</1> Vibe-code your first app from the phone. Or <2>install someone else's</2>. Done.",
     "kind": "text",
     "ctx": "p",
     "pages": [

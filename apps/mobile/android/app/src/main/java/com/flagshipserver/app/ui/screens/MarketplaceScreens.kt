@@ -1,5 +1,8 @@
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -76,12 +79,12 @@ fun MarketplaceListScreen(nav: NavController) {
     ) {
         Spacer(Modifier.height(FS.space.s10))
         Text(
-            text = "Marketplace",
+            text = stringResource(R.string.marketplace),
             color = FS.colors.text,
             style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium),
         )
         Text(
-            text = "Apps your neighbours built. One tap to install on any of your boxes.",
+            text = stringResource(R.string.apps_your_neighbours_built_one_tap),
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
         )
@@ -93,7 +96,7 @@ fun MarketplaceListScreen(nav: NavController) {
             // central catalog ships, guide the user to add a box first.
             FSCard(padding = PaddingValues(FS.space.s5)) {
                 Text(
-                    text = "Add a server first. Marketplace apps run on your own box.",
+                    text = stringResource(R.string.add_a_server_first_marketplace_apps),
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 15.sp, lineHeight = 22.sp),
                 )
@@ -106,7 +109,7 @@ fun MarketplaceListScreen(nav: NavController) {
             value = query,
             onValueChange = { vm.setSearchQuery(it) },
             label = "",
-            placeholder = "Search apps",
+            placeholder = stringResource(R.string.search_apps),
         )
 
         Spacer(Modifier.height(FS.space.s4))
@@ -139,15 +142,15 @@ private fun ListingRow(l: MarketplaceListing, onClick: () -> Unit) {
             Column(modifier = Modifier.fillMaxWidth().padding(end = FS.space.s2)) {
                 Text(text = l.title, color = FS.colors.text, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
                 Spacer(Modifier.height(FS.space.s1))
-                Text(text = "by ${l.creator}", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                Text(text = fsString(R.string.by, l.creator), color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
                 Spacer(Modifier.height(FS.space.s1))
                 Text(text = l.summary, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
                 Spacer(Modifier.height(FS.space.s2))
                 Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                    FSPill(label = "${l.installCount} deploys", kind = if (l.installCount > 0) FSPillKind.Online else FSPillKind.Idle)
+                    FSPill(label = fsString(R.string.deploys, l.installCount), kind = if (l.installCount > 0) FSPillKind.Online else FSPillKind.Idle)
                     ScanGradePill(l.scanGrade)
-                    if (l.requiresLlmKey) FSPill(label = "Needs LLM key", kind = FSPillKind.Provisioning)
-                    if (l.alreadyInstalled) FSPill(label = "Deployed", kind = FSPillKind.Idle)
+                    if (l.requiresLlmKey) FSPill(label = stringResource(R.string.needs_llm_key), kind = FSPillKind.Provisioning)
+                    if (l.alreadyInstalled) FSPill(label = stringResource(R.string.deployed), kind = FSPillKind.Idle)
                 }
             }
         }
@@ -214,7 +217,7 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
             style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium),
         )
         Text(
-            text = "by $creator",
+            text = fsString(R.string.by, creator),
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
         )
@@ -222,7 +225,7 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
         Spacer(Modifier.height(FS.space.s6))
         FSCard(padding = PaddingValues(FS.space.s5)) {
             Text(
-                text = listing?.summary ?: "An app from the marketplace. The phone will sign the install order and ship it to the box you pick.",
+                text = listing?.summary ?: stringResource(R.string.an_app_from_the_marketplace_the),
                 color = FS.colors.text,
                 style = TextStyle(fontSize = 15.sp, lineHeight = 22.sp),
             )
@@ -230,15 +233,15 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
         listing?.let { l ->
             Spacer(Modifier.height(FS.space.s2))
             Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                FSPill(label = "${l.installCount} deploys", kind = FSPillKind.Online)
+                FSPill(label = fsString(R.string.deploys, l.installCount), kind = FSPillKind.Online)
                 ScanGradePill(l.scanGrade)
-                if (l.requiresLlmKey) FSPill(label = "Needs LLM key", kind = FSPillKind.Provisioning)
+                if (l.requiresLlmKey) FSPill(label = stringResource(R.string.needs_llm_key), kind = FSPillKind.Provisioning)
             }
         }
 
         Spacer(Modifier.height(FS.space.s8))
         Text(
-            text = "INSTALL ON",
+            text = stringResource(R.string.install_on),
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
             modifier = Modifier.padding(bottom = FS.space.s3),
@@ -254,7 +257,7 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
                             Text(text = pod.name, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
                             Text(text = pod.fqdn, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
                         }
-                        if (selectedPod == pod.podId) FSPill(label = "Selected", kind = FSPillKind.Online)
+                        if (selectedPod == pod.podId) FSPill(label = stringResource(R.string.selected), kind = FSPillKind.Online)
                     }
                 }
             }
@@ -263,7 +266,7 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
         Spacer(Modifier.height(FS.space.s8))
         if (!canInstall) {
             Text(
-                text = "This device cannot install services. Use a primary device.",
+                text = stringResource(R.string.this_device_cannot_install_services_use),
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
                 modifier = Modifier.padding(bottom = FS.space.s2),
@@ -275,7 +278,7 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
                 FSCard(padding = PaddingValues(FS.space.s4)) {
                     Column {
                         Text(
-                            text = "Installed as ${st.serviceId}.",
+                            text = fsString(R.string.installed_as, st.serviceId),
                             color = FS.colors.text,
                             style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
                         )
@@ -289,13 +292,13 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
                             val envVar = MarketplaceLlmKey.envVar(l)
                             Spacer(Modifier.height(FS.space.s2))
                             Text(
-                                text = "This app needs an AI key ($envVar) to work. Add it on your server now.",
+                                text = fsString(R.string.this_app_needs_an_ai_key, envVar),
                                 color = FS.colors.textMuted,
                                 style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
                             )
                             Spacer(Modifier.height(FS.space.s2))
                             FSPrimaryButton(
-                                label = "Add AI key",
+                                label = stringResource(R.string.add_ai_key),
                                 onClick = {
                                     val p = URLEncoder.encode(envVar, "UTF-8")
                                     nav.navigate(
@@ -310,7 +313,7 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
                 }
             }
             is MarketplaceViewModel.InstallState.Failed -> {
-                ErrorCard("Install failed: ${st.message}", onRetry = { vm.resetInstall() })
+                ErrorCard(fsString(R.string.install_failed, st.message), onRetry = { vm.resetInstall() })
             }
             is MarketplaceViewModel.InstallState.BlockedByScan -> {
                 // Defensive backstop: the VM refused an F-graded install that
@@ -344,7 +347,7 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
                     )
                 } else {
                     FSPrimaryButton(
-                        label = if (installing) "Installing…" else "Install",
+                        label = if (installing) stringResource(R.string.installing) else stringResource(R.string.install),
                         onClick = {
                             if (selectedFqdn != null) confirmingInstall = true
                         },
@@ -356,7 +359,7 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
         }
         Spacer(Modifier.height(FS.space.s3))
         FSGhostButton(
-            label = "View source",
+            label = stringResource(R.string.view_source),
             // Marketplace listings don't carry a repo URL in the browse/detail
             // wire shape today; leave this as a no-op until the catalog exposes
             // one (matches the iOS "View source" stub).
@@ -375,26 +378,26 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
         val ungraded = ScanGradeBucket.isUngraded(grade)
         AlertDialog(
             onDismissRequest = { confirmingInstall = false },
-            title = { Text(if (blocked) "Install $creator/$slug anyway?" else "Install $creator/$slug?") },
+            title = { Text(if (blocked) fsString(R.string.install_anyway, creator, slug) else fsString(R.string.install_2, creator, slug)) },
             text = {
                 Column {
                     if (blocked) {
                         Text(
-                            text = "This app FAILED the security scan (grade F). Installing it could put your box at risk — only continue if you fully trust the developer.",
+                            text = stringResource(R.string.this_app_failed_the_security_scan),
                             color = FS.colors.danger,
                             style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),
                         )
                         Spacer(Modifier.height(FS.space.s2))
                     } else if (ungraded) {
                         Text(
-                            text = "This app has not yet been security-scanned. Install only if you trust the developer.",
+                            text = stringResource(R.string.this_app_has_not_yet_been),
                             color = FS.colors.warning,
                             style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
                         )
                         Spacer(Modifier.height(FS.space.s2))
                     }
                     Text(
-                        text = "The signed app envelope is verified against your IRK before the daemon starts the container.",
+                        text = stringResource(R.string.the_signed_app_envelope_is_verified),
                         color = FS.colors.textMuted,
                         style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
                     )
@@ -415,10 +418,10 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
                     modifier = Modifier.semantics {
                         testTag = if (blocked) "marketplace-install-anyway-confirm" else "marketplace-install-confirm"
                     },
-                ) { Text(if (blocked) "Install anyway" else "Install") }
+                ) { Text(if (blocked) stringResource(R.string.install_anyway_2) else stringResource(R.string.install)) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmingInstall = false }) { Text("Cancel") }
+                TextButton(onClick = { confirmingInstall = false }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -434,13 +437,13 @@ private fun ScanBlockedNotice(onInstallAnyway: () -> Unit, enabled: Boolean) {
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column {
             Text(
-                text = "Security scan failed (grade F)",
+                text = stringResource(R.string.security_scan_failed_grade_f),
                 color = FS.colors.danger,
                 style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
             )
             Spacer(Modifier.height(FS.space.s1))
             Text(
-                text = "The marketplace scanner flagged this app as unsafe. Installing it is not recommended — only continue if you fully trust the developer.",
+                text = stringResource(R.string.the_marketplace_scanner_flagged_this_app),
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
             )
@@ -448,7 +451,7 @@ private fun ScanBlockedNotice(onInstallAnyway: () -> Unit, enabled: Boolean) {
     }
     Spacer(Modifier.height(FS.space.s3))
     FSDangerButton(
-        label = "Install anyway",
+        label = stringResource(R.string.install_anyway_2),
         onClick = onInstallAnyway,
         block = true,
         enabled = enabled,

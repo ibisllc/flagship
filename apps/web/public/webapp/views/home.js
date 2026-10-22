@@ -1492,7 +1492,7 @@ export async function renderHome() {
     $("services-list-open-marketplace"),
     deviceCap,
     "install-service",
-    "This device cannot install services. Use a primary device.",
+    tr("This device cannot install services. Use a primary device."),
   );
   applyScopeGateToButton(
     $("services-list-open-vibe-code"),

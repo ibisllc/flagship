@@ -104,7 +104,7 @@
   <section class="page-hero">
     <h1>问题，用大白话来回答。</h1>
     <p>这些是人们在把硬件和手机交给我们之前真正会问的问题。如果没有你想问的，请发邮件至 <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a>。</p>
-    <nav class="toc" aria-label="章节"><a href="#setup">设置与安装</a><a href="#privacy">隐私与安全</a><a href="#apps">服务</a><a href="#endgame">如果 Flagship 消失了</a></nav>
+    <nav class="toc" aria-label="章节"><a href="#setup">设置与安装</a><a href="#privacy">隐私与安全</a><a href="#apps">服务与市场</a><a href="#money">费用与订阅</a><a href="#endgame">如果 Flagship 消失了</a></nav>
   </section>
 
   <section class="faq-section" id="setup" aria-label="设置与安装">
@@ -205,14 +205,26 @@
     </div>
   </section>
 
-  <section class="faq-section" id="apps" aria-label="服务">
-    <h2>服务</h2>
-    <p class="section-lede">服务是在你的盒子上运行的容器，并按用户命名空间隔离。</p>
+  <section class="faq-section" id="apps" aria-label="服务与市场">
+    <h2>服务与市场</h2>
+    <p class="section-lede">服务是在你的服务器上运行的容器，按用户隔离。市场只是一份指向列表，不托管代码。</p>
     <div class="qlist">
       <details class="q">
         <summary>“vibe coding”一个服务是什么意思？</summary>
         <div class="answer">
           <p>你用日常语言描述想要的东西（“记录我浇过哪些绿植，哪盆缺水超过 5 天就推送通知我”）。LLM 来写代码，你的守护进程负责构建、选择数据层范围（Postgres 表、对象存储、推送），并把它运行在 <code>plant-water.you.flagship.services</code>。大约 90 秒。如果你愿意，也可以自己修改代码。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>市场是如何运作的？</summary>
+        <div class="answer">
+          <p>任何人都可以发布上架信息：标题、描述、截图，以及指向规范 pod 的链接。我们托管上架信息，不托管代码。安装服务时，你的守护进程会从规范 pod（或你指定的分支）拉取源码，用你服务器的身份签名，并在你的命名空间中运行。市场是一个目录，而不是应用商店。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>上架信息会被审核吗？</summary>
+        <div class="answer">
+          <p>由上架者自愿进行。发布者可以付费进行安全扫描（npm audit + trivy + semgrep + 动态检查），并在上架信息中展示字母评级。评级仅供参考，我们不以此作为上架条件。违反 <a href="/terms">/terms</a> 中可接受使用政策的上架内容，我们会在收到举报后下架。</p>
         </div>
       </details>
       <details class="q">
@@ -237,6 +249,55 @@
         <summary>可以干净地卸载服务吗？</summary>
         <div class="answer">
           <p>可以。卸载会删除它的容器、Postgres 数据库、文件夹和访问列表。如果以后还想找回数据，可以在卸载前保留一份快照。</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="faq-section" id="money" aria-label="费用与订阅">
+    <h2>费用与订阅</h2>
+    <p class="section-lede">硬件是一次性付费。订阅是可选的。自带硬件永久免费。</p>
+    <div class="qlist">
+      <details class="q">
+        <summary>Flagship 的费用是多少？</summary>
+        <div class="answer">
+          <p>自带硬件：0 美元。我们目前不出售设备或订阅。出售时会公布详情，并且只针对高级功能、完全自愿。大多数人永远不需要付费。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>如果是“你自己的硬件”，为什么还要收费？</summary>
+        <div class="answer">
+          <p>实际成本有三项：发货预装设备（只有成本，不靠定价赚钱）、在 Fly 上运行隧道中心（在我们的规模下，每台服务器每月几美分），以及运营 <code>flagship.services</code> 的通配 DNS。免费套餐覆盖个人在自有硬件上的日常使用。订阅则覆盖我们否则不得不补贴的部分。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>可以随时取消吗？</summary>
+        <div class="answer">
+          <p>可以。在手机上一键即可取消。我们会按比例结算当前周期未使用的部分。你的子域名仍归你所有；路由条目继续有效；只有付费附加项（大规模推送等）会停用。我们不会拿你的 DNS 要挟你。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>硬件的退款政策是什么？</summary>
+        <div class="answer">
+          <p>30 天内全额退款，由你寄回。美国境内的退货运费由我们承担；美国境外由你承担。如果设备到货即损坏，往返运费都由我们承担。不收取重新入库费。完整条款见 <a href="/terms">/terms</a>。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>接受加密货币吗？</summary>
+        <div class="answer">
+          <p>暂不接受。Stripe 支持银行卡（USD、EUR、GBP）。我们正在为注重隐私的用户研究 monero / lightning，但不在近期路线图中。如果你需要，请发邮件到 <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a> 告诉我们，因为功能就是这样排优先级的。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>价格会变吗？</summary>
+        <div class="answer">
+          <p>硬件：可能会变，取决于零部件成本。已有订单价格不变。订阅：如果调价，我们会让所有现有订阅者至少 12 个月内保持原价，并且如果某个套餐是“入门价”，会在注册时告知。我们不会搞“续订价格涨到三倍”那一套。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>长期来看你们靠什么赚钱？</summary>
+        <div class="answer">
+          <p>靠硬件利润、可选附加项的订阅，以及市场推广费（会明确标注为“精选”）。我们不出售广告、遥测数据、模型训练权利或你的数据——一部分是因为这样做才对，更主要是因为我们在结构上就做不到。</p>
         </div>
       </details>
     </div>
@@ -283,6 +344,7 @@
       <h4>产品</h4>
       <ul>
         <li><a href="/zh-hans/docs#how-it-works">工作原理</a></li>
+        <li><a href="/marketplace/">服务</a></li>
         <li><a href="https://webapp.flagshipserver.com/">网页版</a></li>
       </ul>
     </div>

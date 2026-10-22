@@ -996,10 +996,10 @@ export function deployedMarkup(url, open, publish = null) {
 function publishMarkup(publish) {
   if (!publish) return "";
   if (publish.slug) {
-    return `<div class="faint-sm mt-2">published as <code>${escapeHtml(publish.slug)}</code> on the marketplace</div>`;
+    return `<div class="faint-sm mt-2">${tr("published as <code>{0}</code> on the marketplace", escapeHtml(publish.slug))}</div>`;
   }
   return `<button id="vc-publish" class="secondary mt-2 full-width" data-canonical="${escapeHtml(publish.canonical ?? "")}">
-              Publish this app
+              ${tr("Publish this app")}
             </button>`;
 }
 
@@ -1123,32 +1123,32 @@ async function postDeploy(sessionId) {
  */
 async function publishToMarketplace(serviceCanonical) {
   if (!serviceCanonical) {
-    return toast("missing app canonical name", "err");
+    return toast(tr("missing app canonical name"), "err");
   }
   if (!confirm(
-    `Publish "${serviceCanonical}" to the Flagship marketplace? You can unlist later from the marketplace view.`,
+    tr("Publish \"{0}\" to the Flagship marketplace? You can unlist later from the marketplace view.", serviceCanonical),
   )) {
     return;
   }
   const btn = $("vc-publish");
   if (btn) {
     btn.disabled = true;
-    btn.textContent = "publishing…";
+    btn.textContent = tr("publishing…");
   }
   try {
     const r = await boxFetch("/api/screens/marketplace/publish", {
       method: "POST",
       body: JSON.stringify({ serviceCanonical }),
     });
-    toast(`published as ${r.slug ?? serviceCanonical}`);
+    toast(tr("published as {0}", r.slug ?? serviceCanonical));
     if (btn) {
       btn.disabled = true;
-      btn.textContent = "published ✓";
+      btn.textContent = tr("published ✓");
     }
   } catch (e) {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = "Publish this app";
+      btn.textContent = tr("Publish this app");
     }
     toast(e.message ?? String(e), "err");
   }

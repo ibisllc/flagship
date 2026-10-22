@@ -2381,5 +2381,6 @@
   "A server shared with you is asking you to unlock it.": "Un serveur partagé avec vous vous demande de le déverrouiller.",
   "Couldn't sign the change: %@": "Impossible de signer la modification : %@",
   "Couldn't sign the key: %@": "Impossible de signer la clé : %@",
-  "Couldn't sign the copy: %@": "Impossible de signer la copie : %@"
+  "Couldn't sign the copy: %@": "Impossible de signer la copie : %@",
+  "Pro ended, so your apps use one access list on all your servers again.": "Pro est terminé : vos apps utilisent de nouveau une seule liste d'accès sur tous vos serveurs."
 }

@@ -8,6 +8,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.InstallServiceEnvelope
 import com.flagshipserver.app.api.InstallServiceRequest
 import com.flagshipserver.app.api.MarketplaceListing
@@ -120,7 +122,7 @@ class MarketplaceViewModel(
                 addOwnerToMembership = true,
                 issuedAt = now(),
             )
-            val irk = signer("Install $creator/$slug")
+            val irk = signer(FSStrings.get(R.string.install_3, creator, slug))
             val signature = irk.sign(installServiceCanonicalBytes(request))
             val resp = client.installFromMarketplace(
                 InstallServiceEnvelope(request = request, signature = HexUtil.encode(signature)),

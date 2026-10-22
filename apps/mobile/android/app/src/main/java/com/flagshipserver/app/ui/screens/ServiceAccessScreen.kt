@@ -654,15 +654,15 @@ internal fun ServiceAccessContent(
                     onClick = {
                         confirmScope = null
                         scope.launch {
-                            if (vm.setListScope(on)) toasts.success(if (on) "Each server now keeps its own list." else "Every server now uses one list.")
+                            if (vm.setListScope(on)) toasts.success(if (on) stringResource(R.string.each_server_now_keeps_its_own) else stringResource(R.string.every_server_now_uses_one_list))
                             else (vm.phase.value as? ServiceAccessPhase.Failed)?.let { toasts.error(it.message) }
                         }
                     },
                     modifier = Modifier.semantics { testTag = "service-access-list-scope-confirm" },
-                ) { Text(if (on) "Separate lists" else "One list") }
+                ) { Text(if (on) stringResource(R.string.separate_lists) else stringResource(R.string.one_list)) }
             },
             dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { confirmScope = null }) { Text("Cancel") }
+                androidx.compose.material3.TextButton(onClick = { confirmScope = null }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }

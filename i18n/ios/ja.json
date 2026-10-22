@@ -2381,5 +2381,6 @@
   "A server shared with you is asking you to unlock it.": "あなたと共有されているサーバーが、ロック解除を求めています。",
   "Couldn't sign the change: %@": "変更に署名できませんでした：%@",
   "Couldn't sign the key: %@": "キーに署名できませんでした：%@",
-  "Couldn't sign the copy: %@": "コピーに署名できませんでした：%@"
+  "Couldn't sign the copy: %@": "コピーに署名できませんでした：%@",
+  "Pro ended, so your apps use one access list on all your servers again.": "Pro が終了したため、アプリはすべてのサーバーで再び 1 つのアクセスリストを使います。"
 }

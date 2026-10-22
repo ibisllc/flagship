@@ -104,7 +104,7 @@
   <section class="page-hero">
     <h1>Des questions, en langage clair.</h1>
     <p>Celles que l’on se pose vraiment avant de nous confier son matériel et son téléphone. Si la vôtre n’y figure pas, écrivez à <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a>.</p>
-    <nav class="toc" aria-label="Rubriques"><a href="#setup">Configuration et installation</a><a href="#privacy">Confidentialité et sécurité</a><a href="#apps">Services</a><a href="#endgame">Si Flagship disparaît</a></nav>
+    <nav class="toc" aria-label="Rubriques"><a href="#setup">Configuration et installation</a><a href="#privacy">Confidentialité et sécurité</a><a href="#apps">Services et place de marché</a><a href="#money">Argent et abonnements</a><a href="#endgame">Si Flagship disparaît</a></nav>
   </section>
 
   <section class="faq-section" id="setup" aria-label="Configuration et installation">
@@ -205,14 +205,26 @@
     </div>
   </section>
 
-  <section class="faq-section" id="apps" aria-label="Services">
-    <h2>Services</h2>
-    <p class="section-lede">Les services sont des conteneurs exécutés sur votre boîtier, isolés par espace de noms utilisateur.</p>
+  <section class="faq-section" id="apps" aria-label="Services et place de marché">
+    <h2>Services et place de marché</h2>
+    <p class="section-lede">Les services sont des conteneurs qui tournent sur votre serveur, séparés par utilisateur. La place de marché est une liste de liens, pas un hébergeur de code.</p>
     <div class="qlist">
       <details class="q">
         <summary>Qu’est-ce que « vibe-coder » un service ?</summary>
         <div class="answer">
           <p>Vous décrivez ce que vous voulez en langage naturel (« un suivi des plantes que j’ai arrosées, avertis-moi quand l’une a soif depuis 5 jours ou plus »). Un LLM écrit le code. Votre démon le compile, choisit les portées de la couche de données (tables Postgres, stockage d’objets, push) et l’exécute sur <code>plant-water.you.flagship.services</code>. Environ 90 secondes. Vous pouvez modifier le code si vous en avez envie.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Comment fonctionne la place de marché ?</summary>
+        <div class="answer">
+          <p>Tout le monde peut publier une annonce : un titre, une description, des captures d'écran, un lien vers un pod canonique. Nous hébergeons les annonces, pas le code. Quand vous installez un service, votre daemon récupère le code source depuis le pod canonique (ou un fork que vous indiquez), le signe avec l'identité de votre serveur et l'exécute dans votre espace de noms. La place de marché est un annuaire, pas un app store.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Les annonces sont-elles examinées ?</summary>
+        <div class="answer">
+          <p>En option, par l'auteur de l'annonce. Les éditeurs peuvent payer une analyse de sécurité (npm audit + trivy + semgrep + contrôles dynamiques) et afficher une note sur leur annonce. La note est indicative ; nous ne conditionnons pas les annonces à celle-ci. Nous retirons, sur signalement, les annonces qui enfreignent la politique d'utilisation acceptable de <a href="/terms">/terms</a>.</p>
         </div>
       </details>
       <details class="q">
@@ -237,6 +249,55 @@
         <summary>Puis-je désinstaller proprement un service ?</summary>
         <div class="answer">
           <p>Oui. La désinstallation supprime son conteneur, sa base Postgres, son dossier de fichiers et sa liste d’accès. Vous pouvez conserver un instantané avant la désinstallation si vous voulez retrouver les données plus tard.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="faq-section" id="money" aria-label="Argent et abonnements">
+    <h2>Argent et abonnements</h2>
+    <p class="section-lede">Le matériel est un achat unique. Les abonnements sont facultatifs. Apporter son propre matériel est gratuit pour toujours.</p>
+    <div class="qlist">
+      <details class="q">
+        <summary>Combien coûte Flagship ?</summary>
+        <div class="answer">
+          <p>Avec votre propre matériel : 0 $. Nous ne vendons pas encore de boîtiers ni d'abonnements. Quand nous le ferons, nous publierons les détails, et ce sera facultatif et réservé aux usages avancés. La plupart des gens ne paieront rien, jamais.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Pourquoi faire payer quoi que ce soit si c'est « votre matériel » ?</summary>
+        <div class="answer">
+          <p>Il y a trois vrais coûts : l'expédition des boîtiers préassemblés (de la marge, pas du profit sur le prix), le hub de tunnels sur Fly (quelques centimes par serveur et par mois à notre échelle) et le registre du DNS générique de <code>flagship.services</code>. L'offre gratuite couvre l'usage courant d'un particulier sur son propre matériel. Les abonnements couvrent ce que nous devrions sinon subventionner.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Puis-je résilier à tout moment ?</summary>
+        <div class="answer">
+          <p>Oui. La résiliation se fait en un geste depuis le téléphone. Nous calculons au prorata la part inutilisée de la période en cours. Votre sous-domaine reste à vous ; l'entrée de routage continue de fonctionner ; seuls les modules payants (push à grande échelle, etc.) s'arrêtent. Nous ne prenons pas votre DNS en otage.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Quelle est votre politique de remboursement pour le matériel ?</summary>
+        <div class="answer">
+          <p>30 jours, remboursement intégral, vous le renvoyez. Nous payons le retour aux États-Unis ; hors des États-Unis, il est à votre charge. Si le boîtier est arrivé mort ou défectueux, nous payons l'aller et le retour. Pas de frais de restockage. Conditions complètes sur <a href="/terms">/terms</a>.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Acceptez-vous les cryptomonnaies ?</summary>
+        <div class="answer">
+          <p>Pas encore. Stripe accepte les cartes (USD, EUR, GBP). Nous étudions monero / lightning pour les personnes soucieuses de leur vie privée, mais ce n'est pas dans la feuille de route immédiate. Si cela compte pour vous, écrivez à <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a> pour nous le dire, car c'est ainsi que les fonctionnalités sont priorisées.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Le prix va-t-il changer ?</summary>
+        <div class="answer">
+          <p>Matériel : probablement, selon le coût des composants. Les commandes existantes sont garanties. Abonnements : en cas de changement de prix, nous maintiendrons les conditions de tous les abonnés existants pendant au moins 12 mois et nous vous préviendrons à l'inscription si un plan est « de lancement ». Nous ne faisons pas de « votre renouvellement coûte maintenant le triple ».</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Comment gagnez-vous de l'argent à long terme ?</summary>
+        <div class="answer">
+          <p>Avec la marge sur le matériel, les abonnements aux modules facultatifs et les frais de promotion sur la place de marché (clairement étiquetés « à la une »). Nous ne vendons ni publicité, ni télémétrie, ni droits d'entraînement de modèles, ni vos données, en partie parce que c'est la bonne chose à faire, surtout parce que nous en sommes structurellement incapables.</p>
         </div>
       </details>
     </div>
@@ -283,6 +344,7 @@
       <h4>Produit</h4>
       <ul>
         <li><a href="/fr/docs#how-it-works">Comment ça marche</a></li>
+        <li><a href="/marketplace/">Services</a></li>
         <li><a href="https://webapp.flagshipserver.com/">App web</a></li>
       </ul>
     </div>

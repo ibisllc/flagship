@@ -8592,10 +8592,6 @@
     "en": "Pair",
     "ctx": "webapp/index.html"
   },
-  "Vibe-code a new service, or share-install one from a creator.": {
-    "en": "Vibe-code a new service, or share-install one from a creator.",
-    "ctx": "webapp/index.html"
-  },
   "Vibe-code": {
     "en": "Vibe-code",
     "ctx": "webapp/index.html"
@@ -10673,5 +10669,393 @@
   "Renamed to {0}.": {
     "en": "Renamed to {0}.",
     "ctx": "webapp/views/service-detail.js:1242"
+  },
+  "Pro Max": {
+    "en": "Pro Max",
+    "ctx": "webapp/lib/allowance.js:28"
+  },
+  "0 GB": {
+    "en": "0 GB",
+    "ctx": "webapp/lib/allowance.js:45"
+  },
+  "Resets 1 {0}": {
+    "en": "Resets 1 {0}",
+    "ctx": "webapp/lib/allowance.js:104"
+  },
+  "You've used {0}% of your bandwidth this month. Upgrade to Pro for more.": {
+    "en": "You've used {0}% of your bandwidth this month. Upgrade to Pro for more.",
+    "ctx": "webapp/lib/allowance.js:131"
+  },
+  "Upgrade to Pro": {
+    "en": "Upgrade to Pro",
+    "ctx": "webapp/lib/allowance.js:132"
+  },
+  "You've used this month's free bandwidth, so public traffic is slowed until next month or until you upgrade.": {
+    "en": "You've used this month's free bandwidth, so public traffic is slowed until next month or until you upgrade.",
+    "ctx": "webapp/lib/allowance.js:140"
+  },
+  "You're over your plan's bandwidth — overage applies. Consider Pro Max.": {
+    "en": "You're over your plan's bandwidth — overage applies. Consider Pro Max.",
+    "ctx": "webapp/lib/allowance.js:147"
+  },
+  "Upgrade to Pro Max": {
+    "en": "Upgrade to Pro Max",
+    "ctx": "webapp/lib/allowance.js:148"
+  },
+  "Bandwidth this month": {
+    "en": "Bandwidth this month",
+    "ctx": "webapp/lib/allowance.js:227"
+  },
+  "Bandwidth used": {
+    "en": "Bandwidth used",
+    "ctx": "webapp/lib/allowance.js:232"
+  },
+  "{0}% used": {
+    "en": "{0}% used",
+    "ctx": "webapp/lib/allowance.js:241"
+  },
+  "{0} remaining": {
+    "en": "{0} remaining",
+    "ctx": "webapp/lib/allowance.js:244"
+  },
+  "Separate list on each server": {
+    "en": "Separate list on each server",
+    "ctx": "webapp/lib/listScope.js:20"
+  },
+  "Each server keeps its own members and invites.": {
+    "en": "Each server keeps its own members and invites.",
+    "ctx": "webapp/lib/listScope.js:21"
+  },
+  "Comes with Pro.": {
+    "en": "Comes with Pro.",
+    "ctx": "webapp/lib/listScope.js:22"
+  },
+  "See Pro membership": {
+    "en": "See Pro membership",
+    "ctx": "webapp/lib/listScope.js:23"
+  },
+  "Waiting for this server to confirm Pro.": {
+    "en": "Waiting for this server to confirm Pro.",
+    "ctx": "webapp/lib/listScope.js:24"
+  },
+  "Each server has its own list.": {
+    "en": "Each server has its own list.",
+    "ctx": "webapp/lib/listScope.js:25"
+  },
+  "A separate list on each server?": {
+    "en": "A separate list on each server?",
+    "ctx": "webapp/lib/listScope.js:26"
+  },
+  "Each server keeps its current list. Changes you make on one server stay on it.": {
+    "en": "Each server keeps its current list. Changes you make on one server stay on it.",
+    "ctx": "webapp/lib/listScope.js:27"
+  },
+  "One list on every server?": {
+    "en": "One list on every server?",
+    "ctx": "webapp/lib/listScope.js:28"
+  },
+  "Every server will use {0}'s list. People who joined on other servers since lose access.": {
+    "en": "Every server will use {0}'s list. People who joined on other servers since lose access.",
+    "ctx": "webapp/lib/listScope.js:106"
+  },
+  "1 app has a separate access list on each server. When Pro ends it will use {0}'s list.": {
+    "en": "1 app has a separate access list on each server. When Pro ends it will use {0}'s list.",
+    "ctx": "webapp/lib/listScope.js:121"
+  },
+  "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.": {
+    "en": "1 app has a separate access list on each server. When Pro ends it will use its lead server's list.",
+    "ctx": "webapp/lib/listScope.js:122"
+  },
+  "{0} apps have a separate access list on each server. When Pro ends they'll all use {1}'s list.": {
+    "en": "{0} apps have a separate access list on each server. When Pro ends they'll all use {1}'s list.",
+    "ctx": "webapp/lib/listScope.js:125"
+  },
+  "{0} apps have a separate access list on each server. When Pro ends each will use its lead server's list.": {
+    "en": "{0} apps have a separate access list on each server. When Pro ends each will use its lead server's list.",
+    "ctx": "webapp/lib/listScope.js:126"
+  },
+  "Become a Pro member": {
+    "en": "Become a Pro member",
+    "ctx": "webapp/lib/proBanner.js:72"
+  },
+  "Flagship is free and always will be. Go Pro to support the project — keep Flagship free & independent — and lift your bandwidth to 250 GB.": {
+    "en": "Flagship is free and always will be. Go Pro to support the project — keep Flagship free & independent — and lift your bandwidth to 250 GB.",
+    "ctx": "webapp/lib/proBanner.js:74"
+  },
+  "You have no marketplace listings yet.": {
+    "en": "You have no marketplace listings yet.",
+    "ctx": "webapp/views/developer.js:23"
+  },
+  "payout owed": {
+    "en": "payout owed",
+    "ctx": "webapp/views/developer.js:54"
+  },
+  "gross": {
+    "en": "gross",
+    "ctx": "webapp/views/developer.js:58"
+  },
+  "platform cut {0} · {1}": {
+    "en": "platform cut {0} · {1}",
+    "ctx": "webapp/views/developer.js:62"
+  },
+  "{0} sales · {1} installs": {
+    "en": "{0} sales · {1} installs",
+    "ctx": "webapp/views/developer.js:63"
+  },
+  "app": {
+    "en": "app",
+    "ctx": "webapp/views/developer.js:89"
+  },
+  "price": {
+    "en": "price",
+    "ctx": "webapp/views/developer.js:89"
+  },
+  "installs": {
+    "en": "installs",
+    "ctx": "webapp/views/developer.js:89"
+  },
+  "sales": {
+    "en": "sales",
+    "ctx": "webapp/views/developer.js:89"
+  },
+  "net": {
+    "en": "net",
+    "ctx": "webapp/views/developer.js:89"
+  },
+  "scan": {
+    "en": "scan",
+    "ctx": "webapp/views/developer.js:89"
+  },
+  "recent sales": {
+    "en": "recent sales",
+    "ctx": "webapp/views/developer.js:105"
+  },
+  "Unlock to view your developer console.": {
+    "en": "Unlock to view your developer console.",
+    "ctx": "webapp/views/developer.js:136"
+  },
+  "No username on this account yet.": {
+    "en": "No username on this account yet.",
+    "ctx": "webapp/views/developer.js:141"
+  },
+  "This device cannot install services. Use a primary device.": {
+    "en": "This device cannot install services. Use a primary device.",
+    "ctx": "webapp/views/home.js:1495"
+  },
+  "scan {0}": {
+    "en": "scan {0}",
+    "ctx": "webapp/views/marketplace.js:37"
+  },
+  "not yet scanned — Flagship's scanner service is queueing this listing": {
+    "en": "not yet scanned — Flagship's scanner service is queueing this listing",
+    "ctx": "webapp/views/marketplace.js:39"
+  },
+  "ungraded": {
+    "en": "ungraded",
+    "ctx": "webapp/views/marketplace.js:39"
+  },
+  "The marketplace is coming soon.": {
+    "en": "The marketplace is coming soon.",
+    "ctx": "webapp/views/marketplace.js:49"
+  },
+  "no listings yet": {
+    "en": "no listings yet",
+    "ctx": "webapp/views/marketplace.js:56"
+  },
+  "installed": {
+    "en": "installed",
+    "ctx": "webapp/views/marketplace.js:62"
+  },
+  "needs LLM key": {
+    "en": "needs LLM key",
+    "ctx": "webapp/views/marketplace.js:65"
+  },
+  "install": {
+    "en": "install",
+    "ctx": "webapp/views/marketplace.js:79"
+  },
+  "{0} installs": {
+    "en": "{0} installs",
+    "ctx": "webapp/views/marketplace.js:75"
+  },
+  "The signed app envelope is verified against your IRK before the daemon starts the container.": {
+    "en": "The signed app envelope is verified against your IRK before the daemon starts the container.",
+    "ctx": "webapp/views/marketplace.js:125"
+  },
+  "⚠ Security warning — {0}/{1}": {
+    "en": "⚠ Security warning — {0}/{1}",
+    "ctx": "webapp/views/marketplace.js:131"
+  },
+  "Flagship's scanner gave this app a failing grade (F) — it found critical security issues, so installing it is strongly discouraged. {0}": {
+    "en": "Flagship's scanner gave this app a failing grade (F) — it found critical security issues, so installing it is strongly discouraged. {0}",
+    "ctx": "webapp/views/marketplace.js:133"
+  },
+  "Install anyway": {
+    "en": "Install anyway",
+    "ctx": "webapp/views/marketplace.js:134"
+  },
+  "Install {0}/{1}?": {
+    "en": "Install {0}/{1}?",
+    "ctx": "webapp/views/marketplace.js:142"
+  },
+  "This app has not been security-scanned yet. {0}": {
+    "en": "This app has not been security-scanned yet. {0}",
+    "ctx": "webapp/views/marketplace.js:143"
+  },
+  "Install": {
+    "en": "Install",
+    "ctx": "webapp/views/marketplace.js:144"
+  },
+  "Separate lists": {
+    "en": "Separate lists",
+    "ctx": "webapp/views/service-access.js:396"
+  },
+  "One list": {
+    "en": "One list",
+    "ctx": "webapp/views/service-access.js:397"
+  },
+  "Each server now keeps its own list.": {
+    "en": "Each server now keeps its own list.",
+    "ctx": "webapp/views/service-access.js:410"
+  },
+  "Every server now uses one list.": {
+    "en": "Every server now uses one list.",
+    "ctx": "webapp/views/service-access.js:410"
+  },
+  "free": {
+    "en": "free",
+    "ctx": "webapp/views/tier-status.js:28"
+  },
+  "promo": {
+    "en": "promo",
+    "ctx": "webapp/views/tier-status.js:30"
+  },
+  "BYOK": {
+    "en": "BYOK",
+    "ctx": "webapp/views/tier-status.js:31"
+  },
+  "today remaining": {
+    "en": "today remaining",
+    "ctx": "webapp/views/tier-status.js:44"
+  },
+  "today": {
+    "en": "today",
+    "ctx": "webapp/views/tier-status.js:45"
+  },
+  "— (BYOK or promo not in use)": {
+    "en": "— (BYOK or promo not in use)",
+    "ctx": "webapp/views/tier-status.js:45"
+  },
+  "lifetime remaining": {
+    "en": "lifetime remaining",
+    "ctx": "webapp/views/tier-status.js:47"
+  },
+  "{0} GB free": {
+    "en": "{0} GB free",
+    "ctx": "webapp/views/tier-status.js:56"
+  },
+  "this month": {
+    "en": "this month",
+    "ctx": "webapp/views/tier-status.js:55"
+  },
+  "{0} GB / {1}": {
+    "en": "{0} GB / {1}",
+    "ctx": "webapp/views/tier-status.js:56"
+  },
+  "usage": {
+    "en": "usage",
+    "ctx": "webapp/views/tier-status.js:62"
+  },
+  "none — your default subdomain is forever-free": {
+    "en": "none — your default subdomain is forever-free",
+    "ctx": "webapp/views/tier-status.js:66"
+  },
+  "none — your username is FCFS-free": {
+    "en": "none — your username is FCFS-free",
+    "ctx": "webapp/views/tier-status.js:72"
+  },
+  "Tier": {
+    "en": "Tier",
+    "ctx": "webapp/views/tier-status.js:38"
+  },
+  "LLM credits": {
+    "en": "LLM credits",
+    "ctx": "webapp/views/tier-status.js:41"
+  },
+  "Dispatcher relay": {
+    "en": "Dispatcher relay",
+    "ctx": "webapp/views/tier-status.js:50"
+  },
+  "Custom domains": {
+    "en": "Custom domains",
+    "ctx": "webapp/views/tier-status.js:64"
+  },
+  "Reserved names": {
+    "en": "Reserved names",
+    "ctx": "webapp/views/tier-status.js:70"
+  },
+  "published as <code>{0}</code> on the marketplace": {
+    "en": "published as <code>{0}</code> on the marketplace",
+    "ctx": "webapp/views/vibe-code.js:999"
+  },
+  "Publish this app": {
+    "en": "Publish this app",
+    "ctx": "webapp/views/vibe-code.js:1002"
+  },
+  "missing app canonical name": {
+    "en": "missing app canonical name",
+    "ctx": "webapp/views/vibe-code.js:1126"
+  },
+  "Publish \"{0}\" to the Flagship marketplace? You can unlist later from the marketplace view.": {
+    "en": "Publish \"{0}\" to the Flagship marketplace? You can unlist later from the marketplace view.",
+    "ctx": "webapp/views/vibe-code.js:1129"
+  },
+  "publishing…": {
+    "en": "publishing…",
+    "ctx": "webapp/views/vibe-code.js:1136"
+  },
+  "published as {0}": {
+    "en": "published as {0}",
+    "ctx": "webapp/views/vibe-code.js:1143"
+  },
+  "published ✓": {
+    "en": "published ✓",
+    "ctx": "webapp/views/vibe-code.js:1146"
+  },
+  "Browse marketplace": {
+    "en": "Browse marketplace",
+    "ctx": "webapp/views/wizard.js:367"
+  },
+  "Back to one access list": {
+    "en": "Back to one access list",
+    "ctx": "webapp/lib/activityFeed.js:41"
+  },
+  "Tier & usage": {
+    "en": "Tier & usage",
+    "ctx": "webapp/index.html"
+  },
+  "Browse the marketplace, vibe-code a new service, or share-install one\n            from a creator.": {
+    "en": "Browse the marketplace, vibe-code a new service, or share-install one\n            from a creator.",
+    "ctx": "webapp/index.html"
+  },
+  "Marketplace": {
+    "en": "Marketplace",
+    "ctx": "webapp/index.html"
+  },
+  "Developer": {
+    "en": "Developer",
+    "ctx": "webapp/index.html"
+  },
+  "Developer console": {
+    "en": "Developer console",
+    "ctx": "webapp/index.html"
+  },
+  "Get from the marketplace": {
+    "en": "Get from the marketplace",
+    "ctx": "webapp/index.html"
+  },
+  "Install something a neighbour already built.": {
+    "en": "Install something a neighbour already built.",
+    "ctx": "webapp/index.html"
   }
 }

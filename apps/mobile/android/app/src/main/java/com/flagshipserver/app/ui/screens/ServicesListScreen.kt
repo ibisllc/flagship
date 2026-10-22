@@ -216,7 +216,7 @@ fun ServicesListScreen(nav: NavController) {
                         modifier = Modifier.testTag("services-build-cta"),
                     )
                     FSGhostButton(
-                        label = "Browse marketplace",
+                        label = stringResource(R.string.browse_marketplace),
                         onClick = { nav.navigate("marketplace") },
                         block = true,
                     )

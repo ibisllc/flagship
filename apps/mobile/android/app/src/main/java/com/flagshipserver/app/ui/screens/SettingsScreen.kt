@@ -226,8 +226,8 @@ fun SettingsScreen(nav: NavController) {
                 // Plan / Subscription: the dedicated tier-status screen (marketplace).
                 FSSettingsRowData(
                     icon = Icons.Outlined.CreditCard,
-                    title = "Plan / Subscription",
-                    subtitle = "Tier, LLM credits, dispatcher usage, custom domains.",
+                    title = stringResource(R.string.plan_subscription),
+                    subtitle = stringResource(R.string.tier_llm_credits_dispatcher_usage_custom),
                     onClick = { nav.navigate("tier-status") },
                 ),
                 // Account security leads; the live account type (single vs

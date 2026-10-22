@@ -10527,5 +10527,10 @@
   "Couldn't sign the copy: %@": {
     "en": "Couldn't sign the copy: %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AppPlacementViewModels.swift:118"
+  },
+  "Pro ended, so your apps use one access list on all your servers again.": {
+    "en": "Pro ended, so your apps use one access list on all your servers again.",
+    "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
+    "manual": true
   }
 }

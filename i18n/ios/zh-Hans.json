@@ -2381,5 +2381,6 @@
   "A server shared with you is asking you to unlock it.": "与你共享的一台服务器请求你将其解锁。",
   "Couldn't sign the change: %@": "无法为此更改签名：%@",
   "Couldn't sign the key: %@": "无法为此密钥签名：%@",
-  "Couldn't sign the copy: %@": "无法为此副本签名：%@"
+  "Couldn't sign the copy: %@": "无法为此副本签名：%@",
+  "Pro ended, so your apps use one access list on all your servers again.": "Pro 已结束，因此你的应用在所有服务器上重新使用同一份访问名单。"
 }

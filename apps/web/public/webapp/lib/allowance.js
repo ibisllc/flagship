@@ -14,6 +14,7 @@
 
 import { accountReadFetch } from "./accountRead.js";
 
+import { tr } from "./i18n.js";
 const COM_BASE = "https://flagshipserver.com";
 
 /** /pro membership + private-payment page (a separate static surface). */
@@ -24,7 +25,7 @@ export const PRO_URL = "/pro";
 export const TIER_LABELS = {
   free: "Free",
   hobby: "Pro",
-  maker: "Pro Max",
+  maker: tr("Pro Max"),
 };
 
 /** Human label for a tier name (unknown → the raw value, never throws). */
@@ -41,7 +42,7 @@ const GB = 1024 * 1024 * 1024;
  */
 export function formatGB(bytes) {
   const n = Number(bytes);
-  if (!Number.isFinite(n) || n <= 0) return "0 GB";
+  if (!Number.isFinite(n) || n <= 0) return tr("0 GB");
   const gb = n / GB;
   // One decimal, but strip a trailing ".0" (so quotas like 50/250 read clean).
   const rounded = Math.round(gb * 10) / 10;
@@ -51,7 +52,7 @@ export function formatGB(bytes) {
 
 /** "12.4 GB of 50 GB" — the progress-bar caption. */
 export function formatUsedOfQuota(usedBytes, quotaBytes) {
-  return `${formatGB(usedBytes)} of ${formatGB(quotaBytes)}`;
+  return tr("{0} of {1}", formatGB(usedBytes), formatGB(quotaBytes));
 }
 
 /** Whole-number percent of quota used (clamped 0..100 for the bar width;
@@ -100,7 +101,7 @@ export function resetLabel(period) {
   let month = Number(m[2]); // 1..12, the CURRENT period
   // Reset is the 1st of the NEXT month.
   let next = month % 12; // 0..11 index for the next month (12 → 0 = Jan)
-  return `Resets 1 ${MONTHS[next]}`;
+  return tr("Resets 1 {0}", MONTHS[next]);
 }
 
 /**
@@ -127,8 +128,8 @@ export function upgradeAlertCopy(a = {}) {
     const pct = usedPercent(a.usedFraction);
     return {
       tone: "warn",
-      message: `You've used ${pct}% of your bandwidth this month. Upgrade to Pro for more.`,
-      cta: "Upgrade to Pro",
+      message: tr("You've used {0}% of your bandwidth this month. Upgrade to Pro for more.", pct),
+      cta: tr("Upgrade to Pro"),
     };
   }
   if (state === "over") {
@@ -136,15 +137,15 @@ export function upgradeAlertCopy(a = {}) {
       return {
         tone: "err",
         message:
-          "You've used this month's free bandwidth, so public traffic is slowed until next month or until you upgrade.",
-        cta: "Upgrade to Pro",
+          tr("You've used this month's free bandwidth, so public traffic is slowed until next month or until you upgrade."),
+        cta: tr("Upgrade to Pro"),
       };
     }
     return {
       tone: "err",
       message:
-        "You're over your plan's bandwidth — overage applies. Consider Pro Max.",
-      cta: "Upgrade to Pro Max",
+        tr("You're over your plan's bandwidth — overage applies. Consider Pro Max."),
+      cta: tr("Upgrade to Pro Max"),
     };
   }
   return null;
@@ -223,12 +224,12 @@ export function allowanceCardHtml(a) {
   return `
     <div class="card allowance-card" data-allowance-card>
       <div class="row allowance-head">
-        <div class="weight-600">Bandwidth this month</div>
+        <div class="weight-600">${tr("Bandwidth this month")}</div>
         <span class="pill allowance-tier">${escapeHtml(tierLabel(a.tier))}</span>
       </div>
       <div class="allowance-bar" role="progressbar"
            aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"
-           aria-label="Bandwidth used">
+           aria-label="${tr("Bandwidth used")}">
         <div class="allowance-bar-fill allowance-bar-fill--${escapeHtml(
           tone,
         )}" style="width:${width}%"></div>
@@ -237,12 +238,12 @@ export function allowanceCardHtml(a) {
         <span class="muted-sm">${escapeHtml(
           formatUsedOfQuota(a.usedBytes, a.quotaBytes),
         )}</span>
-        <span class="muted-sm">${pct}% used</span>
+        <span class="muted-sm">${tr("{0}% used", pct)}</span>
       </div>
       <div class="row allowance-meta">
-        <span class="muted-sm">${escapeHtml(
+        <span class="muted-sm">${tr("{0} remaining", escapeHtml(
           formatGB(a.remainingBytes),
-        )} remaining</span>
+        ))}</span>
         ${reset ? `<span class="muted-sm">${escapeHtml(reset)}</span>` : ""}
       </div>
       ${alertHtml}

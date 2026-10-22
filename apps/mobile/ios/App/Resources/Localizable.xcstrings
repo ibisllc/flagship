@@ -97703,6 +97703,47 @@
           }
         }
       }
+    },
+    "Pro ended, so your apps use one access list on all your servers again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pro terminó, así que tus apps vuelven a usar una sola lista de acceso en todos tus servidores."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pro est terminé : vos apps utilisent de nouveau une seule liste d'accès sur tous vos serveurs."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pro ist beendet, daher nutzen deine Apps wieder eine Zugangsliste auf allen deinen Servern."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Pro terminou, então seus apps voltam a usar uma única lista de acesso em todos os seus servidores."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pro が終了したため、アプリはすべてのサーバーで再び 1 つのアクセスリストを使います。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pro 已结束，因此你的应用在所有服务器上重新使用同一份访问名单。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
