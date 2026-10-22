@@ -319,3 +319,29 @@ describe("allocateDibsName", () => {
     expect(r).toMatchObject({ ok: false, status: 403 });
   });
 });
+
+describe("a claim for a voi.ci name (kind: link)", () => {
+  const LONG = "the-annual-halloween-block-party-2026";
+
+  it("takes a longer label than an account name allows, and one that is another account's name", async () => {
+    const { deps } = await setup({ registered: [`${LONG}.com`, "rapid-bison.com"] });
+    const own = initiate("fresh-poppy", LONG, alice);
+    expect((await handleNameDibsInitiate(deps, { ...own, kind: "link" })).status).toBe(200);
+    expect((await handleNameDibsInitiate(deps, own)).status).toBe(400);
+    const clash = initiate("fresh-poppy", "rapid-bison", alice);
+    expect((await handleNameDibsInitiate(deps, { ...clash, kind: "link" })).status).toBe(200);
+    expect((await handleNameDibsInitiate(deps, clash)).status).toBe(409);
+  });
+
+  it("proves the domain the same way, and the proof is the account's for that label", async () => {
+    const { deps, storage } = await setup({ registered: ["acme.com"], txt: {} });
+    const init = await handleNameDibsInitiate(deps, { ...initiate("fresh-poppy", "acme", alice), kind: "link" });
+    const nonce = (init.body as { nonce: string }).nonce;
+    const withTxt = await setup({ registered: ["acme.com"], txt: { "_flagship-claim.acme.com": [`"${record("acme", alice, nonce)}"`] } });
+    await withTxt.storage.nameDibsClaims.start({ name: "acme", username: "fresh-poppy", irkPubHex: hex(alice.publicKey), nonce, createdAt: NOW });
+    const ver = await handleNameDibsVerify(withTxt.deps, { ...verify("fresh-poppy", "acme", nonce, alice), kind: "link" });
+    expect(ver.status).toBe(200);
+    expect((await withTxt.storage.nameDibsClaims.winner("acme"))?.username).toBe("fresh-poppy");
+    void storage;
+  });
+});
