@@ -32,7 +32,17 @@ export interface PodsPeersOptions {
   log?: (m: string) => void;
 }
 
+/** One other server and the apps it answered for at the last refresh. */
+export interface PeerRunner {
+  domain: string;
+  stkHex: string;
+  /** App refs (serviceIds) this server runs. */
+  apps: string[];
+}
+
 export interface PodsPeers extends AccessPeers {
+  /** The other live servers and which of this box's apps each runs, as of the last refresh. */
+  peerRunners(): PeerRunner[];
   /** Re-read the servers and ask each which of this box's apps it runs. */
   refresh(): Promise<void>;
   start(everyMs?: number): void;
@@ -71,6 +81,19 @@ export function buildPodsPeers(opts: PodsPeersOptions): PodsPeers {
     leaderFor(ref) {
       const list = [self, ...(runners.get(ref) ?? [])].sort(byOrder);
       return list[0] ?? null;
+    },
+    peerRunners() {
+      const byDomain = new Map<string, PeerRunner>();
+      for (const [ref, domains] of runners) {
+        for (const d of domains) {
+          const pod = pods.find((p) => p.serverDomain.toLowerCase() === d);
+          if (!pod) continue;
+          const r = byDomain.get(d) ?? { domain: d, stkHex: pod.identityPubKey.toLowerCase(), apps: [] };
+          r.apps.push(ref);
+          byDomain.set(d, r);
+        }
+      }
+      return [...byDomain.values()];
     },
     runners(ref) {
       return [...(runners.get(ref) ?? [])];
