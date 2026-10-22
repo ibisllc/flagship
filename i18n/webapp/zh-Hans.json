@@ -2534,5 +2534,17 @@
   "Couldn't attach \"{0}\".": "无法附加“{0}”。",
   "Add a server": "添加服务器",
   "{0} can now manage this server": "{0} 现在可以管理此服务器",
-  "{0} can now see this server": "{0} 现在可以查看此服务器"
+  "{0} can now see this server": "{0} 现在可以查看此服务器",
+  "companion": "配套设备",
+  "invite": "邀请",
+  "join": "加入",
+  "connecting": "正在连接",
+  "remote": "远程",
+  "locked": "已锁定",
+  "first run": "首次使用",
+  "Confirm": "确认",
+  "Filter": "筛选",
+  "Search": "搜索",
+  "authorize": "授权",
+  "device reset": "设备已重置"
 }

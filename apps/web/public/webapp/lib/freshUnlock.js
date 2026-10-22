@@ -22,7 +22,7 @@ function sameBytes(a, b) {
  * `{ok: false, cancelled: true}` or `{ok: false, error}`.
  * `deps.prompt` / `deps.unlock` / `deps.session` are test seams.
  */
-export async function confirmFreshUnlock({ title, message, okLabel = "Confirm" }, deps = {}) {
+export async function confirmFreshUnlock({ title, message, okLabel = tr("Confirm") }, deps = {}) {
   const prompt = deps.prompt ?? inlinePrompt;
   const unlock = deps.unlock ?? unlockUmk;
   const session = deps.session ?? getSession();
