@@ -989,7 +989,7 @@ allowances (1M / 5M / 20M a month) are placeholders.
 ### Built, waiting on deploys or rebuilds
 
 - **Key-erasing sign-outs above the app lock ask the owner first (2026-10-21, branch
-  `fix/lock-screen-sign-out-auth`, not merged).** On iOS an app delete leaves the account key in
+  `fix/lock-screen-sign-out-auth`, not merged; stacked on `feat/multilingual` on purpose (owner, 2026-10-22) so both deploy together, strings localized in all six languages, review notes in `i18n/*/review-notes.md`).** On iOS an app delete leaves the account key in
   the Keychain, so a lock-screen "Sign out" was the one way a stranger holding the phone could
   destroy it. Now the lock screen's Sign out (iOS, Android), the security-notice "Update required"
   Sign out when the account is not open (iOS, Android) and iOS's "Remove it from this device" on a
