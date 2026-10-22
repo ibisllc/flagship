@@ -295,6 +295,11 @@ export interface RouteEnv {
    * the pre-launch gate armed (only the /wip_ preview cookie sees the site).
    */
   SITE_PUBLIC?: string;
+  /** "1": voi.ci sends every link (random code or custom name) to the service's
+   *  canonical address, `https://<label>.<user>.flagship.services`. Off until the
+   *  gym proves that address always reaches a running instance (docs/named-links.md);
+   *  until then a visit goes to the box that runs the app now. */
+  VOICI_CANONICAL?: string;
   /** Raises GitHub's rate limit for the release list (any token reads a public repo). */
   ADAPTERS_GITHUB_TOKEN?: string;
   /** Optional base-ISO override for /api/build/iso-info. */
@@ -1663,6 +1668,17 @@ async function serveVoiciRedirect(
     {
       usernames: storage.usernames,
       voiciLinks: storage.voiciLinks,
+      voiciNames: storage.voiciNames,
+      ...(env.VOICI_CANONICAL === "1"
+        ? {
+            resolveCanonical: async (username: string, serviceId: string) => {
+              const { deriveUrlFragment } = await import("@flagship/protocol");
+              const alias = await storage.userServiceAliases.get(username, serviceId);
+              const label = alias?.displayLabel ?? deriveUrlFragment(serviceId, username);
+              return `https://${label}.${username}.flagship.services`;
+            },
+          }
+        : {}),
       resolveAppUrl: async (username, serviceId) => {
         const { deriveUrlFragment } = await import("@flagship/protocol");
         const alias = await storage.userServiceAliases.get(username, serviceId);
@@ -1685,7 +1701,7 @@ async function serveVoiciRedirect(
   // 404 / 410 — surface a tiny plaintext body so curl users see a
   // helpful hint without enumerating account details.
   return new Response(
-    res.status === 410 ? "this short link was rotated; ask the sender for a fresh one" : "not found",
+    res.status === 410 ? "this link is no longer in use" : "not found",
     {
       status: res.status,
       headers: { "content-type": "text/plain", "cache-control": "private, no-store" },
