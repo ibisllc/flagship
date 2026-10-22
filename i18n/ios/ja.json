@@ -2378,5 +2378,8 @@
   "One of your apps wants to reach the internet.": "いずれかのアプリがインターネットへのアクセスを求めています。",
   "A device on your account invited someone to one of your apps.": "アカウントのデバイスが、あなたのアプリのいずれかに誰かを招待しました。",
   "Open Flagship to see what's new.": "Flagship を開いて新着を確認してください。",
-  "A server shared with you is asking you to unlock it.": "あなたと共有されているサーバーが、ロック解除を求めています。"
+  "A server shared with you is asking you to unlock it.": "あなたと共有されているサーバーが、ロック解除を求めています。",
+  "Couldn't sign the change: %@": "変更に署名できませんでした：%@",
+  "Couldn't sign the key: %@": "キーに署名できませんでした：%@",
+  "Couldn't sign the copy: %@": "コピーに署名できませんでした：%@"
 }
