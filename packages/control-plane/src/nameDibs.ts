@@ -33,7 +33,7 @@ import {
 } from "@flagship/protocol";
 import type { NameDibsClaimStorage, UsernameStorage } from "@flagship/storage";
 import { HEX64, HEX128, equalHex, hexToBytes } from "./hex.js";
-import { validateUserLabel } from "./labels.js";
+import { validateAppLabel, validateUserLabel } from "./labels.js";
 import {
   conflict,
   forbidden,
@@ -207,6 +207,13 @@ export function handleNameDibsWindow(
 interface SignedBody<T> {
   request?: Partial<T>;
   signature?: unknown;
+  /** Unsigned: "link" proves a domain for a voi.ci name (docs/named-links.md), anything else for an account name. */
+  kind?: unknown;
+}
+
+/** The label rules of the claim: an account name's, or a plain DNS label for a voi.ci name. */
+function labelFor(kind: unknown, raw: string) {
+  return kind === "link" ? validateAppLabel(raw) : validateUserLabel(raw);
 }
 
 async function authClaimant(
@@ -250,7 +257,7 @@ export async function handleNameDibsInitiate(
   if (!dibsWindowState(deps.window, now).open) {
     return conflict("the dibs window is not open — every free name is open to everyone");
   }
-  const label = validateUserLabel(r.name);
+  const label = labelFor(body.kind, r.name);
   if (!label.ok) return malformed(label.reason);
   const name = label.label;
   const username = r.username.toLowerCase();
@@ -261,8 +268,10 @@ export async function handleNameDibsInitiate(
   if (!auth.ok) return auth.response;
   if (!equalHex(r.irkPubHex, auth.irkPubHex)) return forbidden("irkPubHex is not the account's registered IRK");
 
-  if (username === name) return conflict("that is already your name");
-  if (await deps.usernames.get(name)) return conflict("that name is already taken");
+  if (body.kind !== "link") {
+    if (username === name) return conflict("that is already your name");
+    if (await deps.usernames.get(name)) return conflict("that name is already taken");
+  }
   const winner = await deps.claims.winner(name);
   if (winner && winner.username !== username) return conflict("another account has already proven that .com");
 
@@ -331,7 +340,7 @@ export async function handleNameDibsVerify(
   if (!dibsWindowState(deps.window, now).open) {
     return conflict("the dibs window is not open — every free name is open to everyone");
   }
-  const label = validateUserLabel(r.name);
+  const label = labelFor(body.kind, r.name);
   if (!label.ok) return malformed(label.reason);
   const name = label.label;
   const username = r.username.toLowerCase();
