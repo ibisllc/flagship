@@ -345,7 +345,7 @@ of the last check here: **not yet checked**.
   10 changes a day per account; released after 60 days with no running server (warnings at 30 and 7), then a
   30-day wait (410, nobody can take it). Dibs: `.com`-registered labels need the domain proof (same flow as account
   names, `kind: link`). Built: protocol, D1 0107, `.com` routes + cron, webapp field (shell v159, six languages).
-  Open: iOS and Android ports, rank/priority text review, box-side gossip fix so the canonical address always reaches
+  Box side: the canonical-address election also reads .com's server list (endorsed release needed). Gym group `named-links` written, not run. Open: iOS and Android ports (in progress), native review of the six drafts, proof that the canonical address always reaches
   a running instance, live gym group, then set `VOICI_CANONICAL=1` (off until proven). `.com` has no per-service
   delete signal, so a deleted app's code retires only with its account.
 - **Final-round device test fixes (2026-10-19; on `origin/main`).**
