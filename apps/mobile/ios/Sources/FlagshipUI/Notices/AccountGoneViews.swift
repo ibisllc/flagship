@@ -181,7 +181,7 @@ struct AccountGoneScreen: View {
     private func authenticateThenRemove(_ p: Pending) async {
         failure = nil
         if !DestructiveAuth.accountUnlocked(app) {
-            switch await DestructiveAuth.ask(reason: "Remove this account from the device") {
+            switch await DestructiveAuth.ask(reason: String(localized: "Remove this account from the device")) {
             case .allowed: break
             case .declined: return
             case let .failed(message): failure = message; return
