@@ -98,6 +98,9 @@ import type {
   UserServiceAliasStorage,
   VoiciLinkRecord,
   VoiciLinkStorage,
+  VoiciNameRecord,
+  VoiciNameReleaseReason,
+  VoiciNameStorage,
   CustomDomainOrderRecord,
   CustomDomainOrderStorage,
   DemoLlmLedgerStorage,
@@ -1781,7 +1784,7 @@ export class InMemoryVoiciLinkStorage implements VoiciLinkStorage {
     // Most-recently created wins on (defensively) duplicate rows.
     let pick: VoiciLinkRecord | undefined;
     for (const r of this.rows.values()) {
-      if (r.username === u && r.serviceId === serviceId) {
+      if (r.username === u && r.serviceId === serviceId && r.retiredAt === undefined) {
         if (!pick || r.createdAt > pick.createdAt) pick = r;
       }
     }
@@ -1798,6 +1801,17 @@ export class InMemoryVoiciLinkStorage implements VoiciLinkStorage {
     }
     return n;
   }
+  async retireByService(username: string, serviceId: string, at: number) {
+    const u = username.toLowerCase();
+    let n = 0;
+    for (const r of this.rows.values()) {
+      if (r.username === u && r.serviceId === serviceId && r.retiredAt === undefined) {
+        r.retiredAt = at;
+        n++;
+      }
+    }
+    return n;
+  }
   async deleteExpired(before: number) {
     let n = 0;
     for (const [code, r] of this.rows) {
@@ -1806,6 +1820,105 @@ export class InMemoryVoiciLinkStorage implements VoiciLinkStorage {
         n++;
       }
     }
+    return n;
+  }
+}
+
+export class InMemoryVoiciNameStorage implements VoiciNameStorage {
+  private rows = new Map<string, VoiciNameRecord>();
+  private changes: Array<{ username: string; serviceId: string; at: number }> = [];
+  async get(key: string) {
+    const r = this.rows.get(key);
+    return r ? { ...r } : undefined;
+  }
+  async getLiveByService(username: string, serviceId: string) {
+    const u = username.toLowerCase();
+    for (const r of this.rows.values()) if (r.username === u && r.serviceId === serviceId && r.state === "live") return { ...r };
+    return undefined;
+  }
+  async listLive(username: string) {
+    const u = username.toLowerCase();
+    return [...this.rows.values()].filter((r) => r.username === u && r.state === "live").sort((a, b) => a.setAt - b.setAt).map((r) => ({ ...r }));
+  }
+  async countLive(username: string) {
+    return (await this.listLive(username)).length;
+  }
+  async claim(rec: VoiciNameRecord) {
+    if (this.rows.has(rec.key)) return { ok: false as const, reason: "taken" as const };
+    this.rows.set(rec.key, { ...rec, username: rec.username.toLowerCase(), state: "live", warned: 0 });
+    return { ok: true as const };
+  }
+  async release(username: string, serviceId: string, reason: VoiciNameReleaseReason, at: number) {
+    const u = username.toLowerCase();
+    for (const r of this.rows.values()) {
+      if (r.username === u && r.serviceId === serviceId && r.state === "live") {
+        r.state = "waiting";
+        r.releasedAt = at;
+        r.releaseReason = reason;
+        return { ...r };
+      }
+    }
+    return undefined;
+  }
+  async releaseAllForUser(username: string, reason: VoiciNameReleaseReason, at: number) {
+    const u = username.toLowerCase();
+    let n = 0;
+    for (const r of this.rows.values()) {
+      if (r.username === u && r.state === "live") {
+        r.state = "waiting";
+        r.releasedAt = at;
+        r.releaseReason = reason;
+        n++;
+      }
+    }
+    return n;
+  }
+  async deleteWaitingReleasedBefore(before: number) {
+    let n = 0;
+    for (const [k, r] of this.rows) {
+      if (r.state === "waiting" && r.releasedAt !== undefined && r.releasedAt <= before) {
+        this.rows.delete(k);
+        n++;
+      }
+    }
+    return n;
+  }
+  async listLivePage(offset: number, limit: number) {
+    return [...this.rows.values()]
+      .filter((r) => r.state === "live")
+      .sort((a, b) => (a.key < b.key ? -1 : 1))
+      .slice(offset, offset + limit)
+      .map((r) => ({ ...r }));
+  }
+  async countAllLive() {
+    return [...this.rows.values()].filter((r) => r.state === "live").length;
+  }
+  async markActive(key: string, at: number) {
+    const r = this.rows.get(key);
+    if (r && r.state === "live") {
+      r.lastActiveAt = at;
+      r.warned = 0;
+    }
+  }
+  async setWarned(key: string, warned: number) {
+    const r = this.rows.get(key);
+    if (r && r.state === "live") r.warned = warned;
+  }
+  async recordChange(username: string, serviceId: string, at: number) {
+    this.changes.push({ username: username.toLowerCase(), serviceId, at });
+  }
+  async changesForService(username: string, serviceId: string, since: number) {
+    const u = username.toLowerCase();
+    return this.changes.filter((c) => c.username === u && c.serviceId === serviceId && c.at >= since).map((c) => c.at).sort((a, b) => a - b);
+  }
+  async countChangesForUser(username: string, since: number) {
+    const u = username.toLowerCase();
+    return this.changes.filter((c) => c.username === u && c.at >= since).length;
+  }
+  async pruneChanges(before: number) {
+    const keep = this.changes.filter((c) => c.at >= before);
+    const n = this.changes.length - keep.length;
+    this.changes = keep;
     return n;
   }
 }
@@ -2193,6 +2306,7 @@ export class InMemoryStorage implements Storage {
   userIdentity = new InMemoryUserIdentityRecordStorage();
   userServiceAliases = new InMemoryUserServiceAliasStorage();
   voiciLinks = new InMemoryVoiciLinkStorage();
+  voiciNames = new InMemoryVoiciNameStorage();
   customDomainOrders = new InMemoryCustomDomainOrderStorage();
   demoLlmLedger = new InMemoryDemoLlmLedgerStorage();
   installPolicyFanout = new InMemoryInstallPolicyFanoutStorage();

@@ -1488,6 +1488,55 @@ export interface VoiciLinkRecord {
   createdAt: number;
   /** Optional soft TTL. NULL on service-bound links; set on one-offs. */
   expiresAt?: number;
+  /** Set when the service was deleted: the code answers 410 for good and is never minted again. */
+  retiredAt?: number;
+}
+
+export type VoiciNameState = "live" | "waiting";
+export type VoiciNameReleaseReason = "replaced" | "cleared" | "lapsed" | "deleted";
+
+/** A custom voi.ci name (docs/named-links.md), keyed by the name without hyphens. */
+export interface VoiciNameRecord {
+  key: string;
+  /** The name as typed (lower case, hyphens kept). */
+  display: string;
+  username: string;
+  serviceId: string;
+  state: VoiciNameState;
+  setAt: number;
+  /** Last time a server of the account was seen running the app. */
+  lastActiveAt: number;
+  /** How many of the two release warnings went out (0, 1 or 2). */
+  warned: number;
+  releasedAt?: number;
+  releaseReason?: VoiciNameReleaseReason;
+}
+
+export interface VoiciNameStorage {
+  get(key: string): Promise<VoiciNameRecord | undefined>;
+  /** The live name of a service, if it has one. */
+  getLiveByService(username: string, serviceId: string): Promise<VoiciNameRecord | undefined>;
+  listLive(username: string): Promise<VoiciNameRecord[]>;
+  countLive(username: string): Promise<number>;
+  /** Take a free key. "taken" when any row (live or waiting) holds it. */
+  claim(rec: VoiciNameRecord): Promise<{ ok: true } | { ok: false; reason: "taken" }>;
+  /** Live → waiting for the service's name. Undefined when it has none. */
+  release(username: string, serviceId: string, reason: VoiciNameReleaseReason, at: number): Promise<VoiciNameRecord | undefined>;
+  /** Release every live name of the account (account deleted). */
+  releaseAllForUser(username: string, reason: VoiciNameReleaseReason, at: number): Promise<number>;
+  /** Delete the waiting names whose wait ended at or before `before`: they are free. */
+  deleteWaitingReleasedBefore(before: number): Promise<number>;
+  /** A page of live names in key order, for the lapse job (offset wraps in the caller). */
+  listLivePage(offset: number, limit: number): Promise<VoiciNameRecord[]>;
+  countAllLive(): Promise<number>;
+  markActive(key: string, at: number): Promise<void>;
+  setWarned(key: string, warned: number): Promise<void>;
+  /** Every set, replace or clear, for the limits. */
+  recordChange(username: string, serviceId: string, at: number): Promise<void>;
+  /** Changes of one service at or after `since`, oldest first. */
+  changesForService(username: string, serviceId: string, since: number): Promise<number[]>;
+  countChangesForUser(username: string, since: number): Promise<number>;
+  pruneChanges(before: number): Promise<number>;
 }
 
 export interface VoiciLinkStorage {
@@ -1505,6 +1554,9 @@ export interface VoiciLinkStorage {
   getByService(username: string, serviceId: string): Promise<VoiciLinkRecord | undefined>;
   /** Cascade-delete on service rename / uninstall. Returns count deleted. */
   deleteByService(username: string, serviceId: string): Promise<number>;
+  /** The service was deleted: keep the row so the code answers 410 and is
+   *  never handed out again. Returns how many rows were retired. */
+  retireByService(username: string, serviceId: string, at: number): Promise<number>;
   /** Periodic GC for expired one-offs. */
   deleteExpired(before: number): Promise<number>;
 }
@@ -1713,6 +1765,7 @@ export interface Storage {
   userIdentity: UserIdentityRecordStorage;
   userServiceAliases: UserServiceAliasStorage;
   voiciLinks: VoiciLinkStorage;
+  voiciNames: VoiciNameStorage;
   customDomainOrders: CustomDomainOrderStorage;
   demoLlmLedger: DemoLlmLedgerStorage;
   installPolicyFanout: InstallPolicyFanoutStorage;

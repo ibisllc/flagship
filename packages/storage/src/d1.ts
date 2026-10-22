@@ -74,6 +74,9 @@ import type {
   UserServiceAliasStorage,
   VoiciLinkRecord,
   VoiciLinkStorage,
+  VoiciNameRecord,
+  VoiciNameReleaseReason,
+  VoiciNameStorage,
   CustomDomainOrderRecord,
   CustomDomainOrderStorage,
   DemoLlmLedgerStorage,
@@ -1075,13 +1078,13 @@ export class D1VoiciLinkStorage implements VoiciLinkStorage {
   async get(code: string): Promise<VoiciLinkRecord | undefined> {
     const r = await this.db
       .prepare(
-        `SELECT code, username, service_id, target_url, created_at, expires_at
+        `SELECT code, username, service_id, target_url, created_at, expires_at, retired_at
          FROM voici_links WHERE code = ?`,
       )
       .bind(code)
       .first<{
         code: string; username: string; service_id: string | null;
-        target_url: string; created_at: number; expires_at: number | null;
+        target_url: string; created_at: number; expires_at: number | null; retired_at: number | null;
       }>();
     return r ? {
       code: r.code,
@@ -1090,21 +1093,22 @@ export class D1VoiciLinkStorage implements VoiciLinkStorage {
       targetUrl: r.target_url,
       createdAt: r.created_at,
       ...(r.expires_at !== null ? { expiresAt: r.expires_at } : {}),
+      ...(r.retired_at !== null ? { retiredAt: r.retired_at } : {}),
     } : undefined;
   }
   async getByService(username: string, serviceId: string): Promise<VoiciLinkRecord | undefined> {
     const r = await this.db
       .prepare(
-        `SELECT code, username, service_id, target_url, created_at, expires_at
+        `SELECT code, username, service_id, target_url, created_at, expires_at, retired_at
          FROM voici_links
-         WHERE username = ? AND service_id = ?
+         WHERE username = ? AND service_id = ? AND retired_at IS NULL
          ORDER BY created_at DESC
          LIMIT 1`,
       )
       .bind(username.toLowerCase(), serviceId)
       .first<{
         code: string; username: string; service_id: string | null;
-        target_url: string; created_at: number; expires_at: number | null;
+        target_url: string; created_at: number; expires_at: number | null; retired_at: number | null;
       }>();
     return r ? {
       code: r.code,
@@ -1113,6 +1117,7 @@ export class D1VoiciLinkStorage implements VoiciLinkStorage {
       targetUrl: r.target_url,
       createdAt: r.created_at,
       ...(r.expires_at !== null ? { expiresAt: r.expires_at } : {}),
+      ...(r.retired_at !== null ? { retiredAt: r.retired_at } : {}),
     } : undefined;
   }
   async deleteByService(username: string, serviceId: string): Promise<number> {
@@ -1122,11 +1127,148 @@ export class D1VoiciLinkStorage implements VoiciLinkStorage {
       .run();
     return r.meta?.changes ?? 0;
   }
+  async retireByService(username: string, serviceId: string, at: number): Promise<number> {
+    const r = await this.db
+      .prepare("UPDATE voici_links SET retired_at = ? WHERE username = ? AND service_id = ? AND retired_at IS NULL")
+      .bind(at, username.toLowerCase(), serviceId)
+      .run();
+    return r.meta?.changes ?? 0;
+  }
   async deleteExpired(before: number): Promise<number> {
     const r = await this.db
       .prepare("DELETE FROM voici_links WHERE expires_at IS NOT NULL AND expires_at <= ?")
       .bind(before)
       .run();
+    return r.meta?.changes ?? 0;
+  }
+}
+
+export class D1VoiciNameStorage implements VoiciNameStorage {
+  constructor(private db: D1Database) {}
+  private static readonly COLS =
+    "key, display, username, service_id, state, set_at, last_active_at, warned, released_at, release_reason";
+  private static rec(r: {
+    key: string; display: string; username: string; service_id: string; state: string;
+    set_at: number; last_active_at: number; warned: number; released_at: number | null; release_reason: string | null;
+  }): VoiciNameRecord {
+    return {
+      key: r.key,
+      display: r.display,
+      username: r.username,
+      serviceId: r.service_id,
+      state: r.state === "waiting" ? "waiting" : "live",
+      setAt: r.set_at,
+      lastActiveAt: r.last_active_at,
+      warned: r.warned,
+      ...(r.released_at !== null ? { releasedAt: r.released_at } : {}),
+      ...(r.release_reason !== null ? { releaseReason: r.release_reason as VoiciNameReleaseReason } : {}),
+    };
+  }
+  async get(key: string) {
+    const r = await this.db.prepare(`SELECT ${D1VoiciNameStorage.COLS} FROM voici_names WHERE key = ?`).bind(key).first<any>();
+    return r ? D1VoiciNameStorage.rec(r) : undefined;
+  }
+  async getLiveByService(username: string, serviceId: string) {
+    const r = await this.db
+      .prepare(`SELECT ${D1VoiciNameStorage.COLS} FROM voici_names WHERE username = ? AND service_id = ? AND state = 'live' LIMIT 1`)
+      .bind(username.toLowerCase(), serviceId)
+      .first<any>();
+    return r ? D1VoiciNameStorage.rec(r) : undefined;
+  }
+  async listLive(username: string) {
+    const rs = await this.db
+      .prepare(`SELECT ${D1VoiciNameStorage.COLS} FROM voici_names WHERE username = ? AND state = 'live' ORDER BY set_at`)
+      .bind(username.toLowerCase())
+      .all<any>();
+    return (rs.results ?? []).map(D1VoiciNameStorage.rec);
+  }
+  async countLive(username: string) {
+    const r = await this.db
+      .prepare("SELECT COUNT(*) AS n FROM voici_names WHERE username = ? AND state = 'live'")
+      .bind(username.toLowerCase())
+      .first<{ n: number }>();
+    return r?.n ?? 0;
+  }
+  async claim(rec: VoiciNameRecord) {
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO voici_names (key, display, username, service_id, state, set_at, last_active_at, warned, released_at, release_reason)
+           VALUES (?, ?, ?, ?, 'live', ?, ?, 0, NULL, NULL)`,
+        )
+        .bind(rec.key, rec.display, rec.username.toLowerCase(), rec.serviceId, rec.setAt, rec.lastActiveAt)
+        .run();
+      return { ok: true as const };
+    } catch (e) {
+      if (/unique constraint|constraint failed/i.test(e instanceof Error ? e.message : String(e))) {
+        return { ok: false as const, reason: "taken" as const };
+      }
+      throw e;
+    }
+  }
+  async release(username: string, serviceId: string, reason: VoiciNameReleaseReason, at: number) {
+    const cur = await this.getLiveByService(username, serviceId);
+    if (!cur) return undefined;
+    const r = await this.db
+      .prepare("UPDATE voici_names SET state = 'waiting', released_at = ?, release_reason = ? WHERE key = ? AND state = 'live'")
+      .bind(at, reason, cur.key)
+      .run();
+    if ((r.meta?.changes ?? 0) === 0) return undefined;
+    return { ...cur, state: "waiting" as const, releasedAt: at, releaseReason: reason };
+  }
+  async releaseAllForUser(username: string, reason: VoiciNameReleaseReason, at: number) {
+    const r = await this.db
+      .prepare("UPDATE voici_names SET state = 'waiting', released_at = ?, release_reason = ? WHERE username = ? AND state = 'live'")
+      .bind(at, reason, username.toLowerCase())
+      .run();
+    return r.meta?.changes ?? 0;
+  }
+  async deleteWaitingReleasedBefore(before: number) {
+    const r = await this.db
+      .prepare("DELETE FROM voici_names WHERE state = 'waiting' AND released_at <= ?")
+      .bind(before)
+      .run();
+    return r.meta?.changes ?? 0;
+  }
+  async listLivePage(offset: number, limit: number) {
+    const rs = await this.db
+      .prepare(`SELECT ${D1VoiciNameStorage.COLS} FROM voici_names WHERE state = 'live' ORDER BY key LIMIT ? OFFSET ?`)
+      .bind(limit, offset)
+      .all<any>();
+    return (rs.results ?? []).map(D1VoiciNameStorage.rec);
+  }
+  async countAllLive() {
+    const r = await this.db.prepare("SELECT COUNT(*) AS n FROM voici_names WHERE state = 'live'").first<{ n: number }>();
+    return r?.n ?? 0;
+  }
+  async markActive(key: string, at: number) {
+    await this.db.prepare("UPDATE voici_names SET last_active_at = ?, warned = 0 WHERE key = ? AND state = 'live'").bind(at, key).run();
+  }
+  async setWarned(key: string, warned: number) {
+    await this.db.prepare("UPDATE voici_names SET warned = ? WHERE key = ? AND state = 'live'").bind(warned, key).run();
+  }
+  async recordChange(username: string, serviceId: string, at: number) {
+    await this.db
+      .prepare("INSERT INTO voici_name_changes (username, service_id, at) VALUES (?, ?, ?)")
+      .bind(username.toLowerCase(), serviceId, at)
+      .run();
+  }
+  async changesForService(username: string, serviceId: string, since: number) {
+    const rs = await this.db
+      .prepare("SELECT at FROM voici_name_changes WHERE username = ? AND service_id = ? AND at >= ? ORDER BY at")
+      .bind(username.toLowerCase(), serviceId, since)
+      .all<{ at: number }>();
+    return (rs.results ?? []).map((x) => x.at);
+  }
+  async countChangesForUser(username: string, since: number) {
+    const r = await this.db
+      .prepare("SELECT COUNT(*) AS n FROM voici_name_changes WHERE username = ? AND at >= ?")
+      .bind(username.toLowerCase(), since)
+      .first<{ n: number }>();
+    return r?.n ?? 0;
+  }
+  async pruneChanges(before: number) {
+    const r = await this.db.prepare("DELETE FROM voici_name_changes WHERE at < ?").bind(before).run();
     return r.meta?.changes ?? 0;
   }
 }
@@ -4452,6 +4594,7 @@ export class D1Storage implements Storage {
   userIdentity: UserIdentityRecordStorage;
   userServiceAliases: UserServiceAliasStorage;
   voiciLinks: VoiciLinkStorage;
+  voiciNames: VoiciNameStorage;
   customDomainOrders: CustomDomainOrderStorage;
   demoLlmLedger: DemoLlmLedgerStorage;
   installPolicyFanout: InstallPolicyFanoutStorage;
@@ -4508,6 +4651,7 @@ export class D1Storage implements Storage {
     this.userIdentity = new D1UserIdentityRecordStorage(db);
     this.userServiceAliases = new D1UserServiceAliasStorage(db);
     this.voiciLinks = new D1VoiciLinkStorage(db);
+    this.voiciNames = new D1VoiciNameStorage(db);
     this.customDomainOrders = new D1CustomDomainOrderStorage(db);
     this.demoLlmLedger = new D1DemoLlmLedgerStorage(db);
     this.installPolicyFanout = new D1InstallPolicyFanoutStorage(db);
