@@ -1135,6 +1135,62 @@ const OCTOBER: readonly Scenario[] = [
     },
   ),
   iosTotal(
+    "ios-oct-access-control-list-scope-locked",
+    "D3: without Pro, 'Separate list on each server' is off and disabled with 'Comes with Pro.' (no purchase link in the app) and there is no server picker (-smoke-access-fixture -smoke-list-scope free; feat/marketplace).",
+    O + "test_accessControlListScopeLockedWithoutPro",
+    {
+      steps: [
+        { kind: "tap", describe: "Plants → Access control.", handle: "service-detail-open-access" },
+        { kind: "assert", describe: "The switch is locked.", handle: "service-access-list-scope-toggle" },
+      ],
+      assertions: [
+        { describe: "Separate-lists switch", handle: "service-access-list-scope-toggle", expect: "present" },
+        { describe: "Comes with Pro.", handle: "service-access-list-scope-pro", expect: "present" },
+        { describe: "No server picker", handle: "service-access-server-picker", expect: "absent" },
+      ],
+      screenshots: [shot("access-control-list-scope-locked", "Locked without Pro.")],
+      dimension: "D3",
+    },
+  ),
+  iosTotal(
+    "ios-oct-access-control-list-scope-picker",
+    "D3: on Pro an admin device turns on 'Separate list on each server' (confirmed, signed with the admin root); the server picker then lists Home and Office and picking Office loads that server's list (-smoke-access-fixture -smoke-list-scope pro; feat/marketplace).",
+    O + "test_accessControlListScopeTurnOnShowsServerPicker",
+    {
+      steps: [
+        { kind: "tap", describe: "Plants → Access control.", handle: "service-detail-open-access" },
+        { kind: "tap", describe: "Separate list on each server → confirm.", handle: "service-access-list-scope-toggle" },
+        { kind: "tap", describe: "Pick Office.", handle: "service-access-server-picker" },
+      ],
+      assertions: [
+        { describe: "Switch on", handle: "service-access-list-scope-toggle", expect: "present" },
+        { describe: "Server picker", handle: "service-access-server-picker", expect: "present" },
+        { describe: "No Pro line", handle: "service-access-list-scope-pro", expect: "absent" },
+        { describe: "Office's members", handle: "service-access-members-title", expect: "present" },
+      ],
+      screenshots: [
+        shot("access-control-list-scope-off", "Pro: one list."),
+        shot("access-control-list-scope-on", "Separate lists + picker."),
+        shot("access-control-list-scope-office", "Office's list."),
+      ],
+      dimension: "D3",
+    },
+  ),
+  iosTotal(
+    "ios-oct-tier-status-separate-lists-warning",
+    "D3: Tier & usage on Pro with an app keeping a separate access list on each server warns '1 app has a separate access list on each server. When Pro ends it will use Home's list.' (-smoke-access-fixture -smoke-list-scope separate; feat/marketplace).",
+    O + "test_tierStatusWarnsAboutSeparateLists",
+    {
+      steps: [
+        { kind: "tap", describe: "Settings → Tier & usage.", handle: "settings-open-subscription" },
+        { kind: "assert", describe: "The warning card.", handle: "tier-status-separate-lists-warning" },
+      ],
+      assertions: [{ describe: "Separate-lists warning", handle: "tier-status-separate-lists-warning", expect: "present" }],
+      screenshots: [shot("tier-status-separate-lists", "Before Pro ends.")],
+      dimension: "D3",
+    },
+  ),
+  iosTotal(
     "ios-oct-server-order-leader-pending",
     "D1: Make leader on Office's page; until the box confirms, the page and Home show the leader in gray.",
     O + "test_makeLeaderWaitsForTheServerToConfirm",

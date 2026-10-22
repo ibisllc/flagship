@@ -82,6 +82,10 @@ public final class PushNotifications: NSObject {
     /// `kind` of the local notice raised when an app on a server ran out of
     /// its disk limit (docs/app-runtimes.md 5.3); a tap opens the app's page.
     public nonisolated static let appStorageFullKind = "app-storage-full"
+    /// Pro ended, so apps that kept a separate access list on each server use
+    /// one list again (content-free; the app's lead server sends it). A tap
+    /// opens the activity, where the box's row says what happened.
+    public nonisolated static let accessListsCategory = "access-lists"
 
     /// Where a tapped push leads: its app link when it carries one, else
     /// what its `kind` / `category` names.
@@ -98,7 +102,7 @@ public final class PushNotifications: NSObject {
         let category = info["category"] as? String
             ?? (info["aps"] as? [AnyHashable: Any])?["category"] as? String
         if (kind ?? category) == "secret-request" { return .secretRequests }
-        if (kind ?? category) == inviteCreatedCategory { return .accountActivity }
+        if let k = kind ?? category, k == inviteCreatedCategory || k == accessListsCategory { return .accountActivity }
         if let category, accountNoticeCategories.contains(category) { return nil }
         if kind == appStorageFullKind, let serviceId = info["serviceId"] as? String, !serviceId.isEmpty {
             if let server = (info["server"] as? String)?.lowercased(), !server.isEmpty {

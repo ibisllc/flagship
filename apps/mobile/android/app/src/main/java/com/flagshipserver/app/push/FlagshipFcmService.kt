@@ -73,6 +73,12 @@ class FlagshipFcmService : FirebaseMessagingService() {
             data["deepLink"] = InviteCreatedPush.deepLink()
         }
 
+        if (AccessListsPush.matches(data)) {
+            data["title"] = AccessListsPush.TITLE
+            data["body"] = AccessListsPush.BODY
+            data["deepLink"] = AccessListsPush.deepLink()
+        }
+
         // A `generic` push (§3a; `app-access` from an older box) names no
         // app or host: an app's internet request, or a build chat waiting on
         // the owner (ownerWake.ts). The phone asks its boxes over the paired

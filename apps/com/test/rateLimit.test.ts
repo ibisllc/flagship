@@ -82,8 +82,30 @@ describe("rateLimit — endpoint detection", () => {
     expect(endpointFor("POST", "/api/push/relay")).not.toBe("push-revoke");
   });
 
+  it("rate-limits the monetization voucher-redeem + allowance reads per-IP", () => {
+    expect(endpointFor("POST", "/api/voucher/redeem")).toBe("voucher-redeem");
+    expect(endpointFor("GET", "/api/users/alice/allowance")).toBe("user-allowance");
+    expect(endpointFor("GET", "/api/users/alice/plan-attestation")).toBe("user-allowance");
+    // The voucher ISSUE path is admin-only (no edge bucket); only redeem is here.
+    expect(endpointFor("POST", "/api/admin/voucher/issue")).toBeNull();
+    expect(LIMITS["voucher-redeem"]?.every((a) => a.axis === "ip")).toBe(true);
+    expect(LIMITS["user-allowance"]?.every((a) => a.axis === "ip")).toBe(true);
+  });
+
+  it("rate-limits Stripe checkout + the install-what-you-own read per-IP (#14)", () => {
+    expect(endpointFor("POST", "/api/stripe/checkout")).toBe("stripe-checkout");
+    expect(endpointFor("POST", "/api/stripe/app-checkout")).toBe("stripe-checkout");
+    expect(endpointFor("GET", "/api/users/alice/purchases")).toBe("user-purchases");
+    // The webhook is signed by Stripe (no edge bucket); admin price/grant are admin-only.
+    expect(endpointFor("POST", "/api/stripe/webhook")).toBeNull();
+    expect(endpointFor("POST", "/api/admin/marketplace/acme/notes/price")).toBeNull();
+    expect(LIMITS["stripe-checkout"]?.every((a) => a.axis === "ip")).toBe(true);
+    expect(LIMITS["user-purchases"]?.every((a) => a.axis === "ip")).toBe(true);
+  });
+
   it("returns null for unrelated routes (no false-positive rate limits)", () => {
     expect(endpointFor("GET", "/api/health")).toBeNull();
+    expect(endpointFor("POST", "/api/marketplace/list")).toBeNull();
     expect(endpointFor("GET", "/api/username/harry")).toBeNull();
     expect(endpointFor("GET", "/api/recovery")).toBeNull();
   });

@@ -114,7 +114,8 @@
     <nav class="toc" aria-label="Sections">
       <a href="#setup">Setup &amp; install</a>
       <a href="#privacy">Privacy &amp; security</a>
-      <a href="#apps">Services</a>
+      <a href="#apps">Services &amp; marketplace</a>
+      <a href="#money">Money &amp; subscriptions</a>
       <a href="#endgame">If Flagship goes away</a>
     </nav>
   </section>
@@ -217,14 +218,26 @@
     </div>
   </section>
 
-  <section class="faq-section" id="apps" aria-label="Services">
-    <h2>Services</h2>
-    <p class="section-lede">Services are containers running on your box, namespaced by user.</p>
+  <section class="faq-section" id="apps" aria-label="Services and marketplace">
+    <h2>Services &amp; marketplace</h2>
+    <p class="section-lede">Services are containers running on your box, namespaced by user. The marketplace is a list of pointers, not a code host.</p>
     <div class="qlist">
       <details class="q">
         <summary>What is "vibe-coding" a service?</summary>
         <div class="answer">
           <p>You describe what you want in plain language ("a tracker for which houseplants I've watered, push me when one's been thirsty 5+ days"). An LLM writes the code. Your daemon builds it, picks the data-layer scopes (Postgres tables, object storage, push), and runs it at <code>plant-water.you.flagship.services</code>. About 90 seconds. You can edit the code if you feel like it.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>How does the marketplace work?</summary>
+        <div class="answer">
+          <p>Anyone can publish a listing — a title, description, screenshots, a link to a canonical pod. We host listings; we don't host code. When you install a service, your daemon pulls source from the canonical pod (or a fork you point to), signs it with your server identity, and runs it under your namespace. The marketplace is a directory, not an app store.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Are listings reviewed?</summary>
+        <div class="answer">
+          <p>Optionally, by the lister. Publishers can pay for a security scan (npm audit + trivy + semgrep + dynamic checks) and get a letter grade displayed on their listing. The grade is informational; we don't gate listings behind it. We'll take down listings that violate the acceptable-use policy in <a href="/terms">/terms</a> on report.</p>
         </div>
       </details>
       <details class="q">
@@ -249,6 +262,55 @@
         <summary>Can I uninstall a service cleanly?</summary>
         <div class="answer">
           <p>Yes. Uninstall drops its container, its Postgres database, its files folder and its access list. You can keep a snapshot before uninstall if you want to come back to the data later.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="faq-section" id="money" aria-label="Money and subscriptions">
+    <h2>Money &amp; subscriptions</h2>
+    <p class="section-lede">Hardware is one-time. Subscriptions are optional. Bring-your-own-hardware is free forever.</p>
+    <div class="qlist">
+      <details class="q">
+        <summary>What does Flagship cost?</summary>
+        <div class="answer">
+          <p>Bring-your-own-hardware: $0. We're not selling boxes or subscriptions yet — when we are, we'll publish the details and they'll be opt-in for power-user surfaces only. Most people pay nothing, forever.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Why charge anything if it's "your hardware"?</summary>
+        <div class="answer">
+          <p>Three real costs: shipping the pre-built boxes (margin, not profit-from-pricing), running the tunnel hub on Fly (a few cents per server per month at our scale), and running the registrar of <code>flagship.services</code> wildcard DNS. The free tier covers the steady-state for an individual on their own hardware. Subscriptions cover the things we'd otherwise have to subsidize.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Can I cancel anytime?</summary>
+        <div class="answer">
+          <p>Yes. Cancellation is one tap from the phone. We prorate the unused portion of the current period. Your subdomain stays yours; the routing entry continues to work; only the billed add-ons (push at scale, peer-backup pool, etc.) shut off. We don't ransom your DNS.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>What's your refund policy on hardware?</summary>
+        <div class="answer">
+          <p>30 days, full refund, you ship it back. We pay return shipping inside the US; outside the US it's on you. If the box arrived dead or DOA we pay both ways. We don't restock-fee. Full terms at <a href="/terms">/terms</a>.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Do you take crypto?</summary>
+        <div class="answer">
+          <p>Not yet. Stripe takes cards (USD, EUR, GBP). We're exploring monero / lightning for the privacy-conscious, but it's not on the immediate roadmap. If this matters to you, mail <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a> and tell us — that's how features get prioritized.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Will the price change?</summary>
+        <div class="answer">
+          <p>Hardware: probably, with component costs. Existing orders are locked in. Subscriptions: we'll grandfather every existing subscriber on a price change for at least 12 months and we'll tell you at signup if a plan is "introductory." We don't do "your renewal is now triple."</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>How do you make money long-term?</summary>
+        <div class="answer">
+          <p>Hardware margin, subscriptions on the optional add-ons, marketplace promotion fees (clearly labeled "featured"). We don't sell ads, telemetry, model-training rights, or your data — partly because it's the right thing, mostly because we structurally can't.</p>
         </div>
       </details>
     </div>
@@ -297,6 +359,7 @@
       <h4>Product</h4>
       <ul>
         <li><a href="/docs#how-it-works">How it works</a></li>
+        <li><a href="/marketplace/">Services</a></li>
         <li><a href="https://webapp.flagshipserver.com/">Webapp</a></li>
       </ul>
     </div>
