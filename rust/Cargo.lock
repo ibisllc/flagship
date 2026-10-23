@@ -432,6 +432,20 @@ version = "0.3.0"
 [[package]]
 name = "flagship-crypto"
 version = "0.3.0"
+dependencies = [
+ "aes-gcm",
+ "ed25519-dalek",
+ "flagship-protocol",
+ "getrandom",
+ "hkdf",
+ "ml-dsa",
+ "rand_core",
+ "serde_json",
+ "sha2",
+ "x-wing",
+ "x25519-dalek",
+ "zeroize",
+]
 
 [[package]]
 name = "flagship-gpu"
@@ -472,6 +486,9 @@ dependencies = [
 [[package]]
 name = "flagship-protocol"
 version = "0.3.0"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "flagship-relay"
@@ -1393,3 +1410,41 @@ checksum = "b5f6765e852b9b4dc8e2a76843e4d64d1cea8e79bcde0b6901aea8e7c7f08282"
  "bit-vec",
 version = "1.9.1"
 checksum = "e13084392c5e4bc371903e2935a5eaeed24905a7511356b883835e18a78f6879"
+name = "keccak"
+checksum = "d8f198d1db720e4940b5a493201d199d9f24f568f8f746bd13706243a2f71598"
+name = "kem"
+checksum = "01737161ba802849cfd486b5bd209d38ba4943494c249a8126005170c7621edd"
+name = "ml-dsa"
+version = "0.1.1"
+checksum = "add6b9d92e496f16f4526d68ff29da1483aba4b119baeab8bed3b9e3544a6f3d"
+ "module-lattice",
+ "shake",
+ "signature",
+name = "ml-kem"
+version = "0.3.2"
+checksum = "5e15f3e5b957493873e396a66914e83e616b6afe335cdef7efe5c6e1216aba66"
+ "kem",
+ "sha3 0.11.0",
+name = "module-lattice"
+version = "0.2.3"
+checksum = "0c61b87c9683ab7cb1c6871d261ad5479b6b10ceb52c4352aaca3b5d35a8febe"
+name = "ryu"
+checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
+version = "1.0.145"
+checksum = "402a6f66d8c709116cf22f558eab210f5a50187f702eb4d7e5ef38d9a7f1c79c"
+ "ryu",
+name = "sha3"
+checksum = "be176f1a57ce4e3d31c1a166222d9768de5954f811601fb7ca06fc8203905ce1"
+ "keccak",
+version = "0.12.0"
+checksum = "bc9bad02c26382724b2d2692c6f179285e4b54eeecd7968f52a50059c3c11759"
+ "sponge-cursor",
+name = "shake"
+checksum = "09057cb2149ad4cbd2da1e26b351f9a4c354219421229c69c3063e6f61947c4a"
+name = "sponge-cursor"
+checksum = "3a0219bd7d979d58245a4f41f695e1ac9f8befdffadd7f61f1bae9e39abc6620"
+name = "x-wing"
+checksum = "01576e56599d01d75c5efcd5b30fa5de29e776f5a225e43fbf8c92c7302d4c8b"
+ "ml-kem",
+ "sha3 0.12.0",
+ "x25519-dalek",
