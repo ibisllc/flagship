@@ -1,0 +1,40 @@
+[package]
+name = "flagship-relay-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "BUSL-1.1"
+publish = false
+
+# Its own workspace: cargo-fuzz needs nightly and sanitizer flags the main workspace must not see.
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+flagship-relay = { path = ".." }
+libfuzzer-sys = "=0.4.12"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[[bin]]
+name = "frame_decode"
+path = "fuzz_targets/frame_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sni_parse"
+path = "fuzz_targets/sni_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "payload_parse"
+path = "fuzz_targets/payload_parse.rs"
+test = false
+doc = false
+bench = false
